@@ -13,7 +13,8 @@ from typing import Any, Dict, List, Optional
 
 from ...services import observability
 from ...utils.user_dirs import get_cache_dir, FORMATION_ID
-from ..documents.storage.chunk_manager import DocumentChunkManager
+# Lazy import DocumentChunkManager to avoid initialization issues
+# from ..documents.storage.chunk_manager import DocumentChunkManager
 
 
 class SOPSystem:
@@ -67,8 +68,8 @@ class SOPSystem:
         # ===================================================================
         # CACHE CONFIGURATION
         # ===================================================================
-        # Cache directory includes formation_id for proper isolation
-        self.cache_dir = Path(get_cache_dir("sops"))
+        # Cache directory will be initialized lazily when needed
+        self._cache_dir = None
 
         # ===================================================================
         # INITIALIZATION
@@ -81,17 +82,28 @@ class SOPSystem:
                 self._hydrate_from_cache()
 
                 # Emit observability event for monitoring
-                observability.observe(
-                    event_type=observability.ConversationEvents.SOP_LOADED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "formation_id": FORMATION_ID,
-                        "sop_count": len(self.sops),
-                        "sop_names": list(self.sops.keys()),
-                        "cached_embeddings": len(self.embeddings_cache),
-                    },
-                    description=f"Loaded {len(self.sops)} SOPs from {self.sop_dir}"
-                )
+                try:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.SOP_LOADED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "formation_id": FORMATION_ID,
+                            "sop_count": len(self.sops),
+                            "sop_names": list(self.sops.keys()),
+                            "cached_embeddings": len(self.embeddings_cache),
+                        },
+                        description=f"Loaded {len(self.sops)} SOPs from {self.sop_dir}"
+                    )
+                except Exception:
+                    # Ignore observability errors during initialization
+                    pass
+
+    @property
+    def cache_dir(self) -> Path:
+        """Get cache directory, creating it lazily when needed."""
+        if self._cache_dir is None:
+            self._cache_dir = Path(get_cache_dir("sops"))
+        return self._cache_dir
 
     # ========================================================================
     # DIRECTORY SCANNING AND FILE PROCESSING
@@ -125,30 +137,36 @@ class SOPSystem:
                             content = parts[2].strip()
                     except yaml.YAMLError as e:
                         # Log and skip files with invalid YAML front matter
-                        observability.observe(
-                            event_type=observability.ErrorEvents.WARNING,
-                            level=observability.EventLevel.WARNING,
-                            data={
-                                "error": str(e),
-                                "file": str(md_file),
-                                "error_type": "yaml_parsing",
-                            },
-                            description=f"Failed to parse YAML front matter in {md_file.name}"
-                        )
+                        try:
+                            observability.observe(
+                                event_type=observability.ErrorEvents.WARNING,
+                                level=observability.EventLevel.WARNING,
+                                data={
+                                    "error": str(e),
+                                    "file": str(md_file),
+                                    "error_type": "yaml_parsing",
+                                },
+                                description=f"Failed to parse YAML front matter in {md_file.name}"
+                            )
+                        except Exception:
+                            pass
                         continue
                     except Exception as e:
                         # Log and skip files with other parsing errors
-                        observability.observe(
-                            event_type=observability.ErrorEvents.WARNING,
-                            level=observability.EventLevel.WARNING,
-                            data={
-                                "error": str(e),
-                                "file": str(md_file),
-                                "error_type": "general_parsing",
-                                "exception_type": type(e).__name__,
-                            },
-                            description=f"Unexpected error parsing {md_file.name}"
-                        )
+                        try:
+                            observability.observe(
+                                event_type=observability.ErrorEvents.WARNING,
+                                level=observability.EventLevel.WARNING,
+                                data={
+                                    "error": str(e),
+                                    "file": str(md_file),
+                                    "error_type": "general_parsing",
+                                    "exception_type": type(e).__name__,
+                                },
+                                description=f"Unexpected error parsing {md_file.name}"
+                            )
+                        except Exception:
+                            pass
                         continue
 
                 # Only process if type: sop
@@ -266,11 +284,17 @@ class SOPSystem:
         - Cleans up stale entries for removed SOPs
         - Immediately indexes in WorkingMemory if available
         """
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        embeddings_file = self.cache_dir / "embeddings.json"
+        # Skip cache hydration if formation ID is not set yet
+        try:
+            cache_dir = self.cache_dir
+            cache_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # Can't get cache dir yet (formation ID not set), skip hydration
+            return
+        embeddings_file = cache_dir / "embeddings.json"
 
         # Also check for old pickle file to migrate
-        old_pickle_file = self.cache_dir / "embeddings.pkl"
+        old_pickle_file = cache_dir / "embeddings.pkl"
 
         # Track which SOPs are still valid
         valid_sop_ids = set(self.sops.keys())
@@ -600,6 +624,9 @@ class SOPSystem:
     def _get_chunk_manager(self):
         """Get DocumentChunkManager from formation or create one using formation's config."""
         try:
+            # Lazy import DocumentChunkManager to avoid initialization issues
+            from ..documents.storage.chunk_manager import DocumentChunkManager
+
             # Try to get from formation's configured services
             from ...formation import Formation
             formation = Formation.get_instance()

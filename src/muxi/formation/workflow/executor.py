@@ -1161,8 +1161,21 @@ class WorkflowExecutor:
             # Extract content from MuxiResponse
             response_content = response.content if hasattr(response, "content") else str(response)
 
+            # Extract artifacts if present
+            artifacts = []
+            if hasattr(response, "artifacts") and response.artifacts:
+                artifacts = response.artifacts
+
             # Parse response into structured outputs
             outputs = self._parse_task_response(response_content, task)
+
+            # Add artifacts to outputs if present
+            if artifacts:
+                outputs["artifacts"] = {
+                    "result": artifacts,
+                    "status": "success",
+                    "metrics": {"artifact_count": len(artifacts)}
+                }
 
             return TaskResult(
                 task_id=task.id,
