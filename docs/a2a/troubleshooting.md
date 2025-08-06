@@ -140,6 +140,81 @@ nslookup registry.example.com
 curl --connect-timeout 10 https://registry.example.com/health
 ```
 
+### Issue: "Formation startup failed - strict policy"
+
+**Symptoms**:
+```
+============================================================
+⚠️  FORMATION STARTUP FAILED
+============================================================
+
+Policy: STRICT
+Required registries are unreachable:
+
+  ❌ https://registry.example.com
+
+To resolve this issue, you can:
+  1. Start the registry server(s) listed above
+  2. Change startup_policy to 'lenient' in formation.yaml
+  3. Remove the unreachable registries from configuration
+
+============================================================
+```
+
+**Diagnosis**:
+1. Formation configured with `startup_policy: "strict"`
+2. One or more registries are unreachable during startup
+3. Health checks are failing
+
+**Solutions**:
+
+**Option 1: Start the Registry**
+```bash
+# Start local registry for development
+python -m muxi.tools.a2a_registry --port 9090
+
+# Or start the specific registry service listed in the error
+```
+
+**Option 2: Change to Lenient Policy**
+```yaml
+# formation.yaml
+a2a:
+  outbound:
+    startup_policy: "lenient"  # Allow startup even if registry is down
+    registries:
+      - "https://registry.example.com"
+```
+
+**Option 3: Use Retry Policy**
+```yaml
+# formation.yaml
+a2a:
+  outbound:
+    startup_policy: "retry"           # Retry connections
+    retry_timeout_seconds: 60         # Wait up to 60 seconds
+    registries:
+      - "https://registry.example.com"
+```
+
+**Option 4: Per-Registry Configuration**
+```yaml
+# Mark registries as optional
+a2a:
+  outbound:
+    startup_policy: "strict"
+    registries:
+      - url: "https://critical-registry.com"
+        required: true                    # Must be available
+      - url: "https://optional-registry.com"
+        required: false                   # Can be down
+```
+
+**When to Use Each Policy**:
+- **Lenient**: Development, optional services
+- **Strict**: Production systems with critical dependencies
+- **Retry**: Temporary network issues, gradual startup
+
 ### Issue: "Message timeout"
 
 **Symptoms**:

@@ -38,6 +38,8 @@ a2a:
   # Outbound configuration - for sending A2A messages  
   outbound:
     enabled: true
+    startup_policy: "lenient"      # Registry connection policy: lenient, strict, retry
+    retry_timeout_seconds: 30      # Retry duration for 'retry' policy
     registries:         # Registries to discover agents from
       - "https://registry.example.com"
     default_retry_attempts: 3      # Default: 3
@@ -130,6 +132,8 @@ Controls how your formation sends A2A messages to external agents.
 |--------|------|---------|-------------|
 | `enabled` | boolean | `true` | Enable outbound A2A |
 | `registries` | array | `[]` | Registries for agent discovery |
+| `startup_policy` | string | `"lenient"` | Registry connection policy on startup |
+| `retry_timeout_seconds` | integer | `30` | Retry duration for 'retry' policy |
 | `default_retry_attempts` | integer | `3` | Default retry attempts |
 | `default_timeout_seconds` | integer | `30` | Default timeout in seconds |
 | `services` | array | `[]` | Service-specific configurations |
@@ -365,6 +369,112 @@ a2a:
 ```
 
 ## Registry Configuration
+
+### Startup Policy
+
+The `startup_policy` configuration determines how your formation handles registry connectivity during startup. This is crucial for distributed systems where registry availability can impact operations.
+
+#### Available Policies
+
+| Policy | Behavior | Use Case |
+|--------|----------|----------|
+| `lenient` (default) | Continue startup regardless of registry health | Development, optional services |
+| `strict` | Fail startup if registries are unreachable | Production, critical dependencies |
+| `retry` | Attempt connections for configured duration | Temporary network issues |
+
+#### Configuration Examples
+
+**Lenient Policy (Default)**
+```yaml
+a2a:
+  outbound:
+    startup_policy: "lenient"  # Continue even if registry is down
+    registries:
+      - "https://registry.example.com"
+```
+
+**Strict Policy**
+```yaml
+a2a:
+  outbound:
+    startup_policy: "strict"   # Fail fast if registry unreachable
+    registries:
+      - "https://critical-registry.com"
+```
+
+**Retry Policy**
+```yaml
+a2a:
+  outbound:
+    startup_policy: "retry"     # Retry for 60 seconds
+    retry_timeout_seconds: 60   # Duration to retry
+    registries:
+      - "https://registry.example.com"
+```
+
+#### Extended Registry Configuration
+
+For fine-grained control, you can configure individual registries:
+
+```yaml
+a2a:
+  outbound:
+    startup_policy: "strict"
+    registries:
+      # Simple format (backward compatible)
+      - "https://registry1.com"
+      
+      # Extended format with per-registry settings
+      - url: "https://critical-registry.com"
+        required: true                    # Must be reachable
+        health_check_timeout_seconds: 10  # Custom timeout
+        
+      - url: "https://optional-registry.com"
+        required: false                   # Can be down
+        health_check_timeout_seconds: 5
+```
+
+#### Policy Behavior Details
+
+**Lenient Policy**
+- Logs warnings for unreachable registries
+- Formation starts normally
+- Registry connections attempted in background
+- Best for: Development, non-critical external dependencies
+
+**Strict Policy**
+- Performs health checks on all registries
+- Fails immediately if any registry is unreachable
+- Shows user-friendly error message with resolution steps
+- Best for: Production systems with critical dependencies
+
+**Retry Policy**
+- Attempts connections for `retry_timeout_seconds`
+- If all registries become reachable, startup continues
+- After timeout, applies `required` flags from extended config
+- Best for: Handling temporary network issues
+
+#### Error Messages
+
+When using strict policy with unreachable registries, you'll see:
+
+```
+============================================================
+⚠️  FORMATION STARTUP FAILED
+============================================================
+
+Policy: STRICT
+Required registries are unreachable:
+
+  ❌ https://registry.example.com
+
+To resolve this issue, you can:
+  1. Start the registry server(s) listed above
+  2. Change startup_policy to 'lenient' in formation.yaml
+  3. Remove the unreachable registries from configuration
+
+============================================================
+```
 
 ### Using Multiple Registries
 
