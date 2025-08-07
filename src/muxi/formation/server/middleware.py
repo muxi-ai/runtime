@@ -17,6 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from ...services import observability
 from ...utils.id_generator import generate_request_id
 from .responses import create_error_response
+from .utils import get_header_case_insensitive, has_header_case_insensitive
 
 
 class ErrorHandlingMiddleware(BaseHTTPMiddleware):
@@ -151,6 +152,13 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
         # Calculate processing time
         processing_time = time.time() - start_time
 
+        # Increment request counter (thread-safe)
+        if hasattr(request.app.state, 'formation'):
+            server = getattr(request.app.state.formation, '_server', None)
+            if server and hasattr(server, '_request_count_lock'):
+                with server._request_count_lock:
+                    server._request_count += 1
+
         # Log response
         if request_id:
             observability.observe(
@@ -187,8 +195,8 @@ class APILoggingMiddleware(BaseHTTPMiddleware):
             Response
         """
         # Extract API key info (without exposing the actual key)
-        has_admin_key = "X-Admin-Key" in request.headers
-        has_client_key = "X-Client-Key" in request.headers
+        has_admin_key = has_header_case_insensitive(request.headers, "X-Muxi-Admin-Key")
+        has_client_key = has_header_case_insensitive(request.headers, "X-Muxi-Client-Key")
 
         # Log API-specific info
         observability.observe(
@@ -200,9 +208,9 @@ class APILoggingMiddleware(BaseHTTPMiddleware):
                 "path": request.url.path,
                 "has_admin_key": has_admin_key,
                 "has_client_key": has_client_key,
-                "content_type": request.headers.get("content-type"),
-                "accept": request.headers.get("accept"),
-                "user_agent": request.headers.get("user-agent"),
+                "content_type": get_header_case_insensitive(request.headers, "content-type"),
+                "accept": get_header_case_insensitive(request.headers, "accept"),
+                "user_agent": get_header_case_insensitive(request.headers, "user-agent"),
             },
             description="Formation API request details",
         )
@@ -236,12 +244,20 @@ class ConnectionTrackingMiddleware(BaseHTTPMiddleware):
         # connection_id = id(request)
         connection_task = asyncio.current_task()
 
-        # Add to active connections
-        self.server_instance._active_connections.add(connection_task)
+        # Add to active connections (thread-safe)
+        if hasattr(self.server_instance, '_active_connections_lock'):
+            with self.server_instance._active_connections_lock:
+                self.server_instance._active_connections.add(connection_task)
+        else:
+            self.server_instance._active_connections.add(connection_task)
 
         try:
             response = await call_next(request)
             return response
         finally:
-            # Remove from active connections when request completes
-            self.server_instance._active_connections.discard(connection_task)
+            # Remove from active connections when request completes (thread-safe)
+            if hasattr(self.server_instance, '_active_connections_lock'):
+                with self.server_instance._active_connections_lock:
+                    self.server_instance._active_connections.discard(connection_task)
+            else:
+                self.server_instance._active_connections.discard(connection_task)

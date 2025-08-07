@@ -1,61 +1,62 @@
-schema: 1.0.0
-id: workflow-test
-name: "Workflow Test Formation"
-description: "Multi-agent formation for testing workflow decomposition without MCP"
-version: "1.0.0"
+schema: "1.0.0"
+id: "workflow-test-formation"
+description: "Test formation for workflow consistency testing without external dependencies"
 
-# Agents for workflow testing
-agents:
-  - id: researcher
-    name: "Research Specialist"
-    description: "Handles research and information gathering"
-    model: "openai/gpt-4o-mini"
-    system_message: |
-      You are a research specialist. Your job is to gather information,
-      analyze data, and provide comprehensive research findings.
-
-  - id: writer
-    name: "Content Writer"
-    description: "Creates documents and written content"
-    model: "openai/gpt-4o-mini"
-    system_message: |
-      You are a content writer. Your job is to create well-structured
-      documents, reports, and written content based on provided information.
-
-  - id: analyst
-    name: "Data Analyst"
-    description: "Analyzes data and creates insights"
-    model: "openai/gpt-4o-mini"
-    system_message: |
-      You are a data analyst. Your job is to analyze information,
-      identify patterns, and provide data-driven insights.
-
-# Overlord configuration
-overlord:
-  llm:
-    model: "openai/gpt-4o-mini"
-    settings:
-      temperature: 0.2
-      max_tokens: 2000
-
-  config:
-    # Workflow settings
-    auto_decomposition: true
-    complexity_threshold: 6.0
-    plan_approval_threshold: 10
-
-# Memory configuration
-memory:
-  buffer:
-    enabled: true
-    size: 20
-  working:
-    enabled: true
-
-# Capability models
 llm:
   api_keys:
     openai: "${{ secrets.OPENAI_API_KEY }}"
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+  
   models:
     - text: "openai/gpt-4o-mini"
-    - embedding: "openai/text-embedding-3-small"
+      settings:
+        temperature: 0.3  # Lower temperature for consistency
+        max_tokens: 2000
+        timeout_seconds: 30
+
+memory:
+  working:
+    max_memory_mb: 256
+    fifo_interval_min: 30  # Longer interval to avoid cleanup during tests
+    mode: "local"
+  
+  buffer:
+    size: 5  # Smaller buffer for tests
+    multiplier: 5
+
+overlord:
+  workflow:
+    auto_decomposition: true
+    plan_approval_threshold: 10  # Higher to avoid approval prompts
+    complexity_method: "heuristic"
+    complexity_threshold: 7.0
+    routing_strategy: "capability_based"
+    error_recovery: "retry_with_backoff"
+    
+    retry:
+      max_attempts: 2  # Fewer retries for faster tests
+      initial_delay: 1.0
+      max_delay: 5.0
+      backoff_factor: 2.0
+    
+    timeouts:
+      task_timeout: 60  # Shorter timeout for tests
+      workflow_timeout: 180
+      enable_adaptive_timeout: false  # Disable for consistency
+    
+    parallel_execution: false  # Sequential for consistency
+    max_parallel_tasks: 1
+
+# Minimal MCP configuration for testing
+mcp:
+  max_tool_iterations: 3  # Limit iterations
+  max_tool_calls: 10  # Limit total calls
+  max_timeout_in_seconds: 60  # Overall timeout
+  enhance_user_prompts: false  # Disable for consistency
+
+# No runtime MCPs to avoid file generation complexity
+runtime:
+  built_in_mcps: false
+
+# Agents configuration remains in agents/ directory
+agents: []

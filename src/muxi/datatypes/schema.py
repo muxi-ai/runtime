@@ -6,7 +6,7 @@ ensuring consistent validation, documentation, and initialization across the fra
 """
 
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, Dict, Any, List, Literal
+from typing import Optional, Dict, Any, List, Literal, Union
 from abc import ABC, abstractmethod
 
 
@@ -169,6 +169,21 @@ class MCPServiceSchema(BaseServiceSchema):
             raise ValueError("Retry delay must be > 0 when retries are enabled")
 
 
+class RegistryConfig(BaseModel):
+    """Configuration for a single A2A registry."""
+
+    url: str = Field(..., description="Registry URL")
+    required: bool = Field(
+        default=False, description="Whether formation should fail if registry is unreachable"
+    )
+    health_check_timeout_seconds: int = Field(
+        default=5, ge=1, le=60, description="Timeout for startup health check"
+    )
+    retry_attempts: Optional[int] = Field(
+        default=None, description="Override default retry attempts for this registry"
+    )
+
+
 class A2AServiceSchema(BaseServiceSchema):
     """Configuration for A2A (Agent-to-Agent) service."""
 
@@ -181,28 +196,90 @@ class A2AServiceSchema(BaseServiceSchema):
     server_host: str = Field(default="0.0.0.0", description="Host address for A2A server")
     server_port: int = Field(default=8080, ge=1024, le=65535, description="Port for A2A server")
 
-    # Registry configuration
+    # Registry configuration (legacy - kept for backward compatibility)
     external_registry_enabled: bool = Field(
         default=False, description="Enable external registry for agent discovery"
     )
-    registry_url: Optional[str] = Field(default=None, description="URL of external A2A registry")
+    registry_url: Optional[str] = Field(
+        default=None, description="URL of external A2A registry (legacy)"
+    )
     registration_timeout: float = Field(
         default=30.0, ge=1.0, le=300.0, description="Timeout for registry operations"
     )
 
+    # New registry configuration
+    startup_policy: Literal["lenient", "strict", "retry"] = Field(
+        default="lenient",
+        description=(
+            "Registry connection policy: lenient (continue on failure), "
+            "strict (fail fast), retry (attempt then apply required flags)"
+        ),
+    )
+    retry_timeout_seconds: int = Field(
+        default=30, ge=1, le=300, description="Retry duration for 'retry' policy"
+    )
+    registries: List[Union[str, RegistryConfig]] = Field(
+        default_factory=list, description="List of external A2A registries"
+    )
+
     # Security configuration
     require_auth: bool = Field(default=False, description="Require authentication for A2A requests")
+    auth_mode: Literal["none", "api_key", "bearer", "basic"] = Field(
+        default="none", description="Authentication mode (none, api_key, bearer, basic)"
+    )
+    shared_key: Optional[str] = Field(
+        default=None, description="Shared key for inbound authentication"
+    )
     allowed_origins: Optional[List[str]] = Field(
         default=None, description="Allowed origins for CORS"
     )
 
+    # Outbound configuration
+    default_timeout_seconds: int = Field(
+        default=30, ge=1, le=300, description="Default timeout for outbound A2A requests in seconds"
+    )
+    default_retry_attempts: int = Field(
+        default=3,
+        ge=0,
+        le=10,
+        description="Default number of retry attempts for outbound A2A requests",
+    )
+
     def validate_service_specific(self) -> None:
         """Validate A2A-specific configuration."""
-        if self.external_registry_enabled and not self.registry_url:
-            raise ValueError("Registry URL required when external registry is enabled")
+        # Handle legacy configuration
+        if self.external_registry_enabled and not self.registry_url and not self.registries:
+            raise ValueError(
+                "Registry URL or registries list required when external registry is enabled"
+            )
 
         if self.server_enabled and self.server_port < 1024:
             raise ValueError("Server port must be >= 1024 for non-root operation")
+
+        # Validate authentication configuration
+        if self.require_auth and self.auth_mode != "none" and not self.shared_key:
+            raise ValueError(
+                f"Shared key is required when auth is enabled with mode '{self.auth_mode}'. "
+                "Either provide a shared_key or set auth_mode to 'none'"
+            )
+
+        # Normalize registries to RegistryConfig objects
+        normalized_registries = []
+        for reg in self.registries:
+            if isinstance(reg, str):
+                normalized_registries.append(RegistryConfig(url=reg))
+            elif isinstance(reg, dict):
+                normalized_registries.append(RegistryConfig(**reg))
+            else:
+                normalized_registries.append(reg)
+        self.registries = normalized_registries
+
+        # Migrate legacy configuration if present
+        if self.registry_url and self.registry_url not in [
+            r.url for r in self.registries if isinstance(r, RegistryConfig)
+        ]:
+            # Add legacy registry URL to the list
+            self.registries.append(RegistryConfig(url=self.registry_url, required=False))
 
 
 class SchedulerServiceSchema(BaseServiceSchema):
@@ -287,6 +364,7 @@ __all__ = [
     "MemoryServiceSchema",
     "MCPServiceSchema",
     "A2AServiceSchema",
+    "RegistryConfig",
     "SchedulerServiceSchema",
     "FormationSchema",
 ]

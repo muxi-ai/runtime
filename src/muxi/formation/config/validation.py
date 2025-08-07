@@ -737,6 +737,10 @@ class FormationValidator:
             inbound = a2a_config["inbound"]
             if not isinstance(inbound, dict):
                 self.result.add_error("A2A inbound configuration must be a dictionary")
+            else:
+                # Validate inbound auth configuration if present
+                if "auth" in inbound:
+                    self._validate_inbound_auth_config(inbound["auth"])
 
         # Validate outbound configuration
         if "outbound" in a2a_config:
@@ -1839,9 +1843,21 @@ class FormationValidator:
         if "llm" in overlord_config:
             self._validate_overlord_llm_config(overlord_config["llm"])
 
-        # Validate overlord behavior configuration
-        if "config" in overlord_config:
-            self._validate_overlord_behavior_config(overlord_config["config"])
+        # Validate response configuration
+        if "response" in overlord_config:
+            self._validate_overlord_response_config(overlord_config["response"])
+
+        # Validate workflow configuration
+        if "workflow" in overlord_config:
+            self._validate_overlord_workflow_config(overlord_config["workflow"])
+
+        # Validate caching configuration
+        if "caching" in overlord_config:
+            self._validate_overlord_caching_config(overlord_config["caching"])
+
+        # Validate clarification configuration
+        if "clarification" in overlord_config:
+            self._validate_overlord_clarification_config(overlord_config["clarification"])
 
     def _validate_overlord_llm_config(self, llm_config: Dict[str, Any]) -> None:
         """Validate overlord LLM configuration."""
@@ -1861,66 +1877,73 @@ class FormationValidator:
             if not isinstance(llm_config["api_key"], str):
                 self.result.add_error("Overlord LLM api_key must be a string")
 
+        # Validate max_extraction_tokens
+        if "max_extraction_tokens" in llm_config:
+            tokens = llm_config["max_extraction_tokens"]
+            if not isinstance(tokens, int) or tokens <= 0:
+                self.result.add_error("overlord.llm.max_extraction_tokens must be a positive integer")
+
         # Validate settings
         if "settings" in llm_config:
             self._validate_llm_global_settings(llm_config["settings"])
 
-    def _validate_overlord_behavior_config(self, config: Dict[str, Any]) -> None:
-        """Validate overlord behavior configuration."""
-        if not isinstance(config, dict):
-            self.result.add_error("Overlord behavior configuration must be a dictionary")
+    def _validate_overlord_clarification_config(self, clarification_config: Dict[str, Any]) -> None:
+        """Validate overlord clarification configuration."""
+        if not isinstance(clarification_config, dict):
+            self.result.add_error("Overlord clarification configuration must be a dictionary")
             return
 
-        # Allow any additional fields users might want to add for overlord behavior configuration
+        # Validate max_questions
+        if "max_questions" in clarification_config:
+            max_q = clarification_config["max_questions"]
+            if not isinstance(max_q, int) or max_q < 1:
+                self.result.add_error("clarification.max_questions must be a positive integer")
 
-        # Validate max_extraction_tokens
-        if "max_extraction_tokens" in config:
-            tokens = config["max_extraction_tokens"]
-            if not isinstance(tokens, int) or tokens <= 0:
-                self.result.add_error("max_extraction_tokens must be a positive integer")
+        # Validate style
+        if "style" in clarification_config:
+            style = clarification_config["style"]
+            valid_styles = ["conversational", "formal", "brief"]
+            if style not in valid_styles:
+                self.result.add_error(
+                    f"clarification.style '{style}' invalid. Valid: {', '.join(valid_styles)}"
+                )
 
-        # Validate response_format (no longer supported)
-        if "response_format" in config:
-            self.result.add_error(
-                "Overlord 'response_format' is no longer supported. Use 'response.format' instead."
-            )
+        # Validate persist_learned_info
+        if "persist_learned_info" in clarification_config:
+            if not isinstance(clarification_config["persist_learned_info"], bool):
+                self.result.add_error("clarification.persist_learned_info must be a boolean")
 
-        # Validate response configuration (optional structure)
-        if "response" in config:
-            self._validate_overlord_response_config(config["response"])
-        # response is optional - runtime has defaults (format: "markdown", interactive_elements: true)
+    def _validate_overlord_workflow_config(self, workflow_config: Dict[str, Any]) -> None:
+        """Validate overlord workflow configuration."""
+        if not isinstance(workflow_config, dict):
+            self.result.add_error("Overlord workflow configuration must be a dictionary")
+            return
 
-        # Validate intelligence configuration
-        if "learn_user_preference" in config:
-            if not isinstance(config["learn_user_preference"], bool):
-                self.result.add_error("learn_user_preference must be a boolean")
+        # Validate core workflow settings
+        if "auto_decomposition" in workflow_config:
+            if not isinstance(workflow_config["auto_decomposition"], bool):
+                self.result.add_error("workflow.auto_decomposition must be a boolean")
 
-        if "adaptive_responses" in config:
-            if not isinstance(config["adaptive_responses"], bool):
-                self.result.add_error("adaptive_responses must be a boolean")
+        if "plan_approval_threshold" in workflow_config:
+            threshold = workflow_config["plan_approval_threshold"]
+            if not isinstance(threshold, (int, float)) or threshold < 1 or threshold > 10:
+                self.result.add_error("workflow.plan_approval_threshold must be a number between 1 and 10")
 
-        # Validate resilience configuration
-        if "circuit_breaker" in config:
-            if not isinstance(config["circuit_breaker"], bool):
-                self.result.add_error("circuit_breaker must be a boolean")
+        # Validate complexity settings
+        if "complexity_method" in workflow_config:
+            method = workflow_config["complexity_method"]
+            valid_methods = ["heuristic", "llm", "custom", "hybrid"]
+            if method not in valid_methods:
+                self.result.add_error(
+                    f"workflow.complexity_method '{method}' invalid. Valid: {', '.join(valid_methods)}"
+                )
 
-        if "error_recovery" in config:
-            if not isinstance(config["error_recovery"], bool):
-                self.result.add_error("error_recovery must be a boolean")
+        if "complexity_threshold" in workflow_config:
+            threshold = workflow_config["complexity_threshold"]
+            if not isinstance(threshold, (int, float)) or threshold < 1 or threshold > 10:
+                self.result.add_error("workflow.complexity_threshold must be a number between 1 and 10")
 
-        # Validate workflow configuration
-        if "auto_decomposition" in config:
-            if not isinstance(config["auto_decomposition"], bool):
-                self.result.add_error("auto_decomposition must be a boolean")
-
-        if "plan_approval_threshold" in config:
-            threshold = config["plan_approval_threshold"]
-            if not isinstance(threshold, int) or threshold < 1 or threshold > 10:
-                self.result.add_error("plan_approval_threshold must be an integer between 1 and 10")
-
-        # Validate caching configuration
-        if "caching" in config:
-            self._validate_overlord_caching_config(config["caching"])
+        # Allow any additional workflow configuration fields for extensibility
 
     def _validate_overlord_response_config(self, response_config: Dict[str, Any]) -> None:
         """Validate overlord response configuration."""
@@ -1942,6 +1965,11 @@ class FormationValidator:
         if "interactive_elements" in response_config:
             if not isinstance(response_config["interactive_elements"], bool):
                 self.result.add_error("response.interactive_elements must be a boolean")
+
+        # Validate streaming
+        if "streaming" in response_config:
+            if not isinstance(response_config["streaming"], bool):
+                self.result.add_error("response.streaming must be a boolean")
 
     def _validate_overlord_caching_config(self, caching_config: Dict[str, Any]) -> None:
         """Validate overlord caching configuration."""
@@ -2106,9 +2134,9 @@ class FormationValidator:
 
         # Validate type-specific auth requirements
         if auth_type == "api_key":
-            if "api_key" not in auth_config:
+            if "key" not in auth_config:
                 self.result.add_error(
-                    f"A2A service {filename} api_key auth requires 'api_key' field"
+                    f"A2A service {filename} api_key auth requires 'key' field"
                 )
             if "header" in auth_config and not isinstance(auth_config["header"], str):
                 self.result.add_error(f"A2A service {filename} auth header must be a string")
@@ -2177,8 +2205,8 @@ class FormationValidator:
 
         # Validate type-specific auth requirements
         if auth_type == "api_key":
-            if "api_key" not in auth_config:
-                self.result.add_error(f"{service_identifier} api_key auth requires 'api_key' field")
+            if "key" not in auth_config:
+                self.result.add_error(f"{service_identifier} api_key auth requires 'key' field")
             if "header" in auth_config and not isinstance(auth_config["header"], str):
                 self.result.add_error(f"{service_identifier} auth header must be a string")
 
@@ -2200,6 +2228,50 @@ class FormationValidator:
             elif not isinstance(auth_config["headers"], dict):
                 self.result.add_error(
                     f"{service_identifier} custom auth headers must be a dictionary"
+                )
+
+    def _validate_inbound_auth_config(self, auth_config: Dict[str, Any]) -> None:
+        """Validate inbound authentication configuration."""
+        if not isinstance(auth_config, dict):
+            self.result.add_error("A2A inbound auth must be a dictionary")
+            return
+
+        # Validate auth type
+        auth_type = auth_config.get("type", "none")
+        valid_auth_types = ["api_key", "bearer", "basic", "custom", "none"]
+
+        if auth_type not in valid_auth_types:
+            self.result.add_error(
+                f"A2A inbound auth type '{auth_type}' invalid. "
+                f"Valid types are: {valid_auth_types}"
+            )
+            return
+
+        # Validate type-specific auth requirements
+        if auth_type == "api_key":
+            if "key" not in auth_config:
+                self.result.add_error("A2A inbound api_key auth requires 'key' field")
+            if "header" in auth_config and not isinstance(auth_config["header"], str):
+                self.result.add_error("A2A inbound auth header must be a string")
+
+        elif auth_type == "bearer":
+            if "token" not in auth_config:
+                self.result.add_error("A2A inbound bearer auth requires 'token' field")
+
+        elif auth_type == "basic":
+            required_basic_fields = ["username", "password"]
+            for field in required_basic_fields:
+                if field not in auth_config:
+                    self.result.add_error(
+                        f"A2A inbound basic auth requires '{field}' field"
+                    )
+
+        elif auth_type == "custom":
+            if "headers" not in auth_config:
+                self.result.add_error("A2A inbound custom auth requires 'headers' field")
+            elif not isinstance(auth_config["headers"], dict):
+                self.result.add_error(
+                    "A2A inbound custom auth headers must be a dictionary"
                 )
 
     def _validate_scheduler_config(self, scheduler_config: Dict[str, Any]) -> None:
@@ -2399,15 +2471,15 @@ def validate_user_credentials_requirements(
 
     # Check MCP servers for user credentials that need initialization secrets
     mcp_config = config.get("mcp", {})
-    servers = mcp_config.get("servers", [])
+    servers = list(mcp_config.get("servers", []))  # Create a copy for validation
 
-    # Also check agent-level MCP servers
+    # Also check agent-level MCP servers (add to validation copy only)
     agents = config.get("agents", [])
     for agent in agents:
         if isinstance(agent, dict) and "mcp_servers" in agent:
             agent_servers = agent["mcp_servers"]
             if isinstance(agent_servers, list):
-                servers.extend(agent_servers)
+                servers.extend(agent_servers)  # Only extend the validation copy
 
     # Find all user credentials in MCP server configurations
     found_credentials = set()
@@ -2504,15 +2576,15 @@ async def validate_user_credentials_requirements_async(
 
     # Check MCP servers for user credentials that need initialization secrets
     mcp_config = config.get("mcp", {})
-    servers = mcp_config.get("servers", [])
+    servers = list(mcp_config.get("servers", []))  # Create a copy for validation
 
-    # Also check agent-level MCP servers
+    # Also check agent-level MCP servers (add to validation copy only)
     agents = config.get("agents", [])
     for agent in agents:
         if isinstance(agent, dict) and "mcp_servers" in agent:
             agent_servers = agent["mcp_servers"]
             if isinstance(agent_servers, list):
-                servers.extend(agent_servers)
+                servers.extend(agent_servers)  # Only extend the validation copy
 
     # Find all user credentials in MCP server configurations
     found_credentials = set()

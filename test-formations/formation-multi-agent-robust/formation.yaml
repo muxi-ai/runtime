@@ -1,0 +1,186 @@
+schema: "1.0.0"
+id: "multi-agent-test-robust"
+description: "Multi-agent test formation with robust retry configuration for Linear issue creation"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+    google: "${{ secrets.GOOGLE_API_KEY }}"
+
+  models:
+    - text: "openai/gpt-4o-mini"
+      settings:
+        temperature: 0.2
+        max_tokens: 2000
+        # timeout_seconds: 300  # TODO: timeout should be handled at MUXI layer, not passed to OpenAI
+        max_retries: 5      # More retries for LLM
+
+overlord:
+  llm:
+    model: "openai/gpt-4o-mini"
+    max_extraction_tokens: 500
+    settings:
+      temperature: 0.2
+      max_tokens: 2000
+      timeout_seconds: 300  # 5 minutes for testing
+
+  caching:
+    enabled: true
+    ttl: 3600
+
+  response:
+    format: "markdown"
+    interactive_elements: true
+
+  # Enhanced workflow configuration with more retries
+  workflow:
+    auto_decomposition: true
+    plan_approval_threshold: 10
+    complexity_threshold: 6.0
+    routing_strategy: "capability_based"
+    parallel_execution: true
+    max_parallel_tasks: 5
+
+    # Robust retry configuration
+    error_recovery: "retry_with_backoff"
+    retry:
+      max_attempts: 5        # Increased from 3
+      initial_delay: 2.0     # Start with 2s delay
+      max_delay: 120.0       # Allow up to 2 minute delays
+      backoff_factor: 2.0    # 2s, 4s, 8s, 16s, 32s
+      retry_on_errors: ["timeout", "rate_limit", "temporary_failure", "connection_error", "network_error"]
+
+    # Longer timeouts
+    timeouts:
+      task_timeout: 120      # 2 minutes per task
+      workflow_timeout: 600  # 10 minutes total
+      phase_timeout: 300     # 5 minutes per phase
+      enable_adaptive_timeout: true
+      timeout_multiplier: 2.0
+
+  clarification:
+    max_questions: 5
+    style: "conversational"
+    persist_learned_info: false
+
+# Resilience configuration
+resilience:
+  enable_workflow_resilience: true
+  enable_circuit_breaker: true
+  enable_recovery_strategies: true
+  enable_fallbacks: true
+  enable_graceful_degradation: true
+
+  circuit_breaker:
+    failure_threshold: 5      # Allow more failures before opening
+    timeout: 120              # 2 minute timeout
+    half_open_attempts: 2     # More attempts in half-open state
+
+  recovery:
+    max_retry_attempts: 5     # Match workflow retries
+    retry_delay: 2.0
+    enable_alternative_agents: true
+
+  fallback:
+    cache_successful_responses: true
+    cache_ttl: 3600
+
+memory:
+  buffer:
+    size: 50
+    multiplier: 10
+
+  working:
+    mode: "local"
+    max_memory_mb: 512
+    fifo_interval_min: 15
+
+mcp:
+  # More robust MCP configuration
+  default_retry_attempts: 5    # Increased from 3
+  default_timeout_seconds: 60  # Increased from 30
+
+  servers:
+    - id: "linear-mcp"
+      description: "Linear issue tracking MCP server"
+      type: "http"
+      endpoint: "https://mcp.linear.app/sse"
+      url: "https://mcp.linear.app/sse"
+      capabilities: ["create_linear_issue", "update_linear_issue", "search_linear_issues", "get_linear_issue", "add_linear_comment"]
+      config:
+        retry_attempts: 7      # Even more retries for Linear
+        timeout_seconds: 90    # Longer timeout for Linear
+        retry_delay: 3.0       # 3 second initial delay
+        api_key: "${{ secrets.LINEAR_API_KEY }}"
+
+    - id: "web-scraper-mcp"
+      description: "Firecrawl web scraping MCP server"
+      type: "command"
+      command: "npx"
+      args: ["-y", "@firecrawl/mcp-server-firecrawl"]
+      env:
+        FIRECRAWL_API_KEY: "${{ secrets.FIRECRAWL_API_KEY }}"
+      capabilities: ["firecrawl_scrape", "firecrawl_map", "firecrawl_crawl", "firecrawl_search", "firecrawl_extract"]
+      config:
+        retry_attempts: 5
+        timeout_seconds: 60
+
+    - id: "web-search-mcp"
+      description: "Brave search MCP server"
+      type: "command"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-brave-search"]
+      env:
+        BRAVE_API_KEY: "${{ secrets.BRAVE_API_KEY }}"
+      capabilities: ["brave_web_search", "brave_local_search"]
+      config:
+        retry_attempts: 5
+        timeout_seconds: 60
+
+# Agent definitions as dictionaries
+agents:
+  - id: "researcher"
+    name: "researcher"
+    description: "Expert at researching topics and gathering information"
+    system_message: |
+      You are a meticulous researcher who excels at finding and analyzing information.
+      When creating Linear issues with research findings:
+      - Always use teamId: "DEFAULT_TEAM_ID"
+      - Do NOT include cycleId parameter unless specifically requested
+      - Focus on comprehensive research and clear documentation
+    role: "specialist"
+    specialties:
+      - "research"
+      - "web_search"
+
+  - id: "writer"
+    name: "writer"
+    description: "Professional writer for creating documentation and content"
+    system_message: "You are a skilled writer who creates clear, engaging content."
+    role: "specialist"
+    specialties:
+      - "writing"
+      - "documentation"
+
+  - id: "coder"
+    name: "coder"
+    description: "Software developer for technical tasks"
+    system_message: "You are an expert programmer who writes clean, efficient code."
+    role: "specialist"
+    specialties:
+      - "coding"
+      - "development"
+
+  - id: "project-manager"
+    name: "project-manager"
+    description: "Project management and Linear issue creation expert"
+    system_message: |
+      You are a project manager who excels at organizing tasks and creating clear Linear issues.
+      When creating issues and documents, make sure that you include both the title and the actual content.
+      IMPORTANT: Always use teamId: "DEFAULT_TEAM_ID" for all Linear operations.
+      Do NOT include cycleId unless specifically provided.
+    role: "specialist"
+    specialties:
+      - "linear"
+      - "project_management"

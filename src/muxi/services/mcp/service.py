@@ -130,6 +130,10 @@ class MCPService:
         # Dictionary to store discovered tools
         self.tool_registry = {}
 
+        # Dictionary to store agent-specific tool registries
+        # Structure: {"_shared": {server_id: tools}, "agent_id": {server_id: tools}}
+        self.agent_tool_registry = {"_shared": {}}
+
         # Dictionary to store server configurations for ephemeral connections
         self.server_configs = {}
 
@@ -144,6 +148,39 @@ class MCPService:
         self.template_discovery = MCPTemplateDiscovery()
         self.health_monitor = MCPHealthMonitor()
         self.capabilities_negotiator = MCPCapabilitiesNegotiator()
+
+    def get_tool_registry(self, agent_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+        """
+        Get the tool registry for a specific agent.
+
+        Args:
+            agent_id: The ID of the agent. If None, returns all tools.
+
+        Returns:
+            Dictionary of server_id -> tools for the agent. Only returns agent-specific tools.
+        """
+        # If no agent_id provided, return all tools (backward compatibility)
+        if agent_id is None:
+            return self.tool_registry
+
+        # Return both agent-specific tools AND shared tools
+        # This allows agents to access global MCP servers while maintaining agent-specific ones
+        result = {}
+
+        # First, add shared tools if they exist
+        if "_shared" in self.agent_tool_registry:
+            result.update(self.agent_tool_registry["_shared"])
+
+        # Then, add agent-specific tools (these can override shared ones if same server_id)
+        if agent_id in self.agent_tool_registry:
+            result.update(self.agent_tool_registry[agent_id])
+
+        if result:
+            # Successfully found tools for agent (including shared)
+            return result
+        else:
+            # No tools found for agent
+            return {}
 
     async def register_server(
         self,
@@ -216,6 +253,7 @@ class MCPService:
         model: Optional[LLM] = None,
         request_timeout: int = 60,
         original_credentials: Optional[Dict[str, Any]] = None,
+        agent_id: Optional[str] = None,
     ) -> str:
         """
         Register an MCP server with the service.
@@ -234,7 +272,7 @@ class MCPService:
             model: Optional model to use for this MCP handler
             request_timeout: Request timeout in seconds
             original_credentials: Original credentials with user placeholders (if any)
-            request_timeout: Timeout in seconds for requests to this server
+            agent_id: Optional agent ID for agent-specific MCP servers
 
         Returns:
             The server_id of the registered server
@@ -256,8 +294,9 @@ class MCPService:
                 "transport_type": transport_type,
                 "has_credentials": bool(credentials),
                 "request_timeout": request_timeout,
+                "agent_id": agent_id,
             },
-            description=f"MCP server registration started: {server_id}",
+            description=f"MCP server registration started: {server_id} for agent: {agent_id}",
         )
 
         # Handle command-line transport directly
@@ -272,6 +311,7 @@ class MCPService:
                 model,
                 request_timeout,
                 original_credentials,
+                agent_id,
             )
 
         # Enhanced auto-detection with caching for HTTP-based servers
@@ -318,6 +358,7 @@ class MCPService:
                     model,
                     request_timeout,
                     original_credentials,
+                    agent_id,
                 )
 
             except MCPConnectionError as e:
@@ -360,6 +401,7 @@ class MCPService:
                 model,
                 request_timeout,
                 original_credentials,
+                agent_id,
             )
 
         # Proceed with explicitly specified transport type
@@ -373,6 +415,7 @@ class MCPService:
             model,
             request_timeout,
             original_credentials,
+            agent_id,
         )
 
     async def invoke_tool(
@@ -655,6 +698,7 @@ class MCPService:
         model: Optional[LLM] = None,
         request_timeout: int = 60,
         original_credentials: Optional[Dict[str, Any]] = None,
+        agent_id: Optional[str] = None,
     ) -> str:
         """
         Attempt connection with automatic fallback between transports.
@@ -685,6 +729,7 @@ class MCPService:
                     model,
                     request_timeout,
                     original_credentials,
+                    agent_id,  # Pass through agent_id for proper tool isolation
                 )
 
                 # Success - the transport type is already stored in cache by _connect_single_transport
@@ -709,15 +754,23 @@ class MCPService:
                     # Both transports failed - create detailed error message
                     error_details = "\n".join([f"  - {t}: {errors[t]}" for t in transports_to_try])
 
-                    raise MCPConnectionError(
+                    # Check if this is an authentication error
+                    is_auth_error = any("401" in str(e) or "unauthorized" in str(e).lower() for e in errors.values())
+
+                    error_msg = (
                         f"Failed to register MCP server '{server_id}': Unable to connect to {url}\n"
                         f"Tried:\n{error_details}\n"
-                        f"Check: URL accessibility, credentials, server status",
+                        f"Check: {'Authentication credentials' if is_auth_error else 'URL accessibility, credentials, server status'}"  # noqa: E501
+                    )
+
+                    raise MCPConnectionError(
+                        error_msg,
                         {
                             "server_id": server_id,
                             "url": url,
                             "tried_transports": transports_to_try,
                             "errors": errors,
+                            "is_auth_error": is_auth_error,
                         },
                     )
 
@@ -734,6 +787,7 @@ class MCPService:
         model: Optional[LLM] = None,
         request_timeout: int = 60,
         original_credentials: Optional[Dict[str, Any]] = None,
+        agent_id: Optional[str] = None,
     ) -> str:
         """
         Connect using a specific transport type.
@@ -789,18 +843,47 @@ class MCPService:
 
                     # Enhanced tool registry with display names and metadata
                     self.tool_registry[server_id] = {}
+
+                    # Also register in agent-specific registry if agent_id provided
+                    if agent_id:
+                        if agent_id not in self.agent_tool_registry:
+                            self.agent_tool_registry[agent_id] = {}
+                        self.agent_tool_registry[agent_id][server_id] = {}
+
+                        observability.observe(
+                            event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "agent_id": agent_id,
+                                "server_id": server_id,
+                                "tools_count": len(tools),
+                            },
+                            description=f"Registering {len(tools)} tools for agent {agent_id} from server {server_id}"
+                        )
+                    else:
+                        # Register in shared registry if no agent_id
+                        self.agent_tool_registry["_shared"][server_id] = {}
+
                     for i, tool in enumerate(tools):
                         tool_name = tool.get("name", f"unknown_{i}")
 
                         # Use modern protocol features for better UX
-                        self.tool_registry[server_id][tool_name] = {
+                        tool_data = {
                             **tool,
                             "display_name": (ModernProtocolFeatures.extract_display_name(tool)),
                             "supports_structured_output": True,
                             "supports_elicitation": True,
                             "_meta": tool.get("_meta", {}),
-                            "protocol_version": "2025-06-18",
                         }
+
+                        # Register in main registry (for backward compatibility)
+                        self.tool_registry[server_id][tool_name] = tool_data
+
+                        # Register in agent-specific or shared registry
+                        if agent_id:
+                            self.agent_tool_registry[agent_id][server_id][tool_name] = tool_data
+                        else:
+                            self.agent_tool_registry["_shared"][server_id][tool_name] = tool_data
 
                     # Enhanced observability with modern features
                     observability.observe(
@@ -808,6 +891,7 @@ class MCPService:
                         level=observability.EventLevel.INFO,
                         data={
                             "server_id": server_id,
+                            "agent_id": agent_id,
                             "tools_count": len(tools),
                             "transport_type": transport_type,
                             "protocol_features": {
@@ -846,6 +930,14 @@ class MCPService:
                         ),
                     )
                     self.tool_registry[server_id] = {}
+
+                    # Also set empty registry in agent-specific registry
+                    if agent_id:
+                        if agent_id not in self.agent_tool_registry:
+                            self.agent_tool_registry[agent_id] = {}
+                        self.agent_tool_registry[agent_id][server_id] = {}
+                    else:
+                        self.agent_tool_registry["_shared"][server_id] = {}
 
                 # Store server configuration for ephemeral connections
                 # IMPORTANT: Store the original credentials format, not the transformed one
@@ -1668,8 +1760,6 @@ class MCPService:
             # Use chat method with simple messages format
             messages = [{"role": "user", "content": prompt}]
             response = await llm.chat(messages, max_tokens=100)
-
-            # Debug log the response
 
             # Parse the JSON response
             import json

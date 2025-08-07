@@ -121,12 +121,9 @@ class ResponseQualityAssessor:
             # Calculate overall quality
             quality_assessment.overall_quality = self._calculate_overall_quality(quality_assessment)
 
-            #  Debug - TODO: add observability
             return quality_assessment
 
-        except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+        except Exception:
             return self._create_fallback_assessment()
 
     def _create_assessment_prompt(
@@ -226,9 +223,7 @@ Format your response as JSON:
                 improvement_suggestions=data.get("improvement_suggestions", []),
             )
 
-        except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+        except Exception:
             return self._create_fallback_assessment()
 
     def _calculate_overall_quality(self, assessment: QualityAssessment) -> ResponseQuality:
@@ -330,9 +325,7 @@ class PersonaConsistencyAnalyzer:
 
             return analysis
 
-        except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+        except Exception:
             return {
                 "consistency_score": 0.7,
                 "persona_match": True,
@@ -400,9 +393,7 @@ Provide analysis as JSON:
                 return json.loads(json_match.group(0))
             else:
                 raise ValueError("No JSON found in response")
-        except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+        except Exception:
             return {
                 "consistency_score": 0.7,
                 "persona_match": True,
@@ -495,9 +486,7 @@ class AdvancedResponseSynthesizer:
 
             return result
 
-        except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+        except Exception:
             return self._create_fallback_synthesis_result(workflow, user_context)
 
     def _collect_workflow_outputs(self, workflow: Workflow) -> List[Dict[str, Any]]:
@@ -703,9 +692,7 @@ Improved Response:
                 improvement_prompt, max_tokens=2000, temperature=0.6
             )
             return improved_response.strip()
-        except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+        except Exception:
             return content  # Return original if improvement fails
 
     def _get_applied_enhancements(self, mode: SynthesisMode) -> List[str]:

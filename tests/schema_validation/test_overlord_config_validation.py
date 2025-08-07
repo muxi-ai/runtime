@@ -14,7 +14,7 @@ import tempfile
 import yaml
 
 # Import the validation classes
-from src.muxi.config.validation import FormationValidator
+from src.muxi.formation.config.validation import FormationValidator
 
 
 class TestOverlordConfigValidation:

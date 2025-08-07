@@ -26,12 +26,12 @@
 #   # Cleanup
 #   formation.stop_overlord()    # Graceful shutdown
 #   # formation.kill_overlord()  # Immediate shutdown
-#   formation.stop()             # Full cleanup
+#   formation.shutdown()         # Full cleanup
 #
 # =============================================================================
 
 import asyncio
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING, Awaitable
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 import yaml
 from pathlib import Path
 import os
@@ -85,6 +85,7 @@ from ..datatypes.exceptions import (
     OverlordStartupError,
     OverlordStateError,
     DependencyValidationError,
+    RegistryConfigurationError,
     add_error_context,
 )
 
@@ -195,6 +196,12 @@ class Formation:
         self._runtime_config: Dict[str, Any] = {}
         self._agents_config: list = []
 
+        # Track secrets in use
+        self._secrets_in_use: set[str] = set()
+
+        # Track secret placeholder mappings
+        self._secret_placeholders: Dict[str, str] = {}
+
     def set_secrets_manager(self, secrets_manager: SecretsManager) -> None:
         """
         Inject a pre-configured SecretsManager instance.
@@ -212,6 +219,92 @@ class Formation:
             data={"operation": "secrets_manager_injection"},
             description="SecretsManager injected via dependency injection",
         )
+
+    def _get_primary_registry_url(self, a2a_config: Dict[str, Any]) -> Optional[str]:
+        """
+        Get the primary registry URL from A2A configuration.
+
+        Preference order:
+        1. First URL from inbound registries (preferred for receiving requests)
+        2. First URL from outbound registries (fallback)
+        3. None if no registries configured
+
+        Args:
+            a2a_config: The A2A configuration dictionary
+
+        Returns:
+            The primary registry URL or None if not configured
+
+        Raises:
+            ValueError: If registry URL is malformed
+        """
+        # Check inbound registries first (preferred)
+        inbound_registries = a2a_config.get("inbound", {}).get("registries", [])
+        if inbound_registries and inbound_registries[0]:
+            url = inbound_registries[0]
+            # Validate URL format
+            if not (url.startswith("http://") or url.startswith("https://")):
+                raise ValueError(
+                    f"Invalid registry URL format: {url}. Must start with http:// or https://"
+                )
+            return url
+
+        # Fall back to outbound registries
+        outbound_registries = a2a_config.get("outbound", {}).get("registries", [])
+        if outbound_registries and outbound_registries[0]:
+            url = outbound_registries[0]
+            # Validate URL format
+            if not (url.startswith("http://") or url.startswith("https://")):
+                raise ValueError(
+                    f"Invalid registry URL format: {url}. Must start with http:// or https://"
+                )
+            return url
+
+        return None
+
+    def _is_external_registry_enabled(self, a2a_config: Dict[str, Any]) -> bool:
+        """
+        Check if external registry is enabled based on configuration.
+
+        External registry is considered enabled if either inbound or outbound
+        registries are configured.
+
+        Args:
+            a2a_config: The A2A configuration dictionary
+
+        Returns:
+            True if external registry should be enabled
+        """
+        return bool(a2a_config.get("inbound", {}).get("registries")) or bool(
+            a2a_config.get("outbound", {}).get("registries")
+        )
+
+    def _get_inbound_auth_key(self, inbound_config: Dict[str, Any]) -> Optional[str]:
+        """
+        Extract the authentication key from inbound configuration.
+
+        Args:
+            inbound_config: The inbound configuration dictionary
+
+        Returns:
+            The authentication key based on auth type, or None if not configured
+        """
+        auth_config = inbound_config.get("auth", {})
+        auth_type = auth_config.get("type", "none")
+
+        if auth_type == "bearer":
+            return auth_config.get("token")
+        elif auth_type == "api_key":
+            return auth_config.get("key")
+        elif auth_type == "basic":
+            # For basic auth, the server handles username/password separately
+            return None
+        elif auth_type == "custom":
+            # Custom auth uses headers dict
+            return None
+        else:
+            # For "none" or unknown types
+            return None
 
     async def load(self, config_path: str) -> None:
         """
@@ -594,47 +687,9 @@ class Formation:
                     )
                     continue
 
-        # Discover MCP servers from mcp/ directory
-        mcp_dir = formation_dir / "mcp"
-        if mcp_dir.exists() and mcp_dir.is_dir():
-            # Initialize MCP structure if not present
-            if "mcp" not in config:
-                config["mcp"] = {}
-            if "servers" not in config["mcp"]:
-                config["mcp"]["servers"] = []
-
-            # Load each MCP server file
-            for mcp_file in sorted(mcp_dir.glob("*.yaml")) + sorted(mcp_dir.glob("*.yml")):
-                try:
-                    with open(mcp_file, "r") as f:
-                        mcp_config = yaml.safe_load(f)
-
-                    # Interpolate secrets in MCP config
-                    if self.secrets_manager:
-                        mcp_config = self._interpolate_secrets_sync(mcp_config)
-
-                    # Ensure MCP server has an ID
-                    if "id" not in mcp_config:
-                        mcp_config["id"] = mcp_file.stem
-
-                    # Check if server is active (default to True)
-                    if mcp_config.get("active", True):
-                        config["mcp"]["servers"].append(mcp_config)
-                        observability.observe(
-                            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
-                            level=observability.EventLevel.DEBUG,
-                            data={"server_id": mcp_config["id"], "file": str(mcp_file)},
-                            description=f"Discovered MCP server: {mcp_config['id']}",
-                        )
-
-                except Exception as e:
-                    observability.observe(
-                        event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
-                        level=observability.EventLevel.WARNING,
-                        data={"mcp_file": str(mcp_file), "error": str(e)},
-                        description=f"Failed to load MCP file {mcp_file}: {e}",
-                    )
-                    continue
+        # NOTE: MCP server discovery is now handled by FormationLoader
+        # This eliminates duplicate MCP server registration that was happening
+        # when both Formation and FormationLoader processed the mcp/ directory
 
         # Discover A2A services from a2a/ directory
         a2a_dir = formation_dir / "a2a"
@@ -777,8 +832,14 @@ class Formation:
 
             async def _timeout_operation():
                 formation_loader = FormationLoader()
-                result = await formation_loader.load(loader_path, self.secrets_manager)
-                return result
+                config, secrets_in_use, placeholder_registry = await formation_loader.load(
+                    loader_path, self.secrets_manager
+                )
+                # Store the secrets in use set
+                self._secrets_in_use = secrets_in_use
+                # Store the placeholder registry
+                self._secret_placeholders = placeholder_registry
+                return config
 
             result = await execute_with_timeout(
                 _timeout_operation,
@@ -960,40 +1021,91 @@ class Formation:
         a2a_config_obj = None
         if self._a2a_config:
             try:
+                # Collect registries from both inbound and outbound
+                all_registries = []
+
+                # Add outbound registries
+                outbound_registries = self._a2a_config.get("outbound", {}).get("registries", [])
+                for reg in outbound_registries:
+                    if isinstance(reg, str):
+                        all_registries.append(reg)
+                    elif isinstance(reg, dict):
+                        all_registries.append(reg)
+
+                # Add inbound registries
+                inbound_registries = self._a2a_config.get("inbound", {}).get("registries", [])
+                for reg in inbound_registries:
+                    if isinstance(reg, str):
+                        all_registries.append(reg)
+                    elif isinstance(reg, dict):
+                        all_registries.append(reg)
+
+                # Get startup policies (prefer outbound, fall back to inbound)
+                startup_policy = (
+                    self._a2a_config.get("outbound", {}).get("startup_policy") or
+                    self._a2a_config.get("inbound", {}).get("startup_policy", "lenient")
+                )
+                retry_timeout = (
+                    self._a2a_config.get("outbound", {}).get("retry_timeout_seconds") or
+                    self._a2a_config.get("inbound", {}).get("retry_timeout_seconds", 30)
+                )
+
                 a2a_config_obj = A2AServiceSchema(
                     enabled=self._a2a_config.get("enabled", True),
-                    server_enabled=self._a2a_config.get("server", {}).get("enabled", False),
-                    server_host=self._a2a_config.get("server", {}).get("host", "0.0.0.0"),
-                    server_port=self._a2a_config.get("server", {}).get("port", 8080),
-                    external_registry_enabled=self._a2a_config.get("external_registry", {}).get(
-                        "enabled", False
-                    ),
-                    registry_url=self._a2a_config.get("external_registry", {}).get("url"),
+                    # Map inbound configuration to server settings
+                    server_enabled=self._a2a_config.get("inbound", {}).get("enabled", False),
+                    server_host=self._a2a_config.get("inbound", {}).get("host", "0.0.0.0"),
+                    server_port=self._a2a_config.get("inbound", {}).get("port", 8181),
+                    # Enable external registry if inbound or outbound registries are configured
+                    external_registry_enabled=self._is_external_registry_enabled(self._a2a_config),
+                    # Use the primary registry URL from configuration (legacy support)
+                    registry_url=self._get_primary_registry_url(self._a2a_config),
                     registration_timeout=self._a2a_config.get("external_registry", {}).get(
                         "timeout", 30.0
                     ),
-                    require_auth=self._a2a_config.get("security", {}).get("require_auth", False),
+                    # New registry configuration
+                    startup_policy=startup_policy,
+                    retry_timeout_seconds=retry_timeout,
+                    registries=all_registries,
+                    # Map authentication from inbound.auth configuration
+                    require_auth=(
+                        self._a2a_config.get("inbound", {}).get("auth", {}).get("type", "none") != "none"
+                    ),
+                    auth_mode=self._a2a_config.get("inbound", {}).get("auth", {}).get("type", "none"),
+                    shared_key=self._get_inbound_auth_key(self._a2a_config.get("inbound", {})),
                     allowed_origins=self._a2a_config.get("security", {}).get("allowed_origins"),
+                    # Map outbound configuration
+                    default_timeout_seconds=self._a2a_config.get("outbound", {}).get(
+                        "default_timeout_seconds", 30
+                    ),
+                    default_retry_attempts=self._a2a_config.get("outbound", {}).get(
+                        "default_retry_attempts", 3
+                    ),
                 )
                 a2a_config_obj.validate()
             except Exception as e:
                 print(
                     f"Warning: Invalid A2A configuration, using defaults. "
                     f"Validation error: {str(e)}. "
-                    f"Config values: server_enabled={self._a2a_config.get('server', {}).get('enabled')}, "
-                    f"server_port={self._a2a_config.get('server', {}).get('port')}, "
-                    f"external_registry_enabled={self._a2a_config.get('outbound', {}).get('registries') is not None}, "
+                    f"Config values: inbound_enabled={self._a2a_config.get('inbound', {}).get('enabled')}, "
+                    f"inbound_port={self._a2a_config.get('inbound', {}).get('port')}, "
+                    f"external_registry_enabled={self._is_external_registry_enabled(self._a2a_config)}, "
                     f"require_auth={self._a2a_config.get('security', {}).get('require_auth')}",
                     flush=True,
                 )
                 a2a_config_obj = A2AServiceSchema()
 
         # Update service bundle for overlord handoff (don't overwrite!)
+        # For formation_path, ensure we pass the directory (not the file)
+        formation_dir = self._formation_path
+        if formation_dir and os.path.isfile(formation_dir):
+            formation_dir = os.path.dirname(formation_dir)
+
         self._configured_services.update(
             {
                 "formation_config": self.config,
                 "secrets_manager": self.secrets_manager,
-                "formation_path": self._formation_path,
+                "formation_path": formation_dir,  # Pass directory, not file
                 "api_keys": self._api_keys.copy(),
                 # Service-specific configurations (validated and preprocessed)
                 "llm_config": self._llm_config,
@@ -1114,7 +1226,8 @@ class Formation:
         # Store server configuration for later use
         self._server_config = {
             "host": server_config.get("host", "0.0.0.0"),
-            "port": server_config.get("port", 3000),
+            "port": server_config.get("port", 8271),
+            "access_log": server_config.get("access_log", False),
             "api_keys": self._api_keys,
         }
 
@@ -1712,10 +1825,35 @@ class Formation:
             print(f"❌ Permission denied accessing secret '{name}': {e}")
             print("💡 Suggestion: Check file permissions for secrets storage")
             return None
-        except Exception as e:
-            print(f"❌ Unexpected error retrieving secret '{name}': {e}")
-            print("💡 Suggestion: Verify secrets manager is properly initialized")
-            return None
+
+    def get_secrets_count(self) -> int:
+        """
+        Get the count of secrets currently in use by the formation.
+
+        Returns:
+            int: Number of secrets in use
+        """
+        return len(self._secrets_in_use) if hasattr(self, "_secrets_in_use") else 0
+
+    def is_secret_in_use(self, secret_name: str) -> bool:
+        """
+        Check if a secret is being used in the current formation configuration.
+
+        Args:
+            secret_name: Name of the secret to check
+
+        Returns:
+            bool: True if the secret is in use, False otherwise
+        """
+        # Normalize the secret name the same way SecretsManager does
+        import re
+
+        normalized_name = re.sub(r"[^A-Z0-9_]", "_", secret_name.upper())
+        normalized_name = re.sub(r"_+", "_", normalized_name)
+        normalized_name = normalized_name.strip("_")
+
+        # Check if the secret is in our tracked set
+        return normalized_name in self._secrets_in_use
 
     async def list_secrets(self) -> List[str]:
         """
@@ -2221,7 +2359,21 @@ class Formation:
                     description=f"Built-in MCP registration failed: {e}",
                 )
 
+            # A2A initialization happens through the Overlord's A2ACoordinator
+            # No separate service initialization needed here
+
             return self._overlord
+
+        except RegistryConfigurationError as e:
+            # Clean up on failure - registry configuration issue
+            self._is_running = False
+            self._overlord = None
+
+            # Print the user-friendly message
+            print(e.user_message, file=sys.stderr)
+
+            # Re-raise the exception for proper handling upstream
+            raise
 
         except ImportError as e:
             # Clean up on failure - overlord import failed
@@ -2359,6 +2511,106 @@ class Formation:
             self._overlord = None
             self._is_running = False
 
+    async def _deregister_agents_with_timeout(self, timeout: float = 2.0) -> None:
+        """
+        Helper method to deregister all agents from external registry with configurable timeout.
+
+        Args:
+            timeout: Maximum time to wait for deregistration (default: 2.0 seconds)
+        """
+        if not self._overlord or not hasattr(
+            self._overlord, "_deregister_all_agents_from_external_registry"
+        ):
+            return
+
+        try:
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_AGENT_DEREGISTERED,
+                level=observability.EventLevel.INFO,
+                data={"timeout": timeout, "action": "deregistration_started"},
+                description="Starting agent deregistration from external registry",
+            )
+
+            await asyncio.wait_for(
+                self._overlord._deregister_all_agents_from_external_registry(), timeout=timeout
+            )
+
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_DEREGISTERED,
+                level=observability.EventLevel.INFO,
+                data={},
+                description="Successfully deregistered all agents from external registry",
+            )
+
+        except asyncio.TimeoutError:
+            observability.observe(
+                event_type=observability.ErrorEvents.TIMEOUT_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"timeout": timeout, "operation": "agent_deregistration"},
+                description=f"Agent deregistration timed out after {timeout} seconds",
+            )
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.UNEXPECTED_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"error": str(e), "operation": "agent_deregistration"},
+                description=f"Failed to deregister agents: {e}",
+            )
+
+    def _run_async_with_timeout(self, coro, timeout: float = 2.0) -> None:
+        """
+        Helper method to run an async coroutine with timeout, handling both cases:
+        - When there's an existing event loop (create task)
+        - When there's no event loop (create new loop)
+
+        Args:
+            coro: The coroutine to run
+            timeout: Maximum time to wait (default: 2.0 seconds)
+        """
+        try:
+            # Try to get the running loop
+            loop = asyncio.get_running_loop()
+
+            # Create task to run in background (fire and forget)
+            task = asyncio.create_task(coro)
+
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_STARTED,
+                level=observability.EventLevel.DEBUG,
+                data={"task": str(task), "timeout": timeout, "operation": "async_task_created"},
+                description="Created async task in existing event loop",
+            )
+
+        except RuntimeError:
+            # No running loop, create a new one
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_STARTED,
+                level=observability.EventLevel.DEBUG,
+                data={"timeout": timeout, "operation": "event_loop_created"},
+                description="Creating new event loop for async operation",
+            )
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(asyncio.wait_for(coro, timeout=timeout))
+            except asyncio.TimeoutError:
+                observability.observe(
+                    event_type=observability.ErrorEvents.TIMEOUT_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"timeout": timeout, "operation": "async_with_timeout"},
+                    description=f"Operation timed out after {timeout} seconds",
+                )
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.UNEXPECTED_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e)},
+                    description=f"Operation failed: {e}",
+                )
+            finally:
+                loop.close()
+
     def kill_overlord(self) -> None:
         """
         Immediately terminate overlord - stop NOW regardless of state.
@@ -2371,27 +2623,15 @@ class Formation:
             return  # Already stopped or never started
 
         try:
+            # Deregister agents from external registry if configured
+            # Using helper method for cleaner structure and better observability
+            self._run_async_with_timeout(
+                self._deregister_agents_with_timeout(timeout=2.0), timeout=2.0
+            )
+
             # Disconnect MCP servers immediately if present
             if hasattr(self, "_mcp_service") and self._mcp_service:
-                try:
-                    # Check for existing event loop before creating a new one
-                    import asyncio
-
-                    try:
-                        # Try to get the running loop
-                        loop = asyncio.get_running_loop()
-                        # If we're in an async context, create a task
-                        asyncio.create_task(self._mcp_service.disconnect_all())
-                    except RuntimeError:
-                        # No running loop, create a new one
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            loop.run_until_complete(self._mcp_service.disconnect_all())
-                        finally:
-                            loop.close()
-                except Exception:
-                    pass  # Ignore errors during emergency shutdown
+                self._run_async_with_timeout(self._mcp_service.disconnect_all(), timeout=2.0)
 
             # Force immediate cleanup without waiting
             self._overlord = None
@@ -2406,18 +2646,26 @@ class Formation:
 
     def shutdown(self, code: int = 0) -> None:
         """
-        Immediately shutdown the formation and exit the process.
+        Immediately shutdown the formation and exit the process (synchronous).
 
         This method performs an IMMEDIATE shutdown:
         - Kills the overlord without waiting for agents to finish
-        - Exits the process immediately
+        - Exits the process immediately with os._exit(code)
         - No graceful cleanup or state saving
+        - Skips Python's cleanup (atexit handlers, etc.)
 
         Use this when:
         - You need to exit RIGHT NOW (emergency shutdown)
         - In synchronous code where you can't use await
         - In error handlers or signal handlers
         - For simple scripts that don't need graceful shutdown
+        - You want a quick exit without cleanup overhead
+
+        Compare with other shutdown methods:
+        - stop(): Cleanup only, process continues
+        - shutdown(): No cleanup, immediate exit (THIS METHOD)
+        - ashutdown(): Graceful cleanup, then exit
+        - kill(): Emergency abort, immediate exit
 
         For graceful shutdown, use ashutdown() instead.
 
@@ -2445,19 +2693,27 @@ class Formation:
 
     async def ashutdown(self, code: int = 0) -> None:
         """
-        Gracefully shutdown the formation and exit the process.
+        Gracefully shutdown the formation and exit the process (async).
 
         This method performs a GRACEFUL shutdown:
         - Waits for agents to finish their current work (up to 5 seconds)
         - Properly disconnects from MCP servers
         - Saves state and cleans up resources
-        - Then exits the process cleanly
+        - Then exits the process cleanly with os._exit(code)
+        - Best effort: falls back to kill if graceful shutdown fails
 
         Use this when:
         - In production services for controlled shutdown
         - You want agents to complete their current tasks
         - You need to save state or close connections properly
         - In async applications (most modern Python code)
+        - Data integrity is important
+
+        Compare with other shutdown methods:
+        - stop(): Cleanup only, process continues
+        - shutdown(): No cleanup, immediate exit
+        - ashutdown(): Graceful cleanup, then exit (THIS METHOD)
+        - kill(): Emergency abort, immediate exit
 
         For immediate shutdown without waiting, use shutdown() instead.
 
@@ -2493,9 +2749,84 @@ class Formation:
         # Use os._exit to skip Python cleanup (including async generator cleanup)
         os._exit(code)
 
-    def start_server(
+    def kill(self, code: int = 1) -> None:
+        """
+        IMMEDIATELY KILL EVERYTHING AND EXIT THE PROCESS - NUCLEAR OPTION!
+
+        This is the most aggressive shutdown that:
+        - Kills the overlord instantly (no waiting)
+        - Doesn't bother with ANY cleanup
+        - Skips ALL cleanup procedures
+        - EXITS THE PROCESS IMMEDIATELY with os._exit(code)
+        - Last resort logging attempt before exit
+
+        Use this when:
+        - You need to STOP EVERYTHING NOW
+        - Emergency shutdown is required
+        - Something has gone catastrophically wrong
+        - You don't care about cleanup, you just want OUT
+        - Second Ctrl+C in shutdown scripts
+        - Deadlocks or hanging processes
+
+        Compare with other shutdown methods:
+        - stop(): Cleanup only, process continues
+        - shutdown(): No cleanup, immediate exit
+        - ashutdown(): Graceful cleanup, then exit
+        - kill(): Emergency abort, immediate exit (THIS METHOD)
+
+        WARNING: This is the most destructive option!
+
+        Args:
+            code: Exit code (default: 1 for error, 0 for success)
+
+        Example:
+            formation = Formation()
+            await formation.load("formation.yaml")
+            await formation.start_overlord()
+
+            # Something goes catastrophically wrong...
+            formation.kill()  # STOP EVERYTHING AND EXIT NOW!
+            # This line will never execute
+        """
+        import sys
+
+        # Try to kill overlord if it exists (don't wait for anything)
+        if self._is_running and self._overlord:
+            try:
+                self._overlord = None
+                self._is_running = False
+            except Exception:
+                pass  # Don't care about errors when killing
+
+        # Log that we're killing everything (if possible)
+        try:
+            observability.observe(
+                event_type=observability.SystemEvents.CLEANUP,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "service": "formation",
+                    "action": "kill",
+                    "formation_id": self.formation_id,
+                    "exit_code": code,
+                },
+                description=f"FORMATION KILLED - EMERGENCY EXIT WITH CODE {code}",
+            )
+        except Exception:
+            pass  # Don't care if logging fails
+
+        # Flush output streams (try to get any final messages out)
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
+
+        # EXIT NOW!
+        os._exit(code)
+
+    async def start_server(
         self, host: Optional[str] = None, port: Optional[int] = None, block: bool = True
-    ) -> Union["FormationServer", Awaitable["FormationServer"]]:
+    ) -> "FormationServer":
         """
         Start the Formation API server.
 
@@ -2506,13 +2837,12 @@ class Formation:
         Args:
             host: Override host from formation.yaml (default: use config value)
             port: Override port from formation.yaml (default: use config value)
-            block: Whether to block until server stops (default: True)
-                   If True, this method will block until the server is stopped.
+            block: Whether to block until server starts (default: True)
+                   If True, this method will block until the server is started.
                    If False, returns an awaitable that resolves when startup completes.
 
         Returns:
-            FormationServer: The running server instance (when block=True)
-            Awaitable[FormationServer]: Awaitable server instance (when block=False)
+            FormationServer: The running server instance
 
         Raises:
             RuntimeError: If server configuration is missing or invalid
@@ -2521,7 +2851,7 @@ class Formation:
             # Block mode (typical for standalone server)
             formation = Formation()
             await formation.load("my-formation.yaml")
-            server = formation.start_server()  # Auto-starts overlord, then blocks
+            server = await formation.start_server()  # Auto-starts overlord, then blocks
 
             # Non-blocking mode with proper error handling
             formation = Formation()
@@ -2564,7 +2894,7 @@ class Formation:
                         "action": "replacing_stopped_server",
                         "formation_id": self.formation_id,
                     },
-                    description="Replacing existing stopped server instance"
+                    description="Replacing existing stopped server instance",
                 )
 
         # Import FormationServer here to avoid circular imports
@@ -2578,8 +2908,14 @@ class Formation:
         actual_host = host or config_host
         actual_port = port or config_port
 
-        # Create server instance
-        self._formation_server = FormationServer(formation=self, host=actual_host, port=actual_port)
+        # Create server instance with debug and access_log settings
+        self._formation_server = FormationServer(
+            formation=self,
+            host=actual_host,
+            port=actual_port,
+            debug=self._server_config.get("debug", False),
+            access_log=self._server_config.get("access_log", False),
+        )
 
         observability.observe(
             event_type=observability.SystemEvents.INITIALIZING,
@@ -2609,93 +2945,14 @@ class Formation:
             )
 
             # Auto-start overlord for cleaner API
-            try:
-                # Check if we're in an async context
-                try:
-                    loop = asyncio.get_running_loop()
-                    # We're in an async context, but start_overlord is async
-                    # We need to handle this properly
-                    if loop.is_running():
-                        # Create a task to start overlord
-                        async def start_overlord_task():
-                            await self.start_overlord()
-
-                        # This is tricky - we can't await in a sync context
-                        # For now, raise an error asking user to start overlord first
-                        raise RuntimeError(
-                            "Cannot auto-start overlord in async context. "
-                            "Please call 'await formation.start_overlord()' "
-                            "before start_server()."
-                        )
-                    else:
-                        # Not in running loop, can use asyncio.run
-                        asyncio.run(self.start_overlord())
-                except RuntimeError:
-                    # No event loop, safe to create one
-                    asyncio.run(self.start_overlord())
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.SystemEvents.INITIALIZING,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "service": "formation_api_server",
-                        "formation_id": self.formation_id,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                    },
-                    description=f"Failed to auto-start overlord: {e}",
-                )
-                raise RuntimeError(
-                    f"Failed to auto-start overlord: {e}. "
-                    "Please start the overlord manually with "
-                    "'await formation.start_overlord()'"
-                )
+            await self.start_overlord()
 
         # Start the server
+        # Don't install signal handlers - let the parent process handle them
         if block:
-            # Run in blocking mode using asyncio
-            try:
-                asyncio.run(self._formation_server.start(block=True))
-            except KeyboardInterrupt:
-                observability.observe(
-                    event_type=observability.SystemEvents.CLEANUP,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "service": "formation_api_server",
-                        "formation_id": self.formation_id,
-                        "shutdown_reason": "user_interrupt",
-                    },
-                    description="Formation API server interrupted by user",
-                )
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.SystemEvents.CLEANUP,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "service": "formation_api_server",
-                        "formation_id": self.formation_id,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                    },
-                    description=f"Formation API server error: {e}",
-                )
-                raise
+            await self._formation_server.start(block=True, install_signal_handlers=False)
         else:
-            # Run in non-blocking mode
-            # This requires the server to be started in an existing event loop
-            loop = asyncio.get_event_loop()
-            if not loop.is_running():
-                raise RuntimeError(
-                    "Non-blocking mode requires a running event loop. "
-                    "Either use block=True or run this in an async context."
-                )
-
-            # Return an awaitable that starts the server and returns it
-            async def start_server_async() -> "FormationServer":
-                await self._formation_server.start(block=False)
-                return self._formation_server
-
-            return start_server_async()
+            await self._formation_server.start(block=False, install_signal_handlers=False)
 
         return self._formation_server
 
@@ -2706,18 +2963,71 @@ class Formation:
         Returns:
             bool: True if server exists and is running, False otherwise
         """
-        return (
-            self._formation_server is not None
-            and self._formation_server.is_running
-        )
+        return self._formation_server is not None and self._formation_server.is_running
+
+    def is_overlord_running(self) -> bool:
+        """
+        Check if the Overlord is currently running.
+
+        Returns:
+            bool: True if overlord exists and is running, False otherwise
+        """
+        return self._overlord is not None
+
+    def has_persistent_memory(self) -> bool:
+        """
+        Check if persistent memory is configured and available.
+
+        Returns:
+            bool: True if long-term memory is configured, False otherwise
+        """
+        return hasattr(self, "_long_term_memory") and self._long_term_memory is not None
+
+    def _clear_config_dict(self, config_name: str) -> None:
+        """
+        Helper method to clear a configuration dictionary if it exists and has a clear method.
+
+        Args:
+            config_name: Name of the configuration attribute to clear
+        """
+        if hasattr(self, config_name):
+            config_obj = getattr(self, config_name)
+            if hasattr(config_obj, "clear"):
+                config_obj.clear()
 
     def stop(self) -> None:
         """
-        Stop formation infrastructure and cleanup resources.
+        Stop formation infrastructure and cleanup resources WITHOUT exiting the process.
 
-        Performs final cleanup of formation-level resources including services,
-        configurations, and connections. Call this after stopping the overlord
-        to ensure complete cleanup.
+        This method performs resource cleanup only:
+        - Cancels all active operations
+        - Stops the overlord gracefully (if running)
+        - Stops the API server (if running)
+        - Clears all configurations and service references
+        - Cleans up memory and connections
+        - Your Python script continues running after this
+
+        Use this when:
+        - You want to stop the formation but continue your script
+        - You need to restart the formation with different config
+        - You're testing or debugging and want to clean up without exiting
+        - You want full control over when your process exits
+
+        Compare with other shutdown methods:
+        - stop(): Cleanup only, process continues (THIS METHOD)
+        - shutdown(): No cleanup, immediate exit
+        - ashutdown(): Graceful cleanup, then exit
+        - kill(): Emergency abort, immediate exit
+
+        Example:
+            formation = Formation()
+            await formation.load("formation.yaml")
+            await formation.start_overlord()
+
+            # Use the formation...
+
+            formation.stop()  # Stop formation
+            print("Formation stopped, doing other work...")  # Script continues
         """
         try:
             # Cancel all active operations first
@@ -2726,7 +3036,14 @@ class Formation:
 
             # Stop overlord if still running (gracefully)
             if self._is_running:
-                self.stop_overlord()
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        asyncio.create_task(self.stop_overlord())
+                    else:
+                        asyncio.run(self.stop_overlord())
+                except Exception as e:
+                    print(f"   ⚠️  Cleanup warning: {e}")
 
             # Stop API server if running
             if hasattr(self, "_formation_server") and self._formation_server:
@@ -2773,15 +3090,49 @@ class Formation:
             self._formation_cancellation_token = None
 
             # Clear individual service configurations
-            self._llm_config.clear()
-            self._memory_config.clear()
-            self._mcp_config.clear()
-            self._a2a_config.clear()
-            self._logging_config.clear()
-            self._clarification_config.clear()
-            self._document_processing_config.clear()
-            self._scheduler_config.clear()
-            self._agents_config.clear()
+            # Use dict check to handle both dict and object types
+            if isinstance(self._llm_config, dict):
+                self._llm_config.clear()
+            else:
+                self._llm_config = {}
+
+            if isinstance(self._memory_config, dict):
+                self._memory_config.clear()
+            else:
+                self._memory_config = {}
+
+            if isinstance(self._mcp_config, dict):
+                self._mcp_config.clear()
+            else:
+                self._mcp_config = {}
+
+            if isinstance(self._a2a_config, dict):
+                self._a2a_config.clear()
+            else:
+                self._a2a_config = {}
+
+            if isinstance(self._logging_config, dict):
+                self._logging_config.clear()
+            else:
+                self._logging_config = {}
+
+            if isinstance(self._clarification_config, dict):
+                self._clarification_config.clear()
+            else:
+                self._clarification_config = {}
+
+            # Document processing config is special - it's a DocumentProcessingConfig object
+            self._document_processing_config = {}
+
+            if isinstance(self._scheduler_config, dict):
+                self._scheduler_config.clear()
+            else:
+                self._scheduler_config = {}
+
+            if isinstance(self._agents_config, list):
+                self._agents_config.clear()
+            else:
+                self._agents_config = []
 
         except Exception as e:
             print(f"❌ Error during formation cleanup: {e}")
@@ -2791,6 +3142,11 @@ class Formation:
     def is_running(self) -> bool:
         """Check if overlord is currently running."""
         return self._is_running
+
+    @property
+    def secret_placeholders(self) -> Dict[str, str]:
+        """Get the secret placeholder mappings (returns a copy to prevent external modification)."""
+        return self._secret_placeholders.copy()
 
     def get_formation_id(self) -> str:
         """Get the formation ID."""
@@ -2882,7 +3238,7 @@ class Formation:
             # File path - use FormationLoader to load and process
             try:
                 formation_loader = FormationLoader()
-                loaded_config = await formation_loader.load(schema, self.secrets_manager)
+                loaded_config, _, _ = await formation_loader.load(schema, self.secrets_manager)
 
                 # For individual components, extract the relevant section
                 if schema_type == "agent":
@@ -3182,9 +3538,7 @@ class Formation:
             agent_config["source"] = "api"
             self.config["agents"].append(agent_config)
 
-    def update_agent_in_config(
-        self, agent_id: str, updates: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def update_agent_in_config(self, agent_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
         """
         Safely update an agent in the formation config with thread synchronization.
 
@@ -3232,10 +3586,7 @@ class Formation:
                 raise RuntimeError("Formation config not loaded")
 
             agents = self.config.get("agents", [])
-            agent_idx = next(
-                (i for i, a in enumerate(agents) if a.get("id") == agent_id),
-                None
-            )
+            agent_idx = next((i for i, a in enumerate(agents) if a.get("id") == agent_id), None)
 
             if agent_idx is None:
                 raise ValueError(f"Agent '{agent_id}' not found")
@@ -3244,7 +3595,9 @@ class Formation:
 
             # Check if agent can be removed
             if agent.get("source") != "api":
-                raise ValueError(f"Agent '{agent_id}' was not created via API and cannot be removed")
+                raise ValueError(
+                    f"Agent '{agent_id}' was not created via API and cannot be removed"
+                )
 
             # Remove agent
             agents.pop(agent_idx)
