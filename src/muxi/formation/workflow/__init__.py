@@ -31,6 +31,7 @@ from .decomposer import TaskDecomposer, ApprovalManager
 from .executor import WorkflowExecutor, ProgressTracker
 from .workflow_manager import WorkflowManager
 from .workflow_metrics import WorkflowMetrics
+from .sops import SOPSystem
 
 __all__ = [
     # Data types
@@ -57,5 +58,6 @@ __all__ = [
     "TaskDecomposer",
     "WorkflowExecutor",
     "WorkflowManager",
-    "WorkflowMetrics"
+    "WorkflowMetrics",
+    "SOPSystem"
 ]

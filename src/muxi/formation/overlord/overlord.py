@@ -904,7 +904,7 @@ class Overlord:
 
         # Try to initialize now
         try:
-            from muxi.formation.overlord.sops import SOPSystem
+            from muxi.formation.workflow.sops import SOPSystem
 
             self.sop_system = SOPSystem(Path(self._sop_formation_path))
 

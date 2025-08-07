@@ -183,7 +183,15 @@ class SOPSystem:
                     }
                     self.file_hashes[sop_id] = file_hash
 
-        # Resource mapping removed - decomposer handles [file:] references now
+        # Build resource map for [file:] references (all files in sops/)
+        # Even though decomposer handles execution, we still need to resolve paths
+        for file_path in self.sop_dir.rglob("*"):
+            if file_path.is_file():
+                # Store with relative path from sops/ dir
+                relative_path = file_path.relative_to(self.sop_dir)
+                self.resource_map[str(relative_path)] = file_path
+                # Also store just filename for convenience
+                self.resource_map[file_path.name] = file_path
 
     def _parse_tags(self, tags: Any) -> List[str]:
         """
