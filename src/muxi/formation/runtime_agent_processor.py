@@ -115,31 +115,8 @@ async def add_agent_to_overlord_runtime(
         RuntimeError: If overlord is not running
         ValueError: If agent creation fails
     """
-    if not formation._is_running or not formation._overlord:
-        raise RuntimeError("Overlord is not running")
+    # Use public method to add agent to overlord
+    # This handles all the agent creation, metadata setup, and workflow component updates
+    await formation.add_agent_to_overlord(processed_config)
 
-    agent_id = processed_config["id"]
-
-    # Create agent using the same method as initialization
-    agent = await formation._overlord._create_agent_from_config(processed_config)
-
-    # Add to agents dictionary
-    formation._overlord.agents[agent_id] = agent
-
-    # Store agent metadata for routing (same as initialization)
-    formation._overlord.agent_descriptions[agent_id] = processed_config.get("description", "")
-    formation._overlord.agent_metadata[agent_id] = {
-        "name": processed_config.get("name", agent_id),
-        "role": processed_config.get("role", "general"),
-        "specialties": processed_config.get("specialties", []),
-        "system_message": processed_config.get("system_message", ""),
-    }
-
-    # Update workflow components if they exist
-    if hasattr(formation._overlord, 'task_decomposer') and formation._overlord.task_decomposer:
-        formation._overlord.task_decomposer.agent_registry = formation._overlord.agents
-
-    if hasattr(formation._overlord, 'workflow_executor') and formation._overlord.workflow_executor:
-        formation._overlord.workflow_executor.agent_registry = formation._overlord.agents
-
-    return agent_id
+    return processed_config["id"]

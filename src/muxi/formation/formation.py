@@ -1702,7 +1702,7 @@ class Formation:
             return False
 
         # Check if already initialized
-        if hasattr(self.secrets_manager, '_encryption_initialized') and self.secrets_manager._encryption_initialized:
+        if self.secrets_manager.is_initialized():
             return True
 
         async def _initialize_operation():
@@ -3672,6 +3672,59 @@ class Formation:
             # Remove agent
             agents.pop(agent_idx)
             return True
+
+    async def add_agent_to_overlord(self, processed_config: Dict[str, Any]) -> None:
+        """
+        Add a new agent to the running overlord.
+
+        This method creates an agent instance from the processed configuration
+        and adds it to the overlord's runtime. It should be used when adding
+        agents dynamically after the overlord has started.
+
+        Args:
+            processed_config: Processed agent configuration dictionary
+                             (after secrets processing and validation)
+
+        Raises:
+            RuntimeError: If overlord is not running
+            ValueError: If agent creation fails or agent ID already exists
+        """
+        if not self._is_running or not self._overlord:
+            raise RuntimeError("Overlord is not running")
+
+        agent_id = processed_config.get("id")
+        if not agent_id:
+            raise ValueError("Agent configuration missing 'id' field")
+
+        # Check if agent already exists
+        if agent_id in self._overlord.agents:
+            raise ValueError(f"Agent with id '{agent_id}' already exists in overlord")
+
+        # Create agent using the overlord's agent creation method
+        agent = await self._overlord._create_agent_from_config(processed_config)
+
+        # Add to agents dictionary
+        self._overlord.agents[agent_id] = agent
+
+        # Store agent metadata for routing (same as initialization)
+        self._overlord.agent_descriptions[agent_id] = processed_config.get("description", "")
+        self._overlord.agent_metadata[agent_id] = {
+            "name": processed_config.get("name", agent_id),
+            "role": processed_config.get("role", "general"),
+            "specialties": processed_config.get("specialties", []),
+            "system_message": processed_config.get("system_message", ""),
+        }
+
+        # Update workflow executor if available
+        if hasattr(self._overlord, '_workflow_executor') and self._overlord._workflow_executor:
+            self._overlord._workflow_executor._update_agent_capabilities({agent_id: agent})
+
+        # Update workflow components if they exist
+        if hasattr(self._overlord, 'task_decomposer') and self._overlord.task_decomposer:
+            self._overlord.task_decomposer.agent_registry = self._overlord.agents
+
+        if hasattr(self._overlord, 'workflow_executor') and self._overlord.workflow_executor:
+            self._overlord.workflow_executor.agent_registry = self._overlord.agents
 
     async def list_agents(self) -> Dict[str, Dict[str, Any]]:
         """

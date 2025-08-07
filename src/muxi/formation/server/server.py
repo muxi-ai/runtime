@@ -11,7 +11,7 @@ import signal
 import time
 import threading
 from contextlib import asynccontextmanager
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Tuple
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -344,6 +344,63 @@ class FormationServer:
         from .responses import create_error_response
 
         # Create specialized handler for validation errors
+        def _infer_field_type(error_type: str, loc_string: str) -> Tuple[str, str]:
+            """
+            Infer field type and error kind from error type and location string.
+
+            Args:
+                error_type: The error type from validation
+                loc_string: The field location as a dot-separated string
+
+            Returns:
+                Tuple of (field_type, error_kind)
+            """
+            # Error type to field type and error kind mapping
+            ERROR_TYPE_MAPPING = {
+                "missing": ("string", "missing"),  # Default to string for missing
+                "string_type": ("string", "wrong_type"),
+                "int_type": ("integer", "wrong_type"),
+                "bool_type": ("boolean", "wrong_type"),
+                "list_type": ("array", "wrong_type"),
+                "dict_type": ("object", "wrong_type"),
+            }
+
+            # Check if error type is in the mapping
+            if error_type in ERROR_TYPE_MAPPING:
+                field_type, error_kind = ERROR_TYPE_MAPPING[error_type]
+            else:
+                # Fall back to pattern matching for error kind
+                error_kind = "invalid"  # default
+                if "json_invalid" in error_type:
+                    error_kind = "invalid_json"
+                elif "too_short" in error_type:
+                    error_kind = "too_short"
+                elif "too_long" in error_type:
+                    error_kind = "too_long"
+                elif "regex" in error_type:
+                    error_kind = "invalid_format"
+
+                # Default field type
+                field_type = "string"
+
+            # Field suffix patterns for type inference
+            FIELD_SUFFIX_PATTERNS = {
+                "boolean": [".active"],
+                "array": [".llm_models", ".mcp_servers", ".knowledge"],
+                "object": [".a2a", ".settings"],
+                "integer": [".max_tokens", ".timeout_seconds", ".max_retries"],
+                "number": [".temperature"],
+            }
+
+            # Override field type based on location string suffix
+            # This is important for 'missing' errors where we need to know the expected type
+            for expected_type, suffixes in FIELD_SUFFIX_PATTERNS.items():
+                if any(loc_string.endswith(suffix) for suffix in suffixes):
+                    field_type = expected_type
+                    break
+
+            return field_type, error_kind
+
         @app.exception_handler(RequestValidationError)
         async def validation_exception_handler(request, exc: RequestValidationError):
             """Handle FastAPI validation errors with detailed error information."""
@@ -360,49 +417,9 @@ class FormationServer:
                     loc_parts = loc_parts[1:]
                 loc_string = ".".join(str(part) for part in loc_parts)
 
-                # Parse error type into type and error fields
+                # Use the new method to infer field type and error kind
                 error_type = error["type"]
-                error_kind = "invalid"  # default
-
-                # Determine the expected field type based on the error
-                field_type = "string"  # default for most fields
-                if loc_string.endswith(".active"):
-                    field_type = "boolean"
-                elif loc_string.endswith((".llm_models", ".mcp_servers", ".knowledge")):
-                    field_type = "array"
-                elif loc_string.endswith((".a2a", ".settings")):
-                    field_type = "object"
-                elif any(loc_string.endswith(x) for x in (".max_tokens", ".timeout_seconds", ".max_retries")):
-                    field_type = "integer"
-                elif loc_string.endswith((".temperature",)):
-                    field_type = "number"
-
-                # Parse specific error kind
-                if error_type == "missing":
-                    error_kind = "missing"
-                elif error_type == "string_type":
-                    error_kind = "wrong_type"
-                    field_type = "string"
-                elif error_type == "int_type":
-                    error_kind = "wrong_type"
-                    field_type = "integer"
-                elif error_type == "bool_type":
-                    error_kind = "wrong_type"
-                    field_type = "boolean"
-                elif error_type == "list_type":
-                    error_kind = "wrong_type"
-                    field_type = "array"
-                elif error_type == "dict_type":
-                    error_kind = "wrong_type"
-                    field_type = "object"
-                elif "json_invalid" in error_type:
-                    error_kind = "invalid_json"
-                elif "too_short" in error_type:
-                    error_kind = "too_short"
-                elif "too_long" in error_type:
-                    error_kind = "too_long"
-                elif "regex" in error_type:
-                    error_kind = "invalid_format"
+                field_type, error_kind = _infer_field_type(error_type, loc_string)
 
                 validation_errors.append(
                     {

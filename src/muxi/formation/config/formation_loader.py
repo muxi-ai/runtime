@@ -67,6 +67,23 @@ class FormationLoader:
         """Initialize the formation loader."""
         self.config_loader = ConfigLoader()
 
+    def _validate_config_is_dict(self, config: Any, file_name: str, config_type: str) -> bool:
+        """
+        Validate that a loaded configuration is a dictionary.
+
+        Args:
+            config: The loaded configuration to validate
+            file_name: Name of the file that was loaded
+            config_type: Type of configuration (e.g., "Agent", "MCP", "A2A")
+
+        Returns:
+            bool: True if config is a dictionary, False otherwise
+        """
+        if not isinstance(config, dict):
+            print(f"⚠️  Warning: {config_type} file '{file_name}' contains {type(config).__name__} instead of dict - skipping")  # noqa: E501
+            return False
+        return True
+
     async def load(
         self, path: str, secrets_manager: Optional[Any] = None
     ) -> tuple[Dict[str, Any], set[str], Dict[str, str]]:
@@ -271,11 +288,7 @@ class FormationLoader:
                 agent_config = self.config_loader.load(str(agent_file))
 
                 # Validate that agent config is a dictionary
-                if not isinstance(agent_config, dict):
-                    print(
-                        f"⚠️  Warning: Agent file '{agent_file.name}' contains "
-                        f"{type(agent_config).__name__} instead of dict - skipping"
-                    )
+                if not self._validate_config_is_dict(agent_config, agent_file.name, "Agent"):
                     continue
 
                 agent_config, agent_secrets, agent_placeholders = (
@@ -437,11 +450,7 @@ class FormationLoader:
                 mcp_config = self.config_loader.load(str(mcp_file))
 
                 # Validate that MCP config is a dictionary
-                if not isinstance(mcp_config, dict):
-                    print(
-                        f"⚠️  Warning: MCP file '{mcp_file.name}' contains "
-                        f"{type(mcp_config).__name__} instead of dict - skipping"
-                    )
+                if not self._validate_config_is_dict(mcp_config, mcp_file.name, "MCP"):
                     continue
 
                 mcp_config, mcp_secrets, mcp_placeholders = (
@@ -544,11 +553,7 @@ class FormationLoader:
                 a2a_config = self.config_loader.load(str(a2a_file))
 
                 # Validate that A2A config is a dictionary
-                if not isinstance(a2a_config, dict):
-                    print(
-                        f"⚠️  Warning: A2A file '{a2a_file.name}' contains "
-                        f"{type(a2a_config).__name__} instead of dict - skipping"
-                    )
+                if not self._validate_config_is_dict(a2a_config, a2a_file.name, "A2A"):
                     continue
 
                 a2a_config, a2a_secrets, a2a_placeholders = (

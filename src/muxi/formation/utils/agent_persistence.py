@@ -5,6 +5,7 @@ Handles saving and loading agent configurations to/from YAML files.
 """
 
 import os
+import re
 import yaml
 from pathlib import Path
 from typing import Dict, Any, TYPE_CHECKING
@@ -17,6 +18,66 @@ class AgentPersistenceError(Exception):
     """Raised when agent persistence operations fail."""
 
     pass
+
+
+def _validate_and_sanitize_agent_id(agent_id: str, agents_dir: Path) -> Path:
+    """
+    Validate and sanitize agent_id to prevent directory traversal attacks.
+
+    Args:
+        agent_id: The agent ID to validate
+        agents_dir: The resolved agents directory path
+
+    Returns:
+        Path: The validated and resolved agent file path
+
+    Raises:
+        ValueError: If agent_id contains unsafe characters or attempts directory traversal
+    """
+    # Check if agent_id is a string and not empty
+    if not isinstance(agent_id, str) or not agent_id.strip():
+        raise ValueError("Agent ID must be a non-empty string")
+
+    # Define safe character pattern (alphanumeric, underscore, hyphen)
+    safe_pattern = re.compile(r'^[a-zA-Z0-9_-]+$')
+    if not safe_pattern.match(agent_id):
+        raise ValueError(
+            f"Agent ID '{agent_id}' contains unsafe characters. "
+            "Only alphanumeric characters, underscores, and hyphens are allowed."
+        )
+
+    # Check for path separators (both Unix and Windows)
+    if '/' in agent_id or '\\' in agent_id or os.sep in agent_id:
+        raise ValueError(f"Agent ID '{agent_id}' contains path separators which are not allowed")
+
+    # Verify basename equals the original (prevents directory traversal attempts)
+    if os.path.basename(agent_id) != agent_id:
+        raise ValueError(f"Agent ID '{agent_id}' appears to contain path traversal elements")
+
+    # Construct the full path
+    agent_file_path = agents_dir / f"{agent_id}.yaml"
+
+    # Resolve both paths to absolute paths
+    resolved_agents_dir = agents_dir.resolve()
+    resolved_agent_path = agent_file_path.resolve()
+
+    # Verify the resolved path is within the agents directory
+    # Use os.path.commonpath to ensure the file is under agents_dir
+    try:
+        common_path = os.path.commonpath([str(resolved_agents_dir), str(resolved_agent_path)])
+        if common_path != str(resolved_agents_dir):
+            raise ValueError("Agent file path escapes the agents directory")
+    except ValueError:
+        # commonpath raises ValueError if paths are on different drives on Windows
+        raise ValueError("Agent file path is not within the agents directory")
+
+    # Additional check: ensure the resolved path starts with agents_dir
+    if not str(resolved_agent_path).startswith(str(resolved_agents_dir) + os.sep):
+        # Check without separator for exact match (when file is directly in agents_dir)
+        if str(resolved_agent_path) != str(resolved_agents_dir / f"{agent_id}.yaml"):
+            raise ValueError("Agent file path is not within the agents directory")
+
+    return resolved_agent_path
 
 
 async def save_agent_to_file(
@@ -69,8 +130,8 @@ async def save_agent_to_file(
         agents_dir = formation_dir / agents_subdir
         agents_dir.mkdir(exist_ok=True)
 
-        # Create agent file path
-        agent_file_path = agents_dir / f"{agent_id}.yaml"
+        # Validate and sanitize agent_id to prevent directory traversal
+        agent_file_path = _validate_and_sanitize_agent_id(agent_id, agents_dir)
 
         # Prepare agent config for serialization
         # Remove any None values and ensure clean YAML output
@@ -227,7 +288,9 @@ async def update_agent_file(
             formation_dir = Path(formation_path)
 
         agents_dir = formation_dir / agents_subdir
-        agent_file_path = agents_dir / f"{agent_id}.yaml"
+
+        # Validate and sanitize agent_id to prevent directory traversal
+        agent_file_path = _validate_and_sanitize_agent_id(agent_id, agents_dir)
 
         # Check if agent file exists
         if not agent_file_path.exists():
@@ -358,7 +421,9 @@ def delete_agent_file(agent_id: str, formation_path: str, agents_subdir: str = "
 
         # Construct agent file path
         agents_dir = formation_dir / agents_subdir
-        agent_file_path = agents_dir / f"{agent_id}.yaml"
+
+        # Validate and sanitize agent_id to prevent directory traversal
+        agent_file_path = _validate_and_sanitize_agent_id(agent_id, agents_dir)
 
         if not agent_file_path.exists():
             return False

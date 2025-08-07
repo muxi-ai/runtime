@@ -50,6 +50,15 @@ class SecretsManager:
         # Matches: ${{ secrets.SECRET_NAME }} with flexible whitespace
         self._secrets_pattern = re.compile(r"\$\{\{\s*secrets\.([A-Z0-9_]+)\s*\}\}", re.IGNORECASE)
 
+    def is_initialized(self) -> bool:
+        """
+        Check if the secrets manager has been initialized.
+
+        Returns:
+            bool: True if encryption has been initialized, False otherwise
+        """
+        return getattr(self, '_encryption_initialized', False)
+
     async def initialize_encryption(self) -> None:
         """Initialize encryption for formation (creates master key if needed)."""
         try:
