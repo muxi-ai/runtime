@@ -207,7 +207,21 @@ class SecretsManager:
     async def _get_secrets_cache(self) -> Dict[str, Any]:
         """Get secrets cache, which should already be loaded during initialization."""
         if self._secrets_cache is None:
-            # This shouldn't happen if initialize_encryption was called
+            # Log warning about uninitialized state
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "SecretsManager cache is None - initialization may not have been completed. "
+                "Call initialize_encryption() before accessing secrets."
+            )
+
+            # Check if we're initialized
+            if not self.is_initialized():
+                raise RuntimeError(
+                    "SecretsManager not initialized. Call initialize_encryption() before accessing secrets."
+                )
+
+            # If somehow initialized but cache is None, attempt to load
             self._secrets_cache = await self._load_secrets_from_file() if self.secrets_file_path.exists() else {}
         return self._secrets_cache
 
@@ -216,8 +230,23 @@ class SecretsManager:
         return self._used_secrets.copy()
 
     def get_all_secret_names(self) -> Set[str]:
-        """Get all available secret names from cache."""
+        """
+        Get all available secret names from cache.
+
+        Returns:
+            Set[str]: Set of all secret names in the cache
+
+        Note:
+            Returns empty set if not initialized. Consider calling
+            initialize_encryption() first for accurate results.
+        """
         if self._secrets_cache is None:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "get_all_secret_names called with uninitialized cache. "
+                "Returning empty set. Call initialize_encryption() first for accurate results."
+            )
             return set()
         return set(self._secrets_cache.keys())
 
@@ -369,9 +398,27 @@ class SecretsManager:
             raise
 
     async def secret_exists(self, name: str) -> bool:
-        """Check if secret exists."""
+        """
+        Check if secret exists.
+
+        Ensures the secrets manager is initialized before checking.
+
+        Args:
+            name: The secret name to check
+
+        Returns:
+            bool: True if secret exists, False otherwise
+        """
+        # Ensure initialization before checking
+        if not self.is_initialized():
+            await self.initialize_encryption()
+
+        # Now check if secret exists in cache
         normalized_name = self._normalize_secret_name(name)
-        return normalized_name in self.get_all_secret_names()
+
+        # Use _get_secrets_cache to ensure cache is properly loaded
+        cache = await self._get_secrets_cache()
+        return normalized_name in cache
 
     async def interpolate_secrets(self, value: Any) -> Any:
         """
