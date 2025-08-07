@@ -19,6 +19,7 @@ from ...datatypes.resilience import (
     ErrorType,
     ErrorSeverity,
     ResilienceConfig,
+    ErrorContext,
 )
 
 from ..agents.agent import Agent
@@ -124,7 +125,6 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
             })
 
             # Get recovery strategy
-            from ...datatypes.resilience import ErrorContext
             current_retry_count = len(self.error_history.get(task.id, []))
             error_context = ErrorContext(
                 error=e,

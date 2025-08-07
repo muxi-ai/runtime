@@ -266,10 +266,7 @@ class UnifiedA2AMessaging:
                         raise
 
         if wait_for_response:
-            # Import Message here to ensure it's available for isinstance check
-            from a2a.types import Message as A2AMessage
-
-            if isinstance(result, A2AMessage):
+            if isinstance(result, Message):
                 # Convert A2A message back to dict format
                 converted = self._convert_from_a2a_message(result)
                 return converted
