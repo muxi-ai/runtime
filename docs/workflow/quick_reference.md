@@ -302,24 +302,50 @@ async def test_workflow_integration():
 
 ## SOP (Standard Operating Procedures)
 
+### How SOPs Work (New Architecture)
+SOPs are now passed directly to the task decomposer:
+1. **Find SOP** via semantic search
+2. **Pass to decomposer** with mode instructions
+3. **Execute optimized workflow**
+
 ### Creating an SOP
 ```markdown
 # File: formation/sops/code-review.md
 ---
 type: sop
 name: Code Review Process
+mode: guide  # 'template' for strict, 'guide' for flexible
 tags: code, review, pr, quality
+bypass_approval: true  # Skip workflow approval (default: true)
 ---
 
 ## Steps
 1. **Analyze code** [agent:code-reviewer]
    Review for style and correctness
    
-2. **Security scan**
+2. **Security scan** [mcp:security/scan]
    Check for vulnerabilities
    
-3. **Generate report** [agent:writer]
-   Create review summary
+3. **Generate report** [agent:writer] [critical]
+   Create review summary (cannot be optimized away)
+```
+
+### SOP Execution Modes
+
+#### Template Mode (Strict)
+```markdown
+---
+mode: template  # Every step executed exactly as written
+bypass_approval: false  # Require approval for sensitive operations
+---
+```
+
+#### Guide Mode (Flexible)
+```markdown
+---
+mode: guide  # Decomposer optimizes for efficiency
+bypass_approval: true  # Skip approval for routine tasks
+---
 ```
 
 ### SOP Configuration
@@ -328,6 +354,7 @@ overlord:
   workflow:
     auto_decomposition: true  # Required for SOPs
     complexity_threshold: 7.0  # When SOPs trigger
+    # No SOP-specific config needed - uses standard workflow settings
 ```
 
 ### Testing SOP Matching
@@ -335,10 +362,17 @@ overlord:
 # Check if SOP would match
 message = "review my code changes"
 if overlord.sop_system:
-    matched_sop = overlord.sop_system.find_relevant_sop(message)
-    if matched_sop:
-        print(f"Would trigger: {matched_sop['name']}")
+    relevant_sops = await overlord.sop_system.find_relevant_sops(message, top_k=3)
+    if relevant_sops:
+        print(f"Would trigger: {relevant_sops[0]['name']}")
+        print(f"Mode: {relevant_sops[0].get('mode', 'template')}")
+        print(f"Bypass approval: {relevant_sops[0].get('bypass_approval', True)}")
 ```
+
+### SOP Performance
+- **Before**: Every step = separate LLM call (104s for 3 steps)
+- **After**: 1 decomposition + optimized execution (~10s)
+- **Improvement**: 40-80% faster with intelligent optimization
 
 ## Configuration Examples
 

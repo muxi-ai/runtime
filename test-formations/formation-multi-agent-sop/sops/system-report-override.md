@@ -30,6 +30,10 @@ Instead, it generates a calculated system report as a PDF artifact.
    - Formatted as a professional system report
    Use the artifact system to generate and return the PDF to the user.
 
+4. **Reply with a simple "I'm done"**
+   Respond with only "I'm done" and the PDF created in the previous step.
+
+
 ## Expected Outcome
 
 Instead of creating a Linear issue, this workflow produces a PDF artifact with:

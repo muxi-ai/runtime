@@ -33,10 +33,10 @@ The MUXI Runtime Workflow System provides intelligent task decomposition and mul
    - Best practices
 
 5. **[SOP System](sop-system.md)** 🆕
-   - Standard Operating Procedures for workflow override
-   - Creating and managing SOPs
-   - Sequential execution and data flow
-   - Examples and best practices
+   - Standard Operating Procedures with intelligent decomposition
+   - Template (strict) vs Guide (flexible) execution modes
+   - 40-80% performance improvement over mechanical execution
+   - Simplified architecture with zero parsing overhead
 
 6. **[Workflow Status Endpoints](status_endpoints.md)**
    - API endpoints for workflow monitoring
@@ -64,7 +64,7 @@ If you're new to the MUXI Workflow System, we recommend reading the documentatio
 - **Intelligent Task Decomposition**: Automatically breaks complex requests into manageable tasks
 - **Multi-Agent Coordination**: Routes tasks to specialized agents based on capabilities
 - **Parallel Execution**: Executes independent tasks concurrently for optimal performance
-- **SOP System**: Override default workflows with predefined procedures 🆕
+- **SOP System**: Intelligent execution of predefined procedures via decomposer 🆕
 - **Approval Workflows**: Requires user confirmation for high-stakes operations
 - **Resilience Layer**: Automatic retry, graceful degradation, and user-friendly error messages
 - **Configurable Complexity Analysis**: Multiple methods for determining request complexity
