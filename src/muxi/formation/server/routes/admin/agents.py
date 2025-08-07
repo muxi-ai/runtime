@@ -7,6 +7,7 @@ requiring admin API key authentication.
 
 from typing import Optional, List, Dict, Any
 from copy import deepcopy
+import logging
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -22,6 +23,10 @@ from ...secrets import restore_secret_placeholders
 from ...utils import validate_secret_references
 from .....datatypes.api import APIEventType, APIObjectType
 from .....services.secrets.config_utils import get_agent_with_secrets_restored
+from .....services import observability
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(tags=["Agents"])
@@ -206,7 +211,18 @@ def _delete_agent_file_safe(formation: Any, agent_id: str) -> None:
         except Exception as e:
             # Log the error but don't fail the deletion
             # The agent is already removed from config/overlord
-            print(f"Warning: Failed to delete agent file for '{agent_id}': {str(e)}")
+            logger.warning(f"Failed to delete agent file for '{agent_id}': {str(e)}")
+            observability.observe(
+                event_type=observability.SystemEvents.FILE_OPERATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "operation": "delete_agent_file",
+                    "agent_id": agent_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "description": f"Failed to delete agent file for '{agent_id}', but agent was removed from config"
+                }
+            )
 
 
 class AgentCreate(BaseModel):
@@ -375,7 +391,7 @@ async def update_agent(request: Request, agent_id: str, updates: AgentUpdate) ->
 
         # Get updated agent using same logic as LIST endpoint
         agents = _restore_agents_with_secrets(formation)
-        agent = next((a for a in agents if a.get("id") == agent_id), None)
+        agent = _find_agent_by_id(agents, agent_id)
 
         if not agent:
             raise ValueError(f"Agent '{agent_id}' not found after update")
