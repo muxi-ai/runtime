@@ -71,11 +71,45 @@ async def process_agent_for_runtime(
     # 5. Set source to "api" (different from initialization which uses "formation")
     processed_config["source"] = "api"
 
-    # 6. Process MCP servers if present
+    # 6. Validate MCP servers if present
     if "mcp_servers" in processed_config:
-        # MCP servers within the agent have already been processed by process_secrets
-        # but we might need additional validation here
-        pass
+        # Validate agent-level MCP servers configuration
+        mcp_servers = processed_config["mcp_servers"]
+        if not isinstance(mcp_servers, list):
+            raise ValueError(f"Agent {agent_id} mcp_servers must be a list")
+
+        server_ids = set()
+        for i, server_config in enumerate(mcp_servers):
+            if not isinstance(server_config, dict):
+                raise ValueError(
+                    f"Agent {agent_id} MCP server {i} configuration must be a dictionary"
+                )
+
+            # Check required fields for agent-level MCP servers
+            required_fields = ["id", "description", "type"]
+            for field in required_fields:
+                if field not in server_config:
+                    raise ValueError(
+                        f"Agent {agent_id} MCP server {i} missing required field: {field}"
+                    )
+
+            # Validate server_id uniqueness within this agent
+            server_id = server_config.get("id")
+            if server_id:
+                if server_id in server_ids:
+                    raise ValueError(
+                        f"Agent {agent_id} has duplicate MCP server id: {server_id}"
+                    )
+                server_ids.add(server_id)
+
+            # Validate type field
+            valid_types = ["stdio", "http", "websocket", "grpc"]  # Common MCP transport types
+            server_type = server_config.get("type")
+            if server_type and server_type not in valid_types:
+                raise ValueError(
+                    f"Agent {agent_id} MCP server {server_id or i} has invalid type: {server_type}. "
+                    f"Valid types are: {', '.join(valid_types)}"
+                )
 
     # 7. Process knowledge paths if present
     if "knowledge" in processed_config:
