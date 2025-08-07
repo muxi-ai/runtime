@@ -17,6 +17,7 @@ This command updates the project context documentation in `/Users/ran/Projects/m
   - `project-brief.md` - Update if project scope or goals changed
   - `project-overview.md` - Update if major features or status changed
   - `project-vision.md` - Update if vision or strategic direction changed
+  - `project-style-guide.md` - Update if project style guide changed
 - Only update files that have actual changes to reflect
 - Keep updates concise and focused on what changed
 - Preserve the existing structure and format of each document
