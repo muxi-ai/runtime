@@ -6343,13 +6343,19 @@ class Overlord:
 
         prompt_parts.extend(
             [
-                "Please provide a brief confirmation message that:",
-                "1. Confirms what was accomplished (focus on concrete outcomes like created issues, documents, etc.)",
-                "2. Mentions any specific IDs, URLs, or references the user needs",
-                "3. Acknowledges any failures if relevant",
-                "4. Keep it concise - 2-3 sentences maximum",
+                "Based on the original user request and the task results above, provide an appropriate response:",
                 "",
-                "Confirmation Message:",
+                "- If this appears to be a conversational request (greeting, casual inquiry, social interaction, etc.),",  # noqa: E501
+                "  provide a natural, conversational response. Respond directly as if having a conversation,",
+                "  not describing what tasks were completed.",
+                "",
+                "- If this is a task-oriented request with concrete deliverables, provide a brief confirmation that:",
+                "  1. Confirms what was accomplished (focus on concrete outcomes like created issues, documents, etc.)",
+                "  2. Mentions any specific IDs, URLs, or references the user needs",
+                "  3. Acknowledges any failures if relevant",
+                "  4. Keep it concise - 2-3 sentences maximum",
+                "",
+                "Response:",
             ]
         )
 
