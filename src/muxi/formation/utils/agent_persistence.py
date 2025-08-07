@@ -7,11 +7,28 @@ Handles saving and loading agent configurations to/from YAML files.
 import os
 import re
 import yaml
+import logging
 from pathlib import Path
 from typing import Dict, Any, TYPE_CHECKING
 
+# Import runtime processor functions at module level
+# to avoid runtime import failures
+try:
+    from ..runtime_agent_processor import (
+        process_agent_for_runtime,
+        add_agent_to_overlord_runtime,
+    )
+    RUNTIME_IMPORTS_AVAILABLE = True
+except ImportError as e:
+    # Log the import error but allow module to load
+    logging.warning(f"Failed to import runtime agent processor functions: {e}")
+    RUNTIME_IMPORTS_AVAILABLE = False
+
 if TYPE_CHECKING:
     from ..formation import Formation
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
 class AgentPersistenceError(Exception):
@@ -61,21 +78,13 @@ def _validate_and_sanitize_agent_id(agent_id: str, agents_dir: Path) -> Path:
     resolved_agents_dir = agents_dir.resolve()
     resolved_agent_path = agent_file_path.resolve()
 
-    # Verify the resolved path is within the agents directory
-    # Use os.path.commonpath to ensure the file is under agents_dir
-    try:
-        common_path = os.path.commonpath([str(resolved_agents_dir), str(resolved_agent_path)])
-        if common_path != str(resolved_agents_dir):
-            raise ValueError("Agent file path escapes the agents directory")
-    except ValueError:
-        # commonpath raises ValueError if paths are on different drives on Windows
-        raise ValueError("Agent file path is not within the agents directory")
-
-    # Additional check: ensure the resolved path starts with agents_dir
-    if not str(resolved_agent_path).startswith(str(resolved_agents_dir) + os.sep):
-        # Check without separator for exact match (when file is directly in agents_dir)
-        if str(resolved_agent_path) != str(resolved_agents_dir / f"{agent_id}.yaml"):
-            raise ValueError("Agent file path is not within the agents directory")
+    # Verify the resolved path is within the agents directory using robust pathlib method
+    # This is the most secure way to prevent path traversal attacks
+    if not resolved_agent_path.is_relative_to(resolved_agents_dir):
+        raise ValueError(
+            f"Agent file path is not within the agents directory. "
+            f"Resolved path: {resolved_agent_path}, Expected parent: {resolved_agents_dir}"
+        )
 
     return resolved_agent_path
 
@@ -160,15 +169,19 @@ async def save_agent_to_file(
                     # Clean up the file we just created and raise error
                     try:
                         agent_file_path.unlink()
-                    except OSError:
-                        pass  # Ignore cleanup errors
+                    except OSError as e:
+                        logger.warning(
+                            f"Failed to clean up agent file after duplicate detection: {agent_file_path}. "
+                            f"Error: {e}"
+                        )
                     raise ValueError(f"Agent with id '{agent_id}' already exists")
 
-                # Process the agent config through the same pipeline as initialization
-                from ..runtime_agent_processor import (
-                    process_agent_for_runtime,
-                    add_agent_to_overlord_runtime,
-                )
+                # Check if runtime imports are available
+                if not RUNTIME_IMPORTS_AVAILABLE:
+                    raise ImportError(
+                        "Runtime agent processor functions are not available. "
+                        "Cannot auto-load agent into formation."
+                    )
 
                 # Process agent (secrets, paths, validation, etc.)
                 processed_config, placeholders = await process_agent_for_runtime(
@@ -202,8 +215,11 @@ async def save_agent_to_file(
                 # If auto-load fails for other reasons, clean up the file and raise
                 try:
                     agent_file_path.unlink()
-                except OSError:
-                    pass  # Ignore cleanup errors
+                except OSError as cleanup_error:
+                    logger.warning(
+                        f"Failed to clean up agent file after auto-load failure: {agent_file_path}. "
+                        f"Error: {cleanup_error}"
+                    )
                 raise AgentPersistenceError(
                     f"Failed to auto-load agent '{agent_id}': {str(e)}"
                 ) from e
@@ -318,11 +334,12 @@ async def update_agent_file(
         # Auto-reload into formation if requested
         if auto_reload and formation:
             try:
-                # Process the updated config through the same pipeline as initialization
-                from ..runtime_agent_processor import (
-                    process_agent_for_runtime,
-                    add_agent_to_overlord_runtime,
-                )
+                # Check if runtime imports are available
+                if not RUNTIME_IMPORTS_AVAILABLE:
+                    raise ImportError(
+                        "Runtime agent processor functions are not available. "
+                        "Cannot auto-reload agent in formation."
+                    )
 
                 # Process the full updated config (secrets, paths, validation, etc.)
                 processed_config, placeholders = await process_agent_for_runtime(
@@ -385,8 +402,12 @@ async def update_agent_file(
                             allow_unicode=True,
                             indent=2,
                         )
-                except OSError:
-                    pass  # Ignore restore errors
+                except OSError as restore_error:
+                    logger.error(
+                        f"Failed to restore original file after auto-reload failure for agent '{agent_id}': "
+                        f"{agent_file_path}. Error: {restore_error}. "
+                        f"File may be in an inconsistent state."
+                    )
                 raise AgentPersistenceError(
                     f"Failed to auto-reload agent '{agent_id}': {str(e)}"
                 ) from e
