@@ -84,6 +84,7 @@ import signal
 import sys
 import threading
 import time
+from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Union, AsyncGenerator
 import os
@@ -594,6 +595,10 @@ class Overlord:
         # Setup progress tracking
         self.workflow_executor.add_progress_callback(self.progress_tracker.update_workflow_progress)
 
+        # Initialize SOP system placeholders - will be set up after workflow config is loaded
+        self.sop_system = None
+        self._sop_formation_path = None  # Store path for lazy initialization
+
         # ===================================================================
         # MULTIMODAL INTELLIGENCE - Intelligence concerns
         # ===================================================================
@@ -879,6 +884,57 @@ class Overlord:
             #  ErrorEvents.INTERNAL_ERROR (overlord)
             raise
 
+    def _ensure_sop_system(self) -> bool:
+        """Lazily initialize SOP system if needed.
+
+        Returns:
+            True if SOP system is available, False otherwise
+        """
+
+        # If already initialized, return its status
+        if self.sop_system is not None:
+            return self.sop_system.enabled
+
+        # If no path stored, can't initialize
+        if not self._sop_formation_path:
+            return False
+
+        # Try to initialize now
+        try:
+            from muxi.formation.overlord.sops import SOPSystem
+
+            self.sop_system = SOPSystem(Path(self._sop_formation_path))
+
+            if self.sop_system.enabled:
+                observability.observe(
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "sop_system",
+                        "sop_count": len(self.sop_system.sops),
+                        "formation_path": str(self._sop_formation_path),
+                        "lazy_init": True,
+                    },
+                    description=f"SOP system lazily initialized with {len(self.sop_system.sops)} SOPs",
+                )
+                return True
+            else:
+                return False
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "service": "sop_system",
+                    "error": str(e),
+                    "formation_path": str(self._sop_formation_path),
+                },
+                description=f"Failed to initialize SOP system: {e}",
+            )
+            self.sop_system = None
+            return False
+
     async def _async_startup(self) -> None:
         """Async startup logic extracted to a separate method."""
         # Services are now initialized by Formation before Overlord creation
@@ -920,6 +976,33 @@ class Overlord:
         # Load agents from formation configuration
         # Load agents from formation's pre-processed configuration
         await self._load_agents_from_formation()
+
+        # Initialize SOP system indexing if enabled
+        if self._ensure_sop_system():
+            try:
+                await self.sop_system.initialize_index()
+                observability.observe(
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "sop_indexing",
+                        "sop_count": len(self.sop_system.sops),
+                        "indexed": True,
+                    },
+                    description="SOP system indexed for semantic search"
+                )
+            except Exception as e:
+                # Log but don't fail startup if SOP indexing fails
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "service": "sop_indexing",
+                        "error": str(e),
+                    },
+                    description=f"SOP indexing failed (will retry on first search): {e}"
+                )
+
         # Initialize registry client if external registry is configured
         if self.a2a_coordinator.external_registry_enabled:
             # Get registry URLs from configuration
@@ -1767,6 +1850,23 @@ class Overlord:
             # Core workflow settings
             self.auto_decomposition = workflow_config_data.get("auto_decomposition", True)
             self.plan_approval_threshold = workflow_config_data.get("plan_approval_threshold", 7)
+
+            # Now that workflow config is loaded, set up SOP system path if workflows are enabled
+            if self.auto_decomposition:
+                formation_path = self._configured_services.get("formation_path")
+                if formation_path:
+                    self._sop_formation_path = formation_path
+                    observability.observe(
+                        event_type=observability.SystemEvents.SERVICE_STARTED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "service": "sop_system_init",
+                            "auto_decomposition": self.auto_decomposition,
+                            "formation_path": str(formation_path),
+                            "status": "deferred",
+                        },
+                        description=f"SOP system initialization deferred (path={formation_path})",
+                    )
             if workflow_config_data:
                 # Create WorkflowConfig from formation data
                 # Parse retry configuration
@@ -5041,24 +5141,99 @@ class Overlord:
                 description=f"Workflow approval decision: {'REQUIRED' if needs_approval else 'NOT REQUIRED'}",
             )
 
-            # Decompose the request into a workflow
-            observability.observe(
-                event_type=observability.ServerEvents.SERVER_STARTED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "task_decomposer",
-                    "has_llm": self.task_decomposer.llm is not None,
-                    "available_agents": list(self.agents.keys()),
-                },
-                description=f"Starting task decomposition (LLM: {self.task_decomposer.llm is not None})",
-            )
+            # Check for relevant SOPs (only if SOP system exists and is enabled)
+            workflow = None
+            if self._ensure_sop_system():
+                relevant_sops = await self.sop_system.find_relevant_sops(message, top_k=1)
+                relevant_sop = relevant_sops[0] if relevant_sops else None
 
-            workflow = await self.task_decomposer.decompose_request(
-                request=message,
-                context={"available_agents": list(self.agents.keys())},
-                analysis=analysis,
-                requires_approval=needs_approval,
-            )
+                # Log SOP discovery
+                if relevant_sop:
+                    observability.observe(
+                        observability.ConversationEvents.SOP_MATCHED,
+                        observability.EventLevel.INFO,
+                        {
+                            "sop_id": relevant_sop["id"],
+                            "sop_name": relevant_sop["name"],
+                            "relevance_score": relevant_sop.get("relevance_score", 0),
+                            "mode": relevant_sop.get("mode", "template"),
+                            "message_preview": message[:100],
+                        },
+                        description=f"Matched SOP '{relevant_sop['name']}' for request",
+                    )
+
+                if relevant_sop:
+                    mode = relevant_sop.get("mode", "template")
+                    bypass_approval = relevant_sop.get("bypass_approval", True)
+
+                    # Build enhanced message with SOP content
+                    if mode == "template":
+                        intro = "Follow this Standard Operating Procedure EXACTLY. Do not skip steps or improvise."  # noqa: E501
+                        outro = "Create an optimized workflow that executes every step while minimizing unnecessary operations."  # noqa: E501
+                    else:  # guide mode
+                        intro = "Use this Standard Operating Procedure as guidance while optimizing for efficiency."  # noqa: E501
+                        outro = "Create an optimized workflow that achieves the SOP goals while minimizing unnecessary operations."  # noqa: E501
+
+                    # Create enhanced message with SOP content
+                    enhanced_message = (
+                        f"{intro}\n\n"
+                        f"<sop>\n{relevant_sop.get('content', '')}\n</sop>\n\n"
+                        "<directives>\nThe following directives in the SOP should be interpreted:\n"
+                        "- [agent:name] - Route to the specified agent\n"
+                        "- [mcp:tool] - Use the specified MCP tool\n"
+                        "- [file:path] - Include the specified file content\n"
+                        "- [critical] - This step cannot be optimized away\n"
+                        "</directives>\n\n"
+                        f"<user_request>\n{message}\n</user_request>\n\n"
+                        f"{outro}"
+                    )
+
+                    # Pass to decomposer with SOP context
+                    workflow = await self.task_decomposer.decompose_request(
+                        request=enhanced_message,
+                        context={
+                            "available_agents": list(self.agents.keys()),
+                            "sop_mode": mode,
+                            "sop_id": relevant_sop["id"],
+                        },
+                        analysis=analysis,
+                        requires_approval=needs_approval if not bypass_approval else False,
+                    )
+
+                    # Log SOP execution
+                    observability.observe(
+                        event_type=observability.ConversationEvents.SOP_EXECUTED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "sop_id": relevant_sop["id"],
+                            "sop_name": relevant_sop["name"],
+                            "workflow_id": workflow.id if workflow else None,
+                            "mode": mode,
+                            "bypass_approval": bypass_approval,
+                        },
+                        description=f"Passed SOP '{relevant_sop['name']}' to decomposer in {mode} mode",
+                    )
+
+            # Fall back to standard decomposition if no SOP found
+            if workflow is None:
+                # Decompose the request into a workflow
+                observability.observe(
+                    event_type=observability.ServerEvents.SERVER_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "task_decomposer",
+                        "has_llm": self.task_decomposer.llm is not None,
+                        "available_agents": list(self.agents.keys()),
+                    },
+                    description=f"Starting task decomposition (LLM: {self.task_decomposer.llm is not None})",
+                )
+
+                workflow = await self.task_decomposer.decompose_request(
+                    request=message,
+                    context={"available_agents": list(self.agents.keys())},
+                    analysis=analysis,
+                    requires_approval=needs_approval,
+                )
 
             observability.observe(
                 event_type=observability.ServerEvents.SERVER_STARTED,
@@ -5317,7 +5492,7 @@ class Overlord:
                 "workflow_id": workflow.id,
                 "task_count": len(workflow.tasks),
                 "complexity_scores": [
-                    task.estimated_complexity for task in workflow.tasks.values()
+                    task.get("estimated_complexity", 3) for task in workflow.tasks.values()
                 ],
             }
 
@@ -5356,6 +5531,8 @@ class Overlord:
                 description="Post-approval time estimation failed, using sync execution",
             )
             return False
+
+    # Method removed - decomposer handles SOP conversion now
 
     async def _execute_workflow_async(
         self,
@@ -5583,6 +5760,36 @@ class Overlord:
                 "original_message": message,
             }
 
+            # Check if this is an SOP workflow (has sequential dependencies)
+            # and force sequential execution for proper data passing
+            is_sop_workflow = False
+            if workflow.tasks:
+                # Check if tasks have sequential dependencies (characteristic of SOP workflows)
+                tasks_with_deps = [t for t in workflow.tasks.values() if t.dependencies]
+                if tasks_with_deps:
+                    # If most tasks have dependencies, it's likely an SOP workflow
+                    is_sop_workflow = len(tasks_with_deps) >= len(workflow.tasks) - 1
+
+            if is_sop_workflow:
+                # Temporarily disable parallel execution for SOP workflows
+                # to ensure proper data flow between dependent tasks
+                original_parallel_setting = self.workflow_executor.config.behavior.enable_parallel_execution
+                self.workflow_executor.config.behavior.enable_parallel_execution = False
+                observability.observe(
+                    event_type=observability.ConversationEvents.OVERLORD_ROUTING_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "workflow_id": workflow_id,
+                        "task_count": len(workflow.tasks),
+                        "user_id": user_id,
+                        "execution_mode": "sequential",
+                        "reason": "SOP workflow with task dependencies"
+                    },
+                    description=f"Starting SEQUENTIAL execution of SOP workflow {workflow_id}",
+                )
+            else:
+                original_parallel_setting = None
+
             # Execute workflow with resilience support
             observability.observe(
                 event_type=observability.ConversationEvents.OVERLORD_ROUTING_STARTED,
@@ -5605,8 +5812,9 @@ class Overlord:
             task_results = []
             for task in completed_workflow.tasks.values():
                 # Handle both enum objects and string values due to use_enum_values=True
-                # Check for COMPLETED status (not DONE which doesn't exist)
-                if task.status in {TaskStatus.COMPLETED, TaskStatus.COMPLETED.value, "completed"}:
+                # Check for both COMPLETED and DONE statuses (both are success states)
+                if task.status in {TaskStatus.COMPLETED, TaskStatus.COMPLETED.value, "completed",
+                                   TaskStatus.DONE, TaskStatus.DONE.value, "done"}:
                     task_result = {
                         "task_id": task.id,
                         "description": task.description,
@@ -5627,6 +5835,25 @@ class Overlord:
             final_response = await self._synthesize_workflow_results(
                 task_results, message, workflow
             )
+
+            # Collect artifacts from all tasks
+            all_artifacts = []
+            for task in completed_workflow.tasks.values():
+                # Check if task completed successfully and has result (both COMPLETED and DONE are success states)
+                if task.status in {TaskStatus.COMPLETED, TaskStatus.COMPLETED.value, "completed",
+                                   TaskStatus.DONE, TaskStatus.DONE.value, "done"}:
+                    if task.result and isinstance(task.result, dict):
+                        # Check if artifacts are in the result
+                        if "artifacts" in task.result:
+                            artifacts_output = task.result["artifacts"]
+                            if isinstance(artifacts_output, dict) and "result" in artifacts_output:
+                                artifact_list = artifacts_output["result"]
+                                if isinstance(artifact_list, list):
+                                    all_artifacts.extend(artifact_list)
+
+            # Add artifacts to final response if any were collected
+            if all_artifacts:
+                final_response.artifacts = all_artifacts
 
             # Add workflow metadata
             final_response.metadata = final_response.metadata or {}
@@ -5668,6 +5895,10 @@ class Overlord:
                 description=f"Workflow {workflow_id} execution complete",
             )
 
+            # Restore original parallel execution setting if it was changed for SOP workflow
+            if original_parallel_setting is not None:
+                self.workflow_executor.config.behavior.enable_parallel_execution = original_parallel_setting
+
             return final_response
 
         except Exception as e:
@@ -5696,6 +5927,10 @@ class Overlord:
             )
 
         finally:
+            # Restore original parallel execution setting if it was changed for SOP workflow
+            if original_parallel_setting is not None:
+                self.workflow_executor.config.behavior.enable_parallel_execution = original_parallel_setting
+
             # Move workflow to history and update metrics
             completed_workflow = self.workflow_manager.get_active_workflow(workflow_id)
             if completed_workflow:
@@ -5763,6 +5998,19 @@ class Overlord:
                 "request_id": request_id,
                 "original_message": message,
             }
+
+            # Check if this is an SOP workflow and force sequential execution
+            is_sop_workflow = False
+            if workflow.tasks:
+                tasks_with_deps = [t for t in workflow.tasks.values() if t.dependencies]
+                if tasks_with_deps:
+                    is_sop_workflow = len(tasks_with_deps) >= len(workflow.tasks) - 1
+
+            if is_sop_workflow:
+                original_parallel_setting = self.workflow_executor.config.behavior.enable_parallel_execution
+                self.workflow_executor.config.behavior.enable_parallel_execution = False
+            else:
+                original_parallel_setting = None
 
             # Start workflow execution in background
             execution_task = asyncio.create_task(
@@ -5909,6 +6157,10 @@ class Overlord:
             )
 
         finally:
+            # Restore original parallel execution setting if it was changed for SOP workflow
+            if original_parallel_setting is not None:
+                self.workflow_executor.config.behavior.enable_parallel_execution = original_parallel_setting
+
             # Move workflow to history and update metrics
             completed_workflow = self.workflow_manager.get_active_workflow(workflow_id)
             if completed_workflow:
@@ -6091,13 +6343,19 @@ class Overlord:
 
         prompt_parts.extend(
             [
-                "Please provide a brief confirmation message that:",
-                "1. Confirms what was accomplished (focus on concrete outcomes like created issues, documents, etc.)",
-                "2. Mentions any specific IDs, URLs, or references the user needs",
-                "3. Acknowledges any failures if relevant",
-                "4. Keep it concise - 2-3 sentences maximum",
+                "Based on the original user request and the task results above, provide an appropriate response:",
                 "",
-                "Confirmation Message:",
+                "- If this appears to be a conversational request (greeting, casual inquiry, social interaction, etc.),",  # noqa: E501
+                "  provide a natural, conversational response. Respond directly as if having a conversation,",
+                "  not describing what tasks were completed.",
+                "",
+                "- If this is a task-oriented request with concrete deliverables, provide a brief confirmation that:",
+                "  1. Confirms what was accomplished (focus on concrete outcomes like created issues, documents, etc.)",
+                "  2. Mentions any specific IDs, URLs, or references the user needs",
+                "  3. Acknowledges any failures if relevant",
+                "  4. Keep it concise - 2-3 sentences maximum",
+                "",
+                "Response:",
             ]
         )
 

@@ -470,6 +470,18 @@ class ConversationEvents(Enum):
     # When a workflow is cancelled by user or system
 
     # ===================================================================
+    # SOP (Standard Operating Procedures) EVENTS
+    # ===================================================================
+    SOP_LOADED = "sop.loaded"
+    # When SOPs are loaded at formation startup
+
+    SOP_MATCHED = "sop.matched"
+    # When an SOP is matched to a user request
+
+    SOP_EXECUTED = "sop.executed"
+    # When an SOP is used to generate a workflow
+
+    # ===================================================================
     # MEMORY & CONTEXT OPERATIONS
     # ===================================================================
     # Working memory operations

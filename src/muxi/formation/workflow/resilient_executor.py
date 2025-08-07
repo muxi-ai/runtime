@@ -19,6 +19,7 @@ from ...datatypes.resilience import (
     ErrorType,
     ErrorSeverity,
     ResilienceConfig,
+    ErrorContext,
 )
 
 from ..agents.agent import Agent
@@ -125,17 +126,21 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
 
             # Get recovery strategy
             current_retry_count = len(self.error_history.get(task.id, []))
-            recovery_strategy = await self.recovery_strategist.select_strategy(
+            error_context = ErrorContext(
+                error=e,
                 error_type=error_type,
-                error_severity=error_severity,
-                retry_count=current_retry_count,
-                workflow_context={
+                severity=error_severity,
+                task_id=task.id,
+                agent_id=agent.agent_id if agent else None,
+                attempt_count=current_retry_count + 1,
+                context_data={
                     'task': task_description,
                     'agent': agent_name,
                     'has_alternatives': len(self.agent_registry) > 1,
                     'retry_count': current_retry_count,
                 }
             )
+            recovery_strategy = await self.recovery_strategist.select_strategy(error_context)
 
             # Apply recovery strategy
             recovery_result = await self._apply_recovery_strategy(
@@ -157,7 +162,7 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
         if isinstance(error, TimeoutError) or isinstance(error, asyncio.TimeoutError):
             return {
                 'type': ErrorType.NETWORK_TIMEOUT,
-                'severity': ErrorSeverity.RECOVERABLE,
+                'severity': ErrorSeverity.MEDIUM,
                 'message': f"The {task.description} operation timed out.",
                 'details': f"Timeout while {task.description}",
                 'retry_count': len(self.error_history.get(task.id, [])),
@@ -169,7 +174,7 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
             if hasattr(error, 'errno') and error.errno in [111, 10061]:  # Connection refused
                 return {
                     'type': ErrorType.NETWORK_TIMEOUT,
-                    'severity': ErrorSeverity.RECOVERABLE,
+                    'severity': ErrorSeverity.MEDIUM,
                     'message': f"Unable to connect to the service needed for {task.description}.",
                     'details': "Connection refused",
                     'retry_count': len(self.error_history.get(task.id, [])),
@@ -177,7 +182,7 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
             # General connection error
             return {
                 'type': ErrorType.NETWORK_TIMEOUT,
-                'severity': ErrorSeverity.RECOVERABLE,
+                'severity': ErrorSeverity.MEDIUM,
                 'message': f"Network error while {task.description}.",
                 'details': f"Connection error: {error_type_name}",
                 'retry_count': len(self.error_history.get(task.id, [])),
@@ -198,7 +203,7 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
                 elif status_code == 404:
                     return {
                         'type': ErrorType.AGENT_UNAVAILABLE,
-                        'severity': ErrorSeverity.RECOVERABLE,
+                        'severity': ErrorSeverity.MEDIUM,
                         'message': f"The resource required for {task.description} was not found.",
                         'details': "HTTP 404 Not Found",
                         'retry_count': len(self.error_history.get(task.id, [])),
@@ -206,7 +211,7 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
                 elif status_code == 429:
                     return {
                         'type': ErrorType.LLM_RATE_LIMITED,
-                        'severity': ErrorSeverity.RECOVERABLE,
+                        'severity': ErrorSeverity.MEDIUM,
                         'message': "Rate limit exceeded. Waiting before retry.",
                         'details': "HTTP 429 Too Many Requests",
                         'retry_count': len(self.error_history.get(task.id, [])),
@@ -217,7 +222,7 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
             if 'timeout' in error_str:
                 return {
                     'type': ErrorType.NETWORK_TIMEOUT,
-                    'severity': ErrorSeverity.RECOVERABLE,
+                    'severity': ErrorSeverity.MEDIUM,
                     'message': f"The {task.description} tool is taking longer than expected to respond.",
                     'details': f"Tool timeout while {task.description}",
                     'retry_count': len(self.error_history.get(task.id, [])),
@@ -225,7 +230,7 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
             elif 'connection' in error_str or 'network' in error_str:
                 return {
                     'type': ErrorType.NETWORK_TIMEOUT,
-                    'severity': ErrorSeverity.RECOVERABLE,
+                    'severity': ErrorSeverity.MEDIUM,
                     'message': f"Unable to connect to the tool needed for {task.description}.",
                     'details': "Network connectivity issue",
                     'retry_count': len(self.error_history.get(task.id, [])),
@@ -233,7 +238,7 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
             elif 'not found' in error_str or '404' in error_str:
                 return {
                     'type': ErrorType.AGENT_UNAVAILABLE,
-                    'severity': ErrorSeverity.RECOVERABLE,
+                    'severity': ErrorSeverity.MEDIUM,
                     'message': f"The tool required for {task.description} is not available.",
                     'details': "Tool not found",
                     'retry_count': len(self.error_history.get(task.id, [])),
@@ -241,7 +246,7 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
             else:
                 return {
                     'type': ErrorType.CONFIGURATION_ERROR,
-                    'severity': ErrorSeverity.WARNING,
+                    'severity': ErrorSeverity.LOW,
                     'message': f"There was an issue with the tool configuration for {task.description}.",
                     'details': f"MCP error: {error_str}",
                     'retry_count': len(self.error_history.get(task.id, [])),
@@ -251,7 +256,7 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
         elif 'rate limit' in error_str or 'quota' in error_str:
             return {
                 'type': ErrorType.LLM_RATE_LIMITED,
-                'severity': ErrorSeverity.RECOVERABLE,
+                'severity': ErrorSeverity.MEDIUM,
                 'message': "I'm experiencing high demand. Let me try a different approach.",
                 'details': "API rate limit reached",
                 'retry_count': len(self.error_history.get(task.id, [])),
@@ -271,7 +276,7 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
         else:
             return {
                 'type': ErrorType.UNKNOWN,
-                'severity': ErrorSeverity.WARNING,
+                'severity': ErrorSeverity.LOW,
                 'message': f"I encountered an issue while {task.description}.",
                 'details': f"{error_type_name}: {error_str}",
                 'retry_count': len(self.error_history.get(task.id, [])),
@@ -288,7 +293,7 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
         """Apply recovery strategy based on error type."""
 
         # For recoverable errors, try alternative approaches
-        if error_info['severity'] == ErrorSeverity.RECOVERABLE:
+        if error_info['severity'] == ErrorSeverity.MEDIUM:
             # Adjust strategy based on retry count
             retry_count = error_info.get('retry_count', 0)
 
@@ -326,23 +331,29 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
                             session_id=context.get('session_id'),
                         )
 
-                        # Create result with explanation
+                        # Create result with explanation - wrap in proper TaskOutput structure
+                        fallback_output = {
+                            'result': {
+                                'content': response.content if hasattr(response, 'content') else str(response),
+                                'fallback_used': True,
+                                'limitation_note': (
+                                    f"Note: This response was generated without access to external tools "
+                                    f"{f'after {retry_count} failed attempts ' if retry_count > 0 else ''}"
+                                    f"due to connectivity issues. Some specific details may be limited."
+                                ),
+                                'retry_count': retry_count,
+                            },
+                            'status': 'success',
+                        }
+
                         outputs = {
-                            'content': response.content if hasattr(response, 'content') else str(response),
-                            'fallback_used': True,
-                            'limitation_note': (
-                                f"Note: This response was generated without access to external tools "
-                                f"{f'after {retry_count} failed attempts ' if retry_count > 0 else ''}"
-                                f"due to connectivity issues. Some specific details may be limited."
-                            ),
-                            'retry_count': retry_count,
+                            'response': fallback_output
                         }
 
                         return TaskResult(
                             task_id=task.id,
                             status=TaskStatus.DONE,
                             outputs=outputs,
-                            success=True,
                             execution_time=0.0,
                         )
 
@@ -369,33 +380,41 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
             )
         elif error_count > 0:
             user_message = (
-                f"{error_info['message']} (Attempt {error_count} of {getattr(self.config.retry, 'max_attempts', 3)}). "
+                f"{error_info['message']} (Attempt {error_count} of {getattr(self.config.retry_config, 'max_attempts', 3)}). "  # noqa: E501
                 f"Let me continue with what I can do."
             )
         else:
             user_message = f"{error_info['message']} Let me continue with what I can do."
 
-        # Create result with explanation
-        outputs = {
-            'error': True,
-            'error_type': error_info['type'].value,
-            'user_message': user_message,
-            'task_attempted': task.description,
-            'recovery_attempted': error_count > 1,
-            'retry_count': error_count,
+        # Create result with explanation - wrap in proper TaskOutput structure
+        error_output = {
+            'result': {
+                'error': True,
+                'error_type': error_info['type'].value,
+                'user_message': user_message,
+                'task_attempted': task.description,
+                'recovery_attempted': error_count > 1,
+                'retry_count': error_count,
+            },
+            'status': 'failure',
+            'error': user_message,
         }
 
         # For critical errors, include more details
         if error_info['severity'] == ErrorSeverity.CRITICAL:
-            outputs['requires_action'] = True
-            outputs['suggested_action'] = self._get_suggested_action(error_info['type'])
+            error_output['result']['requires_action'] = True
+            error_output['result']['suggested_action'] = self._get_suggested_action(error_info['type'])
+
+        # Wrap in outputs dict with a key
+        outputs = {
+            'error_details': error_output
+        }
 
         return TaskResult(
             task_id=task.id,
             status=TaskStatus.FAILED,
             outputs=outputs,
             error_message=user_message,
-            success=False,
             execution_time=0.0,
         )
 

@@ -1096,11 +1096,16 @@ class Formation:
                 a2a_config_obj = A2AServiceSchema()
 
         # Update service bundle for overlord handoff (don't overwrite!)
+        # For formation_path, ensure we pass the directory (not the file)
+        formation_dir = self._formation_path
+        if formation_dir and os.path.isfile(formation_dir):
+            formation_dir = os.path.dirname(formation_dir)
+
         self._configured_services.update(
             {
                 "formation_config": self.config,
                 "secrets_manager": self.secrets_manager,
-                "formation_path": self._formation_path,
+                "formation_path": formation_dir,  # Pass directory, not file
                 "api_keys": self._api_keys.copy(),
                 # Service-specific configurations (validated and preprocessed)
                 "llm_config": self._llm_config,
