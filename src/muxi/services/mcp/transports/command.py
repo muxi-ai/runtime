@@ -9,6 +9,8 @@
 # =============================================================================
 
 import asyncio
+import warnings
+import logging
 from typing import Any, Dict, Optional
 from datetime import datetime
 
@@ -86,18 +88,30 @@ class CommandLineTransport(BaseTransport):
                 command=self.command, args=self.args, env=self.env
             )
 
-            # Store the context manager itself
-            self.client_context = stdio_client(server_params)
+            # Suppress annoying MCP server warnings about notification validation
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                # Also suppress root logger warnings from MCP servers
+                root_logger = logging.getLogger()
+                original_level = root_logger.level
+                root_logger.setLevel(logging.ERROR)
 
-            # Enter context and get streams
-            self.read_stream, self.write_stream = await self.client_context.__aenter__()
+                try:
+                    # Store the context manager itself
+                    self.client_context = stdio_client(server_params)
 
-            # Create session for high-level operations
-            self.session = ClientSession(self.read_stream, self.write_stream)
-            await self.session.__aenter__()
+                    # Enter context and get streams
+                    self.read_stream, self.write_stream = await self.client_context.__aenter__()
 
-            # Initialize the connection
-            await self.session.initialize()
+                    # Create session for high-level operations
+                    self.session = ClientSession(self.read_stream, self.write_stream)
+                    await self.session.__aenter__()
+
+                    # Initialize the connection
+                    await self.session.initialize()
+                finally:
+                    # Restore original logging level
+                    root_logger.setLevel(original_level)
 
             self.connected = True
             self.connect_time = datetime.now()
