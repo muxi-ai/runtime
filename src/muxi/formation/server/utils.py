@@ -3,8 +3,11 @@ Utility functions for the Formation server.
 """
 
 import re
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Set, Tuple, TYPE_CHECKING
 from starlette.datastructures import Headers
+
+if TYPE_CHECKING:
+    from ..formation import Formation
 
 
 def get_header_case_insensitive(headers: Headers, header_name: str) -> Optional[str]:
@@ -37,8 +40,7 @@ def has_header_case_insensitive(headers: Headers, header_name: str) -> bool:
 
 
 def mask_secret_value(
-    secret_value: Optional[str],
-    common_prefixes: Optional[List[str]] = None
+    secret_value: Optional[str], common_prefixes: Optional[List[str]] = None
 ) -> str:
     """
     Mask a secret value for safe display, preserving identifiable parts.
@@ -73,7 +75,7 @@ def mask_secret_value(
         common_prefixes = ["sk-", "pk-", "ghp_", "ghs_", "pat_", "key-", "tok-", "lin_"]
 
     # Check for protocols (preserve these)
-    protocol_match = re.match(r'^([a-zA-Z][a-zA-Z0-9+.-]*://)', secret_value)
+    protocol_match = re.match(r"^([a-zA-Z][a-zA-Z0-9+.-]*://)", secret_value)
     protocol = protocol_match.group(1) if protocol_match else ""
     value_after_protocol = secret_value[len(protocol):]
 
@@ -106,3 +108,157 @@ def mask_secret_value(
         masked_value = "••••••••"
 
     return masked_value
+
+
+def extract_secret_references(data: Any, path: str = "") -> Set[Tuple[str, str, str]]:
+    """
+    Recursively extract all secret and user credential references from a data structure.
+
+    Args:
+        data: The data structure to scan (dict, list, or primitive)
+        path: Current path for error reporting (used internally for recursion)
+
+    Returns:
+        Set of tuples (reference_type, reference_name, path) where:
+        - reference_type is either "secret" or "user_credential"
+        - reference_name is the extracted name (e.g., "OPENAI_API_KEY" or "github")
+        - path is the location in the data structure where it was found
+    """
+    references = set()
+
+    # Pattern to match ${{ secrets.* }} and ${{ user.credentials.* }}
+    secret_pattern = re.compile(r"\$\{\{\s*(secrets|user\.credentials)\.([^}]+)\s*\}\}")
+
+    if isinstance(data, dict):
+        for key, value in data.items():
+            new_path = f"{path}.{key}" if path else key
+            references.update(extract_secret_references(value, new_path))
+
+    elif isinstance(data, list):
+        for i, item in enumerate(data):
+            new_path = f"{path}[{i}]"
+            references.update(extract_secret_references(item, new_path))
+
+    elif isinstance(data, str):
+        # Find all matches in the string
+        for match in secret_pattern.finditer(data):
+            ref_type = match.group(1)
+            ref_name = match.group(2).strip()
+
+            if ref_type == "secrets":
+                references.add(("secret", ref_name, path))
+            elif ref_type == "user.credentials":
+                references.add(("user_credential", ref_name, path))
+
+    return references
+
+
+async def validate_secret_references(
+    data: Any, formation: "Formation"
+) -> Tuple[bool, List[Dict[str, str]]]:
+    """
+    Validate that all secret and user credential references in the data exist.
+
+    For secrets: Check if the secret exists in the formation's secrets manager.
+    For user credentials: Check if a corresponding USER_CREDENTIALS_* secret exists.
+
+    Args:
+        data: The data structure to validate
+        formation: The Formation instance with access to secrets manager
+
+    Returns:
+        Tuple of (is_valid, errors) where:
+        - is_valid: True if all references are valid
+        - errors: List of error details for missing references
+    """
+    errors = []
+    references = extract_secret_references(data)
+
+    # Check if secrets manager is available
+    if not hasattr(formation, "secrets_manager") or not formation.secrets_manager:
+        if references:
+            errors.append(
+                {
+                    "type": "SERVICE_UNAVAILABLE",
+                    "message": "Secrets manager not available",
+                    "details": "Cannot validate secret references without secrets manager",
+                }
+            )
+        return len(errors) == 0, errors
+
+    # Group references by type for better error messages
+    missing_secrets = []
+    missing_user_credentials = []
+
+    for ref_type, ref_name, path in references:
+        if ref_type == "secret":
+            # Check if secret exists
+            try:
+                secret_exists = await formation.secrets_manager.secret_exists(ref_name)
+                if not secret_exists:
+                    missing_secrets.append(
+                        {
+                            "name": ref_name,
+                            "path": path,
+                            "reference": f"${{{{ secrets.{ref_name} }}}}",
+                        }
+                    )
+            except Exception as e:
+                # If we can't check the secret, treat it as missing
+                missing_secrets.append(
+                    {
+                        "name": ref_name,
+                        "path": path,
+                        "reference": f"${{{{ secrets.{ref_name} }}}}",
+                        "error": f"Unable to verify: {str(e)}",
+                    }
+                )
+
+        elif ref_type == "user_credential":
+            # For user credentials, check if USER_CREDENTIALS_<NAME> secret exists
+            secret_key = f"USER_CREDENTIALS_{ref_name.upper()}"
+            try:
+                secret_exists = await formation.secrets_manager.secret_exists(secret_key)
+                if not secret_exists:
+                    missing_user_credentials.append(
+                        {
+                            "name": ref_name,
+                            "path": path,
+                            "reference": f"${{{{ user.credentials.{ref_name} }}}}",
+                            "required_secret": secret_key,
+                        }
+                    )
+            except Exception as e:
+                # If we can't check the secret, treat it as missing
+                missing_user_credentials.append(
+                    {
+                        "name": ref_name,
+                        "path": path,
+                        "reference": f"${{{{ user.credentials.{ref_name} }}}}",
+                        "required_secret": secret_key,
+                        "error": f"Unable to verify: {str(e)}",
+                    }
+                )
+
+    # Build comprehensive error messages
+    if missing_secrets:
+        errors.append(
+            {
+                "type": "MISSING_SECRETS",
+                "message": f"Missing {len(missing_secrets)} secret(s)",
+                "details": "The following secrets are referenced but do not exist",
+                "missing": missing_secrets,
+            }
+        )
+
+    if missing_user_credentials:
+        errors.append(
+            {
+                "type": "MISSING_USER_CREDENTIALS",
+                "message": f"Missing {len(missing_user_credentials)} user credential configuration(s)",
+                "details": "The following user credentials require corresponding secrets",
+                "missing": missing_user_credentials,
+            }
+        )
+
+    return len(errors) == 0, errors

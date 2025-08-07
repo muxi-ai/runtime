@@ -36,7 +36,9 @@ class APIError(BaseModel):
 
     code: str = Field(..., description="Error code from error registry")
     message: str = Field(..., description="Human-readable error message")
-    trace: Optional[str] = Field(None, description="Stack trace for debugging")
+    data: Optional[Dict[str, Any]] = Field(
+        None, description="Additional error data (validation errors, stack traces, etc.)"
+    )
 
 
 class APIResponse(BaseModel):
@@ -79,10 +81,6 @@ def create_api_response(
     if not request_id:
         request_id = generate_request_id()
 
-    # Ensure data is empty dict on error
-    if not success and error:
-        data = {}
-
     return APIResponse(
         object=object_type.value if isinstance(object_type, APIObjectType) else object_type,
         timestamp=int(time.time() * 1000),
@@ -101,6 +99,7 @@ def create_error_response(
     request_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
     data: Optional[Dict[str, Any]] = None,
+    error_data: Optional[Dict[str, Any]] = None,
 ) -> APIResponse:
     """
     Create a standardized error response.
@@ -108,10 +107,11 @@ def create_error_response(
     Args:
         error_code: Error code from error registry
         message: Custom error message (uses default if not provided)
-        trace: Stack trace for debugging
+        trace: Stack trace for debugging (will be included in error.data if provided)
         request_id: Request ID
         idempotency_key: Idempotency key if provided
-        data: Additional data to include in the error response
+        data: Additional data to include in the response data field
+        error_data: Additional data to include in the error.data field
 
     Returns:
         APIResponse object with error
@@ -132,11 +132,16 @@ def create_error_response(
     elif error_code in ["PROCESSING_ERROR", "LLM_ERROR", "TOOL_EXECUTION_ERROR"]:
         event_type = APIEventType.ERROR_PROCESSING
 
+    # Build error data, including trace if provided
+    final_error_data = error_data.copy() if error_data else {}
+    if trace:
+        final_error_data["trace"] = trace
+
     # Create error object
     error = APIError(
         code=error_code,
         message=message or (error_info.message if error_info else "An error occurred"),
-        trace=trace,
+        data=final_error_data if final_error_data else None,
     )
 
     return create_api_response(

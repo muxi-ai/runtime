@@ -42,6 +42,7 @@ src/muxi/extensions/loadable/sqlite-vec/__init__.py
 src/muxi/formation/__init__.py
 src/muxi/formation/formation.py
 src/muxi/formation/initialization.py
+src/muxi/formation/runtime_agent_processor.py
 src/muxi/formation/agents/__init__.py
 src/muxi/formation/agents/agent.py
 src/muxi/formation/agents/knowledge/__init__.py
@@ -161,6 +162,7 @@ src/muxi/formation/server/routes/client/events.py
 src/muxi/formation/server/routes/client/jobs.py
 src/muxi/formation/server/routes/client/memory.py
 src/muxi/formation/utils/__init__.py
+src/muxi/formation/utils/agent_persistence.py
 src/muxi/formation/utils/api_keys.py
 src/muxi/formation/utils/format_utils.py
 src/muxi/formation/utils/network_utils.py

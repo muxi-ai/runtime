@@ -90,7 +90,49 @@ All API responses use a consistent envelope format:
 }
 ```
 
+### Error Response Format
+
+When an error occurs (`success` is false), the `error` field contains:
+
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",       // Standardized error code (e.g., "INVALID_PARAMS")
+    "message": "Error message", // Human-readable error description
+    "data": {                   // Optional additional error data
+      "validation_errors": [    // For validation errors
+        {
+          "field": "name",      // Field path using dot notation
+          "msg": "Field required",
+          "type": "string",     // Expected data type
+          "error": "missing"    // Error kind (missing, wrong_type, etc.)
+        }
+      ],
+      "trace": "...",          // Stack trace for internal errors (debug mode)
+      // Other error-specific data
+    }
+  },
+  "data": {}                   // Always empty for error responses
+}
+```
+
+### Common Error Codes
+
+- `INVALID_REQUEST` - Invalid request format or missing required fields
+- `INVALID_PARAMS` - Request validation failed
+- `UNAUTHORIZED` - Invalid or missing API key
+- `FORBIDDEN` - Operation not permitted
+- `AGENT_NOT_FOUND` - Requested agent doesn't exist
+- `RESOURCE_NOT_FOUND` - Requested resource doesn't exist
+- `INTERNAL_ERROR` - Server error occurred
+
 ## 🔄 Recent Updates
+
+### 2025-01-31: Error Response Format Improvements ✅
+- **Simplified Error Structure**: Removed redundant `trace` field from error responses
+- **Unified Error Data**: All additional error information now uses `error.data` field
+- **Enhanced Validation Errors**: Changed `loc` to `field` for clearer field identification
+- **Improved Error Types**: Added explicit `type` and `error` fields for validation errors
 
 ### 2025-01-31: Secret Protection Implementation ✅
 - **Placeholder Tracking**: Formation loader now tracks original secret placeholders during configuration loading
@@ -103,7 +145,7 @@ All API responses use a consistent envelope format:
 
 ### 2025-01-31: API Specification Alignment Completed ✅
 - **Envelope Format**: All endpoints now use consistent envelope format with proper error handling
-- **Object Types**: Updated to use spec-compliant object types (`formation_status`, `formation_config`)  
+- **Object Types**: Updated to use spec-compliant object types (`formation_status`, `formation_config`)
 - **List Endpoints**: All list endpoints now return arrays directly with generic `list` object type
 - **Authentication**: Fixed HTTP status codes (401 instead of 403 for auth errors)
 - **Error Handling**: 404 and other HTTP exceptions now use proper envelope structure

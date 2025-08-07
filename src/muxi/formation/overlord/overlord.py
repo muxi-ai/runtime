@@ -346,6 +346,9 @@ class Overlord:
         self.agent_metadata: Dict[str, Dict[str, Any]] = {}  # Enhanced metadata
         self._agent_expertise: Dict[str, Dict[str, Any]] = {}  # Expertise registry
 
+        # Lock for thread-safe agent runtime additions
+        self._agent_add_lock = asyncio.Lock()
+
         # Recent document tracking for immediate context
         # Structure: {session_id: [documents]}
         # Note: This is a fast-access cache. Cleanup is handled automatically by buffer memory FIFO
@@ -2445,6 +2448,192 @@ class Overlord:
             raise ValueError(f"No agent with ID '{agent_id}' exists")
 
         return self.agents[agent_id]
+
+    async def add_agent_runtime(self, processed_config: Dict[str, Any]) -> None:
+        """
+        Atomically add a new agent to the overlord at runtime.
+
+        This method handles the complete agent addition process including:
+        - Agent creation and validation
+        - State updates with proper locking
+        - Workflow component updates
+        - Rollback on failure
+
+        Args:
+            processed_config: Processed agent configuration dictionary
+                            (after secrets processing and validation)
+
+        Raises:
+            ValueError: If agent ID is missing or already exists
+            RuntimeError: If agent creation fails
+        """
+        agent_id = processed_config.get("id")
+        if not agent_id:
+            raise ValueError("Agent configuration missing 'id' field")
+
+        # Acquire lock for thread-safe agent addition
+        async with self._agent_add_lock:
+            # Check if agent already exists (double-check inside lock)
+            if agent_id in self.agents:
+                raise ValueError(f"Agent with id '{agent_id}' already exists in overlord")
+
+            # Track original state for rollback
+            agent_created = False
+            metadata_added = False
+
+            try:
+                # Create the agent instance
+                agent = await self._create_agent_from_config(processed_config)
+                agent_created = True
+
+                # Add to agents dictionary atomically
+                self.agents[agent_id] = agent
+
+                # Store agent metadata for routing
+                self.agent_descriptions[agent_id] = processed_config.get("description", "")
+                self.agent_metadata[agent_id] = {
+                    "name": processed_config.get("name", agent_id),
+                    "role": processed_config.get("role", "general"),
+                    "specialties": processed_config.get("specialties", []),
+                    "system_message": processed_config.get("system_message", ""),
+                }
+                metadata_added = True
+
+                # Update workflow components
+                await self._update_workflow_components_for_agent(agent_id, agent)
+
+                # Log successful addition
+                observability.observe(
+                    event_type=observability.SystemEvents.AGENT_ADDED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "agent_id": agent_id,
+                        "agent_name": processed_config.get("name", agent_id),
+                        "source": processed_config.get("source", "unknown"),
+                    },
+                    description=f"Agent '{agent_id}' successfully added to overlord at runtime"
+                )
+
+            except Exception as e:
+                # Rollback on failure
+                if metadata_added:
+                    self.agent_metadata.pop(agent_id, None)
+                    self.agent_descriptions.pop(agent_id, None)
+
+                if agent_created and agent_id in self.agents:
+                    del self.agents[agent_id]
+
+                # Log the failure
+                observability.observe(
+                    event_type=observability.ErrorEvents.AGENT_CREATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "agent_id": agent_id,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    },
+                    description=f"Failed to add agent '{agent_id}' to overlord: {str(e)}"
+                )
+
+                # Re-raise with context
+                raise RuntimeError(f"Failed to add agent '{agent_id}' to overlord: {str(e)}") from e
+
+    async def _update_workflow_components_for_agent(self, agent_id: str, agent: Any) -> None:
+        """
+        Update all workflow components when an agent is added.
+
+        This method ensures all workflow-related components are properly updated
+        when a new agent is added to the overlord.
+
+        Args:
+            agent_id: The ID of the newly added agent
+            agent: The agent instance
+
+        Raises:
+            AttributeError: If critical workflow components have unexpected structure
+        """
+        update_failures = []
+
+        # Update task decomposer's agent registry
+        if hasattr(self, 'task_decomposer') and self.task_decomposer is not None:
+            try:
+                # Ensure task decomposer has agent_registry attribute
+                if not hasattr(self.task_decomposer, 'agent_registry'):
+                    raise AttributeError("TaskDecomposer missing expected 'agent_registry' attribute")
+
+                # Update the registry with current agents
+                self.task_decomposer.agent_registry = self.agents
+
+            except AttributeError as e:
+                # This is a critical error - the component structure has changed
+                update_failures.append(("task_decomposer", e))
+                observability.observe(
+                    event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "component": "task_decomposer",
+                        "agent_id": agent_id,
+                        "error": str(e),
+                        "error_type": "AttributeError",
+                    },
+                    description=f"Task decomposer has unexpected structure: {str(e)}"
+                )
+            except Exception as e:
+                # Log unexpected errors but continue
+                observability.observe(
+                    event_type=observability.SystemEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "component": "task_decomposer",
+                        "agent_id": agent_id,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    },
+                    description=f"Unexpected error updating task decomposer for agent '{agent_id}': {str(e)}"
+                )
+
+        # Update workflow executor's agent registry
+        if hasattr(self, 'workflow_executor') and self.workflow_executor is not None:
+            try:
+                # Ensure workflow executor has agent_registry attribute
+                if not hasattr(self.workflow_executor, 'agent_registry'):
+                    raise AttributeError("WorkflowExecutor missing expected 'agent_registry' attribute")
+
+                # Update the registry with current agents
+                self.workflow_executor.agent_registry = self.agents
+
+            except AttributeError as e:
+                # This is a critical error - the component structure has changed
+                update_failures.append(("workflow_executor", e))
+                observability.observe(
+                    event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "component": "workflow_executor",
+                        "agent_id": agent_id,
+                        "error": str(e),
+                        "error_type": "AttributeError",
+                    },
+                    description=f"Workflow executor has unexpected structure: {str(e)}"
+                )
+            except Exception as e:
+                # Log unexpected errors but continue
+                observability.observe(
+                    event_type=observability.SystemEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "component": "workflow_executor",
+                        "agent_id": agent_id,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    },
+                    description=f"Unexpected error updating workflow executor for agent '{agent_id}': {str(e)}"
+                )
+
+        # If there were critical structural errors, raise them
+        if update_failures:
+            error_msg = "; ".join([f"{comp}: {err}" for comp, err in update_failures])
+            raise AttributeError(f"Critical workflow component structure errors: {error_msg}")
 
     async def remove_agent(self, agent_id: str) -> bool:
         """

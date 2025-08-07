@@ -31,7 +31,7 @@
 # =============================================================================
 
 import asyncio
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING
 import yaml
 from pathlib import Path
 import os
@@ -369,6 +369,9 @@ class Formation:
                         os.makedirs(secrets_dir, exist_ok=True)
 
                     self.secrets_manager = SecretsManager(secrets_dir)
+
+                    # Initialize encryption immediately so secrets can be used during config loading
+                    await self.secrets_manager.initialize_encryption()
 
                     # Emit observability event for successful SecretsManager initialization
                     observability.observe(
@@ -1698,6 +1701,10 @@ class Formation:
         if not self.secrets_manager:
             return False
 
+        # Check if already initialized
+        if self.secrets_manager.is_initialized():
+            return True
+
         async def _initialize_operation():
             """Initialize secrets manager with timeout support."""
 
@@ -1854,6 +1861,21 @@ class Formation:
 
         # Check if the secret is in our tracked set
         return normalized_name in self._secrets_in_use
+
+    def track_used_secrets(self, secret_names: Set[str]) -> None:
+        """
+        Track additional secrets as being in use by the formation.
+
+        This method is used to update the set of secrets that are actively
+        being used by agents or other components in the formation.
+
+        Args:
+            secret_names: Set of secret names to track as in-use
+        """
+        if hasattr(self, '_secrets_in_use'):
+            self._secrets_in_use.update(secret_names)
+        else:
+            self._secrets_in_use = secret_names.copy()
 
     async def list_secrets(self) -> List[str]:
         """
@@ -3148,6 +3170,80 @@ class Formation:
         """Get the secret placeholder mappings (returns a copy to prevent external modification)."""
         return self._secret_placeholders.copy()
 
+    def get_overlord(self) -> Optional[Any]:
+        """
+        Get the overlord instance if it's running.
+
+        Returns:
+            The overlord instance if running, None otherwise
+        """
+        if self._is_running and self._overlord:
+            return self._overlord
+        return None
+
+    def has_secret_placeholders(self) -> bool:
+        """
+        Check if secret placeholders are being tracked.
+
+        Returns:
+            True if secret placeholders are initialized and not None
+        """
+        return hasattr(self, "_secret_placeholders") and self._secret_placeholders is not None
+
+    def add_secret_placeholder(self, path: str, placeholder: str) -> None:
+        """
+        Add a secret placeholder mapping.
+
+        Args:
+            path: The configuration path (e.g., "agents[0].api_key")
+            placeholder: The placeholder value to store
+        """
+        if self._secret_placeholders is not None:
+            self._secret_placeholders[path] = placeholder
+
+    def remove_secret_placeholders_for_prefix(self, prefix: str) -> None:
+        """
+        Remove all secret placeholders that start with the given prefix.
+
+        Args:
+            prefix: The prefix to match (e.g., "agents[0]")
+        """
+        if self._secret_placeholders is not None:
+            keys_to_remove = [k for k in self._secret_placeholders if k.startswith(prefix)]
+            for k in keys_to_remove:
+                del self._secret_placeholders[k]
+
+    async def remove_agent_from_overlord(self, agent_id: str) -> bool:
+        """
+        Remove an agent from the running overlord.
+
+        Args:
+            agent_id: ID of the agent to remove
+
+        Returns:
+            True if agent was removed, False if overlord not running or agent not found
+        """
+        if self._is_running and self._overlord:
+            if agent_id in self._overlord.agents:
+                # Remove agent from overlord
+                del self._overlord.agents[agent_id]
+
+                # Also remove from active agents tracker if present
+                if hasattr(self._overlord, "active_agents_tracker"):
+                    self._overlord.active_agents_tracker.remove_agent(agent_id)
+
+                return True
+        return False
+
+    def get_formation_path(self) -> Optional[str]:
+        """
+        Get the formation file path.
+
+        Returns:
+            The path to the formation file, or None if not set
+        """
+        return self._formation_path if hasattr(self, '_formation_path') else None
+
     def get_formation_id(self) -> str:
         """Get the formation ID."""
         return self.formation_id
@@ -3538,6 +3634,69 @@ class Formation:
             agent_config["source"] = "api"
             self.config["agents"].append(agent_config)
 
+    async def save_agent_to_file(
+        self,
+        agent_config: Dict[str, Any],
+        auto_load: bool = False
+    ) -> str:
+        """
+        Save an agent configuration to a YAML file in the agents/ directory.
+
+        Args:
+            agent_config: Agent configuration dictionary
+            auto_load: If True, automatically load the agent into formation config and overlord
+
+        Returns:
+            str: Path to the created file
+
+        Raises:
+            ValueError: If formation path is not set
+            AgentPersistenceError: If the save operation fails
+        """
+        if not self._formation_path:
+            raise ValueError("Formation path not set - cannot save agent file")
+
+        from .utils.agent_persistence import save_agent_to_file
+        return await save_agent_to_file(
+            agent_config,
+            self._formation_path,
+            formation=self if auto_load else None,
+            auto_load=auto_load
+        )
+
+    async def update_agent_file(
+        self,
+        agent_id: str,
+        updates: Dict[str, Any],
+        auto_reload: bool = False
+    ) -> str:
+        """
+        Update an agent's YAML file with partial data and optionally reload it.
+
+        Args:
+            agent_id: ID of the agent to update
+            updates: Dictionary of fields to update
+            auto_reload: If True, automatically reload the agent in formation and overlord
+
+        Returns:
+            str: Path to the updated file
+
+        Raises:
+            ValueError: If formation path is not set or agent file doesn't exist
+            AgentPersistenceError: If the update operation fails
+        """
+        if not self._formation_path:
+            raise ValueError("Formation path not set - cannot update agent file")
+
+        from .utils.agent_persistence import update_agent_file
+        return await update_agent_file(
+            agent_id,
+            updates,
+            self._formation_path,
+            formation=self if auto_reload else None,
+            auto_reload=auto_reload
+        )
+
     def update_agent_in_config(self, agent_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
         """
         Safely update an agent in the formation config with thread synchronization.
@@ -3602,6 +3761,33 @@ class Formation:
             # Remove agent
             agents.pop(agent_idx)
             return True
+
+    async def add_agent_to_overlord(self, processed_config: Dict[str, Any]) -> None:
+        """
+        Add a new agent to the running overlord.
+
+        This method creates an agent instance from the processed configuration
+        and adds it to the overlord's runtime. It should be used when adding
+        agents dynamically after the overlord has started.
+
+        Args:
+            processed_config: Processed agent configuration dictionary
+                             (after secrets processing and validation)
+
+        Raises:
+            RuntimeError: If overlord is not running
+            ValueError: If agent creation fails or agent ID already exists
+        """
+        if not self._is_running or not self._overlord:
+            raise RuntimeError("Overlord is not running")
+
+        # Use the overlord's public method for atomic agent addition
+        # This encapsulates all the logic including:
+        # - Agent creation and validation
+        # - State updates with proper locking
+        # - Workflow component updates
+        # - Rollback on failure
+        await self._overlord.add_agent_runtime(processed_config)
 
     async def list_agents(self) -> Dict[str, Dict[str, Any]]:
         """
