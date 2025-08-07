@@ -5164,56 +5164,55 @@ class Overlord:
 
                 if relevant_sop:
                     mode = relevant_sop.get("mode", "template")
+                    bypass_approval = relevant_sop.get("bypass_approval", True)
 
+                    # Build enhanced message with SOP content
                     if mode == "template":
-                        # Create workflow from SOP template
-                        workflow = await self._create_workflow_from_sop_template(relevant_sop, message)
+                        intro = "Follow this Standard Operating Procedure EXACTLY. Do not skip steps or improvise."  # noqa: E501
+                        outro = "Create an optimized workflow that executes every step while minimizing unnecessary operations."  # noqa: E501
+                    else:  # guide mode
+                        intro = "Use this Standard Operating Procedure as guidance while optimizing for efficiency."  # noqa: E501
+                        outro = "Create an optimized workflow that achieves the SOP goals while minimizing unnecessary operations."  # noqa: E501
 
-                    else:  # mode == 'guide'
-                        # Include SOP as guidance for LLM interpretation
-                        try:
-                            sop_guidance = self.sop_system.format_as_guidance(relevant_sop)
-                        except Exception as e:
-                            # Log error and use basic guidance
-                            observability.observe(
-                                observability.ErrorEvents.WARNING,
-                                observability.EventLevel.WARNING,
-                                {
-                                    "error": str(e),
-                                    "sop_id": relevant_sop["id"],
-                                    "sop_name": relevant_sop["name"],
-                                },
-                                description=f"Failed to format SOP guidance: {relevant_sop['id']}"
-                            )
-                            # Use basic guidance as fallback
-                            sop_guidance = (
-                                f"Standard Operating Procedure: {relevant_sop.get('name', 'Unknown')}\n"
-                                f"{relevant_sop.get('description', '')}"
-                            )
+                    # Create enhanced message with SOP content
+                    enhanced_message = (
+                        f"{intro}\n\n"
+                        f"<sop>\n{relevant_sop.get('content', '')}\n</sop>\n\n"
+                        "<directives>\nThe following directives in the SOP should be interpreted:\n"
+                        "- [agent:name] - Route to the specified agent\n"
+                        "- [mcp:tool] - Use the specified MCP tool\n"
+                        "- [file:path] - Include the specified file content\n"
+                        "- [critical] - This step cannot be optimized away\n"
+                        "</directives>\n\n"
+                        f"<user_request>\n{message}\n</user_request>\n\n"
+                        f"{outro}"
+                    )
 
-                        # Pass to decomposer with SOP context
-                        workflow = await self.task_decomposer.decompose_request(
-                            request=message,
-                            context={
-                                "available_agents": list(self.agents.keys()),
-                                "sop_guidance": sop_guidance,
-                            },
-                            analysis=analysis,
-                            requires_approval=needs_approval,
-                        )
+                    # Pass to decomposer with SOP context
+                    workflow = await self.task_decomposer.decompose_request(
+                        request=enhanced_message,
+                        context={
+                            "available_agents": list(self.agents.keys()),
+                            "sop_mode": mode,
+                            "sop_id": relevant_sop["id"],
+                        },
+                        analysis=analysis,
+                        requires_approval=needs_approval if not bypass_approval else False,
+                    )
 
-                        # Log guide mode usage
-                        observability.observe(
-                            event_type=observability.ConversationEvents.SOP_EXECUTED,
-                            level=observability.EventLevel.INFO,
-                            data={
-                                "sop_id": relevant_sop["id"],
-                                "sop_name": relevant_sop["name"],
-                                "workflow_id": workflow.id,
-                                "mode": "guide",
-                            },
-                            description=f"Executed SOP '{relevant_sop['name']}' in guide mode",
-                        )
+                    # Log SOP execution
+                    observability.observe(
+                        event_type=observability.ConversationEvents.SOP_EXECUTED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "sop_id": relevant_sop["id"],
+                            "sop_name": relevant_sop["name"],
+                            "workflow_id": workflow.id if workflow else None,
+                            "mode": mode,
+                            "bypass_approval": bypass_approval,
+                        },
+                        description=f"Passed SOP '{relevant_sop['name']}' to decomposer in {mode} mode",
+                    )
 
             # Fall back to standard decomposition if no SOP found
             if workflow is None:
@@ -5533,125 +5532,7 @@ class Overlord:
             )
             return False
 
-    async def _create_workflow_from_sop_template(
-        self,
-        relevant_sop: Dict[str, Any],
-        message: str
-    ) -> Optional[Any]:
-        """
-        Create a workflow from an SOP template.
-
-        Converts the SOP into workflow tasks, processes directives,
-        preloads resources, and creates a Workflow object.
-
-        Args:
-            relevant_sop: The SOP dictionary to convert
-            message: The original user message
-
-        Returns:
-            Workflow dictionary or None if conversion fails
-        """
-        try:
-            workflow_tasks = self.sop_system.to_workflow_template(relevant_sop)
-        except Exception as e:
-            # Log error and return None to fall back to standard decomposition
-            observability.observe(
-                observability.ErrorEvents.WARNING,
-                observability.EventLevel.WARNING,
-                {
-                    "error": str(e),
-                    "sop_id": relevant_sop["id"],
-                    "sop_name": relevant_sop["name"],
-                },
-                description=f"Failed to convert SOP to workflow template: {relevant_sop['id']}"
-            )
-            return None
-
-        # Process each task with directives
-        for task in workflow_tasks:
-            # Set agent routing from SOP
-            if task.get("preferred_agent"):
-                task["agent_id"] = task["preferred_agent"]
-
-            # Ensure required MCP tools are available
-            if task.get("required_tools"):
-                task["mcp_requirements"] = task["required_tools"]
-
-            # Pre-load file resources
-            if task.get("resources"):
-                task["resource_contents"] = {}
-                for resource in task["resources"]:
-                    try:
-                        content = await self.sop_system.get_resource_content(
-                            resource["reference"]
-                        )
-                        if content:
-                            task["resource_contents"][resource["reference"]] = content
-                    except Exception as e:
-                        # Log error but continue with other resources
-                        observability.observe(
-                            observability.ErrorEvents.WARNING,
-                            observability.EventLevel.WARNING,
-                            {
-                                "error": str(e),
-                                "resource": resource["reference"],
-                                "sop_id": relevant_sop["id"],
-                            },
-                            description=f"Failed to load SOP resource: {resource['reference']}"
-                        )
-                        # Continue processing other resources
-
-        # Create workflow object from template
-        import uuid
-        from muxi.datatypes.workflow import Workflow, SubTask
-
-        # Convert tasks to SubTask objects with sequential dependencies
-        subtasks = {}
-        previous_task_id = None
-        for i, task in enumerate(workflow_tasks):
-            task_id = f"task_{i+1}"
-            # Create dependencies list - each task depends on the previous one
-            dependencies = [previous_task_id] if previous_task_id else []
-
-            subtasks[task_id] = SubTask(
-                id=task_id,
-                description=task.get("description", ""),
-                required_capabilities=["general"],  # Default capabilities
-                estimated_complexity=task.get("estimated_complexity", 3),
-                assigned_agent_id=task.get("preferred_agent"),  # Use preferred_agent from SOP
-                dependencies=dependencies,  # Sequential execution with data flow
-            )
-            previous_task_id = task_id  # Update for next iteration
-
-        workflow = Workflow(
-            id=f"wf_{uuid.uuid4().hex[:12]}",
-            user_request=message,
-            tasks=subtasks
-        )
-
-        # Log SOP usage for observability
-        observability.observe(
-            observability.ConversationEvents.SOP_EXECUTED,
-            observability.EventLevel.INFO,
-            {
-                "sop_id": relevant_sop["id"],
-                "sop_name": relevant_sop["name"],
-                "workflow_id": workflow.id,
-                "mode": "template",
-                "agent_directives": sum(
-                    1 for t in workflow_tasks if t.get("preferred_agent")
-                ),
-                "mcp_directives": sum(
-                    len(t.get("required_tools", [])) for t in workflow_tasks
-                ),
-                "resources_loaded": sum(
-                    len(t.get("resources", [])) for t in workflow_tasks
-                ),
-            },
-            description=f"Executed SOP '{relevant_sop['name']}' in template mode",
-        )
-
-        return workflow
+    # Method removed - decomposer handles SOP conversion now
 
     async def _execute_workflow_async(
         self,

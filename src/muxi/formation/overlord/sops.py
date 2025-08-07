@@ -6,7 +6,6 @@ enabling consistent execution of complex multi-step operations.
 
 import asyncio
 import hashlib
-import re
 import yaml
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -178,19 +177,13 @@ class SOPSystem:
                         'description': metadata.get('description', ''),
                         'mode': metadata.get('mode', 'template'),  # Default to template
                         'tags': self._parse_tags(metadata.get('tags', '')),
-                        'steps': self._extract_steps_from_markdown(content),
-                        'content': content
+                        'bypass_approval': metadata.get('bypass_approval', True),  # Default to bypass
+                        'content': content,  # Full markdown content for decomposer
+                        'raw_content': md_file.read_text()  # Original content with frontmatter
                     }
                     self.file_hashes[sop_id] = file_hash
 
-        # Build resource map for [file:] references (all files in sops/)
-        for file_path in self.sop_dir.rglob("*"):
-            if file_path.is_file():
-                # Store with relative path from sops/ dir
-                relative_path = file_path.relative_to(self.sop_dir)
-                self.resource_map[str(relative_path)] = file_path
-                # Also store just filename for convenience
-                self.resource_map[file_path.name] = file_path
+        # Resource mapping removed - decomposer handles [file:] references now
 
     def _parse_tags(self, tags: Any) -> List[str]:
         """
@@ -208,68 +201,7 @@ class SOPSystem:
             return [t.strip() for t in tags.split(',')]
         return []
 
-    def _extract_steps_from_markdown(self, content: str) -> List[Dict]:
-        """
-        Extract numbered steps with directives from Markdown content.
-
-        Parses:
-        - Numbered lists (1., 2., etc.)
-        - [agent:name] directives for agent routing
-        - [mcp:tool] directives for MCP tool requirements
-        - [file:path] references for documentation
-
-        Returns:
-            List of step dictionaries with parsed directives
-        """
-        steps = []
-        lines = content.split('\n')
-        i = 0
-        while i < len(lines):
-            line = lines[i]
-            # Match lines starting with 1., 2., etc.
-            if line.strip() and line.lstrip()[0].isdigit() and '. ' in line:
-                # Extract the main step text
-                main_text = line.split('. ', 1)[1].strip()
-
-                # Collect full step content including sub-items
-                full_content = main_text
-                j = i + 1
-                while (j < len(lines) and lines[j].strip() and
-                       not (lines[j].lstrip()[0].isdigit() and '. ' in lines[j])):
-                    if lines[j].strip().startswith('-'):
-                        full_content += '\n' + lines[j]
-                    j += 1
-
-                # Parse directives from full content
-                step_data = {
-                    'text': main_text,
-                    'agent': None,
-                    'mcp_tools': [],
-                    'resources': []
-                }
-
-                # Extract agent directive [agent:name]
-                agent_match = re.search(r'\[agent:([^\]]+)\]', full_content)
-                if agent_match:
-                    step_data['agent'] = agent_match.group(1)
-                    # Clean agent directive from main text
-                    main_text = main_text.replace(agent_match.group(0), '').strip()
-
-                # Extract MCP directives [mcp:tool]
-                mcp_matches = re.findall(r'\[mcp:([^\]]+)\]', full_content)
-                step_data['mcp_tools'] = mcp_matches
-
-                # Extract file references [file:path]
-                file_matches = re.findall(r'\[file:([^\]]+)\]', full_content)
-                step_data['resources'] = file_matches
-
-                # Clean text (remove markdown bold and directives)
-                step_data['text'] = main_text.replace('**', '')
-
-                steps.append(step_data)
-                i = j - 1
-            i += 1
-        return steps
+    # Step extraction removed - decomposer handles this now
 
     # ========================================================================
     # CACHE MANAGEMENT
@@ -942,53 +874,7 @@ class SOPSystem:
     # WORKFLOW GENERATION
     # ========================================================================
 
-    def to_workflow_template(self, sop: Dict) -> List[Dict]:
-        """
-        Convert SOP to workflow template for execution.
-
-        Transforms SOP steps into workflow tasks with:
-        - Agent routing preferences
-        - MCP tool requirements
-        - Resource file paths
-
-        Args:
-            sop: SOP dictionary with steps
-
-        Returns:
-            List of workflow task dictionaries
-        """
-        tasks = []
-        for step_data in sop['steps']:
-            task = {
-                'description': step_data['text'],
-                'type': 'task',
-                'source': 'sop',
-                'sop_id': sop['id']
-            }
-
-            # Add agent routing if specified
-            if step_data.get('agent'):
-                task['preferred_agent'] = step_data['agent']
-
-            # Add MCP tool requirements
-            if step_data.get('mcp_tools'):
-                task['required_tools'] = step_data['mcp_tools']
-
-            # Add file resources
-            if step_data.get('resources'):
-                task['resources'] = []
-                for ref in step_data['resources']:
-                    resource_path = self.resolve_resource(ref)
-                    if resource_path:
-                        task['resources'].append({
-                            'reference': ref,
-                            'path': str(resource_path),
-                            'type': resource_path.suffix
-                        })
-
-            tasks.append(task)
-
-        return tasks
+    # Workflow template conversion removed - decomposer handles this now
 
     def format_as_guidance(self, sop: Dict) -> str:
         """
