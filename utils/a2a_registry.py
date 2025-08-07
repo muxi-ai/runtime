@@ -26,16 +26,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-try:
-    from .user_dirs import get_a2a_registry_dir
-except ImportError:
-    # When running as standalone script
-    from user_dirs import get_a2a_registry_dir
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 import logging
+
+
+def get_a2a_registry_dir():
+    """Get the A2A registry data directory."""
+    registry_dir = Path.cwd() / ".a2a_registry_data"
+    registry_dir.mkdir(exist_ok=True)
+    return str(registry_dir)
 
 
 # =============================================================================
@@ -402,9 +404,7 @@ class RegistryStorage:
         url_key = agent_card.url
 
         # Debug logging
-        logging.info(
-            f"REGISTER: Registering agent '{agent_card.name}' with URL key: '{url_key}'"
-        )
+        logging.info(f"REGISTER: Registering agent '{agent_card.name}' with URL key: '{url_key}'")
 
         # Add registration metadata
         agent_data = agent_card.model_dump()
@@ -429,9 +429,7 @@ class RegistryStorage:
             agent_name = agents[agent_url].get("name", "unknown")
             del agents[agent_url]
             self._save_agents(agents)
-            logging.info(
-                f"DEREGISTER: Successfully removed agent '{agent_name}' at '{agent_url}'"
-            )
+            logging.info(f"DEREGISTER: Successfully removed agent '{agent_name}' at '{agent_url}'")
 
             return True
 
@@ -451,9 +449,7 @@ class RegistryStorage:
 
             try:
                 # Convert capabilities from dict to A2ACapability objects
-                if "capabilities" in clean_data and isinstance(
-                    clean_data["capabilities"], dict
-                ):
+                if "capabilities" in clean_data and isinstance(clean_data["capabilities"], dict):
                     converted_capabilities = {}
                     for cap_name, cap_data in clean_data["capabilities"].items():
                         if isinstance(cap_data, dict):
@@ -461,9 +457,7 @@ class RegistryStorage:
                             converted_capabilities[cap_name] = A2ACapability(**cap_data)
                         else:
                             # Skip invalid capability data
-                            logging.warning(
-                                f"Skipping invalid capability {cap_name}: {cap_data}"
-                            )
+                            logging.warning(f"Skipping invalid capability {cap_name}: {cap_data}")
                     clean_data["capabilities"] = converted_capabilities
 
                 # Convert authentication from dict to A2AAuthentication object

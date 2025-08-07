@@ -7,8 +7,9 @@ configuration hash to avoid regeneration when configs haven't changed.
 
 import json
 import hashlib
+import time
 from pathlib import Path
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from datetime import datetime, timezone
 
 from .models import AgentCard
@@ -41,6 +42,10 @@ class A2ACacheManager:
         # Cache metadata file
         self.metadata_file = self.cache_dir / "metadata.json"
         self._load_metadata()
+
+        # Add single subdirectory for filtering cache
+        self.filter_cache_dir = self.cache_dir / "filtered_results"
+        self.filter_cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _load_metadata(self) -> None:
         """Load cache metadata from disk"""
@@ -326,4 +331,57 @@ class A2ACacheManager:
                 },
             )
 
+        return removed_count
+
+    def _is_cache_valid(self, cache_data: Dict[str, Any]) -> bool:
+        """Check if cached data is still valid based on TTL"""
+        if "expires_at" not in cache_data:
+            return False
+        return time.time() < cache_data["expires_at"]
+
+    def get_filtered_agents(self, task_hash: str, agents_hash: str) -> Optional[List[str]]:
+        """Get cached filtered agent list"""
+        cache_file = self.filter_cache_dir / f"{task_hash}_{agents_hash}.json"
+        if cache_file.exists():
+            try:
+                with open(cache_file, "r") as f:
+                    data = json.load(f)
+                if self._is_cache_valid(data):
+                    return data["agent_ids"]
+            except (json.JSONDecodeError, IOError, KeyError):
+                cache_file.unlink(missing_ok=True)
+        return None
+
+    def set_filtered_agents(
+        self, task_hash: str, agents_hash: str, agent_ids: List[str], ttl: int = 1800
+    ):
+        """Cache filtered agent list with TTL"""
+        cache_file = self.filter_cache_dir / f"{task_hash}_{agents_hash}.json"
+        data = {"agent_ids": agent_ids, "expires_at": time.time() + ttl, "created_at": time.time()}
+        try:
+            with open(cache_file, "w") as f:
+                json.dump(data, f, indent=2)
+        except IOError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "set_filtered_agents", "error": str(e)},
+            )
+
+    def cleanup_expired_filtering_cache(self) -> int:
+        """Clean up expired filtering cache entries"""
+        removed_count = 0
+        try:
+            for cache_file in self.filter_cache_dir.glob("*.json"):
+                try:
+                    with open(cache_file, "r") as f:
+                        data = json.load(f)
+                    if not self._is_cache_valid(data):
+                        cache_file.unlink()
+                        removed_count += 1
+                except (json.JSONDecodeError, IOError):
+                    cache_file.unlink(missing_ok=True)
+                    removed_count += 1
+        except OSError:
+            pass
         return removed_count

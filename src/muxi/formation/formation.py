@@ -85,6 +85,7 @@ from ..datatypes.exceptions import (
     OverlordStartupError,
     OverlordStateError,
     DependencyValidationError,
+    RegistryConfigurationError,
     add_error_context,
 )
 
@@ -218,6 +219,92 @@ class Formation:
             data={"operation": "secrets_manager_injection"},
             description="SecretsManager injected via dependency injection",
         )
+
+    def _get_primary_registry_url(self, a2a_config: Dict[str, Any]) -> Optional[str]:
+        """
+        Get the primary registry URL from A2A configuration.
+
+        Preference order:
+        1. First URL from inbound registries (preferred for receiving requests)
+        2. First URL from outbound registries (fallback)
+        3. None if no registries configured
+
+        Args:
+            a2a_config: The A2A configuration dictionary
+
+        Returns:
+            The primary registry URL or None if not configured
+
+        Raises:
+            ValueError: If registry URL is malformed
+        """
+        # Check inbound registries first (preferred)
+        inbound_registries = a2a_config.get("inbound", {}).get("registries", [])
+        if inbound_registries and inbound_registries[0]:
+            url = inbound_registries[0]
+            # Validate URL format
+            if not (url.startswith("http://") or url.startswith("https://")):
+                raise ValueError(
+                    f"Invalid registry URL format: {url}. Must start with http:// or https://"
+                )
+            return url
+
+        # Fall back to outbound registries
+        outbound_registries = a2a_config.get("outbound", {}).get("registries", [])
+        if outbound_registries and outbound_registries[0]:
+            url = outbound_registries[0]
+            # Validate URL format
+            if not (url.startswith("http://") or url.startswith("https://")):
+                raise ValueError(
+                    f"Invalid registry URL format: {url}. Must start with http:// or https://"
+                )
+            return url
+
+        return None
+
+    def _is_external_registry_enabled(self, a2a_config: Dict[str, Any]) -> bool:
+        """
+        Check if external registry is enabled based on configuration.
+
+        External registry is considered enabled if either inbound or outbound
+        registries are configured.
+
+        Args:
+            a2a_config: The A2A configuration dictionary
+
+        Returns:
+            True if external registry should be enabled
+        """
+        return bool(a2a_config.get("inbound", {}).get("registries")) or bool(
+            a2a_config.get("outbound", {}).get("registries")
+        )
+
+    def _get_inbound_auth_key(self, inbound_config: Dict[str, Any]) -> Optional[str]:
+        """
+        Extract the authentication key from inbound configuration.
+
+        Args:
+            inbound_config: The inbound configuration dictionary
+
+        Returns:
+            The authentication key based on auth type, or None if not configured
+        """
+        auth_config = inbound_config.get("auth", {})
+        auth_type = auth_config.get("type", "none")
+
+        if auth_type == "bearer":
+            return auth_config.get("token")
+        elif auth_type == "api_key":
+            return auth_config.get("key")
+        elif auth_type == "basic":
+            # For basic auth, the server handles username/password separately
+            return None
+        elif auth_type == "custom":
+            # Custom auth uses headers dict
+            return None
+        else:
+            # For "none" or unknown types
+            return None
 
     async def load(self, config_path: str) -> None:
         """
@@ -937,40 +1024,91 @@ class Formation:
         a2a_config_obj = None
         if self._a2a_config:
             try:
+                # Collect registries from both inbound and outbound
+                all_registries = []
+
+                # Add outbound registries
+                outbound_registries = self._a2a_config.get("outbound", {}).get("registries", [])
+                for reg in outbound_registries:
+                    if isinstance(reg, str):
+                        all_registries.append(reg)
+                    elif isinstance(reg, dict):
+                        all_registries.append(reg)
+
+                # Add inbound registries
+                inbound_registries = self._a2a_config.get("inbound", {}).get("registries", [])
+                for reg in inbound_registries:
+                    if isinstance(reg, str):
+                        all_registries.append(reg)
+                    elif isinstance(reg, dict):
+                        all_registries.append(reg)
+
+                # Get startup policies (prefer outbound, fall back to inbound)
+                startup_policy = (
+                    self._a2a_config.get("outbound", {}).get("startup_policy") or
+                    self._a2a_config.get("inbound", {}).get("startup_policy", "lenient")
+                )
+                retry_timeout = (
+                    self._a2a_config.get("outbound", {}).get("retry_timeout_seconds") or
+                    self._a2a_config.get("inbound", {}).get("retry_timeout_seconds", 30)
+                )
+
                 a2a_config_obj = A2AServiceSchema(
                     enabled=self._a2a_config.get("enabled", True),
-                    server_enabled=self._a2a_config.get("server", {}).get("enabled", False),
-                    server_host=self._a2a_config.get("server", {}).get("host", "0.0.0.0"),
-                    server_port=self._a2a_config.get("server", {}).get("port", 8080),
-                    external_registry_enabled=self._a2a_config.get("external_registry", {}).get(
-                        "enabled", False
-                    ),
-                    registry_url=self._a2a_config.get("external_registry", {}).get("url"),
+                    # Map inbound configuration to server settings
+                    server_enabled=self._a2a_config.get("inbound", {}).get("enabled", False),
+                    server_host=self._a2a_config.get("inbound", {}).get("host", "0.0.0.0"),
+                    server_port=self._a2a_config.get("inbound", {}).get("port", 8181),
+                    # Enable external registry if inbound or outbound registries are configured
+                    external_registry_enabled=self._is_external_registry_enabled(self._a2a_config),
+                    # Use the primary registry URL from configuration (legacy support)
+                    registry_url=self._get_primary_registry_url(self._a2a_config),
                     registration_timeout=self._a2a_config.get("external_registry", {}).get(
                         "timeout", 30.0
                     ),
-                    require_auth=self._a2a_config.get("security", {}).get("require_auth", False),
+                    # New registry configuration
+                    startup_policy=startup_policy,
+                    retry_timeout_seconds=retry_timeout,
+                    registries=all_registries,
+                    # Map authentication from inbound.auth configuration
+                    require_auth=(
+                        self._a2a_config.get("inbound", {}).get("auth", {}).get("type", "none") != "none"
+                    ),
+                    auth_mode=self._a2a_config.get("inbound", {}).get("auth", {}).get("type", "none"),
+                    shared_key=self._get_inbound_auth_key(self._a2a_config.get("inbound", {})),
                     allowed_origins=self._a2a_config.get("security", {}).get("allowed_origins"),
+                    # Map outbound configuration
+                    default_timeout_seconds=self._a2a_config.get("outbound", {}).get(
+                        "default_timeout_seconds", 30
+                    ),
+                    default_retry_attempts=self._a2a_config.get("outbound", {}).get(
+                        "default_retry_attempts", 3
+                    ),
                 )
                 a2a_config_obj.validate()
             except Exception as e:
                 print(
                     f"Warning: Invalid A2A configuration, using defaults. "
                     f"Validation error: {str(e)}. "
-                    f"Config values: server_enabled={self._a2a_config.get('server', {}).get('enabled')}, "
-                    f"server_port={self._a2a_config.get('server', {}).get('port')}, "
-                    f"external_registry_enabled={self._a2a_config.get('outbound', {}).get('registries') is not None}, "
+                    f"Config values: inbound_enabled={self._a2a_config.get('inbound', {}).get('enabled')}, "
+                    f"inbound_port={self._a2a_config.get('inbound', {}).get('port')}, "
+                    f"external_registry_enabled={self._is_external_registry_enabled(self._a2a_config)}, "
                     f"require_auth={self._a2a_config.get('security', {}).get('require_auth')}",
                     flush=True,
                 )
                 a2a_config_obj = A2AServiceSchema()
 
         # Update service bundle for overlord handoff (don't overwrite!)
+        # For formation_path, ensure we pass the directory (not the file)
+        formation_dir = self._formation_path
+        if formation_dir and os.path.isfile(formation_dir):
+            formation_dir = os.path.dirname(formation_dir)
+
         self._configured_services.update(
             {
                 "formation_config": self.config,
                 "secrets_manager": self.secrets_manager,
-                "formation_path": self._formation_path,
+                "formation_path": formation_dir,  # Pass directory, not file
                 "api_keys": self._api_keys.copy(),
                 # Service-specific configurations (validated and preprocessed)
                 "llm_config": self._llm_config,
@@ -1702,7 +1840,7 @@ class Formation:
         Returns:
             int: Number of secrets in use
         """
-        return len(self._secrets_in_use) if hasattr(self, '_secrets_in_use') else 0
+        return len(self._secrets_in_use) if hasattr(self, "_secrets_in_use") else 0
 
     def is_secret_in_use(self, secret_name: str) -> bool:
         """
@@ -2228,7 +2366,21 @@ class Formation:
                     description=f"Built-in MCP registration failed: {e}",
                 )
 
+            # A2A initialization happens through the Overlord's A2ACoordinator
+            # No separate service initialization needed here
+
             return self._overlord
+
+        except RegistryConfigurationError as e:
+            # Clean up on failure - registry configuration issue
+            self._is_running = False
+            self._overlord = None
+
+            # Print the user-friendly message
+            print(e.user_message, file=sys.stderr)
+
+            # Re-raise the exception for proper handling upstream
+            raise
 
         except ImportError as e:
             # Clean up on failure - overlord import failed
@@ -2366,6 +2518,106 @@ class Formation:
             self._overlord = None
             self._is_running = False
 
+    async def _deregister_agents_with_timeout(self, timeout: float = 2.0) -> None:
+        """
+        Helper method to deregister all agents from external registry with configurable timeout.
+
+        Args:
+            timeout: Maximum time to wait for deregistration (default: 2.0 seconds)
+        """
+        if not self._overlord or not hasattr(
+            self._overlord, "_deregister_all_agents_from_external_registry"
+        ):
+            return
+
+        try:
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_AGENT_DEREGISTERED,
+                level=observability.EventLevel.INFO,
+                data={"timeout": timeout, "action": "deregistration_started"},
+                description="Starting agent deregistration from external registry",
+            )
+
+            await asyncio.wait_for(
+                self._overlord._deregister_all_agents_from_external_registry(), timeout=timeout
+            )
+
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_DEREGISTERED,
+                level=observability.EventLevel.INFO,
+                data={},
+                description="Successfully deregistered all agents from external registry",
+            )
+
+        except asyncio.TimeoutError:
+            observability.observe(
+                event_type=observability.ErrorEvents.TIMEOUT_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"timeout": timeout, "operation": "agent_deregistration"},
+                description=f"Agent deregistration timed out after {timeout} seconds",
+            )
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.UNEXPECTED_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"error": str(e), "operation": "agent_deregistration"},
+                description=f"Failed to deregister agents: {e}",
+            )
+
+    def _run_async_with_timeout(self, coro, timeout: float = 2.0) -> None:
+        """
+        Helper method to run an async coroutine with timeout, handling both cases:
+        - When there's an existing event loop (create task)
+        - When there's no event loop (create new loop)
+
+        Args:
+            coro: The coroutine to run
+            timeout: Maximum time to wait (default: 2.0 seconds)
+        """
+        try:
+            # Try to get the running loop
+            loop = asyncio.get_running_loop()
+
+            # Create task to run in background (fire and forget)
+            task = asyncio.create_task(coro)
+
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_STARTED,
+                level=observability.EventLevel.DEBUG,
+                data={"task": str(task), "timeout": timeout, "operation": "async_task_created"},
+                description="Created async task in existing event loop",
+            )
+
+        except RuntimeError:
+            # No running loop, create a new one
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_STARTED,
+                level=observability.EventLevel.DEBUG,
+                data={"timeout": timeout, "operation": "event_loop_created"},
+                description="Creating new event loop for async operation",
+            )
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(asyncio.wait_for(coro, timeout=timeout))
+            except asyncio.TimeoutError:
+                observability.observe(
+                    event_type=observability.ErrorEvents.TIMEOUT_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"timeout": timeout, "operation": "async_with_timeout"},
+                    description=f"Operation timed out after {timeout} seconds",
+                )
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.UNEXPECTED_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e)},
+                    description=f"Operation failed: {e}",
+                )
+            finally:
+                loop.close()
+
     def kill_overlord(self) -> None:
         """
         Immediately terminate overlord - stop NOW regardless of state.
@@ -2378,27 +2630,15 @@ class Formation:
             return  # Already stopped or never started
 
         try:
+            # Deregister agents from external registry if configured
+            # Using helper method for cleaner structure and better observability
+            self._run_async_with_timeout(
+                self._deregister_agents_with_timeout(timeout=2.0), timeout=2.0
+            )
+
             # Disconnect MCP servers immediately if present
             if hasattr(self, "_mcp_service") and self._mcp_service:
-                try:
-                    # Check for existing event loop before creating a new one
-                    import asyncio
-
-                    try:
-                        # Try to get the running loop
-                        loop = asyncio.get_running_loop()
-                        # If we're in an async context, create a task
-                        asyncio.create_task(self._mcp_service.disconnect_all())
-                    except RuntimeError:
-                        # No running loop, create a new one
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            loop.run_until_complete(self._mcp_service.disconnect_all())
-                        finally:
-                            loop.close()
-                except Exception:
-                    pass  # Ignore errors during emergency shutdown
+                self._run_async_with_timeout(self._mcp_service.disconnect_all(), timeout=2.0)
 
             # Force immediate cleanup without waiting
             self._overlord = None

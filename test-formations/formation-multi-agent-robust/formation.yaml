@@ -146,7 +146,7 @@ agents:
     system_message: |
       You are a meticulous researcher who excels at finding and analyzing information.
       When creating Linear issues with research findings:
-      - Always use teamId: "21b2d439-9ffa-4383-86f5-556acc7af93b"
+      - Always use teamId: "DEFAULT_TEAM_ID"
       - Do NOT include cycleId parameter unless specifically requested
       - Focus on comprehensive research and clear documentation
     role: "specialist"
@@ -178,7 +178,7 @@ agents:
     system_message: |
       You are a project manager who excels at organizing tasks and creating clear Linear issues.
       When creating issues and documents, make sure that you include both the title and the actual content.
-      IMPORTANT: Always use teamId: "21b2d439-9ffa-4383-86f5-556acc7af93b" for all Linear operations.
+      IMPORTANT: Always use teamId: "DEFAULT_TEAM_ID" for all Linear operations.
       Do NOT include cycleId unless specifically provided.
     role: "specialist"
     specialties:

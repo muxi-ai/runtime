@@ -737,6 +737,10 @@ class FormationValidator:
             inbound = a2a_config["inbound"]
             if not isinstance(inbound, dict):
                 self.result.add_error("A2A inbound configuration must be a dictionary")
+            else:
+                # Validate inbound auth configuration if present
+                if "auth" in inbound:
+                    self._validate_inbound_auth_config(inbound["auth"])
 
         # Validate outbound configuration
         if "outbound" in a2a_config:
@@ -2130,9 +2134,9 @@ class FormationValidator:
 
         # Validate type-specific auth requirements
         if auth_type == "api_key":
-            if "api_key" not in auth_config:
+            if "key" not in auth_config:
                 self.result.add_error(
-                    f"A2A service {filename} api_key auth requires 'api_key' field"
+                    f"A2A service {filename} api_key auth requires 'key' field"
                 )
             if "header" in auth_config and not isinstance(auth_config["header"], str):
                 self.result.add_error(f"A2A service {filename} auth header must be a string")
@@ -2201,8 +2205,8 @@ class FormationValidator:
 
         # Validate type-specific auth requirements
         if auth_type == "api_key":
-            if "api_key" not in auth_config:
-                self.result.add_error(f"{service_identifier} api_key auth requires 'api_key' field")
+            if "key" not in auth_config:
+                self.result.add_error(f"{service_identifier} api_key auth requires 'key' field")
             if "header" in auth_config and not isinstance(auth_config["header"], str):
                 self.result.add_error(f"{service_identifier} auth header must be a string")
 
@@ -2224,6 +2228,50 @@ class FormationValidator:
             elif not isinstance(auth_config["headers"], dict):
                 self.result.add_error(
                     f"{service_identifier} custom auth headers must be a dictionary"
+                )
+
+    def _validate_inbound_auth_config(self, auth_config: Dict[str, Any]) -> None:
+        """Validate inbound authentication configuration."""
+        if not isinstance(auth_config, dict):
+            self.result.add_error("A2A inbound auth must be a dictionary")
+            return
+
+        # Validate auth type
+        auth_type = auth_config.get("type", "none")
+        valid_auth_types = ["api_key", "bearer", "basic", "custom", "none"]
+
+        if auth_type not in valid_auth_types:
+            self.result.add_error(
+                f"A2A inbound auth type '{auth_type}' invalid. "
+                f"Valid types are: {valid_auth_types}"
+            )
+            return
+
+        # Validate type-specific auth requirements
+        if auth_type == "api_key":
+            if "key" not in auth_config:
+                self.result.add_error("A2A inbound api_key auth requires 'key' field")
+            if "header" in auth_config and not isinstance(auth_config["header"], str):
+                self.result.add_error("A2A inbound auth header must be a string")
+
+        elif auth_type == "bearer":
+            if "token" not in auth_config:
+                self.result.add_error("A2A inbound bearer auth requires 'token' field")
+
+        elif auth_type == "basic":
+            required_basic_fields = ["username", "password"]
+            for field in required_basic_fields:
+                if field not in auth_config:
+                    self.result.add_error(
+                        f"A2A inbound basic auth requires '{field}' field"
+                    )
+
+        elif auth_type == "custom":
+            if "headers" not in auth_config:
+                self.result.add_error("A2A inbound custom auth requires 'headers' field")
+            elif not isinstance(auth_config["headers"], dict):
+                self.result.add_error(
+                    "A2A inbound custom auth headers must be a dictionary"
                 )
 
     def _validate_scheduler_config(self, scheduler_config: Dict[str, Any]) -> None:

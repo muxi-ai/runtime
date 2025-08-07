@@ -470,6 +470,18 @@ class ConversationEvents(Enum):
     # When a workflow is cancelled by user or system
 
     # ===================================================================
+    # SOP (Standard Operating Procedures) EVENTS
+    # ===================================================================
+    SOP_LOADED = "sop.loaded"
+    # When SOPs are loaded at formation startup
+
+    SOP_MATCHED = "sop.matched"
+    # When an SOP is matched to a user request
+
+    SOP_EXECUTED = "sop.executed"
+    # When an SOP is used to generate a workflow
+
+    # ===================================================================
     # MEMORY & CONTEXT OPERATIONS
     # ===================================================================
     # Working memory operations
@@ -555,6 +567,9 @@ class ConversationEvents(Enum):
     AGENT_PLANNING = "agent.planning"
     # When agent creates execution plan
 
+    AGENT_PROCESSING_ERROR = "agent.processing.error"
+    # When agent encounters an error during processing
+
     # Tool chaining events
     AGENT_TOOL_CHAIN_ITERATION_STARTED = "agent.tool_chain.iteration_started"
     # When agent begins a tool chaining iteration
@@ -621,6 +636,18 @@ class ConversationEvents(Enum):
 
     A2A_MESSAGE_FAILED = "a2a.message.failed"
     # When A2A message delivery fails
+
+    A2A_MESSAGE_PROCESSED = "a2a.message.processed"
+    # When A2A message has been processed by receiving agent
+
+    A2A_TASK_HANDOFF = "a2a.task.handoff"
+    # When task is handed off from one agent to another via A2A
+
+    AGENT_A2A = "agent.a2a"
+    # General A2A-related agent event
+
+    AGENT_A2A_MESSAGE_RECEIVED = "agent.a2a.message.received"
+    # When agent receives an A2A message
 
     # Request/response flow
     A2A_REQUEST_SENT = "a2a.request.sent"  # outbound

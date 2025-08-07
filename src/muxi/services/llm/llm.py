@@ -436,7 +436,9 @@ def _classify_error(error: Exception, provider: str = None) -> LLMError:
         )
     elif isinstance(error, asyncio.TimeoutError):
         # Provide more context for timeout errors
-        timeout_msg = error_message if error_message else "No response received within timeout period"
+        timeout_msg = (
+            error_message if error_message else "No response received within timeout period"
+        )
         return LLMError(
             message=f"Request timed out after waiting for response: {timeout_msg}",
             error_type=LLMErrorType.TIMEOUT,
@@ -491,53 +493,59 @@ async def _exponential_backoff_retry(
     _retry_stats["total_requests"] += 1
 
     # Try to extract context from function name and kwargs
-    operation = getattr(func, '__name__', 'llm_request')
+    operation = getattr(func, "__name__", "llm_request")
     context_parts = []
 
     # Check if we have an LLM instance
     if llm_instance:
         context_parts.append(f"model={llm_instance.model_name}")
-    elif args and hasattr(args[0], 'model_name'):
+    elif args and hasattr(args[0], "model_name"):
         context_parts.append(f"model={args[0].model_name}")
 
     # Check for metadata with caller context
-    if 'metadata' in kwargs and kwargs['metadata']:
-        metadata = kwargs['metadata']
-        if 'agent_id' in metadata:
+    if "metadata" in kwargs and kwargs["metadata"]:
+        metadata = kwargs["metadata"]
+        if "agent_id" in metadata:
             context_parts.append(f"agent={metadata['agent_id']}")
-        if 'agent_name' in metadata:
+        if "agent_name" in metadata:
             context_parts.append(f"agent_name={metadata['agent_name']}")
-        if 'task_id' in metadata:
+        if "task_id" in metadata:
             context_parts.append(f"task={metadata['task_id']}")
-        if 'workflow_id' in metadata:
+        if "workflow_id" in metadata:
             context_parts.append(f"workflow={metadata['workflow_id']}")
 
     # Check for common kwargs that provide context
-    if 'messages' in kwargs and kwargs['messages']:
-        msg_count = len(kwargs['messages'])
+    if "messages" in kwargs and kwargs["messages"]:
+        msg_count = len(kwargs["messages"])
         # Try to get the first user message for context
-        first_user_msg = next((m['content'] for m in kwargs['messages'] if m.get('role') == 'user'), None)
+        first_user_msg = next(
+            (m["content"] for m in kwargs["messages"] if m.get("role") == "user"), None
+        )
         if first_user_msg:
-            msg_preview = first_user_msg[:30].replace('\n', ' ')
+            msg_preview = first_user_msg[:30].replace("\n", " ")
             context_parts.append(f"{msg_count} msgs, first='{msg_preview}...'")
         else:
             context_parts.append(f"{msg_count} messages")
 
-    if 'prompt' in kwargs:
-        prompt_preview = str(kwargs['prompt'])[:50].replace('\n', ' ')
+    if "prompt" in kwargs:
+        prompt_preview = str(kwargs["prompt"])[:50].replace("\n", " ")
         context_parts.append(f"prompt='{prompt_preview}...'")
 
-    if 'temperature' in kwargs:
+    if "temperature" in kwargs:
         context_parts.append(f"temp={kwargs['temperature']}")
 
-    if 'max_tokens' in kwargs:
+    if "max_tokens" in kwargs:
         context_parts.append(f"max_tokens={kwargs['max_tokens']}")
 
     context_str = f" ({', '.join(context_parts)})" if context_parts else ""
 
     for attempt in range(max_retries + 1):
         try:
-            result = await func(*args, **kwargs)
+            # Add retry attempt to kwargs for adaptive timeout
+            kwargs_with_attempt = kwargs.copy()
+            kwargs_with_attempt["retry_attempt"] = attempt
+
+            result = await func(*args, **kwargs_with_attempt)
             _retry_stats["successful_requests"] += 1
             return result
         except LLMError as e:
@@ -635,6 +643,8 @@ class LLM:
         enable_circuit_breaker: bool = True,
         circuit_breaker_threshold: int = 5,
         circuit_breaker_timeout: float = 60.0,
+        enable_adaptive_timeout: bool = True,
+        max_adaptive_timeout: float = 120.0,
         **kwargs,
     ):
         """
@@ -653,6 +663,8 @@ class LLM:
             enable_circuit_breaker: Enable circuit breaker pattern.
             circuit_breaker_threshold: Number of failures before opening circuit.
             circuit_breaker_timeout: Time to wait before retrying after circuit opens.
+            enable_adaptive_timeout: Enable adaptive timeout based on context size.
+            max_adaptive_timeout: Maximum timeout when using adaptive mode.
             **kwargs: Additional parameters passed to the model.
         """
         self.model_name = model
@@ -665,6 +677,8 @@ class LLM:
         self.base_retry_delay = base_retry_delay
         self.max_retry_delay = max_retry_delay
         self.enable_circuit_breaker = enable_circuit_breaker
+        self.enable_adaptive_timeout = enable_adaptive_timeout
+        self.max_adaptive_timeout = max_adaptive_timeout
         self.additional_params = kwargs
 
         # Parse provider and model from the model string
@@ -992,14 +1006,46 @@ class LLM:
     async def _execute_with_resilience(self, func, *args, **kwargs):
         """Execute a function with full resilience patterns including fallback model support."""
 
+        # Extract operation type from kwargs (won't be passed to func)
+        operation_type = kwargs.pop("operation_type", "chat")
+
         async def _wrapped_func(*args, **kwargs):
             try:
-                # Add timeout to the function call
-                return await asyncio.wait_for(func(*args, **kwargs), timeout=self.timeout)
+                # Calculate timeout if adaptive timeout is enabled
+                timeout = self.timeout
+                if self.enable_adaptive_timeout:
+                    # Extract retry attempt from kwargs
+                    retry_attempt = kwargs.get("retry_attempt", 0)
+
+                    # Use a simple adaptive timeout based on operation type and retry attempt
+                    # NOTE: Known limitation - We can't easily access messages/files here without
+                    # major refactoring. This means timeout calculations are less accurate for
+                    # large message contexts or file processing operations. This is acceptable
+                    # as the operation type modifier provides reasonable defaults.
+                    timeout = calculate_adaptive_timeout(
+                        base_timeout=self.timeout,
+                        messages=None,  # Would need refactoring to pass these properly
+                        operation_type=operation_type,
+                        retry_attempt=retry_attempt,
+                        files=None,
+                        max_timeout=self.max_adaptive_timeout,
+                    )
+
+                    # Remove internal kwargs before passing to function
+                    clean_kwargs = {k: v for k, v in kwargs.items() if k not in ["retry_attempt"]}
+
+                    # Use cleaned kwargs for the actual call
+                    return await asyncio.wait_for(func(*args, **clean_kwargs), timeout=timeout)
+                else:
+                    # Remove internal kwargs before passing to function (same as adaptive case)
+                    clean_kwargs = {k: v for k, v in kwargs.items() if k not in ["retry_attempt"]}
+
+                    # Use fixed timeout with cleaned kwargs
+                    return await asyncio.wait_for(func(*args, **clean_kwargs), timeout=timeout)
             except asyncio.TimeoutError as e:
                 # Provide specific timeout error with timeout value
                 raise LLMError(
-                    message=f"Request timed out after {self.timeout}s waiting for {self._provider} response",
+                    message=f"Request timed out after {timeout}s waiting for {self._provider} response",
                     error_type=LLMErrorType.TIMEOUT,
                     provider=self._provider,
                     retryable=True,
@@ -1145,9 +1191,9 @@ class LLM:
             # Build context description
             context_parts = [f"LLM chat request started for {self.model_name}"]
             if metadata:
-                if metadata.get('agent_id'):
+                if metadata.get("agent_id"):
                     context_parts.append(f"by agent {metadata['agent_id']}")
-                if metadata.get('task_id'):
+                if metadata.get("task_id"):
                     context_parts.append(f"for task {metadata['task_id']}")
 
             observability.observe(
@@ -1326,7 +1372,8 @@ Provide a helpful, conversational response that directly addresses what the user
 
             return content
 
-        return await self._execute_with_resilience(_chat_request)
+        # Pass operation type for adaptive timeout via kwargs
+        return await self._execute_with_resilience(_chat_request, operation_type="chat")
 
     async def chat_with_tools(
         self,
@@ -1378,7 +1425,8 @@ Provide a helpful, conversational response that directly addresses what the user
             # Otherwise extract and return content as string
             return self._extract_content_from_response(response)
 
-        return await self._execute_with_resilience(_chat_request_with_tools)
+        # Pass operation type for adaptive timeout
+        return await self._execute_with_resilience(_chat_request_with_tools, operation_type="tool")
 
     async def embed(self, text: str, **kwargs: Any) -> List[float]:
         """
@@ -1427,7 +1475,8 @@ Provide a helpful, conversational response that directly addresses what the user
 
             return embedding
 
-        return await self._execute_with_resilience(_embed_request)
+        # Pass operation type for adaptive timeout
+        return await self._execute_with_resilience(_embed_request, operation_type="embedding")
 
     async def transcribe(
         self, audio_file: Union[str, bytes], model: Optional[str] = None, **kwargs: Any
@@ -1484,7 +1533,10 @@ Provide a helpful, conversational response that directly addresses what the user
             else:
                 return str(response)
 
-        return await self._execute_with_resilience(_transcribe_request)
+        # Pass operation type for adaptive timeout
+        return await self._execute_with_resilience(
+            _transcribe_request, operation_type="transcription"
+        )
 
     async def generate_embeddings(self, texts: List[str], **kwargs: Any) -> List[List[float]]:
         """
@@ -1539,7 +1591,8 @@ Provide a helpful, conversational response that directly addresses what the user
 
             return embeddings
 
-        return await self._execute_with_resilience(_embed_batch_request)
+        # Pass operation type for adaptive timeout
+        return await self._execute_with_resilience(_embed_batch_request, operation_type="embedding")
 
     async def generate_text(
         self,
@@ -1572,7 +1625,7 @@ Provide a helpful, conversational response that directly addresses what the user
             temperature=temperature,
             max_tokens=max_tokens,
             metadata=metadata,
-            **kwargs
+            **kwargs,
         )
 
     @property
@@ -1670,3 +1723,97 @@ def reset_all_stats():
         data={"action": "stats_reset"},
         description="LLM statistics and circuit breakers reset",
     )
+
+
+def calculate_adaptive_timeout(
+    base_timeout: float = 30.0,
+    messages: Optional[List[Dict[str, str]]] = None,
+    tool_results: Optional[List[Any]] = None,
+    operation_type: str = "chat",
+    retry_attempt: int = 0,
+    files: Optional[List[Union[str, Path]]] = None,
+    max_timeout: float = 120.0,
+) -> float:
+    """
+    Calculate adaptive timeout based on context size and operation complexity.
+
+    Args:
+        base_timeout: Base timeout in seconds (default: 30s)
+        messages: List of messages in the conversation
+        tool_results: List of tool execution results if any
+        operation_type: Type of operation ("chat", "tool", "workflow")
+        retry_attempt: Current retry attempt number (0 for first attempt)
+        files: List of files being processed
+        max_timeout: Maximum allowed timeout (default: 120s)
+
+    Returns:
+        Calculated timeout in seconds, capped at max_timeout
+    """
+    # Start with base timeout
+    timeout = base_timeout
+
+    # Scale based on context size (messages)
+    if messages:
+        # Count total tokens approximately (rough estimate: 4 chars per token)
+        total_chars = 0
+        for msg in messages:
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                total_chars += len(content)
+            elif isinstance(content, list):
+                # Handle multi-modal content
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        total_chars += len(item.get("text", ""))
+
+        estimated_tokens = total_chars / 4
+        # Add 1 second per 1000 tokens
+        timeout += estimated_tokens / 1000
+
+    # Scale based on tool results
+    if tool_results:
+        # Add 5 seconds per tool result (tools often have substantial output)
+        timeout += len(tool_results) * 5
+
+    # Scale based on files
+    if files:
+        # Add 3 seconds per file (for processing overhead)
+        timeout += len(files) * 3
+
+    # Apply operation type modifier
+    operation_modifiers = {
+        "chat": 1.0,  # Standard chat operations
+        "tool": 1.2,  # Tool operations need more time
+        "workflow": 1.5,  # Workflow operations are complex
+        "embedding": 0.5,  # Embeddings are typically faster
+        "transcription": 2.0,  # Audio transcription can be slow
+    }
+    modifier = operation_modifiers.get(operation_type, 1.0)
+    timeout *= modifier
+
+    # Apply retry escalation (1.5x for each retry)
+    if retry_attempt > 0:
+        timeout *= 1.5**retry_attempt
+
+    # Cap at maximum timeout
+    final_timeout = min(timeout, max_timeout)
+
+    # Log the calculation for debugging
+    observability.observe(
+        event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
+        level=observability.EventLevel.DEBUG,
+        data={
+            "base_timeout": base_timeout,
+            "calculated_timeout": timeout,
+            "final_timeout": final_timeout,
+            "context_size": len(messages) if messages else 0,
+            "tool_results_count": len(tool_results) if tool_results else 0,
+            "file_count": len(files) if files else 0,
+            "operation_type": operation_type,
+            "retry_attempt": retry_attempt,
+            "modifier": modifier,
+        },
+        description=f"Calculated adaptive timeout: {final_timeout:.1f}s for {operation_type} operation",
+    )
+
+    return final_timeout

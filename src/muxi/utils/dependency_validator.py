@@ -356,11 +356,11 @@ class DependencyValidator:
         if config.get("a2a", {}).get("enabled"):
             a2a_config = config["a2a"]
 
-            if not a2a_config.get("host"):
-                errors.append("A2A service requires 'host' configuration")
-
-            if not a2a_config.get("port"):
-                errors.append("A2A service requires 'port' configuration")
+            # Check for inbound configuration if inbound is enabled
+            if a2a_config.get("inbound", {}).get("enabled"):
+                inbound_config = a2a_config.get("inbound", {})
+                if not inbound_config.get("port"):
+                    errors.append("A2A inbound service requires 'port' configuration")
 
         return errors
 

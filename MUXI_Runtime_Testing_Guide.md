@@ -4,6 +4,8 @@
 
 This guide documents key learnings and patterns discovered while implementing the comprehensive test suite for MUXI Runtime. It covers practical solutions to common issues and best practices for writing reliable tests.
 
+**Last Updated**: August 6, 2025 (Day 7 A2A and Workflow Integration)
+
 ## Key Testing Patterns
 
 ### 1. Formation Loading and Event Loop Management
@@ -245,6 +247,42 @@ response_text = await handle_response(response)
 - Clear pass/fail criteria
 
 This enables easier debugging and validation of complex multi-user systems.
+
+### 9. Workflow Decomposition Testing (Day 7B)
+
+**Key Lessons Learned**:
+
+1. **Observability Migration**: When migrating from logging to observability:
+   - Check for missing event type definitions (compile-time errors)
+   - Watch for duplicate imports at different scopes (module vs function level)
+   - Ensure all observability events are properly defined in `observability.py`
+
+2. **Workflow Decomposer Improvements**:
+   - **Avoid hardcoded capability checks** - Not scalable when adding new agents
+   - **Use agent descriptions** when available instead of inferring from capabilities
+   - **Generic fallbacks** are better than special cases for maintainability
+
+3. **Prompt Engineering for Decomposition**:
+   - Emphasize MINIMAL workflows to avoid unnecessary intermediate steps
+   - Provide clear examples of good vs bad task decomposition
+   - Specify that agents can format data themselves (no need for "write description" tasks)
+   - Be explicit: "Platform agents can format data themselves"
+
+4. **A2A Communication Testing**:
+   - Test both direct A2A (agent_name specified) and workflow-based routing
+   - Verify complexity scoring triggers decomposition at correct thresholds
+   - Ensure task routing matches agent capabilities accurately
+
+5. **Common Issues and Fixes**:
+   - **Wrong capability assignment**: "System usage info" → web_research (wrong) vs system_administration (correct)
+   - **Unnecessary steps**: Task 1: Gather data → Task 2: Write description → Task 3: Create issue (bad)
+   - **Better approach**: Task 1: Gather data → Task 2: Create issue with data (good)
+
+6. **Testing Strategy**:
+   - Use real formations with multiple specialized agents
+   - Test with various complexity thresholds to validate decomposition triggers
+   - Verify both successful routing and error cases
+   - Check that changes remain scalable (no hardcoded platform names)
 
 # Verify old messages are forgotten (FIFO)
 response = asyncio.run(overlord.chat("What was message 0?"))
@@ -1907,11 +1945,133 @@ error_messages = {
 }
 ```
 
-### 45. Day 7 Testing Success Metrics
+### 45. A2A Communication Testing Patterns (Day 7B)
 
-- **Workflow Orchestration**: 100% test pass rate
-- **Task Decomposition**: Platform-agnostic, dynamic routing
-- **Resilience Framework**: User-friendly errors, retry logic
-- **Deferred Async**: 32 tests across 5 test files
-- **Code Quality**: Elegant solution with minimal changes
+**Registry Startup Policy Testing**:
+```python
+def test_registry_startup_policies():
+    # Test strict policy with unreachable registry
+    formation_config = {
+        "a2a": {
+            "outbound": {
+                "startup_policy": "strict",
+                "registries": ["https://unreachable-registry.com"]
+            }
+        }
+    }
+    
+    # Should fail fast with user-friendly error
+    with pytest.raises(RegistryConfigurationError) as exc_info:
+        formation = Formation()
+        formation.load(formation_config)
+    
+    # Error should include helpful resolution steps
+    error_msg = str(exc_info.value)
+    assert "FORMATION STARTUP FAILED" in error_msg
+    assert "Change startup_policy to 'lenient'" in error_msg
+```
+
+**A2A Server Health Check Pattern**:
+```python
+async def test_a2a_server_health():
+    # Start A2A registry server
+    registry_server = await start_test_registry()
+    
+    # Test formation with registry dependency
+    formation = Formation()
+    formation.load("formation-with-registry.yaml")
+    overlord = formation.start_overlord()
+    
+    try:
+        # Test A2A communication
+        response = asyncio.run(overlord.chat("Test A2A message"))
+        assert "success" in response.lower()
+    finally:
+        formation.stop_overlord() 
+        await registry_server.stop()
+```
+
+**Observability Event Migration**:
+```python
+# ❌ Old pattern - using logger
+import logging
+logger = logging.getLogger(__name__)
+logger.info("A2A message sent")
+
+# ✅ New pattern - using observability
+from muxi.services.observability import emit_event
+from muxi.datatypes.observability import A2AEvents
+
+emit_event(
+    event_type=A2AEvents.A2A_MESSAGE_SENT,
+    level="info",
+    data={"agent_id": agent_id, "message_size": len(message)}
+)
+```
+
+### 46. Intelligent Agent Filtering Testing (Day 7B3)
+
+**Cache Management Testing**:
+```python
+def test_agent_filtering_cache():
+    # Initialize with small cache for testing
+    cache_manager = A2ACacheManager()
+    
+    # Test cache hit/miss patterns
+    agents = [create_test_agent(i) for i in range(10)]
+    task = "Create Linear issue"
+    
+    # First call - should cache
+    filtered1 = await filter_agents(agents, task)
+    
+    # Second call - should use cache
+    filtered2 = await filter_agents(agents, task)
+    
+    assert filtered1 == filtered2  # Same results from cache
+    
+    # Force cache bypass
+    filtered3 = await filter_agents(agents, task, bypass_cache=True)
+    
+    assert filtered1 == filtered3  # Same logic, fresh analysis
+```
+
+**Filtering Threshold Configuration**:
+```yaml
+# Test formation with low threshold for filtering
+a2a:
+  filtering:
+    enabled: true
+    threshold: 2                     # Trigger with >2 agents
+    always_include_threshold: 0.8    # High confidence agents
+    min_relevance_score: 0.3         # Minimum consideration score
+    cache_ttl: 1800                  # 30 minute cache
+```
+
+### 47. Day 7 Testing Success Metrics & Lessons
+
+**✅ Complete Success Metrics**:
+- **Workflow Orchestration**: 100% test pass rate across 10 comprehensive tests
+- **A2A Communication**: Internal + external agent communication working
+- **Registry Policies**: Strict/lenient/retry startup policies implemented
+- **Intelligent Filtering**: Optimized agent selection for 10+ agent scenarios
+- **Resilience Framework**: User-friendly errors, retry logic, circuit breaker patterns
+- **Deferred Async**: 32 tests across 5 test files, approval-aware workflows
+- **Code Quality**: Elegant solutions with minimal architectural changes
+
+**Key Architectural Lessons**:
+
+1. **Observability Over Logging**: Complete migration from Python logging to structured observability events improves debugging and monitoring
+2. **Generic vs. Hardcoded**: Avoid hardcoding platform names - use dynamic capability matching for scalability
+3. **User-Friendly Errors**: Replace technical error messages with actionable resolution steps
+4. **Registry Dependencies**: External services need configurable startup policies (strict/lenient/retry)
+5. **Agent Filtering Caching**: LLM-based filtering requires aggressive caching (97% cache hit rate achievable)
+
+**Testing Best Practices Discovered**:
+
+- Test both sync and async execution paths for approval workflows
+- Use dedicated test registries to avoid production dependencies  
+- Mock time estimates to avoid slow real-world delays in tests
+- Validate observability event emission alongside functional behavior
+- Test registry startup policies with actually unreachable endpoints
+- Cache invalidation testing prevents stale filtering results
 - **Documentation**: Comprehensive guides and test reports
