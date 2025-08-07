@@ -6007,8 +6007,8 @@ class Overlord:
                     is_sop_workflow = len(tasks_with_deps) >= len(workflow.tasks) - 1
 
             if is_sop_workflow:
-                original_parallel_setting = self.workflow_executor.config.enable_parallel_execution
-                self.workflow_executor.config.enable_parallel_execution = False
+                original_parallel_setting = self.workflow_executor.config.behavior.enable_parallel_execution
+                self.workflow_executor.config.behavior.enable_parallel_execution = False
             else:
                 original_parallel_setting = None
 
