@@ -80,8 +80,11 @@
 import asyncio
 import base64
 import json
+import signal
+import sys
 import threading
 import time
+from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Union, AsyncGenerator
 import os
@@ -105,6 +108,7 @@ from .mcp_coordinator import MCPCoordinator
 from .a2a_coordinator import A2ACoordinator
 from ...services.scheduler.service import SchedulerService
 from ..initialization import initialize_artifact_service
+from ...datatypes.exceptions import RegistryConfigurationError
 
 # A2A models imported when needed
 from ...services.secrets.secrets_manager import SecretsManager
@@ -378,9 +382,22 @@ class Overlord:
         mcp_config = configured_services.get("mcp_config") if configured_services else None
         self.mcp_coordinator = MCPCoordinator(self, config=mcp_config)
 
+        # Initialize A2A cache manager for filtering support
+        from ...services.a2a.cache_manager import A2ACacheManager
+
+        self.a2a_cache_manager = A2ACacheManager()
+
         # A2A coordination system with configuration
         a2a_config = configured_services.get("a2a_config") if configured_services else None
         self.a2a_coordinator = A2ACoordinator(self, config=a2a_config)
+
+        # Initialize A2A ClientFactory for transport management
+        self._initialize_a2a_client_factory()
+
+        # Initialize unified A2A messaging
+        from .a2a_messaging import UnifiedA2AMessaging
+
+        self.unified_a2a = UnifiedA2AMessaging(self)
 
         # Set up callbacks for actual deletion
         self.active_agent_tracker._delete_agent = self._actually_delete_agent
@@ -419,7 +436,7 @@ class Overlord:
                     if not llm_model:
                         # This should not happen if initialize_llm_config ran successfully
                         observability.observe(
-                            event_type=observability.ErrorEvents.CONFIG_ERROR,
+                            event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                             level=observability.EventLevel.WARNING,
                             data={"error": "Text model not found in LLM config"},
                             description="Expected text model in formation config but not found",
@@ -427,7 +444,7 @@ class Overlord:
                 except Exception as e:
                     # Log the error but don't fail - credential resolver can work without LLM
                     observability.observe(
-                        event_type=observability.ErrorEvents.CONFIG_ERROR,
+                        event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                         level=observability.EventLevel.WARNING,
                         data={"error": str(e), "config_type": "llm_config"},
                         description=f"Error extracting text model from config: {str(e)}",
@@ -497,7 +514,7 @@ class Overlord:
                     except (TypeError, AttributeError) as e:
                         # Log error but continue - extraction model is optional
                         observability.observe(
-                            event_type=observability.ErrorEvents.CONFIG_ERROR,
+                            event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                             level=observability.EventLevel.DEBUG,
                             data={"error": str(e), "config_type": "extraction_model"},
                             description=f"Could not extract text model for extraction: {str(e)}",
@@ -559,6 +576,11 @@ class Overlord:
             complexity_threshold=self.workflow_config.complexity_threshold,
             complexity_weights=self.workflow_config.complexity_weights,
         )
+
+        # Initialize planning filter now that request_analyzer is available
+        if hasattr(self, "a2a_coordinator") and self.a2a_coordinator:
+            self.a2a_coordinator.initialize_planning_filter()
+
         # TaskDecomposer will be initialized after MCP service is available
         self.approval_manager = ApprovalManager()
         # Use ResilientWorkflowExecutor for better error handling
@@ -572,6 +594,10 @@ class Overlord:
 
         # Setup progress tracking
         self.workflow_executor.add_progress_callback(self.progress_tracker.update_workflow_progress)
+
+        # Initialize SOP system placeholders - will be set up after workflow config is loaded
+        self.sop_system = None
+        self._sop_formation_path = None  # Store path for lazy initialization
 
         # ===================================================================
         # MULTIMODAL INTELLIGENCE - Intelligence concerns
@@ -706,14 +732,13 @@ class Overlord:
         self.external_registry_client: Optional[A2ARegistryClient] = None
         self.inbound_registry_client: Optional[A2ARegistryClient] = None
         self.a2a_server: Optional[A2AServer] = None
+        # a2a_cache_manager will be initialized earlier in __init__ at line 385
         self.mcp_service = MCPService.get_instance()  # Get existing instance
         self.scheduler_service: Optional[SchedulerService] = None
 
         # Initialize TaskDecomposer now that MCP service is available
         self.task_decomposer = TaskDecomposer(
-            llm=None,  # Will be set later
-            agent_registry=self.agents,
-            mcp_service=self.mcp_service
+            llm=None, agent_registry=self.agents, mcp_service=self.mcp_service  # Will be set later
         )
 
         # Initialize agent tracking for delayed external registration
@@ -859,6 +884,57 @@ class Overlord:
             #  ErrorEvents.INTERNAL_ERROR (overlord)
             raise
 
+    def _ensure_sop_system(self) -> bool:
+        """Lazily initialize SOP system if needed.
+
+        Returns:
+            True if SOP system is available, False otherwise
+        """
+
+        # If already initialized, return its status
+        if self.sop_system is not None:
+            return self.sop_system.enabled
+
+        # If no path stored, can't initialize
+        if not self._sop_formation_path:
+            return False
+
+        # Try to initialize now
+        try:
+            from muxi.formation.overlord.sops import SOPSystem
+
+            self.sop_system = SOPSystem(Path(self._sop_formation_path))
+
+            if self.sop_system.enabled:
+                observability.observe(
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "sop_system",
+                        "sop_count": len(self.sop_system.sops),
+                        "formation_path": str(self._sop_formation_path),
+                        "lazy_init": True,
+                    },
+                    description=f"SOP system lazily initialized with {len(self.sop_system.sops)} SOPs",
+                )
+                return True
+            else:
+                return False
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "service": "sop_system",
+                    "error": str(e),
+                    "formation_path": str(self._sop_formation_path),
+                },
+                description=f"Failed to initialize SOP system: {e}",
+            )
+            self.sop_system = None
+            return False
+
     async def _async_startup(self) -> None:
         """Async startup logic extracted to a separate method."""
         # Services are now initialized by Formation before Overlord creation
@@ -901,16 +977,178 @@ class Overlord:
         # Load agents from formation's pre-processed configuration
         await self._load_agents_from_formation()
 
+        # Initialize SOP system indexing if enabled
+        if self._ensure_sop_system():
+            try:
+                await self.sop_system.initialize_index()
+                observability.observe(
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "sop_indexing",
+                        "sop_count": len(self.sop_system.sops),
+                        "indexed": True,
+                    },
+                    description="SOP system indexed for semantic search"
+                )
+            except Exception as e:
+                # Log but don't fail startup if SOP indexing fails
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "service": "sop_indexing",
+                        "error": str(e),
+                    },
+                    description=f"SOP indexing failed (will retry on first search): {e}"
+                )
+
+        # Initialize registry client if external registry is configured
+        if self.a2a_coordinator.external_registry_enabled:
+            # Get registry URLs from configuration
+            inbound_registries = (
+                self.formation_config.get("a2a", {}).get("inbound", {}).get("registries", [])
+            )
+            outbound_registries = (
+                self.formation_config.get("a2a", {}).get("outbound", {}).get("registries", [])
+            )
+
+            # Use inbound registries for agent registration, fall back to outbound if not specified
+            registry_urls = inbound_registries or outbound_registries
+
+            if registry_urls:
+                try:
+                    # Use SDK implementation directly (no more backward compatibility)
+                    self.inbound_registry_client = A2ARegistryClient(registries=registry_urls)
+                    observability.observe(
+                        event_type=observability.SystemEvents.A2A_REGISTRY_CONNECTED,
+                        level=observability.EventLevel.INFO,
+                        data={"registries": registry_urls, "implementation": "SDK"},
+                        description=(
+                            f"Initialized SDK registry client "
+                            f"with {len(registry_urls)} registries"
+                        ),
+                    )
+
+                    # Check registry health according to startup policy
+                    if hasattr(self.a2a_coordinator, "config") and self.a2a_coordinator.config:
+                        a2a_config = self.a2a_coordinator.config
+
+                        # Collect all registry configs for policy checking
+                        all_registry_configs = []
+                        for reg in a2a_config.registries:
+                            if hasattr(reg, "__dict__"):
+                                # RegistryConfig object
+                                all_registry_configs.append(
+                                    {
+                                        "url": reg.url,
+                                        "required": reg.required,
+                                        "health_check_timeout_seconds": reg.health_check_timeout_seconds,
+                                    }
+                                )
+                            elif isinstance(reg, dict):
+                                all_registry_configs.append(reg)
+                            else:
+                                # String URL
+                                all_registry_configs.append({"url": str(reg), "required": False})
+
+                        # Check registries with configured policy
+                        should_continue, health_status = (
+                            await self.inbound_registry_client.check_registries_with_policy(
+                                startup_policy=a2a_config.startup_policy,
+                                retry_timeout_seconds=a2a_config.retry_timeout_seconds,
+                                registry_configs=all_registry_configs,
+                            )
+                        )
+
+                        if not should_continue:
+                            # Formation should not start due to registry failures
+                            unreachable_registries = [
+                                url for url, is_healthy in health_status.items() if not is_healthy
+                            ]
+
+                            # Log for observability
+                            observability.observe(
+                                event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                                level=observability.EventLevel.ERROR,
+                                data={
+                                    "startup_policy": a2a_config.startup_policy,
+                                    "health_status": health_status,
+                                    "registry_configs": all_registry_configs,
+                                },
+                                description=(
+                                    f"Formation startup aborted: Required registries are "
+                                    f"unreachable (policy: {a2a_config.startup_policy})"
+                                ),
+                            )
+
+                            # Raise a special exception with user-friendly formatting
+                            raise RegistryConfigurationError(
+                                policy=a2a_config.startup_policy,
+                                unreachable_registries=unreachable_registries,
+                            )
+
+                        # Log health status for monitoring
+                        healthy_count = sum(
+                            1 for is_healthy in health_status.values() if is_healthy
+                        )
+                        unhealthy_count = len(health_status) - healthy_count
+
+                        observability.observe(
+                            event_type=observability.SystemEvents.A2A_HEALTH_CHECK_COMPLETED,
+                            level=(
+                                observability.EventLevel.INFO
+                                if healthy_count > 0
+                                else observability.EventLevel.WARNING
+                            ),
+                            data={
+                                "healthy_registries": healthy_count,
+                                "unhealthy_registries": unhealthy_count,
+                                "health_status": health_status,
+                                "startup_policy": a2a_config.startup_policy,
+                            },
+                            description=f"Registry health check complete: {healthy_count}/{len(health_status)} healthy",
+                        )
+
+                    # Process pending external agent registrations
+                    if (
+                        hasattr(self, "pending_external_registrations")
+                        and self.pending_external_registrations
+                    ):
+                        await self.a2a_coordinator.process_pending_registrations()
+
+                except RuntimeError:
+                    # Re-raise RuntimeError for policy failures
+                    raise
+                except RegistryConfigurationError:
+                    # Re-raise registry configuration errors - these are critical
+                    raise
+                except Exception as e:
+                    # Log error but don't fail startup - formation can work without external registry
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "registries": registry_urls,
+                            "operation": "registry_client_init",
+                        },
+                        description=(
+                            f"Failed to initialize external registry client: {str(e)}. "
+                            "Formation will continue without external A2A."
+                        ),
+                    )
+                    # Set to None to indicate registry is not available
+                    self.inbound_registry_client = None
+
         # Update TaskDecomposer with loaded agents
-        if hasattr(self, 'task_decomposer') and self.task_decomposer:
+        if hasattr(self, "task_decomposer") and self.task_decomposer:
             self.task_decomposer.agent_registry = self.agents
 
         # Update workflow executor with loaded agents
-        if hasattr(self, 'workflow_executor') and self.workflow_executor:
+        if hasattr(self, "workflow_executor") and self.workflow_executor:
             self.workflow_executor.agent_registry = self.agents
-            print(f"\n📋 DEBUG: Workflow executor updated with {len(self.agents)} agents:")
-            for agent_id, agent in self.agents.items():
-                print(f"  - {agent_id}: {agent.name} (specialties: {getattr(agent, 'specialties', [])})")
 
         # Document processing configuration is now initialized by Formation
         if hasattr(self, "_configured_services") and self._configured_services:
@@ -920,8 +1158,8 @@ class Overlord:
             self.document_chunker = self._configured_services.get("document_chunker")
 
         # A2A services are now initialized by Formation
-        # Start A2A formation server if initialized by Formation
-        if hasattr(self, "a2a_server") and self.a2a_server:
+        # Start A2A formation server if coordinator exists
+        if hasattr(self, "a2a_coordinator") and self.a2a_coordinator:
             await self.a2a_coordinator._start_a2a_server()
 
         # Process pending external agent registrations if available
@@ -930,7 +1168,7 @@ class Overlord:
             and self.inbound_registry_client
             and hasattr(self, "pending_external_registrations")
         ):
-            await self.a2a_coordinator._process_pending_agent_registrations()
+            await self.a2a_coordinator.process_pending_registrations()
 
         # MCP servers are now registered by Formation in its event loop
         # Just get the MCP service from configured services
@@ -1063,6 +1301,10 @@ class Overlord:
                 # Add to agents dictionary
                 self.agents[agent_id] = agent
 
+                # Add to pending external registrations if external A2A is enabled
+                if self.a2a_coordinator.external_registry_enabled:
+                    self.pending_external_registrations.add(agent_id)
+
                 # Store agent metadata for routing
                 self.agent_descriptions[agent_id] = agent_config.get("description", "")
                 self.agent_metadata[agent_id] = {
@@ -1150,29 +1392,79 @@ class Overlord:
         agent.specialties = agent_config.get("specialties", [])
 
         # Register agent-specific MCP servers if configured
-        await self._register_agent_mcp_servers(agent_config.get("id"), agent_config.get("mcp_servers", []))
+        # This will fail fast if any MCP server cannot be initialized
+        await self._register_agent_mcp_servers(
+            agent_config.get("id"), agent_config.get("mcp_servers", [])
+        )
 
         return agent
 
-    async def _register_agent_mcp_servers(self, agent_id: str, mcp_servers: List[Dict[str, Any]]) -> None:
+    def _print_mcp_initialization_error(
+        self,
+        server_id: str,
+        agent_id: str = None,
+        error_msg: str = None,
+        is_timeout: bool = False,
+        is_auth_error: bool = False,
+    ) -> None:
+        """Print a formatted MCP initialization error message.
+
+        Args:
+            server_id: The MCP server ID (required)
+            agent_id: The agent ID (optional, None for formation-level MCP)
+            error_msg: Optional error message
+            is_timeout: Whether this is a timeout error
+            is_auth_error: Whether this is an authentication error
+        """
+        print("\n❌ FORMATION INITIALIZATION FAILED\n")
+
+        if is_timeout:
+            print(f"   MCP server '{server_id}' registration timed out after 10 seconds")
+            print("   This usually indicates an authentication failure (401)")
+        else:
+            if agent_id:
+                print(f"   Agent: {agent_id}")
+            print(f"   MCP Server: {server_id}")
+            if is_auth_error:
+                print("   Error: Authentication failed (401 Unauthorized)")
+            elif error_msg:
+                print(f"   Error: {error_msg[:200]}")
+
+        print("\n   📋 TO FIX THIS:")
+        print("   1. Check that credentials are configured correctly")
+        print("   2. For Linear MCP: Ensure LINEAR_MCP_TOKEN is valid in secrets.enc")
+        print("   3. Verify the token has not expired")
+        print("   4. Regenerate token if needed")
+
+        if not is_timeout:
+            print("\n   Formation cannot start with broken MCP configurations.")
+            print("   Please fix the issue and try again.")
+
+        print()
+
+    async def _register_agent_mcp_servers(
+        self, agent_id: str, mcp_servers: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """
         Register MCP servers for a specific agent.
 
         Args:
             agent_id: The ID of the agent
             mcp_servers: List of MCP server configurations
+
+        Returns:
+            Dict with registration results including failed servers
         """
+        results = {"successful": [], "failed": []}
+
         if not mcp_servers or not self.mcp_service:
-            return
+            return results
 
         observability.observe(
             event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
             level=observability.EventLevel.INFO,
-            data={
-                "agent_id": agent_id,
-                "server_count": len(mcp_servers)
-            },
-            description=f"Registering {len(mcp_servers)} MCP servers for agent {agent_id}"
+            data={"agent_id": agent_id, "server_count": len(mcp_servers)},
+            description=f"Registering {len(mcp_servers)} MCP servers for agent {agent_id}",
         )
 
         for server_config in mcp_servers:
@@ -1185,7 +1477,7 @@ class Overlord:
 
                 # Prepare registration parameters
                 registration_params = {
-                    "server_id": f"{agent_id}-{server_id}",  # Prefix with agent ID to ensure uniqueness
+                    "server_id": server_id,  # Use original server_id for agent-specific registrations
                     "agent_id": agent_id,  # Pass agent ID for proper registration
                 }
 
@@ -1214,31 +1506,91 @@ class Overlord:
                 if "type" in server_config:
                     registration_params["transport_type"] = server_config["type"]
 
-                # Register the MCP server
-                await self.mcp_service.register_mcp_server(**registration_params)
+                # Register the MCP server with process-level timeout
+                # This may raise MCPConnectionError if connection fails
+                # Note: MCP library v1.12.3 has issues with 401 errors causing hangs
+                # So we use a process-level timeout to detect and handle hangs
+
+                # Create a timeout handler that captures the current server_id
+                current_server_id = server_id  # Capture in local scope
+                current_agent_id = agent_id  # Capture in local scope
+
+                def timeout_handler(signum, frame):
+                    self._print_mcp_initialization_error(
+                        server_id=current_server_id, agent_id=current_agent_id, is_timeout=True
+                    )
+                    sys.exit(1)
+
+                # Use platform-appropriate timeout mechanism
+                if hasattr(signal, "SIGALRM"):
+                    # Unix/Linux/Mac: Use signal-based timeout
+                    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+                    try:
+                        signal.alarm(10)  # 10-second timeout
+                        await self.mcp_service.register_mcp_server(**registration_params)
+                    finally:
+                        # Always cancel the alarm and restore old handler
+                        signal.alarm(0)
+                        signal.signal(signal.SIGALRM, old_handler)
+                else:
+                    # Windows or other platforms: Use asyncio timeout
+                    try:
+                        await asyncio.wait_for(
+                            self.mcp_service.register_mcp_server(**registration_params),
+                            timeout=10.0,
+                        )
+                    except asyncio.TimeoutError:
+                        self._print_mcp_initialization_error(
+                            server_id=current_server_id, agent_id=current_agent_id, is_timeout=True
+                        )
+                        sys.exit(1)
 
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
                     level=observability.EventLevel.INFO,
-                    data={
-                        "agent_id": agent_id,
-                        "server_id": server_id,
-                        "full_server_id": registration_params["server_id"]
-                    },
-                    description=f"MCP server {server_id} registered for agent {agent_id}"
+                    data={"agent_id": agent_id, "server_id": server_id},
+                    description=f"MCP server {server_id} registered for agent {agent_id}",
                 )
 
-            except Exception as e:
+                results["successful"].append(server_id)
+
+            except (asyncio.CancelledError, Exception) as e:
+                # Fail fast - MCP server registration failed
+                server_id = server_config.get("id", "unknown")
+                error_msg = str(e)
+
+                # Determine error type for better messaging
+                is_auth_error = "401" in error_msg or "unauthorized" in error_msg.lower()
+                is_cancelled = "cancelled" in error_msg.lower() or isinstance(
+                    e, asyncio.CancelledError
+                )
+
+                # Log the error using observability
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
                         "agent_id": agent_id,
-                        "server_id": server_config.get("id", "unknown"),
-                        "error": str(e)
+                        "server_id": server_id,
+                        "error": error_msg,
+                        "is_auth_error": is_auth_error,
+                        "is_cancelled": is_cancelled,
                     },
-                    description=f"Failed to register MCP server for agent {agent_id}: {str(e)}"
+                    description=f"Cannot start formation: MCP server '{server_id}' failed for agent '{agent_id}'",
                 )
+
+                # Print clear error message using helper
+                self._print_mcp_initialization_error(
+                    server_id=server_id,
+                    agent_id=agent_id,
+                    error_msg=error_msg if not (is_auth_error or is_cancelled) else None,
+                    is_auth_error=is_auth_error or is_cancelled,
+                )
+
+                # Exit the program cleanly to allow proper cleanup
+                sys.exit(1)
+
+        return results
 
     def _load_default_persona(self) -> None:
         """Load the default persona from the system_persona.md file."""
@@ -1498,6 +1850,23 @@ class Overlord:
             # Core workflow settings
             self.auto_decomposition = workflow_config_data.get("auto_decomposition", True)
             self.plan_approval_threshold = workflow_config_data.get("plan_approval_threshold", 7)
+
+            # Now that workflow config is loaded, set up SOP system path if workflows are enabled
+            if self.auto_decomposition:
+                formation_path = self._configured_services.get("formation_path")
+                if formation_path:
+                    self._sop_formation_path = formation_path
+                    observability.observe(
+                        event_type=observability.SystemEvents.SERVICE_STARTED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "service": "sop_system_init",
+                            "auto_decomposition": self.auto_decomposition,
+                            "formation_path": str(formation_path),
+                            "status": "deferred",
+                        },
+                        description=f"SOP system initialization deferred (path={formation_path})",
+                    )
             if workflow_config_data:
                 # Create WorkflowConfig from formation data
                 # Parse retry configuration
@@ -1649,8 +2018,12 @@ class Overlord:
                             # Create model instance from text capability
                             decomposer_model = await self.create_model(
                                 model=text_model_config["model"],
-                                temperature=text_model_config.get("settings", {}).get("temperature", 0.7),
-                                max_tokens=text_model_config.get("settings", {}).get("max_tokens", 2000),
+                                temperature=text_model_config.get("settings", {}).get(
+                                    "temperature", 0.7
+                                ),
+                                max_tokens=text_model_config.get("settings", {}).get(
+                                    "max_tokens", 2000
+                                ),
                                 api_key=text_model_config.get("api_key"),
                             )
                             model_source = "llm.models.text"
@@ -1744,6 +2117,83 @@ class Overlord:
                         data={"collection_name": collection_name, "error": str(e)},
                         description=f"Failed to register collection '{collection_name}': {str(e)}",
                     )
+
+    def _initialize_a2a_client_factory(self):
+        """Initialize the A2A ClientFactory with AgentTransport registered."""
+        try:
+            from a2a.client import ClientFactory, ClientConfig
+            from ...services.a2a.agent_transport import AgentTransport
+
+            # Create client factory with default configuration
+            config = ClientConfig()
+            self.client_factory = ClientFactory(config)
+
+            # Register agent transport for direct agent communication
+            agent_transport = AgentTransport(overlord=self)
+            self.client_factory.register("agent", agent_transport)
+
+            # Log successful initialization
+            observability.observe(
+                event_type=observability.SystemEvents.INITIALIZING,
+                level=observability.EventLevel.INFO,
+                data={
+                    "factory": "ClientFactory",
+                    "transports": ["agent", "jsonrpc", "rest", "grpc"],
+                },
+                description="A2A ClientFactory initialized with AgentTransport",
+            )
+
+        except Exception as e:
+            # Log error but don't fail - A2A is optional
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"error": str(e)},
+                description=f"Failed to initialize A2A ClientFactory: {str(e)}",
+            )
+            self.client_factory = None
+
+    async def send_a2a_message(
+        self,
+        source_agent_id: str,
+        target_agent_info: Dict[str, Any],
+        message: Union[str, Dict[str, Any]],
+        message_type: str = "request",
+        context: Optional[Dict[str, Any]] = None,
+        wait_for_response: bool = True,
+        timeout: int = 30,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Send A2A message using unified protocol with appropriate transport.
+
+        This method provides the interface for agents to send messages to other agents
+        (internal or external) using the same A2A protocol. The transport is determined
+        by the target agent's URL.
+
+        Args:
+            source_agent_id: ID of the sending agent
+            target_agent_info: Agent info dict with 'url' field (agent:// or http://)
+            message: Message content (string or dict)
+            message_type: Type of message (request, response, etc.)
+            context: Optional context data
+            wait_for_response: Whether to wait for a response
+            timeout: Timeout in seconds
+
+        Returns:
+            Response from target agent if wait_for_response is True
+        """
+        if not target_agent_info.get("url"):
+            raise ValueError("Target agent info must include 'url' field")
+
+        return await self.unified_a2a.send_a2a_message(
+            source_agent_id=source_agent_id,
+            target_agent_url=target_agent_info["url"],
+            message=message,
+            message_type=message_type,
+            context=context,
+            wait_for_response=wait_for_response,
+            timeout=timeout,
+        )
 
     async def create_model(
         self,
@@ -2044,40 +2494,61 @@ class Overlord:
 
         return True
 
+    async def _deregister_agent_from_external_registry(self, agent_id: str):
+        """Helper to deregister a single agent from external registry."""
+        if hasattr(self, "a2a_coordinator") and self.a2a_coordinator.external_registry_enabled:
+            if hasattr(self, "inbound_registry_client") and self.inbound_registry_client:
+                try:
+                    await self.a2a_coordinator.deregister_agent_from_external_registry(agent_id)
+                    observability.observe(
+                        event_type=observability.SystemEvents.AGENT_DEREGISTRATION_COMPLETED,
+                        level=observability.EventLevel.DEBUG,
+                        data={"agent_id": agent_id, "registry": "external"},
+                        description=f"Successfully deregistered agent {agent_id} from external registry",
+                    )
+                except Exception as e:
+                    # Log error but don't fail the removal
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "agent_id": agent_id,
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "operation": "external_deregistration",
+                        },
+                        description=f"Failed to deregister agent {agent_id} from external registry: {str(e)}",
+                    )
+
+    async def _deregister_all_agents_from_external_registry(self):
+        """Helper to deregister all agents from external registry."""
+        if hasattr(self, "a2a_coordinator") and self.a2a_coordinator.external_registry_enabled:
+            if hasattr(self, "inbound_registry_client") and self.inbound_registry_client:
+                # Deregister all agents concurrently
+                # Create a static copy of keys to avoid RuntimeError if dict changes during iteration
+                deregistration_tasks = []
+                for agent_id in list(self.agents.keys()):
+                    task = self.a2a_coordinator.deregister_agent_from_external_registry(agent_id)
+                    deregistration_tasks.append(task)
+
+                if deregistration_tasks:
+                    # Wait for all deregistrations with timeout
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.gather(*deregistration_tasks, return_exceptions=True),
+                            timeout=5.0,
+                        )
+                    except asyncio.TimeoutError:
+                        pass  # Continue even if deregistration times out
+
     async def _actually_delete_agent(self, agent_id: str):
         """Actually delete the agent (called by active_agent_tracker)."""
         if agent_id in self.agents:
             # Deregister from external registries if configured
-            if hasattr(self, "external_registry_client") and self.external_registry_client:
-
-                async def _deregister_with_error_handling():
-                    """Wrapper to handle errors in background deregistration."""
-                    try:
-                        await self.a2a_coordinator.deregister_agent_from_external_registry(agent_id)
-                        observability.observe(
-                            event_type=observability.SystemEvents.AGENT_DEREGISTRATION_COMPLETED,
-                            level=observability.EventLevel.DEBUG,
-                            data={"agent_id": agent_id, "registry": "external"},
-                            description=f"Successfully deregistered agent {agent_id} from external registry",
-                        )
-                    except Exception as e:
-                        # Log error but don't fail the removal
-                        observability.observe(
-                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                            level=observability.EventLevel.WARNING,
-                            data={
-                                "agent_id": agent_id,
-                                "error_type": type(e).__name__,
-                                "error_message": str(e),
-                                "operation": "external_deregistration",
-                            },
-                            description=f"Failed to deregister agent {agent_id} from external registry: {str(e)}",
-                        )
-
-                # Create tracked task with error handling
-                self._create_tracked_task(
-                    _deregister_with_error_handling(), name=f"deregister_agent_{agent_id}"
-                )
+            self._create_tracked_task(
+                self._deregister_agent_from_external_registry(agent_id),
+                name=f"deregister_agent_{agent_id}",
+            )
 
             # Invalidate all cached responses for this agent
             try:
@@ -2119,6 +2590,9 @@ class Overlord:
 
     async def _actually_shutdown_overlord(self):
         """Actually shutdown overlord (called by active_agent_tracker)."""
+
+        # Deregister all agents from external registry before shutdown
+        await self._deregister_all_agents_from_external_registry()
 
         # Wait for background tasks to complete
         if hasattr(self, "_background_tasks") and self._background_tasks:
@@ -3941,15 +4415,12 @@ class Overlord:
                                     )
                                     # Re-initialize MCP connection with new credentials
                                     # and discover the account name
-                                    result = await self.credential_resolver.update_credential_name_with_discovery(
+                                    await self.credential_resolver.update_credential_name_with_discovery(
                                         user_id=user_id,
                                         service=service,
                                         mcp_service=self.mcp_service,
                                     )
-                                    print(f"[DEBUG] Credential name update result: {result}")
-                                except Exception as e:
-                                    # Log the error for debugging
-                                    print(f"[DEBUG] Credential name update failed: {e}")
+                                except Exception:
                                     # Silent failure - credential still works with generic name
                                     pass
 
@@ -4584,11 +5055,7 @@ class Overlord:
 
         return result
 
-    async def would_need_workflow_approval(
-        self,
-        message: str,
-        agent_name: Optional[str]
-    ) -> bool:
+    async def would_need_workflow_approval(self, message: str, agent_name: Optional[str]) -> bool:
         """
         Quick check if request would need workflow approval.
 
@@ -4605,8 +5072,8 @@ class Overlord:
 
             # Would need approval if complex enough for workflow AND approval
             return (
-                analysis.complexity_score >= self.complexity_threshold and
-                analysis.complexity_score >= self.plan_approval_threshold
+                analysis.complexity_score >= self.complexity_threshold
+                and analysis.complexity_score >= self.plan_approval_threshold
             )
         except Exception:
             # If analysis fails, assume no approval needed (safe default)
@@ -4674,24 +5141,99 @@ class Overlord:
                 description=f"Workflow approval decision: {'REQUIRED' if needs_approval else 'NOT REQUIRED'}",
             )
 
-            # Decompose the request into a workflow
-            observability.observe(
-                event_type=observability.ServerEvents.SERVER_STARTED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "task_decomposer",
-                    "has_llm": self.task_decomposer.llm is not None,
-                    "available_agents": list(self.agents.keys()),
-                },
-                description=f"Starting task decomposition (LLM: {self.task_decomposer.llm is not None})",
-            )
+            # Check for relevant SOPs (only if SOP system exists and is enabled)
+            workflow = None
+            if self._ensure_sop_system():
+                relevant_sops = await self.sop_system.find_relevant_sops(message, top_k=1)
+                relevant_sop = relevant_sops[0] if relevant_sops else None
 
-            workflow = await self.task_decomposer.decompose_request(
-                request=message,
-                context={"available_agents": list(self.agents.keys())},
-                analysis=analysis,
-                requires_approval=needs_approval,
-            )
+                # Log SOP discovery
+                if relevant_sop:
+                    observability.observe(
+                        observability.ConversationEvents.SOP_MATCHED,
+                        observability.EventLevel.INFO,
+                        {
+                            "sop_id": relevant_sop["id"],
+                            "sop_name": relevant_sop["name"],
+                            "relevance_score": relevant_sop.get("relevance_score", 0),
+                            "mode": relevant_sop.get("mode", "template"),
+                            "message_preview": message[:100],
+                        },
+                        description=f"Matched SOP '{relevant_sop['name']}' for request",
+                    )
+
+                if relevant_sop:
+                    mode = relevant_sop.get("mode", "template")
+                    bypass_approval = relevant_sop.get("bypass_approval", True)
+
+                    # Build enhanced message with SOP content
+                    if mode == "template":
+                        intro = "Follow this Standard Operating Procedure EXACTLY. Do not skip steps or improvise."  # noqa: E501
+                        outro = "Create an optimized workflow that executes every step while minimizing unnecessary operations."  # noqa: E501
+                    else:  # guide mode
+                        intro = "Use this Standard Operating Procedure as guidance while optimizing for efficiency."  # noqa: E501
+                        outro = "Create an optimized workflow that achieves the SOP goals while minimizing unnecessary operations."  # noqa: E501
+
+                    # Create enhanced message with SOP content
+                    enhanced_message = (
+                        f"{intro}\n\n"
+                        f"<sop>\n{relevant_sop.get('content', '')}\n</sop>\n\n"
+                        "<directives>\nThe following directives in the SOP should be interpreted:\n"
+                        "- [agent:name] - Route to the specified agent\n"
+                        "- [mcp:tool] - Use the specified MCP tool\n"
+                        "- [file:path] - Include the specified file content\n"
+                        "- [critical] - This step cannot be optimized away\n"
+                        "</directives>\n\n"
+                        f"<user_request>\n{message}\n</user_request>\n\n"
+                        f"{outro}"
+                    )
+
+                    # Pass to decomposer with SOP context
+                    workflow = await self.task_decomposer.decompose_request(
+                        request=enhanced_message,
+                        context={
+                            "available_agents": list(self.agents.keys()),
+                            "sop_mode": mode,
+                            "sop_id": relevant_sop["id"],
+                        },
+                        analysis=analysis,
+                        requires_approval=needs_approval if not bypass_approval else False,
+                    )
+
+                    # Log SOP execution
+                    observability.observe(
+                        event_type=observability.ConversationEvents.SOP_EXECUTED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "sop_id": relevant_sop["id"],
+                            "sop_name": relevant_sop["name"],
+                            "workflow_id": workflow.id if workflow else None,
+                            "mode": mode,
+                            "bypass_approval": bypass_approval,
+                        },
+                        description=f"Passed SOP '{relevant_sop['name']}' to decomposer in {mode} mode",
+                    )
+
+            # Fall back to standard decomposition if no SOP found
+            if workflow is None:
+                # Decompose the request into a workflow
+                observability.observe(
+                    event_type=observability.ServerEvents.SERVER_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "task_decomposer",
+                        "has_llm": self.task_decomposer.llm is not None,
+                        "available_agents": list(self.agents.keys()),
+                    },
+                    description=f"Starting task decomposition (LLM: {self.task_decomposer.llm is not None})",
+                )
+
+                workflow = await self.task_decomposer.decompose_request(
+                    request=message,
+                    context={"available_agents": list(self.agents.keys())},
+                    analysis=analysis,
+                    requires_approval=needs_approval,
+                )
 
             observability.observe(
                 event_type=observability.ServerEvents.SERVER_STARTED,
@@ -4925,9 +5467,7 @@ class Overlord:
         return response
 
     async def _should_execute_workflow_async(
-        self,
-        workflow: Workflow,
-        original_message: str
+        self, workflow: Workflow, original_message: str
     ) -> bool:
         """
         Determine if approved workflow should execute asynchronously.
@@ -4951,7 +5491,9 @@ class Overlord:
             context = {
                 "workflow_id": workflow.id,
                 "task_count": len(workflow.tasks),
-                "complexity_scores": [task.estimated_complexity for task in workflow.tasks.values()],
+                "complexity_scores": [
+                    task.get("estimated_complexity", 3) for task in workflow.tasks.values()
+                ],
             }
 
             estimated_time = await self.time_estimator.estimate_processing_time(
@@ -4990,6 +5532,8 @@ class Overlord:
             )
             return False
 
+    # Method removed - decomposer handles SOP conversion now
+
     async def _execute_workflow_async(
         self,
         workflow: Workflow,
@@ -5005,7 +5549,7 @@ class Overlord:
         webhook_url = self.formation_config.get("async", {}).get("webhook_url")
 
         # Mark request as async for observability
-        if hasattr(self, 'observability_manager'):
+        if hasattr(self, "observability_manager"):
             self.observability_manager.mark_request_async(request_id)
 
         # Return immediate response
@@ -5021,14 +5565,16 @@ class Overlord:
         }
 
         # Execute workflow in background
-        asyncio.create_task(self._execute_workflow_background(
-            workflow=workflow,
-            message=message,
-            user_id=user_id,
-            session_id=session_id,
-            request_id=request_id,
-            webhook_url=webhook_url,
-        ))
+        asyncio.create_task(
+            self._execute_workflow_background(
+                workflow=workflow,
+                message=message,
+                user_id=user_id,
+                session_id=session_id,
+                request_id=request_id,
+                webhook_url=webhook_url,
+            )
+        )
 
         return response_data
 
@@ -5214,6 +5760,36 @@ class Overlord:
                 "original_message": message,
             }
 
+            # Check if this is an SOP workflow (has sequential dependencies)
+            # and force sequential execution for proper data passing
+            is_sop_workflow = False
+            if workflow.tasks:
+                # Check if tasks have sequential dependencies (characteristic of SOP workflows)
+                tasks_with_deps = [t for t in workflow.tasks.values() if t.dependencies]
+                if tasks_with_deps:
+                    # If most tasks have dependencies, it's likely an SOP workflow
+                    is_sop_workflow = len(tasks_with_deps) >= len(workflow.tasks) - 1
+
+            if is_sop_workflow:
+                # Temporarily disable parallel execution for SOP workflows
+                # to ensure proper data flow between dependent tasks
+                original_parallel_setting = self.workflow_executor.config.behavior.enable_parallel_execution
+                self.workflow_executor.config.behavior.enable_parallel_execution = False
+                observability.observe(
+                    event_type=observability.ConversationEvents.OVERLORD_ROUTING_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "workflow_id": workflow_id,
+                        "task_count": len(workflow.tasks),
+                        "user_id": user_id,
+                        "execution_mode": "sequential",
+                        "reason": "SOP workflow with task dependencies"
+                    },
+                    description=f"Starting SEQUENTIAL execution of SOP workflow {workflow_id}",
+                )
+            else:
+                original_parallel_setting = None
+
             # Execute workflow with resilience support
             observability.observe(
                 event_type=observability.ConversationEvents.OVERLORD_ROUTING_STARTED,
@@ -5236,8 +5812,9 @@ class Overlord:
             task_results = []
             for task in completed_workflow.tasks.values():
                 # Handle both enum objects and string values due to use_enum_values=True
-                # Check for COMPLETED status (not DONE which doesn't exist)
-                if task.status in {TaskStatus.COMPLETED, TaskStatus.COMPLETED.value, "completed"}:
+                # Check for both COMPLETED and DONE statuses (both are success states)
+                if task.status in {TaskStatus.COMPLETED, TaskStatus.COMPLETED.value, "completed",
+                                   TaskStatus.DONE, TaskStatus.DONE.value, "done"}:
                     task_result = {
                         "task_id": task.id,
                         "description": task.description,
@@ -5258,6 +5835,25 @@ class Overlord:
             final_response = await self._synthesize_workflow_results(
                 task_results, message, workflow
             )
+
+            # Collect artifacts from all tasks
+            all_artifacts = []
+            for task in completed_workflow.tasks.values():
+                # Check if task completed successfully and has result (both COMPLETED and DONE are success states)
+                if task.status in {TaskStatus.COMPLETED, TaskStatus.COMPLETED.value, "completed",
+                                   TaskStatus.DONE, TaskStatus.DONE.value, "done"}:
+                    if task.result and isinstance(task.result, dict):
+                        # Check if artifacts are in the result
+                        if "artifacts" in task.result:
+                            artifacts_output = task.result["artifacts"]
+                            if isinstance(artifacts_output, dict) and "result" in artifacts_output:
+                                artifact_list = artifacts_output["result"]
+                                if isinstance(artifact_list, list):
+                                    all_artifacts.extend(artifact_list)
+
+            # Add artifacts to final response if any were collected
+            if all_artifacts:
+                final_response.artifacts = all_artifacts
 
             # Add workflow metadata
             final_response.metadata = final_response.metadata or {}
@@ -5299,6 +5895,10 @@ class Overlord:
                 description=f"Workflow {workflow_id} execution complete",
             )
 
+            # Restore original parallel execution setting if it was changed for SOP workflow
+            if original_parallel_setting is not None:
+                self.workflow_executor.config.behavior.enable_parallel_execution = original_parallel_setting
+
             return final_response
 
         except Exception as e:
@@ -5327,6 +5927,10 @@ class Overlord:
             )
 
         finally:
+            # Restore original parallel execution setting if it was changed for SOP workflow
+            if original_parallel_setting is not None:
+                self.workflow_executor.config.behavior.enable_parallel_execution = original_parallel_setting
+
             # Move workflow to history and update metrics
             completed_workflow = self.workflow_manager.get_active_workflow(workflow_id)
             if completed_workflow:
@@ -5367,7 +5971,7 @@ class Overlord:
 
         try:
             # Yield initial workflow information
-            yield f"🔄 Starting workflow: {workflow.name or workflow_id}\n"
+            yield f"🔄 Starting workflow: {workflow_id}\n"
             yield f"📋 Total tasks: {len(workflow.tasks)}\n\n"
 
             # Track completed content for final synthesis
@@ -5394,6 +5998,19 @@ class Overlord:
                 "request_id": request_id,
                 "original_message": message,
             }
+
+            # Check if this is an SOP workflow and force sequential execution
+            is_sop_workflow = False
+            if workflow.tasks:
+                tasks_with_deps = [t for t in workflow.tasks.values() if t.dependencies]
+                if tasks_with_deps:
+                    is_sop_workflow = len(tasks_with_deps) >= len(workflow.tasks) - 1
+
+            if is_sop_workflow:
+                original_parallel_setting = self.workflow_executor.config.behavior.enable_parallel_execution
+                self.workflow_executor.config.behavior.enable_parallel_execution = False
+            else:
+                original_parallel_setting = None
 
             # Start workflow execution in background
             execution_task = asyncio.create_task(
@@ -5540,6 +6157,10 @@ class Overlord:
             )
 
         finally:
+            # Restore original parallel execution setting if it was changed for SOP workflow
+            if original_parallel_setting is not None:
+                self.workflow_executor.config.behavior.enable_parallel_execution = original_parallel_setting
+
             # Move workflow to history and update metrics
             completed_workflow = self.workflow_manager.get_active_workflow(workflow_id)
             if completed_workflow:
@@ -5610,6 +6231,7 @@ class Overlord:
                 try:
                     # Create LLM instance for synthesis
                     from ...services.llm import LLM
+
                     # Extract just the model name from the config
                     model_name = (
                         synthesis_model_config.get("model")
@@ -5638,7 +6260,7 @@ class Overlord:
                         metadata={
                             "operation": "workflow_synthesis",
                             "workflow_id": workflow.id,
-                        }
+                        },
                     )
 
                     if synthesis_response:
@@ -5695,7 +6317,7 @@ class Overlord:
 
         # Add successful task results with only key outcomes
         for i, result in enumerate(successful_results, 1):
-            task_desc = result.get('description', 'Unknown task')
+            task_desc = result.get("description", "Unknown task")
             prompt_parts.append(f"Task {i}: {task_desc}")
 
             # Extract only key actionable outcomes from outputs
@@ -5721,13 +6343,19 @@ class Overlord:
 
         prompt_parts.extend(
             [
-                "Please provide a brief confirmation message that:",
-                "1. Confirms what was accomplished (focus on concrete outcomes like created issues, documents, etc.)",
-                "2. Mentions any specific IDs, URLs, or references the user needs",
-                "3. Acknowledges any failures if relevant",
-                "4. Keep it concise - 2-3 sentences maximum",
+                "Based on the original user request and the task results above, provide an appropriate response:",
                 "",
-                "Confirmation Message:",
+                "- If this appears to be a conversational request (greeting, casual inquiry, social interaction, etc.),",  # noqa: E501
+                "  provide a natural, conversational response. Respond directly as if having a conversation,",
+                "  not describing what tasks were completed.",
+                "",
+                "- If this is a task-oriented request with concrete deliverables, provide a brief confirmation that:",
+                "  1. Confirms what was accomplished (focus on concrete outcomes like created issues, documents, etc.)",
+                "  2. Mentions any specific IDs, URLs, or references the user needs",
+                "  3. Acknowledges any failures if relevant",
+                "  4. Keep it concise - 2-3 sentences maximum",
+                "",
+                "Response:",
             ]
         )
 
@@ -5754,7 +6382,8 @@ class Overlord:
 
         # Look for Linear issue patterns (MX-123 format)
         import re
-        linear_pattern = r'MX-\d+'
+
+        linear_pattern = r"MX-\d+"
         linear_matches = re.findall(linear_pattern, output_str)
         if linear_matches:
             key_items.append(f"Linear issues: {', '.join(set(linear_matches))}")
@@ -5770,24 +6399,32 @@ class Overlord:
         if isinstance(outputs, dict):
             # Common outcome fields to check
             outcome_fields = [
-                'issue_id', 'issue_url', 'document_id', 'file_path',
-                'created_id', 'updated_id', 'ticket_id', 'pr_url',
-                'issue_number', 'pull_request', 'artifact_id'
+                "issue_id",
+                "issue_url",
+                "document_id",
+                "file_path",
+                "created_id",
+                "updated_id",
+                "ticket_id",
+                "pr_url",
+                "issue_number",
+                "pull_request",
+                "artifact_id",
             ]
 
             for field in outcome_fields:
                 if field in outputs and outputs[field]:
                     # Capitalize and format the field name nicely
-                    field_name = field.replace('_', ' ').title()
+                    field_name = field.replace("_", " ").title()
                     key_items.append(f"{field_name}: {outputs[field]}")
 
             # Check for creation confirmations
-            if outputs.get('created') or outputs.get('success'):
-                if 'linear' in task_description.lower():
+            if outputs.get("created") or outputs.get("success"):
+                if "linear" in task_description.lower():
                     key_items.append("Linear issue created successfully")
-                elif 'document' in task_description.lower():
+                elif "document" in task_description.lower():
                     key_items.append("Document created successfully")
-                elif 'file' in task_description.lower():
+                elif "file" in task_description.lower():
                     key_items.append("File created successfully")
 
         # If we found key items, join them; otherwise return empty string
@@ -5805,13 +6442,15 @@ class Overlord:
         # Start with a brief summary
         task_count = len(successful_results)
         if task_count > 0:
-            response_parts.append(f"✅ Successfully completed {task_count} task{'s' if task_count != 1 else ''}")
+            response_parts.append(
+                f"✅ Successfully completed {task_count} task{'s' if task_count != 1 else ''}"
+            )
             response_parts.append("")
 
         # Extract key outcomes from successful tasks
         key_outcomes = []
         for result in successful_results:
-            task_desc = result.get('description', 'Task')
+            task_desc = result.get("description", "Task")
             outputs = result.get("outputs", {})
             outcomes = self._extract_key_outcomes(outputs, task_desc)
             if outcomes:
@@ -5825,7 +6464,9 @@ class Overlord:
         # Note any failed tasks briefly
         failed_tasks = [r for r in all_results if r.get("status") == "failed"]
         if failed_tasks:
-            response_parts.append(f"⚠️ {len(failed_tasks)} task{'s' if len(failed_tasks) != 1 else ''} failed:")
+            response_parts.append(
+                f"⚠️ {len(failed_tasks)} task{'s' if len(failed_tasks) != 1 else ''} failed:"
+            )
             for task in failed_tasks:
                 response_parts.append(
                     f"• {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}"

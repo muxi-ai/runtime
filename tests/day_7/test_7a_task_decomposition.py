@@ -22,7 +22,7 @@ from datetime import datetime
 # Add the src directory to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from muxi.formation.formation import Formation
+from src.muxi.formation.formation import Formation  # noqa: E402
 
 
 async def test_workflow_task_decomposition():
@@ -53,7 +53,7 @@ async def test_workflow_task_decomposition():
         print("   Agents: " + ", ".join(overlord.agents.keys()))
 
         # Complex prompt that should trigger workflow decomposition
-        prompt = 'research "ran aroussi funding gap" and write a short summary about it. save the summary as a linear issue'
+        prompt = 'research "ran aroussi funding gap" and write a short summary about it. save the summary as a linear issue'  # noqa: E501
 
         print("\n3. Sending complex prompt to Overlord...")
         print(f"   Prompt: {prompt}")
@@ -72,7 +72,7 @@ async def test_workflow_task_decomposition():
         print("\n   [Workflow orchestration will appear below]")
         response = await overlord.chat(
             prompt,
-            user_id="test_user", 
+            user_id="test_user",
             session_id="test_session_workflow",
             stream=False,  # IMPORTANT: Must be False for workflow tests
             use_async=False
@@ -90,7 +90,7 @@ async def test_workflow_task_decomposition():
         # Save full response
         response_file = output_dir / f"simple_response_{timestamp}.txt"
         with open(response_file, 'w') as f:
-            f.write(f"Simple Task Decomposition Test\n")
+            f.write("Simple Task Decomposition Test\n")
             f.write(f"Timestamp: {timestamp}\n")
             f.write(f"Duration: {duration:.1f} seconds\n")
             f.write(f"Prompt: {prompt}\n")
@@ -101,18 +101,18 @@ async def test_workflow_task_decomposition():
 
         # Analyze the response
         print("\n4. Analyzing response for workflow integration...")
-        
+
         # Check for workflow metadata
         has_metadata = hasattr(response, 'metadata') and response.metadata is not None
         print(f"   Response has metadata: {'✓' if has_metadata else '✗'}")
-        
+
         workflow_id = None
         if has_metadata and 'workflow_id' in response.metadata:
             workflow_id = response.metadata['workflow_id']
             print(f"   Workflow ID found: {workflow_id}")
         else:
-            print(f"   Workflow ID: Not found in metadata")
-        
+            print("   Workflow ID: Not found in metadata")
+
         # Check if workflow was actually used
         workflow_used = workflow_id is not None
         print(f"   Workflow system engaged: {'✓' if workflow_used else '✗'}")
@@ -148,7 +148,7 @@ async def test_workflow_task_decomposition():
             if hasattr(overlord, 'get_workflow_status'):
                 workflow_status = overlord.get_workflow_status(workflow_id)
                 if workflow_status:
-                    print(f"   Workflow status: {workflow_status.status if hasattr(workflow_status, 'status') else 'Unknown'}")
+                    print(f"   Workflow status: {workflow_status.status if hasattr(workflow_status, 'status') else 'Unknown'}")  # noqa: E501
                     if hasattr(workflow_status, 'tasks'):
                         print(f"   Total tasks: {len(workflow_status.tasks)}")
                         # Check task dependencies
@@ -156,7 +156,7 @@ async def test_workflow_task_decomposition():
                         print(f"   Tasks have dependencies: {'✓' if has_dependencies else '✗'}")
             else:
                 print("   Workflow status method not available")
-        
+
         # Test follow-up to verify information source
         print("\n6. Testing information source...")
         follow_up = await overlord.chat(
@@ -187,15 +187,15 @@ async def test_workflow_task_decomposition():
             stream=False,
             use_async=False
         )
-        
+
         # Check if simple request bypassed workflow
         simple_has_metadata = hasattr(simple_response, 'metadata') and simple_response.metadata is not None
         simple_workflow_id = None
         if simple_has_metadata and 'workflow_id' in simple_response.metadata:
             simple_workflow_id = simple_response.metadata['workflow_id']
-        
+
         print(f"   Simple request used workflow: {'✗ (Good!)' if simple_workflow_id is None else '✓ (Should bypass!)'}")
-        
+
         # Clean up
         print("\n8. Cleaning up...")
         await formation.stop_overlord()
@@ -216,7 +216,7 @@ async def test_workflow_task_decomposition():
         workflow_success = workflow_used and ran_mentioned and funding_gap_mentioned and linear_created
         simple_success = simple_workflow_id is None  # Simple request should not use workflow
         overall_success = workflow_success and simple_success
-        
+
         print(f"\nOverall: {'SUCCESS' if overall_success else 'PARTIAL SUCCESS'}")
 
         if overall_success:

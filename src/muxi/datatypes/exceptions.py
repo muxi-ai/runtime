@@ -119,6 +119,49 @@ class OverlordStartupError(OverlordError):
         self.reason = reason
 
 
+class RegistryConfigurationError(OverlordStartupError):
+    """Raised when registry requirements are not met according to startup policy."""
+
+    def __init__(self, policy: str, unreachable_registries: List[str]):
+        self.policy = policy
+        self.unreachable_registries = unreachable_registries
+        reason = f"Required registries are unreachable (policy: {policy})"
+
+        # Create user-friendly message
+        error_lines = [
+            "\n" + "="*60,
+            "⚠️  FORMATION STARTUP FAILED",
+            "="*60,
+            "",
+            f"Policy: {policy.upper()}",
+            "Required registries are unreachable:",
+            ""
+        ]
+
+        for registry in unreachable_registries:
+            error_lines.append(f"  ❌ {registry}")
+
+        error_lines.extend([
+            "",
+            "To resolve this issue, you can:",
+            "  1. Start the registry server(s) listed above",
+            "  2. Change startup_policy to 'lenient' in formation.yaml",
+            "  3. Remove the unreachable registries from configuration",
+            "",
+            "="*60
+        ])
+
+        self.user_message = "\n".join(error_lines)
+
+        details = {
+            "policy": policy,
+            "unreachable_registries": unreachable_registries,
+            "user_message": self.user_message
+        }
+
+        super().__init__(reason, details)
+
+
 class OverlordStateError(OverlordError):
     """Raised when overlord is in an invalid state for the requested operation."""
 

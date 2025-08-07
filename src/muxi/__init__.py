@@ -19,10 +19,21 @@
 # creating and configuring Overlord instances internally.
 # =============================================================================
 
-# Import core classes for direct access
-from .formation import Formation
-from .services.llm import LLM
+# Import core classes for direct access - use lazy imports to avoid circular dependency
 from .utils.version import get_version
+
+
+# Lazy imports to avoid circular dependency at module load time
+def __getattr__(name):
+    if name == "Formation":
+        from .formation import Formation
+
+        return Formation
+    elif name == "LLM":
+        from .services.llm import LLM
+
+        return LLM
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 # Initialize package version from .version file
@@ -38,7 +49,6 @@ __url__ = "https://github.com/muxi-ai"
 __all__ = [
     "Formation",
     "LLM",
-    "observability",
 ]
 
 # Usage:

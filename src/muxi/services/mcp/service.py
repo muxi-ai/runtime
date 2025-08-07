@@ -157,20 +157,30 @@ class MCPService:
             agent_id: The ID of the agent. If None, returns all tools.
 
         Returns:
-            Dictionary of server_id -> tools, combining shared tools with agent-specific tools.
+            Dictionary of server_id -> tools for the agent. Only returns agent-specific tools.
         """
         # If no agent_id provided, return all tools (backward compatibility)
         if agent_id is None:
             return self.tool_registry
 
-        # Start with shared tools
-        result = dict(self.agent_tool_registry.get("_shared", {}))
+        # Return both agent-specific tools AND shared tools
+        # This allows agents to access global MCP servers while maintaining agent-specific ones
+        result = {}
 
-        # Add agent-specific tools if they exist
+        # First, add shared tools if they exist
+        if "_shared" in self.agent_tool_registry:
+            result.update(self.agent_tool_registry["_shared"])
+
+        # Then, add agent-specific tools (these can override shared ones if same server_id)
         if agent_id in self.agent_tool_registry:
             result.update(self.agent_tool_registry[agent_id])
 
-        return result
+        if result:
+            # Successfully found tools for agent (including shared)
+            return result
+        else:
+            # No tools found for agent
+            return {}
 
     async def register_server(
         self,
@@ -284,8 +294,9 @@ class MCPService:
                 "transport_type": transport_type,
                 "has_credentials": bool(credentials),
                 "request_timeout": request_timeout,
+                "agent_id": agent_id,
             },
-            description=f"MCP server registration started: {server_id}",
+            description=f"MCP server registration started: {server_id} for agent: {agent_id}",
         )
 
         # Handle command-line transport directly
@@ -743,15 +754,23 @@ class MCPService:
                     # Both transports failed - create detailed error message
                     error_details = "\n".join([f"  - {t}: {errors[t]}" for t in transports_to_try])
 
-                    raise MCPConnectionError(
+                    # Check if this is an authentication error
+                    is_auth_error = any("401" in str(e) or "unauthorized" in str(e).lower() for e in errors.values())
+
+                    error_msg = (
                         f"Failed to register MCP server '{server_id}': Unable to connect to {url}\n"
                         f"Tried:\n{error_details}\n"
-                        f"Check: URL accessibility, credentials, server status",
+                        f"Check: {'Authentication credentials' if is_auth_error else 'URL accessibility, credentials, server status'}"  # noqa: E501
+                    )
+
+                    raise MCPConnectionError(
+                        error_msg,
                         {
                             "server_id": server_id,
                             "url": url,
                             "tried_transports": transports_to_try,
                             "errors": errors,
+                            "is_auth_error": is_auth_error,
                         },
                     )
 
@@ -830,6 +849,17 @@ class MCPService:
                         if agent_id not in self.agent_tool_registry:
                             self.agent_tool_registry[agent_id] = {}
                         self.agent_tool_registry[agent_id][server_id] = {}
+
+                        observability.observe(
+                            event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "agent_id": agent_id,
+                                "server_id": server_id,
+                                "tools_count": len(tools),
+                            },
+                            description=f"Registering {len(tools)} tools for agent {agent_id} from server {server_id}"
+                        )
                     else:
                         # Register in shared registry if no agent_id
                         self.agent_tool_registry["_shared"][server_id] = {}
@@ -861,6 +891,7 @@ class MCPService:
                         level=observability.EventLevel.INFO,
                         data={
                             "server_id": server_id,
+                            "agent_id": agent_id,
                             "tools_count": len(tools),
                             "transport_type": transport_type,
                             "protocol_features": {
@@ -1729,8 +1760,6 @@ class MCPService:
             # Use chat method with simple messages format
             messages = [{"role": "user", "content": prompt}]
             response = await llm.chat(messages, max_tokens=100)
-
-            # Debug log the response
 
             # Parse the JSON response
             import json

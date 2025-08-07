@@ -221,14 +221,14 @@ class LocalDiscoveryService:
             #  A2A discovery info - TODO: add observability
 
             observability.observe(
-                event_type=observability.SystemEvents.A2A_REGISTRATION_STARTED,
+                event_type=observability.SystemEvents.A2A_AGENT_REGISTERED,
                 level=observability.EventLevel.INFO,
                 data={
                     "agent_id": agent_id,
                     "endpoint": endpoint,
                     "formation_name": self.formation_name,
                 },
-                description="A2A agent registration started",
+                description="A2A agent registered successfully",
             )
 
             # Fetch agent card if not provided

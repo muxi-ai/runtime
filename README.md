@@ -48,7 +48,7 @@ MUXI Runtime is the low-level execution engine that powers AI agent formations i
 - **Built-in MCP Servers**: File Generation MCP for secure creation of charts, documents, spreadsheets, images, and presentations through sandboxed Python execution
 - **Artifacts System**: Comprehensive file generation, tracking, and management with secure sandboxed execution, intelligent metadata extraction, session-based storage, and nanoid-based unique identifiers
 - **Knowledge Integration**: Enhanced knowledge base with directory/multi-path support and YAML configuration
-- **Standard Operating Procedures (SOPs)**: Overlord-level procedural guidance for consistent task execution and organizational best practices
+- **Standard Operating Procedures (SOPs)**: Overlord-level procedural guidance with template/guide modes, supporting [agent:], [mcp:], and [file:] directives for consistent task execution
 - **Security Layer**: Role-based access control and permission management
 - **A2A Communication**: Agent-to-Agent protocol for complex agent collaboration
 - **Multi-Modal Support**: Handle text, image, audio, video, and document content through unified services
@@ -527,6 +527,83 @@ mcp:
         type: "bearer"
         token: "${{ secrets.TOOL_API_KEY }}"
 ```
+
+### Standard Operating Procedures (SOPs)
+
+SOPs provide overlord-level procedural guidance for consistent task execution. They're automatically discovered from the `sops/` directory in your formation.
+
+#### SOP Format
+
+SOPs are Markdown files with YAML front matter:
+
+```markdown
+---
+type: sop  # Required to identify as SOP
+name: Production Incident Response
+description: Handle production incidents from detection to resolution
+mode: template  # "template" (default) or "guide" for flexible approach
+tags: critical, production, ops  # Comma-separated for discovery
+---
+
+# Production Incident Response
+
+## Steps
+
+1. **Assess severity** [agent:monitoring-specialist]
+   - Check dashboards for scope
+   - Review [file:references/severity-matrix.png] for classification
+   - Use [mcp:datadog] to pull metrics from last hour
+
+2. **Notify stakeholders** [agent:communications]
+   - Use [file:contacts/escalation-tree.md] for contact info
+   - Page on-call via [mcp:pagerduty]
+   - Create ticket using [mcp:linear/create_issue]
+
+3. **Document incident** [agent:writer]
+   - Use [file:templates/incident-report.md] as template
+   - Upload to Confluence using [mcp:confluence]
+```
+
+#### Directive Types
+
+SOPs support three types of directives for guiding execution:
+
+- **`[agent:name]`** - Route step to specific agent
+- **`[mcp:tool]`** - Use specific MCP tool or server
+- **`[file:path]`** - Reference any file in the sops/ directory
+
+#### Execution Modes
+
+1. **Template Mode** (`mode: template` - default)
+   - Steps directly convert to workflow tasks
+   - Fast, predictable execution
+   - Best for rigid procedures
+
+2. **Guide Mode** (`mode: guide`)
+   - SOP included as guidance for LLM
+   - Flexible interpretation based on context
+   - Best for guidelines and best practices
+
+#### Directory Structure
+
+```
+formation/
+└── sops/
+    ├── incident-response.md       # type: sop
+    ├── customer-onboarding.md     # type: sop
+    ├── code-review-guidelines.md  # type: sop, mode: guide
+    ├── templates/                 # Referenced files
+    │   ├── incident-report.md
+    │   └── postmortem.docx
+    └── references/                # Any organization you prefer
+        └── severity-matrix.png
+```
+
+SOPs enhance the runtime by:
+- Providing consistent execution patterns
+- Reducing prompt duplication across agents
+- Enabling organizational best practices
+- Supporting both rigid procedures and flexible guidelines
 
 ## 🐛 Debugging Tips
 
