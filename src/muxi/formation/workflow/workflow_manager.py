@@ -339,22 +339,11 @@ class WorkflowManager:
             if status:
                 workflows = [w for w in workflows if w.status == status]
 
-            # TODO: Implement user_id filtering once Workflow model includes user tracking
-            # Currently, the Workflow model does not have a user_id field or metadata
-            # that tracks which user initiated the workflow. This is a future enhancement
-            # that requires updating the Workflow model and all code that creates workflows.
+            # Note: user_id filtering is not implemented as workflows are internal
+            # implementation details not exposed via API. This parameter exists
+            # for potential future use but currently has no effect.
             if user_id:
-                # For now, log a warning that user_id filtering is not yet implemented
-                observability.observe(
-                    event_type=observability.SystemEvents.SERVICE_STARTED,
-                    level=observability.EventLevel.WARNING,
-                    data={
-                        "event": "user_id_filter_not_implemented",
-                        "user_id": user_id,
-                        "message": "user_id filtering requested but not yet implemented"
-                    },
-                    description="User ID filtering not yet supported in get_workflows"
-                )
+                pass  # No-op: workflows don't track user_id
 
             # Sort by creation time (newest first)
             workflows.sort(key=lambda w: w.created_at, reverse=True)
