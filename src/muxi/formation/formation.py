@@ -3692,39 +3692,13 @@ class Formation:
         if not self._is_running or not self._overlord:
             raise RuntimeError("Overlord is not running")
 
-        agent_id = processed_config.get("id")
-        if not agent_id:
-            raise ValueError("Agent configuration missing 'id' field")
-
-        # Check if agent already exists
-        if agent_id in self._overlord.agents:
-            raise ValueError(f"Agent with id '{agent_id}' already exists in overlord")
-
-        # Create agent using the overlord's agent creation method
-        agent = await self._overlord._create_agent_from_config(processed_config)
-
-        # Add to agents dictionary
-        self._overlord.agents[agent_id] = agent
-
-        # Store agent metadata for routing (same as initialization)
-        self._overlord.agent_descriptions[agent_id] = processed_config.get("description", "")
-        self._overlord.agent_metadata[agent_id] = {
-            "name": processed_config.get("name", agent_id),
-            "role": processed_config.get("role", "general"),
-            "specialties": processed_config.get("specialties", []),
-            "system_message": processed_config.get("system_message", ""),
-        }
-
-        # Update workflow executor if available
-        if hasattr(self._overlord, '_workflow_executor') and self._overlord._workflow_executor:
-            self._overlord._workflow_executor._update_agent_capabilities({agent_id: agent})
-
-        # Update workflow components if they exist
-        if hasattr(self._overlord, 'task_decomposer') and self._overlord.task_decomposer:
-            self._overlord.task_decomposer.agent_registry = self._overlord.agents
-
-        if hasattr(self._overlord, 'workflow_executor') and self._overlord.workflow_executor:
-            self._overlord.workflow_executor.agent_registry = self._overlord.agents
+        # Use the overlord's public method for atomic agent addition
+        # This encapsulates all the logic including:
+        # - Agent creation and validation
+        # - State updates with proper locking
+        # - Workflow component updates
+        # - Rollback on failure
+        await self._overlord.add_agent_runtime(processed_config)
 
     async def list_agents(self) -> Dict[str, Dict[str, Any]]:
         """

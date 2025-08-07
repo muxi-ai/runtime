@@ -68,7 +68,7 @@ def _validate_and_sanitize_agent_id(agent_id: str, agents_dir: Path) -> Path:
         raise ValueError(f"Agent ID '{agent_id}' contains path separators which are not allowed")
 
     # Verify basename equals the original (prevents directory traversal attempts)
-    if os.path.basename(agent_id) != agent_id:
+    if Path(agent_id).name != agent_id:
         raise ValueError(f"Agent ID '{agent_id}' appears to contain path traversal elements")
 
     # Construct the full path
@@ -127,10 +127,11 @@ async def save_agent_to_file(
 
     try:
         # Determine formation directory
-        if os.path.isfile(formation_path):
-            formation_dir = Path(os.path.dirname(formation_path))
+        formation_path = Path(formation_path)
+        if formation_path.is_file():
+            formation_dir = formation_path.parent
         else:
-            formation_dir = Path(formation_path)
+            formation_dir = formation_path
 
         if not formation_dir.exists():
             raise AgentPersistenceError(f"Formation directory does not exist: {formation_dir}")
@@ -298,10 +299,11 @@ async def update_agent_file(
 
     try:
         # Determine formation directory
-        if os.path.isfile(formation_path):
-            formation_dir = Path(os.path.dirname(formation_path))
+        formation_path = Path(formation_path)
+        if formation_path.is_file():
+            formation_dir = formation_path.parent
         else:
-            formation_dir = Path(formation_path)
+            formation_dir = formation_path
 
         agents_dir = formation_dir / agents_subdir
 
@@ -435,10 +437,11 @@ def delete_agent_file(agent_id: str, formation_path: str, agents_subdir: str = "
     """
     try:
         # Determine formation directory
-        if os.path.isfile(formation_path):
-            formation_dir = Path(os.path.dirname(formation_path))
+        formation_path = Path(formation_path)
+        if formation_path.is_file():
+            formation_dir = formation_path.parent
         else:
-            formation_dir = Path(formation_path)
+            formation_dir = formation_path
 
         # Construct agent file path
         agents_dir = formation_dir / agents_subdir
@@ -474,10 +477,11 @@ def list_agent_files(formation_path: str, agents_subdir: str = "agents") -> list
     """
     try:
         # Determine formation directory
-        if os.path.isfile(formation_path):
-            formation_dir = Path(os.path.dirname(formation_path))
+        formation_path = Path(formation_path)
+        if formation_path.is_file():
+            formation_dir = formation_path.parent
         else:
-            formation_dir = Path(formation_path)
+            formation_dir = formation_path
 
         agents_dir = formation_dir / agents_subdir
 

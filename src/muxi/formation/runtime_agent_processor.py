@@ -12,9 +12,16 @@ as agents loaded during initialization, including:
 
 from typing import Dict, Any, Tuple, TYPE_CHECKING
 from pathlib import Path
+from muxi.formation.config.loader import ConfigLoader
 
 if TYPE_CHECKING:
     from .formation import Formation
+
+# Valid MCP transport types
+VALID_MCP_TRANSPORT_TYPES = ["stdio", "http", "websocket", "grpc"]
+
+# Module-level ConfigLoader instance to avoid repeated instantiation
+_config_loader = ConfigLoader()
 
 
 async def process_agent_for_runtime(
@@ -46,12 +53,8 @@ async def process_agent_for_runtime(
     if not hasattr(formation, 'secrets_manager') or not formation.secrets_manager:
         raise RuntimeError("SecretsManager not available for secret processing")
 
-    # Import ConfigLoader to process secrets
-    from muxi.formation.config.loader import ConfigLoader
-    config_loader = ConfigLoader()
-
     # Process secrets using the same method as initialization
-    processed_config, secrets_used, placeholders = await config_loader.process_secrets(
+    processed_config, secrets_used, placeholders = await _config_loader.process_secrets(
         agent_config,
         formation.secrets_manager
     )
@@ -103,12 +106,11 @@ async def process_agent_for_runtime(
                 server_ids.add(server_id)
 
             # Validate type field
-            valid_types = ["stdio", "http", "websocket", "grpc"]  # Common MCP transport types
             server_type = server_config.get("type")
-            if server_type and server_type not in valid_types:
+            if server_type not in VALID_MCP_TRANSPORT_TYPES:
                 raise ValueError(
                     f"Agent {agent_id} MCP server {server_id or i} has invalid type: {server_type}. "
-                    f"Valid types are: {', '.join(valid_types)}"
+                    f"Valid types are: {', '.join(VALID_MCP_TRANSPORT_TYPES)}"
                 )
 
     # 7. Process knowledge paths if present

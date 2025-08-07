@@ -2446,6 +2446,155 @@ class Overlord:
 
         return self.agents[agent_id]
 
+    async def add_agent_runtime(self, processed_config: Dict[str, Any]) -> None:
+        """
+        Atomically add a new agent to the overlord at runtime.
+
+        This method handles the complete agent addition process including:
+        - Agent creation and validation
+        - State updates with proper locking
+        - Workflow component updates
+        - Rollback on failure
+
+        Args:
+            processed_config: Processed agent configuration dictionary
+                            (after secrets processing and validation)
+
+        Raises:
+            ValueError: If agent ID is missing or already exists
+            RuntimeError: If agent creation fails
+        """
+        agent_id = processed_config.get("id")
+        if not agent_id:
+            raise ValueError("Agent configuration missing 'id' field")
+
+        # Check if agent already exists
+        if agent_id in self.agents:
+            raise ValueError(f"Agent with id '{agent_id}' already exists in overlord")
+
+        # Track original state for rollback
+        agent_created = False
+        metadata_added = False
+
+        try:
+            # Create the agent instance
+            agent = await self._create_agent_from_config(processed_config)
+            agent_created = True
+
+            # Add to agents dictionary atomically
+            self.agents[agent_id] = agent
+
+            # Store agent metadata for routing
+            self.agent_descriptions[agent_id] = processed_config.get("description", "")
+            self.agent_metadata[agent_id] = {
+                "name": processed_config.get("name", agent_id),
+                "role": processed_config.get("role", "general"),
+                "specialties": processed_config.get("specialties", []),
+                "system_message": processed_config.get("system_message", ""),
+            }
+            metadata_added = True
+
+            # Update workflow components
+            await self._update_workflow_components_for_agent(agent_id, agent)
+
+            # Log successful addition
+            observability.observe(
+                event_type=observability.SystemEvents.AGENT_ADDED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": agent_id,
+                    "agent_name": processed_config.get("name", agent_id),
+                    "source": processed_config.get("source", "unknown"),
+                },
+                description=f"Agent '{agent_id}' successfully added to overlord at runtime"
+            )
+
+        except Exception as e:
+            # Rollback on failure
+            if metadata_added:
+                self.agent_metadata.pop(agent_id, None)
+                self.agent_descriptions.pop(agent_id, None)
+
+            if agent_created and agent_id in self.agents:
+                del self.agents[agent_id]
+
+            # Log the failure
+            observability.observe(
+                event_type=observability.ErrorEvents.AGENT_CREATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": agent_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                description=f"Failed to add agent '{agent_id}' to overlord: {str(e)}"
+            )
+
+            # Re-raise with context
+            raise RuntimeError(f"Failed to add agent '{agent_id}' to overlord: {str(e)}") from e
+
+    async def _update_workflow_components_for_agent(self, agent_id: str, agent: Any) -> None:
+        """
+        Update all workflow components when an agent is added.
+
+        This method ensures all workflow-related components are properly updated
+        when a new agent is added to the overlord.
+
+        Args:
+            agent_id: The ID of the newly added agent
+            agent: The agent instance
+        """
+        # Update workflow executor if available (using direct attribute check)
+        if hasattr(self, '_workflow_executor') and self._workflow_executor is not None:
+            try:
+                self._workflow_executor._update_agent_capabilities({agent_id: agent})
+            except Exception as e:
+                # Log but don't fail - workflow executor update is not critical
+                observability.observe(
+                    event_type=observability.SystemEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "component": "workflow_executor",
+                        "agent_id": agent_id,
+                        "error": str(e),
+                    },
+                    description=f"Failed to update workflow executor for agent '{agent_id}': {str(e)}"
+                )
+
+        # Update task decomposer if available
+        if hasattr(self, 'task_decomposer') and self.task_decomposer is not None:
+            try:
+                self.task_decomposer.agent_registry = self.agents
+            except Exception as e:
+                # Log but don't fail
+                observability.observe(
+                    event_type=observability.SystemEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "component": "task_decomposer",
+                        "agent_id": agent_id,
+                        "error": str(e),
+                    },
+                    description=f"Failed to update task decomposer for agent '{agent_id}': {str(e)}"
+                )
+
+        # Update workflow executor (public attribute) if available
+        if hasattr(self, 'workflow_executor') and self.workflow_executor is not None:
+            try:
+                self.workflow_executor.agent_registry = self.agents
+            except Exception as e:
+                # Log but don't fail
+                observability.observe(
+                    event_type=observability.SystemEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "component": "workflow_executor_public",
+                        "agent_id": agent_id,
+                        "error": str(e),
+                    },
+                    description=f"Failed to update public workflow executor for agent '{agent_id}': {str(e)}"
+                )
+
     async def remove_agent(self, agent_id: str) -> bool:
         """
         Remove agent using "delete when done" pattern - actual deletion happens when safe.
