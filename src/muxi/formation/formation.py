@@ -31,7 +31,7 @@
 # =============================================================================
 
 import asyncio
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING
 import yaml
 from pathlib import Path
 import os
@@ -1862,6 +1862,21 @@ class Formation:
         # Check if the secret is in our tracked set
         return normalized_name in self._secrets_in_use
 
+    def track_used_secrets(self, secret_names: Set[str]) -> None:
+        """
+        Track additional secrets as being in use by the formation.
+
+        This method is used to update the set of secrets that are actively
+        being used by agents or other components in the formation.
+
+        Args:
+            secret_names: Set of secret names to track as in-use
+        """
+        if hasattr(self, '_secrets_in_use'):
+            self._secrets_in_use.update(secret_names)
+        else:
+            self._secrets_in_use = secret_names.copy()
+
     async def list_secrets(self) -> List[str]:
         """
         List all secret names in the formation's secrets manager.
@@ -3154,6 +3169,80 @@ class Formation:
     def secret_placeholders(self) -> Dict[str, str]:
         """Get the secret placeholder mappings (returns a copy to prevent external modification)."""
         return self._secret_placeholders.copy()
+
+    def get_overlord(self) -> Optional[Any]:
+        """
+        Get the overlord instance if it's running.
+
+        Returns:
+            The overlord instance if running, None otherwise
+        """
+        if self._is_running and self._overlord:
+            return self._overlord
+        return None
+
+    def has_secret_placeholders(self) -> bool:
+        """
+        Check if secret placeholders are being tracked.
+
+        Returns:
+            True if secret placeholders are initialized and not None
+        """
+        return hasattr(self, "_secret_placeholders") and self._secret_placeholders is not None
+
+    def add_secret_placeholder(self, path: str, placeholder: str) -> None:
+        """
+        Add a secret placeholder mapping.
+
+        Args:
+            path: The configuration path (e.g., "agents[0].api_key")
+            placeholder: The placeholder value to store
+        """
+        if self._secret_placeholders is not None:
+            self._secret_placeholders[path] = placeholder
+
+    def remove_secret_placeholders_for_prefix(self, prefix: str) -> None:
+        """
+        Remove all secret placeholders that start with the given prefix.
+
+        Args:
+            prefix: The prefix to match (e.g., "agents[0]")
+        """
+        if self._secret_placeholders is not None:
+            keys_to_remove = [k for k in self._secret_placeholders if k.startswith(prefix)]
+            for k in keys_to_remove:
+                del self._secret_placeholders[k]
+
+    async def remove_agent_from_overlord(self, agent_id: str) -> bool:
+        """
+        Remove an agent from the running overlord.
+
+        Args:
+            agent_id: ID of the agent to remove
+
+        Returns:
+            True if agent was removed, False if overlord not running or agent not found
+        """
+        if self._is_running and self._overlord:
+            if agent_id in self._overlord.agents:
+                # Remove agent from overlord
+                del self._overlord.agents[agent_id]
+
+                # Also remove from active agents tracker if present
+                if hasattr(self._overlord, "active_agents_tracker"):
+                    self._overlord.active_agents_tracker.remove_agent(agent_id)
+
+                return True
+        return False
+
+    def get_formation_path(self) -> Optional[str]:
+        """
+        Get the formation file path.
+
+        Returns:
+            The path to the formation file, or None if not set
+        """
+        return self._formation_path if hasattr(self, '_formation_path') else None
 
     def get_formation_id(self) -> str:
         """Get the formation ID."""

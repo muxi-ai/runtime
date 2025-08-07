@@ -193,20 +193,17 @@ async def save_agent_to_file(
                 formation.add_agent_to_config(processed_config)
 
                 # Track placeholders if formation tracks them
-                if (
-                    hasattr(formation, "_secret_placeholders")
-                    and formation._secret_placeholders is not None
-                ):
+                if formation.has_secret_placeholders():
                     # Add placeholders with proper path prefix for the new agent
                     agent_index = len(formation.config.get("agents", [])) - 1
                     for path, placeholder in placeholders.items():
                         adjusted_path = (
                             f"agents[{agent_index}].{path}" if path else f"agents[{agent_index}]"
                         )
-                        formation._secret_placeholders[adjusted_path] = placeholder
+                        formation.add_secret_placeholder(adjusted_path, placeholder)
 
                 # If overlord is running, add the agent to it as well
-                if formation._is_running and formation._overlord:
+                if formation.is_running and formation.get_overlord():
                     await add_agent_to_overlord_runtime(formation, processed_config)
 
             except ValueError:
@@ -352,10 +349,7 @@ async def update_agent_file(
                 formation.update_agent_in_config(agent_id, processed_config)
 
                 # Update placeholders if formation tracks them
-                if (
-                    hasattr(formation, "_secret_placeholders")
-                    and formation._secret_placeholders is not None
-                ):
+                if formation.has_secret_placeholders():
                     # Find the agent index
                     agents = formation.config.get("agents", [])
                     agent_index = next(
@@ -364,11 +358,7 @@ async def update_agent_file(
                     if agent_index >= 0:
                         # Remove old placeholders for this agent
                         prefix = f"agents[{agent_index}]"
-                        keys_to_remove = [
-                            k for k in formation._secret_placeholders if k.startswith(prefix)
-                        ]
-                        for k in keys_to_remove:
-                            del formation._secret_placeholders[k]
+                        formation.remove_secret_placeholders_for_prefix(prefix)
 
                         # Add new placeholders
                         for path, placeholder in placeholders.items():
@@ -377,17 +367,14 @@ async def update_agent_file(
                                 if path
                                 else f"agents[{agent_index}]"
                             )
-                            formation._secret_placeholders[adjusted_path] = placeholder
+                            formation.add_secret_placeholder(adjusted_path, placeholder)
 
                 # If overlord is running and agent is active, reload it
-                if (
-                    formation._is_running
-                    and formation._overlord
-                    and processed_config.get("active", True)
-                ):
+                overlord = formation.get_overlord()
+                if overlord and processed_config.get("active", True):
                     # Remove the old agent and add the updated one
-                    if agent_id in formation._overlord.agents:
-                        del formation._overlord.agents[agent_id]
+                    if agent_id in overlord.agents:
+                        del overlord.agents[agent_id]
 
                     # Add the updated agent
                     await add_agent_to_overlord_runtime(formation, processed_config)

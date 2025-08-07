@@ -154,7 +154,7 @@ def _can_delete_agent(agent: Dict[str, Any]) -> bool:
     return agent.get("source") == API_SOURCE
 
 
-def _cleanup_agent_from_overlord(formation: Any, agent_id: str) -> None:
+async def _cleanup_agent_from_overlord(formation: Any, agent_id: str) -> None:
     """
     Helper function to remove agent from overlord if running.
 
@@ -162,14 +162,8 @@ def _cleanup_agent_from_overlord(formation: Any, agent_id: str) -> None:
         formation: The formation instance
         agent_id: ID of agent to remove
     """
-    if formation._is_running and formation._overlord:
-        if agent_id in formation._overlord.agents:
-            # Remove agent from overlord
-            del formation._overlord.agents[agent_id]
-
-            # Also remove from active agents tracker if present
-            if hasattr(formation._overlord, "active_agents_tracker"):
-                formation._overlord.active_agents_tracker.remove_agent(agent_id)
+    # Use public method to remove agent from overlord
+    await formation.remove_agent_from_overlord(agent_id)
 
 
 def _cleanup_secret_placeholders(formation: Any, agent_index: int) -> None:
@@ -180,16 +174,10 @@ def _cleanup_secret_placeholders(formation: Any, agent_index: int) -> None:
         formation: The formation instance
         agent_index: Index of agent in agents list
     """
-    if (
-        hasattr(formation, "_secret_placeholders")
-        and formation._secret_placeholders is not None
-        and agent_index >= 0
-    ):
-        # Remove all placeholders for this agent
+    if agent_index >= 0 and formation.has_secret_placeholders():
+        # Remove all placeholders for this agent using public method
         prefix = f"agents[{agent_index}]"
-        keys_to_remove = [k for k in formation._secret_placeholders if k.startswith(prefix)]
-        for k in keys_to_remove:
-            del formation._secret_placeholders[k]
+        formation.remove_secret_placeholders_for_prefix(prefix)
 
 
 def _delete_agent_file_safe(formation: Any, agent_id: str) -> None:
@@ -200,11 +188,12 @@ def _delete_agent_file_safe(formation: Any, agent_id: str) -> None:
         formation: The formation instance
         agent_id: ID of agent to delete file for
     """
-    if formation._formation_path:
+    formation_path = formation.get_formation_path()
+    if formation_path:
         from ...utils.agent_persistence import delete_agent_file
 
         try:
-            deleted = delete_agent_file(agent_id, formation._formation_path)
+            deleted = delete_agent_file(agent_id, formation_path)
             if not deleted:
                 # File didn't exist, but that's okay - agent was still removed from config
                 pass
@@ -461,7 +450,7 @@ async def delete_agent(request: Request, agent_id: str) -> JSONResponse:
         formation.remove_agent_from_config(agent_id)
 
         # Remove from overlord if running
-        _cleanup_agent_from_overlord(formation, agent_id)
+        await _cleanup_agent_from_overlord(formation, agent_id)
 
         # Clean up secret placeholders
         _cleanup_secret_placeholders(formation, agent_index)

@@ -9,10 +9,14 @@ import re
 import os
 import asyncio
 import threading
+import logging
 from typing import Dict, Any, Optional, Union, List, Set
 from pathlib import Path
 from cryptography.fernet import Fernet
 from .. import observability
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
 class SecretsManager:
@@ -208,8 +212,6 @@ class SecretsManager:
         """Get secrets cache, which should already be loaded during initialization."""
         if self._secrets_cache is None:
             # Log warning about uninitialized state
-            import logging
-            logger = logging.getLogger(__name__)
             logger.warning(
                 "SecretsManager cache is None - initialization may not have been completed. "
                 "Call initialize_encryption() before accessing secrets."
@@ -241,8 +243,6 @@ class SecretsManager:
             initialize_encryption() first for accurate results.
         """
         if self._secrets_cache is None:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.warning(
                 "get_all_secret_names called with uninitialized cache. "
                 "Returning empty set. Call initialize_encryption() first for accurate results."

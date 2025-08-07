@@ -10,12 +10,16 @@ as agents loaded during initialization, including:
 - Placeholder tracking
 """
 
+import logging
 from typing import Dict, Any, Tuple, TYPE_CHECKING
 from pathlib import Path
 from muxi.formation.config.loader import ConfigLoader
 
 if TYPE_CHECKING:
     from .formation import Formation
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 # Valid MCP transport types
 VALID_MCP_TRANSPORT_TYPES = ["stdio", "http", "websocket", "grpc"]
@@ -59,9 +63,9 @@ async def process_agent_for_runtime(
         formation.secrets_manager
     )
 
-    # 2. Track secrets in formation's used secrets (if it tracks them)
-    if hasattr(formation, '_secrets_in_use'):
-        formation._secrets_in_use.update(secrets_used)
+    # 2. Track secrets in formation's used secrets
+    if hasattr(formation, 'track_used_secrets'):
+        formation.track_used_secrets(secrets_used)
 
     # 3. Ensure agent has required fields (same as initialization)
     if "id" not in processed_config:
@@ -117,13 +121,52 @@ async def process_agent_for_runtime(
     if "knowledge" in processed_config:
         # Resolve relative paths relative to formation directory
         if hasattr(formation, '_formation_path') and formation._formation_path:
-            formation_dir = Path(formation._formation_path).parent
-            for knowledge_item in processed_config.get("knowledge", []):
-                if isinstance(knowledge_item, dict) and "path" in knowledge_item:
-                    path = knowledge_item["path"]
-                    if not Path(path).is_absolute():
-                        # Make relative paths absolute
-                        knowledge_item["path"] = str(formation_dir / path)
+            # Validate formation path is a non-empty string
+            formation_path = formation._formation_path
+            if not isinstance(formation_path, str) or not formation_path.strip():
+                # Log warning but don't fail - knowledge paths will remain as provided
+                logger.warning(
+                    f"Agent {agent_id}: Invalid formation path '{formation_path}', "
+                    "skipping knowledge path resolution"
+                )
+            else:
+                try:
+                    # Safely get the parent directory
+                    formation_path_obj = Path(formation_path)
+                    formation_dir = formation_path_obj.parent
+
+                    # Verify the parent directory can be determined and exists
+                    if not formation_dir or formation_dir == Path("."):
+                        # Handle edge case where parent can't be determined
+                        # (e.g., bare filename without directory)
+                        formation_dir = Path.cwd()
+                        logger.info(
+                            f"Agent {agent_id}: Formation path '{formation_path}' has no parent directory, "
+                            f"using current working directory: {formation_dir}"
+                        )
+                    elif not formation_dir.exists():
+                        # Parent directory doesn't exist - use current directory as fallback
+                        logger.warning(
+                            f"Agent {agent_id}: Formation parent directory '{formation_dir}' does not exist, "
+                            f"using current working directory instead"
+                        )
+                        formation_dir = Path.cwd()
+
+                    # Process knowledge items with validated formation_dir
+                    for knowledge_item in processed_config.get("knowledge", []):
+                        if isinstance(knowledge_item, dict) and "path" in knowledge_item:
+                            path = knowledge_item["path"]
+                            if path and not Path(path).is_absolute():
+                                # Make relative paths absolute
+                                resolved_path = formation_dir / path
+                                knowledge_item["path"] = str(resolved_path)
+
+                except (OSError, ValueError) as e:
+                    # Handle any path-related errors gracefully
+                    logger.error(
+                        f"Agent {agent_id}: Error processing formation path '{formation_path}': {e}. "
+                        "Knowledge paths will remain unresolved."
+                    )
 
     return processed_config, placeholders
 
