@@ -38,7 +38,11 @@ Just as web servers power websites and container runtimes power microservices, M
 
 * **🤝 Agent Teamwork & A2A Protocol**: Revolutionary inter-agent collaboration that works both locally (agents within your formation) and externally (across different formations, organizations, and even competing systems) using MUXI's native A2A protocol – agents automatically discover, negotiate with, and delegate tasks to other agents without manual orchestration, enabling unprecedented AI collaboration that spans organizational boundaries and creates true agent ecosystems.
 
+* **🧭 Intelligent Agent Filtering**: Revolutionary LLM-powered agent selection that scales to formations with dozens or hundreds of specialized agents – using semantic understanding to route tasks to the perfect agent every time, with aggressive caching achieving 97% cache hit rates, configurable relevance scoring, and intelligent load balancing. No more rigid routing rules or manual agent selection – MUXI understands capabilities and matches tasks to agents like a master conductor orchestrating a symphony.
+
 * **⏰ Proactive Intelligence**: The world's first AI infrastructure that transforms from reactive assistant to proactive digital teammate – schedule recurring workflows ("check my email every hour for messages from my wife") or one-time reminders ("call mom tomorrow at 2pm") using natural language. MUXI becomes your always-on digital assistant that takes initiative, not just responds.
+
+* **🎭 Dynamic Async Decision Making**: Breakthrough approval-aware execution that preserves human control while maximizing performance – MUXI intelligently keeps complex workflows synchronous during approval phases to maintain interactive dialogue, then seamlessly switches to async execution after approval for optimal performance. This elegant pattern means users never lose control of high-stakes operations while still benefiting from fire-and-forget efficiency once they give the green light.
 
 * **🛡️ Enterprise-Grade Resilience**: Built-in production reliability that competitors treat as afterthoughts – automatic LLM failover when providers go down, intelligent circuit breakers preventing cascade failures, smart caching reducing costs by 70%+, and graceful degradation ensuring your agents never completely fail. Production-ready from day one, not a "nice-to-have" add-on.
 
