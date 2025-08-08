@@ -4613,15 +4613,169 @@ class Overlord:
             # If there's a pending clarification, ANY response should be treated as a clarification response
             # What else could it be? The user is responding to our clarification question.
             is_clarification_response = True
+
+            # Get the original message and combine with clarification
+            clarification_info = self._pending_clarifications[session_id]
+            original_message = clarification_info.get("original_message", "")
+
+            # Extract the actual original user message (without context) if it has formatting
+            actual_original = original_message
+            if "=== CURRENT REQUEST ===" in original_message and "User:" in original_message:
+                lines = original_message.split("\n")
+                for i, line in enumerate(lines):
+                    if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                        next_line = lines[i + 1].strip()
+                        if next_line.startswith("User:"):
+                            actual_original = next_line[5:].strip()
+                            break
+
+            # Extract the actual user response (without context) if it has formatting
+            actual_response = message
+            if "=== CURRENT REQUEST ===" in message and "User:" in message:
+                lines = message.split("\n")
+                for i, line in enumerate(lines):
+                    if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                        next_line = lines[i + 1].strip()
+                        if next_line.startswith("User:"):
+                            actual_response = next_line[5:].strip()
+                            break
+            
+            # Get the last clarification question we asked (if stored)
+            last_question = clarification_info.get("last_question", "I asked for more details")
+
+            # Get conversation history if available
+            conversation_history = clarification_info.get("conversation_history", [])
+
+            # Build the full conversation for the LLM to understand
+            if conversation_history:
+                # We have multiple rounds, build full history
+                conversation_text = "Conversation history:\n"
+                for turn in conversation_history:
+                    conversation_text += f"User: {turn['user']}\n"
+                    if 'assistant' in turn:
+                        conversation_text += f"Assistant: {turn['assistant']}\n"
+                conversation_text += f"User: {actual_original}\n"
+                conversation_text += f"Assistant: {last_question}\n"
+                conversation_text += f"User: {actual_response}"
+            else:
+                # First round of clarification
+                conversation_text = f"""User: "{actual_original}"
+Assistant: "{last_question}"
+User: "{actual_response}"\""""
+
+            # Use LLM to create a clear, unified request from the conversation
+            clarification_prompt = f"""Given this conversation:
+
+{conversation_text}
+
+Transform this into a single clear request. IMPORTANT: If the user has provided a website URL or specific target, that's enough information to proceed.
+
+Examples of good transformations:
+- User: "help with scrape" + "aroussi.com" → "Help scrape data from aroussi.com"
+- User: "build something" + "a calculator" → "Build a calculator"
+
+Only output a clarification question (with ?) if absolutely critical information is missing.
+Otherwise, output a statement of what the user wants."""
+
+            try:
+                # Use the clarification LLM to combine the messages intelligently
+                if self.clarification_analyzer and self.clarification_analyzer.model:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "prompt": clarification_prompt[:300],
+                        },
+                        description="Calling LLM to combine clarification"
+                    )
+                    messages = [{"role": "user", "content": clarification_prompt}]
+                    response = await self.clarification_analyzer.model.chat(
+                        messages,
+                        max_tokens=150,
+                        temperature=0.3
+                    )
+                    observability.observe(
+                        event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "llm_response": str(response) if response else "No response",
+                            "has_content": bool(response),
+                        },
+                        description="LLM response for clarification combination"
+                    )
+                    if response:
+                        # response is a string from the LLM
+                        formatted_message = response.strip() if isinstance(response, str) else str(response)
+                        
+                        # Check if the LLM response is asking a question (indicating more clarification needed)
+                        # If it contains a question mark, it's likely a clarification question
+                        if "?" in formatted_message:
+                            # The LLM thinks more clarification is needed
+                            # Keep the pending clarification but update the question
+                            self._pending_clarifications[session_id]["last_question"] = formatted_message
+                            return MuxiResponse(
+                                role="assistant",
+                                content=formatted_message,
+                                metadata={
+                                    "clarification": True,
+                                    "reason": "llm_needs_more_info"
+                                },
+                            )
+                        
+                        # Log what the LLM produced
+                        observability.observe(
+                            event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
+                            level=observability.EventLevel.DEBUG,
+                            data={
+                                "llm_combined": formatted_message[:200],
+                                "original": actual_original,
+                                "response": actual_response,
+                            },
+                            description="LLM combined clarification response"
+                        )
+                    else:
+                        # Fallback to simple combination
+                        formatted_message = f"{actual_original}. {message}"
+                else:
+                    # Fallback if no LLM available
+                    formatted_message = f"{actual_original}. {message}"
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e)},
+                    description="Failed to use LLM for message combination, using fallback"
+                )
+                formatted_message = f"{actual_original}. {message}"
+
+            # Debug: Log the combined message
+            observability.observe(
+                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "original": actual_original,
+                    "response": message,
+                    "combined": formatted_message[:200],
+                },
+                description="Combined clarification response with context",
+            )
+
+            message = formatted_message
+
+            # Don't clear the pending clarification yet - it will be cleared
+            # only if this combined message doesn't trigger another clarification
+            # We'll update it if a new clarification is needed
+
             observability.observe(
                 event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
                 level=observability.EventLevel.DEBUG,
                 data={
                     "session_id": session_id,
-                    "clarification_type": self._pending_clarifications[session_id].get("type"),
+                    "clarification_type": clarification_info.get("type"),
                     "is_clarification_response": is_clarification_response,
+                    "combined_message": message[:100],
                 },
-                description=f"Found pending clarification for session {session_id}",
+                description=f"Processed clarification response for session {session_id}",
             )
 
         if session_id and (contains_token or is_clarification_response):
@@ -5281,15 +5435,39 @@ class Overlord:
                         # Fallback to generic question if something goes wrong
                         question = "Could you please provide more details about what you're looking for?"
 
-                    # Store pending clarification
-                    self._pending_clarifications[session_id] = {
-                        "type": "reactive",
-                        "request_id": clarification_request.request_id,
-                        "original_message": message,
-                        "missing_info": analysis_result.missing_info,
-                        "user_id": user_id,
-                        "created_at": time.time(),
-                    }
+                    # Store or update pending clarification with the question we asked
+                    # If this is a follow-up clarification (from a clarification response),
+                    # keep the accumulated context
+                    if session_id in self._pending_clarifications and is_clarification_response:
+                        # Update existing clarification with new question
+                        existing_info = self._pending_clarifications[session_id]
+
+                        # Update conversation history
+                        if "conversation_history" not in existing_info:
+                            existing_info["conversation_history"] = []
+
+                        # Add the current exchange to history
+                        existing_info["conversation_history"].append({
+                            "user": actual_message,  # The user's clarification response
+                            "assistant": existing_info.get("last_question", "")
+                        })
+
+                        existing_info["last_question"] = question
+                        existing_info["missing_info"] = analysis_result.missing_info
+                        # Keep the accumulated message as the original
+                        existing_info["original_message"] = message
+                    else:
+                        # New clarification request
+                        self._pending_clarifications[session_id] = {
+                            "type": "reactive",
+                            "request_id": clarification_request.request_id,
+                            "original_message": message,
+                            "missing_info": analysis_result.missing_info,
+                            "user_id": user_id,
+                            "created_at": time.time(),
+                            "last_question": question,  # Store the question we asked
+                            "conversation_history": [],  # Initialize conversation history
+                        }
 
                     return MuxiResponse(
                         role="assistant",
@@ -5310,6 +5488,17 @@ class Overlord:
                     data={"error": str(e), "traceback": traceback.format_exc()},
                     description=f"Clarification analysis failed: {e}",
                 )
+
+        # If we get here and it was a clarification response but no new clarification was triggered,
+        # clear the pending clarification
+        if is_clarification_response and session_id in self._pending_clarifications:
+            del self._pending_clarifications[session_id]
+            observability.observe(
+                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
+                level=observability.EventLevel.DEBUG,
+                data={"session_id": session_id},
+                description="Clarification resolved - clearing pending clarification",
+            )
 
         # ===================================================================
         # GENERAL CLARIFICATION CHECK (Before Workflow Analysis)
