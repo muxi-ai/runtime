@@ -82,6 +82,7 @@ import base64
 import json
 import signal
 import sys
+from contextlib import contextmanager, suppress
 import threading
 import time
 import traceback
@@ -92,7 +93,8 @@ import os
 
 from ..agents import Agent
 from ..background.request_tracker import RequestStatus
-from ..clarification import create_clarification_system
+from ..clarification import create_clarification_system, ClarificationContext
+from .clarification_handler import ClarificationHandler
 from ...services import observability
 from ...datatypes.response import MuxiResponse
 from ...datatypes.clarification import ClarificationRequest, ClarificationResponse, RequestType
@@ -240,6 +242,10 @@ MEMORY_COLLECTIONS = {
     "workflows": "Stores workflow execution history and patterns",
 }
 
+# Define success states for cleaner status checks
+SUCCESS_STATES = {TaskStatus.COMPLETED, TaskStatus.DONE}
+SUCCESS_STATE_VALUES = {TaskStatus.COMPLETED.value, TaskStatus.DONE.value, "completed", "done"}
+
 
 class Overlord:
     """
@@ -348,7 +354,9 @@ class Overlord:
         self.agent_metadata: Dict[str, Dict[str, Any]] = {}  # Enhanced metadata
         self._agent_expertise: Dict[str, Dict[str, Any]] = {}  # Expertise registry
 
-        # Lock for thread-safe agent runtime additions
+        # Lock for concurrent agent runtime additions
+        # Note: This uses asyncio.Lock which assumes all calls occur within the same event loop.
+        # Cross-thread calls are not supported - use the Formation's thread-safe methods instead.
         self._agent_add_lock = asyncio.Lock()
 
         # Recent document tracking for immediate context
@@ -751,6 +759,9 @@ class Overlord:
             data={"service": "clarification", "components": list(clarification_components.keys())},
             description="Clarification system initialized with all components",
         )
+
+        # Initialize the ClarificationHandler with delegation pattern
+        self.clarification_handler = ClarificationHandler(self)
 
         # ===================================================================
         # SERVICE REFERENCES - References to pre-configured services
@@ -1296,7 +1307,7 @@ class Overlord:
         # Start clarification cleanup task
         if not self._clarification_cleanup_task or self._clarification_cleanup_task.done():
             self._clarification_cleanup_task = self._create_tracked_task(
-                self._cleanup_stale_clarifications(), name="clarification_cleanup"
+                self.clarification_handler.cleanup_stale_clarifications(), name="clarification_cleanup"
             )
             observability.observe(
                 event_type=observability.SystemEvents.SERVICE_STARTED,
@@ -1424,6 +1435,31 @@ class Overlord:
             data={"agent_count": loaded_count},
             description=f"Loaded {loaded_count} agents from formation configuration",
         )
+
+    @contextmanager
+    def _disable_parallel_execution_temporarily(self):
+        """
+        Context manager to temporarily disable parallel execution for workflows.
+
+        This is particularly useful for SOP workflows that require sequential
+        execution to ensure proper data flow between dependent tasks.
+
+        Usage:
+            with self._disable_parallel_execution_temporarily():
+                # Execute workflow with parallel execution disabled
+                result = await self.workflow_executor.execute_workflow(...)
+        """
+        if not self.workflow_executor or not hasattr(self.workflow_executor, 'config'):
+            # No workflow executor or config, nothing to do
+            yield
+            return
+
+        original_setting = self.workflow_executor.config.behavior.enable_parallel_execution
+        try:
+            self.workflow_executor.config.behavior.enable_parallel_execution = False
+            yield
+        finally:
+            self.workflow_executor.config.behavior.enable_parallel_execution = original_setting
 
     async def _create_agent_from_config(self, agent_config: Dict[str, Any]):
         """
@@ -2538,6 +2574,10 @@ class Overlord:
         - Workflow component updates
         - Rollback on failure
 
+        Note: This method uses asyncio.Lock and assumes all calls occur within
+        the same event loop. For cross-thread operations, use Formation's
+        thread-safe methods instead.
+
         Args:
             processed_config: Processed agent configuration dictionary
                             (after secrets processing and validation)
@@ -2559,14 +2599,16 @@ class Overlord:
             # Track original state for rollback
             agent_created = False
             metadata_added = False
+            workflow_updated = False
 
             try:
-                # Create the agent instance
+                # Create the agent instance first (before any mutations)
                 agent = await self._create_agent_from_config(processed_config)
-                agent_created = True
 
+                # Now perform all critical mutations together
                 # Add to agents dictionary atomically
                 self.agents[agent_id] = agent
+                agent_created = True
 
                 # Store agent metadata for routing
                 self.agent_descriptions[agent_id] = processed_config.get("description", "")
@@ -2578,8 +2620,15 @@ class Overlord:
                 }
                 metadata_added = True
 
-                # Update workflow components
+                # Update workflow components only after all critical operations succeed
+                # Store previous state for potential rollback
+                prev_agent_registry = None
+                if hasattr(self, "task_decomposer") and self.task_decomposer is not None:
+                    if hasattr(self.task_decomposer, "agent_registry"):
+                        prev_agent_registry = self.task_decomposer.agent_registry.copy()
+
                 await self._update_workflow_components_for_agent(agent_id, agent)
+                workflow_updated = True
 
                 # Log successful addition
                 observability.observe(
@@ -2594,11 +2643,38 @@ class Overlord:
                 )
 
             except Exception as e:
-                # Rollback on failure
+                # Rollback on failure - reverse order of operations
+
+                # Rollback workflow components if they were updated
+                if workflow_updated:
+                    try:
+                        # Remove agent from workflow components
+                        if hasattr(self, "task_decomposer") and self.task_decomposer is not None:
+                            if hasattr(self.task_decomposer, "agent_registry"):
+                                # Remove the agent from registry
+                                self.task_decomposer.agent_registry.pop(agent_id, None)
+
+                        if hasattr(self, "workflow_executor") and self.workflow_executor is not None:
+                            if hasattr(self.workflow_executor, "agent_registry"):
+                                self.workflow_executor.agent_registry.pop(agent_id, None)
+                    except Exception as rollback_error:
+                        # Log rollback failure but continue with other rollbacks
+                        observability.observe(
+                            event_type=observability.ErrorEvents.WARNING,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "agent_id": agent_id,
+                                "rollback_error": str(rollback_error),
+                            },
+                            description=f"Failed to rollback workflow components for agent '{agent_id}'",
+                        )
+
+                # Rollback metadata
                 if metadata_added:
                     self.agent_metadata.pop(agent_id, None)
                     self.agent_descriptions.pop(agent_id, None)
 
+                # Rollback agent creation
                 if agent_created and agent_id in self.agents:
                     del self.agents[agent_id]
 
@@ -4605,7 +4681,7 @@ class Overlord:
             description=f"_process_sync_chat ENTRY: agent={agent_name}, session={session_id}",
         )
         # Check if this might be a credential response (e.g., GitHub token)
-        contains_token = await self._looks_like_credential_token(message) if session_id else False
+        contains_token = await self.clarification_handler.looks_like_credential_token(message) if session_id else False
 
         # Check if this might be a clarification response
         is_clarification_response = False
@@ -4613,169 +4689,15 @@ class Overlord:
             # If there's a pending clarification, ANY response should be treated as a clarification response
             # What else could it be? The user is responding to our clarification question.
             is_clarification_response = True
-
-            # Get the original message and combine with clarification
-            clarification_info = self._pending_clarifications[session_id]
-            original_message = clarification_info.get("original_message", "")
-
-            # Extract the actual original user message (without context) if it has formatting
-            actual_original = original_message
-            if "=== CURRENT REQUEST ===" in original_message and "User:" in original_message:
-                lines = original_message.split("\n")
-                for i, line in enumerate(lines):
-                    if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                        next_line = lines[i + 1].strip()
-                        if next_line.startswith("User:"):
-                            actual_original = next_line[5:].strip()
-                            break
-
-            # Extract the actual user response (without context) if it has formatting
-            actual_response = message
-            if "=== CURRENT REQUEST ===" in message and "User:" in message:
-                lines = message.split("\n")
-                for i, line in enumerate(lines):
-                    if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                        next_line = lines[i + 1].strip()
-                        if next_line.startswith("User:"):
-                            actual_response = next_line[5:].strip()
-                            break
-            
-            # Get the last clarification question we asked (if stored)
-            last_question = clarification_info.get("last_question", "I asked for more details")
-
-            # Get conversation history if available
-            conversation_history = clarification_info.get("conversation_history", [])
-
-            # Build the full conversation for the LLM to understand
-            if conversation_history:
-                # We have multiple rounds, build full history
-                conversation_text = "Conversation history:\n"
-                for turn in conversation_history:
-                    conversation_text += f"User: {turn['user']}\n"
-                    if 'assistant' in turn:
-                        conversation_text += f"Assistant: {turn['assistant']}\n"
-                conversation_text += f"User: {actual_original}\n"
-                conversation_text += f"Assistant: {last_question}\n"
-                conversation_text += f"User: {actual_response}"
-            else:
-                # First round of clarification
-                conversation_text = f"""User: "{actual_original}"
-Assistant: "{last_question}"
-User: "{actual_response}"\""""
-
-            # Use LLM to create a clear, unified request from the conversation
-            clarification_prompt = f"""Given this conversation:
-
-{conversation_text}
-
-Transform this into a single clear request. IMPORTANT: If the user has provided a website URL or specific target, that's enough information to proceed.
-
-Examples of good transformations:
-- User: "help with scrape" + "aroussi.com" → "Help scrape data from aroussi.com"
-- User: "build something" + "a calculator" → "Build a calculator"
-
-Only output a clarification question (with ?) if absolutely critical information is missing.
-Otherwise, output a statement of what the user wants."""
-
-            try:
-                # Use the clarification LLM to combine the messages intelligently
-                if self.clarification_analyzer and self.clarification_analyzer.model:
-                    observability.observe(
-                        event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "prompt": clarification_prompt[:300],
-                        },
-                        description="Calling LLM to combine clarification"
-                    )
-                    messages = [{"role": "user", "content": clarification_prompt}]
-                    response = await self.clarification_analyzer.model.chat(
-                        messages,
-                        max_tokens=150,
-                        temperature=0.3
-                    )
-                    observability.observe(
-                        event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "llm_response": str(response) if response else "No response",
-                            "has_content": bool(response),
-                        },
-                        description="LLM response for clarification combination"
-                    )
-                    if response:
-                        # response is a string from the LLM
-                        formatted_message = response.strip() if isinstance(response, str) else str(response)
-                        
-                        # Check if the LLM response is asking a question (indicating more clarification needed)
-                        # If it contains a question mark, it's likely a clarification question
-                        if "?" in formatted_message:
-                            # The LLM thinks more clarification is needed
-                            # Keep the pending clarification but update the question
-                            self._pending_clarifications[session_id]["last_question"] = formatted_message
-                            return MuxiResponse(
-                                role="assistant",
-                                content=formatted_message,
-                                metadata={
-                                    "clarification": True,
-                                    "reason": "llm_needs_more_info"
-                                },
-                            )
-                        
-                        # Log what the LLM produced
-                        observability.observe(
-                            event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
-                            level=observability.EventLevel.DEBUG,
-                            data={
-                                "llm_combined": formatted_message[:200],
-                                "original": actual_original,
-                                "response": actual_response,
-                            },
-                            description="LLM combined clarification response"
-                        )
-                    else:
-                        # Fallback to simple combination
-                        formatted_message = f"{actual_original}. {message}"
-                else:
-                    # Fallback if no LLM available
-                    formatted_message = f"{actual_original}. {message}"
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                    level=observability.EventLevel.WARNING,
-                    data={"error": str(e)},
-                    description="Failed to use LLM for message combination, using fallback"
-                )
-                formatted_message = f"{actual_original}. {message}"
-
-            # Debug: Log the combined message
-            observability.observe(
-                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
-                level=observability.EventLevel.DEBUG,
-                data={
-                    "original": actual_original,
-                    "response": message,
-                    "combined": formatted_message[:200],
-                },
-                description="Combined clarification response with context",
-            )
-
-            message = formatted_message
-
-            # Don't clear the pending clarification yet - it will be cleared
-            # only if this combined message doesn't trigger another clarification
-            # We'll update it if a new clarification is needed
-
             observability.observe(
                 event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
                 level=observability.EventLevel.DEBUG,
                 data={
                     "session_id": session_id,
-                    "clarification_type": clarification_info.get("type"),
+                    "clarification_type": self._pending_clarifications[session_id].get("type"),
                     "is_clarification_response": is_clarification_response,
-                    "combined_message": message[:100],
                 },
-                description=f"Processed clarification response for session {session_id}",
+                description=f"Found pending clarification for session {session_id}",
             )
 
         if session_id and (contains_token or is_clarification_response):
@@ -4803,7 +4725,7 @@ Otherwise, output a statement of what the user wants."""
                             # Store the credential using the correct method
                             # Store as-is: string credentials remain strings, JSON remains JSON
                             # First try to extract token from text
-                            extracted_token = await self._extract_token_from_text(message)
+                            extracted_token = await self.clarification_handler.extract_token_from_text(message)
                             if extracted_token:
                                 cleaned_message = extracted_token
                             else:
@@ -5057,6 +4979,8 @@ Otherwise, output a statement of what the user wants."""
                     if not response_result:
                         # Simple fallback: combine original message with response
                         original_message = clarification_info.get("original_message", "")
+                        # Remove trailing punctuation to avoid double periods
+                        original_message = original_message.rstrip(".,!?;:")
                         enhanced_message = f"{original_message}. {message}"
 
                         # Clean up
@@ -5147,6 +5071,8 @@ Otherwise, output a statement of what the user wants."""
                     else:
                         # Unexpected status - fallback
                         original_message = clarification_info.get("original_message", "")
+                        # Remove trailing punctuation to avoid double periods
+                        original_message = original_message.rstrip(".,!?;:")
                         enhanced_message = f"{original_message}. {message}"
 
                         # Clean up
@@ -5332,6 +5258,28 @@ Otherwise, output a statement of what the user wants."""
                             ),
                         )
 
+                # Handle general clarifications (reactive/proactive) with multi-turn support
+                elif clarification_info.get("type") in ["reactive", "proactive", "multi_turn"]:
+                    # Check if we should use the new multi-turn handler
+                    # This handles rejection, multi-turn sequences, etc.
+                    multi_turn_response = await self.clarification_handler.handle_clarification_response_v2(
+                        message=message,
+                        session_id=session_id
+                    )
+
+                    if multi_turn_response:
+                        # Return the clarification response (could be another question, cancellation, etc.)
+                        return multi_turn_response
+                    else:
+                        # None means clarification resolved, continue processing
+                        # Get the combined/resolved message to process
+                        if isinstance(self._pending_clarifications.get(session_id), ClarificationContext):
+                            context = self._pending_clarifications[session_id]
+                            # Build combined message from context
+                            message = context.original_intent
+                            # Message will be processed normally below
+                        # If we get here, clarification was resolved and we continue with normal processing
+
         # ===================================================================
         # CLARIFICATION CHECK - MUST HAPPEN BEFORE ANY AGENT SELECTION
         # ===================================================================
@@ -5435,39 +5383,15 @@ Otherwise, output a statement of what the user wants."""
                         # Fallback to generic question if something goes wrong
                         question = "Could you please provide more details about what you're looking for?"
 
-                    # Store or update pending clarification with the question we asked
-                    # If this is a follow-up clarification (from a clarification response),
-                    # keep the accumulated context
-                    if session_id in self._pending_clarifications and is_clarification_response:
-                        # Update existing clarification with new question
-                        existing_info = self._pending_clarifications[session_id]
-
-                        # Update conversation history
-                        if "conversation_history" not in existing_info:
-                            existing_info["conversation_history"] = []
-
-                        # Add the current exchange to history
-                        existing_info["conversation_history"].append({
-                            "user": actual_message,  # The user's clarification response
-                            "assistant": existing_info.get("last_question", "")
-                        })
-
-                        existing_info["last_question"] = question
-                        existing_info["missing_info"] = analysis_result.missing_info
-                        # Keep the accumulated message as the original
-                        existing_info["original_message"] = message
-                    else:
-                        # New clarification request
-                        self._pending_clarifications[session_id] = {
-                            "type": "reactive",
-                            "request_id": clarification_request.request_id,
-                            "original_message": message,
-                            "missing_info": analysis_result.missing_info,
-                            "user_id": user_id,
-                            "created_at": time.time(),
-                            "last_question": question,  # Store the question we asked
-                            "conversation_history": [],  # Initialize conversation history
-                        }
+                    # Store pending clarification
+                    self._pending_clarifications[session_id] = {
+                        "type": "reactive",
+                        "request_id": clarification_request.request_id,
+                        "original_message": message,
+                        "missing_info": analysis_result.missing_info,
+                        "user_id": user_id,
+                        "created_at": time.time(),
+                    }
 
                     return MuxiResponse(
                         role="assistant",
@@ -5488,17 +5412,6 @@ Otherwise, output a statement of what the user wants."""
                     data={"error": str(e), "traceback": traceback.format_exc()},
                     description=f"Clarification analysis failed: {e}",
                 )
-
-        # If we get here and it was a clarification response but no new clarification was triggered,
-        # clear the pending clarification
-        if is_clarification_response and session_id in self._pending_clarifications:
-            del self._pending_clarifications[session_id]
-            observability.observe(
-                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
-                level=observability.EventLevel.DEBUG,
-                data={"session_id": session_id},
-                description="Clarification resolved - clearing pending clarification",
-            )
 
         # ===================================================================
         # GENERAL CLARIFICATION CHECK (Before Workflow Analysis)
@@ -6708,14 +6621,7 @@ Otherwise, output a statement of what the user wants."""
             for task in completed_workflow.tasks.values():
                 # Handle both enum objects and string values due to use_enum_values=True
                 # Check for both COMPLETED and DONE statuses (both are success states)
-                if task.status in {
-                    TaskStatus.COMPLETED,
-                    TaskStatus.COMPLETED.value,
-                    "completed",
-                    TaskStatus.DONE,
-                    TaskStatus.DONE.value,
-                    "done",
-                }:
+                if task.status in SUCCESS_STATE_VALUES or task.status in SUCCESS_STATES:
                     task_result = {
                         "task_id": task.id,
                         "description": task.description,
@@ -6741,14 +6647,7 @@ Otherwise, output a statement of what the user wants."""
             all_artifacts = []
             for task in completed_workflow.tasks.values():
                 # Check if task completed successfully and has result (both COMPLETED and DONE are success states)
-                if task.status in {
-                    TaskStatus.COMPLETED,
-                    TaskStatus.COMPLETED.value,
-                    "completed",
-                    TaskStatus.DONE,
-                    TaskStatus.DONE.value,
-                    "done",
-                }:
+                if task.status in SUCCESS_STATE_VALUES or task.status in SUCCESS_STATES:
                     if task.result and isinstance(task.result, dict):
                         # Check if artifacts are in the result
                         if "artifacts" in task.result:
@@ -7956,14 +7855,13 @@ Otherwise, output a statement of what the user wants."""
 
                                 # Asynchronously update credential name with smart discovery
                                 async def update_name():
-                                    try:
+                                    with suppress(Exception):
+                                        # Attempt to update credential name, but don't fail if it doesn't work
                                         await self.credential_resolver.update_credential_name_with_discovery(
                                             user_id=user_id,
                                             service=service,
                                             mcp_service=self.mcp_service,
                                         )
-                                    except Exception:
-                                        pass
 
                                 asyncio.create_task(update_name())
                             else:
@@ -8098,427 +7996,6 @@ Otherwise, output a statement of what the user wants."""
             context_parts.append(f"{formatted_key}: {value}")
 
         return ". ".join(context_parts)
-
-    async def _looks_like_credential_token(self, message: str) -> bool:
-        """
-        Check if a message contains a credential token using LLM intelligence.
-
-        Args:
-            message: The message to check
-
-        Returns:
-            True if the message appears to contain a credential token
-        """
-        if not message or not isinstance(message, str):
-            return False
-
-        # Use a simple heuristic for very short messages
-        if len(message.strip()) < 10:
-            return False
-
-        # First check with simple heuristics (faster)
-        import re
-
-        # Common token patterns
-        token_patterns = [
-            r"ghp_[A-Za-z0-9]{36}",  # GitHub personal access tokens
-            r"github_pat_[A-Za-z0-9_]+",  # New GitHub format
-            r"ghs_[A-Za-z0-9]{36}",  # GitHub server tokens
-            r"glpat-[A-Za-z0-9\-_]+",  # GitLab tokens
-            r"sk-[A-Za-z0-9]+",  # OpenAI and similar
-        ]
-
-        for pattern in token_patterns:
-            if re.search(pattern, message):
-                return True
-
-        # If no pattern matched, use LLM as fallback
-        try:
-            prompt = f"""Does this message contain an API token or credential? Reply YES or NO only.
-
-Message: {message[:200]}"""
-
-            # Use the routing model for this quick check
-            response = await self.routing_model.achat(prompt, max_tokens=10, temperature=0)
-            response_text = response.content.strip().upper()
-
-            return "YES" in response_text
-
-        except Exception:
-            # Final fallback: check if it's just a token by itself
-            stripped = message.strip()
-            # Basic heuristic: no spaces and reasonable length
-            if " " not in stripped and 20 <= len(stripped) <= 200:
-                return True
-            return False
-
-    async def _extract_token_from_text(self, message: str) -> Optional[str]:
-        """
-        Extract a credential token from a message using regex and LLM.
-
-        Args:
-            message: The message that may contain a token
-
-        Returns:
-            The extracted token if found, None otherwise
-        """
-        if not message or not isinstance(message, str):
-            return None
-
-        import re
-
-        # First try regex patterns (faster and more reliable)
-        token_patterns = [
-            (r"(ghp_[A-Za-z0-9]{36})", "github"),
-            (r"(github_pat_[A-Za-z0-9_]+)", "github"),
-            (r"(ghs_[A-Za-z0-9]{36})", "github"),
-            (r"(glpat-[A-Za-z0-9\-_]+)", "gitlab"),
-            (r"(sk-[A-Za-z0-9]+)", "openai"),
-        ]
-
-        for pattern, service in token_patterns:
-            match = re.search(pattern, message)
-            if match:
-                return match.group(1)
-
-        # If no regex match, try LLM extraction
-        try:
-            prompt = f"""Extract ONLY the API token from this message. If there's no token, reply NONE.
-
-Message: {message[:300]}
-
-Token:"""
-
-            # Use the routing model for extraction
-            response = await self.routing_model.achat(prompt, max_tokens=100, temperature=0)
-            extracted = response.content.strip()
-
-            # Check if the LLM found a token
-            if extracted and extracted.upper() != "NONE" and len(extracted) >= 10:
-                # Clean up common surrounding characters
-                cleaned = extracted.strip().strip('"').strip("'").strip("`").strip(":")
-                # Verify it looks like a token
-                if " " not in cleaned and len(cleaned) >= 20:
-                    return cleaned
-
-        except Exception as e:
-            # Log error but don't fail
-            observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                level=observability.EventLevel.DEBUG,
-                data={"error": str(e)},
-                description=f"Failed to extract token using LLM: {str(e)}",
-            )
-
-        return None
-
-    def _is_token_string(self, token: str) -> bool:
-        """Check if a string is itself a token (no surrounding text)."""
-        # Check length - tokens are usually at least 20 characters
-        if len(token) < 20:
-            return False
-
-        # Check for common token patterns
-        # GitHub personal access tokens
-        if token.startswith(("ghp_", "github_pat_", "ghs_")):
-            return True
-
-        # GitLab tokens
-        if token.startswith(("glpat-", "gldt-", "glrt-")):
-            return True
-
-        # Generic API key patterns
-        if token.startswith(("sk-", "pk-", "api-", "key-")):
-            return True
-
-        # Check if it looks like a base64 or hex encoded string
-        import re
-
-        # Base64 pattern
-        if re.match(r"^[A-Za-z0-9+/]{20,}={0,2}$", token):
-            return True
-        # Hex pattern
-        if re.match(r"^[A-Fa-f0-9]{32,}$", token):
-            return True
-
-        # Check if it has no spaces and reasonable length (likely a token)
-        if " " not in token and 20 <= len(token) <= 200:
-            # Additional heuristic: has mix of letters and numbers
-            has_letter = any(c.isalpha() for c in token)
-            has_digit = any(c.isdigit() for c in token)
-            if has_letter and has_digit:
-                return True
-
-        return False
-
-    async def _cleanup_stale_clarifications(self) -> None:
-        """
-        Clean up stale pending clarifications based on TTL.
-
-        This method runs periodically to remove clarifications that have
-        exceeded their TTL, preventing memory growth from abandoned or
-        failed clarification flows.
-        """
-        while True:
-            try:
-                # Sleep for cleanup interval
-                await asyncio.sleep(self._clarification_cleanup_interval_seconds)
-
-                current_time = time.time()
-                stale_sessions = []
-
-                # Find stale clarifications
-                for session_id, clarification_info in self._pending_clarifications.items():
-                    timestamp = clarification_info.get("timestamp", 0)
-                    age_seconds = current_time - timestamp
-
-                    if age_seconds > self._clarification_ttl_seconds:
-                        stale_sessions.append(session_id)
-
-                        observability.observe(
-                            event_type=observability.SystemEvents.CLEANUP,
-                            level=observability.EventLevel.INFO,
-                            data={
-                                "session_id": session_id,
-                                "type": clarification_info.get("type", "unknown"),
-                                "age_seconds": age_seconds,
-                                "ttl_seconds": self._clarification_ttl_seconds,
-                            },
-                            description=f"Removing stale clarification for session {session_id}",
-                        )
-
-                # Remove stale entries
-                for session_id in stale_sessions:
-                    del self._pending_clarifications[session_id]
-
-                if stale_sessions:
-                    observability.observe(
-                        event_type=observability.SystemEvents.CLEANUP,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "removed_count": len(stale_sessions),
-                            "remaining_count": len(self._pending_clarifications),
-                        },
-                        description=f"Cleaned up {len(stale_sessions)} stale clarifications",
-                    )
-
-            except asyncio.CancelledError:
-                # Task was cancelled - exit cleanly
-                observability.observe(
-                    event_type=observability.SystemEvents.SERVICE_STARTED,
-                    level=observability.EventLevel.INFO,
-                    data={"task_name": "clarification_cleanup", "status": "cancelled"},
-                    description="Clarification cleanup task cancelled",
-                )
-                break
-            except Exception as e:
-                # Log error but continue running
-                observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                    level=observability.EventLevel.ERROR,
-                    data={"error": str(e)},
-                    description=f"Error in clarification cleanup: {str(e)}",
-                )
-                # Sleep before retrying
-                await asyncio.sleep(60)
-
-    async def _process_streaming_chat(
-        self,
-        message: str,
-        agent_name: Optional[str],
-        user_id: Any,
-        session_id: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> AsyncGenerator[str, None]:
-        """
-        Process chat with streaming response.
-
-        This method handles streaming for both regular agent chats and workflow execution.
-        For workflows, it provides real-time progress updates as tasks are executed.
-
-        Args:
-            message: User's message to process
-            agent_name: Optional specific agent to use (None for auto-selection)
-            user_id: User identifier for memory and context
-            session_id: Optional session ID for context
-            request_id: Optional request ID for tracking
-
-        Yields:
-            str: Content chunks streamed from the response or workflow progress
-
-        Note:
-            This ensures identical processing logic between streaming and non-streaming
-            modes, including agent selection, busy tracking, clarification handling,
-            workflow detection, and memory management.
-        """
-        try:
-            # Check if this should trigger a workflow (only if no specific agent requested)
-            if agent_name is None and self.auto_decomposition:
-                # Check for pending clarifications first
-                is_clarification_response = (
-                    session_id and session_id in self._pending_clarifications
-                )
-
-                if not is_clarification_response:
-                    # Analyze request complexity
-                    try:
-                        analysis = await self.request_analyzer.analyze_request(message)
-
-                        # Check if complexity exceeds threshold
-                        # Use workflow config threshold if available, otherwise fall back to overlord threshold
-                        threshold = (
-                            self.workflow_config.complexity_threshold
-                            if hasattr(self, "workflow_config")
-                            else self.complexity_threshold
-                        )
-                        if analysis.complexity_score >= threshold:
-                            # Stream workflow execution
-                            result = await self._process_with_workflow(
-                                message=message,
-                                analysis=analysis,
-                                user_id=user_id,
-                                session_id=session_id,
-                                request_id=request_id,
-                                stream=True,  # Enable streaming
-                            )
-
-                            # If result is an async generator (streaming), yield its chunks
-                            if hasattr(result, "__aiter__"):
-                                async for chunk in result:
-                                    yield chunk
-                            else:
-                                # If not streaming (e.g., approval needed), yield the response
-                                if hasattr(result, "content"):
-                                    yield result.content
-                                else:
-                                    yield str(result)
-                            return  # Exit after handling workflow
-                    except Exception as e:
-                        # Log error but continue with normal flow
-                        observability.observe(
-                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                            level=observability.EventLevel.WARNING,
-                            data={"error": str(e), "phase": "workflow_analysis"},
-                            description=f"Failed to analyze request for workflow: {str(e)}",
-                        )
-
-            # Fall back to regular streaming chat for non-workflow requests
-            # Get the full response using sync processing logic
-            result = await self._process_sync_chat(
-                message=message,
-                agent_name=agent_name,
-                user_id=user_id,
-                session_id=session_id,
-                request_id=request_id,
-            )
-
-            # Extract content from MuxiResponse
-            content = result.content if hasattr(result, "content") else str(result)
-
-            # Stream the response in chunks
-            chunk_size = 50  # Characters per chunk
-            for i in range(0, len(content), chunk_size):
-                chunk = content[i:(i + chunk_size)]
-                yield chunk
-                # Small delay for streaming effect
-                await asyncio.sleep(0.01)
-
-        except Exception as e:
-            # Handle streaming errors gracefully
-            observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                level=observability.EventLevel.ERROR,
-                data={"error": str(e), "agent": agent_name, "context": "streaming"},
-                description=f"Streaming error: {str(e)}",
-            )
-
-            # Yield error message to user
-            yield f"Error during streaming: {str(e)}"
-
-    async def _handle_post_streaming_tasks(
-        self, message: str, response: str, agent_name: str, user_id: Any
-    ) -> None:
-        """
-        Handle memory storage and observability after streaming completes.
-
-        This method runs asynchronously after streaming to handle tasks that
-        shouldn't block the real-time stream, such as memory storage and
-        user information extraction.
-
-        Args:
-            message: Original user message
-            response: Complete response that was streamed
-            agent_name: Name of the agent that processed the message
-            user_id: External user ID for memory operations
-        """
-        try:
-            # Add messages to memory
-            current_time = time.time()
-
-            # Store user message
-            await self.add_message_to_memory(
-                content=message,
-                role="user",
-                timestamp=current_time,
-                agent_id=agent_name,
-                user_id=user_id,
-            )
-
-            # Store agent response
-            await self.add_message_to_memory(
-                content=response,
-                role="assistant",
-                timestamp=current_time + 0.1,  # Slight offset for ordering
-                agent_id=agent_name,
-                user_id=user_id,
-            )
-
-            # Handle user information extraction if enabled
-            if user_id and user_id != "0":  # Skip for anonymous users
-                await self.handle_user_information_extraction(
-                    user_message=message,
-                    agent_response=response,
-                    user_id=user_id,
-                    agent_id=agent_name,
-                )
-
-            # Emit completion event
-            observability.observe(
-                event_type=observability.ConversationEvents.OVERLORD_PROCESSING_COMPLETED,
-                level=observability.EventLevel.INFO,
-                data={"agent": agent_name, "streaming": True},
-                description=f"Streaming chat completed successfully with agent {agent_name}",
-            )
-
-        except Exception as e:
-            # Log post-processing errors but don't propagate them
-            observability.observe(
-                event_type=observability.ConversationEvents.OVERLORD_PROCESSING_ERROR,
-                level=observability.EventLevel.WARNING,
-                data={"error": str(e), "agent": agent_name, "phase": "post_streaming"},
-                description=f"Error in post-streaming tasks: {str(e)}",
-            )
-
-    async def _get_webhook_url_for_request(self, request_id: str) -> Optional[str]:
-        """
-        Get webhook URL for a specific request.
-
-        This method retrieves the webhook URL associated with a request,
-        first checking the request's specific configuration and falling
-        back to the formation default.
-        """
-        try:
-            request_state = await self.request_tracker.get_request(request_id)
-            if request_state and request_state.webhook_url:
-                return request_state.webhook_url
-
-            # Fall back to formation default
-            return self.async_webhook_url
-        except Exception as e:
-            #  Error - TODO: add observability
-            # ErrorEvents.RESOURCE_UNAVAILABLE
-            _ = e  # remove this after implementing observability
-            return self.async_webhook_url
 
     async def get_async_request_status(self, request_id: str) -> Optional[Dict[str, Any]]:
         """
