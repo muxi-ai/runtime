@@ -120,9 +120,9 @@ async def process_agent_for_runtime(
     # 7. Process knowledge paths if present
     if "knowledge" in processed_config:
         # Resolve relative paths relative to formation directory
-        if hasattr(formation, '_formation_path') and formation._formation_path:
+        formation_path = formation.get_formation_path()
+        if formation_path:
             # Validate formation path is a non-empty string
-            formation_path = formation._formation_path
             if not isinstance(formation_path, str) or not formation_path.strip():
                 # Log warning but don't fail - knowledge paths will remain as provided
                 logger.warning(

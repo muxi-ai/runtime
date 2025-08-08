@@ -31,7 +31,7 @@
 # =============================================================================
 
 import asyncio
-from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 import yaml
 from pathlib import Path
 import os
@@ -1702,7 +1702,7 @@ class Formation:
             return False
 
         # Check if already initialized
-        if self.secrets_manager.is_initialized():
+        if self.secrets_manager.is_initialized:
             return True
 
         async def _initialize_operation():
@@ -1862,7 +1862,7 @@ class Formation:
         # Check if the secret is in our tracked set
         return normalized_name in self._secrets_in_use
 
-    def track_used_secrets(self, secret_names: Set[str]) -> None:
+    def track_used_secrets(self, secret_names: set[str]) -> None:
         """
         Track additional secrets as being in use by the formation.
 
@@ -1872,10 +1872,19 @@ class Formation:
         Args:
             secret_names: Set of secret names to track as in-use
         """
+        import re
+        # Normalize secret names the same way as is_secret_in_use
+        normalized_names = set()
+        for name in secret_names:
+            normalized_name = re.sub(r"[^A-Z0-9_]", "_", name.upper())
+            normalized_name = re.sub(r"_+", "_", normalized_name)
+            normalized_name = normalized_name.strip("_")
+            normalized_names.add(normalized_name)
+
         if hasattr(self, '_secrets_in_use'):
-            self._secrets_in_use.update(secret_names)
+            self._secrets_in_use.update(normalized_names)
         else:
-            self._secrets_in_use = secret_names.copy()
+            self._secrets_in_use = normalized_names
 
     async def list_secrets(self) -> List[str]:
         """
@@ -3198,8 +3207,9 @@ class Formation:
             path: The configuration path (e.g., "agents[0].api_key")
             placeholder: The placeholder value to store
         """
-        if self._secret_placeholders is not None:
-            self._secret_placeholders[path] = placeholder
+        with self._config_lock:
+            if self._secret_placeholders is not None:
+                self._secret_placeholders[path] = placeholder
 
     def remove_secret_placeholders_for_prefix(self, prefix: str) -> None:
         """
@@ -3208,10 +3218,11 @@ class Formation:
         Args:
             prefix: The prefix to match (e.g., "agents[0]")
         """
-        if self._secret_placeholders is not None:
-            keys_to_remove = [k for k in self._secret_placeholders if k.startswith(prefix)]
-            for k in keys_to_remove:
-                del self._secret_placeholders[k]
+        with self._config_lock:
+            if self._secret_placeholders is not None:
+                keys_to_remove = [k for k in self._secret_placeholders if k.startswith(prefix)]
+                for k in keys_to_remove:
+                    del self._secret_placeholders[k]
 
     async def remove_agent_from_overlord(self, agent_id: str) -> bool:
         """

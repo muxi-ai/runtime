@@ -31,7 +31,7 @@ from .decomposer import TaskDecomposer, ApprovalManager
 from .executor import WorkflowExecutor, ProgressTracker
 from .workflow_manager import WorkflowManager
 from .workflow_metrics import WorkflowMetrics
-from .sops import SOPSystem
+# SOPSystem is lazy-loaded via __getattr__ to avoid disk I/O on import
 
 __all__ = [
     # Data types
@@ -61,3 +61,28 @@ __all__ = [
     "WorkflowMetrics",
     "SOPSystem"
 ]
+
+
+# Lazy loading implementation for SOPSystem
+_lazy_imports = {
+    'SOPSystem': None
+}
+
+
+def __getattr__(name):
+    """
+    Lazy import for SOPSystem to defer disk I/O until actually needed.
+
+    SOPSystem performs directory scanning and file I/O during initialization,
+    which can impact startup time. This lazy loading ensures it's only
+    imported when actually accessed.
+    """
+    if name == 'SOPSystem':
+        # Check if already imported
+        if _lazy_imports['SOPSystem'] is None:
+            from .sops import SOPSystem
+            _lazy_imports['SOPSystem'] = SOPSystem
+        return _lazy_imports['SOPSystem']
+
+    # If not a lazy import, raise AttributeError
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

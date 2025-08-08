@@ -355,30 +355,58 @@ class FormationServer:
             Returns:
                 Tuple of (field_type, error_kind)
             """
+            # Extract the core error type from FastAPI/Pydantic format
+            # e.g., "value_error.missing" -> "missing", "type_error.str" -> "str"
+            core_error_type = error_type.split(".")[-1] if "." in error_type else error_type
+
             # Error type to field type and error kind mapping
+            # Updated to handle actual FastAPI/Pydantic error codes
             ERROR_TYPE_MAPPING = {
-                "missing": ("string", "missing"),  # Default to string for missing
-                "string_type": ("string", "wrong_type"),
-                "int_type": ("integer", "wrong_type"),
-                "bool_type": ("boolean", "wrong_type"),
-                "list_type": ("array", "wrong_type"),
-                "dict_type": ("object", "wrong_type"),
+                # Value errors
+                "missing": ("string", "missing"),  # value_error.missing
+                "json_invalid": ("string", "invalid_json"),  # value_error.json_invalid
+                "extra": ("string", "extra_field"),  # value_error.extra
+
+                # Type errors (from type_error.*)
+                "str": ("string", "wrong_type"),  # type_error.str
+                "string": ("string", "wrong_type"),  # alternative format
+                "integer": ("integer", "wrong_type"),  # type_error.integer
+                "int": ("integer", "wrong_type"),  # type_error.int
+                "bool": ("boolean", "wrong_type"),  # type_error.bool
+                "boolean": ("boolean", "wrong_type"),  # alternative format
+                "list": ("array", "wrong_type"),  # type_error.list
+                "array": ("array", "wrong_type"),  # alternative format
+                "dict": ("object", "wrong_type"),  # type_error.dict
+                "object": ("object", "wrong_type"),  # alternative format
+                "float": ("number", "wrong_type"),  # type_error.float
+                "number": ("number", "wrong_type"),  # alternative format
+
+                # Validation errors
+                "too_short": ("string", "too_short"),
+                "too_long": ("string", "too_long"),
+                "regex": ("string", "invalid_format"),
             }
 
-            # Check if error type is in the mapping
-            if error_type in ERROR_TYPE_MAPPING:
-                field_type, error_kind = ERROR_TYPE_MAPPING[error_type]
+            # Check if core error type is in the mapping
+            if core_error_type in ERROR_TYPE_MAPPING:
+                field_type, error_kind = ERROR_TYPE_MAPPING[core_error_type]
             else:
-                # Fall back to pattern matching for error kind
+                # Fall back to pattern matching on full error type
                 error_kind = "invalid"  # default
-                if "json_invalid" in error_type:
+                if "json" in error_type:
                     error_kind = "invalid_json"
-                elif "too_short" in error_type:
+                elif "missing" in error_type:
+                    error_kind = "missing"
+                elif "type" in error_type:
+                    error_kind = "wrong_type"
+                elif "too_short" in error_type or "min_length" in error_type:
                     error_kind = "too_short"
-                elif "too_long" in error_type:
+                elif "too_long" in error_type or "max_length" in error_type:
                     error_kind = "too_long"
-                elif "regex" in error_type:
+                elif "regex" in error_type or "pattern" in error_type:
                     error_kind = "invalid_format"
+                elif "extra" in error_type:
+                    error_kind = "extra_field"
 
                 # Default field type
                 field_type = "string"
@@ -392,10 +420,15 @@ class FormationServer:
                 "number": [".temperature"],
             }
 
+            # Remove array indices from location string for accurate suffix matching
+            # e.g., "agents[0].settings" -> "agents.settings"
+            import re
+            normalized_loc = re.sub(r'\[\d+\]', '', loc_string)
+
             # Override field type based on location string suffix
             # This is important for 'missing' errors where we need to know the expected type
             for expected_type, suffixes in FIELD_SUFFIX_PATTERNS.items():
-                if any(loc_string.endswith(suffix) for suffix in suffixes):
+                if any(normalized_loc.endswith(suffix) for suffix in suffixes):
                     field_type = expected_type
                     break
 

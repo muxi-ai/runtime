@@ -9,6 +9,10 @@ from starlette.datastructures import Headers
 if TYPE_CHECKING:
     from ..formation import Formation
 
+# Precompiled regex patterns for performance
+# Pattern to match ${{ secrets.* }} and ${{ user.credentials.* }}
+SECRET_REF_PATTERN = re.compile(r"\$\{\{\s*(secrets|user\.credentials)\.([^}]+)\s*\}\}")
+
 
 def get_header_case_insensitive(headers: Headers, header_name: str) -> Optional[str]:
     """
@@ -126,9 +130,6 @@ def extract_secret_references(data: Any, path: str = "") -> Set[Tuple[str, str, 
     """
     references = set()
 
-    # Pattern to match ${{ secrets.* }} and ${{ user.credentials.* }}
-    secret_pattern = re.compile(r"\$\{\{\s*(secrets|user\.credentials)\.([^}]+)\s*\}\}")
-
     if isinstance(data, dict):
         for key, value in data.items():
             new_path = f"{path}.{key}" if path else key
@@ -140,8 +141,8 @@ def extract_secret_references(data: Any, path: str = "") -> Set[Tuple[str, str, 
             references.update(extract_secret_references(item, new_path))
 
     elif isinstance(data, str):
-        # Find all matches in the string
-        for match in secret_pattern.finditer(data):
+        # Find all matches in the string using the precompiled pattern
+        for match in SECRET_REF_PATTERN.finditer(data):
             ref_type = match.group(1)
             ref_name = match.group(2).strip()
 

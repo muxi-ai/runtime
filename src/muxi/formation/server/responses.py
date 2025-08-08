@@ -14,6 +14,7 @@ Note: The spec-compliant versions (_spec suffix) are now DEPRECATED. Instead, us
 regular functions with use_generic_type=True parameter for OpenAPI compliance.
 """
 
+import copy
 import time
 from typing import Any, Dict, Optional, List, Union
 
@@ -133,7 +134,8 @@ def create_error_response(
         event_type = APIEventType.ERROR_PROCESSING
 
     # Build error data, including trace if provided
-    final_error_data = error_data.copy() if error_data else {}
+    # Use deepcopy to prevent mutations of nested structures in the original
+    final_error_data = copy.deepcopy(error_data) if error_data else {}
     if trace:
         final_error_data["trace"] = trace
 

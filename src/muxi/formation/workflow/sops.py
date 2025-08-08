@@ -179,7 +179,8 @@ class SOPSystem:
                         'tags': self._parse_tags(metadata.get('tags', '')),
                         'bypass_approval': metadata.get('bypass_approval', True),  # Default to bypass
                         'content': content,  # Full markdown content for decomposer
-                        'raw_content': md_file.read_text()  # Original content with frontmatter
+                        'raw_content': md_file.read_text(),  # Original content with frontmatter
+                        'steps': metadata.get('steps', [])  # Always include steps, default to empty list
                     }
                     self.file_hashes[sop_id] = file_hash
 
@@ -480,47 +481,44 @@ class SOPSystem:
                 """
                 Synchronous single text embedding.
 
-                Note: This method cannot execute async embedding models when called
-                from within an already running event loop. In such cases, it will
-                raise a RuntimeError. Use embed_async() or generate_embeddings()
-                instead when in an async context.
+                This method handles both sync and async embedding models transparently.
+                When called from within a running event loop with an async-only model,
+                it will execute the async operation in a thread pool executor to avoid
+                blocking the event loop.
 
                 Args:
                     text: Text to generate embedding for
 
                 Returns:
-                    Embedding vector or raises RuntimeError if async execution required
+                    Embedding vector
 
-                Raises:
-                    RuntimeError: When async embedding is needed but event loop is already running
+                Note: For better performance in async contexts, prefer using
+                      embed_async() or generate_embeddings() directly.
                 """
                 # Check if model has sync embed method
                 if hasattr(self.model, 'embed') and not asyncio.iscoroutinefunction(self.model.embed):
                     return self.model.embed(text)
                 else:
-                    # If only async is available, try to run it synchronously
+                    # If only async is available, handle it properly
                     import asyncio
+                    import concurrent.futures
+
                     try:
                         loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            # Can't run async in running loop, raise clear error
-                            raise RuntimeError(
-                                "Cannot execute async embedding model synchronously while event loop is running. "
-                                "Use await embed_async() or await generate_embeddings() instead. "
-                                "This typically happens when calling embed() from async code - "
-                                "switch to the async methods for proper execution."
-                            )
-                        else:
-                            return loop.run_until_complete(self.embed_async(text))
-                    except RuntimeError as e:
-                        # Re-raise RuntimeError with our message
-                        raise e
-                    except Exception as e:
-                        # Log other exceptions and raise with context
-                        raise RuntimeError(
-                            f"Failed to execute embedding: {str(e)}. "
-                            "Consider using async methods if in async context."
-                        ) from e
+                    except RuntimeError:
+                        # No event loop, create one
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+
+                    if loop.is_running():
+                        # We're in a running loop - use thread pool executor to avoid blocking
+                        # This allows sync embed() to work even from async contexts
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                            future = executor.submit(asyncio.run, self.embed_async(text))
+                            return future.result()
+                    else:
+                        # No running loop, we can run it directly
+                        return loop.run_until_complete(self.embed_async(text))
 
             async def embed_async(self, text: str):
                 """Asynchronous single text embedding."""
@@ -649,8 +647,9 @@ class SOPSystem:
                 # Create searchable text from SOP
                 searchable_text = f"{sop['name']} {sop['description']} "
                 searchable_text += " ".join(sop['tags'])
-                # Include step text for better matching
-                for step in sop['steps']:
+                # Include step text for better matching (check if steps exist)
+                steps = sop.get('steps', [])
+                for step in steps:
                     searchable_text += " " + step.get('text', '')
 
                 # Generate embedding using adapter's async interface since we're in async context
@@ -900,12 +899,17 @@ class SOPSystem:
         guidance = f"## Standard Operating Procedure: {sop['name']}\n\n"
         guidance += f"{sop['description']}\n\n"
         guidance += "### Steps:\n"
-        for i, step in enumerate(sop['steps'], 1):
-            guidance += f"{i}. {step['text']}\n"
-            if step.get('agent'):
-                guidance += f"   (Assigned to: {step['agent']})\n"
-            if step.get('mcp_tools'):
-                guidance += f"   (Tools: {', '.join(step['mcp_tools'])})\n"
-            if step.get('resources'):
-                guidance += f"   (Resources: {', '.join(step['resources'])})\n"
+        # Check if steps exist, provide empty list if missing
+        steps = sop.get('steps', [])
+        if not steps:
+            guidance += "No steps defined.\n"
+        else:
+            for i, step in enumerate(steps, 1):
+                guidance += f"{i}. {step.get('text', 'No description')}\n"
+                if step.get('agent'):
+                    guidance += f"   (Assigned to: {step['agent']})\n"
+                if step.get('mcp_tools'):
+                    guidance += f"   (Tools: {', '.join(step['mcp_tools'])})\n"
+                if step.get('resources'):
+                    guidance += f"   (Resources: {', '.join(step['resources'])})\n"
         return guidance

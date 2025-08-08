@@ -8,6 +8,7 @@ import os
 import re
 import yaml
 import logging
+import aiofiles
 from pathlib import Path
 from typing import Dict, Any, TYPE_CHECKING
 
@@ -143,20 +144,29 @@ async def save_agent_to_file(
         # Validate and sanitize agent_id to prevent directory traversal
         agent_file_path = _validate_and_sanitize_agent_id(agent_id, agents_dir)
 
+        # Check if file already exists to prevent silent overwriting
+        if agent_file_path.exists():
+            raise ValueError(
+                f"Agent file already exists: {agent_file_path.name}. "
+                f"Use update_agent_file to modify existing agents."
+            )
+
         # Prepare agent config for serialization
         # Remove any None values and ensure clean YAML output
         clean_config = _clean_config_for_yaml(agent_config)
 
-        # Write to YAML file
-        with open(agent_file_path, "w", encoding="utf-8") as f:
-            yaml.dump(
-                clean_config,
-                f,
-                default_flow_style=False,
-                sort_keys=False,
-                allow_unicode=True,
-                indent=2,
-            )
+        # Convert to YAML string first, then write asynchronously
+        yaml_content = yaml.safe_dump(
+            clean_config,
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,
+            indent=2,
+        )
+
+        # Write to YAML file asynchronously
+        async with aiofiles.open(agent_file_path, "w", encoding="utf-8") as f:
+            await f.write(yaml_content)
 
         # Auto-load into formation if requested
         if auto_load and formation:
@@ -320,15 +330,17 @@ async def update_agent_file(
         # Clean and save the updated configuration
         clean_config = _clean_config_for_yaml(updated_config)
 
-        with open(agent_file_path, "w", encoding="utf-8") as f:
-            yaml.dump(
-                clean_config,
-                f,
-                default_flow_style=False,
-                sort_keys=False,
-                allow_unicode=True,
-                indent=2,
-            )
+        # Convert to YAML string first, then write asynchronously
+        yaml_content = yaml.safe_dump(
+            clean_config,
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,
+            indent=2,
+        )
+
+        async with aiofiles.open(agent_file_path, "w", encoding="utf-8") as f:
+            await f.write(yaml_content)
 
         # Auto-reload into formation if requested
         if auto_reload and formation:
@@ -475,9 +487,14 @@ def list_agent_files(formation_path: str, agents_subdir: str = "agents") -> list
         if not agents_dir.exists():
             return []
 
-        # Find all YAML files
+        # Find all YAML files (both .yaml and .yml extensions)
         agent_files = []
         for file_path in agents_dir.glob("*.yaml"):
+            if file_path.is_file():
+                agent_files.append(str(file_path))
+
+        # Also include .yml files
+        for file_path in agents_dir.glob("*.yml"):
             if file_path.is_file():
                 agent_files.append(str(file_path))
 
@@ -540,7 +557,8 @@ def _deep_merge(base: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]
     Returns:
         Dict[str, Any]: Merged dictionary
     """
-    result = base.copy()
+    import copy
+    result = copy.deepcopy(base)
 
     for key, value in updates.items():
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):

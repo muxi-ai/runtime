@@ -44,6 +44,7 @@ class InformationAnalyzer:
             intent: The identified user intent
             available_tools: List of available tool names
             user_context: User's context memory
+            style: Optional clarification style/approach to use (e.g., 'conversational', 'technical')
 
         Returns:
             InformationAnalysis with missing info, suggestions, and confidence
@@ -166,7 +167,11 @@ class InformationAnalyzer:
             raise InformationAnalysisError(f"Failed to analyze tool requirements: {e}")
 
     async def analyze_reasoning_requirements(
-        self, intent: str, user_message: str, user_context: Dict[str, Any], style: Optional[str] = None
+        self,
+        intent: str,
+        user_message: str,
+        user_context: Dict[str, Any],
+        style: Optional[str] = None,
     ) -> ReasoningInformationAnalysis:
         """
         Analyze information needed for effective reasoning/advice
@@ -175,6 +180,7 @@ class InformationAnalyzer:
             intent: The user's identified intent
             user_message: Original user message
             user_context: User's context memory
+            style: Optional clarification style/approach to use (e.g., 'conversational', 'technical')
 
         Returns:
             ReasoningInformationAnalysis with context gaps and requirements
@@ -202,7 +208,9 @@ class InformationAnalyzer:
                 complexity_level = "moderate"
             else:
                 # Generic analysis
-                context_gaps = await self._analyze_generic_context_needs(user_message, user_context, style)
+                context_gaps = await self._analyze_generic_context_needs(
+                    user_message, user_context, style
+                )
                 complexity_level = "simple"
 
             available_info = self._extract_available_context(user_context, context_gaps)
@@ -392,7 +400,7 @@ class InformationAnalyzer:
                 style_instructions = {
                     "conversational": "Use a friendly, conversational tone. Ask naturally as if chatting with a colleague.",  # noqa: E501
                     "formal": "Use professional, formal language. Be polite but direct.",
-                    "brief": "Be extremely concise. Use minimal words, no pleasantries."
+                    "brief": "Be extremely concise. Use minimal words, no pleasantries.",
                 }
 
                 style_guidance = style_instructions.get(style, style_instructions["conversational"])
@@ -403,10 +411,10 @@ class InformationAnalyzer:
                     "\n\nIf the request is clear and specific enough to act on, respond with just:\nCLEAR"
                     "\n\nIf the request needs clarification, respond with:\nNEEDS_CLARIFICATION: [Your clarification question here]"  # noqa: E501
                     "\n\nExamples:"
-                    "\n- \"can you me a\" -> NEEDS_CLARIFICATION: Your message seems incomplete. What would you like help with?"  # noqa: E501
-                    "\n- \"I need help with a scraper\" -> NEEDS_CLARIFICATION: What kind of scraper are you building?"
-                    "\n- \"fix the bug\" -> NEEDS_CLARIFICATION: Which bug are you referring to?"
-                    "\n- \"Write a Python function to sort a list\" -> CLEAR"
+                    '\n- "can you me a" -> NEEDS_CLARIFICATION: Your message seems incomplete. What would you like help with?'  # noqa: E501
+                    '\n- "I need help with a scraper" -> NEEDS_CLARIFICATION: What kind of scraper are you building?'
+                    '\n- "fix the bug" -> NEEDS_CLARIFICATION: Which bug are you referring to?'
+                    '\n- "Write a Python function to sort a list" -> CLEAR'
                     f"\n{style_guidance}"
                     "\nKeep your clarification question SHORT (around 15 words) and focused on the most critical missing information."  # noqa: E501
                     "\nEnsure clarification questions are in the same language as the user request."
@@ -419,16 +427,24 @@ class InformationAnalyzer:
                 if response and "NEEDS_CLARIFICATION:" in response:
                     # Extract the clarification question
                     clarification_question = response.split("NEEDS_CLARIFICATION:", 1)[1].strip()
-                    context_gaps.append(clarification_question)  # Store the actual question as the gap
+                    context_gaps.append(
+                        clarification_question
+                    )  # Store the actual question as the gap
 
             except Exception:
                 # If LLM fails, fall back to simple heuristic
-                # Only for very obviously incomplete messages
-                if user_message.strip().endswith(("with a", "with the", "for a", "for the")):
+                # Check for obviously incomplete messages or very short inputs
+                message_words = user_message.strip().split()
+                if len(message_words) < 3 or user_message.strip().endswith(
+                    ("with a", "with the", "for a", "for the")
+                ):
                     context_gaps.append("specific_details")
         else:
-            # No LLM available - only catch obviously incomplete messages
-            if user_message.strip().endswith(("with a", "with the", "for a", "for the")):
+            # No LLM available - only catch obviously incomplete messages or very short inputs
+            message_words = user_message.strip().split()
+            if len(message_words) < 3 or user_message.strip().endswith(
+                ("with a", "with the", "for a", "for the")
+            ):
                 context_gaps.append("specific_details")
 
         return context_gaps

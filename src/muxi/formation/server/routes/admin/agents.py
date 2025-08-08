@@ -287,14 +287,13 @@ async def create_agent(request: Request, agent: AgentCreate) -> JSONResponse:
     formation = request.app.state.formation
     request_id: Optional[str] = getattr(request.state, "request_id", None)
 
-    # Validate all secret references in the agent configuration
-    agent_dict = agent.model_dump(exclude_unset=True)
-    validation_error = await _validate_agent_secrets(agent_dict, formation, request_id)
-    if validation_error:
-        return validation_error
-
     # Build the complete agent configuration
     agent_config = _build_agent_config(agent)
+
+    # Validate all secret references in the final agent configuration
+    validation_error = await _validate_agent_secrets(agent_config, formation, request_id)
+    if validation_error:
+        return validation_error
 
     # Save agent to file and auto-load into formation and overlord
     try:

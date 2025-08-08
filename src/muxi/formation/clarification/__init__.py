@@ -107,6 +107,7 @@ from .enricher import ContextualParameterEnricher
 from .parser import ClarificationResponseParser
 from .requirements import InformationRequirements
 from .tool_processor import EnhancedToolProcessor
+from .context import ClarificationContext
 
 # Proactive clarification components
 from .proactive_detector import ProactiveClarificationIntentDetector
@@ -128,6 +129,7 @@ __all__ = [
     "ClarificationResponseParser",
     "InformationRequirements",
     "EnhancedToolProcessor",
+    "ClarificationContext",
     # Proactive Clarification
     "ProactiveClarificationIntentDetector",
     "ClarificationModeManager",

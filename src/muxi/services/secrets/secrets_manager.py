@@ -46,14 +46,15 @@ class SecretsManager:
         self._fernet: Optional[Fernet] = None
         self._secrets_cache: Optional[Dict[str, Any]] = None
         self._used_secrets: Set[str] = set()  # Track which secrets are actually used
-        self._lock = asyncio.Lock()
-        self._sync_lock = threading.Lock()  # Thread lock for sync operations
+        self._lock = asyncio.Lock()  # For async operations (except _used_secrets)
+        self._sync_lock = threading.Lock()  # Thread lock for sync operations and _used_secrets
         self._encryption_initialized = False  # Track if async init has been called
 
         # Regex pattern for secrets interpolation (whitespace tolerant)
         # Matches: ${{ secrets.SECRET_NAME }} with flexible whitespace
         self._secrets_pattern = re.compile(r"\$\{\{\s*secrets\.([A-Z0-9_]+)\s*\}\}", re.IGNORECASE)
 
+    @property
     def is_initialized(self) -> bool:
         """
         Check if the secrets manager has been initialized.
@@ -188,6 +189,7 @@ class SecretsManager:
                 secret_value = self._secrets_cache.get(normalized_name)
 
                 # Track that this secret was used (sync version)
+                # Already protected by _sync_lock acquired above
                 if secret_value is not None and hasattr(self, '_used_secrets'):
                     self._used_secrets.add(normalized_name)
 
@@ -218,7 +220,7 @@ class SecretsManager:
             )
 
             # Check if we're initialized
-            if not self.is_initialized():
+            if not self.is_initialized:
                 raise RuntimeError(
                     "SecretsManager not initialized. Call initialize_encryption() before accessing secrets."
                 )
@@ -229,7 +231,8 @@ class SecretsManager:
 
     def get_used_secrets(self) -> Set[str]:
         """Get the set of secrets that have been accessed/used."""
-        return self._used_secrets.copy()
+        with self._sync_lock:
+            return self._used_secrets.copy()
 
     def get_all_secret_names(self) -> Set[str]:
         """
@@ -313,8 +316,10 @@ class SecretsManager:
                 secret_value = secrets.get(normalized_name)
 
                 # Track that this secret was used
+                # Use threading.Lock for _used_secrets to coordinate with sync code
                 if secret_value is not None:
-                    self._used_secrets.add(normalized_name)
+                    with self._sync_lock:
+                        self._used_secrets.add(normalized_name)
 
                 return secret_value
 
@@ -410,7 +415,7 @@ class SecretsManager:
             bool: True if secret exists, False otherwise
         """
         # Ensure initialization before checking
-        if not self.is_initialized():
+        if not self.is_initialized:
             await self.initialize_encryption()
 
         # Now check if secret exists in cache
