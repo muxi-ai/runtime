@@ -295,6 +295,62 @@ class ClarificationHandler:
             return True
         return False
 
+    def _redact_tokens_in_message(self, message: str) -> tuple[str, bool]:
+        """
+        Scan and redact potential tokens in a message.
+
+        Args:
+            message: The message to scan for tokens
+
+        Returns:
+            Tuple of (redacted message, whether tokens were found)
+        """
+        if not message or not isinstance(message, str):
+            return message, False
+
+        tokens_found = False
+        redacted = message
+
+        # Check for known token patterns and redact them
+        token_patterns = [
+            (r"(ghp_[A-Za-z0-9]{36})", "[REDACTED_GITHUB_TOKEN]"),
+            (r"(github_pat_[A-Za-z0-9_]+)", "[REDACTED_GITHUB_PAT]"),
+            (r"(ghs_[A-Za-z0-9]{36})", "[REDACTED_GITHUB_SECRET]"),
+            (r"(glpat-[A-Za-z0-9\-_]+)", "[REDACTED_GITLAB_TOKEN]"),
+            (r"(sk-[A-Za-z0-9]{20,})", "[REDACTED_API_KEY]"),
+            (r"(pk-[A-Za-z0-9]{20,})", "[REDACTED_PRIVATE_KEY]"),
+            (r"(api-[A-Za-z0-9]{20,})", "[REDACTED_API_KEY]"),
+            (r"(key-[A-Za-z0-9]{20,})", "[REDACTED_KEY]"),
+        ]
+
+        for pattern, replacement in token_patterns:
+            if re.search(pattern, redacted):
+                tokens_found = True
+                redacted = re.sub(pattern, replacement, redacted)
+
+        # Check if the entire message might be a token
+        stripped = message.strip().strip('"').strip("'")
+        if self.is_token_string(stripped):
+            return "[REDACTED_TOKEN]", True
+
+        # Check for potential tokens using heuristics (long strings without spaces)
+        words = redacted.split()
+        for i, word in enumerate(words):
+            cleaned_word = word.strip().strip('"').strip("'").strip("`").strip(":")
+            if len(cleaned_word) >= 20 and " " not in cleaned_word:
+                # Check if it matches token-like patterns
+                if re.match(r"^[A-Za-z0-9+/\-_]{20,}={0,2}$", cleaned_word):
+                    words[i] = "[REDACTED_POTENTIAL_TOKEN]"
+                    tokens_found = True
+                elif re.match(r"^[A-Fa-f0-9]{32,}$", cleaned_word):
+                    words[i] = "[REDACTED_HEX_TOKEN]"
+                    tokens_found = True
+
+        if tokens_found:
+            redacted = " ".join(words)
+
+        return redacted, tokens_found
+
     async def extract_token_from_text(self, message: str) -> Optional[str]:
         """
         Extract a credential token from a message using regex and LLM.
@@ -323,11 +379,25 @@ class ClarificationHandler:
                 return match.group(1)
 
         # If no regex match, try LLM extraction
+        # BUT FIRST: Check if message contains potential tokens and redact/skip if so
         try:
             if hasattr(self.overlord, 'routing_model'):
+                # Redact any potential tokens before sending to LLM
+                redacted_message, tokens_found = self._redact_tokens_in_message(message[:300])
+
+                # If tokens were detected, skip LLM fallback to avoid leaking them
+                if tokens_found:
+                    observability.observe(
+                        event_type=observability.EventEvents.AGENT_EVENT,
+                        level=observability.EventLevel.DEBUG,
+                        data={"reason": "potential_tokens_detected"},
+                        description="Skipping LLM token extraction due to detected sensitive content",
+                    )
+                    return None
+
                 prompt = f"""Extract ONLY the API token from this message. If there's no token, reply NONE.
 
-Message: {message[:300]}
+Message: {redacted_message}
 
 Token:"""
 
@@ -754,8 +824,12 @@ Token:"""
                 current_time = time.time()
                 stale_sessions = []
 
+                # Create a snapshot of items to avoid RuntimeError during iteration
+                # This prevents issues if the dictionary is modified concurrently
+                pending_items = list(self._pending_clarifications.items())
+
                 # Find stale clarifications
-                for session_id, clarification_info in self._pending_clarifications.items():
+                for session_id, clarification_info in pending_items:
                     # Handle both old format and ClarificationContext
                     if isinstance(clarification_info, ClarificationContext):
                         timestamp = clarification_info.timestamp.timestamp() if clarification_info.timestamp else 0
@@ -778,9 +852,11 @@ Token:"""
                             description=f"Removing stale clarification for session {session_id}",
                         )
 
-                # Remove stale entries
+                # Remove stale entries (safe to modify now since we're not iterating)
                 for session_id in stale_sessions:
-                    del self._pending_clarifications[session_id]
+                    # Check if still exists before deletion (in case it was removed elsewhere)
+                    if session_id in self._pending_clarifications:
+                        del self._pending_clarifications[session_id]
 
                 if stale_sessions:
                     observability.observe(
