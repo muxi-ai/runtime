@@ -1,6 +1,6 @@
 schema: "1.0.0"
-id: "assistant"
-name: "Basic Assistant"
+id: "assistant2"
+name: "Assistant Two"
 description: "General purpose assistant for testing basic formation functionality"
 
 system_message: |
