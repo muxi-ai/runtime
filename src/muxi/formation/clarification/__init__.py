@@ -200,7 +200,7 @@ def create_clarification_system(overlord, model=None):
         "parser": ClarificationResponseParser(model=model),
         "requirements": InformationRequirements(),
         "tool_processor": EnhancedToolProcessor(
-            agent=overlord.agents[0] if overlord.agents else None,
+            agent=None,  # Will be set later when agents are loaded
             clarification_analyzer=InformationAnalyzer(model=model),
             clarification_enricher=ContextualParameterEnricher(overlord=overlord),
         ),
