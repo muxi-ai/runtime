@@ -34,6 +34,7 @@ class InformationAnalyzer:
         intent: str,
         available_tools: List[str],
         user_context: Dict[str, Any],
+        style: Optional[str] = None,
     ) -> InformationAnalysis:
         """
         Analyze request for missing information needs
@@ -71,7 +72,7 @@ class InformationAnalyzer:
             else:
                 # Analyze as reasoning request
                 reasoning_analysis = await self.analyze_reasoning_requirements(
-                    intent, user_message, user_context
+                    intent, user_message, user_context, style
                 )
                 missing_info.extend(reasoning_analysis.context_gaps)
                 available_info.update(reasoning_analysis.available_info)
@@ -165,7 +166,7 @@ class InformationAnalyzer:
             raise InformationAnalysisError(f"Failed to analyze tool requirements: {e}")
 
     async def analyze_reasoning_requirements(
-        self, intent: str, user_message: str, user_context: Dict[str, Any]
+        self, intent: str, user_message: str, user_context: Dict[str, Any], style: Optional[str] = None
     ) -> ReasoningInformationAnalysis:
         """
         Analyze information needed for effective reasoning/advice
@@ -201,7 +202,7 @@ class InformationAnalyzer:
                 complexity_level = "moderate"
             else:
                 # Generic analysis
-                context_gaps = self._analyze_generic_context_needs(user_message, user_context)
+                context_gaps = await self._analyze_generic_context_needs(user_message, user_context, style)
                 complexity_level = "simple"
 
             available_info = self._extract_available_context(user_context, context_gaps)
@@ -378,15 +379,57 @@ class InformationAnalyzer:
 
         return context_gaps, background_needed
 
-    def _analyze_generic_context_needs(
-        self, user_message: str, user_context: Dict[str, Any]
+    async def _analyze_generic_context_needs(
+        self, user_message: str, user_context: Dict[str, Any], style: Optional[str] = None
     ) -> List[str]:
-        """Analyze generic context needs"""
-        # Basic analysis for generic requests
+        """Analyze generic context needs using LLM"""
         context_gaps = []
 
-        if len(user_message.split()) < 5:  # Very brief message
-            context_gaps.append("more_details")
+        # If we have an LLM model, use it to analyze if the request is ambiguous
+        if self.model:
+            try:
+                # Adjust instructions based on style
+                style_instructions = {
+                    "conversational": "Use a friendly, conversational tone. Ask naturally as if chatting with a colleague.",  # noqa: E501
+                    "formal": "Use professional, formal language. Be polite but direct.",
+                    "brief": "Be extremely concise. Use minimal words, no pleasantries."
+                }
+
+                style_guidance = style_instructions.get(style, style_instructions["conversational"])
+
+                prompt = (
+                    "Analyze if this user request is ambiguous or lacks specific details needed to provide a helpful response."  # noqa: E501
+                    f"\n\nUser request: {user_message}"
+                    "\n\nIf the request is clear and specific enough to act on, respond with just:\nCLEAR"
+                    "\n\nIf the request needs clarification, respond with:\nNEEDS_CLARIFICATION: [Your clarification question here]"  # noqa: E501
+                    "\n\nExamples:"
+                    "\n- \"can you me a\" -> NEEDS_CLARIFICATION: Your message seems incomplete. What would you like help with?"  # noqa: E501
+                    "\n- \"I need help with a scraper\" -> NEEDS_CLARIFICATION: What kind of scraper are you building?"
+                    "\n- \"fix the bug\" -> NEEDS_CLARIFICATION: Which bug are you referring to?"
+                    "\n- \"Write a Python function to sort a list\" -> CLEAR"
+                    f"\n{style_guidance}"
+                    "\nKeep your clarification question SHORT (around 15 words) and focused on the most critical missing information."  # noqa: E501
+                    "\nEnsure clarification questions are in the same language as the user request."
+                )
+
+                # Use chat method instead of generate
+                messages = [{"role": "user", "content": prompt}]
+                response = await self.model.chat(messages, max_tokens=100, temperature=0.3)
+
+                if response and "NEEDS_CLARIFICATION:" in response:
+                    # Extract the clarification question
+                    clarification_question = response.split("NEEDS_CLARIFICATION:", 1)[1].strip()
+                    context_gaps.append(clarification_question)  # Store the actual question as the gap
+
+            except Exception:
+                # If LLM fails, fall back to simple heuristic
+                # Only for very obviously incomplete messages
+                if user_message.strip().endswith(("with a", "with the", "for a", "for the")):
+                    context_gaps.append("specific_details")
+        else:
+            # No LLM available - only catch obviously incomplete messages
+            if user_message.strip().endswith(("with a", "with the", "for a", "for the")):
+                context_gaps.append("specific_details")
 
         return context_gaps
 

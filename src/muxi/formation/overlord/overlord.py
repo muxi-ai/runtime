@@ -1242,13 +1242,39 @@ class Overlord:
         # Update clarification system components with actual services
         # Update with actual LLM model
         if hasattr(self, "_capability_models") and self._capability_models.get("text"):
-            self.clarification_analyzer.llm = self._capability_models.get("text")
-            if self.clarification_question_generator:
-                self.clarification_question_generator.llm = self._capability_models.get("text")
-            if self.clarification_proactive_detector:
-                self.clarification_proactive_detector.llm = self._capability_models.get("text")
-            if self.clarification_plan_analyzer:
-                self.clarification_plan_analyzer.llm = self._capability_models.get("text")
+            text_config = self._capability_models.get("text")
+            if isinstance(text_config, dict) and "model" in text_config:
+                # Create actual LLM instance for clarification
+                try:
+                    clarification_llm = await self.create_model(
+                        model=text_config["model"],
+                        temperature=0.3,  # Lower temperature for clarification analysis
+                        max_tokens=100,   # Small responses for clarification
+                        api_key=text_config.get("api_key"),
+                    )
+
+                    # Set the LLM for all clarification components
+                    self.clarification_analyzer.model = clarification_llm
+                    if self.clarification_question_generator:
+                        self.clarification_question_generator.model = clarification_llm
+                    if self.clarification_proactive_detector:
+                        self.clarification_proactive_detector.model = clarification_llm
+                    if self.clarification_plan_analyzer:
+                        self.clarification_plan_analyzer.model = clarification_llm
+
+                    observability.observe(
+                        event_type="service.started",
+                        level=observability.EventLevel.INFO,
+                        data={"service": "clarification_llm", "model": text_config["model"]},
+                        description=f"Created LLM for clarification: {text_config['model']}",
+                    )
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={"error": str(e)},
+                        description=f"Failed to create clarification LLM: {e}",
+                    )
 
         # Update with actual managers
         if hasattr(self, "mcp_coordinator") and self.mcp_coordinator:
@@ -4860,9 +4886,9 @@ class Overlord:
                     response_result = None
                     if self.clarification_manager:
                         try:
-                            response_result = await self.clarification_manager.process_response(
-                                user_id=user_id,
-                                clarification_id=clarification_info.get("request_id"),
+                            response_result = await self.clarification_manager.process_user_response(
+                                user_id=str(user_id),
+                                request_id=clarification_info.get("request_id"),
                                 user_response=message,
                             )
                         except Exception as e:
@@ -5153,6 +5179,139 @@ class Overlord:
                         )
 
         # ===================================================================
+        # CLARIFICATION CHECK - MUST HAPPEN BEFORE ANY AGENT SELECTION
+        # ===================================================================
+        # Check if clarification is needed for ambiguous requests
+        if not is_clarification_response and not agent_name and self.clarification_analyzer:
+            # Check for proactive clarification requests first
+            proactive_request = None
+            if self.clarification_proactive_detector:
+                try:
+                    proactive_request = (
+                        await self.clarification_proactive_detector.detect_proactive_request(
+                            message
+                        )
+                    )
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={"error": str(e)},
+                        description=f"Proactive detection failed: {e}",
+                    )
+
+            if proactive_request:
+                # Handle proactive clarification mode
+                await self.clarification_mode_manager.set_mode(
+                    user_id=user_id, mode="proactive", goal=proactive_request.goal
+                )
+
+                # Generate first question
+                first_question = await self.clarification_question_generator.generate_question(
+                    missing_info={"goal_details": "Understanding your requirements"},
+                    style=self.clarification_config.style,
+                )
+
+                self._pending_clarifications[session_id] = {
+                    "type": "proactive",
+                    "original_message": message,
+                    "mode": "proactive",
+                    "user_id": user_id,
+                    "created_at": time.time(),
+                }
+
+                return MuxiResponse(
+                    role="assistant",
+                    content=first_question,
+                    metadata={"clarification": True, "mode": "proactive"},
+                )
+
+            # Analyze for missing information (reactive mode)
+            try:
+                # Extract the actual user message from formatted context if needed
+                actual_message = message
+                if "=== CURRENT REQUEST ===" in message and "User:" in message:
+                    # Extract the user's actual message from the formatted context
+                    lines = message.split("\n")
+                    for i, line in enumerate(lines):
+                        if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                            next_line = lines[i + 1].strip()
+                            if next_line.startswith("User:"):
+                                actual_message = next_line[5:].strip()  # Remove "User: " prefix
+                                break
+
+                user_context = {}
+                if hasattr(self, "user_context_manager"):
+                    user_context = await self.user_context_manager.get_user_context(user_id)
+
+                available_tools = []
+                if hasattr(self, "mcp_coordinator"):
+                    # Get all tools from the registry
+                    tool_registry = self.mcp_coordinator.get_tool_registry()
+                    available_tools = []
+                    for server_tools in tool_registry.values():
+                        available_tools.extend(server_tools.keys())
+
+                analysis_result = await self.clarification_analyzer.analyze_request(
+                    user_message=actual_message,  # Use extracted message
+                    intent="general",  # Will be inferred from message
+                    available_tools=available_tools,
+                    user_context=user_context,
+                    style=self.clarification_config.style,  # Pass the configured style
+                )
+
+                # Check if clarification is needed
+                # analysis_result is an InformationAnalysis object, not a dict
+                if analysis_result.missing_info:
+                    # Create clarification request
+                    clarification_request = await self.clarification_manager.start_clarification(
+                        user_id=str(user_id),
+                        agent_id="overlord",
+                        request_type=RequestType.REASONING,
+                        intent="general",
+                        tool_name=None,
+                        provided_info={},
+                    )
+
+                    # The first missing_info item now contains the actual clarification question from the LLM
+                    if analysis_result.missing_info and isinstance(analysis_result.missing_info[0], str):
+                        # Use the question directly from the analyzer
+                        question = analysis_result.missing_info[0]
+                    else:
+                        # Fallback to generic question if something goes wrong
+                        question = "Could you please provide more details about what you're looking for?"
+
+                    # Store pending clarification
+                    self._pending_clarifications[session_id] = {
+                        "type": "reactive",
+                        "request_id": clarification_request.request_id,
+                        "original_message": message,
+                        "missing_info": analysis_result.missing_info,
+                        "user_id": user_id,
+                        "created_at": time.time(),
+                    }
+
+                    return MuxiResponse(
+                        role="assistant",
+                        content=question,
+                        metadata={
+                            "clarification": True,
+                            "missing_info": (
+                                analysis_result.missing_info
+                                if isinstance(analysis_result.missing_info, list)
+                                else list(analysis_result.missing_info.keys())
+                            ),
+                        },
+                    )
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "traceback": traceback.format_exc()},
+                    description=f"Clarification analysis failed: {e}",
+                )
+
+        # ===================================================================
         # GENERAL CLARIFICATION CHECK (Before Workflow Analysis)
         # ===================================================================
 
@@ -5239,31 +5398,41 @@ class Overlord:
                     clarification_request = None
                     if self.clarification_manager:
                         clarification_request = (
-                            await self.clarification_manager.create_clarification(
-                                user_id=user_id,
-                                original_request=message,
-                                missing_info=analysis_result["missing_info"],
-                                context=analysis_result.get("context", {}),
+                            await self.clarification_manager.start_clarification(
+                                user_id=str(user_id),
+                                agent_id="overlord",
+                                request_type=RequestType.REASONING,
+                                intent="general",
+                                tool_name=None,
+                                provided_info={},
                             )
                         )
 
                     # Generate clarification question
                     question = "Could you please provide more details?"
                     if self.clarification_question_generator:
-                        question = await self.clarification_question_generator.generate_question(
-                            missing_info=analysis_result["missing_info"],
-                            context=analysis_result.get("context", {}),
-                            style=self.clarification_config.style,
+                        # For reasoning clarification, use the first missing info item
+                        missing_context = (
+                            analysis_result.missing_info[0]
+                            if analysis_result.missing_info
+                            else "more details"
                         )
+                        question_obj = await self.clarification_question_generator.generate_reasoning_question(
+                            intent="general",
+                            missing_context=missing_context,
+                            user_background={},
+                            style=self.clarification_config.style
+                        )
+                        question = question_obj.question_text
 
                     # Store pending clarification
                     self._pending_clarifications[session_id] = {
                         "type": "reactive",
                         "request_id": (
-                            clarification_request.get("id") if clarification_request else None
+                            clarification_request.request_id if clarification_request else None
                         ),
                         "original_message": message,
-                        "missing_info": analysis_result["missing_info"],
+                        "missing_info": analysis_result.missing_info,
                         "user_id": user_id,
                         "created_at": time.time(),
                     }
@@ -5272,7 +5441,11 @@ class Overlord:
                         event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
                         level=observability.EventLevel.INFO,
                         data={
-                            "missing_info": list(analysis_result["missing_info"].keys()),
+                            "missing_info": (
+                                analysis_result.missing_info
+                                if isinstance(analysis_result.missing_info, list)
+                                else list(analysis_result.missing_info.keys())
+                            ),
                             "question": question[:100],
                         },
                         description="General clarification needed",
@@ -5283,7 +5456,11 @@ class Overlord:
                         content=question,
                         metadata={
                             "clarification": True,
-                            "missing_info": list(analysis_result["missing_info"].keys()),
+                            "missing_info": (
+                                analysis_result.missing_info
+                                if isinstance(analysis_result.missing_info, list)
+                                else list(analysis_result.missing_info.keys())
+                            ),
                         },
                     )
 
@@ -5358,137 +5535,6 @@ class Overlord:
                 f"SHOULD_TRIGGER={agent_name is None and self.auto_decomposition and not is_clarification_response}"
             ),
         )
-
-        # Check if clarification is needed for ambiguous requests
-        print(
-            f"DEBUG: Clarification check - is_clarif_resp={is_clarification_response}, agent={agent_name}, has_analyzer={self.clarification_analyzer is not None}"
-        )
-        if not is_clarification_response and not agent_name and self.clarification_analyzer:
-            # Check for proactive clarification requests first
-            proactive_request = None
-            if self.clarification_proactive_detector:
-                try:
-                    proactive_request = (
-                        await self.clarification_proactive_detector.detect_proactive_request(
-                            message
-                        )
-                    )
-                except Exception as e:
-                    observability.observe(
-                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                        level=observability.EventLevel.WARNING,
-                        data={"error": str(e)},
-                        description=f"Proactive detection failed: {e}",
-                    )
-
-            if proactive_request:
-                # Handle proactive clarification mode
-                await self.clarification_mode_manager.set_mode(
-                    user_id=user_id, mode="proactive", goal=proactive_request.goal
-                )
-
-                # Generate first question
-                first_question = await self.clarification_question_generator.generate_question(
-                    missing_info={"goal_details": "Understanding your requirements"},
-                    style=self.clarification_config.style,
-                )
-
-                self._pending_clarifications[session_id] = {
-                    "type": "proactive",
-                    "original_message": message,
-                    "mode": "proactive",
-                    "user_id": user_id,
-                    "created_at": time.time(),
-                }
-
-                return MuxiResponse(
-                    role="assistant",
-                    content=first_question,
-                    metadata={"clarification": True, "mode": "proactive"},
-                )
-
-            # Analyze for missing information (reactive mode)
-            try:
-                user_context = {}
-                if hasattr(self, "user_context_manager"):
-                    user_context = await self.user_context_manager.get_user_context(user_id)
-
-                available_tools = []
-                if hasattr(self, "mcp_coordinator"):
-                    # Get all tools from the registry
-                    tool_registry = self.mcp_coordinator.get_tool_registry()
-                    available_tools = []
-                    for server_tools in tool_registry.values():
-                        available_tools.extend(server_tools.keys())
-
-                analysis_result = await self.clarification_analyzer.analyze_request(
-                    user_message=message,
-                    intent="general",  # Will be inferred from message
-                    available_tools=available_tools,
-                    user_context=user_context,
-                )
-
-                # Check if clarification is needed
-                # analysis_result is an InformationAnalysis object, not a dict
-                if analysis_result.missing_info:
-                    # Create clarification request
-                    clarification_request = await self.clarification_manager.start_clarification(
-                        user_id=str(user_id),
-                        agent_id="overlord",
-                        request_type=RequestType.REASONING,
-                        intent="general",
-                        tool_name=None,
-                        provided_info={},
-                    )
-
-                    # Generate clarification question
-                    # For reasoning clarification, use the first missing info item
-                    missing_context = (
-                        analysis_result.missing_info[0]
-                        if analysis_result.missing_info
-                        else "more details"
-                    )
-                    question_obj = (
-                        await self.clarification_question_generator.generate_reasoning_question(
-                            intent="general",
-                            missing_context=missing_context,
-                            user_background={},
-                            style=self.clarification_config.style,
-                        )
-                    )
-                    question = question_obj.question_text
-
-                    # Store pending clarification
-                    self._pending_clarifications[session_id] = {
-                        "type": "reactive",
-                        "request_id": clarification_request.request_id,
-                        "original_message": message,
-                        "missing_info": analysis_result.missing_info,
-                        "user_id": user_id,
-                        "created_at": time.time(),
-                    }
-
-                    return MuxiResponse(
-                        role="assistant",
-                        content=question,
-                        metadata={
-                            "clarification": True,
-                            "missing_info": (
-                                analysis_result.missing_info
-                                if isinstance(analysis_result.missing_info, list)
-                                else list(analysis_result.missing_info.keys())
-                            ),
-                        },
-                    )
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                    level=observability.EventLevel.WARNING,
-                    data={"error": str(e), "traceback": traceback.format_exc()},
-                    description=f"Clarification analysis failed: {e}",
-                )
-                print(f"DEBUG Clarification error: {e}")
-                print(traceback.format_exc())
 
         # Check for workflow analysis and decomposition (complexity-based routing)
         if agent_name is None and self.auto_decomposition and not is_clarification_response:
@@ -8358,40 +8404,55 @@ Token:"""
             available_tools = []
             if hasattr(self, "mcp_coordinator") and self.mcp_coordinator:
                 try:
-                    available_tools = await self.mcp_coordinator.get_available_tools()
+                    # Get all tools from the registry
+                    tool_registry = self.mcp_coordinator.get_tool_registry()
+                    available_tools = []
+                    for server_tools in tool_registry.values():
+                        available_tools.extend(server_tools.keys())
                 except Exception:
                     pass  # Continue without tools
 
             # Analyze request for missing information
             analysis_result = await self.clarification_analyzer.analyze_request(
-                request=message, user_context=user_context, available_tools=available_tools
+                user_message=message,
+                intent="general",
+                available_tools=available_tools,
+                user_context=user_context
             )
 
             # Check if clarification is needed
-            if analysis_result and analysis_result.get("missing_info"):
+            if analysis_result and analysis_result.missing_info:
                 # Create clarification request
                 clarification_request = None
                 if self.clarification_manager:
-                    clarification_request = await self.clarification_manager.create_clarification(
-                        user_id=user_id,
-                        original_request=message,
-                        missing_info=analysis_result["missing_info"],
-                        context=analysis_result.get("context", {}),
+                    clarification_request = await self.clarification_manager.start_clarification(
+                        user_id=str(user_id),
+                        agent_id="overlord",
+                        request_type=RequestType.REASONING,
+                        intent="general",
+                        tool_name=None,
+                        provided_info={}
                     )
 
                 # Generate clarification question
                 question = "Could you please provide more details?"
                 if self.clarification_question_generator:
-                    question = await self.clarification_question_generator.generate_question(
-                        missing_info=analysis_result["missing_info"],
-                        context=analysis_result.get("context", {}),
-                        style=(
-                            self.clarification_config.style if self.clarification_config else None
-                        ),
+                    # For reasoning clarification, use the first missing info item
+                    missing_context = (
+                        analysis_result.missing_info[0]
+                        if analysis_result.missing_info
+                        else "more details"
                     )
+                    question_obj = await self.clarification_question_generator.generate_reasoning_question(
+                        intent="general",
+                        missing_context=missing_context,
+                        user_background={},
+                        style=self.clarification_config.style
+                    )
+                    question = question_obj.question_text
 
                 request_id = (
-                    clarification_request.get("id")
+                    clarification_request.request_id
                     if clarification_request
                     else f"clarify_{user_id}_{time.time()}"
                 )
@@ -8401,7 +8462,11 @@ Token:"""
                     level=observability.EventLevel.INFO,
                     data={
                         "request_id": request_id,
-                        "missing_info": list(analysis_result["missing_info"].keys()),
+                        "missing_info": (
+                            analysis_result.missing_info
+                            if isinstance(analysis_result.missing_info, list)
+                            else list(analysis_result.missing_info.keys())
+                        ),
                     },
                     description="Async clarification needed",
                 )
