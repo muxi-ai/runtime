@@ -18,7 +18,7 @@ async def main():
     load_api_keys()
 
     print("\n" + "="*60)
-    print("A2A OVERLORD.CHAT() TEST")
+    print("SOP OVERLORD.CHAT() TEST")
     print("="*60)
 
     # Suppress most logs
