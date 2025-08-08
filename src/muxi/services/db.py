@@ -45,11 +45,11 @@ class AsyncModelMixin:
     async def get(cls, session: AsyncSession, **kwargs):
         """
         Asynchronously retrieves a single model instance matching the given filter criteria.
-        
+
         Parameters:
             session (AsyncSession): The asynchronous database session.
             **kwargs: Field-based filters to apply to the query.
-        
+
         Returns:
             The model instance if found, or None if no match exists.
         """
@@ -62,11 +62,11 @@ class AsyncModelMixin:
     async def get_all(cls, session: AsyncSession, **kwargs):
         """
         Asynchronously retrieve all instances of the model matching the given filter criteria.
-        
+
         Parameters:
             session (AsyncSession): The asynchronous database session.
             **kwargs: Attribute-based filters to apply to the query.
-        
+
         Returns:
             List: All model instances matching the specified criteria.
         """
@@ -79,11 +79,11 @@ class AsyncModelMixin:
     async def create(cls, session: AsyncSession, **kwargs):
         """
         Asynchronously creates and adds a new model instance to the database session.
-        
+
         Parameters:
             session (AsyncSession): The asynchronous database session.
             **kwargs: Attribute values for the new model instance.
-        
+
         Returns:
             The newly created model instance with any database-assigned fields populated after flush.
         """
@@ -95,7 +95,7 @@ class AsyncModelMixin:
     async def update(self, session: AsyncSession, **kwargs):
         """
         Asynchronously updates the instance's attributes with the provided values and flushes changes to the database.
-        
+
         Parameters:
             session (AsyncSession): The asynchronous database session used for the update.
             **kwargs: Attribute-value pairs to update on the instance.
@@ -108,7 +108,7 @@ class AsyncModelMixin:
     async def delete(self, session: AsyncSession):
         """
         Asynchronously deletes this model instance from the database and flushes the session.
-        
+
         Parameters:
             session (AsyncSession): The asynchronous database session used for the operation.
         """
@@ -126,9 +126,12 @@ class DatabaseManager:
 
     def __init__(self, connection_string: Optional[str] = None):
         """
-        Initializes the database manager with synchronous engine and session support, resolving the connection string and database type.
-        
-        If no connection string is provided, attempts to load from environment variables or defaults to SQLite. Prepares for lazy initialization of asynchronous engine and session factory. Emits an observability event upon successful initialization.
+        Initializes the database manager with synchronous engine and session support,
+        resolving the connection string and database type.
+
+        If no connection string is provided, attempts to load from environment variables
+        or defaults to SQLite. Prepares for lazy initialization of asynchronous engine
+        and session factory. Emits an observability event upon successful initialization.
         """
         self.connection_string = self._resolve_connection_string(connection_string)
         self.database_type = self._detect_database_type(self.connection_string)
@@ -159,10 +162,12 @@ class DatabaseManager:
 
     def _resolve_connection_string(self, connection_string: Optional[str]) -> str:
         """
-        Determines the database connection string using the provided argument, environment variables, or a default SQLite path.
-        
-        If no connection string is given, checks for PostgreSQL and SQLite environment variables before defaulting to a SQLite database file in the memory directory.
-        
+        Determines the database connection string using the provided argument,
+        environment variables, or a default SQLite path.
+
+        If no connection string is given, checks for PostgreSQL and SQLite environment
+        variables before defaulting to a SQLite database file in the memory directory.
+
         Returns:
             str: The resolved database connection string.
         """
@@ -218,7 +223,7 @@ class DatabaseManager:
     def _create_engine(self):
         """
         Create and configure a synchronous SQLAlchemy engine for the detected database type.
-        
+
         Returns:
             Engine: A configured SQLAlchemy engine instance for PostgreSQL or SQLite.
         """
@@ -258,8 +263,9 @@ class DatabaseManager:
 
     def _create_async_engine(self):
         """
-        Create and return an asynchronous SQLAlchemy engine configured for either PostgreSQL or SQLite, using the appropriate async driver and pooling options.
-        
+        Create and return an asynchronous SQLAlchemy engine configured for either
+        PostgreSQL or SQLite, using the appropriate async driver and pooling options.
+
         Returns:
             AsyncEngine: An async SQLAlchemy engine instance configured for the detected database type.
         """
@@ -288,10 +294,12 @@ class DatabaseManager:
 
     def _convert_to_async_connection_string(self) -> str:
         """
-        Convert the synchronous database connection string to an async-compatible format for SQLAlchemy.
-        
+        Convert the synchronous database connection string to an async-compatible
+        format for SQLAlchemy.
+
         Returns:
-            str: The connection string modified for use with async drivers (`asyncpg` for PostgreSQL, `aiosqlite` for SQLite).
+            str: The connection string modified for use with async drivers
+            (`asyncpg` for PostgreSQL, `aiosqlite` for SQLite).
         """
         if self.database_type == "postgresql":
             # Replace postgresql:// with postgresql+asyncpg://
@@ -329,8 +337,9 @@ class DatabaseManager:
     async def _init_async_pgvector(self):
         """
         Attempts to enable the pgvector extension on the asynchronous PostgreSQL engine.
-        
-        If the extension cannot be created, emits a warning observability event. This operation is a no-op for non-PostgreSQL databases.
+
+        If the extension cannot be created, emits a warning observability event.
+        This operation is a no-op for non-PostgreSQL databases.
         """
         try:
             async with self.async_engine.connect() as conn:
@@ -347,7 +356,7 @@ class DatabaseManager:
     def get_session(self) -> Session:
         """
         Return a new synchronous SQLAlchemy session for database operations.
-        
+
         Returns:
             Session: A new SQLAlchemy session instance.
         """
@@ -357,7 +366,7 @@ class DatabaseManager:
     async def get_async_session(self):
         """
         Asynchronous context manager that yields a new database session with automatic commit, rollback, and cleanup.
-        
+
         Yields:
             AsyncSession: An active asynchronous SQLAlchemy session.
         """
@@ -374,7 +383,7 @@ class DatabaseManager:
     def create_tables(self, metadata: MetaData) -> None:
         """
         Create all tables defined in the provided SQLAlchemy metadata using the synchronous engine.
-        
+
         Parameters:
             metadata (MetaData): SQLAlchemy metadata object containing table definitions.
         """
@@ -397,10 +406,12 @@ class DatabaseManager:
 
     def get_connection_info(self) -> Dict[str, Any]:
         """
-        Return details about the current database connection, including type, connection string, and engine pool statistics.
-        
+        Return details about the current database connection, including type,
+        connection string, and engine pool statistics.
+
         Returns:
-            dict: Contains the database type, connection string, engine pool size, and number of checked-out connections if available.
+            dict: Contains the database type, connection string, engine pool size,
+            and number of checked-out connections if available.
         """
         return {
             "database_type": self.database_type,
@@ -418,10 +429,10 @@ class DatabaseManager:
     async def create_tables_async(self, metadata: MetaData) -> None:
         """
         Asynchronously creates all tables defined in the provided SQLAlchemy metadata using the async engine.
-        
+
         Parameters:
             metadata (MetaData): SQLAlchemy metadata object containing table definitions.
-        
+
         Raises:
             Exception: Propagates any exception encountered during table creation.
         """
@@ -453,8 +464,10 @@ class DatabaseManager:
     def close(self) -> None:
         """
         Closes both synchronous and asynchronous database engines and cleans up associated resources.
-        
-        If an asynchronous engine exists, attempts to dispose of it appropriately based on the event loop state. In production, prefer using `close_async()` for asynchronous cleanup.
+
+        If an asynchronous engine exists, attempts to dispose of it appropriately
+        based on the event loop state. In production, prefer using `close_async()`
+        for asynchronous cleanup.
         """
         if hasattr(self, "engine"):
             self.engine.dispose()
