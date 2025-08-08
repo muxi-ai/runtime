@@ -23,3 +23,7 @@ logging:
       level: "info"
       format: "jsonl"
 
+overlord:
+  clarification:
+    style: "conversational"  # Options: conversational, formal, brief
+
