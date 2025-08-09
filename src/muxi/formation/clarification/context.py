@@ -25,15 +25,70 @@ class ClarificationContext:
         self.session_id = session_id
         self.timestamp = datetime.now()
 
-    def can_fulfill(self) -> bool:
-        """Check if we have minimum required info."""
-        # TODO: This is a temporary heuristic that's too permissive and may cause false positives.
-        # Replace with a more precise validator that:
-        # 1. Checks for required parameters based on the original intent
-        # 2. Validates parameter completeness and compatibility
-        # 3. Uses LLM or rule-based logic to assess actual fulfillment capability
-        # Current implementation: any collected param = can fulfill (not accurate!)
-        return len(self.collected_params) > 0
+    async def can_fulfill(self, llm_model) -> bool:
+        """
+        Check if we have sufficient information to fulfill the original intent.
+
+        Uses LLM to assess whether the collected parameters are sufficient
+        for the original request, making this approach language-agnostic
+        and scalable across different types of requests.
+
+        Args:
+            llm_model: LLM model for assessment (required)
+
+        Returns:
+            bool: True if we have sufficient info to proceed, False otherwise
+        """
+        # If no parameters collected, definitely can't fulfill
+        if not self.collected_params:
+            return False
+
+        # Validate that LLM model is provided
+        if not llm_model:
+            raise ValueError("LLM model is required for fulfillment assessment")
+
+        # Use LLM to assess fulfillment capability
+        try:
+            prompt = (
+                "Analyze whether we have sufficient information to fulfill this request.\n"
+                f"Original Request: {self.original_intent}\n"
+                "Collected Information:\n"
+                f"{self._format_params_for_llm()}\n"
+                "Question: Do we have ALL the necessary information to successfully complete the original request?\n"
+                "Consider:\n"
+                "- Are all required parameters present?\n"
+                "- Are the parameter values complete and valid?\n"
+                "- Is there any critical information still missing?\n"
+                "- Would attempting to fulfill this request with current info likely succeed?\n"
+                "Respond with only: YES or NO\n"
+                "If unsure or if critical information is missing, respond NO."
+            )
+
+            response = await llm_model.chat(prompt, max_tokens=10, temperature=0)
+
+            # Extract response content
+            if isinstance(response, str):
+                content = response.strip().upper()
+            elif hasattr(response, 'content'):
+                content = response.content.strip().upper()
+            else:
+                content = str(response).strip().upper()
+
+            return "YES" in content
+
+        except Exception:
+            # If LLM fails, be conservative - require more info
+            return False
+
+    def _format_params_for_llm(self) -> str:
+        """Format collected parameters for LLM analysis."""
+        if not self.collected_params:
+            return "No parameters collected yet"
+
+        formatted = []
+        for key, value in self.collected_params.items():
+            formatted.append(f"- {key}: {value}")
+        return "\n".join(formatted)
 
     def add_param(self, key: str, value: Any):
         """Add collected parameter."""

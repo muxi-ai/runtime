@@ -652,8 +652,8 @@ Token:"""
         """
         Check if we have enough info to fulfill the original intent.
 
-        Uses LLM to determine if the collected parameters are sufficient
-        to fulfill the original user request.
+        Delegates to the context's LLM-based can_fulfill method which provides
+        language-agnostic assessment of parameter sufficiency.
 
         Args:
             context: The current clarification context
@@ -662,40 +662,69 @@ Token:"""
             True if we can fulfill the intent, False otherwise
         """
         try:
-            # First try simple heuristic
-            if not context.collected_params:
+            # Use the overlord's model for assessment
+            # According to schema/formation/README.md:
+            # - overlord.llm.model takes precedence over formation defaults
+            # - If not set, inherits from formation's text LLM model
+            llm_model = None
+
+            # The overlord has a proper model resolution that follows the hierarchy:
+            # 1. overlord.llm.model (if configured)
+            # 2. formation's text model (fallback)
+            # Access through _text_model or _capability_models for proper resolution
+            if self.overlord:
+                # Try to get the overlord's text model (properly resolved)
+                if hasattr(self.overlord, '_text_model'):
+                    llm_model = self.overlord._text_model
+                elif hasattr(self.overlord, '_capability_models') and self.overlord._capability_models:
+                    llm_model = self.overlord._capability_models.get('text')
+                elif hasattr(self.overlord, 'routing_model'):
+                    # Fallback to routing_model if available (legacy)
+                    llm_model = self.overlord.routing_model
+
+            # If still no model, try the clarification analyzer's model as last resort
+            if not llm_model and self.clarification_analyzer:
+                if hasattr(self.clarification_analyzer, 'model'):
+                    llm_model = self.clarification_analyzer.model
+
+            # If no LLM model is available, we can't properly assess fulfillment
+            if not llm_model:
+                observability.observe(
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "session_id": context.session_id,
+                        "error": "No LLM model available for fulfillment assessment"
+                    },
+                    description="Cannot assess fulfillment without LLM model - assuming incomplete"
+                )
+                # Conservative approach: assume we need more info if no LLM available
                 return False
 
-            # Use LLM for complex cases
-            prompt = f"""Determine if we have enough information to fulfill this request.
+            # Use the context's improved LLM-based method
+            # This provides consistent, language-agnostic assessment
+            can_fulfill = await context.can_fulfill(llm_model=llm_model)
 
-    Original request: {context.original_intent}
-    Collected parameters: {json.dumps(context.collected_params)}
+            # Log the decision for observability
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_STARTED,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "session_id": context.session_id,
+                    "can_fulfill": can_fulfill,
+                    "params_count": len(context.collected_params),
+                    "has_llm": llm_model is not None
+                },
+                description=f"Fulfillment check: {'Ready' if can_fulfill else 'Need more info'}"
+            )
 
-    Can we proceed with fulfilling this request? Consider:
-    - Do we have the minimum required information?
-    - Can missing parameters use reasonable defaults?
-
-    Return: YES or NO with brief explanation
-    """
-
-            if self.clarification_analyzer and self.clarification_analyzer.model:
-                result = await self.clarification_analyzer.model.chat(
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=50,
-                    temperature=0.3
-                )
-
-                return "YES" in result.content.upper()
-            else:
-                # Fallback: if we have any params, assume we can try
-                return len(context.collected_params) > 0
+            return can_fulfill
 
         except Exception as e:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"error": str(e)},
+                data={"error": str(e), "session_id": context.session_id},
                 description=f"Failed to check fulfillment capability: {str(e)}"
             )
             # Conservative: don't fulfill if unsure
