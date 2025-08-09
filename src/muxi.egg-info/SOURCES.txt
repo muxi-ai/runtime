@@ -64,6 +64,7 @@ src/muxi/formation/caching/implementations.py
 src/muxi/formation/caching/memory_optimizer.py
 src/muxi/formation/clarification/__init__.py
 src/muxi/formation/clarification/analyzer.py
+src/muxi/formation/clarification/context.py
 src/muxi/formation/clarification/credential_handler.py
 src/muxi/formation/clarification/enricher.py
 src/muxi/formation/clarification/generator.py
@@ -119,10 +120,10 @@ src/muxi/formation/overlord/a2a_messaging.py
 src/muxi/formation/overlord/active_agents_tracker.py
 src/muxi/formation/overlord/agent_router.py
 src/muxi/formation/overlord/chat_orchestrator.py
+src/muxi/formation/overlord/clarification_handler.py
 src/muxi/formation/overlord/mcp_coordinator.py
 src/muxi/formation/overlord/overlord.py
 src/muxi/formation/overlord/secrets_manager.py
-src/muxi/formation/overlord/sops.py
 src/muxi/formation/parallel/__init__.py
 src/muxi/formation/parallel/bottleneck_detector.py
 src/muxi/formation/parallel/dependency_analyzer.py
@@ -174,6 +175,7 @@ src/muxi/formation/workflow/decomposer.py
 src/muxi/formation/workflow/executor.py
 src/muxi/formation/workflow/interactive.py
 src/muxi/formation/workflow/resilient_executor.py
+src/muxi/formation/workflow/sops.py
 src/muxi/formation/workflow/synthesis.py
 src/muxi/formation/workflow/task_adapter.py
 src/muxi/formation/workflow/workflow_manager.py
