@@ -648,13 +648,20 @@ export MUXI_LOG_LEVEL=DEBUG
 
 ## 📄 License
 
-Elastic 2.0 License - see [LICENSE](LICENSE) for details.
+MUXI Runtime (and MUXI Server) are licensed under the **Elastic License 2.0** (ELv2).
+
+This means that you're allowed to freely use, modify, and redistribute the software – **including in commercial products** – as long as you do not provide it as a hosted or managed service to third parties.
+
+In other words:
+
+- ✅ Use MUXI for internal projects, personal use, research, or embedded inside your own applications.
+- ✅ Sell products that include MUXI, as long as you’re not offering MUXI itself as a service.
+- ❌ You may not offer a “hosted” or “managed” MUXI to others (e.g., MUXI-as-a-service, cloud API).
+
+
+See the [LICENSE](LICENSE) file for the complete license text and [licensing details](docs/licensing.md) for more information.
 
 ---
 
-<p align="center">
-  <strong>Building the future of AI infrastructure, one runtime at a time</strong><br>
-  <a href="https://github.com/muxi-ai/runtime/issues">Report Bug</a> •
-  <a href="https://github.com/muxi-ai/runtime/pulls">Submit PR</a> •
-  <a href="https://github.com/muxi-ai/community/discussions">Join Discussions</a>
-</p>
+**Building the future of AI infrastructure, one runtime at a time**
+[Report Bug](https://github.com/muxi-ai/runtime/issues) • [Submit PR](https://github.com/muxi-ai/runtime/pulls) • [Join Discussions](https://github.com/muxi-ai/community/discussions)
