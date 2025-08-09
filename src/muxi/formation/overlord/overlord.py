@@ -5348,7 +5348,6 @@ class Overlord:
             and not is_clarification_response
             and not agent_name
             and self.clarification_analyzer
-            and not is_workflow_task
         ):
             # Check for proactive clarification requests first
             proactive_request = None

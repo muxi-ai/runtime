@@ -316,7 +316,12 @@ class SecretsManager:
                 secret_value = secrets.get(normalized_name)
 
                 # Track that this secret was used
-                # Use threading.Lock for _used_secrets to coordinate with sync code
+                # LOCK ACQUISITION ORDER: asyncio.Lock (_lock) -> threading.Lock (_sync_lock)
+                # This order is safe because:
+                # 1. The async code always acquires _lock first, then _sync_lock
+                # 2. The sync code only ever acquires _sync_lock, never _lock
+                # 3. No reverse order acquisition exists, preventing deadlocks
+                # IMPORTANT: Maintain this order to avoid deadlock risks
                 if secret_value is not None:
                     with self._sync_lock:
                         self._used_secrets.add(normalized_name)

@@ -5,6 +5,7 @@ enabling consistent execution of complex multi-step operations.
 """
 
 import asyncio
+import concurrent.futures
 import hashlib
 import yaml
 from pathlib import Path
@@ -500,48 +501,62 @@ class SOPSystem:
                     return self.model.embed(text)
                 else:
                     # If only async is available, handle it properly
-                    import asyncio
-                    import concurrent.futures
-
                     try:
                         loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            # We're in a running loop - use thread pool executor to avoid blocking
+                            # This allows sync embed() to work even from async contexts
+                            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                                future = executor.submit(asyncio.run, self.embed_async(text))
+                                return future.result()
+                        else:
+                            # No running loop, we can run it directly
+                            return loop.run_until_complete(self.embed_async(text))
                     except RuntimeError:
-                        # No event loop, create one
+                        # No event loop exists, create one and run
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
-
-                    if loop.is_running():
-                        # We're in a running loop - use thread pool executor to avoid blocking
-                        # This allows sync embed() to work even from async contexts
-                        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                            future = executor.submit(asyncio.run, self.embed_async(text))
-                            return future.result()
-                    else:
-                        # No running loop, we can run it directly
-                        return loop.run_until_complete(self.embed_async(text))
+                        try:
+                            return loop.run_until_complete(self.embed_async(text))
+                        finally:
+                            loop.close()
+                            asyncio.set_event_loop(None)
 
             async def embed_async(self, text: str):
-                """Asynchronous single text embedding."""
+                """Asynchronous single text embedding with fallback to batch method."""
+                # Try direct embed method first
                 if hasattr(self.model, 'embed'):
                     if asyncio.iscoroutinefunction(self.model.embed):
                         return await self.model.embed(text)
                     else:
                         return self.model.embed(text)
+
+                # Fall back to generate_embeddings for single text
+                elif hasattr(self.model, 'generate_embeddings'):
+                    embeddings = await self.generate_embeddings([text])
+                    return embeddings[0] if embeddings else None
+
                 return None
 
             async def generate_embeddings(self, texts: List[str]) -> List[Any]:
-                """Asynchronous batch embedding."""
+                """Asynchronous batch embedding with proper sync/async handling."""
                 # Prefer batch method if available
                 if hasattr(self.model, 'generate_embeddings'):
-                    return await self.model.generate_embeddings(texts)
-                elif hasattr(self.model, 'embed'):
-                    # Fall back to individual embeddings
-                    embeddings = []
-                    for text in texts:
-                        embedding = await self.embed_async(text)
+                    # Check if it's async or sync
+                    if asyncio.iscoroutinefunction(self.model.generate_embeddings):
+                        return await self.model.generate_embeddings(texts)
+                    else:
+                        # Sync method - call directly
+                        return self.model.generate_embeddings(texts)
+
+                # Fall back to individual embeddings using embed_async
+                # (which already handles sync/async properly)
+                embeddings = []
+                for text in texts:
+                    embedding = await self.embed_async(text)
+                    if embedding is not None:
                         embeddings.append(embedding)
-                    return embeddings
-                return []
+                return embeddings if embeddings else []
 
         return EmbeddingAdapter(model)
 
@@ -646,7 +661,7 @@ class SOPSystem:
             if sop_id not in self.embeddings_cache:
                 # Create searchable text from SOP
                 searchable_text = f"{sop['name']} {sop['description']} "
-                searchable_text += " ".join(sop['tags'])
+                searchable_text += " ".join(str(tag) for tag in sop['tags'])
                 # Include step text for better matching (check if steps exist)
                 steps = sop.get('steps', [])
                 for step in steps:
@@ -909,7 +924,7 @@ class SOPSystem:
                 if step.get('agent'):
                     guidance += f"   (Assigned to: {step['agent']})\n"
                 if step.get('mcp_tools'):
-                    guidance += f"   (Tools: {', '.join(step['mcp_tools'])})\n"
+                    guidance += f"   (Tools: {', '.join(str(tool) for tool in step['mcp_tools'])})\n"
                 if step.get('resources'):
-                    guidance += f"   (Resources: {', '.join(step['resources'])})\n"
+                    guidance += f"   (Resources: {', '.join(str(resource) for resource in step['resources'])})\n"
         return guidance

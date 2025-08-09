@@ -3218,6 +3218,10 @@ class Formation:
         Args:
             prefix: The prefix to match (e.g., "agents[0]")
         """
+        # Early return to avoid unnecessary locking if no placeholders exist
+        if self._secret_placeholders is None or not self._secret_placeholders:
+            return
+
         with self._config_lock:
             if self._secret_placeholders is not None:
                 keys_to_remove = [k for k in self._secret_placeholders if k.startswith(prefix)]

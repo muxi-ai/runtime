@@ -47,9 +47,40 @@ class ClarificationHandler:
         self.clarification_question_generator = overlord.clarification_question_generator
         self.request_tracker = overlord.request_tracker
 
+        # Create a lock to protect concurrent access to _pending_clarifications
+        # This prevents race conditions when multiple async tasks access the dictionary
+        self._clarifications_lock = asyncio.Lock()
+
         # Configuration
         self._clarification_ttl_seconds = getattr(overlord, '_clarification_ttl_seconds', 3600)
         self._clarification_cleanup_interval_seconds = getattr(overlord, '_clarification_cleanup_interval_seconds', 300)
+
+    async def _get_clarification(self, session_id: str) -> Optional[Any]:
+        """Thread-safe getter for pending clarifications."""
+        async with self._clarifications_lock:
+            return self._pending_clarifications.get(session_id)
+
+    async def _set_clarification(self, session_id: str, value: Any) -> None:
+        """Thread-safe setter for pending clarifications."""
+        async with self._clarifications_lock:
+            self._pending_clarifications[session_id] = value
+
+    async def _delete_clarification(self, session_id: str) -> None:
+        """Thread-safe deletion for pending clarifications."""
+        async with self._clarifications_lock:
+            if session_id in self._pending_clarifications:
+                del self._pending_clarifications[session_id]
+
+    async def _has_clarification(self, session_id: str) -> bool:
+        """Thread-safe check for pending clarifications."""
+        async with self._clarifications_lock:
+            return session_id in self._pending_clarifications
+
+    async def _get_all_clarifications(self) -> list:
+        """Thread-safe getter for all pending clarifications."""
+        async with self._clarifications_lock:
+            # Return a copy to prevent external modification
+            return list(self._pending_clarifications.items())
 
     async def check_agent_clarification_request(
         self, agent_response: MuxiResponse, user_id: Any
@@ -128,14 +159,14 @@ class ClarificationHandler:
 
             # Store pending clarification
             if session_id:
-                self._pending_clarifications[session_id] = {
+                await self._set_clarification(session_id, {
                     "type": "agent_clarification",
                     "agent_name": agent_name,
                     "original_message": original_message,
                     "metadata": clarification_metadata,
                     "timestamp": time.time(),
                     "user_id": user_id,
-                }
+                })
 
             return MuxiResponse(
                 role="assistant",
@@ -217,7 +248,7 @@ class ClarificationHandler:
         Returns:
             MuxiResponse if clarification is handled, None to continue normal processing
         """
-        clarification_info = self._pending_clarifications.get(session_id, {})
+        clarification_info = await self._get_clarification(session_id) or {}
 
         if clarification_info.get("type") != "agent_clarification":
             return None
@@ -230,7 +261,7 @@ class ClarificationHandler:
             enhanced_message = f"{original_message}\n\nAdditional information: {message}"
 
             # Clear the pending clarification
-            del self._pending_clarifications[session_id]
+            await self._delete_clarification(session_id)
 
             # Re-route to the agent with enhanced message
             if agent_name and hasattr(self.overlord, 'run_agent'):
@@ -252,8 +283,7 @@ class ClarificationHandler:
                 description=f"Failed to process agent clarification response: {str(e)}"
             )
             # Clear the clarification and continue
-            if session_id in self._pending_clarifications:
-                del self._pending_clarifications[session_id]
+            await self._delete_clarification(session_id)
             return None
 
     async def looks_like_credential_token(self, message: str) -> bool:
@@ -289,10 +319,58 @@ class ClarificationHandler:
         if self.is_token_string(stripped):
             return True
 
-        # Additional heuristic: long string without spaces
-        # Basic heuristic: no spaces and reasonable length
+        # Additional heuristic for potential tokens not caught by patterns
+        # Only flag as credential if it meets multiple criteria to reduce false positives
         if " " not in stripped and 20 <= len(stripped) <= 200:
-            return True
+            # Skip common ID patterns that are unlikely to be credentials
+            lower_stripped = stripped.lower()
+
+            # Common non-credential patterns to exclude
+            if any(pattern in lower_stripped for pattern in [
+                'product_id', 'user_id', 'session_id', 'request_id', 'order_id',
+                'transaction_id', 'customer_id', 'account_id', 'invoice_id',
+                'http://', 'https://', '.com', '.org', '.net'  # URLs
+            ]):
+                return False
+
+            # Require both letters and digits
+            has_letter = any(c.isalpha() for c in stripped)
+            has_digit = any(c.isdigit() for c in stripped)
+
+            if has_letter and has_digit:
+                # Check for case transitions (common in tokens like "aB3cD4eF")
+                has_case_transition = False
+                for i in range(len(stripped) - 1):
+                    if stripped[i].isalpha() and stripped[i + 1].isalpha():
+                        if stripped[i].islower() != stripped[i + 1].islower():
+                            has_case_transition = True
+                            break
+
+                # Check for known credential-like prefixes (case-insensitive)
+                # Note: More specific prefixes to avoid false positives
+                has_credential_prefix = any(
+                    lower_stripped.startswith(prefix) for prefix in [
+                        'key_', 'token_', 'api_', 'apikey', 'secret_', 'password',
+                        'bearer', 'access_token', 'private_', 'auth_'
+                    ]
+                ) or any(
+                    # Exact match for short prefixes to avoid false positives
+                    lower_stripped == prefix or lower_stripped.startswith(prefix + '-')
+                    for prefix in ['key', 'token', 'api', 'secret', 'auth']
+                )
+
+                # Check for high entropy (mix of upper, lower, digits, special chars)
+                has_upper = any(c.isupper() for c in stripped)
+                has_lower = any(c.islower() for c in stripped)
+                has_special = any(c in '-_+/=' for c in stripped)
+                high_entropy = sum([has_upper, has_lower, has_digit, has_special]) >= 3
+
+                # Return True only if it strongly resembles a credential
+                # Require at least TWO indicators to reduce false positives
+                indicators = sum([has_case_transition, has_credential_prefix, high_entropy])
+                if indicators >= 2 or (has_credential_prefix and len(stripped) >= 32):
+                    return True
+
         return False
 
     def _redact_tokens_in_message(self, message: str) -> tuple[str, bool]:
@@ -382,22 +460,26 @@ class ClarificationHandler:
         # BUT FIRST: Check if message contains potential tokens and redact/skip if so
         try:
             if hasattr(self.overlord, 'routing_model'):
-                # Redact any potential tokens before sending to LLM
-                redacted_message, tokens_found = self._redact_tokens_in_message(message[:300])
+                # Redact any potential tokens from the ENTIRE message first
+                redacted_full_message, tokens_found = self._redact_tokens_in_message(message)
 
                 # If tokens were detected, skip LLM fallback to avoid leaking them
                 if tokens_found:
                     observability.observe(
-                        event_type=observability.EventEvents.AGENT_EVENT,
+                        event_type=observability.SystemEvents.SERVICE_STARTED,
                         level=observability.EventLevel.DEBUG,
-                        data={"reason": "potential_tokens_detected"},
+                        data={"reason": "potential_tokens_detected", "service": "token_extraction"},
                         description="Skipping LLM token extraction due to detected sensitive content",
                     )
                     return None
 
+                # Now truncate the redacted message for the LLM prompt
+                # This ensures no tokens beyond character 300 are leaked
+                truncated_message = redacted_full_message[:300]
+
                 prompt = f"""Extract ONLY the API token from this message. If there's no token, reply NONE.
 
-Message: {redacted_message}
+Message: {truncated_message}
 
 Token:"""
 
@@ -707,7 +789,7 @@ Token:"""
             None if the clarification should be cleared and normal processing should continue
         """
         # Get or create ClarificationContext
-        clarification_info = self._pending_clarifications.get(session_id)
+        clarification_info = await self._get_clarification(session_id)
         if not clarification_info:
             return None
 
@@ -728,15 +810,15 @@ Token:"""
                     "ANSWER"
                 )
             # Replace with new context
-            self._pending_clarifications[session_id] = context
+            await self._set_clarification(session_id, context)
 
         # Use LLM to understand response type
         intent_analysis = await self.analyze_clarification_response(message, context)
 
         if intent_analysis["intent"] == "REJECT":
             # Handle rejection - push sub-clarification
-            if context.depth < 2:  # Max 2 levels
-                context.depth += 1
+            if not context.is_at_max_depth():
+                context.increment_depth()
                 return await self.handle_rejection(message, context, intent_analysis)
             else:
                 # Too deep, force resolution
@@ -755,7 +837,7 @@ Token:"""
             # Check if we can fulfill
             if await self.can_fulfill_intent(context):
                 # Clear clarification and return None to continue with fulfillment
-                del self._pending_clarifications[session_id]
+                await self._delete_clarification(session_id)
                 # Return None means continue processing with the combined message
                 return None
             else:
@@ -768,7 +850,7 @@ Token:"""
 
         elif intent_analysis["intent"] == "CANCEL":
             # User cancelling
-            del self._pending_clarifications[session_id]
+            await self._delete_clarification(session_id)
             return MuxiResponse(
                 content="Understood, I've cancelled the clarification process.",
                 metadata={"clarification_cancelled": True}
@@ -815,72 +897,96 @@ Token:"""
         This method runs periodically to remove clarifications that have
         exceeded their TTL, preventing memory growth from abandoned or
         failed clarification flows.
+
+        The method properly handles shutdown signals via asyncio.CancelledError
+        for clean and prompt termination.
         """
-        while True:
-            try:
-                # Sleep for cleanup interval
-                await asyncio.sleep(self._clarification_cleanup_interval_seconds)
+        try:
+            # Check shutting down flag in while condition for immediate exit
+            while not (hasattr(self.overlord, '_shutting_down') and self.overlord._shutting_down):
+                try:
+                    # Sleep for cleanup interval - will raise CancelledError if task is cancelled
+                    await asyncio.sleep(self._clarification_cleanup_interval_seconds)
 
-                current_time = time.time()
-                stale_sessions = []
+                    # Re-check shutdown flag after sleep to exit immediately if shutdown started
+                    if hasattr(self.overlord, '_shutting_down') and self.overlord._shutting_down:
+                        break
 
-                # Create a snapshot of items to avoid RuntimeError during iteration
-                # This prevents issues if the dictionary is modified concurrently
-                pending_items = list(self._pending_clarifications.items())
+                    current_time = time.time()
+                    stale_sessions = []
 
-                # Find stale clarifications
-                for session_id, clarification_info in pending_items:
-                    # Handle both old format and ClarificationContext
-                    if isinstance(clarification_info, ClarificationContext):
-                        timestamp = clarification_info.timestamp.timestamp() if clarification_info.timestamp else 0
-                    else:
-                        timestamp = clarification_info.get("timestamp", 0)
+                    # Create a snapshot of items to avoid RuntimeError during iteration
+                    # This prevents issues if the dictionary is modified concurrently
+                    pending_items = await self._get_all_clarifications()
 
-                    age_seconds = current_time - timestamp
+                    # Find stale clarifications
+                    for session_id, clarification_info in pending_items:
+                        # Handle both old format and ClarificationContext
+                        if isinstance(clarification_info, ClarificationContext):
+                            timestamp = clarification_info.timestamp.timestamp() if clarification_info.timestamp else 0
+                        else:
+                            timestamp = clarification_info.get("timestamp", 0)
 
-                    if age_seconds > self._clarification_ttl_seconds:
-                        stale_sessions.append(session_id)
+                        age_seconds = current_time - timestamp
 
+                        if age_seconds > self._clarification_ttl_seconds:
+                            stale_sessions.append(session_id)
+
+                            observability.observe(
+                                event_type=observability.SystemEvents.CLEANUP,
+                                level=observability.EventLevel.INFO,
+                                data={
+                                    "session_id": session_id,
+                                    "age_seconds": age_seconds,
+                                    "ttl_seconds": self._clarification_ttl_seconds,
+                                },
+                                description=f"Removing stale clarification for session {session_id}",
+                            )
+
+                    # Remove stale entries (safe to modify now since we're not iterating)
+                    for session_id in stale_sessions:
+                        # Check if still exists before deletion (in case it was removed elsewhere)
+                        await self._delete_clarification(session_id)
+
+                    if stale_sessions:
                         observability.observe(
                             event_type=observability.SystemEvents.CLEANUP,
                             level=observability.EventLevel.INFO,
                             data={
-                                "session_id": session_id,
-                                "age_seconds": age_seconds,
-                                "ttl_seconds": self._clarification_ttl_seconds,
+                                "removed_count": len(stale_sessions),
+                                "remaining_count": len(self._pending_clarifications),
                             },
-                            description=f"Removing stale clarification for session {session_id}",
+                            description=f"Cleaned up {len(stale_sessions)} stale clarifications",
                         )
 
-                # Remove stale entries (safe to modify now since we're not iterating)
-                for session_id in stale_sessions:
-                    # Check if still exists before deletion (in case it was removed elsewhere)
-                    if session_id in self._pending_clarifications:
-                        del self._pending_clarifications[session_id]
-
-                if stale_sessions:
+                except asyncio.CancelledError:
+                    # Task was cancelled (likely due to shutdown) - clean exit
                     observability.observe(
-                        event_type=observability.SystemEvents.CLEANUP,
+                        event_type=observability.SystemEvents.SERVICE_STOPPED,
                         level=observability.EventLevel.INFO,
-                        data={
-                            "removed_count": len(stale_sessions),
-                            "remaining_count": len(self._pending_clarifications),
-                        },
-                        description=f"Cleaned up {len(stale_sessions)} stale clarifications",
+                        description="Clarification cleanup task cancelled - shutting down cleanly",
+                    )
+                    raise  # Re-raise to properly propagate cancellation
+
+                except Exception as e:
+                    # Log error but continue cleanup loop
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={"error": str(e)},
+                        description=f"Error during clarification cleanup: {str(e)}",
                     )
 
-            except Exception as e:
-                # Log error but continue cleanup loop
-                observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                    level=observability.EventLevel.WARNING,
-                    data={"error": str(e)},
-                    description=f"Error during clarification cleanup: {str(e)}",
-                )
-
-            # Safety check: break if overlord is shutting down
-            if hasattr(self.overlord, '_shutting_down') and self.overlord._shutting_down:
-                break
+        except asyncio.CancelledError:
+            # Clean exit on cancellation
+            pass
+        finally:
+            # Log cleanup task termination
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_STOPPED,
+                level=observability.EventLevel.DEBUG,
+                description="Clarification cleanup task terminated",
+            )
 
     async def check_clarification_needs_async(
         self,
@@ -946,14 +1052,14 @@ Token:"""
                     )
 
                 # Store pending clarification
-                self._pending_clarifications[session_id] = {
+                await self._set_clarification(session_id, {
                     "type": "async_clarification",
                     "request_id": request_id,
                     "original_message": message,
                     "missing_info": analysis_result.missing_info,
                     "user_id": user_id,
                     "created_at": time.time(),
-                }
+                })
 
                 return (question, request_id)
 
@@ -1016,8 +1122,8 @@ Token:"""
             await self.request_tracker.update_status(request_id, RequestStatus.PROCESSING)
 
             # Clear pending clarification
-            if request_state.session_id and request_state.session_id in self._pending_clarifications:
-                del self._pending_clarifications[request_state.session_id]
+            if request_state.session_id:
+                await self._delete_clarification(request_state.session_id)
 
             # Resume processing with enhanced message
             # This will be handled by the overlord's async processing

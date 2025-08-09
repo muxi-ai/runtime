@@ -5,6 +5,9 @@ This module provides intelligent task decomposition and multi-agent workflow
 orchestration capabilities.
 """
 
+import threading
+from typing import TYPE_CHECKING
+
 # Import all workflow types first
 from ...datatypes.workflow import (
     # Core workflow data structures
@@ -63,10 +66,15 @@ __all__ = [
 ]
 
 
-# Lazy loading implementation for SOPSystem
+# Conditional import for type checking
+if TYPE_CHECKING:
+    from .sops import SOPSystem
+
+# Lazy loading implementation for SOPSystem with thread safety
 _lazy_imports = {
     'SOPSystem': None
 }
+_import_lock = threading.Lock()
 
 
 def __getattr__(name):
@@ -78,11 +86,24 @@ def __getattr__(name):
     imported when actually accessed.
     """
     if name == 'SOPSystem':
-        # Check if already imported
+        # Check if already imported (double-checked locking pattern)
         if _lazy_imports['SOPSystem'] is None:
-            from .sops import SOPSystem
-            _lazy_imports['SOPSystem'] = SOPSystem
+            with _import_lock:
+                # Check again inside lock to prevent race conditions
+                if _lazy_imports['SOPSystem'] is None:
+                    from .sops import SOPSystem
+                    _lazy_imports['SOPSystem'] = SOPSystem
         return _lazy_imports['SOPSystem']
 
     # If not a lazy import, raise AttributeError
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+def __dir__():
+    """
+    Return the list of names available in this module.
+
+    This makes SOPSystem visible in IDE autocompletion, help(), and dir()
+    even though it's lazily loaded.
+    """
+    return list(globals().keys()) + ['SOPSystem']

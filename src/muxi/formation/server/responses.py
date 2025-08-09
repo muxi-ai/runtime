@@ -16,7 +16,7 @@ regular functions with use_generic_type=True parameter for OpenAPI compliance.
 
 import copy
 import time
-from typing import Any, Dict, Optional, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 

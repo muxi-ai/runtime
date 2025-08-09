@@ -122,8 +122,10 @@ async def process_agent_for_runtime(
         # Resolve relative paths relative to formation directory
         formation_path = formation.get_formation_path()
         if formation_path:
-            # Validate formation path is a non-empty string
-            if not isinstance(formation_path, str) or not formation_path.strip():
+            # Validate formation path is a valid string or Path object
+            if not isinstance(formation_path, (str, Path)) or (
+                isinstance(formation_path, str) and not formation_path.strip()
+            ):
                 # Log warning but don't fail - knowledge paths will remain as provided
                 logger.warning(
                     f"Agent {agent_id}: Invalid formation path '{formation_path}', "

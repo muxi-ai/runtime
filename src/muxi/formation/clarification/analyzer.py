@@ -63,8 +63,11 @@ class InformationAnalyzer:
 
             if potential_tool:
                 # Analyze as tool request
+                # Pass style parameter for consistency and future extensibility
+                # Even though tool analysis doesn't currently use style, this maintains
+                # API consistency and prepares for future tone adaptation in tool flows
                 tool_analysis = await self.analyze_tool_requirements(
-                    potential_tool, {}, user_context
+                    potential_tool, {}, user_context, style
                 )
                 missing_info.extend(tool_analysis.missing_required_params)
                 available_info.update(tool_analysis.available_info)
@@ -99,7 +102,11 @@ class InformationAnalyzer:
             raise InformationAnalysisError(f"Failed to analyze request: {e}")
 
     async def analyze_tool_requirements(
-        self, tool_name: str, provided_params: Dict[str, Any], user_context: Dict[str, Any]
+        self,
+        tool_name: str,
+        provided_params: Dict[str, Any],
+        user_context: Dict[str, Any],
+        style: Optional[str] = None,
     ) -> ToolInformationAnalysis:
         """
         Analyze tool-specific parameter requirements
@@ -108,6 +115,7 @@ class InformationAnalyzer:
             tool_name: Name of the tool being analyzed
             provided_params: Parameters already provided by user
             user_context: User's context memory
+            style: Optional clarification style (currently unused but maintained for API consistency)
 
         Returns:
             ToolInformationAnalysis with missing parameters and confidence scores
@@ -387,6 +395,23 @@ class InformationAnalyzer:
 
         return context_gaps, background_needed
 
+    def _needs_basic_clarification(self, user_message: str) -> bool:
+        """
+        Check if a message needs basic clarification based on simple heuristics.
+
+        Returns True if the message is very short or ends with a dangling preposition.
+
+        Args:
+            user_message: The user's message to analyze
+
+        Returns:
+            bool: True if basic clarification is needed
+        """
+        message_words = user_message.strip().split()
+        return len(message_words) < 3 or user_message.strip().endswith(
+            ("with a", "with the", "for a", "for the")
+        )
+
     async def _analyze_generic_context_needs(
         self, user_message: str, user_context: Dict[str, Any], style: Optional[str] = None
     ) -> List[str]:
@@ -405,15 +430,16 @@ class InformationAnalyzer:
 
                 style_guidance = style_instructions.get(style, style_instructions["conversational"])
 
-                prompt = (
+                # Construct messages with proper role separation for better prompt safety and clarity
+                # System message contains instructions and cannot be influenced by user input
+                system_message = (
                     "You are a request analyzer. Determine if a user request has enough information to proceed."
-                    "\n\nIMPORTANT: Be VERY conservative about asking for clarification. Most requests have enough information to proceed."  # noqa: E501
+                    "\n\nIMPORTANT: Be VERY conservative about asking for clarification. Most requests have enough information to proceed."
                     "\n\nOnly return NEEDS_CLARIFICATION if the request is:"
                     "\n- Completely incomplete (like 'can you help')"
                     "\n- Has critical missing context that cannot be inferred"
                     "\n- Is grammatically broken or unintelligible"
                     "\n\nIf the request has a clear action + object + reasonable specificity, return CLEAR."
-                    f"\n\nUser request: {user_message}"
                     "\n\nResponse format:"
                     "\nCLEAR (if the request is actionable)"
                     "\nNEEDS_CLARIFICATION: [short question] (only if truly necessary)"
@@ -429,35 +455,50 @@ class InformationAnalyzer:
                     '\n- "can you me a" -> NEEDS_CLARIFICATION: Your message seems incomplete.'
                     '\n- "help me" -> NEEDS_CLARIFICATION: What do you need help with?'
                     '\n- "fix the bug" -> NEEDS_CLARIFICATION: Which bug are you referring to?'
-                    f"\n{style_guidance}"
+                    f"\n\n{style_guidance}"
                     "\n\nRemember: If there's reasonable context, return CLEAR. Don't ask for unnecessary details."
                 )
 
-                # Use chat method instead of generate
-                messages = [{"role": "user", "content": prompt}]
+                # Separate user message to prevent prompt injection and improve clarity
+                # User input is isolated and cannot modify the system instructions
+                messages = [
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message}
+                ]
                 response = await self.model.chat(messages, max_tokens=100, temperature=0.3)
 
-                if response and "NEEDS_CLARIFICATION:" in response:
-                    # Extract the clarification question
-                    clarification_question = response.split("NEEDS_CLARIFICATION:", 1)[1].strip()
-                    context_gaps.append(
-                        clarification_question
-                    )  # Store the actual question as the gap
+                # Extract the actual content from the response
+                if response:
+                    # Handle different response formats
+                    if isinstance(response, str):
+                        content = response
+                    elif hasattr(response, 'content'):
+                        content = response.content
+                    elif isinstance(response, dict) and 'content' in response:
+                        content = response['content']
+                    elif isinstance(response, dict) and 'choices' in response:
+                        # Handle OpenAI-style response
+                        content = response['choices'][0]['message']['content']
+                    else:
+                        # Fallback to string conversion
+                        content = str(response)
+
+                    # Normalize and check for clarification need
+                    normalized_content = content.strip().upper() if content else ""
+                    if "NEEDS_CLARIFICATION:" in normalized_content:
+                        # Extract the clarification question (case-insensitive split)
+                        parts = content.split("NEEDS_CLARIFICATION:", 1)
+                        if len(parts) > 1:
+                            clarification_question = parts[1].strip()
+                            context_gaps.append(clarification_question)
 
             except Exception:
                 # If LLM fails, fall back to simple heuristic
-                # Check for obviously incomplete messages or very short inputs
-                message_words = user_message.strip().split()
-                if len(message_words) < 3 or user_message.strip().endswith(
-                    ("with a", "with the", "for a", "for the")
-                ):
+                if self._needs_basic_clarification(user_message):
                     context_gaps.append("specific_details")
         else:
-            # No LLM available - only catch obviously incomplete messages or very short inputs
-            message_words = user_message.strip().split()
-            if len(message_words) < 3 or user_message.strip().endswith(
-                ("with a", "with the", "for a", "for the")
-            ):
+            # No LLM available - only catch obviously incomplete messages
+            if self._needs_basic_clarification(user_message):
                 context_gaps.append("specific_details")
 
         return context_gaps

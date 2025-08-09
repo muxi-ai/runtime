@@ -4,20 +4,22 @@ Agent persistence utilities for Formation.
 Handles saving and loading agent configurations to/from YAML files.
 """
 
+import copy
+import logging
 import os
 import re
-import yaml
-import logging
-import aiofiles
 from pathlib import Path
-from typing import Dict, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
+
+import aiofiles
+import yaml
 
 # Import runtime processor functions at module level
 # to avoid runtime import failures
 try:
     from ..runtime_agent_processor import (
-        process_agent_for_runtime,
         add_agent_to_overlord_runtime,
+        process_agent_for_runtime,
     )
     RUNTIME_IMPORTS_AVAILABLE = True
 except ImportError as e:
@@ -144,13 +146,6 @@ async def save_agent_to_file(
         # Validate and sanitize agent_id to prevent directory traversal
         agent_file_path = _validate_and_sanitize_agent_id(agent_id, agents_dir)
 
-        # Check if file already exists to prevent silent overwriting
-        if agent_file_path.exists():
-            raise ValueError(
-                f"Agent file already exists: {agent_file_path.name}. "
-                f"Use update_agent_file to modify existing agents."
-            )
-
         # Prepare agent config for serialization
         # Remove any None values and ensure clean YAML output
         clean_config = _clean_config_for_yaml(agent_config)
@@ -164,9 +159,16 @@ async def save_agent_to_file(
             indent=2,
         )
 
-        # Write to YAML file asynchronously
-        async with aiofiles.open(agent_file_path, "w", encoding="utf-8") as f:
-            await f.write(yaml_content)
+        # Write to YAML file using exclusive creation mode to prevent race conditions
+        # Mode "x" will raise FileExistsError if the file already exists, ensuring atomicity
+        try:
+            async with aiofiles.open(agent_file_path, "x", encoding="utf-8") as f:
+                await f.write(yaml_content)
+        except FileExistsError:
+            raise ValueError(
+                f"Agent file already exists: {agent_file_path.name}. "
+                f"Use update_agent_file to modify existing agents."
+            )
 
         # Auto-load into formation if requested
         if auto_load and formation:
@@ -488,13 +490,9 @@ def list_agent_files(formation_path: str, agents_subdir: str = "agents") -> list
             return []
 
         # Find all YAML files (both .yaml and .yml extensions)
+        # Using glob pattern "*.y*ml" captures both .yaml and .yml in one pass
         agent_files = []
-        for file_path in agents_dir.glob("*.yaml"):
-            if file_path.is_file():
-                agent_files.append(str(file_path))
-
-        # Also include .yml files
-        for file_path in agents_dir.glob("*.yml"):
+        for file_path in agents_dir.glob("*.y*ml"):
             if file_path.is_file():
                 agent_files.append(str(file_path))
 
@@ -557,7 +555,6 @@ def _deep_merge(base: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]
     Returns:
         Dict[str, Any]: Merged dictionary
     """
-    import copy
     result = copy.deepcopy(base)
 
     for key, value in updates.items():

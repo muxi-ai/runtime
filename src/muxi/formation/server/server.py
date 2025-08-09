@@ -7,6 +7,7 @@ It handles both admin operations (formation management) and client operations
 """
 
 import asyncio
+import re
 import signal
 import time
 import threading
@@ -35,6 +36,16 @@ STATUS_CODE_TO_ERROR_CODE = {
     429: "RATE_LIMITED",
     501: "METHOD_NOT_FOUND",
     503: "SYSTEM_OVERLOAD",
+}
+
+# Field suffix patterns for type inference in validation errors
+# Used to determine the expected field type based on field name patterns
+FIELD_SUFFIX_PATTERNS = {
+    "boolean": [".active"],
+    "array": [".llm_models", ".mcp_servers", ".knowledge"],
+    "object": [".a2a", ".settings"],
+    "integer": [".max_tokens", ".timeout_seconds", ".max_retries"],
+    "number": [".temperature"],
 }
 
 
@@ -356,8 +367,24 @@ class FormationServer:
                 Tuple of (field_type, error_kind)
             """
             # Extract the core error type from FastAPI/Pydantic format
-            # e.g., "value_error.missing" -> "missing", "type_error.str" -> "str"
-            core_error_type = error_type.split(".")[-1] if "." in error_type else error_type
+            # Handles multi-part error types:
+            # - "value_error.missing" -> "missing"
+            # - "type_error.str" -> "str"
+            # - "string_too_short" -> "string_too_short" (kept as-is)
+            # - "value_error.extra.forbidden" -> "extra.forbidden" (last two parts)
+
+            # For error types with multiple dots, we may want the last two parts
+            # to preserve context (e.g., "extra.forbidden" instead of just "forbidden")
+            parts = error_type.split(".")
+            if len(parts) > 2:
+                # For multi-level errors, keep the last two parts for better context
+                core_error_type = ".".join(parts[-2:])
+            elif len(parts) == 2:
+                # Standard format: take the last part
+                core_error_type = parts[-1]
+            else:
+                # No dots: use as-is
+                core_error_type = error_type
 
             # Error type to field type and error kind mapping
             # Updated to handle actual FastAPI/Pydantic error codes
@@ -366,6 +393,10 @@ class FormationServer:
                 "missing": ("string", "missing"),  # value_error.missing
                 "json_invalid": ("string", "invalid_json"),  # value_error.json_invalid
                 "extra": ("string", "extra_field"),  # value_error.extra
+
+                # Multi-part error types (for better context)
+                "extra.forbidden": ("string", "extra_field"),  # value_error.extra.forbidden
+                "missing.required": ("string", "missing"),  # value_error.missing.required
 
                 # Type errors (from type_error.*)
                 "str": ("string", "wrong_type"),  # type_error.str
@@ -385,6 +416,8 @@ class FormationServer:
                 "too_short": ("string", "too_short"),
                 "too_long": ("string", "too_long"),
                 "regex": ("string", "invalid_format"),
+                "string_too_short": ("string", "too_short"),  # Alternative format
+                "string_too_long": ("string", "too_long"),  # Alternative format
             }
 
             # Check if core error type is in the mapping
@@ -411,18 +444,8 @@ class FormationServer:
                 # Default field type
                 field_type = "string"
 
-            # Field suffix patterns for type inference
-            FIELD_SUFFIX_PATTERNS = {
-                "boolean": [".active"],
-                "array": [".llm_models", ".mcp_servers", ".knowledge"],
-                "object": [".a2a", ".settings"],
-                "integer": [".max_tokens", ".timeout_seconds", ".max_retries"],
-                "number": [".temperature"],
-            }
-
             # Remove array indices from location string for accurate suffix matching
             # e.g., "agents[0].settings" -> "agents.settings"
-            import re
             normalized_loc = re.sub(r'\[\d+\]', '', loc_string)
 
             # Override field type based on location string suffix
