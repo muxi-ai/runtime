@@ -406,18 +406,31 @@ class InformationAnalyzer:
                 style_guidance = style_instructions.get(style, style_instructions["conversational"])
 
                 prompt = (
-                    "Analyze if this user request is ambiguous or lacks specific details needed to provide a helpful response."  # noqa: E501
+                    "You are a request analyzer. Determine if a user request has enough information to proceed."
+                    "\n\nIMPORTANT: Be VERY conservative about asking for clarification. Most requests have enough information to proceed."  # noqa: E501
+                    "\n\nOnly return NEEDS_CLARIFICATION if the request is:"
+                    "\n- Completely incomplete (like 'can you help')"
+                    "\n- Has critical missing context that cannot be inferred"
+                    "\n- Is grammatically broken or unintelligible"
+                    "\n\nIf the request has a clear action + object + reasonable specificity, return CLEAR."
                     f"\n\nUser request: {user_message}"
-                    "\n\nIf the request is clear and specific enough to act on, respond with just:\nCLEAR"
-                    "\n\nIf the request needs clarification, respond with:\nNEEDS_CLARIFICATION: [Your clarification question here]"  # noqa: E501
-                    "\n\nExamples:"
-                    '\n- "can you me a" -> NEEDS_CLARIFICATION: Your message seems incomplete. What would you like help with?'  # noqa: E501
-                    '\n- "I need help with a scraper" -> NEEDS_CLARIFICATION: What kind of scraper are you building?'
-                    '\n- "fix the bug" -> NEEDS_CLARIFICATION: Which bug are you referring to?'
+                    "\n\nResponse format:"
+                    "\nCLEAR (if the request is actionable)"
+                    "\nNEEDS_CLARIFICATION: [short question] (only if truly necessary)"
+                    "\n\nExamples that should return CLEAR:"
+                    '\n- "create a linear issue with system usage info like cpu, memory, etc" -> CLEAR'
+                    '\n- "generate system report with performance metrics" -> CLEAR'
                     '\n- "Write a Python function to sort a list" -> CLEAR'
+                    '\n- "scrape this website for product data" -> CLEAR'
+                    '\n- "analyze the data and create visualizations" -> CLEAR'
+                    '\n- "make a report about server performance" -> CLEAR'
+                    '\n- "create documentation for the API" -> CLEAR'
+                    "\n\nExamples that need clarification:"
+                    '\n- "can you me a" -> NEEDS_CLARIFICATION: Your message seems incomplete.'
+                    '\n- "help me" -> NEEDS_CLARIFICATION: What do you need help with?'
+                    '\n- "fix the bug" -> NEEDS_CLARIFICATION: Which bug are you referring to?'
                     f"\n{style_guidance}"
-                    "\nKeep your clarification question SHORT (around 15 words) and focused on the most critical missing information."  # noqa: E501
-                    "\nEnsure clarification questions are in the same language as the user request."
+                    "\n\nRemember: If there's reasonable context, return CLEAR. Don't ask for unnecessary details."
                 )
 
                 # Use chat method instead of generate
