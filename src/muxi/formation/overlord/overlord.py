@@ -4643,6 +4643,55 @@ class Overlord:
             # This ensures cleanup happens regardless of success or failure
             self.observability_manager._async_requests.discard(request_id)
 
+    async def _should_skip_clarification(self, message: str) -> bool:
+        """
+        Determine if clarification should be skipped for the given message.
+
+        This method checks if the message is a workflow task or uses the
+        clarification analyzer to determine if the request is clear enough
+        to proceed without clarification.
+
+        Args:
+            message: The message to analyze
+
+        Returns:
+            True if clarification should be skipped, False otherwise
+        """
+        # Skip clarification for workflow tasks (tasks from decomposed workflows)
+        if message and message.startswith("## Task:"):
+            return True
+
+        # Use the analyzer's core method to determine if clarification should be skipped
+        if self.clarification_analyzer:
+            try:
+                # Extract the actual user message from formatted context if needed
+                actual_message = message
+                if "=== CURRENT REQUEST ===" in message and "User:" in message:
+                    # Extract the user's actual message from the formatted context
+                    lines = message.split("\n")
+                    for i, line in enumerate(lines):
+                        if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                            next_line = lines[i + 1].strip()
+                            if next_line.startswith("User:"):
+                                actual_message = next_line[5:].strip()  # Remove "User: " prefix
+                                break
+
+                # Quick analyzer check using the core method
+                context_gaps = await self.clarification_analyzer._analyze_generic_context_needs(
+                    user_message=actual_message,
+                    user_context={},
+                    style=self.clarification_config.style if hasattr(self, 'clarification_config') else "conversational"
+                )
+
+                # Skip clarification if no context gaps found (request is clear enough)
+                return not context_gaps
+
+            except Exception:
+                # If analyzer fails, fall back to default behavior
+                pass
+
+        return False
+
     async def _process_sync_chat(
         self,
         message: str,
@@ -5277,38 +5326,8 @@ class Overlord:
         # ===================================================================
         # CLARIFICATION CHECK - MUST HAPPEN BEFORE ANY AGENT SELECTION
         # ===================================================================
-        # Skip clarification for workflow tasks (tasks from decomposed workflows)
-        is_workflow_task = message.startswith("## Task:") if message else False
-        
-        # Use the analyzer's core method to determine if clarification should be skipped
-        skip_clarification = is_workflow_task
-        if not skip_clarification and self.clarification_analyzer:
-            try:
-                # Extract the actual user message from formatted context if needed
-                actual_message = message
-                if "=== CURRENT REQUEST ===" in message and "User:" in message:
-                    # Extract the user's actual message from the formatted context
-                    lines = message.split("\n")
-                    for i, line in enumerate(lines):
-                        if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                            next_line = lines[i + 1].strip()
-                            if next_line.startswith("User:"):
-                                actual_message = next_line[5:].strip()  # Remove "User: " prefix
-                                break
-                
-                # Quick analyzer check using the core method we already fixed
-                context_gaps = await self.clarification_analyzer._analyze_generic_context_needs(
-                    user_message=actual_message,
-                    user_context={},
-                    style=self.clarification_config.style if hasattr(self, 'clarification_config') else "conversational"
-                )
-                
-                # Skip clarification if no context gaps found (request is clear enough)
-                if not context_gaps:
-                    skip_clarification = True
-            except Exception:
-                # If analyzer fails, fall back to workflow task check only
-                pass
+        # Determine if clarification should be skipped for this message
+        skip_clarification = await self._should_skip_clarification(message)
 
         # Log clarification bypass decision
         if skip_clarification:
@@ -5317,10 +5336,10 @@ class Overlord:
                 level=observability.EventLevel.DEBUG,
                 data={
                     "clarification_bypassed": True,
-                    "is_workflow_task": is_workflow_task,
-                    "reason": "workflow_task"
+                    "is_workflow_task": message and message.startswith("## Task:"),
+                    "reason": "workflow_task" if message and message.startswith("## Task:") else "analyzer_clear"
                 },
-                description="Clarification bypassed: workflow task"
+                description="Clarification bypassed"
             )
 
         # Check if clarification is needed for ambiguous requests
@@ -5462,39 +5481,8 @@ class Overlord:
         # ===================================================================
         # GENERAL CLARIFICATION CHECK (Before Workflow Analysis)
         # ===================================================================
-
-        # Skip clarification for workflow tasks (tasks from decomposed workflows)
-        is_workflow_task = message.startswith("## Task:") if message else False
-        
-        # Use the analyzer's core method to determine if clarification should be skipped
-        skip_clarification = is_workflow_task
-        if not skip_clarification and self.clarification_analyzer:
-            try:
-                # Extract the actual user message from formatted context if needed
-                actual_message = message
-                if "=== CURRENT REQUEST ===" in message and "User:" in message:
-                    # Extract the user's actual message from the formatted context
-                    lines = message.split("\n")
-                    for i, line in enumerate(lines):
-                        if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                            next_line = lines[i + 1].strip()
-                            if next_line.startswith("User:"):
-                                actual_message = next_line[5:].strip()  # Remove "User: " prefix
-                                break
-                
-                # Quick analyzer check using the core method we already fixed
-                context_gaps = await self.clarification_analyzer._analyze_generic_context_needs(
-                    user_message=actual_message,
-                    user_context={},
-                    style=self.clarification_config.style if hasattr(self, 'clarification_config') else "conversational"
-                )
-                
-                # Skip clarification if no context gaps found (request is clear enough)
-                if not context_gaps:
-                    skip_clarification = True
-            except Exception:
-                # If analyzer fails, fall back to workflow task check only
-                pass
+        # Determine if clarification should be skipped for this message
+        skip_clarification = await self._should_skip_clarification(message)
 
         # Check if clarification is needed (before workflow analysis)
         if (
@@ -5503,7 +5491,6 @@ class Overlord:
             and not agent_name
             and self.clarification_analyzer
             and session_id
-            and not is_workflow_task  # Don't clarify workflow tasks
         ):
             try:
                 # Check for proactive clarification requests first
