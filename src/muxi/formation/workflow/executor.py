@@ -639,7 +639,8 @@ class WorkflowExecutor:
             raise ValueError("Context must be a dictionary or None")
 
         # Convert SubTask to separated models for cleaner internal logic
-        spec, state = TaskAdapter.from_subtask(task)
+        # Pass workflow context to calculate blocked_by field properly
+        spec, state = TaskAdapter.from_subtask(task, workflow=workflow)
 
         # Mark task as starting (agent will be assigned later)
         state.status = TaskStatus.IN_PROGRESS

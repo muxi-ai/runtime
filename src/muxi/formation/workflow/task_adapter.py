@@ -14,11 +14,14 @@ Important:
     mismatches in task dependencies and data flow.
 """
 
-from typing import Tuple, Optional
+from typing import Tuple, Optional, TYPE_CHECKING
 
 from ...datatypes.workflow import SubTask, TaskInput, TaskOutput
 from ...datatypes.workflow_models import TaskSpecification, TaskExecutionState, TaskExecutionResult
 from ...datatypes.task_status import TaskStatus
+
+if TYPE_CHECKING:
+    from ...datatypes.workflow import Workflow
 
 
 class TaskAdapter:
@@ -34,7 +37,10 @@ class TaskAdapter:
     """
 
     @staticmethod
-    def from_subtask(subtask: SubTask) -> Tuple[TaskSpecification, TaskExecutionState]:
+    def from_subtask(
+        subtask: SubTask,
+        workflow: Optional['Workflow'] = None
+    ) -> Tuple[TaskSpecification, TaskExecutionState]:
         """
         Convert a SubTask into separated TaskSpecification and TaskExecutionState.
 
@@ -42,9 +48,9 @@ class TaskAdapter:
         creates the corresponding execution state tracking the runtime information.
 
         Note:
-            The `blocked_by` field in TaskExecutionState will be initialized as an empty set
-            because calculating it requires workflow context (to check the status of dependency
-            tasks). The workflow executor should populate this field after conversion based on
+            The `blocked_by` field in TaskExecutionState will be calculated based on the
+            workflow context if provided. Otherwise, it will be initialized as an empty set.
+            When workflow is provided, blocked_by will contain IDs of incomplete dependency
             the actual workflow state.
 
         Args:
@@ -189,21 +195,25 @@ class TaskAdapter:
             progress_percent=subtask.progress_percent,
         )
 
-        # TODO: Calculate blocked_by based on dependencies
-        # The blocked_by field indicates which tasks are currently blocking this task's execution.
-        # It should contain the IDs of dependency tasks that haven't completed yet.
-        #
-        # This calculation requires:
-        # 1. Access to the full workflow to check dependency task statuses
-        # 2. Filtering dependencies to only include those not in COMPLETED/DONE state
-        #
-        # Since this adapter method doesn't have workflow context, we initialize blocked_by as empty.
-        # The WorkflowExecutor should update this field after conversion by:
-        # - Checking each task in subtask.dependencies
-        # - Adding to blocked_by if the dependency task status is not COMPLETED/DONE
-        #
-        # Future enhancement: Consider adding an optional workflow parameter to this method
-        # to enable proper blocked_by calculation during conversion.
+        # Calculate blocked_by based on dependencies if workflow context is available
+        if workflow and subtask.dependencies:
+            # Find all dependency tasks that haven't completed yet
+            blocked_by = set()
+            for dep_id in subtask.dependencies:
+                # Find the dependency task in the workflow
+                dep_task = None
+                for task in workflow.tasks:
+                    if task.id == dep_id:
+                        dep_task = task
+                        break
+
+                # If dependency task exists and isn't completed, add to blocked_by
+                if dep_task and dep_task.status not in ['COMPLETED', 'DONE', TaskStatus.COMPLETED]:
+                    blocked_by.add(dep_id)
+
+            # Update the state with calculated blocked_by
+            state.blocked_by = blocked_by
+        # else: blocked_by is already initialized as empty set in TaskExecutionState
 
         return spec, state
 
@@ -435,17 +445,21 @@ class TaskAdapter:
 # Utility functions for common conversion patterns
 
 
-def subtask_to_models(subtask: SubTask) -> Tuple[TaskSpecification, TaskExecutionState]:
+def subtask_to_models(
+    subtask: SubTask,
+    workflow: Optional['Workflow'] = None
+) -> Tuple[TaskSpecification, TaskExecutionState]:
     """
     Convenience function to convert SubTask to separated models.
 
     Args:
         subtask: SubTask to convert
+        workflow: Optional workflow context for calculating blocked_by field
 
     Returns:
         Tuple of (TaskSpecification, TaskExecutionState)
     """
-    return TaskAdapter.from_subtask(subtask)
+    return TaskAdapter.from_subtask(subtask, workflow=workflow)
 
 
 def models_to_subtask(
