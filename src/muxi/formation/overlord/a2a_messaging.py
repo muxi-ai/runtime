@@ -249,8 +249,6 @@ class UnifiedA2AMessaging:
                             result_dict = result.model_dump()
                             if "result" in result_dict:
                                 # Import Message type to reconstruct it
-                                from a2a.types import Message
-
                                 result = Message(**result_dict["result"])
 
                         # Success - break out of retry loop
