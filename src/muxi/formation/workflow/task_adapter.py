@@ -202,7 +202,7 @@ class TaskAdapter:
             for dep_id in subtask.dependencies:
                 # Find the dependency task in the workflow
                 dep_task = None
-                for task in workflow.tasks:
+                for task in workflow.tasks.values():
                     if task.id == dep_id:
                         dep_task = task
                         break
