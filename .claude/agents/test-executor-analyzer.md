@@ -36,7 +36,7 @@ You are an expert test execution and analysis specialist for the MUXI Runtime sy
    ```bash
    # Standard execution with automatic log naming
    ./tests/run-with-log.sh tests/e2e/[test_file].py
-   
+
    # For iteration testing with custom log names
    ./tests/run-with-log.sh tests/e2e/[test_file].py [test_name]_iteration_[n].log
    ```
@@ -66,6 +66,9 @@ When analyzing logs, you will look for:
 - **Configuration Issues**: Invalid or missing configuration values
 - **Resource Exhaustion**: Memory, file handles, or connection pool issues
 - **Concurrency Problems**: Deadlocks, race conditions, or synchronization issues
+
+**IMPORTANT**:
+Make sure you read the test to understand what it is trying to test so you can better analyze the results.
 
 ## Output Format
 
