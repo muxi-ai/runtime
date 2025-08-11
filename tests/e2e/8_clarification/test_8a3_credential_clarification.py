@@ -10,6 +10,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from muxi import Formation  # noqa: E402
+from test_utils import TestContext  # noqa: E402
 
 
 async def test_credential_clarification():
@@ -26,13 +27,17 @@ async def test_credential_clarification():
 
         print("Starting overlord...")
         overlord = await formation.start_overlord()
+        
+        # Create unique test context
+        ctx = TestContext("test_8a3")
+        print(f"Using unique IDs - User: {ctx.user_id}, Session: {ctx.session_id}")
 
         # Test: Request that would need credentials
         print("\n1. Testing with: 'List my repositories'")
         response = await overlord.chat(
             message="List my repositories",
-            user_id="test_user",
-            session_id="credential_session",
+            user_id=ctx.user_id,
+            session_id=ctx.session_id,
             stream=False,
         )
 
@@ -51,8 +56,8 @@ async def test_credential_clarification():
             print("\n2. Clarifying: 'GitHub repositories'")
             response2 = await overlord.chat(
                 message="GitHub repositories",
-                user_id="test_user",
-                session_id="credential_session",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
                 stream=False,
             )
 
@@ -64,8 +69,32 @@ async def test_credential_clarification():
             assert (
                 "repositor" in response.content.lower()
             ), "Should mention repositories in response"
+            response2 = None
 
-        print("\n✅ Test 8A3 PASSED: Credential clarification handled")
+        print("\n" + "="*40)
+        print("\n### Test Result:")
+        print("🎉 SUCCESS: Credential clarification handled")
+        print("✓ Repository request processed")
+        if is_clarification:
+            print("✓ System asked for service clarification")
+            print("✓ Clarification response handled correctly")
+        else:
+            print("✓ Direct response provided (no MCP configured)")
+        print("\n" + "="*40)
+        
+        print("\n### Chat transcript:")
+        print("\nUser: List my repositories")
+        print(f"System: {response.content}")
+        if response2:
+            print("\nUser: GitHub repositories")
+            print(f"System: {response2.content[:500] + '...' if len(response2.content) > 500 else response2.content}")
+        
+        print("\n" + "="*40)
+        
+        # Properly shut down to prevent timeout
+        await formation.stop_overlord()
+        formation.shutdown()
+        
         return True
 
     except Exception as e:
@@ -73,6 +102,31 @@ async def test_credential_clarification():
         import traceback
 
         traceback.print_exc()
+        
+        print("\n" + "="*40)
+        print("\n### Test Result:")
+        print("❌ FAILED: Credential clarification test failed")
+        print(f"✗ Error: {e}")
+        print("\n" + "="*40)
+        
+        print("\n### Partial Chat transcript (before failure):")
+        if 'response' in locals():
+            print("\nUser: List my repositories")
+            print(f"System: {response.content}")
+        if 'response2' in locals():
+            print("\nUser: GitHub repositories")
+            print(f"System: {response2.content[:500] + '...' if len(response2.content) > 500 else response2.content}")
+        
+        print("\n" + "="*40)
+        
+        # Try to shut down even on failure
+        if 'formation' in locals():
+            try:
+                await formation.stop_overlord()
+                formation.shutdown()
+            except Exception:
+                pass
+        
         return False
     finally:
         sys.exit(0 if "return True" in locals() else 1)

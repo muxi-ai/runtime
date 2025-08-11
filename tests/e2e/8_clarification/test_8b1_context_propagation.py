@@ -12,8 +12,10 @@ from pathlib import Path
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))  # For test_utils
 
 from muxi.formation import Formation
+from test_utils import TestContext
 
 
 async def test_8b1_context_propagation():
@@ -26,12 +28,16 @@ async def test_8b1_context_propagation():
     await formation.load(str(formation_path))
     overlord = await formation.start_overlord()
     
+    # Create unique test context
+    ctx = TestContext("test_8b1")
+    print(f"Using unique IDs - User: {ctx.user_id}, Session: {ctx.session_id}")
+    
     try:
         # Test 1: Establish context
         print("\n1. Establishing e-commerce platform context...")
         response = await overlord.chat(
             "I'm working on an e-commerce platform using React and Node.js",
-            user_id="test_user"
+            user_id=ctx.user_id
         )
         print(f"Response: {response}")
         assert response is not None
@@ -40,7 +46,7 @@ async def test_8b1_context_propagation():
         print("\n2. Asking database recommendation (should consider e-commerce context)...")
         response = await overlord.chat(
             "What database should I use?",
-            user_id="test_user"
+            user_id=ctx.user_id
         )
         print(f"Response: {response}")
         
@@ -57,7 +63,7 @@ async def test_8b1_context_propagation():
         print("\n3. Adding scalability requirement...")
         response = await overlord.chat(
             "I expect high traffic during sales events with millions of users",
-            user_id="test_user"
+            user_id=ctx.user_id
         )
         print(f"Response: {response}")
         
@@ -65,7 +71,7 @@ async def test_8b1_context_propagation():
         print("\n4. Asking about caching strategy (should consider React, Node.js, high traffic)...")
         response = await overlord.chat(
             "What caching strategy would you recommend?",
-            user_id="test_user"
+            user_id=ctx.user_id
         )
         print(f"Response: {response}")
         
@@ -102,12 +108,17 @@ async def test_8b1_context_isolation():
     await formation.load(str(formation_path))
     overlord = await formation.start_overlord()
     
+    # Create unique test contexts for two different users
+    ctx1 = TestContext("test_8b1_user1")
+    ctx2 = TestContext("test_8b1_user2")
+    print(f"User1: {ctx1.user_id}, User2: {ctx2.user_id}")
+    
     try:
         # User 1: Python context
         print("\n1. User1: Establishing Python ML context...")
         response = await overlord.chat(
             "I'm building a machine learning model in Python using scikit-learn",
-            user_id="user1"
+            user_id=ctx1.user_id
         )
         print(f"User1 Response: {response}")
         
@@ -115,7 +126,7 @@ async def test_8b1_context_isolation():
         print("\n2. User2: Establishing Java microservices context...")
         response = await overlord.chat(
             "I'm developing microservices in Java with Spring Boot",
-            user_id="user2"
+            user_id=ctx2.user_id
         )
         print(f"User2 Response: {response}")
         
@@ -123,7 +134,7 @@ async def test_8b1_context_isolation():
         print("\n3. User1: Asking about data preprocessing...")
         response = await overlord.chat(
             "What libraries should I use for data preprocessing?",
-            user_id="user1"
+            user_id=ctx1.user_id
         )
         print(f"User1 Response: {response}")
         
@@ -137,7 +148,7 @@ async def test_8b1_context_isolation():
         print("\n4. User2: Asking about service communication...")
         response = await overlord.chat(
             "What's the best way to handle service-to-service communication?",
-            user_id="user2"
+            user_id=ctx2.user_id
         )
         print(f"User2 Response: {response}")
         
@@ -192,5 +203,8 @@ if __name__ == "__main__":
         
         return all_passed
     
-    success = asyncio.run(run_tests())
-    sys.exit(0 if success else 1)
+    try:
+        success = asyncio.run(run_tests())
+        sys.exit(0 if success else 1)
+    finally:
+        pass
