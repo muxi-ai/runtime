@@ -1,12 +1,11 @@
 # MUXI Runtime
 
-<p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version">
-  <img src="https://img.shields.io/badge/python-3.10+-green.svg" alt="Python">
-  <img src="https://img.shields.io/badge/license-Elastic-purple.svg" alt="License">
-  <img src="https://img.shields.io/badge/tests-passing-brightgreen.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/coverage-85%25-green.svg" alt="Coverage">
-</p>
+![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.10+-green.svg)
+![License](https://img.shields.io/badge/License-Elastic-purple.svg)
+![Tests](https://img.shields.io/badge/Tests-passing-brightgreen.svg)
+![Coverage](https://img.shields.io/badge/Coverage-85%25-green.svg)
+
 
 ### The container runtime for AI agents
 
