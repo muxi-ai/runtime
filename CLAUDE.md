@@ -177,6 +177,34 @@ Test organization by feature day:
 - Day 4-6: MCP, File Generation, Knowledge
 - Day 7-12: Advanced features (workflow, resilience, etc.)
 
+### Test Execution Pattern
+
+**IMPORTANT**: When running tests, always redirect output to save context:
+```bash
+# Redirect test output to logs directory
+python tests/e2e/8_clarification/test_8a1.py > tests/logs/test_8a1.log 2>&1
+```
+
+After running tests:
+1. Use the Task tool with `test-runner-summarizer` agent to analyze the log
+2. The agent will surface key issues, failures, and actionable insights
+3. This approach saves significant context in the main conversation
+
+Example workflow:
+```bash
+# Run test with output redirection
+python tests/e2e/7_orchestration/test_sops.py > tests/logs/test_sops.log 2>&1
+
+# Then use Task tool to analyze:
+# "Analyze the test log at tests/logs/test_sops.log and summarize any failures or issues"
+```
+
+This pattern ensures:
+- Full test output is captured for debugging
+- Main conversation stays clean and focused
+- Context usage is optimized
+- All issues are properly surfaced
+
 ## Common Issues
 
 ### "Missing required LLM capability 'text'"
