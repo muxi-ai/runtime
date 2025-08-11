@@ -63,7 +63,7 @@ class ClarificationManager:
 
             # Create new clarification request
             request = ClarificationRequest(
-                request_id="",  # Will be auto-generated in __post_init__
+                request_id=None,  # Will be auto-generated in __post_init__
                 user_id=user_id,
                 agent_id=agent_id,
                 request_type=request_type,
@@ -88,7 +88,7 @@ class ClarificationManager:
         self, request_id: str, user_response: str
     ) -> ClarificationResult:
         """
-        Process user's response to clarification question
+        Process user response with single LLM call for all decisions.
 
         Args:
             request_id: ID of the clarification request
@@ -98,8 +98,6 @@ class ClarificationManager:
             ClarificationResult with next steps
         """
         try:
-            #  Info - TODO: add observability
-
             request = self.active_requests.get(request_id)
             if not request:
                 return ClarificationResult(
@@ -113,48 +111,99 @@ class ClarificationManager:
                     error_message="Clarification request is not active",
                 )
 
-            # Extract information from user response
-            extracted_info = await self._extract_information_from_response(user_response, request)
+            # Get LLM model from overlord - this is always available as it's required
+            # The formation won't start without a text model configured
+            text_config = self.overlord._capability_models.get('text')
+            llm_model = await self.overlord.create_model(
+                model=text_config.get('model'),
+                temperature=0,
+                max_tokens=300,
+                api_key=text_config.get('api_key')
+            )
 
-            # Update request with extracted information
-            request.provided_info.update(extracted_info)
+            # Build prompt for single LLM decision
+            import json
+
+            prompt = f"""Process this clarification response and determine next steps.
+
+Context:
+- Original request: {request.intent}
+- Tool being configured: {request.tool_name or 'N/A'}
+- Information already collected: {json.dumps(request.provided_info, indent=2)}
+- User just said: {user_response}
+
+The user's original request was vague ("{request.intent}") and we asked for clarification.
+Now they've provided: "{user_response}"
+
+Analyze if this provides enough information to proceed with a basic implementation.
+Be practical - if the user has clarified what they want at a high level, that's often enough to start.
+
+Return JSON with:
+1. extracted: Key information from the response (e.g., what to build, type of project)
+2. next_question: Only ask another question if truly critical info is missing (null if we can proceed)
+3. is_complete: true if we have enough to start working, false only if critical info is missing
+
+Remember: Users often want to start with a basic version. Don't over-clarify.
+
+Example - if user says "Build it" then clarifies "A web scraper", that's enough to start a basic scraper.
+
+Return ONLY valid JSON, no explanation."""
+
+            # Get LLM response
+            messages = [{"role": "user", "content": prompt}]
+            response = await llm_model.chat(messages, max_tokens=300, temperature=0)
+            content = response.content if hasattr(response, 'content') else str(response)
+
+            # Parse JSON response
+            json_str = content[content.index('{'):content.rindex('}')+1] if '{' in content else '{}'
+            result = json.loads(json_str)
+
+            # Update request with extracted info
+            extracted = result.get("extracted", {})
+            request.provided_info.update(extracted)
             request.current_step += 1
             request.updated_at = time.time()
 
-            # Check if we have enough information to proceed
-            if await self._has_sufficient_information(request):
-                # Complete the clarification
+            # Check completion status
+            if result.get("is_complete", False):
                 request.status = ClarificationStatus.READY
                 complete_params = await self._compile_complete_parameters(request)
-
                 return ClarificationResult(
                     status=ClarificationResultStatus.COMPLETE,
                     complete_params=complete_params,
                     confidence=0.9,
-                    extracted_info=extracted_info,
+                    extracted_info=extracted,
                 )
 
-            # Need more information - generate next question
-            next_question = await self._generate_next_question(request)
-
+            # Continue with next question
+            next_question = result.get("next_question")
             if next_question:
                 return ClarificationResult(
                     status=ClarificationResultStatus.CONTINUE,
                     next_question=next_question,
                     confidence=0.7,
-                    extracted_info=extracted_info,
-                )
-            else:
-                # No more questions but still missing info - fail gracefully
-                request.status = ClarificationStatus.FAILED
-                return ClarificationResult(
-                    status=ClarificationResultStatus.ERROR,
-                    error_message="Unable to collect all required information",
-                    extracted_info=extracted_info,
+                    extracted_info=extracted,
                 )
 
+            # No next question but not complete - error state
+            request.status = ClarificationStatus.FAILED
+            return ClarificationResult(
+                status=ClarificationResultStatus.ERROR,
+                error_message="Unable to determine next steps",
+                extracted_info=extracted,
+            )
+
+        except json.JSONDecodeError:
+            # LLM didn't return valid JSON, store raw response
+            request.provided_info["response"] = user_response
+            request.current_step += 1
+            request.updated_at = time.time()
+            return ClarificationResult(
+                status=ClarificationResultStatus.CONTINUE,
+                next_question="Could you provide more details?",
+                extracted_info={"response": user_response},
+            )
         except Exception as e:
-            #  Error - TODO: add observability
             return ClarificationResult(
                 status=ClarificationResultStatus.ERROR,
                 error_message=f"Failed to process response: {e}",
@@ -250,48 +299,12 @@ class ClarificationManager:
     async def _extract_information_from_response(
         self, user_response: str, request: ClarificationRequest
     ) -> Dict[str, Any]:
-        """Extract structured information from user's response"""
-        extracted = {}
-
-        # Get current question being answered
-        if request.current_step < len(request.clarification_plan):
-            current_question = request.clarification_plan[request.current_step]
-
-            # Simple extraction based on parameter type
-            param_name = current_question.parameter_name
-            param_type = current_question.parameter_type
-
-            # Basic type conversion
-            if param_type == "integer":
-                try:
-                    # Extract numbers from response
-                    import re
-
-                    numbers = re.findall(r"\d+", user_response)
-                    if numbers:
-                        extracted[param_name] = int(numbers[0])
-                except ValueError:
-                    pass
-            elif param_type == "boolean":
-                response_lower = user_response.lower()
-                if any(word in response_lower for word in ["yes", "true", "confirm"]):
-                    extracted[param_name] = True
-                elif any(word in response_lower for word in ["no", "false", "cancel"]):
-                    extracted[param_name] = False
-            else:
-                # String or other types - use response directly
-                extracted[param_name] = user_response.strip()
-
-        return extracted
+        """DEPRECATED - Functionality moved to process_user_response."""
+        return {"response": user_response}
 
     async def _has_sufficient_information(self, request: ClarificationRequest) -> bool:
-        """Check if request has sufficient information to proceed"""
-        if request.request_type == RequestType.TOOL_CALL:
-            # For tool calls, check if all required parameters are provided
-            return await self._has_required_tool_parameters(request)
-        else:
-            # For reasoning, check if we have enough context
-            return await self._has_sufficient_reasoning_context(request)
+        """DEPRECATED - Functionality moved to process_user_response."""
+        return len(request.provided_info) > 0
 
     async def _has_required_tool_parameters(self, request: ClarificationRequest) -> bool:
         """Check if all required tool parameters are available"""
@@ -323,13 +336,8 @@ class ClarificationManager:
         return provided_contexts >= 2  # Have at least 2 key contexts
 
     async def _generate_next_question(self, request: ClarificationRequest) -> Optional[str]:
-        """Generate the next clarification question"""
-        if request.current_step >= len(request.clarification_plan):
-            # No more planned questions
-            return None
-
-        next_question = request.clarification_plan[request.current_step]
-        return next_question.question_text
+        """DEPRECATED - Functionality moved to process_user_response."""
+        return None
 
     async def _compile_complete_parameters(self, request: ClarificationRequest) -> Dict[str, Any]:
         """Compile all collected information into final parameter set"""

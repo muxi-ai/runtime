@@ -5051,11 +5051,11 @@ class Overlord:
                                         user_id
                                     )
 
-                                enriched_params = (
-                                    await self.clarification_parameter_enricher.enrich_from_context(
-                                        missing_params=collected_info,
+                                enriched_params, confidence_scores = (
+                                    await self.clarification_parameter_enricher.enrich_reasoning_context(
+                                        intent=original_message,
+                                        provided_context=collected_info,
                                         user_context=user_context,
-                                        user_intent=original_message,
                                     )
                                 )
                                 collected_info.update(enriched_params)
@@ -5369,6 +5369,25 @@ class Overlord:
                     user_id=user_id, mode="proactive", goal=proactive_request.goal
                 )
 
+                # Create a clarification request through the manager
+                clarification_request = None
+                if self.clarification_manager:
+                    try:
+                        clarification_request = await self.clarification_manager.start_clarification(
+                            user_id=user_id,
+                            agent_id="overlord",
+                            request_type=RequestType.REASONING,
+                            intent=message,
+                            provided_info={}
+                        )
+                    except Exception as e:
+                        observability.observe(
+                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                            level=observability.EventLevel.WARNING,
+                            data={"error": str(e)},
+                            description=f"Failed to create clarification request: {e}",
+                        )
+
                 # Generate first question
                 first_question = await self.clarification_question_generator.generate_question(
                     missing_info={"goal_details": "Understanding your requirements"},
@@ -5377,6 +5396,7 @@ class Overlord:
 
                 self._pending_clarifications[session_id] = {
                     "type": "proactive",
+                    "request_id": clarification_request.request_id if clarification_request else None,
                     "original_message": message,
                     "mode": "proactive",
                     "user_id": user_id,
@@ -5505,6 +5525,25 @@ class Overlord:
                             user_id=user_id, mode="proactive", goal=proactive_request.goal
                         )
 
+                    # Create a clarification request through the manager
+                    clarification_request = None
+                    if self.clarification_manager:
+                        try:
+                            clarification_request = await self.clarification_manager.start_clarification(
+                                user_id=user_id,
+                                agent_id="overlord",
+                                request_type=RequestType.REASONING,
+                                intent=message,
+                                provided_info={}
+                            )
+                        except Exception as e:
+                            observability.observe(
+                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                level=observability.EventLevel.WARNING,
+                                data={"error": str(e)},
+                                description=f"Failed to create clarification request: {e}",
+                            )
+
                     # Generate first question
                     first_question = (
                         "I'd be happy to help you. "
@@ -5520,6 +5559,7 @@ class Overlord:
 
                     self._pending_clarifications[session_id] = {
                         "type": "proactive",
+                        "request_id": clarification_request.request_id if clarification_request else None,
                         "original_message": message,
                         "mode": "proactive",
                         "user_id": user_id,
@@ -8052,10 +8092,23 @@ class Overlord:
         if not collected_info:
             return original_message
 
-        # Format collected info as context
+        # Build a clear, specific message that won't trigger clarification again
+        # Extract key information
+        project_type = collected_info.get("project_type", "")
+        language = collected_info.get("language", "")
+
+        # Create a specific, unambiguous message
+        if project_type and language:
+            enhanced = f"Create a {language} {project_type}"
+            # Add any additional details
+            for key, value in collected_info.items():
+                if key not in ["project_type", "language"] and value:
+                    enhanced += f" with {key}: {value}"
+            return enhanced
+
+        # Fallback to original format if no specific info
         context_parts = [original_message]
         for key, value in collected_info.items():
-            # Format key nicely (e.g., "tool_name" -> "tool name")
             formatted_key = key.replace("_", " ").title()
             context_parts.append(f"{formatted_key}: {value}")
 
