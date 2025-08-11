@@ -1,4 +1,5 @@
 brainstorm/
+src/muxi.egg-info/*
 
 # Dependencies
 node_modules/
