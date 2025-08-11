@@ -4699,6 +4699,7 @@ class Overlord:
         user_id: Any,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
+        skip_clarification: bool = False,
     ) -> MuxiResponse:
         """
         Process chat synchronously using existing infrastructure.
@@ -5028,13 +5029,14 @@ class Overlord:
                         # Clean up
                         del self._pending_clarifications[session_id]
 
-                        # Process with enhanced context
+                        # Process with enhanced context - skip clarification check
                         return await self._process_sync_chat(
                             message=enhanced_message,
                             agent_name=agent_name,
                             user_id=user_id,
                             session_id=session_id,
                             request_id=request_id,
+                            skip_clarification=True,
                         )
 
                     if response_result and response_result.status == ClarificationResultStatus.COMPLETE:
@@ -5082,13 +5084,14 @@ class Overlord:
                             description="Clarification complete, processing enhanced request",
                         )
 
-                        # Process with enhanced context
+                        # Process with enhanced context - skip clarification check
                         return await self._process_sync_chat(
                             message=enhanced_message,
                             agent_name=agent_name,
                             user_id=user_id,
                             session_id=session_id,
                             request_id=request_id,
+                            skip_clarification=True,
                         )
 
                     elif response_result and response_result.status == ClarificationResultStatus.CONTINUE:
@@ -5118,13 +5121,14 @@ class Overlord:
                         # Clean up
                         del self._pending_clarifications[session_id]
 
-                        # Process with enhanced context
+                        # Process with enhanced context - skip clarification check
                         return await self._process_sync_chat(
                             message=enhanced_message,
                             agent_name=agent_name,
                             user_id=user_id,
                             session_id=session_id,
                             request_id=request_id,
+                            skip_clarification=True,
                         )
 
                 elif clarification_info.get("type") == "workflow_approval":
@@ -8093,11 +8097,19 @@ class Overlord:
             return original_message
 
         # Build a clear, specific message that won't trigger clarification again
-        # Extract key information
+
+        # Handle bug/error clarification
+        if "error_type" in collected_info or "issue" in collected_info:
+            error_type = collected_info.get("error_type", collected_info.get("issue", ""))
+            context = collected_info.get("context", "")
+            if error_type and context:
+                return f"Help me fix {error_type} in {context}"
+            elif error_type:
+                return f"Help me fix {error_type}"
+
+        # Handle project creation
         project_type = collected_info.get("project_type", "")
         language = collected_info.get("language", "")
-
-        # Create a specific, unambiguous message
         if project_type and language:
             enhanced = f"Create a {language} {project_type}"
             # Add any additional details
@@ -8106,7 +8118,29 @@ class Overlord:
                     enhanced += f" with {key}: {value}"
             return enhanced
 
-        # Fallback to original format if no specific info
+        # Handle repository/service clarification
+        if "service" in collected_info or "repository_type" in collected_info:
+            service = collected_info.get("service", collected_info.get("repository_type", ""))
+            if service:
+                return f"{original_message} on {service}"
+
+        # Fallback: Create clear, specific message from collected info
+        # Try to build a complete sentence that won't re-trigger clarification
+        if collected_info:
+            # Get the main subject/action from collected info
+            values = list(collected_info.values())
+            if len(values) == 1:
+                return str(values[0])  # Single value is likely the clarified request
+            else:
+                # Multiple values - combine them intelligently
+                main_value = values[0] if values else ""
+                additional = " ".join(str(v) for v in values[1:] if v)
+                if main_value and additional:
+                    return f"{main_value} - {additional}"
+                elif main_value:
+                    return str(main_value)
+
+        # Last resort: append collected info to original
         context_parts = [original_message]
         for key, value in collected_info.items():
             formatted_key = key.replace("_", " ").title()
