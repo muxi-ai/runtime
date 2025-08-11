@@ -17,7 +17,7 @@ This report documents the results of testing large file processing with the MUXI
 
 **Results:**
 - ✅ **OpenAI 25MB limit confirmed**: The file exceeded OpenAI's content size limit
-- **Error Details**: 
+- **Error Details**:
   - HTTP Status: 413 (Request Entity Too Large)
   - Exact limit: 26,214,400 bytes (25MB)
   - Actual file size: 44,054,444 bytes (42.0MB)
@@ -110,7 +110,7 @@ This report documents the results of testing large file processing with the MUXI
 
 ## Test Artifacts
 
-**Test Command**: `python tests/day_3/test_large_file_limits.py`
+**Test Command**: `python tests/e1e/day_3/test_large_file_limits.py`
 **Test Duration**: ~2 minutes (terminated due to timeout)
 **Log Files**: Detailed observability logs available in multimodal.log
 

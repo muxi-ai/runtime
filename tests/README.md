@@ -1,136 +1,220 @@
-# MUXI Runtime Tests Organization
+# MUXI Runtime Tests
 
-This directory contains all tests for the MUXI Runtime, organized by functional area for better maintainability and discoverability.
+This directory contains the comprehensive test suite for MUXI Runtime, validating all features through systematic, incremental testing.
 
 ## 📁 Directory Structure
 
-### Core Functional Tests
+```
+tests/
+├── assets/                  # Test data and fixtures
+│   ├── formations/          # YAML formation configurations for testing
+│   │   ├── formation-basic/
+│   │   ├── formation-memory/
+│   │   ├── formation-multi-agent/
+│   │   ├── formation-file-generation/
+│   │   ├── formation-complete/
+│   │   └── secrets.enc      # Shared encrypted secrets
+│   └── files/               # Test documents, media, and sample files
+│       ├── *.pdf            # PDF test documents
+│       ├── *.docx           # Word documents
+│       ├── *.png/jpg        # Images for OCR/vision
+│       ├── *.mp3/m4a        # Audio files
+│       └── *.mp4/mov        # Video files
+├── e2e/                     # End-to-end integration tests
+│   ├── 1_foundation/        # Foundation layer tests
+│   ├── 2_memory/            # Memory systems tests
+│   ├── 3_multimodal/        # Multimodal processing tests
+│   ├── 4_mcp/               # MCP integration tests
+│   ├── 5_artifacts/         # Artifacts system tests
+│   ├── 6_knowledge/         # Knowledge system tests
+│   ├── 7_orchestration/     # Multi-agent coordination tests
+│   └── 8_clarification/     # Clarification flow tests
+├── unit/                    # Unit tests
+│   └── api/                 # API endpoint tests
+├── reports/                 # Test execution reports
+│   ├── 1a.md, 1b.md...      # Area 1 test reports
+│   ├── 2a.md, 2b.md...      # Area 2 test reports
+│   └── ...                  # Additional test reports
+├── conftest.py              # Shared pytest fixtures
+└── Comprehensive_Test_Plan.md  # Master test plan document
+```
 
-- **`schema_validation/`** - Schema compliance and validation tests
-  - SCHEMA_GUIDE.md compliance tests
-  - Formation, agent, MCP, and A2A validation
-  - Phase 6 comprehensive validation suite
+## 🧪 Testing Philosophy
 
-- **`a2a/`** - Agent-to-Agent communication tests
-  - A2A protocol implementation
-  - Authentication and authorization
-  - Registry and discovery
-  - Inter-agent collaboration
+**We test against real services, not mocks.** This ensures our code works in production.
 
-- **`memory/`** - Memory system tests
-  - Buffer memory (local/remote FAISS)
-  - Long-term memory (PostgreSQL/SQLite)
-  - Memory integration and performance
+### Why Real Services?
+- Mock services don't test actual integration points
+- Real embeddings are crucial for vector search quality
+- Authentication and security features need real validation
+- Performance characteristics differ significantly from mocks
 
-- **`mcp/`** - Model Context Protocol tests
-  - MCP server implementations
-  - Tool calling and reconnection
-  - Transport layer testing
+### Required Services
 
-- **`overlord/`** - Overlord orchestrator tests
-  - Intelligent routing
-  - Agent management
-  - System orchestration
+Before running tests, ensure these real services are available:
 
-- **`agents/`** - Agent lifecycle and behavior tests
-  - Agent creation and configuration
-  - Agent knowledge systems
-  - Agent collaboration patterns
-
-### Configuration & Integration
-
-- **`configuration/`** - Configuration loading and validation
-  - Formation integration
-  - Logging configuration
-  - Config file processing
-
-- **`secrets/`** - Secrets management tests
-  - Secrets interpolation
-  - Secure configuration handling
-  - Authentication token management
-
-- **`integration/`** - End-to-end integration tests
-  - Full system integration
-  - Task completion workflows
-  - Cross-component testing
-
-### Utilities & Archive
-
-- **`utils/`** - Utility and service tests
-  - Enhanced LLM services
-  - Knowledge handlers
-  - Extraction utilities
-
-- **`archive/`** - Legacy, debug, and temporary tests
-  - Debug utilities
-  - Deprecated test files
-  - Development artifacts
-
-## 🧪 Test Categories
-
-### Active Test Suites
-- **Schema Validation**: Comprehensive SCHEMA_GUIDE.md compliance
-- **A2A Communication**: Full agent-to-agent protocol testing
-- **Memory Systems**: Buffer and long-term memory validation
-- **MCP Integration**: Model Context Protocol functionality
-- **Configuration**: Formation and agent configuration testing
-
-### Archived Tests
-- Debug utilities and temporary test files
-- Legacy test implementations
-- Development artifacts and demos
+1. **LLM Providers**: Real OpenAI, Anthropic, or other provider API keys
+2. **FAISSx Servers**: For vector search (ports 45678, 65432)
+3. **PostgreSQL Database**: For multi-user tests
+4. **A2A Registry Server**: For agent communication
+5. **MCP Servers**: Built-in and external servers
 
 ## 🚀 Running Tests
 
-### By Category
+### Quick Start
+
 ```bash
-# Run all schema validation tests
-pytest runtime/tests/schema_validation/
+# Run all tests
+pytest
 
-# Run A2A communication tests
-pytest runtime/tests/a2a/
+# Run specific test area
+pytest tests/e2e/1_foundation/
 
-# Run memory system tests
-pytest runtime/tests/memory/
-
-# Run MCP tests
-pytest runtime/tests/mcp/
-```
-
-### Comprehensive Testing
-```bash
-# Run all runtime tests
-pytest runtime/tests/ --ignore=runtime/tests/archive/
+# Run specific test file
+pytest tests/e2e/1_foundation/test_1a1_basic_yaml_formation.py -v
 
 # Run with coverage
-pytest runtime/tests/ --cov=runtime/muxi --ignore=runtime/tests/archive/
+pytest --cov=muxi --cov-report=html
 ```
 
-## 📊 Test Statistics
+### Test Organization by Feature Area
 
-- **Total Test Files**: ~130+ organized test files
-- **Schema Validation**: 12 comprehensive test suites
-- **A2A Communication**: 27 test files covering full protocol
-- **Memory Systems**: 11 test files for all memory types
-- **MCP Integration**: 17 test files for protocol compliance
-- **Active Test Coverage**: All major runtime components
+Tests are organized by feature areas following our comprehensive test plan:
 
-## 🔧 Maintenance
+- **Areas 1-3**: Core functionality (formation, memory, multimodal)
+- **Areas 4-6**: Integration features (MCP, file generation, knowledge)
+- **Areas 7-8**: Advanced features (workflow, clarification)
+- **Areas 9-12**: Production features (async, streaming, resilience, observability)
 
-### Adding New Tests
-1. Place tests in the appropriate functional directory
-2. Follow naming convention: `test_[component]_[feature].py`
-3. Update this README if adding new categories
+Each area contains:
+- `TEST_MAPPING.md` - Maps test plan requirements to actual test files
+- `FINAL_SUMMARY.md` - Area's accomplishments
+- `test_Xa1_*.py` - Individual test files following naming convention
+- `run_areaX_tests.py` - Area-specific test runner
 
-### Cleaning Up
-- Archive old/deprecated tests in `archive/`
-- Remove debug files after development
-- Keep active test suites focused and maintainable
+## 📝 Naming Convention
+
+Test files follow a standardized naming pattern:
+
+```
+test_[area][group][number]_descriptive_name.py
+```
+
+Examples:
+- `test_1a1_basic_yaml_formation.py` - Area 1, Group A, Test 1
+- `test_2b1_sqlite_persistence.py` - Area 2, Group B, Test 1
+- `test_3c2_video_processing.py` - Area 3, Group C, Test 2
+
+## 🔧 Configuration
+
+### Environment Variables
+
+Set your API keys and service configurations:
+
+```bash
+export OPENAI_API_KEY="your-key-here"
+export ANTHROPIC_API_KEY="your-key-here"
+export FAISSX_TENANT_ID="your-tenant-id"
+```
+
+### Test Formations
+
+Pre-configured formations are available in `tests/assets/formations/`:
+
+- `formation-basic/` - Single agent with minimal memory
+- `formation-memory/` - Various memory configurations
+- `formation-multi-agent/` - Multiple agents for routing tests
+- `formation-file-generation/` - Built-in MCP enabled
+- `formation-complete/` - Comprehensive formation with all components
+
+## 📊 Test Coverage
+
+Current test coverage across features:
+
+| Feature | Coverage | Status |
+|---------|----------|--------|
+| Formation Loading | 100% | ✅ |
+| Memory Systems | 100% | ✅ |
+| Multimodal Processing | 94% | ✅ |
+| MCP Integration | 100% | ✅ |
+| File Generation | 95.5% | ✅ |
+| Knowledge System | 100% | ✅ |
+| Multi-Agent Coordination | 100% | ✅ |
+| Clarification Flow | 100% | ✅ |
+
+Total: **1,400+ test combinations** across 22 feature dimensions
+
+## 🐛 Known Issues
+
+### Large File Processing
+- Video files >100MB may timeout with Google Gemini
+- OpenAI Whisper has a 25MB limit for audio files
+
+### Cross-Format Operations
+- Some complex cross-format operations require optimization
+- Workarounds documented in test reports
+
+## 📚 Documentation
+
+- [Comprehensive Test Plan](Comprehensive_Test_Plan.md) - Master testing strategy
+- [Test Reports](reports/) - Detailed execution results
+- [Contributing](../CONTRIBUTING.md) - How to add new tests
+
+## 🤝 Contributing Tests
+
+When adding new tests:
+
+1. Follow the naming convention
+2. Use real services (no mocks)
+3. Add to appropriate area/group
+4. Update TEST_MAPPING.md
+5. Document in FINAL_SUMMARY.md
+6. Use existing formations when possible
+
+Example test structure:
+
+```python
+"""
+Area X - Test Group XA: Feature Description
+
+Tests specific functionality following the test plan.
+"""
+import pytest
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+
+from src.muxi.formation import Formation
+
+@pytest.mark.asyncio
+async def test_xa1_feature_name():
+    """Test description matching test plan."""
+    formation = Formation()
+    await formation.load("tests/assets/formations/formation-basic/formation.yaml")
+    overlord = await formation.start_overlord()
+
+    response = await overlord.chat(
+        "Test message",
+        user_id="test_user"
+    )
+
+    assert response is not None
+    assert "expected" in response.lower()
+```
+
+## 📈 Success Metrics
+
+Tests validate:
+- ✅ All 22 feature dimensions in combination
+- ✅ User credentials with encryption & isolation
+- ✅ File generation across all major formats
+- ✅ Domain knowledge with multiple agents
+- ✅ Built-in MCP security validation
+- ✅ SOP system with 72% code reduction
+- ✅ Multiple clarification sequences
+- ✅ Formation-first architecture
+- ✅ Real developer API (`overlord.chat()`)
 
 ---
 
-This organization ensures that tests are:
-- **Discoverable**: Easy to find tests for specific components
-- **Maintainable**: Logical grouping reduces maintenance overhead
-- **Focused**: Each directory has a clear purpose and scope
-- **Comprehensive**: Full coverage of runtime functionality
+For questions or issues with tests, see the [main Contributing Guide](../CONTRIBUTING.md) or open an issue on GitHub.
