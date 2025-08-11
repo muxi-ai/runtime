@@ -127,8 +127,6 @@ src/muxi/observability/health/.status
 .claude/settings.local.json
 src/muxi/.claude/settings.local.json
 .key
-.claude/commands/read-test-plan.md
-CLAUDE.md
 test-docs/chart.png
 test-docs/demo.mov
 test-docs/document.docx
@@ -155,8 +153,6 @@ webhook_log.json
 .ruff_cache
 .venv/
 .cursor
-context
-schemas
 .taskmaster
 tests/outputs/*
 .a2a_registry_data/agents.json
