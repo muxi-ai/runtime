@@ -6204,8 +6204,8 @@ class Overlord:
                         failed_workflow.status = WorkflowStatus.FAILED
                     if hasattr(failed_workflow, "completed_at"):
                         failed_workflow.completed_at = datetime.now()
-                    if hasattr(failed_workflow, "error_message"):
-                        failed_workflow.error_message = str(e)
+                    # Note: Workflow model doesn't have error_message field
+                    # Error details are logged in observability events below
 
                     self.workflow_manager.complete_workflow(workflow_id, failed_workflow)
 

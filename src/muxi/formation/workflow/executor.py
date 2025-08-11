@@ -92,8 +92,8 @@ class WorkflowExecutor:
                             task.end_time = datetime.now()
 
                     workflow.status = WorkflowStatus.FAILED
-                    workflow.error_message = "Workflow timeout exceeded"
                     workflow.completed_at = datetime.now()
+                    # Note: Workflow model doesn't have error_message field
 
                     # Log timeout event
                     observability.observe(
@@ -233,8 +233,8 @@ class WorkflowExecutor:
         except Exception as e:
             #  Error - TODO: add observability
             workflow.status = WorkflowStatus.FAILED
-            workflow.error_message = str(e)
             workflow.completed_at = datetime.now()
+            # Note: Workflow model doesn't have error_message field
 
         finally:
             # Cancel timeout monitor if still running
@@ -335,8 +335,8 @@ class WorkflowExecutor:
 
         except Exception as e:
             workflow.status = WorkflowStatus.FAILED
-            workflow.error_message = str(e)
             workflow.completed_at = datetime.now()
+            # Note: Workflow model doesn't have error_message field
 
             # Notify workflow failed
             if progress_callback:
@@ -1419,7 +1419,7 @@ class WorkflowExecutor:
                 and elapsed > self.config.timeout_config.workflow_timeout
             ):
                 workflow.status = WorkflowStatus.FAILED
-                workflow.error_message = "Workflow timeout exceeded"
+                # Note: Workflow model doesn't have error_message field
                 return False
 
         # Check failure strategy
