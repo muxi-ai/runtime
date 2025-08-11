@@ -197,7 +197,22 @@ pytest
 - [muxi-ai/onellm](https://github.com/muxi-ai/onellm) - Unified LLM interface
 - [muxi-ai/faissx](https://github.com/muxi-ai/faissx) - Distributed vector store
 
-## 📄 License
+## 📄 Citation
+
+If you use MUXI Runtime in your research or commercial product, please cite:
+
+```
+@software{MUXI_2025,
+  author = {Ran Aroussi},
+  title = {MUXI Runtime: The container runtime for AI agents},
+  year = {2025},
+  url = {https://github.com/muxi-ai/runtime},
+  note = {Available at https://muxi.org/},
+  version = {latest}
+}
+```
+
+## ⚖️ License
 
 MUXI Runtime (and MUXI Server) are licensed under the **Elastic License 2.0** (ELv2).
 
