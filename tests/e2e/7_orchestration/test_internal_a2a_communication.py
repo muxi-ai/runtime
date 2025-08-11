@@ -48,8 +48,6 @@ async def main():
     )
 
     # Collect and display response
-    print("\nOverlord Response (auto-routed):")
-
     # Handle response like the working test
     if hasattr(response, 'content'):
         result = response.content
@@ -57,9 +55,12 @@ async def main():
         result = ""
         async for chunk in response:
             result += chunk
-            print(chunk, end="", flush=True)
+            # print(chunk, end="", flush=True)
 
-    print("\n" + "-"*60)
+    print("\n" + "="*60)
+    print("\nOverlord Response (auto-routed):")
+    print(result)  # ACTUALLY PRINT THE RESULT!
+    print("\n" + "="*60)
 
     # Track the behavior
     print("\n3. Behavior tracking:")
