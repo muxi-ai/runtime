@@ -2,11 +2,23 @@
 
 Thank you for your interest in contributing to MUXI Runtime! We're excited to have you join our community of developers building the future of AI infrastructure.
 
-## 🌟 Welcome
-
 MUXI Runtime is the execution engine that powers AI agent formations. Your contributions help make AI development more accessible, reliable, and powerful for developers worldwide.
 
-## 📜 Code of Conduct
+## 🤟 Anyone can cook :)
+
+You can contribute by:
+
+- [Reporting a bug](https://github.com/muxi-ai/runtime/issues/new/choose)
+- [Participating in the discussions](https://github.com/muxi-ai/community/discussions)
+- [Improving the documentation](https://github.com/muxi-ai/docs)
+- [Proposing new features](https://github.com/muxi-ai/community/discussions)
+
+
+## 👨🏼‍💻 Contributing code
+
+If you're interested in contributing code, we welcome contributions from anyone who is motivated and wants to be part of that journey!
+
+### 📜 Code of Conduct
 
 We are committed to providing a welcoming and inclusive environment for all contributors. By participating in this project, you agree to:
 
@@ -18,16 +30,16 @@ We are committed to providing a welcoming and inclusive environment for all cont
 
 See the full [code of conduct](CODE_OF_CONDUCT.md) for more details.
 
-## 🚀 Getting Started
+### 🚀 Getting started
 
-### Prerequisites
+#### Prerequisites
 
 - Python 3.10 or higher
 - Git
 - A GitHub account
 - API keys for at least one LLM provider (OpenAI, Anthropic, etc.)
 
-### Development Setup
+#### Development Setup
 
 1. **Fork the repository**
    ```bash
@@ -72,39 +84,39 @@ See the full [code of conduct](CODE_OF_CONDUCT.md) for more details.
    pytest tests/e1e/day_1/test_1a1_basic_yaml_formation.py -v
    ```
 
-## 🧪 Testing Philosophy
+### 🧪 Testing Philosophy
 
 **We test against real services, not mocks.** This ensures our code works in production.
 
-### Running Tests
+#### Running Tests
 
 ```bash
-# Run all tests
+## Run all tests
 pytest
 
-# Run specific test suite
+## Run specific test suite
 pytest tests/e1e/day_1/  # Foundation tests
 pytest tests/e1e/day_2/  # Memory systems
 pytest tests/e1e/day_3/  # Multimodal processing
 
-# Run with verbose output
+## Run with verbose output
 pytest -v
 
-# Run with coverage
+## Run with coverage
 pytest --cov=muxi --cov-report=html
 ```
 
-### Test Organization
+#### Test Organization
 
 Tests are organized by feature "days" in our comprehensive test plan:
 - **Day 1-3**: Core functionality (formation, memory, multimodal)
 - **Day 4-6**: Integration features (MCP, file generation, knowledge)
 - **Day 7-12**: Advanced features (workflow, resilience, clarification)
 
-### Writing Tests
+#### Writing Tests
 
 ```python
-# Example test structure
+## Example test structure
 async def test_feature_with_real_service():
     """Test description explaining what we're testing."""
     # 1. Setup - Create real formation
@@ -120,9 +132,9 @@ async def test_feature_with_real_service():
     assert "expected" in response.lower()
 ```
 
-## 💻 Development Guidelines
+### 💻 Development Guidelines
 
-### Code Style
+#### Code Style
 
 - **Python 3.10+ features** - Use modern Python
 - **Type hints** - All public functions should have type hints
@@ -153,7 +165,7 @@ async def process_message(
     # Implementation here
 ```
 
-### Architecture Principles
+#### Architecture Principles
 
 1. **Formation-First** - Everything starts with YAML configuration
 2. **Provider-Agnostic** - Use OneLLM for all LLM interactions
@@ -161,36 +173,36 @@ async def process_message(
 4. **Fail Fast** - Clear errors for configuration problems
 5. **Graceful Degradation** - Continue when optional features fail
 
-### Multilingual Support
+#### Multilingual Support
 
 **Always use LLM over pattern matching** for user-facing text:
 - ❌ Don't: `if re.match(r'^(help|assist)', message)`
 - ✅ Do: Use LLM to detect intent in any language
 
-## 🔄 Pull Request Process
+### 🔄 Pull Request Process
 
-### 1. Create a Feature Branch
+#### 1. Create a Feature Branch
 
 ```bash
 git checkout -b feature/your-feature-name
-# or
+## or
 git checkout -b fix/issue-description
 ```
 
-### 2. Make Your Changes
+#### 2. Make Your Changes
 
 - Write clean, documented code
 - Add tests for new functionality
 - Update documentation if needed
 - Ensure all tests pass
 
-### 3. Commit Your Changes
+#### 3. Commit Your Changes
 
 ```bash
-# Use clear, descriptive commit messages
+## Use clear, descriptive commit messages
 git commit -m "Add support for custom memory backends"
 
-# For multi-line commits
+## For multi-line commits
 git commit -m "Fix memory leak in buffer manager
 
 - Add cleanup in __del__ method
@@ -198,7 +210,7 @@ git commit -m "Fix memory leak in buffer manager
 - Add test for memory cleanup"
 ```
 
-### 4. Push and Create PR
+#### 4. Push and Create PR
 
 ```bash
 git push origin feature/your-feature-name
@@ -210,15 +222,15 @@ Then go to GitHub and create a Pull Request with:
 - **Link to issue** if applicable
 - **Test results** showing tests pass
 
-### 5. PR Review Process
+#### 5. PR Review Process
 
 - Maintainers will review within 2-3 business days
 - Address feedback constructively
 - Once approved, we'll merge your contribution!
 
-## 🐛 Reporting Issues
+### 🐛 Reporting Issues
 
-### Bug Reports
+#### Bug Reports
 
 Please include:
 1. **Environment** (OS, Python version, installed packages)
@@ -227,7 +239,7 @@ Please include:
 4. **Error messages** and stack traces
 5. **Steps to reproduce**
 
-### Feature Requests
+#### Feature Requests
 
 Please include:
 1. **Use case** - What problem does this solve?
@@ -235,7 +247,7 @@ Please include:
 3. **Alternatives considered** - Other approaches
 4. **Impact** - Who benefits from this feature?
 
-## 📚 Documentation
+### 📚 Documentation
 
 When adding features, please update:
 - **Docstrings** in the code
@@ -243,22 +255,22 @@ When adding features, please update:
 - **Formation schema** if adding configuration options
 - **Test documentation** for new test cases
 
-## 🤝 Community
+### 🤝 Community
 
-### Getting Help
+#### Getting Help
 
 - **Discord**: [Join our Discord](https://discord.gg/muxi) for real-time chat
 - **Discussions**: [GitHub Discussions](https://github.com/muxi-ai/community/discussions) for questions
 - **Issues**: [GitHub Issues](https://github.com/muxi-ai/runtime/issues) for bugs
 
-### Communication Tips
+#### Communication Tips
 
 - Search existing issues/discussions before creating new ones
 - Be patient - maintainers are often volunteers
 - Provide context and be specific
 - Follow up on your PRs and issues
 
-## 🏗️ Project Structure
+### 🏗️ Project Structure
 
 ```
 src/muxi/
@@ -275,7 +287,7 @@ src/muxi/
 └── utils/            # Shared utilities
 ```
 
-## 📈 Performance Considerations
+### 📈 Performance Considerations
 
 When contributing performance-sensitive code:
 - Profile before and after changes
@@ -283,7 +295,7 @@ When contributing performance-sensitive code:
 - Document performance characteristics
 - Add benchmarks for critical paths
 
-## 🚀 Release Process
+### 🚀 Release Process
 
 We use semantic versioning (MAJOR.MINOR.PATCH):
 - **PATCH**: Bug fixes, minor improvements
@@ -292,7 +304,7 @@ We use semantic versioning (MAJOR.MINOR.PATCH):
 
 Releases are automated through GitHub Actions when tags are pushed.
 
-## 🙏 Recognition
+### 🙏 Recognition
 
 Contributors are recognized in:
 - Release notes
@@ -301,9 +313,9 @@ Contributors are recognized in:
 
 We appreciate every contribution, no matter how small!
 
-## 📄 License & Contributor Agreement
+### 📄 License & Contributor Agreement
 
-### Contributor License Agreement (CLA)
+#### Contributor License Agreement (CLA)
 
 By contributing to MUXI Runtime, you agree to our [Contributor License Agreement](CONTRIBUTOR_LICENSE_AGREEMENT.md):
 
@@ -315,7 +327,7 @@ By contributing to MUXI Runtime, you agree to our [Contributor License Agreement
 
 **By submitting a pull request, you automatically agree to these terms.**
 
-### Project License
+#### Project License
 
 MUXI Runtime is licensed under the **Elastic License 2.0** (ELv2). This means:
 - ✅ You can freely use, modify, and redistribute the software
