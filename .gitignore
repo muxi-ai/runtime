@@ -181,3 +181,4 @@ tests/outputs/5f3.json
 tests/outputs/5f4.json
 tests/outputs/5f5.json
 .a2a_registry_data/agents.json
+uv.lock
