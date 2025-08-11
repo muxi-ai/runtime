@@ -7,7 +7,7 @@ allowed-tools: Bash, Read
 This command loads essential context for a new agent session by reading the project context documentation and understanding the codebase structure.
 
 ## Instructions
-- Read all files in the `/Users/ran/Projects/muxi/code/context/` directory (no recursion) to understand the project comprehensively
+- Read all files in the `context/` directory (no recursion) to understand the project comprehensively
 - Run `git ls-files` to understand the codebase structure and file organization
 - Read the README.md to understand the project purpose, setup instructions, and key information
 - Read the formation spec

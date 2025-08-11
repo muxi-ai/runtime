@@ -21,5 +21,5 @@ This command loads essential context for a new agent session by examining the co
    - [MUXI Formation Spec](schemas/formation/README.md)
    - [MUXI Formation directory](schemas/formation/)
 - Read the test plan
-   - [Runtime Test Plan.md](MUXI_Runtime_Comprehensive_Test_Plan.md)
-   - [Runtime Testing Guide](MUXI_Runtime_Testing_Guide.md)
+   - [Runtime Test Plan.md](tests/Comprehensive_Test_Plan.md)
+   - [Runtime Testing Guide](tests/Lessons-Learned.md)

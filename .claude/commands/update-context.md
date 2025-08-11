@@ -4,7 +4,7 @@ allowed-tools: Read, Write, Bash
 
 # Update Context
 
-This command updates the project context documentation in `/Users/ran/Projects/muxi/code/context/` to reflect the current state of the MUXI Runtime project. Run this at the end of each development session to keep context accurate.
+This command updates the project context documentation in `context/` to reflect the current state of the MUXI Runtime project. Run this at the end of each development session to keep context accurate.
 
 ## Instructions
 - Review the current state of the project by examining recent changes and progress
@@ -24,7 +24,7 @@ This command updates the project context documentation in `/Users/ran/Projects/m
 - Tell me which files were updated and summarize the changes
 
 ## Context
-- Context directory: `/Users/ran/Projects/muxi/code/context/`
+- Context directory: `context/`
 - Current git status: !`git status --short`
 - Recent commits: !`git log --oneline -10`
 - Project README: @README.md
