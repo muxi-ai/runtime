@@ -135,17 +135,27 @@ Context:
 The user's original request was vague ("{request.intent}") and we asked for clarification.
 Now they've provided: "{user_response}"
 
-Analyze if this provides enough information to proceed with a basic implementation.
-Be practical - if the user has clarified what they want at a high level, that's often enough to start.
+Analyze if this provides enough information to proceed. Be VERY practical and avoid over-clarification.
+
+IMPORTANT RULES:
+- If the user mentions a specific technology, language, or error type, that's ENOUGH to proceed
+- For bug fixes: knowing it's "Python syntax error" is sufficient - we can help debug
+- **If the user provides actual CODE, that's ALWAYS enough** - mark as complete immediately
+- For projects: knowing it's "web scraper" or "API" is sufficient to start
+- Only continue clarifying if you literally cannot take ANY helpful action
+
+SPECIAL CASE - CODE PROVIDED:
+If the response contains code (look for patterns like "for", "if", "def", "class", "print", etc. or multi-line structure with indentation), ALWAYS mark is_complete as true. The user has given you concrete code to work with.
 
 Return JSON with:
-1. extracted: Key information from the response (e.g., what to build, type of project)
-2. next_question: Only ask another question if truly critical info is missing (null if we can proceed)
-3. is_complete: true if we have enough to start working, false only if critical info is missing
+1. extracted: Key information from the response (e.g., bug type, language, project type)
+2. next_question: ONLY if absolutely impossible to help (usually null). This should be in the same language as the user's original request.
+3. is_complete: true unless you literally cannot provide ANY assistance
 
-Remember: Users often want to start with a basic version. Don't over-clarify.
-
-Example - if user says "Build it" then clarifies "A web scraper", that's enough to start a basic scraper.
+Examples of COMPLETE clarifications:
+- "Build it" → "A web scraper" = COMPLETE (can build basic scraper)
+- "Fix the bug" → "Python syntax error" = COMPLETE (can help with Python syntax)
+- "Help with database" → "PostgreSQL" = COMPLETE (can help with PostgreSQL)
 
 Return ONLY valid JSON, no explanation."""
 
