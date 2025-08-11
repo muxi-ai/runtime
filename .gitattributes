@@ -1,8 +1,6 @@
 # Git attributes for MUXI Runtime
-
 # Auto detect text files and perform LF normalization
 * text=auto
-
 # Python files
 *.py text diff=python
 *.pyw text diff=python
@@ -11,7 +9,6 @@
 *.pyc binary
 *.pyo binary
 *.pyd binary
-
 # Documentation
 *.md text
 *.rst text
@@ -21,7 +18,6 @@ README text
 CONTRIBUTING text
 CHANGELOG text
 AUTHORS text
-
 # Configuration files
 *.yaml text
 *.yml text
@@ -32,17 +28,14 @@ AUTHORS text
 .gitignore text
 .gitattributes text
 .editorconfig text
-
 # Shell scripts
 *.sh text eol=lf
 *.bash text eol=lf
 *.zsh text eol=lf
-
 # Batch scripts
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
-
 # Test assets - Binary files
 tests/assets/files/*.pdf binary
 tests/assets/files/*.png binary
@@ -52,14 +45,14 @@ tests/assets/files/*.gif binary
 tests/assets/files/*.webp binary
 tests/assets/files/*.svg text
 tests/assets/files/*.mp3 binary
-tests/assets/files/*.wav binary
-tests/assets/files/*.mp4 binary
+tests/assets/files/*.wav filter=lfs diff=lfs merge=lfs -text
+tests/assets/files/*.mp4 filter=lfs diff=lfs merge=lfs -text
 tests/assets/files/*.avi binary
-tests/assets/files/*.mov binary
+tests/assets/files/*.mov filter=lfs diff=lfs merge=lfs -text
 tests/assets/files/*.webm binary
 tests/assets/files/*.xlsx binary
 tests/assets/files/*.xls binary
-tests/assets/files/*.pptx binary
+tests/assets/files/*.pptx filter=lfs diff=lfs merge=lfs -text
 tests/assets/files/*.ppt binary
 tests/assets/files/*.docx binary
 tests/assets/files/*.doc binary
@@ -68,10 +61,8 @@ tests/assets/files/*.tar binary
 tests/assets/files/*.gz binary
 tests/assets/files/*.7z binary
 tests/assets/files/*.rar binary
-
 # Jupyter notebooks
 *.ipynb text
-
 # Data files
 *.csv text
 *.tsv text
@@ -83,7 +74,6 @@ tests/assets/files/*.rar binary
 *.npz binary
 *.h5 binary
 *.hdf5 binary
-
 # Model files
 *.onnx binary
 *.pt binary
@@ -91,35 +81,35 @@ tests/assets/files/*.rar binary
 *.safetensors binary
 *.ckpt binary
 *.bin binary
-
 # Compiled files
 *.so binary
 *.dylib binary
 *.dll binary
 *.exe binary
-
 # Archives
 *.tar binary
 *.gz binary
 *.zip binary
 *.7z binary
 *.rar binary
-
 # Fonts
 *.ttf binary
 *.otf binary
 *.woff binary
 *.woff2 binary
 *.eot binary
-
 # Database files
 *.db binary
 *.sqlite binary
 *.sqlite3 binary
-
 # Lock files (should not be modified)
 *.lock text -diff
 poetry.lock text -diff
 Pipfile.lock text -diff
 package-lock.json text -diff
 yarn.lock text -diff
+tests/assets/files/*.m4a filter=lfs diff=lfs merge=lfs -text
+tests/assets/files/large.pdf filter=lfs diff=lfs merge=lfs -text
+tests/assets/files/report.pdf filter=lfs diff=lfs merge=lfs -text
+tests/assets/files/document.docx filter=lfs diff=lfs merge=lfs -text
+tests/assets/files/slide.png filter=lfs diff=lfs merge=lfs -text
