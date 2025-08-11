@@ -177,32 +177,12 @@ Test organization by feature day:
 - Day 4-6: MCP, File Generation, Knowledge
 - Day 7-12: Advanced features (workflow, resilience, etc.)
 
-### Test Execution Pattern
+### Test Execution
 
-**IMPORTANT**: When running tests, always use the test runner script to save context:
-```bash
-# Run test with automatic log redirection
-./tests/run-with-log.sh tests/e2e/8_clarification/test_8a1.py
+When running tests, always use the test-executor-analyzer agent to execute and analyze the test results.
 
-# Or with custom log name for iteration
-./tests/run-with-log.sh tests/e2e/8_clarification/test_8a1.py test_8a1_v2.log
-```
+Using the test-executor-analyzer agent ensures:
 
-After running tests:
-1. Use the Task tool with `test-runner-summarizer` agent to analyze the log
-2. The agent will surface key issues, failures, and actionable insights
-3. This approach saves significant context in the main conversation
-
-Example workflow:
-```bash
-# Run test with automatic logging
-./tests/run-with-log.sh tests/e2e/7_orchestration/test_sops.py
-
-# Then use Task tool to analyze:
-# "Analyze the test log at tests/logs/test_sops.log and summarize any failures or issues"
-```
-
-This pattern ensures:
 - Full test output is captured for debugging
 - Main conversation stays clean and focused
 - Context usage is optimized

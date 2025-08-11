@@ -169,6 +169,7 @@ User: ...
 System: ...
 ```
 
+
 ### Test Execution Pattern
 
 **IMPORTANT**: When running tests, always use the test runner script to save context:
@@ -200,6 +201,7 @@ This pattern ensures:
 - Context usage is optimized
 - All issues are properly surfaced
 - No approval dialogs interrupt the workflow
+
 
 ## 🐛 Known Issues
 
