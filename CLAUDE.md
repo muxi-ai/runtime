@@ -141,16 +141,16 @@ user_request → SOP search (FAISS) → Pass SOP to decomposer → Execute workf
 async def chat(self, message: str, user_id: str):
     # 1. Detect intent
     intent = await self.intent_detector.analyze(message)
-    
+
     # 2. Find relevant SOPs
     sops = await self.sop_coordinator.search(message)
-    
+
     # 3. Select agent(s) based on SOPs or intent
     if sops:
         agents = self.select_agents_for_sop(sops[0])
     else:
         agent = self.select_agent(intent)
-    
+
     # 4. Execute with memory context
     context = await self.memory.get_context(user_id)
     response = await agent.process(message, context)
@@ -179,10 +179,13 @@ Test organization by feature day:
 
 ### Test Execution Pattern
 
-**IMPORTANT**: When running tests, always redirect output to save context:
+**IMPORTANT**: When running tests, always use the test runner script to save context:
 ```bash
-# Redirect test output to logs directory
-python tests/e2e/8_clarification/test_8a1.py > tests/logs/test_8a1.log 2>&1
+# Run test with automatic log redirection
+./tests/run-with-log.sh tests/e2e/8_clarification/test_8a1.py
+
+# Or with custom log name for iteration
+./tests/run-with-log.sh tests/e2e/8_clarification/test_8a1.py test_8a1_v2.log
 ```
 
 After running tests:
@@ -192,8 +195,8 @@ After running tests:
 
 Example workflow:
 ```bash
-# Run test with output redirection
-python tests/e2e/7_orchestration/test_sops.py > tests/logs/test_sops.log 2>&1
+# Run test with automatic logging
+./tests/run-with-log.sh tests/e2e/7_orchestration/test_sops.py
 
 # Then use Task tool to analyze:
 # "Analyze the test log at tests/logs/test_sops.log and summarize any failures or issues"
@@ -204,6 +207,32 @@ This pattern ensures:
 - Main conversation stays clean and focused
 - Context usage is optimized
 - All issues are properly surfaced
+- No approval dialogs interrupt the workflow
+
+#### Note about e2e tests
+
+Ensure every test ends up with a summary and the correspondence between the user and the overlord.
+
+After all the logs are printed, add:
+
+```
+========================================
+
+### Test Result:
+  🎉 SUCCESS: ...
+  ✓ ...
+  ✓ ...
+  ✓ ...
+
+========================================
+
+### Chat transcript:
+
+User: ...
+System: ...
+User: ...
+System: ...
+```
 
 ## Common Issues
 
