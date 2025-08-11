@@ -214,5 +214,5 @@ See the [LICENSE](LICENSE) file for the complete license text and [licensing det
 
 ---
 
-**Building the future of AI infrastructure, one runtime at a time**
+**Building the future of AI infrastructure, one runtime at a time**<br>
 [Report Bug](https://github.com/muxi-ai/runtime/issues) • [Submit PR](https://github.com/muxi-ai/runtime/pulls) • [Join Discussions](https://github.com/muxi-ai/community/discussions)

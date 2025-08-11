@@ -301,9 +301,28 @@ Contributors are recognized in:
 
 We appreciate every contribution, no matter how small!
 
-## 📄 License
+## 📄 License & Contributor Agreement
 
-By contributing, you agree that your contributions will be licensed under the Elastic License 2.0.
+### Contributor License Agreement (CLA)
+
+By contributing to MUXI Runtime, you agree to our [Contributor License Agreement](CONTRIBUTOR_LICENSE_AGREEMENT.md):
+
+1. **Grant of License**: You grant us permission to license your contributions on any terms we choose, including open-source and commercial licensing models.
+
+2. **Purpose**: This allows your contributions to be included in the project and supports future development, including potential commercialization.
+
+3. **Warranty**: Your contributions are provided "as is" without warranty.
+
+**By submitting a pull request, you automatically agree to these terms.**
+
+### Project License
+
+MUXI Runtime is licensed under the **Elastic License 2.0** (ELv2). This means:
+- ✅ You can freely use, modify, and redistribute the software
+- ✅ You can include it in commercial products
+- ❌ You cannot offer it as a hosted/managed service to others
+
+See [LICENSE](LICENSE) for full details.
 
 ---
 
