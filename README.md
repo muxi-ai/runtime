@@ -2,20 +2,16 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version">
-  <img src="https://img.shields.io/badge/python-3.9+-green.svg" alt="Python">
+  <img src="https://img.shields.io/badge/python-3.10+-green.svg" alt="Python">
   <img src="https://img.shields.io/badge/license-Elastic-purple.svg" alt="License">
   <img src="https://img.shields.io/badge/tests-passing-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/coverage-85%25-green.svg" alt="Coverage">
 </p>
 
-<h3 align="center">
-  The container runtime for AI agents
-</h3>
+### The container runtime for AI agents
 
-<p align="center">
-  <strong>Core execution engine that powers the MUXI AI Server</strong><br>
-  Like containers for Docker, but for intelligent multi-agent systems
-</p>
+**Core execution engine that powers the MUXI AI Server**
+> _“Like containers for Docker, but for intelligent multi-agent systems”_
 
 ---
 
@@ -23,9 +19,8 @@
 
 MUXI Runtime is the low-level execution engine that powers AI agent formations inside the [MUXI AI Server](https://github.com/muxi-ai/server). It's the foundational layer that transforms declarative YAML configurations into living, breathing AI systems.
 
-**For end users**: Install [MUXI AI Server](https://github.com/muxi-ai/server) for the complete platform experience.
-
-**For contributors**: This repository contains the core runtime that makes AI agents actually work.
+> [!NOTE]
+> This repository is for contributors and the for developers who want to embed MUXI Runtime in their own applications. **For 90% of users, we recommend installing [MUXI AI Server](https://github.com/muxi-ai/server) for the complete platform experience.**
 
 ### Core Responsibilities
 
@@ -86,51 +81,75 @@ MUXI Runtime is the low-level execution engine that powers AI agent formations i
 └────────────────────────────────────┘
 ```
 
-## 🚀 Quick Start for Contributors
+📚 **Full Documentation**: [muxi.org/docs](https://muxi.org/docs)
 
-### Development Setup
+---
+
+## 🚀 Quick Start
+
+The easiest way to get started is to install the MUXI Server + CLI and create a new project:
 
 ```bash
-# Clone the repository
-git clone https://github.com/muxi-ai/runtime
-cd runtime
+# Install MUXI Server + CLI
+curl -fsSL https://muxi.org/install | sh
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Create a new AI project
+muxi new my-ai-assistant
+cd my-ai-assistant
 
-# Install in development mode
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Run specific test suites
-pytest tests/day_1/  # Foundation tests
-pytest tests/day_2/  # Memory systems
-pytest tests/day_3/  # Multimodal processing
+# Start developing
+muxi dev
 ```
 
-### Your First Formation
+### 📚 Documentation
+- [Quick Start Guide](https://muxi.org/docs/quickstart) - Get started with MUXI
+- [Formation Guide](https://muxi.org/docs/formations) - Creating AI systems
+- [API Reference](https://muxi.org/docs/api) - Server API documentation
 
-Create a simple AI system to see the runtime in action:
+---
 
+## 🔧 Embedding MUXI Runtime
+
+The MUXI Runtime can be used directly as a Python framework:
+
+```python
+from muxi import Formation
+import asyncio
+
+async def main():
+    # Load a formation
+    formation = Formation()
+    await formation.load("formation.yaml")
+
+    # Start the runtime
+    overlord = await formation.start_overlord()
+
+    # Interact with your AI system
+    response = await overlord.chat(
+        "Hello! What can you help me with?",
+        user_id="user123"
+    )
+    print(response)
+
+asyncio.run(main())
+```
+
+**Example formation.yaml:**
 ```yaml
-# my-assistant.yaml
 schema: "1.0.0"
-id: "dev-assistant"
-description: "Development helper AI"
+id: "my-assistant"
+description: "A helpful AI assistant"
 
 llm:
-  api_keys:
-    openai: "${{ secrets.OPENAI_API_KEY }}"
   models:
     - text: "openai/gpt-4o-mini"
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
 
 agents:
-  - id: "coder"
-    name: "Code Assistant"
-    system_message: "You are an expert programmer who writes clean, efficient code."
+  - id: "assistant"
+    name: "General Assistant"
+    system_message: "You are a helpful AI assistant."
 
 memory:
   buffer:
@@ -138,502 +157,34 @@ memory:
     vector_search: true
 ```
 
-Run it directly:
+### 📚 Documentation
 
-```python
-from muxi import Formation
-import asyncio
+- [Python SDK](https://muxi.org/docs/sdk/python) - Using MUXI as a library
+- [Formation Schema](https://muxi.org/docs/schema) - Complete YAML reference
+- [Advanced Patterns](https://muxi.org/docs/patterns) - Complex use cases
 
-async def main():
-    # Load formation
-    formation = Formation()
-    await formation.load("my-assistant.yaml")
-
-    # Start runtime
-    overlord = await formation.start_overlord()
-
-    # Test it
-    response = await overlord.chat(
-        "Write a Python function to calculate fibonacci numbers",
-        user_id="dev123"
-    )
-    print(response)
-
-asyncio.run(main())
-```
-
-## 🔬 Real-World Examples
-
-### Multi-Agent Customer Support
-
-```yaml
-# support-system.yaml
-schema: "1.0.0"
-id: "enterprise-support"
-description: "Multi-agent customer support system"
-
-agents:
-  - id: "router"
-    name: "Support Router"
-    description: "Routes customer queries to appropriate specialists"
-    system_message: "Route customer queries to the right specialist"
-
-  - id: "billing"
-    name: "Billing Expert"
-    description: "Handles billing and payment inquiries"
-    specialties: ["payments", "invoices", "subscriptions"]
-
-  - id: "technical"
-    name: "Tech Specialist"
-    description: "Provides technical support and troubleshooting"
-    specialties: ["bugs", "setup", "integration"]
-
-memory:
-  persistent:
-    connection_string: "postgresql://localhost/support_memory"
-
-mcp:
-  servers:
-    - id: "zendesk"
-      description: "Zendesk integration for ticket management"
-      type: "http"
-      endpoint: "https://api.zendesk.com/mcp"
-```
-
-### AI Development Team
-
-```yaml
-# dev-team.yaml
-schema: "1.0.0"
-id: "ai-dev-team"
-description: "AI development team with specialized roles"
-
-llm:
-  api_keys:
-    openai: "${{ secrets.OPENAI_API_KEY }}"
-    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
-
-agents:
-  - id: "architect"
-    name: "System Architect"
-    description: "Designs scalable system architectures"
-    system_message: "Design scalable system architectures"
-    llm_models:
-      - text: "anthropic/claude-3-opus"
-
-  - id: "developer"
-    name: "Senior Developer"
-    description: "Implements production-ready code"
-    system_message: "Implement clean, efficient code"
-    llm_models:
-      - text: "openai/gpt-4o"
-
-  - id: "reviewer"
-    name: "Code Reviewer"
-    description: "Reviews code quality and suggests improvements"
-    system_message: "Review code for bugs and improvements"
-
-runtime:
-  built_in_mcps:
-    - file-generation  # Create actual code files
-
-# Standard Operating Procedures (SOPs) in sops/ directory
-# sops/code-review.yaml
-id: code-review-v1
-title: Code Review Process
-description: Standard process for reviewing pull requests
-steps:
-  - step: Check code style and formatting
-    description: Verify code follows project conventions
-  - step: Review logic and algorithms
-    description: Analyze implementation correctness
-  - step: Test coverage assessment
-    description: Ensure adequate test coverage
-  - step: Security audit
-    description: Check for security vulnerabilities
-  - step: Performance review
-    description: Identify performance bottlenecks
-outcomes:
-  success:
-    - Code approved for merge
-    - Feedback documented
-```
-
-## 🧪 Testing Philosophy
-
-**No mocks allowed** - We test against real services to ensure production reliability:
-
-```python
-# Example test pattern
-async def test_multi_agent_routing():
-    # Load real formation
-    formation = Formation()
-    await formation.load("test-formations/multi-agent.yaml")
-    overlord = await formation.start_overlord()
-
-    # Test with real LLM
-    response = await overlord.chat("Calculate 2+2")
-    assert "4" in response
-
-    # Test routing logic
-    response = await overlord.chat("I have a billing question")
-    # Should route to billing specialist
-```
-
-## 📂 Project Structure
-
-```
-src/muxi/
-├── formation.py         # Formation loader and lifecycle manager
-├── overlord.py         # Central orchestration engine
-├── agents/             # Agent implementations
-│   ├── base.py        # Base agent class
-│   └── registry.py    # Agent discovery and registration
-├── memory/             # Memory subsystems
-│   ├── buffer.py      # Working FIFO + vector memory
-│   ├── persistent.py  # Long-term PostgreSQL/SQLite storage
-│   └── vector.py      # FAISSx integration
-├── services/           # Core services
-│   ├── mcp/          # Model Context Protocol implementation
-│   ├── scheduler/    # Task scheduling system
-│   ├── multimodal/   # File processing (images, audio, video)
-│   └── a2a/          # Agent-to-agent communication
-└── utils/             # Shared utilities
-```
-
-## 🔧 Core Components Deep Dive
-
-### Formation Engine
-The heart of the runtime - loads YAML and creates live AI systems:
-
-```python
-from muxi import Formation
-
-# Load formation (like docker load)
-formation = Formation()
-await formation.load("path/to/formation.yaml")
-
-# Validate configuration
-await formation.validate()
-
-# Start runtime (like docker run)
-overlord = await formation.start_overlord()
-
-# Hot reload for development
-await formation.reload()
-```
-
-### Overlord Orchestrator
-Intelligent message routing and agent coordination with SOP guidance:
-
-```python
-class Overlord:
-    async def chat(self, message: str, user_id: str):
-        # 1. Intent detection
-        intent = await self.intent_detector.analyze(message)
-
-        # 2. SOP matching (NEW)
-        relevant_sops = await self.sop_coordinator.search(message)
-
-        # 3. Agent selection (enhanced with SOPs)
-        if relevant_sops:
-            # Use SOP to guide task decomposition
-            agents = self.select_agents_for_sop(relevant_sops[0])
-        else:
-            agent = self.select_agent(intent, self.agents)
-
-        # 4. Memory context
-        context = await self.memory.get_context(user_id)
-
-        # 5. Tool discovery
-        tools = await self.mcp_manager.get_tools_for_agent(agent)
-
-        # 6. Execute with agent(s)
-        if relevant_sops:
-            # Follow SOP steps with appropriate agents
-            response = await self.execute_sop(
-                relevant_sops[0],
-                agents,
-                message,
-                context,
-                tools
-            )
-        else:
-            response = await agent.process(
-                message,
-                context=context,
-                tools=tools
-            )
-
-        return response
-```
-
-### Memory Systems
-
-**Three-tier architecture for perfect recall:**
-
-```python
-# Buffer Memory - Recent context with vector similarity
-from muxi.memory import WorkingMemory
-
-# Note: WorkingMemory configuration is typically done in formation.yaml
-# This is just showing the internal API for contributors
-memory = WorkingMemory(
-    buffer_size=20,
-    buffer_multiplier=10,
-    vector_search_enabled=True
-)
-
-# Persistent Memory - Long-term storage
-from muxi.memory import LongTermMemory
-
-memory = LongTermMemory("postgresql://localhost/muxi")
-await memory.store_user_preference("theme", "dark", user_id="123")
-
-# Vector Memory - Semantic search
-results = await memory.search(
-    "previous discussion about API design",
-    user_id="123",
-    top_k=5
-)
-```
-
-## 🚀 Advanced Features
-
-### Natural Language Task Scheduling
-```python
-# Users can schedule tasks conversationally
-response = await overlord.chat(
-    "Check my GitHub PRs every morning and summarize them",
-    user_id="dev123"
-)
-# Creates recurring job automatically
-```
-
-### Intelligent Tool Chaining
-```python
-# Agents automatically recover from errors
-response = await overlord.chat(
-    "Create the report in /reports/2024/q4/analysis.pdf"
-)
-# Agent will create directories if needed, handle permissions, etc.
-```
-
-### User Credential Management
-```python
-# Each user has isolated credentials
-response = await overlord.chat(
-    "Create a PR on my GitHub repo",
-    user_id="alice"  # Uses Alice's GitHub token
-)
-```
-
-### Multimodal Processing
-```python
-# Handle any file type
-response = await overlord.chat(
-    "Analyze this presentation and extract key points",
-    files=[{"filename": "deck.pdf", "content": pdf_bytes}]
-)
-```
-
-## 📚 Documentation
-
-### Core Documentation
-- [Workflow System](docs/workflow/) - Complete workflow documentation
-  - [Orchestration](docs/workflow/orchestration.md) - Task decomposition and multi-agent coordination
-  - [Resilience](docs/workflow/resilience_integration.md) - Error recovery and graceful degradation
-  - [Technical Guide](docs/workflow/technical_guide.md) - Implementation details
-  - [Quick Reference](docs/workflow/quick_reference.md) - Common patterns
-- [Memory Systems](docs/memory-systems.md) - Three-tier memory architecture
-- [MCP Integration](docs/mcp/README.md) - Model Context Protocol for tools
-- [Agent Collaboration](docs/agent-collaboration.md) - Multi-agent patterns
-- [Observability](docs/observability.md) - Monitoring and event streaming
-
-### Technical Guides
-- [Type Safety Guide](docs/type-safety-guide.md) - Pydantic v2 patterns
-- [Multi-User Architecture](docs/multi-user-architecture.md) - Tenant isolation
-- [Configuration Guide](docs/configuration/) - Formation YAML reference
-- [API Documentation](docs/formation-api-server.md) - REST API endpoints
-
-## 📊 Performance Characteristics
-
-- **Response Time**: < 2s for simple queries
-- **Complex Workflows**: < 30s with streaming updates
-- **Memory Usage**: < 100MB per 100 conversations
-- **Concurrent Users**: 1,000+ per instance
-- **Database Performance**: 3x improvement with async SQLAlchemy
-- **Cost Optimization**: 70% reduction through intelligent caching
-
-## 🛠️ Contributing
-
-### Prerequisites
-
-- Python 3.10+
-- SQLite (for single-user persistent memory)
-- PostgreSQL (for multi-user persistent memory)
-- FAISSx server (optional, for distributed vector memory)
-- Real API keys for testing (OpenAI, Anthropic, etc.)
-
-### Development Workflow
-
-1. **Fork** the repository
-2. **Create** feature branch: `git checkout -b feature/amazing-feature`
-3. **Write** tests first (TDD)
-4. **Implement** your feature
-5. **Run** tests: `pytest`
-6. **Submit** pull request
-
-### Code Standards
-
-- **Style**: Black formatter, 120 char lines
-- **Types**: Type hints for all public APIs
-- **Docs**: Docstrings for public methods
-- **Async**: All I/O must be async
-- **Tests**: Real services only, no mocks
-
-## 🔌 Integration Points
-
-### For MUXI Server
-
-```python
-# The runtime exposes these interfaces
-formation = Formation()
-await formation.load(config_path)
-overlord = await formation.start_overlord()
-
-# Handle requests
-response = await overlord.chat(
-    message="User input",
-    user_id="user123",
-    session_id="session456",
-    stream=False
-)
-
-# Lifecycle management
-await overlord.stop()
-await formation.cleanup()
-```
-
-### For Tool Developers
-
-```yaml
-# Add tools via MCP in formation.yaml
-mcp:
-  servers:
-    - id: "custom-tools"
-      description: "Custom tool server for specialized operations"
-      type: "http"
-      endpoint: "http://localhost:3000/mcp"
-      auth:
-        type: "bearer"
-        token: "${{ secrets.TOOL_API_KEY }}"
-```
-
-### Standard Operating Procedures (SOPs)
-
-SOPs provide overlord-level procedural guidance for consistent task execution. They're automatically discovered from the `sops/` directory in your formation.
-
-#### SOP Format
-
-SOPs are Markdown files with YAML front matter:
-
-```markdown
----
-type: sop  # Required to identify as SOP
-name: Production Incident Response
-description: Handle production incidents from detection to resolution
-mode: template  # "template" (default) or "guide" for flexible approach
-tags: critical, production, ops  # Comma-separated for discovery
 ---
 
-# Production Incident Response
+## 👨🏼‍💻 Contributing
 
-## Steps
+We welcome contributions! MUXI Runtime is open source and community-driven.
 
-1. **Assess severity** [agent:monitoring-specialist]
-   - Check dashboards for scope
-   - Review [file:references/severity-matrix.png] for classification
-   - Use [mcp:datadog] to pull metrics from last hour
-
-2. **Notify stakeholders** [agent:communications]
-   - Use [file:contacts/escalation-tree.md] for contact info
-   - Page on-call via [mcp:pagerduty]
-   - Create ticket using [mcp:linear/create_issue]
-
-3. **Document incident** [agent:writer]
-   - Use [file:templates/incident-report.md] as template
-   - Upload to Confluence using [mcp:confluence]
+**Quick start for contributors:**
+```bash
+git clone https://github.com/muxi-ai/runtime
+cd runtime
+pip install -e .[dev]
+pytest
 ```
 
-#### Directive Types
+📚 **See our [Contributing Guide](CONTRIBUTING.md)** for:
+- Development setup and prerequisites
+- Testing philosophy (real services, no mocks)
+- Code style and architecture principles
+- Pull request process
+- Community guidelines
 
-SOPs support three types of directives for guiding execution:
-
-- **`[agent:name]`** - Route step to specific agent
-- **`[mcp:tool]`** - Use specific MCP tool or server
-- **`[file:path]`** - Reference any file in the sops/ directory
-
-#### Execution Modes
-
-1. **Template Mode** (`mode: template` - default)
-   - Steps directly convert to workflow tasks
-   - Fast, predictable execution
-   - Best for rigid procedures
-
-2. **Guide Mode** (`mode: guide`)
-   - SOP included as guidance for LLM
-   - Flexible interpretation based on context
-   - Best for guidelines and best practices
-
-#### Directory Structure
-
-```
-formation/
-└── sops/
-    ├── incident-response.md       # type: sop
-    ├── customer-onboarding.md     # type: sop
-    ├── code-review-guidelines.md  # type: sop, mode: guide
-    ├── templates/                 # Referenced files
-    │   ├── incident-report.md
-    │   └── postmortem.docx
-    └── references/                # Any organization you prefer
-        └── severity-matrix.png
-```
-
-SOPs enhance the runtime by:
-- Providing consistent execution patterns
-- Reducing prompt duplication across agents
-- Enabling organizational best practices
-- Supporting both rigid procedures and flexible guidelines
-
-## 🐛 Debugging Tips
-
-```python
-# Enable debug logging
-import logging
-logging.basicConfig(level=logging.DEBUG)
-
-# Or via environment
-export MUXI_LOG_LEVEL=DEBUG
-
-# Common issues:
-# 1. Formation validation: Check YAML against schema
-# 2. Memory errors: Verify PostgreSQL/SQLite connections
-# 3. MCP errors: Ensure tool servers are running
-# 4. Async errors: Check for proper await usage
-```
-
-## 📚 Resources
-
-- [Formation Schema](https://github.com/muxi-ai/schemas) - YAML configuration reference
-- [Architecture Guide](docs/architecture.md) - Deep dive into design
-- [Testing Guide](docs/testing.md) - How to write runtime tests
-- [Memory Systems](docs/memory.md) - Buffer, persistent, vector details
-- [MCP Integration](docs/mcp.md) - Tool development guide
-- [Artifacts System](docs/artifacts.md) - File generation, tracking, and management
-
-## 🤝 Community
+## 🤝 Community & Support
 
 - **Issues**: [GitHub Issues](https://github.com/muxi-ai/runtime/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/muxi-ai/community/discussions)
@@ -643,6 +194,7 @@ export MUXI_LOG_LEVEL=DEBUG
 
 - [muxi-ai/server](https://github.com/muxi-ai/server) - API server that hosts this runtime
 - [muxi-ai/cli](https://github.com/muxi-ai/cli) - Command-line management tool
+- [muxi-ai/sdks](https://github.com/muxi-ai/sdks) - SDKs in multiple languages for MUXI
 - [muxi-ai/onellm](https://github.com/muxi-ai/onellm) - Unified LLM interface
 - [muxi-ai/faissx](https://github.com/muxi-ai/faissx) - Distributed vector store
 
