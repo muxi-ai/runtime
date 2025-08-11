@@ -77,12 +77,12 @@ overlord:
     # Enable workflow features
     auto_decomposition: true
     plan_approval_threshold: 7
-    
+
     workflow:
       complexity_threshold: 6.0
       routing_strategy: "capability_based"
       parallel_execution: true
-      
+
       # Resilience configuration
       error_recovery: "retry_with_backoff"
       retry:
@@ -96,7 +96,7 @@ overlord:
 For contributors working on the workflow system:
 
 - Source code: `src/muxi/formation/workflow/`
-- Tests: `tests/day_7/`
+- Tests: `tests/e1e/day_7/`
 - Examples: See the demo scripts in the test directory
 
 ## 📊 Monitoring

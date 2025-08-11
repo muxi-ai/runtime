@@ -137,7 +137,7 @@ response = await overlord.chat(
 active_ids = overlord.get_active_workflow_ids()
 if active_ids:
     workflow_id = active_ids[0]
-    
+
     # Check status periodically
     while True:
         workflow = overlord.get_workflow_status(workflow_id)
@@ -156,7 +156,7 @@ print(f"User has {len(user_workflows)} workflows")
 
 ## Testing
 
-Comprehensive tests are provided in `tests/day_7/test_workflow_status_endpoints.py` covering:
+Comprehensive tests are provided in `tests/e1e/day_7/test_workflow_status_endpoints.py` covering:
 
 - Status retrieval
 - Workflow listing with filters

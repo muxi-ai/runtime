@@ -1,7 +1,7 @@
 # MUXI Workflow Resilience Integration
 
-**Version**: 1.0  
-**Date**: July 29, 2025  
+**Version**: 1.0
+**Date**: July 29, 2025
 **Status**: Production Ready
 
 ## Overview
@@ -51,7 +51,7 @@ class ResilientWorkflowExecutor:
     - Exponential backoff retry logic
     - Graceful degradation strategies
     """
-    
+
     def __init__(self, agent_registry: Dict[str, Agent], config: WorkflowConfig):
         self.executor = WorkflowExecutor(agent_registry, config)
         self.error_classifier = ErrorClassifier()
@@ -109,11 +109,11 @@ overlord:
     # Enable resilience features
     circuit_breaker: true
     error_recovery: true
-    
+
     workflow:
       # Error recovery strategy
       error_recovery: "retry_with_backoff"  # Options: fail_fast, skip_and_continue
-      
+
       # Retry configuration
       retry:
         max_attempts: 5              # Maximum retry attempts
@@ -125,7 +125,7 @@ overlord:
           - "rate_limit"
           - "temporary_failure"
           - "connection_error"
-      
+
       # Timeout configuration
       timeouts:
         task_timeout: 300            # 5 minutes per task
@@ -164,7 +164,7 @@ async def retry_with_exponential_backoff(
     Retry with exponential backoff:
     - Attempt 1: immediate
     - Attempt 2: 2s delay
-    - Attempt 3: 4s delay  
+    - Attempt 3: 4s delay
     - Attempt 4: 8s delay
     - Attempt 5: 16s delay
     """
@@ -174,7 +174,7 @@ async def retry_with_exponential_backoff(
         except Exception as e:
             if attempt == max_attempts - 1:
                 raise
-            
+
             delay = min(initial_delay * (backoff_factor ** attempt), max_delay)
             await asyncio.sleep(delay)
 ```
@@ -203,7 +203,7 @@ Error: 401 Unauthorized
 
 **With Resilience:**
 ```
-Unable to authenticate with Linear API. 
+Unable to authenticate with Linear API.
 Please check that your Linear API token is correctly configured.
 The research has been completed, but the Linear issue could not be created.
 
@@ -257,7 +257,7 @@ The resilience layer integrates with the observability system:
 
 ### 1. Demo Script
 
-See `tests/day_7/demo_10_workflows.py` for examples of resilience in action:
+See `tests/e1e/day_7/demo_10_workflows.py` for examples of resilience in action:
 
 ```python
 # Simulates various failure scenarios

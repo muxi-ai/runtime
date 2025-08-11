@@ -4,7 +4,7 @@ allowed-tools: Bash, Read
 
 # Cleanup tests
 
-Please clean up the tests/day_$ARGUMENTS directory.
+Please clean up the tests/e1e/day_$ARGUMENTS directory.
 
 Remove old tests that are no longer relevant and not covered in tests/reports/$ARGUMENTS*.md
 
