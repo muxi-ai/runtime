@@ -11,12 +11,10 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src")))
 
 from muxi.formation.formation import Formation  # noqa: E402
-from tests.utils.env_setup import load_api_keys  # noqa: E402
 
 
 async def main():
     """Test A2A flow with overlord.chat()"""
-    load_api_keys()
 
     print("\n" + "="*60)
     print("SOP OVERLORD.CHAT() TEST")
@@ -29,7 +27,7 @@ async def main():
     # Load formation
     print("\n1. Loading formation...")
     formation = Formation()
-    await formation.load(str(Path(__file__).parent / "formations" / "formation-multi-agent-sop")formation.yaml")  # noqa: E501
+    await formation.load(str(Path(__file__).parent / "formations" / "formation-multi-agent-sop" / "formation.yaml"))  # noqa: E501
     overlord = await formation.start_overlord()
     print("   ✓ Formation loaded")
 

@@ -21,7 +21,7 @@ async def test_absolute_path_knowledge():
         # Load the existing formation with knowledge
         print("Loading formation with knowledge configuration...")
         formation = Formation()
-        await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge")formation.yaml")
+        await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
         overlord = await formation.start_overlord()
 
         print("✓ Formation loaded successfully")

@@ -914,7 +914,7 @@ response = await overlord.chat("Actually, nevermind, just show me the code")
 ### ✅ **IMPLEMENTATION COMPLETE: Multiple Clarification Sequences**
 **Implemented**: Clarification stack architecture for multi-turn clarifications
 **Status**: Production-ready with proper state tracking and context preservation
-**Documentation**: [multiple-clarification-sequences.md](context/prds/multiple-clarification-sequences.md)
+**Documentation**: [multiple-clarification-sequences-simplified.md](../context/prds/multiple-clarification-sequences-simplified.md)
 
 ### Part 2: Enhanced Clarification with Multiple Sequences
 

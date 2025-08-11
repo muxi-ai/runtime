@@ -19,7 +19,7 @@ def test_relative_path_knowledge_loading():
             # Load the test formation with knowledge
             print("\nLoading formation with knowledge configuration...")
             formation = Formation()
-            await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge")formation.yaml")
+            await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
 
             # Start the overlord
             print("Starting overlord...")
