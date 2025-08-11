@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "muxi"
-version = "0.0.1"
+dynamic = ["version"]  # Version is read from src/muxi/.version file
 authors = [
   {name = "Ran Aroussi", email = "ran@aroussi.com"},
 ]
@@ -18,6 +18,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+    # Build dependencies for setup.py
+    "tomli>=1.2.0;python_version<'3.11'",  # For reading pyproject.toml in setup.py
+
     # Core dependencies
     "pyyaml>=6.0",
     "pydantic>=2.0.0",
@@ -110,9 +113,23 @@ dependencies = [
 
     # File formats
     "lxml>=4.9.0",
+
+    # Additional dependencies found in codebase
+    "croniter>=1.3.0",  # Cron expression parsing for scheduler
+    "cryptography>=41.0.0",  # Encryption for secrets manager
+    "msgpack>=1.0.0",  # Message pack format for observability
+    "multitasking>=0.0.11",  # Multi-threading utilities
+    "nanoid>=2.0.0",  # Nano ID generation
+    "pytz>=2023.3",  # Timezone support for scheduler
+    "requests>=2.31.0",  # HTTP client (used in observability)
+    "typing-extensions>=4.8.0",  # Backport of typing features
+    "pyzmq>=25.0.0",  # ZeroMQ for observability streaming
 ]
 
 [project.optional-dependencies]
+kafka = [
+    "kafka-python>=2.0.0",  # Kafka streaming support for observability
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
@@ -126,15 +143,18 @@ dev = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/muxi-ai/runtime"
-"Bug Tracker" = "https://github.com/muxi-ai/runtime/issues"
+"Homepage" = "https://muxi.org"
+"Source" = "https://github.com/muxi-ai/runtime"
+"Bugs/Issues" = "https://github.com/muxi-ai/runtime/issues"
+"Discussions" = "https://github.com/muxi-ai/runtime/discussions"
+"Documentation" = "https://github.com/muxi-ai/runtime"
+"Funding" = "https://github.com/sponsors/ranaroussi"
+"Changelog" = "https://github.com/muxi-ai/runtime/blob/main/CHANGELOG.md"
 
-[project.scripts]
-muxi = "muxi.cli:main"
 
 [tool.black]
 line-length = 100
-target-version = ["py38", "py39", "py310"]
+target-version = ["py310", "py311", "py312", "py313"]
 include = '\.pyi?$'
 exclude = '''
 /(
