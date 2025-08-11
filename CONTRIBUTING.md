@@ -69,7 +69,7 @@ See the full [code of conduct](CODE_OF_CONDUCT.md) for more details.
 
 7. **Run tests to verify setup**
    ```bash
-   pytest tests/day_1/test_1a1_basic_yaml_formation.py -v
+   pytest tests/e1e/day_1/test_1a1_basic_yaml_formation.py -v
    ```
 
 ## 🧪 Testing Philosophy
@@ -83,9 +83,9 @@ See the full [code of conduct](CODE_OF_CONDUCT.md) for more details.
 pytest
 
 # Run specific test suite
-pytest tests/day_1/  # Foundation tests
-pytest tests/day_2/  # Memory systems
-pytest tests/day_3/  # Multimodal processing
+pytest tests/e1e/day_1/  # Foundation tests
+pytest tests/e1e/day_2/  # Memory systems
+pytest tests/e1e/day_3/  # Multimodal processing
 
 # Run with verbose output
 pytest -v
