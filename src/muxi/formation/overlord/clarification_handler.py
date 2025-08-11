@@ -991,7 +991,7 @@ Token:"""
                 except asyncio.CancelledError:
                     # Task was cancelled (likely due to shutdown) - clean exit
                     observability.observe(
-                        event_type=observability.SystemEvents.SERVICE_STOPPED,
+                        event_type=observability.SystemEvents.CLEANUP,
                         level=observability.EventLevel.INFO,
                         description="Clarification cleanup task cancelled - shutting down cleanly",
                     )
@@ -1012,7 +1012,7 @@ Token:"""
         finally:
             # Log cleanup task termination
             observability.observe(
-                event_type=observability.SystemEvents.SERVICE_STOPPED,
+                event_type=observability.SystemEvents.CLEANUP,
                 level=observability.EventLevel.DEBUG,
                 description="Clarification cleanup task terminated",
             )

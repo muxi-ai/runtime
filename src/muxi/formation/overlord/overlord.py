@@ -5006,9 +5006,8 @@ class Overlord:
                     if self.clarification_manager:
                         try:
                             response_result = await self.clarification_manager.process_user_response(
-                                user_id=str(user_id),
                                 request_id=clarification_info.get("request_id"),
-                                user_response=message,
+                                user_response=message
                             )
                         except Exception as e:
                             observability.observe(
@@ -5038,10 +5037,10 @@ class Overlord:
                             request_id=request_id,
                         )
 
-                    if response_result.get("status") == "complete":
+                    if response_result and response_result.status == ClarificationResultStatus.COMPLETE:
                         # Clarification complete - process enhanced request
                         original_message = clarification_info.get("original_message", "")
-                        collected_info = response_result.get("collected_info", {})
+                        collected_info = response_result.complete_params or {}
 
                         # Enrich the original message with collected information
                         if self.clarification_parameter_enricher and collected_info:
@@ -5092,15 +5091,13 @@ class Overlord:
                             request_id=request_id,
                         )
 
-                    elif response_result.get("status") == "needs_more":
+                    elif response_result and response_result.status == ClarificationResultStatus.CONTINUE:
                         # Need more clarification
-                        next_question = response_result.get(
-                            "next_question", "Could you provide more details?"
-                        )
+                        next_question = response_result.next_question or "Could you provide more details?"
 
                         # Update pending clarification
                         self._pending_clarifications[session_id]["questions_asked"] = (
-                            response_result.get("questions_asked", [])
+                            response_result.extracted_info.get("questions_asked", [])
                         )
 
                         return MuxiResponse(
@@ -5108,7 +5105,7 @@ class Overlord:
                             content=next_question,
                             metadata={
                                 "clarification": True,
-                                "questions_remaining": response_result.get("questions_remaining"),
+                                "questions_remaining": response_result.extracted_info.get("questions_remaining"),
                             },
                         )
                     else:
