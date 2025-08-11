@@ -1,11 +1,18 @@
 import asyncio
 from typing import Dict, Any, List, Optional
 import aiohttp
-from kafka import KafkaProducer
 import zmq
 import zmq.asyncio
 from .base import BaseTransport, TransportStatus
 from .token_encryption import TokenEncryption
+
+# Optional Kafka support
+try:
+    from kafka import KafkaProducer
+    KAFKA_AVAILABLE = True
+except ImportError:
+    KafkaProducer = None
+    KAFKA_AVAILABLE = False
 
 
 class StreamTransport(BaseTransport):
@@ -215,6 +222,13 @@ class StreamTransport(BaseTransport):
 
     async def _initialize_kafka(self) -> bool:
         """Initialize Kafka transport."""
+        if not KAFKA_AVAILABLE:
+            self.last_error = (
+                "Kafka support is not installed. "
+                "Install with: pip install muxi[kafka]"
+            )
+            self.status = TransportStatus.FAILED
+            return False
         try:
             # Parse Kafka brokers from destination
             if self.destination.startswith("kafka://"):
