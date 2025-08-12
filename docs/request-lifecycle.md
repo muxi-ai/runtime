@@ -34,123 +34,190 @@ The system seamlessly handles everything from simple queries ("What's the weathe
 
 ```mermaid
 flowchart TD
-    Start([User Sends Request]) --> InitRequest[Initialize Request]
+    Start([User Sends Request])
 
-    InitRequest --> SessionCheck{Check Session}
-    SessionCheck -->|New Session| CreateSession[Create Session ID]
-    SessionCheck -->|Existing| UseSession[Use Existing Session]
+    %% Input Methods
+    Start --> RESTAPI[REST API]
+    Start --> MCP[MCP]
+    Start --> SDK[SDK]
+    Start --> CLI[CLI]
+    Start --> Embedded[Embedded]
 
-    CreateSession --> RequestTracking
-    UseSession --> RequestTracking[Request Tracking<br/>- Generate Request ID<br/>- Start Timer<br/>- Log Event]
+    %% All converge to Initialize Request
+    RESTAPI --> InitReq[Initialize Request]
+    MCP --> InitReq
+    SDK --> InitReq
+    CLI --> InitReq
+    Embedded --> InitReq
 
-    RequestTracking --> FileCheck{Has File Uploads?}
-    FileCheck -->|Yes| ProcessFiles[Process Files<br/>- Store in temp<br/>- Extract metadata<br/>- Update context]
-    FileCheck -->|No| MemoryLoad
+    %% Session Check
+    InitReq --> CheckSession{Check Session}
+    CheckSession -->|New Session| CreateSession[Create Session ID]
+    CheckSession -->|Existing| UseSession[Use Existing Session]
 
-    ProcessFiles --> MemoryLoad[Initialize Memory Systems]
+    CreateSession --> ReqTracking[Request Tracking<br/>- Generate Request ID<br/>- Start Timer<br/>- Log Event]
+    UseSession --> ReqTracking
 
-    MemoryLoad --> BufferMemory[Smart Buffer Memory<br/>- Load last N messages<br/>- Vector similarity search<br/>- Auto-summarization<br/>- FIFO with multiplier]
+    %% File Upload Check
+    ReqTracking --> HasFiles{Has File<br/>Uploads?}
+    HasFiles -->|Yes| ProcessFiles[Process Files<br/>- Store in temp<br/>- Extract metadata<br/>- Update context]
+    HasFiles -->|No| InitMemory[Initialize Memory<br/>Systems]
+    ProcessFiles --> InitMemory
 
-    BufferMemory --> LongTermMemory{Long-term<br/>Enabled?}
-    LongTermMemory -->|Yes| LoadLongTerm[Long-term Memory<br/>- PostgreSQL/SQLite<br/>- User preferences<br/>- Historical context<br/>- Semantic search]
-    LongTermMemory -->|No| WorkingMemory
+    %% Memory Systems
+    InitMemory --> SmartBuffer[Smart Buffer Memory<br/>- Load last N messages<br/>- Vector similarity search<br/>- Auto-summarization<br/>- FIFO with multiplier]
 
-    LoadLongTerm --> UserContext[Build User Context<br/>- Merge preferences<br/>- Apply personalization<br/>- Load user history<br/>- Extract patterns]
+    SmartBuffer --> LongTermCheck{Long-term<br/>Enabled?}
+    LongTermCheck -->|Yes| LongTermMem[Long-term Memory<br/>- PostgreSQL/SQLite<br/>- User preferences<br/>- Historical context<br/>- Semantic search]
+    LongTermCheck -->|No| BuildContext
 
-    UserContext --> WorkingMemory[Working Memory<br/>- Current task state<br/>- Active file refs<br/>- Tool outputs<br/>- Session data]
+    LongTermMem --> BuildContext[Build User Context<br/>- Merge preferences<br/>- Apply personalization<br/>- Load user history<br/>- Extract patterns]
 
-    WorkingMemory --> MessageFormat[Format Message<br/>with Full Context<br/>- User context<br/>- Recent history<br/>- Current state]
+    BuildContext --> WorkingMem[Working Memory<br/>- Current task state<br/>- Active file refs<br/>- Tool outputs - Session data]
 
-    MessageFormat --> ClarificationPending{Pending<br/>Clarification?}
-    ClarificationPending -->|Yes| ResolveClarification[Process Clarification<br/>Response]
-    ClarificationPending -->|No| ClarificationCheck
+    WorkingMem --> FormatMsg[Format Message with Full Context<br/>- User context<br/>- Recent history<br/>- Current state]
 
-    ResolveClarification --> ClarificationCheck{Need<br/>Clarification?}
+    %% Clarification Check
+    FormatMsg --> PendingClarification{Has pending<br/>Clarification?}
+    PendingClarification -->|Yes| ProcessClarification[Process Clarification<br/>Response]
+    PendingClarification -->|No| NeedClarification{Need<br/>Clarification?}
 
-    ClarificationCheck -->|Workflow Task| SkipClarification[Skip Clarification<br/>## Task: prefix]
-    ClarificationCheck -->|Clear Request| SkipClarification
-    ClarificationCheck -->|Ambiguous| InitClarification[Initialize Clarification<br/>- Analyze gaps<br/>- Generate questions<br/>- Store context]
+    ProcessClarification --> NeedClarification
+    NeedClarification -->|Yes| InitClarification[Initialize Clarification<br/>- Analyze gaps<br/>- Generate questions<br/>- Store context]
+    NeedClarification -->|No| IsActionable{Is actionable?}
 
-    InitClarification --> ClarificationResponse[Return Clarification<br/>Question]
+    InitClarification --> WriteQuestion[Write Clarification<br/>Question]
+    WriteQuestion --> ApplyPersona1[Apply Overlord Persona]
 
-    SkipClarification --> AgentCheck{Agent<br/>Specified?}
+    %% Main Processing Path
+    IsActionable -->|Yes| AgentSpecified{Agent<br/>Specified?}
+    IsActionable -->|No| ApplyPersona1
 
-    AgentCheck -->|Yes| DirectAgent[Direct to<br/>Specific Agent]
-    AgentCheck -->|No| WorkflowAnalysis[Workflow Analysis<br/>- Check complexity<br/>- Check SOPs]
+    AgentSpecified -->|Yes| RequestAgent[Request Specific<br/>Agent]
+    AgentSpecified -->|No| WorkflowAnalysis[Workflow Analysis<br/>- Check complexity<br/>- Check SOPs]
 
-    WorkflowAnalysis --> SOPCheck{SOP Match?}
-    SOPCheck -->|Yes| ExecuteSOP[Execute SOP<br/>- Load template<br/>- Decompose tasks<br/>- Execute workflow]
-    SOPCheck -->|No| ComplexityCheck{Complex<br/>Request?}
+    RequestAgent --> AgentProcessing
 
-    ComplexityCheck -->|Score >= Threshold | WorkflowDecomp[Workflow Decomposition<br/>- Create task graph<br/>- Assign agents<br/>- Execute parallel]
-    ComplexityCheck -->|Score < Threshold | AutoRoute[Auto-Route<br/>to Best Agent]
+    %% SOP and Workflow Path
+    WorkflowAnalysis --> SOPMatch{SOP<br/>Matched?}
+    SOPMatch -->|Yes| ExecuteSOP[Execute SOP<br/>- Load template<br/>- Decompose tasks<br/>- Execute workflow]
+    SOPMatch -->|No| ComplexCheck{Complex<br/>Request?}
 
-    DirectAgent --> EstimateTime
-    ExecuteSOP --> EstimateTime
-    WorkflowDecomp --> EstimateTime
-    AutoRoute --> EstimateTime[Estimate Execution Time<br/>- Analyze task complexity<br/>- Check tool requirements<br/>- Review historical data]
+    ExecuteSOP --> AgentProcessing
 
-    EstimateTime --> ExecutionMode{Estimated<br/>Time?}
-    ExecutionMode -->|< Threshold | ProcessRequest
-    ExecutionMode -->|\>= Threshold | NotifyUser[Notify User of<br/>Estimated Time<br/>- Return task ID<br/>- Provide time estimate<br/>- Setup webhook]
+    ComplexCheck -->|\>=Threshold| WorkflowDecomp[Workflow<br/>Decomposition<br/>- Create task graph<br/>- Assign agents<br/>- Execute parallel]
+    ComplexCheck -->|<Threshold| AutoRoute[Auto-Route to<br/>Best Agent]
 
-    NotifyUser --> ProcessRequest[Process with Agent<br/>- Load agent config<br/>- Apply system prompt<br/>- Initialize context]
+    WorkflowDecomp --> AgentProcessing
+    AutoRoute --> AgentProcessing
 
-    ProcessRequest --> AgentProcess[Agent Processing]
+    %% Plan Confirmation
+    ComplexCheck2{Requires plan<br/>confirmation?}
+    WorkflowDecomp --> ComplexCheck2
+    ComplexCheck2 -->|Yes| AskConfirmation[Ask user for<br/>confirmation]
+    ComplexCheck2 -->|No| EstimateTime
 
-    AgentProcess --> NeedTools{Need<br/>Tools?}
+    AskConfirmation -->|Approved| EstimateTime
+    AskConfirmation -->|Declined| AutoRoute
+
+    %% Time Estimation
+    EstimateTime[Estimate Execution Time<br/>- Analyze task complexity<br/>- Check tool requirements<br/>- Review historical data]
+
+    EstimateTime --> TimeThreshold{Estimated<br/>Time?}
+    TimeThreshold -->|\>=Threshold| NotifyUser[Notify User of Estimated Time<br/>- Return task ID<br/>- Provide time estimate<br/>- Setup webhook]
+    TimeThreshold -->|<Threshold| ProcessAgent[Process with Agent<br/>- Load agent config<br/>- Apply system prompt<br/>- Initialize context]
+
+    NotifyUser --> ProcessAgent
+
+    %% Agent Processing
+    ProcessAgent --> AgentProcessing[Agent Processing]
+
+    AgentProcessing --> NeedTools{Need Tools?}
     NeedTools -->|Yes| MCPTools[MCP Tool Calls<br/>- Connect to server<br/>- Execute tools<br/>- Handle responses]
-    NeedTools -->|No| NeedA2A
+    NeedTools -->|No| NeedHelp{Need Help<br/>from another<br/>Agents?}
 
-    MCPTools --> ToolResults[Process Tool Results<br/>- Parse outputs<br/>- Update context<br/>- Check errors]
+    MCPTools --> ProcessToolResults[Process Tool Results<br/>- Parse outputs<br/>- Update context<br/>- Check errors]
 
-    ToolResults --> NeedA2A{Need Other<br/>Agents?}
-    NeedA2A -->|Yes| A2ACommunication[A2A Communication<br/>- Format request<br/>- Call agent via transport<br/>- Await response]
-    NeedA2A -->|No| GenerateResponse
+    ProcessToolResults --> NeedHelp
 
-    A2ACommunication --> A2AHandoff{Handoff<br/>Type?}
-    A2AHandoff -->|Delegation| DelegateAgent[Delegate to Agent<br/>- Transfer context<br/>- Wait for completion<br/>- Aggregate results]
-    A2AHandoff -->|Consultation| ConsultAgent[Consult Agent<br/>- Request specific info<br/>- Continue processing<br/>- Integrate insights]
-    A2AHandoff -->|Parallel| ParallelAgents[Parallel Agents<br/>- Split tasks<br/>- Execute concurrently<br/>- Merge results]
+    %% Agent Communication
+    NeedHelp -->|Yes| A2A[A2A Communication<br/>- Format request<br/>- Call internal/external agent<br/>- Await response]
+    NeedHelp -->|No| MoreProcessing{Need more<br/>Processing?}
+
+    A2A --> HandoffType{Handoff<br/>Type?}
+    HandoffType -->|Delegation| DelegateAgent[Delegate to Agent<br/>- Transfer context<br/>- Wait for completion<br/>- Aggregate results]
+    HandoffType -->|Consultation| ConsultAgent[Consult Agent<br/>- Request specific info<br/>- Continue processing<br/>- Integrate insights]
+    HandoffType -->|Parallel| ParallelAgents[Parallel Agents<br/>- Split tasks<br/>- Execute concurrently<br/>- Merge results]
 
     DelegateAgent --> AgentResponse[Agent Response<br/>- Collect outputs<br/>- Update memory<br/>- Format results]
     ConsultAgent --> AgentResponse
     ParallelAgents --> AgentResponse
 
-    AgentResponse --> MoreProcessing{More<br/>Processing?}
-    MoreProcessing -->|Yes| AgentProcess
-    MoreProcessing -->|No| GenerateResponse
+    AgentResponse --> MoreProcessing
+    MoreProcessing -->|Yes| AgentProcessing
+    MoreProcessing -->|No| GenerateResponse[Generate Response<br/>- Format output<br/>- Add explanations<br/>- Include artifacts]
 
-    GenerateResponse[Generate Response<br/>- Format output<br/>- Add explanations<br/>- Include artifacts]
+    %% Final Response Path
+    GenerateResponse --> ApplyPersona2[Apply Overlord Persona<br/>- Maintain tone consistency<br/>- Apply style preferences<br/>- Format for user<br/>- Add personality touches]
 
-    GenerateResponse --> ResponseMode{Execution<br/>Mode?}
+    ApplyPersona1 --> ApplyPersona2
 
-    ResponseMode -->|Sync| UserPref{User<br/>Preference?}
+    ApplyPersona2 --> ResponseMode{Response<br/>Mode?}
+
     ResponseMode -->|Async| WebhookDelivery[Webhook Delivery<br/>- Format payload<br/>- Call webhook URL<br/>- Retry on failure]
+    ResponseMode -->|Sync| UserPref{User<br/>Preference?}
 
     UserPref -->|Batch| BatchResponse[Batch Response<br/>- Complete processing<br/>- Return full response<br/>- Single payload]
     UserPref -->|Stream| StreamResponse[Stream Response<br/>- Chunk generation<br/>- Progressive delivery<br/>- Real-time updates]
 
+    WebhookDelivery --> UpdateMemory[Update Memory<br/>- Buffer: conversation<br/>- Working: context<br/>- Long-term: persist]
     BatchResponse --> UpdateMemory
     StreamResponse --> UpdateMemory
-    WebhookDelivery --> UpdateMemory[Update Memory<br/>- Buffer: conversation<br/>- Working: context<br/>- Long-term: persist]
 
-    UpdateMemory --> ArtifactCheck{Has<br/>Artifacts?}
-    ArtifactCheck -->|Yes| AttachArtifacts[Attach Artifacts<br/>- PDFs<br/>- Files<br/>- Data URLs]
-    ArtifactCheck -->|No| FinalizeResponse
+    UpdateMemory --> HasArtifacts{Has<br/>Artifacts?}
+    HasArtifacts -->|Yes| AttachArtifacts[Attach Artifacts<br/>- PDFs<br/>- Files<br/>- Data URLs]
+    HasArtifacts -->|No| FinalizeResponse[Finalize Response<br/>- Add metadata<br/>- Log completion<br/>- Update metrics]
 
-    AttachArtifacts --> FinalizeResponse[Finalize Response<br/>- Add metadata<br/>- Log completion<br/>- Update metrics]
+    AttachArtifacts --> FinalizeResponse
 
-    FinalizeResponse --> ApplyPersona[Apply Overlord Persona<br/>- Maintain tone consistency<br/>- Apply style preferences<br/>- Format for user<br/>- Add personality touches]
+    FinalizeResponse --> End([Return to User])
 
-    ApplyPersona --> ReturnResponse([Return to User])
-
-    ClarificationResponse --> ApplyPersona
+    class Start,End startEnd
+    class CheckSession,HasFiles,LongTermCheck,PendingClarification,NeedClarification,IsActionable,AgentSpecified,SOPMatch,ComplexCheck,ComplexCheck2,TimeThreshold,NeedTools,NeedHelp,HandoffType,MoreProcessing,ResponseMode,UserPref,HasArtifacts decision
+    class UseSession,CreateSession warning
+    class RESTAPI,MCP,SDK,CLI,Embedded input
 ```
 
 ## Component Details
 
-### 1. Session Management
+### 1. Entry Points
+
+**REST API:**
+- Primary HTTP interface for web applications
+- Supports JSON payloads and multipart file uploads
+- RESTful endpoints for all operations
+
+**MCP (Model Context Protocol):**
+- Native protocol for AI-to-AI communication
+- Efficient binary protocol with lower overhead
+- Built-in tool discovery and schema validation
+
+**SDK:**
+- Language-specific client libraries (Python, TypeScript, Go)
+- High-level abstractions over REST API
+- Built-in retry logic and error handling
+
+**CLI:**
+- Command-line interface for terminal operations
+- Interactive and non-interactive modes
+- Scriptable for automation
+
+**Embedded:**
+- Direct library integration for in-process usage
+- Zero network overhead
+- Shared memory context
+
+### 2. Session Management
 
 **Session ID Generation:**
 - New users receive a unique session ID (nano ID)
@@ -166,7 +233,7 @@ flowchart TD
 - Links to long-term memory storage
 - Enables personalization and context retention
 
-### 2. Request Initialization
+### 3. Request Initialization
 
 **Request Tracking:**
 ```python
@@ -186,7 +253,7 @@ request_data = {
 - `request.processing` - Processing stages
 - `request.completed` - Final response delivered
 
-### 3. File Upload Processing
+### 4. File Upload Processing
 
 **File Handling Flow:**
 1. Files uploaded as multipart form data or base64
@@ -204,7 +271,7 @@ request_data = {
 - Data: CSV, JSON, YAML
 - Code: Various programming languages
 
-### 4. Memory System Integration
+### 5. Memory System Integration
 
 **Three-Tier Memory Architecture:**
 
@@ -405,7 +472,7 @@ async def update_memory_systems(request, response, context):
         })
 ```
 
-### 5. Clarification System
+### 6. Clarification System
 
 **Clarification Detection Flow:**
 
@@ -420,6 +487,33 @@ skip_clarification = await _should_skip_clarification(message)
 # 4. Clarification already in progress
 ```
 
+**Actionable vs Non-Actionable Requests:**
+
+The system distinguishes between actionable requests (requiring agent processing) and non-actionable statements (informational or greetings):
+
+```python
+async def is_actionable(message):
+    # Non-actionable examples:
+    # - "Thank you"
+    # - "I'm working on an e-commerce platform"
+    # - "The system uses React and Node.js"
+    # - Simple acknowledgments
+
+    # Actionable examples:
+    # - "Create a report"
+    # - "What database should I use?"
+    # - "Debug this error"
+
+    # Uses LLM to determine intent
+    return await llm.analyze_actionability(message)
+```
+
+**Non-Actionable Handling:**
+- Acknowledged by overlord directly
+- No agent delegation
+- Persona response applied
+- Memory updated for context
+
 **Clarification Process:**
 1. **Analysis**: Identify missing information
 2. **Question Generation**: Create targeted questions
@@ -432,7 +526,7 @@ skip_clarification = await _should_skip_clarification(message)
 - `formal` - Professional, structured
 - `brief` - Minimal, direct questions
 
-### 6. SOP (Standard Operating Procedure) System
+### 7. SOP (Standard Operating Procedure) System
 
 **SOP Detection:**
 1. Semantic search against indexed SOPs
@@ -459,7 +553,7 @@ template: |
 - Agent assignment based on capabilities
 - Artifact generation support
 
-### 7. Workflow System
+### 8. Workflow System
 
 **Complexity Analysis:**
 ```python
@@ -471,13 +565,54 @@ complexity_score = analyze_request_complexity(message)
 # - Parallel execution opportunities
 ```
 
-**Workflow Decomposition (Score >= 7):**
+**Workflow Decomposition (Score >= Threshold):**
 1. Break request into atomic tasks
 2. Identify dependencies
 3. Create execution graph
 4. Assign agents based on capabilities
 5. Execute in parallel where possible
 6. Aggregate results
+
+**Plan Confirmation Flow:**
+
+When a complex workflow requires user approval (configured via `requires_approval`):
+
+```python
+async def handle_workflow_approval(workflow_plan):
+    if workflow.requires_approval:
+        # Generate human-readable plan
+        plan_preview = format_workflow_plan(workflow_plan)
+
+        # Ask user for confirmation
+        confirmation_request = {
+            "type": "workflow_approval",
+            "plan": plan_preview,
+            "estimated_time": workflow.estimated_time,
+            "task_count": len(workflow.tasks),
+            "message": "This request requires multiple steps. Would you like to proceed?"
+        }
+
+        user_response = await get_user_confirmation(confirmation_request)
+
+        if user_response.approved:
+            # Proceed with workflow execution
+            return "execute"
+        else:
+            # Fall back to simpler processing or cancel
+            return "fallback"
+
+    # No approval needed, execute directly
+    return "execute"
+```
+
+**Approval Configuration:**
+```yaml
+workflow:
+  requires_approval: true  # Ask for confirmation
+  approval_threshold: 10    # Only for complexity >= 10
+  bypass_approval: false    # Override for testing
+  auto_approve_timeout: 30  # Auto-approve after 30s
+```
 
 **Task Structure:**
 ```python
@@ -491,7 +626,7 @@ task = {
 }
 ```
 
-### 8. Agent Routing
+### 9. Agent Routing
 
 **Auto-routing Logic:**
 1. Extract intent from message
@@ -505,7 +640,7 @@ task = {
 - Bypasses auto-routing
 - Still subject to clarification if needed
 
-### 9. Agent Processing & Communication
+### 10. Agent Processing & Communication
 
 **Agent Processing Flow:**
 
@@ -783,7 +918,7 @@ def select_best_agent(request, available_agents):
     return max(scores, key=scores.get)
 ```
 
-### 10. Overlord Persona Application
+### 11. Overlord Persona Application
 
 **Persona System:**
 
@@ -906,7 +1041,7 @@ The persona system adapts based on:
 4. **User Expertise**: Detected from conversation complexity
 5. **Cultural Preferences**: Region-specific communication styles
 
-### 11. Execution Time Estimation & Response Mode
+### 12. Execution Time Estimation & Response Mode
 
 **Execution Time Estimation:**
 
@@ -1001,7 +1136,7 @@ The key difference is that for async requests:
 3. Results are delivered via webhook when complete
 4. User can check status using the task ID at any time
 
-### 12. Response Generation
+### 13. Response Generation
 
 #### Synchronous Batch Response
 ```python
@@ -1097,7 +1232,7 @@ response:
     flush_interval: 100  # ms
 ```
 
-### 13. Artifact Handling
+### 14. Artifact Handling
 
 **Artifact Types:**
 - PDF reports
@@ -1116,7 +1251,7 @@ artifact = MuxiArtifact(
 )
 ```
 
-### 14. Memory Updates
+### 15. Memory Updates
 
 **Post-Response Memory Updates:**
 
