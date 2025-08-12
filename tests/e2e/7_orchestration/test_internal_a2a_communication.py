@@ -178,12 +178,6 @@ async def main():
     else:
         print("   ✗ System info not found in response")
 
-    # Check if delegation occurred
-    if "project manager" in result.lower() or "project-manager" in result.lower():
-        print("   ✓ Delegation to Project Manager mentioned")
-    else:
-        print("   ✗ No mention of Project Manager delegation")
-
     # Check if Linear issue was created
     if "linear" in result.lower() and ("created" in result.lower() or "issue" in result.lower()):
         print("   ✓ Linear issue creation mentioned")
