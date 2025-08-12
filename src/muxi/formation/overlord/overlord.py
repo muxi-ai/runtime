@@ -1778,8 +1778,20 @@ class Overlord:
 
 Message: "{}"
 
+Examples of ACTIONABLE messages (questions, requests, commands):
+- "What database should I use?" → ACTIONABLE (question needing answer)
+- "How do I implement authentication?" → ACTIONABLE (question needing help)
+- "Create a file" → ACTIONABLE (command to execute)
+- "Fix the bug" → ACTIONABLE (request for action)
+
+Examples of NON_ACTIONABLE messages (information, context, greetings):
+- "I'm working on an e-commerce platform" → NON_ACTIONABLE (just context)
+- "My budget is $5000" → NON_ACTIONABLE (just information)
+- "Hi" → NON_ACTIONABLE (greeting)
+- "Thanks" → NON_ACTIONABLE (acknowledgment)
+
 Reply with only:
-ACTIONABLE - if the user wants something done
+ACTIONABLE - if the user wants something done or answered
 NON_ACTIONABLE - if it's just information, greeting, or acknowledgment""".format(message)
 
                 # Use formation's text model for this quick check
@@ -2096,7 +2108,7 @@ Make it conversational and friendly while keeping accuracy."""
                         },
                         description=f"SOP system initialization deferred (path={formation_path})",
                     )
-            if workflow_config_data:
+            if workflow_config_data is not None:
                 # Create WorkflowConfig from formation data
                 # Parse retry configuration
                 retry_data = workflow_config_data.get("retry", {})
@@ -2172,7 +2184,15 @@ Make it conversational and friendly while keeping accuracy."""
                     self.workflow_config_manager.base_config = self.workflow_config
                 # Update the request analyzer with new config
                 if hasattr(self, "request_analyzer"):
-                    self.request_analyzer.complexity_method = self.workflow_config.complexity_method
+                    # Import ComplexityMethod enum for proper type conversion
+                    from ..workflow.analyzer import ComplexityMethod
+                    # Convert string to enum if needed
+                    if isinstance(self.workflow_config.complexity_method, str):
+                        self.request_analyzer.complexity_method = ComplexityMethod(
+                            self.workflow_config.complexity_method
+                        )
+                    else:
+                        self.request_analyzer.complexity_method = self.workflow_config.complexity_method
                     self.request_analyzer.complexity_threshold = (
                         self.workflow_config.complexity_threshold
                     )
@@ -5910,7 +5930,19 @@ Make it conversational and friendly while keeping accuracy."""
         if agent_name is None and self.auto_decomposition and not is_clarification_response:
             # Analyze request complexity
             try:
-                analysis = await self.request_analyzer.analyze_request(message)
+                # Extract the actual user message from formatted context if needed
+                actual_message = message
+                if "=== CURRENT REQUEST ===" in message and "User:" in message:
+                    # Extract the user's actual message from the formatted context
+                    lines = message.split("\n")
+                    for i, line in enumerate(lines):
+                        if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                            next_line = lines[i + 1].strip()
+                            if next_line.startswith("User:"):
+                                actual_message = next_line[5:].strip()  # Remove "User: " prefix
+                                break
+
+                analysis = await self.request_analyzer.analyze_request(actual_message)
 
                 # Check if complexity exceeds threshold
                 # Use workflow config threshold if available, otherwise fall back to overlord threshold
@@ -6287,6 +6319,18 @@ Make it conversational and friendly while keeping accuracy."""
                 relevant_sops = await self.sop_system.find_relevant_sops(message, top_k=1)
                 relevant_sop = relevant_sops[0] if relevant_sops else None
 
+                # Filter out low-relevance SOPs (threshold: 0.7 for semantic search, 3 for tag-based)
+                if relevant_sop:
+                    relevance_score = relevant_sop.get("relevance_score", 0)
+                    # If score is between 0 and 1, it's semantic search; if >= 1, it's tag-based
+                    if relevance_score < 0.7:
+                        # Low semantic relevance, ignore
+                        relevant_sop = None
+                    elif relevance_score >= 1.0 and relevance_score < 3:
+                        # Low tag-based relevance (less than 3 points), ignore
+                        # Note: name match = 2 points, each tag = 1 point
+                        relevant_sop = None
+
                 # Log SOP discovery
                 if relevant_sop:
                     observability.observe(
@@ -6410,7 +6454,9 @@ Make it conversational and friendly while keeping accuracy."""
             # Note: user_id is tracked separately in active_workflows
             # The Workflow model doesn't support user_id as an attribute
 
-            if needs_approval:
+            # Check if workflow actually requires approval (not just needs_approval)
+            # This accounts for bypass_approval from SOPs
+            if workflow.requires_approval:
                 # Route to approval handler
                 observability.observe(
                     event_type=observability.ServerEvents.SERVER_STARTED,

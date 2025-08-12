@@ -342,12 +342,13 @@ class RequestAnalyzer:
         analysis_prompt = self._create_analysis_prompt(user_message, context)
 
         try:
-            response = await self.llm.generate(analysis_prompt, max_tokens=1000)
+            response = await self.llm.generate_text(analysis_prompt, max_tokens=1000)
             return self._parse_llm_analysis(response)
 
         except Exception as e:
-            #  Warning - TODO: add observability
-            _ = e  # remove this after implementing observability
+            # Log error and fall back to heuristic
+            # TODO: add proper observability here
+            _ = e  # Suppress unused variable warning
             return self._heuristic_analyze_request(user_message)
 
     def _create_analysis_prompt(
@@ -370,7 +371,7 @@ class RequestAnalyzer:
         return f"""
 Analyze this user request to determine its complexity and requirements:
 
-User Request: "{user_message}"{context_info}
+User Request: "{user_message}" {context_info}
 
 Please provide analysis in JSON format:
 
@@ -383,16 +384,40 @@ Please provide analysis in JSON format:
     "reasoning": [Brief explanation of the analysis]
 }}
 
-Analysis Guidelines:
-- Simple questions (1-3): "What is X?", "Show me Y", basic information requests
-- Medium tasks (4-6): Single-agent tasks requiring some work
-- Complex workflows (7-10): Multi-step processes requiring coordination
+CRITICAL: YOU MUST BE EXTREMELY CONSERVATIVE WITH SCORING!
 
-Focus on identifying:
-1. How many logical steps are involved
-2. What different types of expertise are needed
-3. Whether this requires multiple agents working together
-4. The overall scope and depth of work required
+FUNDAMENTAL RULE: Start at 1 and only increase if there's concrete work to do.
+
+**Score 1-2: NO EXECUTION REQUIRED**
+If the response is just text/advice/knowledge → 1-2
+- Questions seeking information → 1
+- Requests for recommendations → 1-2
+- Asking for explanations → 1
+- Seeking best practices → 1-2
+TEST: Would a human answer this by just talking? → Score 1-2
+
+**Score 3-4: SINGLE EXECUTION STEP**
+REQUIRES actual system changes:
+- Creating one specific file → 3
+- Running one specific command → 3
+- Making one code fix → 4
+
+**Score 5-6: MODERATE WORK**
+Multiple steps but one agent can handle:
+- Writing a complete feature → 5-6
+- Debugging a complex issue → 5-6
+
+**Score 7-10: RARE - MULTI-AGENT PROJECTS**
+- Complete applications → 8-9
+- System-wide changes → 7-8
+
+CRITICAL DECISION POINT:
+Does this require DOING something or just SAYING something?
+- Just saying → 1-2
+- Doing one thing → 3-4
+- Doing many things → 5+
+
+START LOW: Begin with 1 and justify ANY increase!
 """
 
     def _parse_llm_analysis(self, response: str) -> RequestAnalysis:
