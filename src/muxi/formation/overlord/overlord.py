@@ -1821,6 +1821,126 @@ NON_ACTIONABLE - if it's just information, greeting, or acknowledgment""".format
         # Default to actionable if unsure
         return True
 
+    async def _is_non_actionable_for_workflow(self, message_lower: str) -> bool:
+        """
+        Check if a message is non-actionable for workflow purposes.
+        More strict than _is_actionable_message - used to prevent workflow triggers.
+        Uses LLM to understand intent in any language.
+
+        Args:
+            message_lower: Lowercase message text
+
+        Returns:
+            True if message should NOT trigger workflow
+        """
+        # Use LLM to determine if this is non-actionable
+        if self._capability_models.get('text'):
+            try:
+                prompt = """Determine if this message is non-actionable (greeting, acknowledgment, or pure information).
+
+Message: "{}"
+
+Non-actionable messages include:
+- Greetings or pleasantries in any language
+- Acknowledgments or confirmations in any language
+- Pure informational statements with no request or question
+- Simple responses like "yes", "no", "ok" in any language
+
+If the message is a greeting, acknowledgment, or pure information with no action needed, respond with: NON_ACTIONABLE
+If the message requests action, asks a question, or needs a response, respond with: ACTIONABLE
+
+Response:""".format(message_lower)
+
+                # Use cached model if available
+                text_model_config = self._capability_models['text']
+                model_name = text_model_config.get('model', 'openai/gpt-4o-mini')
+                cache_key = f"workflow_check_{model_name}"
+
+                if cache_key in self._model_cache:
+                    llm = self._model_cache[cache_key]
+                else:
+                    llm = await self.create_model(
+                        model=model_name,
+                        api_key=text_model_config.get('api_key'),
+                        temperature=0.1,
+                        max_tokens=20,
+                        **text_model_config.get('settings', {})
+                    )
+                    self._model_cache[cache_key] = llm
+
+                response = await llm.generate_text(prompt)
+                if response and "NON_ACTIONABLE" in response.upper():
+                    return True
+            except Exception:
+                # If LLM fails, be conservative and allow workflow to proceed
+                pass
+
+        # Default to actionable if we can't determine
+        return False
+
+    async def _is_simple_question(self, message_lower: str) -> bool:
+        """
+        Check if a message is a simple question that shouldn't trigger workflow.
+        Used when threshold is very low to prevent workflow overload.
+        Uses LLM to understand question complexity in any language.
+
+        Args:
+            message_lower: Lowercase message text
+
+        Returns:
+            True if this is a simple question
+        """
+        # Use LLM to determine if this is a simple question
+        if self._capability_models.get('text'):
+            try:
+                prompt = """Determine if this is a simple question that can be answered directly.
+
+Message: "{}"
+
+A simple question is one that:
+- Asks for a recommendation or suggestion
+- Seeks basic information or clarification
+- Can be answered in a few sentences
+- Doesn't require multiple steps or complex analysis
+- Is asking "what", "how", "why", "when", "where", "who" about something specific
+
+Complex questions that need workflows:
+- Multi-part requests requiring several steps
+- Requests to build, create, or implement something
+- Tasks requiring research AND analysis AND action
+
+If this is a simple question that can be answered directly, respond with: SIMPLE
+If this requires complex multi-step work, respond with: COMPLEX
+
+Response:""".format(message_lower)
+
+                # Use cached model if available
+                text_model_config = self._capability_models['text']
+                model_name = text_model_config.get('model', 'openai/gpt-4o-mini')
+                cache_key = f"question_check_{model_name}"
+
+                if cache_key in self._model_cache:
+                    llm = self._model_cache[cache_key]
+                else:
+                    llm = await self.create_model(
+                        model=model_name,
+                        api_key=text_model_config.get('api_key'),
+                        temperature=0.1,
+                        max_tokens=20,
+                        **text_model_config.get('settings', {})
+                    )
+                    self._model_cache[cache_key] = llm
+
+                response = await llm.generate_text(prompt)
+                if response and "SIMPLE" in response.upper():
+                    return True
+            except Exception:
+                # If LLM fails, be conservative and allow workflow to proceed
+                pass
+
+        # Default to complex if we can't determine
+        return False
+
     async def _apply_persona(self, raw_response: Optional[str], user_message: str) -> str:
         """
         Apply the overlord persona to format a response.
@@ -5971,14 +6091,47 @@ Make it conversational and friendly while keeping accuracy."""
                 )
 
                 if analysis.complexity_score >= threshold:
-                    # Process with workflow orchestration
-                    return await self._process_with_workflow(
-                        message=message,
-                        analysis=analysis,
-                        user_id=user_id,
-                        session_id=session_id,
-                        request_id=request_id,
-                    )
+                    # Protection: Skip workflow for non-actionable or simple informational messages
+                    # even if they exceed the threshold
+                    message_lower = actual_message.lower()
+
+                    # Check if this is a simple greeting or non-actionable message
+                    if await self._is_non_actionable_for_workflow(message_lower):
+                        observability.observe(
+                            event_type=observability.ServerEvents.SERVER_STARTED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "service": "workflow_protection",
+                                "complexity_score": analysis.complexity_score,
+                                "threshold": threshold,
+                                "reason": "non_actionable_message",
+                            },
+                            description="Skipping workflow for non-actionable message despite threshold",
+                        )
+                        # Fall through to normal agent selection
+                    # Protection: Prevent workflow for simple questions when threshold is too low
+                    elif threshold <= 2.0 and await self._is_simple_question(message_lower):
+                        observability.observe(
+                            event_type=observability.ServerEvents.SERVER_STARTED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "service": "workflow_protection",
+                                "complexity_score": analysis.complexity_score,
+                                "threshold": threshold,
+                                "reason": "simple_question_low_threshold",
+                            },
+                            description="Skipping workflow for simple question with low threshold",
+                        )
+                        # Fall through to normal agent selection
+                    else:
+                        # Process with workflow orchestration
+                        return await self._process_with_workflow(
+                            message=message,
+                            analysis=analysis,
+                            user_id=user_id,
+                            session_id=session_id,
+                            request_id=request_id,
+                        )
             except Exception as e:
                 # Log error but continue with normal flow
                 observability.observe(
