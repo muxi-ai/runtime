@@ -1309,11 +1309,8 @@ class Agent:
                         # Show the delegation responses as the primary result
                         response_content = "\n\n".join(planning_response_parts)
 
-                        # Optionally append local results if they add value
-                        # (but not if they're just intermediate data gathering)
-                        if my_results and not any(
-                            "linear" in part.lower() for part in planning_response_parts
-                        ):
+                        # Always include local results if we have them - they're part of the complete response
+                        if my_results:
                             response_content += "\n\n---\n\nAdditional information gathered:\n"
                             for placeholder, result in my_results.items():
                                 if isinstance(result, dict):
@@ -2727,7 +2724,10 @@ class Agent:
                                 for word in [
                                     "account",
                                     "credential",
-                                    "github",
+                                    "auth",
+                                    "token",
+                                    "api",
+                                    "key",
                                 ]
                             ):
                                 conversation_context.append(f"Assistant: {msg['content'][:200]}")
@@ -2944,13 +2944,28 @@ class Agent:
                             capability_match = True
                             break
 
-                    # Special cases for specific services mentioned in the needed capability
-                    # Check if any key terms from the needed capability match agent capabilities
-                    key_terms = ["linear", "github", "jira", "slack", "discord", "email"]
-                    for term in key_terms:
-                        if term in needed_lower and term in [c.lower() for c in agent_capabilities]:
-                            capability_match = True
-                            break
+                    # Check if any significant terms from the needed capability match agent capabilities
+                    # Extract potential service/tool names from the needed capability (that might be service names)
+                    # Use a more generic approach - look for proper nouns or technical terms
+                    needed_words = needed_lower.split()
+                    capability_words = [c.lower() for c in agent_capabilities]
+
+                    # Check for any meaningful overlap between needed capability and agent capabilities
+                    for word in needed_words:
+                        # Skip common words
+                        if len(word) > 3 and word not in [
+                            "with",
+                            "using",
+                            "from",
+                            "into",
+                            "that",
+                            "this",
+                            "have",
+                            "will",
+                        ]:
+                            if any(word in cap_word for cap_word in capability_words):
+                                capability_match = True
+                                break
 
                     if capability_match and preference_score < best_score:
                         best_agent_id = agent_id
@@ -3043,33 +3058,51 @@ class Agent:
                 timeout=60,  # Give more time for complex requests
             )
 
-            if response and response.get("status") == "success":
-                # Get response content (could be in 'response' or 'advice' field)
-                result_content = response.get("response", response.get("advice", ""))
-                execution_completed = response.get("execution_completed", False)
+            if response:
+                # Initialize variables
+                result_content = None
+                execution_completed = False
 
-                # Handle MuxiResponse objects
-                if hasattr(result_content, "content"):
-                    content_length = len(result_content.content) if result_content.content else 0
-                elif isinstance(result_content, str):
-                    content_length = len(result_content)
-                else:
-                    content_length = len(str(result_content)) if result_content else 0
+                # Check for external A2A format (has 'status' field at top level)
+                if response.get("status") == "success":
+                    # External A2A response format
+                    result_content = response.get("response", response.get("advice", ""))
+                    execution_completed = response.get("execution_completed", False)
 
-                # Log the A2A response
-                observability.observe(
-                    event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "agent_id": self.agent_id,
-                        "source_agent_id": best_agent_id,
-                        "execution_completed": execution_completed,
-                        "response_length": content_length,
-                    },
-                    description=f"A2A response received: execution={execution_completed}",
-                )
+                # Check for internal A2A format (has 'parts' and 'metadata' fields)
+                elif "parts" in response and "metadata" in response:
+                    # Internal A2A response - the actual response is in metadata
+                    metadata = response.get("metadata", {})
 
+                    # Extract from metadata
+                    if metadata.get("status") == "success":
+                        result_content = metadata.get("response", "")
+                        execution_completed = metadata.get("executed", False)
+
+                # Process the result content if we found it
                 if result_content:
+                    # Handle MuxiResponse objects
+                    if hasattr(result_content, "content"):
+                        content_length = (
+                            len(result_content.content) if result_content.content else 0
+                        )
+                    elif isinstance(result_content, str):
+                        content_length = len(result_content)
+                    else:
+                        content_length = len(str(result_content)) if result_content else 0
+
+                    # Log the A2A response
+                    observability.observe(
+                        event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "agent_id": self.agent_id,
+                            "source_agent_id": best_agent_id,
+                            "execution_completed": execution_completed,
+                            "response_length": content_length,
+                        },
+                        description=f"A2A response received: execution={execution_completed}",
+                    )
                     # Extract string content from MuxiResponse if needed
                     if hasattr(result_content, "content"):
                         result_text = result_content.content
@@ -3787,9 +3820,21 @@ class Agent:
                 }
 
             # Otherwise, fall back to consultation/acknowledgment mode
-            # Convert message to string for processing
+            # Extract only text content from message (exclude internal metadata)
             if isinstance(message, dict):
-                message_content = json.dumps(message, indent=2)
+                # Extract only TextPart content, excluding DataPart metadata
+                if "parts" in message and isinstance(message["parts"], list):
+                    text_parts = []
+                    for part in message["parts"]:
+                        if isinstance(part, dict) and part.get("type") == "TextPart":
+                            text_parts.append(part.get("text", ""))
+                    message_content = " ".join(text_parts).strip()
+                    # Fallback if no text parts found
+                    if not message_content:
+                        message_content = message.get("task", message.get("content", str(message)))
+                else:
+                    # Simple message without parts structure
+                    message_content = message.get("task", message.get("content", str(message)))
             else:
                 message_content = str(message)
 
