@@ -81,7 +81,7 @@ async def main():
                 stream=False,  # Try with stream=False like the working test
                 use_async=False
             ),
-            timeout=120  # 120 second timeout
+            timeout=300  # 300 second timeout
         )
     except asyncio.TimeoutError:
         print("\n   ✗ TIMEOUT: Chat call took longer than 120 seconds")
@@ -92,16 +92,24 @@ async def main():
 
     # Collect and display response
     print("\nOverlord Response (auto-routed):")
+    print(response)
 
     # Handle response like the working test
-    if hasattr(response, 'content'):
-        print(response)
+    if isinstance(response, str):
+        # String response - use directly
+        result = response
+    elif hasattr(response, "content"):
+        # MuxiResponse object - extract content
         result = response.content
-    else:
+    elif hasattr(response, "__aiter__"):
+        # Async generator - collect chunks
         result = ""
         async for chunk in response:
             result += chunk
             print(chunk, end="", flush=True)
+    else:
+        # Fallback for other types
+        result = str(response)
 
     print(result)
     print("\n" + "-"*60)
