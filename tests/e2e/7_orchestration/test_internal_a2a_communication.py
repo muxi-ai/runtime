@@ -40,6 +40,7 @@ async def main():
     # Make the call WITHOUT specifying agent_name
     response = await overlord.chat(
         message="create a linear issue with system usage info like cpu, memory, etc",
+        # message="create a linear issue with system usage info like cpu, memory, etc. reply with the information as a json object. do not include any other text in the response.",  # noqa: E501
         agent_name=None,  # Let overlord auto-route
         user_id="test_user",
         session_id="test_session",
