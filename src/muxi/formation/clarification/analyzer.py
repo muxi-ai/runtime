@@ -433,30 +433,44 @@ class InformationAnalyzer:
                 # Construct messages with proper role separation for better prompt safety and clarity
                 # System message contains instructions and cannot be influenced by user input
                 system_message = (
-                    "You are a request analyzer. Determine if a user request has enough information to proceed."
-                    "\n\nIMPORTANT: Be VERY conservative about asking for clarification. Most requests have enough information to proceed."
-                    "\n\nOnly return NEEDS_CLARIFICATION if the request is:"
-                    "\n- Completely incomplete (like 'can you help')"
-                    "\n- Has critical missing context that cannot be inferred"
-                    "\n- Is grammatically broken or unintelligible"
-                    "\n\nIf the request has a clear action + object + reasonable specificity, return CLEAR."
+                    "You are a request analyzer. Determine if a user message contains a REQUEST that needs action."
+                    "\n\nCRITICAL RULES:"
+                    "\n1. INFORMATIONAL STATEMENTS ARE NOT REQUESTS - If the user is just providing context or "
+                    "information, return CLEAR"
+                    "\n2. Only actual questions or action requests need clarification if incomplete"
+                    "\n3. Be VERY conservative - when in doubt, return CLEAR"
+                    "\n4. REQUESTS WITH OUTPUT FORMAT INSTRUCTIONS ARE COMPLETE - If user specifies how they want "
+                    "the output (e.g., 'as JSON', 'reply with only', 'return as'), the request is CLEAR"
+                    "\n\nReturn CLEAR for:"
+                    "\n- Any informational statement (e.g., 'I'm working on X', 'My budget is Y')"
+                    "\n- Any complete question (e.g., 'What database should I use?')"
+                    "\n- Any actionable request with reasonable context"
+                    "\n- Any request that specifies output format (e.g., 'reply as JSON', 'return only the code')"
+                    "\n- Greetings or social messages (e.g., 'Hi', 'Hello', 'Thanks')"
+                    "\n\nONLY return NEEDS_CLARIFICATION if:"
+                    "\n- The message is an incomplete question or request"
+                    "\n- The message asks for action but critical details are missing"
+                    "\n- The message is grammatically broken AND appears to be a request"
                     "\n\nResponse format:"
-                    "\nCLEAR (if the request is actionable)"
-                    "\nNEEDS_CLARIFICATION: [short question] (only if truly necessary)"
-                    "\n\nExamples that should return CLEAR:"
-                    '\n- "create a linear issue with system usage info like cpu, memory, etc" -> CLEAR'
-                    '\n- "generate system report with performance metrics" -> CLEAR'
-                    '\n- "Write a Python function to sort a list" -> CLEAR'
-                    '\n- "scrape this website for product data" -> CLEAR'
-                    '\n- "analyze the data and create visualizations" -> CLEAR'
-                    '\n- "make a report about server performance" -> CLEAR'
-                    '\n- "create documentation for the API" -> CLEAR'
+                    "\nCLEAR (for statements, complete questions, or actionable requests)"
+                    "\nNEEDS_CLARIFICATION: [short question] (only for incomplete requests)"
+                    "\n\nExamples that MUST return CLEAR:"
+                    '\n- "I\'m working on an e-commerce platform using React and Node.js" -> CLEAR '
+                    '(informational statement)'
+                    '\n- "Hi" -> CLEAR (greeting)'
+                    '\n- "I\'m a software developer" -> CLEAR (informational statement)'
+                    '\n- "My budget is $5000 and timeline is 2 weeks" -> CLEAR (informational statement)'
+                    '\n- "What database should I use?" -> CLEAR (complete question)'
+                    '\n- "create a linear issue with system usage info" -> CLEAR (actionable request)'
+                    '\n- "Write a Python function to sort a list" -> CLEAR (actionable request)'
+                    '\n- "Get system info and return as JSON" -> CLEAR (has output format)'
+                    '\n- "Create an issue. Reply with JSON only" -> CLEAR (has output format)'
                     "\n\nExamples that need clarification:"
-                    '\n- "can you me a" -> NEEDS_CLARIFICATION: Your message seems incomplete.'
-                    '\n- "help me" -> NEEDS_CLARIFICATION: What do you need help with?'
-                    '\n- "fix the bug" -> NEEDS_CLARIFICATION: Which bug are you referring to?'
+                    '\n- "can you help me with" -> NEEDS_CLARIFICATION: What would you like help with?'
+                    '\n- "fix the" -> NEEDS_CLARIFICATION: What needs to be fixed?'
+                    '\n- "create a" -> NEEDS_CLARIFICATION: What would you like me to create?'
                     f"\n\n{style_guidance}"
-                    "\n\nRemember: If there's reasonable context, return CLEAR. Don't ask for unnecessary details."
+                    "\n\nREMEMBER: Requests with output format instructions are COMPLETE and should return CLEAR."
                 )
 
                 # Separate user message to prevent prompt injection and improve clarity

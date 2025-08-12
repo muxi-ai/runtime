@@ -146,6 +146,7 @@ class InformationAnalysis:
     suggestions: List[str]
     can_proceed: bool
     reasoning_context_needed: Optional[str] = None
+    is_actionable: bool = True  # New field: whether the request requires action
 
 
 @dataclass

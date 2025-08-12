@@ -1750,76 +1750,166 @@ class Overlord:
             # ErrorEvents.INTERNAL_ERROR
             _ = e  # remove this after implementing observability
 
-    async def _apply_persona(self, raw_response: str, user_message: str) -> str:
+    async def _is_actionable_message(self, message: str) -> bool:
         """
-        Apply the overlord persona to format a raw response.
+        Determine if a message requires action or is just informational.
 
-        Args:
-            raw_response: The raw agent/error response to format
-            user_message: The original user request for context and language detection
+        Fast path detection for:
+        - Greetings: "Hi", "Hello", "Good morning"
+        - Acknowledgments: "Thanks", "Got it", "Okay"
+        - Informational statements: "I'm using Python", "My budget is $5000"
 
         Returns:
-            Formatted response with persona applied, or raw response if formatting fails
+            True if message needs work done (questions, commands, requests)
+            False if message is conversational/informational only
         """
-        try:
-            # Get the text LLM from capability models
-            text_model_config = self._capability_models.get("text")
-            if not text_model_config:
-                # No text model configured, return raw response
-                return raw_response
+        # First try fast heuristics for common cases
+        message_lower = message.lower().strip()
 
-            # Create or get cached LLM instance
-            model_name = text_model_config.get("model")
-            cache_key = f"persona_{model_name}"
+        # Definite non-actionable patterns
+        if message_lower in ["hi", "hello", "hey", "thanks", "thank you", "ok", "okay", "got it"]:
+            return False
 
-            if cache_key in self._model_cache:
-                llm = self._model_cache[cache_key]
-            else:
-                # Create new LLM instance for persona formatting
-                llm = await self.create_model(
-                    model=model_name,
-                    api_key=text_model_config.get("api_key"),
-                    temperature=0.3,  # Lower temperature for consistent formatting
-                    max_tokens=2000,
-                    **text_model_config.get("settings", {})
-                )
-                self._model_cache[cache_key] = llm
+        # For more complex cases, use LLM if available
+        if self._capability_models.get('text'):
+            try:
+                # Quick LLM check with formation's text model
+                prompt = """Is this message requesting action or just providing information/greeting?
 
-            # Create formatting prompt
-            prompt = (
-                f"{self._default_persona}\n\n"
-                f"User's original request: {user_message}\n\n"
-                f"Raw response to format: {raw_response}\n\n"
-                "IMPORTANT: First, analyze the user's request to understand their intent:\n"
-                "- If they explicitly asked for raw JSON, specific format (YES/NO, TRUE/FALSE), "
-                "or unformatted output, return the raw response exactly as is\n"
-                "- Otherwise, transform the response into a natural message using your persona\n"
-                "Transform this technical response appropriately based on the user's intent:\n"
-                "- JSON data: Describe it in natural language (unless user wants raw JSON)\n"
-                "- System information: Present it as a friendly status update\n"
-                "- Task confirmations: Acknowledge what was accomplished\n"
-                "- Error messages: Explain them helpfully\n\n"
-                "Please provide a response that:\n"
-                "- Respects the user's desired format (raw vs conversational)\n"
-                "- Matches the language of the user's request\n"
-                "- Uses MUXI's warm, confident tone (when appropriate)\n"
-                "- Is clear and easy to understand\n\n"
-                "Formatted response:\n"
+Message: "{}"
+
+Reply with only:
+ACTIONABLE - if the user wants something done
+NON_ACTIONABLE - if it's just information, greeting, or acknowledgment""".format(message)
+
+                # Use formation's text model for this quick check
+                text_model_config = self._capability_models.get('text')
+                model_name = text_model_config.get('model')
+                cache_key = f"actionability_{model_name}"
+
+                if cache_key in self._model_cache:
+                    llm = self._model_cache[cache_key]
+                else:
+                    llm = await self.create_model(
+                        model=model_name,
+                        api_key=text_model_config.get('api_key'),
+                        temperature=0.1,  # Very low temperature for consistent classification
+                        max_tokens=20,
+                        **text_model_config.get('settings', {})
+                    )
+                    self._model_cache[cache_key] = llm
+
+                response = await llm.generate_text(prompt)
+                if response and "NON_ACTIONABLE" in response.upper():
+                    return False
+            except Exception:
+                # If LLM check fails, continue to default
+                pass
+
+        # Default to actionable if unsure
+        return True
+
+    async def _apply_persona(self, raw_response: Optional[str], user_message: str) -> str:
+        """
+        Apply the overlord persona to format a response.
+
+        Args:
+            raw_response: The agent's response, or None for non-actionable messages
+            user_message: The original user message for context
+
+        Returns:
+            Formatted response with persona applied
+        """
+        # CRITICAL CHANGE: Use formation's text model (from formation.llm.models[0].text)
+        # NOT the overlord's specialized decomposition model
+        # The _capability_models dict contains the formation's LLM models
+        text_model_config = self._capability_models.get('text')
+        if not text_model_config:
+            # Fallback if no text model configured in formation
+            return raw_response or "I understand. How can I help you?"
+
+        # text_model_config contains the formation's text model from formation.llm.models[0].text
+        model_name = text_model_config.get('model')
+        api_key = text_model_config.get('api_key')
+
+        # Get or create LLM instance for persona/conversation
+        cache_key = f"persona_{model_name}"
+        if cache_key in self._model_cache:
+            llm = self._model_cache[cache_key]
+        else:
+            # Create LLM using formation's text model (not overlord's specialized model)
+            llm = await self.create_model(
+                model=model_name,
+                api_key=api_key,
+                temperature=0.7
             )
+            self._model_cache[cache_key] = llm
 
-            # Get formatted response from LLM
-            formatted = await llm.generate_text(prompt)
-            if formatted:
-                return formatted.strip()
+        try:
+            if raw_response is None:
+                # NON-ACTIONABLE PATH: Direct conversational response
+                prompt = f"""{self._default_persona}
+
+The user said: "{user_message}"
+
+This is a greeting, acknowledgment, or informational statement that doesn't require any action.
+Respond naturally and conversationally. Be warm, encouraging, and maintain conversation flow.
+
+Guidelines:
+- For greetings: Respond warmly and ask how you can help
+- For information: Acknowledge it positively and show interest
+- For thanks: Respond graciously
+- Keep responses concise but friendly
+
+Examples:
+User: "Hi"
+Response: "Hello! How can I assist you today?"
+
+User: "I'm working on a Python project"
+Response: "Great! Python is an excellent choice. What are you building?"
+
+User: "My budget is $5000"
+Response: "I understand - $5000 budget noted. What would you like to explore within that range?"
+
+User: "Thanks"
+Response: "You're welcome! Let me know if you need anything else."
+"""
+                messages = [{"role": "user", "content": prompt}]
+                response = await llm.chat(messages, max_tokens=300, temperature=0.7)
+
+                if hasattr(response, 'content'):
+                    return response.content
+                elif isinstance(response, str):
+                    return response
+                else:
+                    return str(response)
             else:
-                # Fallback to raw response if formatting fails
-                return raw_response
+                # ACTIONABLE PATH: Format agent's response with persona
+                prompt = f"""{self._default_persona}
+
+User request: {user_message}
+Agent response: {raw_response}
+
+Reformat the agent's response to match your persona while preserving all technical details and information.
+Make it conversational and friendly while keeping accuracy."""
+
+                messages = [{"role": "user", "content": prompt}]
+                response = await llm.chat(messages, max_tokens=2000, temperature=0.7)
+
+                if hasattr(response, 'content'):
+                    return response.content
+                elif isinstance(response, str):
+                    return response
+                else:
+                    return str(response) if response else raw_response
 
         except Exception as e:
-            # Log error and return raw response
+            # Log error and return appropriate fallback
             msg = f"Error applying persona: {e}"
             # TODO: Add observability logging
             _ = msg
+            if raw_response is None:
+                return "I understand. How can I help you?"
             return raw_response
 
     async def _initialize_buffer_memory(self, buffer_config: Dict[str, Any]) -> None:
@@ -4735,6 +4825,9 @@ class Overlord:
 
         ENHANCED: Now detects and handles agent clarification requests.
         """
+        # Track processing time
+        start_time = time.time()
+
         # Debug: Entry point
         observability.observe(
             event_type=observability.ServerEvents.SERVER_STARTED,
@@ -5706,6 +5799,49 @@ class Overlord:
                     description=f"Clarification check failed: {e}",
                 )
                 # Continue without clarification on error
+
+        # ===================================================================
+        # NON-ACTIONABLE MESSAGE FAST PATH
+        # ===================================================================
+        # Check if message requires any action at all
+        if not await self._is_actionable_message(message):
+            observability.observe(
+                event_type=observability.ConversationEvents.REQUEST_PROCESSING,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "message_preview": message[:50],
+                    "path": "fast_conversational",
+                    "message_type": "non_actionable"
+                },
+                description="Non-actionable message, using fast conversational path"
+            )
+
+            # Skip all heavy processing - go straight to persona
+            response = await self._apply_persona(None, message)
+
+            # Store in memory for context (lightweight operation)
+            if self.buffer_memory_manager:
+                await self.buffer_memory_manager.add_to_buffer_memory(
+                    message=f"User: {message}",
+                    metadata={"user_id": user_id, "session_id": session_id, "role": "user"},
+                    agent_id="overlord"
+                )
+                await self.buffer_memory_manager.add_to_buffer_memory(
+                    message=f"Assistant: {response}",
+                    metadata={"user_id": user_id, "session_id": session_id, "role": "assistant"},
+                    agent_id="overlord"
+                )
+
+            return MuxiResponse(
+                role="assistant",
+                content=response,
+                metadata={
+                    "handled_by": "overlord_direct",
+                    "is_actionable": False,
+                    "fast_path": True,
+                    "processing_time_ms": (time.time() - start_time) * 1000
+                }
+            )
 
         # ===================================================================
         # WORKFLOW ANALYSIS AND DECOMPOSITION
