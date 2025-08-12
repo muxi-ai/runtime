@@ -807,7 +807,9 @@ class Agent:
             message_obj = message
 
         # Store message metadata for use in other methods (like A2A routing)
-        self._current_message_metadata = message_obj.metadata if hasattr(message_obj, 'metadata') else None
+        self._current_message_metadata = (
+            message_obj.metadata if hasattr(message_obj, "metadata") else None
+        )
 
         # Reset A2A attempt counter for each new request to prevent cascading failures
         self._a2a_attempt_count = 0
@@ -972,17 +974,19 @@ class Agent:
         # Check if this is a workflow task using metadata
         # Workflow tasks should be marked in metadata to avoid fragile string matching
         is_workflow_task = False
-        if hasattr(message_obj, 'metadata') and message_obj.metadata:
+        if hasattr(message_obj, "metadata") and message_obj.metadata:
             # Check for workflow task indicator in metadata
             is_workflow_task = (
-                message_obj.metadata.get('is_workflow_task', False) or
-                message_obj.metadata.get('task_type') == 'workflow' or
-                message_obj.metadata.get('source') == 'workflow_executor'
+                message_obj.metadata.get("is_workflow_task", False)
+                or message_obj.metadata.get("task_type") == "workflow"
+                or message_obj.metadata.get("source") == "workflow_executor"
             )
 
         # Fallback to string matching only if metadata not available (for backward compatibility)
-        if not is_workflow_task and not (hasattr(message_obj, 'metadata') and message_obj.metadata):
-            user_message = message_obj.content if hasattr(message_obj, "content") else str(message_obj)
+        if not is_workflow_task and not (hasattr(message_obj, "metadata") and message_obj.metadata):
+            user_message = (
+                message_obj.content if hasattr(message_obj, "content") else str(message_obj)
+            )
             is_workflow_task = (
                 # Check for workflow context indicators
                 ("## Task:" in user_message)  # Workflow task prompt format
@@ -1514,6 +1518,40 @@ class Agent:
         elif isinstance(raw_response, dict) and "choices" in raw_response:
             # Handle dict response format
             content = raw_response["choices"][0]["message"].get("content", "") or ""
+        elif isinstance(raw_response, dict):
+            # Handle dictionary tool result - extract meaningful content
+            import json as json_lib
+
+            # Try to extract meaningful text from the dict structure
+            if "content" in raw_response:
+                content_data = raw_response["content"]
+                if isinstance(content_data, dict) and "content" in content_data:
+                    # Handle nested content.content structure
+                    nested_content = content_data["content"]
+                    if isinstance(nested_content, list):
+                        # Extract text from content items
+                        text_parts = []
+                        for item in nested_content:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                text_parts.append(item.get("text", ""))
+                        content = (
+                            "\n".join(text_parts)
+                            if text_parts
+                            else json_lib.dumps(raw_response, indent=2)
+                        )
+                    else:
+                        content = str(nested_content)
+                else:
+                    content = str(content_data)
+            elif "result" in raw_response:
+                content = str(raw_response["result"])
+            elif "output" in raw_response:
+                content = str(raw_response["output"])
+            elif "text" in raw_response:
+                content = str(raw_response["text"])
+            else:
+                # Format as readable JSON
+                content = json_lib.dumps(raw_response, indent=2)
         else:
             # Try to extract content from string representation if it's embedded
             response_str = str(raw_response)
@@ -2807,11 +2845,11 @@ class Agent:
             is_workflow_task = False
 
             # Check metadata if available (from process_message context)
-            if hasattr(self, '_current_message_metadata') and self._current_message_metadata:
+            if hasattr(self, "_current_message_metadata") and self._current_message_metadata:
                 is_workflow_task = (
-                    self._current_message_metadata.get('is_workflow_task', False) or
-                    self._current_message_metadata.get('task_type') == 'workflow' or
-                    self._current_message_metadata.get('source') == 'workflow_executor'
+                    self._current_message_metadata.get("is_workflow_task", False)
+                    or self._current_message_metadata.get("task_type") == "workflow"
+                    or self._current_message_metadata.get("source") == "workflow_executor"
                 )
 
             # Fallback to string matching only if metadata not available
@@ -3035,6 +3073,39 @@ class Agent:
                     # Extract string content from MuxiResponse if needed
                     if hasattr(result_content, "content"):
                         result_text = result_content.content
+                    elif isinstance(result_content, dict):
+                        # Handle dictionary results (e.g., from tool execution)
+                        import json
+
+                        # Try to extract meaningful content from the dict
+                        if "result" in result_content:
+                            result_text = result_content["result"]
+                        elif "output" in result_content:
+                            result_text = result_content["output"]
+                        elif "content" in result_content:
+                            # Handle nested content structure
+                            content = result_content["content"]
+                            if isinstance(content, dict) and "content" in content:
+                                # Extract from nested content.content structure
+                                nested_content = content["content"]
+                                if isinstance(nested_content, list) and nested_content:
+                                    # Extract text from content items
+                                    text_parts = []
+                                    for item in nested_content:
+                                        if isinstance(item, dict) and item.get("type") == "text":
+                                            text_parts.append(item.get("text", ""))
+                                    result_text = (
+                                        "\n".join(text_parts)
+                                        if text_parts
+                                        else json.dumps(result_content, indent=2)
+                                    )
+                                else:
+                                    result_text = str(content)
+                            else:
+                                result_text = str(content)
+                        else:
+                            # Format as pretty JSON for readability
+                            result_text = json.dumps(result_content, indent=2)
                     else:
                         result_text = str(result_content)
 

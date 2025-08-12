@@ -456,9 +456,13 @@ class ChatOrchestrator:
 
         # Store overlord's final response in buffer memory (fire-and-forget)
         if result and hasattr(result, "content") and result.content:
+            # Extract content for storage
+            content_for_storage = (
+                result.content if isinstance(result.content, str) else str(result.content)
+            )
             asyncio.create_task(
                 self._store_assistant_response_async(
-                    content=result.content,
+                    content=content_for_storage,
                     timestamp=time.time(),
                     agent_name=agent_name,
                     user_id=user_id,
@@ -467,7 +471,49 @@ class ChatOrchestrator:
                 )
             )
 
-            # Post-response extraction removed - now happens before processing
+        # Extract content from MuxiResponse for return to user
+        if result and hasattr(result, "content"):
+            # After overlord processing, content should already be a formatted string
+            # If it's still a dict, the persona wasn't applied properly
+            if isinstance(result.content, str):
+                return result.content
+            elif isinstance(result.content, dict):
+                # Extract text from nested dictionary structure
+                if "content" in result.content:
+                    content = result.content["content"]
+                    # Handle nested content.content structure
+                    if isinstance(content, dict) and "content" in content:
+                        nested_content = content["content"]
+                        if isinstance(nested_content, list):
+                            # Extract text from content items
+                            text_parts = []
+                            for item in nested_content:
+                                if isinstance(item, dict) and item.get("type") == "text":
+                                    text_parts.append(item.get("text", ""))
+                            if text_parts:
+                                return "\n".join(text_parts)
+                    elif isinstance(content, list):
+                        # Direct list of content items
+                        text_parts = []
+                        for item in content:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                text_parts.append(item.get("text", ""))
+                        if text_parts:
+                            return "\n".join(text_parts)
+                # Try other common patterns
+                if "result" in result.content:
+                    return str(result.content["result"])
+                elif "output" in result.content:
+                    return str(result.content["output"])
+                elif "text" in result.content:
+                    return str(result.content["text"])
+                # Fallback - format as JSON for readability
+                import json
+
+                return json.dumps(result.content, indent=2)
+            else:
+                # Handle other complex content types
+                return str(result.content)
 
         return result
 

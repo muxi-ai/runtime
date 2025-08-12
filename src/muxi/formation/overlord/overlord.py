@@ -1711,95 +1711,116 @@ class Overlord:
         return results
 
     def _load_default_persona(self) -> None:
-        """Load the default persona from the system_persona.md file."""
+        """Load the default persona from formation config or system_persona.md file."""
         try:
-            # Get the path to the system_persona.md file relative to this file
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            persona_path = os.path.join(current_dir, "utils", "system_persona.md")
+            # First check if persona is configured in formation YAML
+            overlord_config = self.formation_config.get("overlord", {})
+            configured_persona = overlord_config.get("persona")
 
-            if os.path.exists(persona_path):
-                with open(persona_path, "r", encoding="utf-8") as f:
-                    self._default_persona = f.read().strip()
+            if configured_persona:
+                self._default_persona = configured_persona
             else:
-                # Fallback if file doesn't exist
-                fallback = "You are a friendly and helpful assistant."
-                self._default_persona = fallback
-                msg = f"Persona file not found at {persona_path}, using fallback"
-                #  Warning - TODO: add observability
-                # SystemEvents.FAILED_INITIALIZATION (persona)
-                _ = msg  # remove this after implementing observability
+                # Load from the correct path (no utils/ subdirectory)
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                persona_path = os.path.join(current_dir, "system_persona.md")
+
+                if os.path.exists(persona_path):
+                    with open(persona_path, "r", encoding="utf-8") as f:
+                        self._default_persona = f.read().strip()
+                else:
+                    # Fallback if file doesn't exist
+                    fallback = "You are a friendly and helpful assistant."
+                    self._default_persona = fallback
+                    msg = f"Persona file not found at {persona_path}, using fallback"
+                    #  Warning - TODO: add observability
+                    # SystemEvents.FAILED_INITIALIZATION (persona)
+                    _ = msg  # remove this after implementing observability
+
+            # Append multilingual instruction
+            self._default_persona += "\n\nIMPORTANT: Always reply in the same language as the user's original request."
 
         except Exception as e:
             # Fallback if there's an error reading the file
-            fallback = "You are a friendly and helpful assistant."
+            fallback = (
+                "You are a friendly and helpful assistant.\n\n"
+                "IMPORTANT: Always reply in the same language as the user's original request."
+            )
             self._default_persona = fallback
             #  Warning - TODO: add observability
             # ErrorEvents.INTERNAL_ERROR
             _ = e  # remove this after implementing observability
 
-    def _create_overlord_system_message(self, persona: Optional[str] = None) -> str:
+    async def _apply_persona(self, raw_response: str, user_message: str) -> str:
         """
-        Create the complete system message by combining technical orchestration
-        instructions with the persona.
+        Apply the overlord persona to format a raw response.
 
         Args:
-            persona: Optional persona text. If None, uses default persona.
+            raw_response: The raw agent/error response to format
+            user_message: The original user request for context and language detection
 
         Returns:
-            Complete system message with technical instructions prepended to persona.
+            Formatted response with persona applied, or raw response if formatting fails
         """
-        # Load technical orchestration instructions from system_message.md
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        system_message_path = os.path.join(current_dir, "utils", "system_message.md")
-
-        system_message = ""
         try:
-            if os.path.exists(system_message_path):
-                with open(system_message_path, "r", encoding="utf-8") as f:
-                    system_message = f.read().strip()
+            # Get the text LLM from capability models
+            text_model_config = self._capability_models.get("text")
+            if not text_model_config:
+                # No text model configured, return raw response
+                return raw_response
+
+            # Create or get cached LLM instance
+            model_name = text_model_config.get("model")
+            cache_key = f"persona_{model_name}"
+
+            if cache_key in self._model_cache:
+                llm = self._model_cache[cache_key]
+            else:
+                # Create new LLM instance for persona formatting
+                llm = await self.create_model(
+                    model=model_name,
+                    api_key=text_model_config.get("api_key"),
+                    temperature=0.3,  # Lower temperature for consistent formatting
+                    max_tokens=2000,
+                    **text_model_config.get("settings", {})
+                )
+                self._model_cache[cache_key] = llm
+
+            # Create formatting prompt
+            prompt = (
+                f"{self._default_persona}\n\n"
+                f"User's original request: {user_message}\n\n"
+                f"Raw response to format: {raw_response}\n\n"
+                "IMPORTANT: First, analyze the user's request to understand their intent:\n"
+                "- If they explicitly asked for raw JSON, specific format (YES/NO, TRUE/FALSE), "
+                "or unformatted output, return the raw response exactly as is\n"
+                "- Otherwise, transform the response into a natural message using your persona\n"
+                "Transform this technical response appropriately based on the user's intent:\n"
+                "- JSON data: Describe it in natural language (unless user wants raw JSON)\n"
+                "- System information: Present it as a friendly status update\n"
+                "- Task confirmations: Acknowledge what was accomplished\n"
+                "- Error messages: Explain them helpfully\n\n"
+                "Please provide a response that:\n"
+                "- Respects the user's desired format (raw vs conversational)\n"
+                "- Matches the language of the user's request\n"
+                "- Uses MUXI's warm, confident tone (when appropriate)\n"
+                "- Is clear and easy to understand\n\n"
+                "Formatted response:\n"
+            )
+
+            # Get formatted response from LLM
+            formatted = await llm.generate_text(prompt)
+            if formatted:
+                return formatted.strip()
+            else:
+                # Fallback to raw response if formatting fails
+                return raw_response
+
         except Exception as e:
-            #  Warning - TODO: add observability
-            # SystemEvents.FAILED_INITIALIZATION (system_message)
-            _ = e  # remove this after implementing observability
-
-            # Fallback technical instructions
-            system_message = (
-                "You are the system overlord. You are responsible for routing messages "
-                "to the appropriate agents and maintaining conversation coherence."
-            )
-        system_message += f"\n\nAlways try to use {self.response_format} in responses."
-
-        # Use provided persona or default
-        if persona is None:
-            persona = getattr(self, "_default_persona", "You are a friendly and helpful assistant.")
-
-        # Add built-in MCP system prompts if enabled
-        builtin_mcp_prompts = self._get_builtin_mcp_prompts()
-        if builtin_mcp_prompts:
-            system_message += f"\n\n## Built-in Tools\n\n{builtin_mcp_prompts}"
-
-        # Add artifact system prompt (always enabled)
-        from pathlib import Path
-
-        artifact_prompt_path = Path(__file__).parent.parent / "artifacts" / "prompt.md"
-        try:
-            if artifact_prompt_path.exists():
-                artifact_prompt = artifact_prompt_path.read_text(encoding="utf-8")
-                system_message += f"\n\n## File Generation (Always Available)\n\n{artifact_prompt}"
-        except (IOError, OSError, UnicodeDecodeError) as e:
-            observability.observe(
-                event_type=observability.SystemEvents.SERVICE_WARNING,
-                level=observability.EventLevel.WARNING,
-                data={"service": "artifact", "file": str(artifact_prompt_path), "error": str(e)},
-                description=f"Failed to read artifact prompt file: {e}",
-            )
-            # Continue without artifact prompt - system message construction continues gracefully
-
-        # Combine technical instructions with persona
-        return (
-            f"<system-message>\n{system_message}\n</system-message>\n\n"
-            f"<persona>\n{persona}\n</persona>"
-        )
+            # Log error and return raw response
+            msg = f"Error applying persona: {e}"
+            # TODO: Add observability logging
+            _ = msg
+            return raw_response
 
     async def _initialize_buffer_memory(self, buffer_config: Dict[str, Any]) -> None:
         """Initialize buffer memory from configuration."""
@@ -4620,10 +4641,13 @@ class Overlord:
             # NOTE: Must get webhook URL BEFORE removing request from tracker
             webhook_url = await self._get_webhook_url_for_request(request_id)
             if webhook_url:
+                # Apply persona to format the error message
+                formatted_error = await self._apply_persona(f"An error occurred: {str(e)}", message)
+
                 await self.webhook_manager.deliver_completion(
                     webhook_url=webhook_url,
                     request_id=request_id,
-                    error=str(e),
+                    error=formatted_error,
                     processing_mode="async",  # indicate this was async processing
                     user_id=user_id,  # include user identifier
                     formation_id=self.formation_id,  # include formation identifier
@@ -5888,12 +5912,18 @@ class Overlord:
                 if e.service == "github":
                     service_display = "GitHub"
 
+                # Create error message
+                error_content = (
+                    f"I need access to your {service_display} credentials to complete this task. "
+                    f"Could you please provide your {service_display} personal access token?"
+                )
+
+                # Apply persona to format the error message
+                formatted_content = await self._apply_persona(error_content, message)
+
                 return MuxiResponse(
                     role="assistant",
-                    content=(
-                        f"I need access to your {service_display} credentials to complete this task. "
-                        f"Could you please provide your {service_display} personal access token?"
-                    ),
+                    content=formatted_content,
                     metadata={
                         "clarification_requested": True,
                         "clarification_type": "missing_credential",
@@ -5937,13 +5967,19 @@ class Overlord:
 
                 options_text = "\n".join([f"{i+1}. {name}" for i, name in enumerate(ordered_names)])
 
+                # Create error message
+                error_content = (
+                    f"I found multiple {service_display} accounts for you. "
+                    f"Which account would you like to use?\n\n"
+                    f"Available accounts:\n{options_text}"
+                )
+
+                # Apply persona to format the error message
+                formatted_content = await self._apply_persona(error_content, message)
+
                 return MuxiResponse(
                     role="assistant",
-                    content=(
-                        f"I found multiple {service_display} accounts for you. "
-                        f"Which account would you like to use?\n\n"
-                        f"Available accounts:\n{options_text}"
-                    ),
+                    content=formatted_content,
                     metadata={
                         "clarification_requested": True,
                         "clarification_type": "ambiguous_credential",
@@ -5966,6 +6002,60 @@ class Overlord:
             return await self._handle_agent_clarification_request(
                 agent_clarification, result, message, agent_name, user_id
             )
+
+        # Apply persona to format the response (except for clarifications)
+        if result and hasattr(result, 'content'):
+            if isinstance(result.content, str):
+                # Simple string content - apply persona directly
+                formatted_content = await self._apply_persona(result.content, message)
+                result.content = formatted_content
+            elif isinstance(result.content, dict):
+                # Dictionary content (e.g., from tool execution) - extract and format
+                import json as json_lib
+                extracted_text = None
+
+                # Try to extract meaningful text from the dict structure
+                if 'content' in result.content:
+                    content = result.content['content']
+                    if isinstance(content, dict) and 'content' in content:
+                        # Handle nested content.content structure
+                        nested_content = content['content']
+                        if isinstance(nested_content, list):
+                            # Extract text from content items
+                            text_parts = []
+                            for item in nested_content:
+                                if isinstance(item, dict) and item.get('type') == 'text':
+                                    text_parts.append(item.get('text', ''))
+                            if text_parts:
+                                extracted_text = '\n'.join(text_parts)
+                        else:
+                            extracted_text = str(nested_content)
+                    elif isinstance(content, list):
+                        # Direct list of content items
+                        text_parts = []
+                        for item in content:
+                            if isinstance(item, dict) and item.get('type') == 'text':
+                                text_parts.append(item.get('text', ''))
+                        if text_parts:
+                            extracted_text = '\n'.join(text_parts)
+                    elif isinstance(content, str):
+                        extracted_text = content
+
+                # If we couldn't extract text, try other common patterns
+                if not extracted_text:
+                    if 'result' in result.content:
+                        extracted_text = str(result.content['result'])
+                    elif 'output' in result.content:
+                        extracted_text = str(result.content['output'])
+                    elif 'text' in result.content:
+                        extracted_text = str(result.content['text'])
+                    else:
+                        # Last resort - format as JSON
+                        extracted_text = json_lib.dumps(result.content, indent=2)
+
+                # Apply persona to the extracted text
+                formatted_content = await self._apply_persona(extracted_text, message)
+                result.content = formatted_content
 
         return result
 
