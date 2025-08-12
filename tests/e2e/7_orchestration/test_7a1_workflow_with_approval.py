@@ -37,13 +37,22 @@ async def main():
             stream=False
         )
 
-        # Get response
-        if hasattr(response, 'content'):
+        # Collect and display response
+        # Handle response based on type
+        if isinstance(response, str):
+            # String response - use directly
+            content = response
+        elif hasattr(response, "content"):
+            # MuxiResponse object - extract content
             content = response.content
-        else:
+        elif hasattr(response, "__aiter__"):
+            # Async generator - collect chunks
             content = ""
             async for chunk in response:
                 content += chunk
+        else:
+            # Fallback for other types
+            content = str(response)
 
         print("\n📋 Response:")
         print("-"*60)
@@ -65,12 +74,21 @@ async def main():
                 stream=False
             )
 
-            if hasattr(response2, 'content'):
+            # Handle response based on type
+            if isinstance(response2, str):
+                # String response2 - use directly
+                content2 = response2
+            elif hasattr(response2, "content"):
+                # MuxiResponse2 object - extract content
                 content2 = response2.content
-            else:
+            elif hasattr(response2, "__aiter__"):
+                # Async generator - collect chunks
                 content2 = ""
                 async for chunk in response2:
                     content2 += chunk
+            else:
+                # Fallback for other types
+                content2 = str(response2)
 
             print("\n📋 After Approval:")
             print("-"*60)
