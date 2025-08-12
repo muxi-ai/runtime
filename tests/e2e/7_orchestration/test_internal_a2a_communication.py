@@ -48,14 +48,21 @@ async def main():
     )
 
     # Collect and display response
-    # Handle response like the working test
-    if hasattr(response, 'content'):
+    # Handle response based on type
+    if isinstance(response, str):
+        # String response - use directly
+        result = response
+    elif hasattr(response, 'content'):
+        # MuxiResponse object - extract content
         result = response.content
-    else:
+    elif hasattr(response, '__aiter__'):
+        # Async generator - collect chunks
         result = ""
         async for chunk in response:
             result += chunk
-            # print(chunk, end="", flush=True)
+    else:
+        # Fallback for other types
+        result = str(response)
 
     print("\n" + "="*60)
     print("\nOverlord Response (auto-routed):")
