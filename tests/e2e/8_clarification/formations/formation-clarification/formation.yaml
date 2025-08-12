@@ -26,4 +26,8 @@ logging:
 overlord:
   clarification:
     style: "conversational"  # Options: conversational, formal, brief
+  # workflow:
+  #   auto_decomposition: true
+  #   complexity_threshold: 1.0  # Set to 1 to trigger workflow for everything
+  #   plan_approval_threshold: 10  # Keep approval high to avoid approval prompts
 
