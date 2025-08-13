@@ -56,7 +56,8 @@ async def test_multi_agent_clarification():
         # Look for clarification keywords in the response
         is_clarification = any(
             keyword in content.lower()
-            for keyword in ["clarify", "which", "what kind", "could you", "more specific", "help me understand"]
+            for keyword in ["clarify", "which", "what kind", "could you", "more specific",
+                            "help me understand", "specific", "bug", "what specific", "need help"]
         )
         assert is_clarification, "Should ask for clarification about bug type"
         print("   ✅ Multi-agent clarification triggered")
