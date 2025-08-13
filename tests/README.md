@@ -39,6 +39,8 @@ tests/
 └── Comprehensive_Test_Plan.md  # Master test plan document
 ```
 
+**IMPORTANT:** When developing - REMEMBER TO NEVER USE PATTERN MATCHING to detect user intent, preferences, or other context. Always defer to using LLM so MUXI can stay multi-lingual.
+
 ## 🧪 Testing Philosophy
 
 **We test against real services, not mocks.** This ensures our code works in production.
