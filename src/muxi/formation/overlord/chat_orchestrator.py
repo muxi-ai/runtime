@@ -128,6 +128,24 @@ class ChatOrchestrator:
                 description=f"Request {request_id} validated",
             )
 
+            # Store user message in buffer memory immediately for all messages (fire-and-forget)
+            # This ensures agents have access to full conversation context
+            if self.overlord.buffer_memory_manager:
+                asyncio.create_task(
+                    self.overlord.buffer_memory_manager.add_to_buffer_memory(
+                        message=f"User: {message}",
+                        metadata={
+                            "user_id": user_id,
+                            "session_id": session_id,
+                            "role": "user",
+                            "timestamp": timestamp,
+                            "agent_name": agent_name,
+                            "request_id": request_id,
+                        },
+                        agent_id="overlord"
+                    )
+                )
+
             # Process files if provided
             file_results = None
             if files:
