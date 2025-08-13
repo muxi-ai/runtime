@@ -183,11 +183,6 @@ from ...services.multimodal import (
 # Import intelligent caching system
 from ..caching import IntelligentCacheManager
 
-# Import intelligence components
-from ..intelligence import (
-    UserPreferenceEngine,
-    AdaptiveResponseGenerator,
-)
 
 # Resilience components
 from ..resilience import (
@@ -654,9 +649,7 @@ class Overlord:
         # USER EXPERIENCE INTELLIGENCE - Intelligence concerns
         # ===================================================================
 
-        # Initialize User Experience Intelligence components (intelligence concerns)
-        self.user_preference_engine = UserPreferenceEngine(overlord=self)
-        self.adaptive_response_generator = AdaptiveResponseGenerator(overlord=self)
+        # Intelligence components removed - using memory extractor for preferences
 
         # Initialize resilience components (intelligence concerns)
         resilience_config = ResilienceConfig(**self.formation_config.get("resilience", {}))
