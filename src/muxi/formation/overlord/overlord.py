@@ -1961,9 +1961,10 @@ Respond naturally and conversationally. Be warm, encouraging, and maintain conve
 
 Guidelines:
 - For greetings: Respond warmly and ask how you can help
-- For information and statements: Acknowledge it positively and show interest
+- For information or statements: Simply acknowledge the information positively WITHOUT asking clarifying questions
 - For thanks: Respond graciously
 - Keep responses concise but friendly
+- IMPORTANT: When users provide context/information, just acknowledge it - don't ask follow-up with clarifying questions
 
 Examples:
 User: "Hi"
@@ -1972,15 +1973,15 @@ Response: "Hello! How can I assist you today?"
 
 User: "I'm a software developer"
 Type: Informational statement about themselves
-Response: "Nice to meet you! What kind of development do you focus on?"
+Response: "Great to know! I'm here if you need any assistance with your development work."
 
-User: "I'm working on a school paper"
+User: "I'm working on an e-commerce platform using React and Node.js"
 Type: Informational statement about their work
-Response: "Great! What's the paper about? I'd love to hear more about it."
+Response: "That sounds like an exciting project! React and Node.js are excellent choices for an e-commerce platform."
 
 User: "My budget is $5000"
 Type: Informational statement about constraints
-Response: "I understand - $5000 budget noted. What would you like to explore within that range?"
+Response: "Understood - I'll keep the $5000 budget in mind."
 
 User: "Thanks"
 Type: Acknowledgment
@@ -5693,7 +5694,7 @@ Make it conversational and friendly while keeping accuracy."""
                     self._pending_clarifications[session_id] = {
                         "type": "reactive",
                         "request_id": clarification_request.request_id,
-                        "original_message": message,
+                        "original_message": actual_message,  # Store the extracted message, not the enhanced one
                         "missing_info": analysis_result.missing_info,
                         "user_id": user_id,
                         "created_at": time.time(),
@@ -5798,6 +5799,18 @@ Make it conversational and friendly while keeping accuracy."""
                     )
 
                 # Analyze for missing information (reactive mode)
+                # Extract the actual user message from formatted context if needed
+                actual_message = message
+                if "=== CURRENT REQUEST ===" in message and "User:" in message:
+                    # Extract the user's actual message from the formatted context
+                    lines = message.split("\n")
+                    for i, line in enumerate(lines):
+                        if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                            next_line = lines[i + 1].strip()
+                            if next_line.startswith("User:"):
+                                actual_message = next_line[5:].strip()  # Remove "User: " prefix
+                                break
+
                 available_tools = []
                 if hasattr(self, "mcp_coordinator") and self.mcp_coordinator:
                     try:
@@ -5817,7 +5830,7 @@ Make it conversational and friendly while keeping accuracy."""
                         pass  # Continue without context
 
                 analysis_result = await self.clarification_analyzer.analyze_request(
-                    user_message=message,
+                    user_message=actual_message,
                     intent="general",  # Will be inferred from message
                     available_tools=available_tools,
                     user_context=user_context,
@@ -5862,7 +5875,7 @@ Make it conversational and friendly while keeping accuracy."""
                         "request_id": (
                             clarification_request.request_id if clarification_request else None
                         ),
-                        "original_message": message,
+                        "original_message": actual_message,  # Store the extracted message, not the enhanced one
                         "missing_info": analysis_result.missing_info,
                         "user_id": user_id,
                         "created_at": time.time(),
@@ -6201,6 +6214,18 @@ Make it conversational and friendly while keeping accuracy."""
                 AmbiguousCredentialError,
             )
 
+            # Extract the actual user message from formatted context if needed (for credential errors)
+            actual_message_for_credential = message
+            if "=== CURRENT REQUEST ===" in message and "User:" in message:
+                # Extract the user's actual message from the formatted context
+                lines = message.split("\n")
+                for i, line in enumerate(lines):
+                    if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                        next_line = lines[i + 1].strip()
+                        if next_line.startswith("User:"):
+                            actual_message_for_credential = next_line[5:].strip()  # Remove "User: " prefix
+                            break
+
             if isinstance(e, MissingCredentialError):
                 # Store pending clarification if we have a session
                 if session_id:
@@ -6209,7 +6234,7 @@ Make it conversational and friendly while keeping accuracy."""
                         "service": e.service,
                         "user_id": e.user_id,
                         "timestamp": time.time(),
-                        "original_message": message,
+                        "original_message": actual_message_for_credential,  # Store the extracted message
                     }
 
                 # Return a simple response asking for credentials
@@ -6247,7 +6272,7 @@ Make it conversational and friendly while keeping accuracy."""
                         "service": e.service,
                         "user_id": e.user_id,
                         "timestamp": time.time(),
-                        "original_message": message,
+                        "original_message": actual_message_for_credential,  # Store the extracted message
                         "available_credentials": e.available_credentials,
                         "ordered_credentials": e.ordered_credentials,
                     }
