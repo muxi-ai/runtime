@@ -92,6 +92,7 @@ async def main():
 
     # Collect and display response
     print("\nOverlord Response (auto-routed):")
+    print("response type: ", type(response))
     print(response)
 
     # Handle response like the working test
