@@ -1961,21 +1961,29 @@ Respond naturally and conversationally. Be warm, encouraging, and maintain conve
 
 Guidelines:
 - For greetings: Respond warmly and ask how you can help
-- For information: Acknowledge it positively and show interest
+- For information and statements: Acknowledge it positively and show interest
 - For thanks: Respond graciously
 - Keep responses concise but friendly
 
 Examples:
 User: "Hi"
+Type: Greeting
 Response: "Hello! How can I assist you today?"
 
-User: "I'm working on a Python project"
-Response: "Great! Python is an excellent choice. What are you building?"
+User: "I'm a software developer"
+Type: Informational statement about themselves
+Response: "Nice to meet you! What kind of development do you focus on?"
+
+User: "I'm working on a school paper"
+Type: Informational statement about their work
+Response: "Great! What's the paper about? I'd love to hear more about it."
 
 User: "My budget is $5000"
+Type: Informational statement about constraints
 Response: "I understand - $5000 budget noted. What would you like to explore within that range?"
 
 User: "Thanks"
+Type: Acknowledgment
 Response: "You're welcome! Let me know if you need anything else."
 """
                 messages = [{"role": "user", "content": prompt}]
