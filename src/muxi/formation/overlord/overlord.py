@@ -180,10 +180,6 @@ from ...services.multimodal import (
     TaskOutputProcessor,
 )
 
-# Import intelligent caching system
-from ..caching import IntelligentCacheManager
-
-
 # Resilience components
 from ..resilience import (
     ResilientWorkflowManager,
@@ -633,17 +629,7 @@ class Overlord:
         # CACHING AND OPTIMIZATION - Intelligence concerns
         # ===================================================================
 
-        # Use pre-initialized cache manager from Formation
-        self.cache_manager = (
-            configured_services.get("cache_manager") if configured_services else None
-        )
-        if not self.cache_manager:
-            # Fallback initialization if not provided
-            self.cache_manager = IntelligentCacheManager(
-                enable_analytics=True,
-                enable_memory_optimization=True,
-                embedding_service=self.extraction_model,  # Use extraction model for embeddings
-            )
+        # Caching system removed - was never actually used
 
         # ===================================================================
         # USER EXPERIENCE INTELLIGENCE - Intelligence concerns
@@ -3129,23 +3115,7 @@ Make it conversational and friendly while keeping accuracy."""
                 name=f"deregister_agent_{agent_id}",
             )
 
-            # Invalidate all cached responses for this agent
-            try:
-                invalidated_count = await self.cache_manager.invalidate_cache(agent_id=agent_id)
-                observability.observe(
-                    event_type=observability.SystemEvents.MEMORY_DELETION_COMPLETED,
-                    level=observability.EventLevel.INFO,
-                    data={"agent_id": agent_id, "invalidated_count": invalidated_count},
-                    description=f"Successfully invalidated {invalidated_count} cached responses for agent '{agent_id}'",
-                )
-            except Exception as e:
-                # Don't fail agent deletion if cache invalidation fails
-                observability.observe(
-                    event_type=observability.SystemEvents.MEMORY_DELETION_FAILED,
-                    level=observability.EventLevel.WARNING,
-                    data={"agent_id": agent_id, "error": str(e)},
-                    description=f"Failed to invalidate cache for agent '{agent_id}': {str(e)}",
-                )
+            # Note: Cache invalidation removed - the caching system was never used
 
             # Cleanup agent if it has cleanup logic
             agent = self.agents[agent_id]

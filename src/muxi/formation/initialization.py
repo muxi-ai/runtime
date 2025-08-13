@@ -558,15 +558,7 @@ def initialize_background_services(formation) -> None:
     On failure, emits a warning-level observability event with error details.
     """
     try:
-        # Initialize cache manager
-        from .caching import IntelligentCacheManager
-
-        formation._cache_manager = IntelligentCacheManager(
-            enable_analytics=True,
-            default_ttl_seconds=3600,
-            l3_max_memory_mb=100,
-        )
-        # Cache manager will be started later if needed
+        # Cache manager removed - was never actually used
 
         # Initialize request tracker
         from .background import RequestTracker

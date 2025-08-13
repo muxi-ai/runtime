@@ -1170,7 +1170,6 @@ class Formation:
                 "long_term_memory": getattr(self, "_long_term_memory", None),
                 "working_memory_config": getattr(self, "_working_memory_config", None),
                 "document_chunk_manager": getattr(self, "_document_chunk_manager", None),
-                "cache_manager": getattr(self, "_cache_manager", None),
                 "request_tracker": getattr(self, "_request_tracker", None),
                 "webhook_manager": getattr(self, "_webhook_manager", None),
                 "clarification_config": getattr(self, "_clarification_config_obj", None),
