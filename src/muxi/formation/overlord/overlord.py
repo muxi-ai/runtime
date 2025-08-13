@@ -6076,8 +6076,8 @@ Make it conversational and friendly while keeping accuracy."""
                             description="Skipping workflow for non-actionable message despite threshold",
                         )
                         # Fall through to normal agent selection
-                    # Protection: Prevent workflow for simple questions when threshold is too low
-                    elif threshold <= 2.0 and await self._is_simple_question(message_lower):
+                    # Protection: Prevent workflow for simple questions
+                    elif threshold <= 2.0 or await self._is_simple_question(message_lower):
                         observability.observe(
                             event_type=observability.ServerEvents.SERVER_STARTED,
                             level=observability.EventLevel.INFO,
