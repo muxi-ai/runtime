@@ -26,6 +26,67 @@ Memory Systems ← Services Layer → Tool Integration
 4. **Unified Services**: MCP, A2A, Multimodal, Scheduler, Observability
 5. **Multi-User Isolation**: Memobase partitioning for user contexts
 
+## MUXI Runtime Project Structure
+
+MUXI Runtime is organized as a Python package with comprehensive test coverage and documentation:
+
+```
+runtime/
+├── src/muxi/runtime/      # Core runtime engine
+├── tests/                 # Comprehensive test suite
+├── docs/                  # Documentation
+├── test-formations/       # Example formations
+├── schemas/               # YAML schema definitions
+├── examples/              # Usage examples
+└── migrations/            # Database migrations
+```
+
+You can find more information about the project structure in the `context/project-structure.md` file.
+
+## USE SUB-AGENTS FOR CONTEXT OPTIMIZATION
+
+### 1. Always use the file-analyzer sub-agent when asked to read files.
+The file-analyzer agent is an expert in extracting and summarizing critical information from files, particularly log files and verbose outputs. It provides concise, actionable summaries that preserve essential information while dramatically reducing context usage.
+
+### 2. Always use the code-analyzer sub-agent when asked to analyze code, research bugs, or trace logic flow.
+
+The code-analyzer agent is an expert in code analysis, logic tracing, and vulnerability detection. It provides concise, actionable summaries that preserve essential information while dramatically reducing context usage.
+
+### 3. Always use the test-runner sub-agent to run tests and analyze the test results.
+
+Using the test-runner agent ensures:
+
+- Full test output is captured for debugging
+- Main conversation stays clean and focused
+- Context usage is optimized
+- All issues are properly surfaced
+- No approval dialogs interrupt the workflow
+
+#### Note about e2e tests
+
+Ensure every test ends up with a summary and the correspondence between the user and the overlord.
+
+After all the logs are printed, add:
+
+```
+========================================
+
+### Test Result:
+  🎉 SUCCESS: ...
+  ✓ ...
+  ✓ ...
+  ✓ ...
+
+========================================
+
+### Chat transcript:
+
+User: ...
+System: ...
+User: ...
+System: ...
+```
+
 ## Recent Architectural Changes
 
 ### August 2025: SOP System Refactoring
@@ -177,42 +238,6 @@ Test organization by feature day:
 - Day 4-6: MCP, File Generation, Knowledge
 - Day 7-12: Advanced features (workflow, resilience, etc.)
 
-### Test Execution
-
-When running tests, always use the test-executor-analyzer agent to execute and analyze the test results.
-
-Using the test-executor-analyzer agent ensures:
-
-- Full test output is captured for debugging
-- Main conversation stays clean and focused
-- Context usage is optimized
-- All issues are properly surfaced
-- No approval dialogs interrupt the workflow
-
-#### Note about e2e tests
-
-Ensure every test ends up with a summary and the correspondence between the user and the overlord.
-
-After all the logs are printed, add:
-
-```
-========================================
-
-### Test Result:
-  🎉 SUCCESS: ...
-  ✓ ...
-  ✓ ...
-  ✓ ...
-
-========================================
-
-### Chat transcript:
-
-User: ...
-System: ...
-User: ...
-System: ...
-```
 
 ## Common Issues
 

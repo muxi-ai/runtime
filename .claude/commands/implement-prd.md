@@ -14,6 +14,6 @@ Implement $ARGUMENTS to the letter!
 - Re-read the file after each context compacting.
 - **Do not improvise. Do not over-engineer. Do not deviate**
 
-Write unit tests for all new functionality in tests/unit. Test using the test-executor-analyzer agent.
+Write unit tests for all new functionality in tests/unit. Test using the test-runner agent.
 
 Let me kniw when you're done.
