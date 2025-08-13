@@ -1,5 +1,5 @@
 schema: "1.0.0"
-id: "clarification-test"
+id: "test_formation"
 description: "Single agent formation with minimal memory for clarification testing"
 
 llm:
@@ -16,6 +16,9 @@ memory:
     size: 10
     multiplier: 5
     vector_search: false
+  persistent:
+    connection_string: "${{ secrets.POSTGRES_URI }}"
+    embedding_model: "openai/text-embedding-3-small"
 
 logging:
   streams:
