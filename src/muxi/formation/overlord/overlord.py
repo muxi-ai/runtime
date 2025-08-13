@@ -5923,17 +5923,20 @@ Make it conversational and friendly while keeping accuracy."""
             # Skip all heavy processing - go straight to persona
             response = await self._apply_persona(None, message)
 
-            # Store in memory for context (lightweight operation)
+            # Store assistant response in memory (user message already stored at entry) - fire-and-forget
             if self.buffer_memory_manager:
-                await self.buffer_memory_manager.add_to_buffer_memory(
-                    message=f"User: {message}",
-                    metadata={"user_id": user_id, "session_id": session_id, "role": "user"},
-                    agent_id="overlord"
-                )
-                await self.buffer_memory_manager.add_to_buffer_memory(
-                    message=f"Assistant: {response}",
-                    metadata={"user_id": user_id, "session_id": session_id, "role": "assistant"},
-                    agent_id="overlord"
+                asyncio.create_task(
+                    self.buffer_memory_manager.add_to_buffer_memory(
+                        message=f"Assistant: {response}",
+                        metadata={
+                            "user_id": user_id,
+                            "session_id": session_id,
+                            "role": "assistant",
+                            "timestamp": time.time(),
+                            "request_id": request_id
+                        },
+                        agent_id="overlord"
+                    )
                 )
 
             return MuxiResponse(
@@ -6166,6 +6169,24 @@ Make it conversational and friendly while keeping accuracy."""
                 session_id=session_id,
                 request_id=request_id,
             )
+
+            # Store assistant response in buffer memory (fire-and-forget)
+            if self.buffer_memory_manager and result:
+                response_content = result.content if hasattr(result, 'content') else str(result)
+                asyncio.create_task(
+                    self.buffer_memory_manager.add_to_buffer_memory(
+                        message=f"Assistant: {response_content}",
+                        metadata={
+                            "user_id": user_id,
+                            "session_id": session_id,
+                            "role": "assistant",
+                            "timestamp": time.time(),
+                            "agent_name": agent_name,
+                            "request_id": request_id,
+                        },
+                        agent_id=agent_name or "overlord"
+                    )
+                )
 
             # Mark agent as idle
             await self.active_agent_tracker.mark_agent_idle(agent_name)
