@@ -441,12 +441,34 @@ class MemoryExtractor:
                 }
 
                 try:
-                    await self.overlord.long_term_memory.add(
-                        content=memory_content,
-                        metadata=memory_metadata,
-                        external_user_id=external_user_id,
-                        collection=collection,
-                    )
+                    # Check for semantically similar memories before storing
+                    should_store = True
+
+                    # Use long_term_memory's search if available
+                    if hasattr(self.overlord.long_term_memory, "search"):
+                        # Search for similar existing memories
+                        existing = await self.overlord.long_term_memory.search(
+                            query=memory_content,
+                            limit=1,
+                            external_user_id=external_user_id,
+                            collection=collection
+                        )
+
+                        if existing:
+                            # Check the first result for similarity
+                            # Distance of 0 = identical, Distance < 0.1 = very similar (>90% similarity)
+                            first_result = existing[0] if isinstance(existing, list) else existing
+                            distance = first_result.get("distance", 1.0) if isinstance(first_result, dict) else 1.0
+                            if distance < 0.1:
+                                should_store = False
+
+                    if should_store:
+                        await self.overlord.long_term_memory.add(
+                            content=memory_content,
+                            metadata=memory_metadata,
+                            external_user_id=external_user_id,
+                            collection=collection,
+                        )
                 except Exception as e:
                     # Log memory storage failure for debugging while continuing execution
                     observability.observe(
@@ -455,7 +477,11 @@ class MemoryExtractor:
                         data={
                             "error": str(e),
                             "error_type": type(e).__name__,
-                            "memory_content": memory_content[:100] + "..." if len(memory_content) > 100 else memory_content,
+                            "memory_content": (
+                                memory_content[:100] + "..."
+                                if len(memory_content) > 100
+                                else memory_content
+                            ),
                             "collection": collection,
                             "user_id": str(user_id),
                             "component": "memory_extractor",
