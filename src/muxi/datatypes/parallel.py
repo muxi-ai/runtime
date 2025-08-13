@@ -193,7 +193,7 @@ class OptimizedWorkflow:
 
     # Tracking
     created_at: datetime = field(default_factory=datetime.now)
-    optimized_by: str = "ParallelWorkflowOptimizer"
+    optimized_by: str = "WorkflowExecutor"
 
     def get_speedup_ratio(self) -> float:
         """Get the ratio of speedup achieved."""

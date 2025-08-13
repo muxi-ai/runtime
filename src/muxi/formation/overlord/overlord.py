@@ -183,9 +183,6 @@ from ...services.multimodal import (
 # Import intelligent caching system
 from ..caching import IntelligentCacheManager
 
-# Import parallel workflow optimization
-from ..parallel import ParallelWorkflowOptimizer
-
 # Import intelligence components
 from ..intelligence import (
     UserPreferenceEngine,
@@ -652,9 +649,6 @@ class Overlord:
                 enable_memory_optimization=True,
                 embedding_service=self.extraction_model,  # Use extraction model for embeddings
             )
-
-        # Initialize parallel workflow optimizer (intelligence concerns)
-        self.parallel_optimizer = ParallelWorkflowOptimizer(sensitivity_threshold=0.5)
 
         # ===================================================================
         # USER EXPERIENCE INTELLIGENCE - Intelligence concerns
