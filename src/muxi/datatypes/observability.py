@@ -32,6 +32,9 @@ class SystemEvents(Enum):
     CLEANUP = "cleanup"
     # When server is cleaning up
 
+    OVERLORD_SHUTDOWN = "overlord.shutdown"
+    # When overlord is shutting down gracefully
+
     # ===================================================================
     # MCP SYSTEM EVENTS
     # ===================================================================
