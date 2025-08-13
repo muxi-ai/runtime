@@ -37,18 +37,7 @@ flowchart TD
     Start([User Sends Request])
 
     %% Input Methods
-    Start --> RESTAPI[REST API]
-    Start --> MCP[MCP]
-    Start --> SDK[SDK]
-    Start --> CLI[CLI]
-    Start --> Embedded[Embedded]
-
-    %% All converge to Initialize Request
-    RESTAPI --> InitReq[Initialize Request]
-    MCP --> InitReq
-    SDK --> InitReq
-    CLI --> InitReq
-    Embedded --> InitReq
+    Start -->|API/MCP/SDK/CLI/Embedded| InitReq[Initialize Request]
 
     %% Session Check
     InitReq --> CheckSession{Check Session}
