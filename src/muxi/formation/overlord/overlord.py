@@ -1721,8 +1721,7 @@ class Overlord:
                 self._default_persona = configured_persona
             else:
                 # Load from the correct path (no utils/ subdirectory)
-                current_dir = os.path.dirname(os.path.abspath(__file__))
-                persona_path = os.path.join(current_dir, "system_persona.md")
+                persona_path = Path(__file__).parent.parent / "prompts" / "system_persona.md"
 
                 if os.path.exists(persona_path):
                     with open(persona_path, "r", encoding="utf-8") as f:
@@ -6503,17 +6502,16 @@ Make it conversational and friendly while keeping accuracy."""
                     mode = relevant_sop.get("mode", "template")
                     bypass_approval = relevant_sop.get("bypass_approval", True)
 
-                    # Build enhanced message with SOP content
-                    if mode == "template":
-                        intro = "Follow this Standard Operating Procedure EXACTLY. Do not skip steps or improvise."  # noqa: E501
-                        outro = "Create an optimized workflow that executes every step while minimizing unnecessary operations."  # noqa: E501
-                    else:  # guide mode
-                        intro = "Use this Standard Operating Procedure as guidance while optimizing for efficiency."  # noqa: E501
-                        outro = "Create an optimized workflow that achieves the SOP goals while minimizing unnecessary operations."  # noqa: E501
-
                     # Create enhanced message with SOP content
+                    sop_file = "sop_template_mode.md" if mode == "template" else "sop_guide_mode.md"
+                    sop_instructions_path = Path(__file__).parent.parent / "prompts" / sop_file
+                    try:
+                        with open(sop_instructions_path, "r", encoding="utf-8") as f:
+                            sop_instructions = f"<sop_execution_mode>\n{f.read()}\n</sop_execution_mode>"
+                    except FileNotFoundError:
+                        sop_instructions = ""
+
                     enhanced_message = (
-                        f"{intro}\n\n"
                         f"<sop>\n{relevant_sop.get('content', '')}\n</sop>\n\n"
                         "<directives>\nThe following directives in the SOP should be interpreted:\n"
                         "- [agent:name] - Route to the specified agent\n"
@@ -6521,8 +6519,8 @@ Make it conversational and friendly while keeping accuracy."""
                         "- [file:path] - Include the specified file content\n"
                         "- [critical] - This step cannot be optimized away\n"
                         "</directives>\n\n"
+                        f"{sop_instructions}\n\n"
                         f"<user_request>\n{message}\n</user_request>\n\n"
-                        f"{outro}"
                     )
 
                     # Pass to decomposer with SOP context

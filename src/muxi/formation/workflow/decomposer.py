@@ -249,7 +249,7 @@ class TaskDecomposer:
             Decomposition prompt for LLM
         """
         # Read the prompt template from file
-        template_path = Path(__file__).parent / "decomposition_prompt.md"
+        template_path = Path(__file__).parent.parent / "prompts" / "decomposition_prompt.md"
         try:
             with open(template_path, "r", encoding="utf-8") as f:
                 template = f.read()
