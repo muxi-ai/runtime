@@ -105,8 +105,8 @@ flowchart TD
 
     ExecuteSOP --> AgentProcessing
 
-    ComplexCheck -->|\>=Threshold| WorkflowDecomp[Workflow<br/>Decomposition<br/>- Create task graph<br/>- Assign agents<br/>- Execute parallel]
-    ComplexCheck -->|<Threshold| AutoRoute[Auto-Route to<br/>Best Agent]
+    ComplexCheck -->|﹥=Threshold| WorkflowDecomp[Workflow<br/>Decomposition<br/>- Create task graph<br/>- Assign agents<br/>- Execute parallel]
+    ComplexCheck -->|﹤Threshold| AutoRoute[Auto-Route to<br/>Best Agent]
 
     WorkflowDecomp --> AgentProcessing
     AutoRoute --> AgentProcessing
@@ -118,14 +118,14 @@ flowchart TD
     ComplexCheck2 -->|No| EstimateTime
 
     AskConfirmation -->|Approved| EstimateTime
-    AskConfirmation -->|Declined| AutoRoute
+    AskConfirmation -->|Declined| WorkflowDecomp
 
     %% Time Estimation
     EstimateTime[Estimate Execution Time<br/>- Analyze task complexity<br/>- Check tool requirements<br/>- Review historical data]
 
     EstimateTime --> TimeThreshold{Estimated<br/>Time?}
-    TimeThreshold -->|\>=Threshold| NotifyUser[Notify User of Estimated Time<br/>- Return task ID<br/>- Provide time estimate<br/>- Setup webhook]
-    TimeThreshold -->|<Threshold| ProcessAgent[Process with Agent<br/>- Load agent config<br/>- Apply system prompt<br/>- Initialize context]
+    TimeThreshold -->|﹥=Threshold| NotifyUser[Notify User of Estimated Time<br/>- Return task ID<br/>- Provide time estimate<br/>- Setup webhook]
+    TimeThreshold -->|﹤Threshold| ProcessAgent[Process with Agent<br/>- Load agent config<br/>- Apply system prompt<br/>- Initialize context]
 
     NotifyUser --> ProcessAgent
 
