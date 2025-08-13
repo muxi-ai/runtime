@@ -11,6 +11,7 @@ from typing import Optional, Any, Union, Dict, AsyncGenerator, List
 from ..background.request_tracker import RequestStatus, RequestState
 from ...utils.id_generator import generate_nanoid
 from ...services import observability
+from ...datatypes.response import MuxiResponse
 from ...services.observability.context import (
     get_current_event_logger,
     get_current_request_context,
@@ -433,7 +434,7 @@ class ChatOrchestrator:
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
         original_message: Optional[str] = None,
-    ) -> str:
+    ) -> Union[str, MuxiResponse]:
         """
         Process a chat request synchronously.
 
@@ -443,7 +444,7 @@ class ChatOrchestrator:
             user_id: Optional user ID
 
         Returns:
-            The response string
+            The response string or MuxiResponse with artifacts
         """
         # Delegate to overlord's sync processing method
         result = await self.overlord._process_sync_chat(
@@ -471,7 +472,13 @@ class ChatOrchestrator:
                 )
             )
 
-        # Extract content from MuxiResponse for return to user
+        # Check if result is a MuxiResponse with artifacts
+        if result and hasattr(result, "content") and hasattr(result, "artifacts"):
+            # If it has artifacts, return the full MuxiResponse object
+            if result.artifacts and len(result.artifacts) > 0:
+                return result
+
+        # Extract content from MuxiResponse for return to user (no artifacts case)
         if result and hasattr(result, "content"):
             # After overlord processing, content should already be a formatted string
             # If it's still a dict, the persona wasn't applied properly
