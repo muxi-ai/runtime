@@ -76,7 +76,7 @@ flowchart TD
     NeedClarification -->|No| IsActionable{Is actionable?}
 
     InitClarification --> WriteQuestion[Write Clarification<br/>Question]
-    WriteQuestion --> ApplyPersona1[Apply Overlord Persona]
+    WriteQuestion --> ApplyPersona1[[Apply Overlord Persona]]
 
     %% Main Processing Path
     IsActionable -->|Yes| AgentSpecified{Agent<br/>Specified?}
