@@ -189,6 +189,10 @@ class WorkingMemory:
         self.index_count = 0  # Counter for FAISS indices
         self.needs_rebuild = False  # Flag to track if index needs rebuilding
 
+        # Key-value store for exact lookups with TTL
+        self.kv_store = {}
+        self.kv_expiry = {}
+
         # Start the background FIFO cleanup task
         fifo_cleanup_task(self)
 
@@ -954,6 +958,55 @@ class WorkingMemory:
         self.index_mapping = {}
         self.index_count = 0
         self.needs_rebuild = False
+
+        # Clear key-value store
+        self.kv_store.clear()
+        self.kv_expiry.clear()
+
+    async def kv_set(self, key: str, value: dict, ttl: int = 300, namespace: str = None) -> None:
+        """
+        Store key-value data with TTL and optional namespace.
+
+        Args:
+            key: The key to store the value under
+            value: The dictionary value to store
+            ttl: Time to live in seconds (default: 5 minutes)
+            namespace: Optional namespace for key isolation (e.g., "clarification", "workflow")
+        """
+        full_key = f"{namespace}:{key}" if namespace else key
+        self.kv_store[full_key] = value
+        self.kv_expiry[full_key] = time.time() + ttl
+
+    async def kv_get(self, key: str, namespace: str = None) -> Optional[dict]:
+        """
+        Get by exact key, respecting TTL and optional namespace.
+
+        Args:
+            key: The key to retrieve
+            namespace: Optional namespace for key isolation
+
+        Returns:
+            The stored dictionary value or None if not found/expired
+        """
+        full_key = f"{namespace}:{key}" if namespace else key
+        
+        # Check if key exists and is not expired
+        if full_key in self.kv_expiry and time.time() > self.kv_expiry[full_key]:
+            await self.kv_delete(key, namespace)
+            return None
+        return self.kv_store.get(full_key)
+
+    async def kv_delete(self, key: str, namespace: str = None) -> None:
+        """
+        Delete by exact key with optional namespace.
+
+        Args:
+            key: The key to delete
+            namespace: Optional namespace for key isolation
+        """
+        full_key = f"{namespace}:{key}" if namespace else key
+        self.kv_store.pop(full_key, None)
+        self.kv_expiry.pop(full_key, None)
 
     def get_stats(self) -> Dict[str, Any]:
         """

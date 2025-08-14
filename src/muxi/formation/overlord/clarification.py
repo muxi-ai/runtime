@@ -226,11 +226,13 @@ class UnifiedClarificationSystem:
             self.active_requests.add(request_id)
             return
 
-        key = f"{self.namespace}:{request_id}"
         state["request_id"] = request_id
 
-        await self.buffer_memory.set(
-            key=key, value=state, ttl=self.timeout, namespace=self.namespace
+        await self.buffer_memory.kv_set(
+            key=request_id,
+            value=state,
+            ttl=self.timeout,
+            namespace=self.namespace
         )
 
         self.active_requests.add(request_id)
@@ -243,8 +245,7 @@ class UnifiedClarificationSystem:
                 return self._fallback_storage.get(request_id)
             return None
 
-        key = f"{self.namespace}:{request_id}"
-        return await self.buffer_memory.get(key)
+        return await self.buffer_memory.kv_get(request_id, namespace=self.namespace)
 
     async def _cleanup_state(self, request_id: str):
         """Remove state from buffer memory"""
@@ -255,8 +256,7 @@ class UnifiedClarificationSystem:
             self.active_requests.discard(request_id)
             return
 
-        key = f"{self.namespace}:{request_id}"
-        await self.buffer_memory.delete(key)
+        await self.buffer_memory.kv_delete(request_id, namespace=self.namespace)
         self.active_requests.discard(request_id)
 
     async def _create_state(self, request_id: str, message: str, mode: str, session_id: str = None):
