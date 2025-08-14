@@ -37,6 +37,22 @@ The new SOP system is dramatically simplified:
 
 No manual step parsing, no directive extraction, no workflow template conversion. The decomposer already knows how to interpret structured documents.
 
+### SOP Priority in Request Routing
+
+**SOPs have first-class priority** in the MUXI Runtime request routing system:
+
+```
+User Request → Complexity Analysis → SOP Detection (FIRST) → Execute SOP
+                                  ↓ (No SOP Found)
+                                 Workflow Protection → Normal Routing
+```
+
+Key behavioral guarantees:
+- **SOPs are checked BEFORE** workflow protection logic
+- **SOPs override** complexity threshold restrictions (including `≤ 2.0` thresholds)
+- **SOPs always execute** when matched, regardless of other configuration
+- **No threshold blocking** - if a relevant SOP exists, it will run
+
 ### When to Use SOPs
 
 SOPs are ideal for:
@@ -267,14 +283,19 @@ SOPs use the standard workflow configuration:
 
 ```yaml
 overlord:
-  config:
-    workflow:
-      auto_decomposition: true
-      complexity_threshold: 7.0
-      # SOPs integrate with standard workflow settings
+  workflow:
+    auto_decomposition: true
+    complexity_threshold: 1.0  # SOPs work with ANY threshold value
+    # SOPs integrate with standard workflow settings
 ```
 
-No separate SOP-specific configuration needed - SOPs are treated as pre-approved workflows.
+**Important**: SOPs work with **any complexity threshold**, including low values (≤ 2.0). The SOP detection system runs BEFORE threshold-based workflow protection, ensuring that relevant SOPs always execute regardless of threshold configuration.
+
+**Configuration Independence**:
+- No separate SOP-specific configuration needed
+- SOPs are treated as pre-approved workflows that bypass protection logic
+- `complexity_threshold` does not affect SOP execution
+- SOPs work even with very restrictive threshold settings
 
 ## Examples
 
@@ -437,6 +458,17 @@ The SOP system integrates cleanly with:
 2. **Enable bypass_approval**: Skip unnecessary approval steps
 3. **Reduce [critical] tags**: Allow more optimization
 4. **Check decomposer load**: Monitor overall system performance
+
+### SOPs Not Executing Despite Match
+
+If SOPs are found but not executing:
+
+1. **Check SOP priority**: Verify `sop.matched` event occurs before workflow protection
+2. **Review threshold settings**: SOPs should bypass `complexity_threshold` restrictions
+3. **Verify auto_decomposition**: Must be enabled for SOPs to execute
+4. **Check logs for routing**: Look for `sop_override` path in debug logs
+
+**Expected behavior**: If a SOP matches (relevance score ≥ 0.7 or ≥ 3), it should execute regardless of complexity threshold, even with very low thresholds like 1.0.
 
 ## Summary
 

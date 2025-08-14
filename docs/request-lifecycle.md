@@ -21,12 +21,14 @@ The MUXI Runtime is not just a request-response system; it's an intelligent proc
 A request passing through MUXI undergoes:
 
 1. **Session & Memory Initialization**: Context loading from three memory tiers with vector similarity search
-2. **Intelligent Routing**: Clarification detection, SOP matching, complexity analysis, and agent selection
-3. **Execution Planning**: Time estimation and sync/async mode selection with immediate user notification for long tasks
-4. **Agent Processing**: Tool execution via MCP, agent-to-agent delegation, parallel task execution
-5. **Response Generation**: Batch, streaming, or webhook delivery based on execution mode and user preferences
-6. **Persona Application**: Style and tone consistency regardless of which agents were involved
-7. **Memory Updates**: Learning from interactions for future personalization
+2. **Clarification & Actionability**: Multi-turn clarification system resolves unclear requests; non-actionable statements get direct responses
+3. **Intelligent Routing**: Priority-based routing with agent specification check, then SOP matching, then complexity analysis
+4. **SOP-First Processing**: Standard Operating Procedures override all other routing when matched, ensuring consistent execution of predefined workflows
+5. **Workflow Analysis**: Complex requests (above threshold) trigger multi-agent orchestration when no SOP exists
+6. **Agent Processing**: Tool execution via MCP, agent-to-agent delegation, parallel task execution
+7. **Response Generation**: Batch, streaming, or webhook delivery based on execution mode and user preferences
+8. **Persona Application**: Style and tone consistency regardless of which agents were involved
+9. **Memory Updates**: Learning from interactions for future personalization
 
 The system seamlessly handles everything from simple queries ("What's the weather?") to complex orchestrations ("Analyze my codebase, generate security audit, create Linear issues, and notify my team") through the same intelligent pipeline.
 
@@ -83,17 +85,14 @@ flowchart TD
     IsActionable -->|No| ApplyPersona1
 
     AgentSpecified -->|Yes| RequestAgent[Request Specific<br/>Agent]
-    AgentSpecified -->|No| WorkflowAnalysis[Workflow Analysis<br/>- Check complexity<br/>- Check SOPs]
-
+    AgentSpecified -->|No| SOPMatch{SOP<br/>Matched?}
     RequestAgent --> AgentProcessing
 
     %% SOP and Workflow Path
-    WorkflowAnalysis --> SOPMatch{SOP<br/>Matched?}
     SOPMatch -->|Yes| ExecuteSOP[Execute SOP<br/>- Load template<br/>- Decompose tasks<br/>- Execute workflow]
     SOPMatch -->|No| ComplexCheck{Complex<br/>Request?}
 
     ExecuteSOP --> AgentProcessing
-
     ComplexCheck -->|﹥=Threshold| WorkflowDecomp[Workflow<br/>Decomposition<br/>- Create task graph<br/>- Assign agents<br/>- Execute parallel]
     ComplexCheck -->|﹤Threshold| AutoRoute[Auto-Route to<br/>Best Agent]
 
@@ -519,10 +518,27 @@ async def is_actionable(message):
 
 ### 7. SOP (Standard Operating Procedure) System
 
-**SOP Detection:**
-1. Semantic search against indexed SOPs
-2. Keyword and tag matching
-3. Similarity threshold checking (default: 0.7)
+**SOP-First Priority Routing:**
+
+SOPs have first-class priority in the MUXI Runtime request routing system:
+
+```
+Request → Agent Specified? → (No) → SOP Detection (PRIORITY) → Execute SOP
+                          ↓ (Yes)              ↓ (No SOP Found)
+                      Direct Agent          Workflow Analysis
+```
+
+**Key SOP Behaviors:**
+- **Checked FIRST**: SOPs are detected before workflow protection logic
+- **Override Everything**: SOPs bypass complexity thresholds (including ≤ 2.0)
+- **Guaranteed Execution**: Matched SOPs always execute, regardless of other configuration
+- **Agent Bypass**: Direct agent requests skip SOP detection (respects explicit intent)
+
+**SOP Detection Process:**
+1. Semantic search against indexed SOPs (FAISS)
+2. Keyword and tag matching with relevance scoring
+3. Similarity threshold filtering (≥ 0.7 semantic, ≥ 3 tag-based)
+4. Immediate execution when matched
 
 **SOP Execution:**
 ```yaml
@@ -540,9 +556,10 @@ template: |
 
 **SOP Processing:**
 - Templates passed directly to task decomposer
-- Automatic workflow generation
+- Automatic workflow generation with mode-specific instructions
 - Agent assignment based on capabilities
 - Artifact generation support
+- Bypasses approval requirements by default
 
 ### 8. Workflow System
 
@@ -619,17 +636,36 @@ task = {
 
 ### 9. Agent Routing
 
-**Auto-routing Logic:**
-1. Extract intent from message
-2. Match against agent capabilities
-3. Consider agent availability
-4. Apply load balancing
-5. Route to best match
+**Priority-Based Routing Logic:**
+
+The MUXI Runtime uses a priority-based routing system:
+
+```
+1. Agent Specified? → (Yes) Direct Agent Processing (bypasses everything)
+                   ↓ (No)
+2. SOP Detected? → (Yes) Execute SOP Workflow
+                ↓ (No)
+3. Complex Request? → (Yes) Multi-Agent Workflow
+                   ↓ (No)
+4. Auto-Route to Best Agent
+```
 
 **Direct Agent Specification:**
 - User can specify: `agent_name="researcher"`
-- Bypasses auto-routing
-- Still subject to clarification if needed
+- **Highest Priority**: Bypasses SOP detection and workflow analysis
+- **Respects Explicit Intent**: User gets exactly what they requested
+- Still subject to clarification if the request is unclear
+
+**Auto-routing Logic** (when no agent specified and no SOP found):
+1. Extract intent from message
+2. Match against agent capabilities
+3. Consider agent availability and load balancing
+4. Route to best-suited agent
+
+**SOP Override Behavior:**
+- SOPs take precedence over auto-routing
+- Ensures consistent execution of standardized procedures
+- User cannot accidentally bypass SOPs with complex requests
 
 ### 10. Agent Processing & Communication
 
@@ -1369,4 +1405,17 @@ response:
 
 ## Conclusion
 
-The MUXI Runtime request lifecycle is designed to be flexible, resilient, and intelligent. It handles various request types, manages complex workflows, maintains context through sophisticated memory systems, and ensures optimal routing through clarification and analysis systems. The architecture supports horizontal scaling, graceful degradation, and comprehensive observability for production deployments.
+The MUXI Runtime request lifecycle is designed to be flexible, resilient, and intelligent with a clear priority-based routing system. It handles various request types through a structured decision tree:
+
+1. **Explicit Agent Requests**: Direct routing respects user intent
+2. **SOP-First Processing**: Standard Operating Procedures override all other routing
+3. **Intelligent Workflow Orchestration**: Complex requests trigger multi-agent coordination
+4. **Optimized Single-Agent Routing**: Simple requests get efficient processing
+
+The system maintains context through sophisticated three-tier memory systems, ensures consistent execution through SOPs, and provides comprehensive clarification capabilities. The architecture supports horizontal scaling, graceful degradation, and comprehensive observability for production deployments.
+
+Key architectural principles:
+- **Priority-based routing** prevents conflicts and ensures predictable behavior
+- **SOP override capability** guarantees consistent execution of critical procedures
+- **Clarification-first approach** resolves ambiguity before processing
+- **Memory-aware processing** provides personalized, context-rich interactions
