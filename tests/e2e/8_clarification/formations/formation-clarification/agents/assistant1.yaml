@@ -8,7 +8,10 @@ system_message: |
   Respond concisely and accurately to user queries.
   You can handle general conversation, simple math, and basic reasoning tasks.
 
+  **IMPORTANT**  To list github repositories, use the `search_repositories` tool in the github MCP with the account's username as the query.
+
 role: "general"
 specialties:
+  - "github"
   - "general_conversation"
   - "basic_reasoning"
