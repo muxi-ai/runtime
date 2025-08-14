@@ -937,6 +937,67 @@ class Overlord:
             self.sop_system = None
             return False
 
+    async def _find_relevant_sop(self, message: str) -> Optional[Dict]:
+        """Find relevant SOP for the given message.
+
+        Args:
+            message: The user message to find SOPs for
+
+        Returns:
+            Relevant SOP dict if found and passes relevance filtering, None otherwise
+        """
+        try:
+            # Check if SOP system is available
+            if not self._ensure_sop_system():
+                return None
+
+            # Search for relevant SOPs
+            relevant_sops = await self.sop_system.find_relevant_sops(message, top_k=1)
+            relevant_sop = relevant_sops[0] if relevant_sops else None
+
+            # Filter out low-relevance SOPs (threshold: 0.7 for semantic search, 3 for tag-based)
+            if relevant_sop:
+                relevance_score = relevant_sop.get("relevance_score", 0)
+                # If score is between 0 and 1, it's semantic search; if >= 1, it's tag-based
+                if relevance_score < 0.7:
+                    # Low semantic relevance, ignore
+                    relevant_sop = None
+                elif relevance_score >= 1.0 and relevance_score < 3:
+                    # Low tag-based relevance (less than 3 points), ignore
+                    # Note: name match = 2 points, each tag = 1 point
+                    relevant_sop = None
+
+            # Log SOP discovery
+            if relevant_sop:
+                observability.observe(
+                    observability.ConversationEvents.SOP_MATCHED,
+                    observability.EventLevel.INFO,
+                    {
+                        "sop_id": relevant_sop["id"],
+                        "sop_name": relevant_sop["name"],
+                        "relevance_score": relevant_sop.get("relevance_score", 0),
+                        "mode": relevant_sop.get("mode", "template"),
+                        "message_preview": message[:100],
+                    },
+                    description=f"Matched SOP '{relevant_sop['name']}' for request",
+                )
+
+            return relevant_sop
+
+        except Exception as e:
+            # Log error but don't block execution
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error": str(e),
+                    "phase": "sop_detection",
+                    "message_preview": message[:100],
+                },
+                description=f"Failed to find relevant SOP: {str(e)}",
+            )
+            return None
+
     async def _async_startup(self) -> None:
         """Async startup logic extracted to a separate method."""
         # Services are now initialized by Formation before Overlord creation
@@ -5990,8 +6051,25 @@ Make it conversational and friendly while keeping accuracy."""
                     # even if they exceed the threshold
                     message_lower = actual_message.lower()
 
+                    # FIRST: Check for relevant SOPs - SOPs override all protection logic
+                    relevant_sop = await self._find_relevant_sop(actual_message)
+
+                    if relevant_sop:
+                        # SOP found - bypass all protection and force workflow
+                        return await self._process_with_workflow(
+                            message=message,
+                            analysis=analysis,
+                            user_id=user_id,
+                            session_id=session_id,
+                            request_id=request_id,
+                            relevant_sop=relevant_sop,
+                        )
+
+                    # No SOP found - apply normal protection logic
                     # Check if this is a simple greeting or non-actionable message
-                    if await self._is_non_actionable_for_workflow(message_lower):
+                    is_non_actionable = await self._is_non_actionable_for_workflow(message_lower)
+
+                    if is_non_actionable:
                         observability.observe(
                             event_type=observability.ServerEvents.SERVER_STARTED,
                             level=observability.EventLevel.INFO,
@@ -6004,29 +6082,33 @@ Make it conversational and friendly while keeping accuracy."""
                             description="Skipping workflow for non-actionable message despite threshold",
                         )
                         # Fall through to normal agent selection
-                    # Protection: Prevent workflow for simple questions
-                    elif threshold <= 2.0 or await self._is_simple_question(message_lower):
-                        observability.observe(
-                            event_type=observability.ServerEvents.SERVER_STARTED,
-                            level=observability.EventLevel.INFO,
-                            data={
-                                "service": "workflow_protection",
-                                "complexity_score": analysis.complexity_score,
-                                "threshold": threshold,
-                                "reason": "simple_question_low_threshold",
-                            },
-                            description="Skipping workflow for simple question with low threshold",
-                        )
-                        # Fall through to normal agent selection
                     else:
-                        # Process with workflow orchestration
-                        return await self._process_with_workflow(
-                            message=message,
-                            analysis=analysis,
-                            user_id=user_id,
-                            session_id=session_id,
-                            request_id=request_id,
-                        )
+                        # Protection: Prevent workflow for simple questions
+                        is_simple_question = await self._is_simple_question(message_lower)
+
+                        if threshold <= 2.0 or is_simple_question:
+                            observability.observe(
+                                event_type=observability.ServerEvents.SERVER_STARTED,
+                                level=observability.EventLevel.INFO,
+                                data={
+                                    "service": "workflow_protection",
+                                    "complexity_score": analysis.complexity_score,
+                                    "threshold": threshold,
+                                    "reason": "simple_question_low_threshold",
+                                },
+                                description="Skipping workflow for simple question with low threshold",
+                            )
+                            # Fall through to normal agent selection
+                        else:
+                            # Process with workflow orchestration
+                            return await self._process_with_workflow(
+                                message=message,
+                                analysis=analysis,
+                                user_id=user_id,
+                                session_id=session_id,
+                                request_id=request_id,
+                                relevant_sop=None,
+                            )
             except Exception as e:
                 # Log error but continue with normal flow
                 observability.observe(
@@ -6352,6 +6434,7 @@ Make it conversational and friendly while keeping accuracy."""
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
         stream: bool = False,
+        relevant_sop: Optional[Dict] = None,
     ) -> Union[MuxiResponse, AsyncGenerator[str, None]]:
         """
         Process a complex request using workflow orchestration.
@@ -6406,88 +6489,72 @@ Make it conversational and friendly while keeping accuracy."""
                 description=f"Workflow approval decision: {'REQUIRED' if needs_approval else 'NOT REQUIRED'}",
             )
 
-            # Check for relevant SOPs (only if SOP system exists and is enabled)
+            # Use the passed relevant_sop if provided, otherwise search for SOPs
             workflow = None
-            if self._ensure_sop_system():
-                relevant_sops = await self.sop_system.find_relevant_sops(message, top_k=1)
-                relevant_sop = relevant_sops[0] if relevant_sops else None
+            if relevant_sop:
+                # SOP was already found and validated in _process_sync_chat
+                mode = relevant_sop.get("mode", "template")
+                bypass_approval = relevant_sop.get("bypass_approval", True)
 
-                # Filter out low-relevance SOPs (threshold: 0.7 for semantic search, 3 for tag-based)
-                if relevant_sop:
-                    relevance_score = relevant_sop.get("relevance_score", 0)
-                    # If score is between 0 and 1, it's semantic search; if >= 1, it's tag-based
-                    if relevance_score < 0.7:
-                        # Low semantic relevance, ignore
-                        relevant_sop = None
-                    elif relevance_score >= 1.0 and relevance_score < 3:
-                        # Low tag-based relevance (less than 3 points), ignore
-                        # Note: name match = 2 points, each tag = 1 point
-                        relevant_sop = None
+                # Create enhanced message with SOP content
+                sop_file = "sop_template_mode.md" if mode == "template" else "sop_guide_mode.md"
+                sop_instructions_path = Path(__file__).parent.parent / "prompts" / sop_file
+                try:
+                    with open(sop_instructions_path, "r", encoding="utf-8") as f:
+                        sop_instructions = f"<sop_execution_mode>\n{f.read()}\n</sop_execution_mode>"
+                except FileNotFoundError:
+                    sop_instructions = ""
 
-                # Log SOP discovery
-                if relevant_sop:
-                    observability.observe(
-                        observability.ConversationEvents.SOP_MATCHED,
-                        observability.EventLevel.INFO,
-                        {
-                            "sop_id": relevant_sop["id"],
-                            "sop_name": relevant_sop["name"],
-                            "relevance_score": relevant_sop.get("relevance_score", 0),
-                            "mode": relevant_sop.get("mode", "template"),
-                            "message_preview": message[:100],
-                        },
-                        description=f"Matched SOP '{relevant_sop['name']}' for request",
-                    )
+                enhanced_message = (
+                    f"<sop>\n{relevant_sop.get('content', '')}\n</sop>\n\n"
+                    "<directives>\nThe following directives in the SOP should be interpreted:\n"
+                    "- [agent:name] - Route to the specified agent\n"
+                    "- [mcp:tool] - Use the specified MCP tool\n"
+                    "- [file:path] - Include the specified file content\n"
+                    "- [critical] - This step cannot be optimized away\n"
+                    "</directives>\n\n"
+                    f"{sop_instructions}\n\n"
+                    f"<user_request>\n{message}\n</user_request>\n\n"
+                )
 
-                if relevant_sop:
-                    mode = relevant_sop.get("mode", "template")
-                    bypass_approval = relevant_sop.get("bypass_approval", True)
+                # Pass to decomposer with SOP context
+                workflow = await self.task_decomposer.decompose_request(
+                    request=enhanced_message,
+                    context={
+                        "available_agents": list(self.agents.keys()),
+                        "sop_mode": mode,
+                        "sop_id": relevant_sop["id"],
+                    },
+                    analysis=analysis,
+                    requires_approval=needs_approval if not bypass_approval else False,
+                )
 
-                    # Create enhanced message with SOP content
-                    sop_file = "sop_template_mode.md" if mode == "template" else "sop_guide_mode.md"
-                    sop_instructions_path = Path(__file__).parent.parent / "prompts" / sop_file
-                    try:
-                        with open(sop_instructions_path, "r", encoding="utf-8") as f:
-                            sop_instructions = f"<sop_execution_mode>\n{f.read()}\n</sop_execution_mode>"
-                    except FileNotFoundError:
-                        sop_instructions = ""
-
-                    enhanced_message = (
-                        f"<sop>\n{relevant_sop.get('content', '')}\n</sop>\n\n"
-                        "<directives>\nThe following directives in the SOP should be interpreted:\n"
-                        "- [agent:name] - Route to the specified agent\n"
-                        "- [mcp:tool] - Use the specified MCP tool\n"
-                        "- [file:path] - Include the specified file content\n"
-                        "- [critical] - This step cannot be optimized away\n"
-                        "</directives>\n\n"
-                        f"{sop_instructions}\n\n"
-                        f"<user_request>\n{message}\n</user_request>\n\n"
-                    )
-
-                    # Pass to decomposer with SOP context
-                    workflow = await self.task_decomposer.decompose_request(
-                        request=enhanced_message,
-                        context={
-                            "available_agents": list(self.agents.keys()),
-                            "sop_mode": mode,
-                            "sop_id": relevant_sop["id"],
-                        },
+                # Log SOP execution
+                observability.observe(
+                    event_type=observability.ConversationEvents.SOP_EXECUTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "sop_id": relevant_sop["id"],
+                        "sop_name": relevant_sop["name"],
+                        "workflow_id": workflow.id if workflow else None,
+                        "mode": mode,
+                        "bypass_approval": bypass_approval,
+                    },
+                    description=f"Passed SOP '{relevant_sop['name']}' to decomposer in {mode} mode",
+                )
+            elif self._ensure_sop_system():
+                # Fallback: search for SOPs if none was passed (shouldn't happen in normal flow)
+                fallback_sop = await self._find_relevant_sop(message)
+                if fallback_sop:
+                    # Recursive call with the found SOP
+                    return await self._process_with_workflow(
+                        message=message,
                         analysis=analysis,
-                        requires_approval=needs_approval if not bypass_approval else False,
-                    )
-
-                    # Log SOP execution
-                    observability.observe(
-                        event_type=observability.ConversationEvents.SOP_EXECUTED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "sop_id": relevant_sop["id"],
-                            "sop_name": relevant_sop["name"],
-                            "workflow_id": workflow.id if workflow else None,
-                            "mode": mode,
-                            "bypass_approval": bypass_approval,
-                        },
-                        description=f"Passed SOP '{relevant_sop['name']}' to decomposer in {mode} mode",
+                        user_id=user_id,
+                        session_id=session_id,
+                        request_id=request_id,
+                        stream=stream,
+                        relevant_sop=fallback_sop,
                     )
 
             # Fall back to standard decomposition if no SOP found
