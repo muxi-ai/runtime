@@ -461,19 +461,21 @@ async def update_memory_systems(request, response, context):
         })
 ```
 
-### 6. Clarification System
+### 6. Unified Clarification System
 
 **Clarification Detection Flow:**
 
 ```python
-# Check if clarification should be skipped
-skip_clarification = await _should_skip_clarification(message)
+# Single unified clarification check
+result = await unified_clarification.needs_clarification(
+    message=message,
+    request_id=request_id,
+    session_id=session_id,
+    context=context
+)
 
-# Reasons to skip:
-# 1. Workflow task (starts with "## Task:")
-# 2. Clear request (analyzer determines sufficient context)
-# 3. Agent explicitly specified
-# 4. Clarification already in progress
+# Returns ClarificationResult with action: "clarify" or "execute"
+# Uses request_id for state management, session_id for stats only
 ```
 
 **Actionable vs Non-Actionable Requests:**
@@ -503,12 +505,12 @@ async def is_actionable(message):
 - Persona response applied
 - Memory updated for context
 
-**Clarification Process:**
-1. **Analysis**: Identify missing information
-2. **Question Generation**: Create targeted questions
-3. **Context Storage**: Save original intent and gaps
-4. **Multi-turn Support**: Handle follow-up questions
-5. **Resolution**: Combine responses into final request
+**Unified Clarification Process:**
+1. **Single Entry Point**: All clarification through `UnifiedClarificationSystem`
+2. **LLM-Based Analysis**: No pattern matching, all decisions via LLM
+3. **Buffer Memory State**: Uses request_id as primary key with TTL cleanup
+4. **Context Switch Detection**: Automatically detects when users change topics
+5. **Five Clarification Modes**: direct, brainstorm, planning, credential, execution
 
 **Clarification Styles:**
 - `conversational` - Natural, friendly tone
