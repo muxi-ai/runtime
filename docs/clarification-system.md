@@ -71,11 +71,11 @@ If clarification is needed, state is stored in buffer memory:
 ```python
 state = {
     "request_id": "req_123",
-    "session_id": "sess_456",
+    "session_id": "sess_456", 
     "original_request": "Help me with my project",
     "mode": "planning",
     "depth": 0,
-    "max_depth": 7,
+    "max_depth": 7,                  # Mode-specific limit from configuration
     "collected_info": [],
     "context": {...},
     "started_at": timestamp
@@ -106,70 +106,134 @@ result = ClarificationResult(
 )
 ```
 
-## Clarification Modes
+## Five Specialized Clarification Modes
 
-### Direct Mode (max_depth: 3)
-**Purpose**: Quick clarification of simple ambiguities
-**Use Cases**: File operations, basic commands, simple queries
+The unified system automatically detects which mode is appropriate for each request and applies mode-specific behaviors:
 
-```yaml
-Example:
-  Original: "List files"
-  Question: "Which directory would you like me to list?"
-  Enhanced: "List files in the /src directory"
-```
-
-### Brainstorm Mode (max_depth: 10)
-**Purpose**: Creative exploration and idea development
-**Use Cases**: Design discussions, feature planning, creative projects
+### 🎯 Direct Mode (max_depth: 3)
+**Purpose**: Quick clarification of simple ambiguities in straightforward requests
+**When Auto-Selected**: User asks for specific actions but some details are unclear
+**Characteristics**: Short, focused questions that aim for quick resolution
 
 ```yaml
-Example:
-  Original: "Help me design an app"
-  Questions: 
-    - "What type of app are you thinking about?"
-    - "Who is your target audience?"
-    - "What problem should it solve?"
-  Enhanced: "Goal: Help me design an app. Discussion: Mobile fitness tracking app for busy professionals to log workouts quickly..."
+Example Flow:
+  User: "List files"
+  System: "Which directory would you like me to list?"
+  User: "The src directory"  
+  Enhanced: "List files in the src directory"
+  
+Typical Use Cases:
+  - File operations with missing paths
+  - Commands with missing parameters
+  - Simple queries needing specifics
 ```
 
-### Planning Mode (max_depth: 7)
-**Purpose**: Structured project planning and requirement gathering
-**Use Cases**: Project setup, architecture decisions, complex implementations
+### 💡 Brainstorm Mode (max_depth: 10)
+**Purpose**: Creative exploration and collaborative idea development
+**When Auto-Selected**: User wants to explore possibilities, generate ideas, or think through options
+**Characteristics**: Open-ended questions that encourage creative thinking and build comprehensive understanding
 
 ```yaml
-Example:
-  Original: "Build an e-commerce system"
-  Questions:
-    - "What products will you be selling?"
-    - "What payment methods do you need?"
-    - "Do you need inventory management?"
-  Enhanced: "Requirements for e-commerce system: Products: Digital downloads, Payment: Stripe + PayPal, Inventory: Not needed..."
+Example Flow:
+  User: "Help me design an app"
+  System: "What type of app are you thinking about?"
+  User: "Something for productivity"
+  System: "What specific productivity challenges do you want to solve?"
+  User: "Task management and collaboration"
+  System: "Should it be mobile-first, web-based, or both?"
+  User: "Mobile-first with web sync"
+  Enhanced: "Goal: Help me design an app. Discussion: Mobile-first productivity app focused on task management and collaboration with web synchronization..."
+
+Typical Use Cases:
+  - Creative projects and design
+  - Feature exploration and ideation  
+  - Open-ended problem solving
+  - Architectural discussions
 ```
 
-### Credential Mode (max_depth: 1)
-**Purpose**: Credential and account selection
-**Use Cases**: API authentication, service selection, account disambiguation
+### 📋 Planning Mode (max_depth: 7)
+**Purpose**: Structured project planning and systematic requirement gathering
+**When Auto-Selected**: User needs help planning multi-step processes or complex implementations
+**Characteristics**: Methodical questioning that builds comprehensive project scope and focuses on requirements
 
 ```yaml
-Example:
-  Error: AmbiguousCredentialError for GitHub service
-  Question: "Which GitHub account would you like to use? 1) personal-account 2) work-account"
-  Enhanced: "work-account"
+Example Flow:
+  User: "Build an e-commerce system"
+  System: "What products will you be selling?"
+  User: "Digital downloads - courses and ebooks"
+  System: "What payment methods do you need to support?"
+  User: "Stripe and PayPal"
+  System: "Do you need user accounts and authentication?"
+  User: "Yes, with email verification"
+  System: "What about inventory tracking for digital products?"
+  User: "No inventory needed, just download delivery"
+  Enhanced: "Requirements for e-commerce system: Products: Digital downloads (courses/ebooks), Payment: Stripe + PayPal, Auth: User accounts with email verification, Inventory: None (digital delivery)..."
+
+Typical Use Cases:
+  - Project setup and scoping
+  - Architecture decisions
+  - Complex system implementations
+  - Requirement gathering
 ```
 
-### Execution Mode (max_depth: 2)
-**Purpose**: Clarifying execution details and parameters
-**Use Cases**: Command parameters, output formats, execution options
+### 🔐 Credential Mode (max_depth: 2)
+**Purpose**: Handle credential selection when multiple accounts/tokens are available
+**When Auto-Selected**: System encounters `AmbiguousCredentialError` and needs user to select specific credentials
+**Characteristics**: Quick selection with clear options, allows for clarification if needed
 
 ```yaml
-Example:
-  Original: "Generate a report"
-  Questions:
-    - "What format would you like? (PDF, CSV, JSON)"
-    - "Should I include historical data?"
-  Enhanced: "Generate a PDF report including historical data from the last 30 days"
+Example Flow:
+  [System detects multiple GitHub accounts during repo access]
+  System: "I found multiple GitHub accounts. Which would you like to use?
+          1) personal-account (john.doe@gmail.com)
+          2) work-account (john@company.com)"
+  User: "Use the work account"
+  Enhanced: "work-account" [Selection passed to credential system]
+
+Typical Use Cases:
+  - Multiple API keys/tokens for same service
+  - Different account contexts (personal vs work)
+  - Service credential disambiguation
+  - OAuth account selection
 ```
+
+### ⚙️ Execution Mode (max_depth: 2)
+**Purpose**: Clarify specific execution details and parameters for well-defined tasks
+**When Auto-Selected**: User request is clear about WHAT to do, but HOW to do it needs clarification
+**Characteristics**: Focus on "how" rather than "what"; parameter-specific questions for quick execution decisions
+
+```yaml
+Example Flow:
+  User: "Generate a report on our sales data"
+  System: "What format would you like? (PDF, CSV, Excel, JSON)"
+  User: "PDF please"
+  System: "Should I include data from the last month, quarter, or year?"
+  User: "Last quarter"
+  Enhanced: "Generate a PDF report on sales data for the last quarter"
+
+Typical Use Cases:
+  - Output format selection
+  - Time range specifications
+  - Processing parameters
+  - Configuration options
+```
+
+### Mode Detection Logic
+
+The system uses LLM-based analysis to automatically select the appropriate mode:
+
+```python
+# LLM analyzes request and returns mode recommendation
+analysis = await self._analyze_request(message, context)
+# Returns: {"mode": "planning", "needs_clarification": true, ...}
+```
+
+**Mode Selection Criteria**:
+- **Direct**: Clear action with missing simple details
+- **Brainstorm**: Creative language, exploration keywords ("design", "ideas", "explore")
+- **Planning**: Project language, complex scope ("build", "implement", "create system")
+- **Credential**: Triggered by `AmbiguousCredentialError` exceptions
+- **Execution**: Clear task with parameter/format ambiguities
 
 ## State Management
 
@@ -333,22 +397,42 @@ async def _check_timeout(self, state):
 ### System Configuration
 
 ```yaml
-clarification:
-  max_turns: 3              # Default max turns
-  timeout: 300              # Timeout in seconds (5 minutes)
-  style: conversational     # conversational, formal, brief
-  enable_context_switch: true
-  modes:
-    direct:
-      max_depth: 3
-    brainstorm:
-      max_depth: 10
-    planning:
-      max_depth: 7
-    credential:
-      max_depth: 1
-    execution:
-      max_depth: 2
+overlord:
+  clarification:
+    style: conversational          # Question style: conversational, formal, brief
+    persist_learned_info: false    # Privacy control: false = session-only, true = persistent learning
+    timeout_seconds: 300           # Timeout in seconds (5 minutes)
+    max_rounds:                    # Mode-specific limits (1-32 each)
+      direct: 3                    # Quick disambiguation
+      brainstorm: 10               # Creative exploration
+      planning: 7                  # Requirements gathering  
+      execution: 3                 # Parameter clarification
+      other: 3                     # Fallback for unlisted modes
+    
+    # Legacy format (still supported for backward compatibility)
+    # max_questions: 5             # Global limit for all modes
+```
+
+### Configuration Hierarchy
+
+The system uses a **4-level priority hierarchy** for determining maximum rounds:
+
+1. **`max_rounds.{specific_mode}`** (highest priority) - Mode-specific setting
+2. **`max_rounds.other`** - Fallback for unlisted modes  
+3. **`max_questions`** - Legacy global setting (backward compatibility)
+4. **Sensible defaults** - Built-in fallbacks (direct: 3, brainstorm: 10, etc.)
+
+### Validation Rules
+
+- **Range**: All `max_rounds` values must be integers between **1 and 32**
+- **Type Safety**: Non-integer values (strings, floats, etc.) are rejected
+- **Error Handling**: Invalid configurations fail fast with clear error messages
+- **Limit Configuration**: The maximum of 32 is defined by `MAX_CLARIFICATION_ROUNDS` in `src/muxi/formation/initialization.py` for easy adjustment
+
+```bash
+# Example error messages:
+ValueError: max_rounds.direct must be integer 1-32, got 100
+ValueError: max_rounds.brainstorm must be integer 1-32, got "10"
 ```
 
 ### Style Examples
@@ -501,6 +585,31 @@ The unified system completely replaces these legacy components:
 - **Zero Technical Debt**: No backward compatibility maintenance burden
 - **Easier Maintenance**: One file to modify vs 15+ interconnected components
 
+### Configuration Migration
+
+**Old Format (still supported)**:
+```yaml
+overlord:
+  clarification:
+    max_questions: 5      # Global limit for all modes
+    style: conversational
+```
+
+**New Format (recommended)**:
+```yaml
+overlord:
+  clarification:
+    style: conversational
+    max_rounds:           # Mode-specific limits (1-32 each)
+      direct: 3
+      brainstorm: 10
+      planning: 7
+      execution: 3
+      other: 3            # Fallback for new modes
+```
+
+**Migration is optional** - existing configurations continue working unchanged. The new format provides better control over user experience by tailoring interaction depth to each clarification type.
+
 ## Request Lifecycle
 
 ### 1. Entry Point
@@ -606,8 +715,10 @@ logging.getLogger("muxi.clarification").setLevel(logging.DEBUG)
 
 1. **Set appropriate timeouts**: 300s default works for most cases
 2. **Choose style carefully**: Match your application's tone
-3. **Monitor clarification rate**: High rates may indicate UX issues
-4. **Tune complexity thresholds**: Balance user experience with processing efficiency
+3. **Respect the 32-round limit**: Values above 32 are rejected to prevent poor UX
+4. **Use mode-specific limits**: Different modes need different interaction depths
+5. **Monitor clarification rate**: High rates may indicate UX issues
+6. **Tune complexity thresholds**: Balance user experience with processing efficiency
 
 ### For Operations
 
@@ -681,20 +792,16 @@ except AmbiguousCredentialError as e:
 
 ```python
 # In formation YAML
-clarification:
-  style: conversational
-  timeout: 300
-  modes:
-    direct:
-      max_depth: 3
-    brainstorm:
-      max_depth: 10
-    planning:
-      max_depth: 7
-    credential:
-      max_depth: 1
-    execution:
-      max_depth: 2
+overlord:
+  clarification:
+    style: conversational
+    timeout_seconds: 300
+    max_rounds:
+      direct: 3
+      brainstorm: 10
+      planning: 7
+      credential: 2
+      execution: 3
 ```
 
 ## Conclusion
