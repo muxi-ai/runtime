@@ -549,6 +549,7 @@ class MCPService:
                                 parameters,
                                 service_name,
                                 conversation_context,
+                                user_id,
                             )
                         except CredentialSelectionNeededError as e:
                             # LLM determined the request is ambiguous - pass it up to agent
@@ -1678,6 +1679,7 @@ class MCPService:
         parameters: Dict[str, Any],
         service_name: str,
         conversation_context: Optional[List[str]] = None,
+        user_id: Optional[str] = None,
     ) -> Optional[Dict]:
         """
         Use LLM to select the best credential from multiple options based on user parameters and conversation context.
@@ -1786,7 +1788,7 @@ class MCPService:
                         # The agent will decide whether to trigger clarification
                         raise CredentialSelectionNeededError(
                             service=service_name,
-                            user_id="",  # Will be filled in by caller
+                            user_id=user_id or "",  # Use provided user_id or empty string as fallback
                             available_credentials=credential_list,
                             ordered_credentials=ordered_credentials,
                         )
@@ -1803,7 +1805,7 @@ class MCPService:
             # If LLM didn't give a clear answer, raise CredentialSelectionNeededError
             raise CredentialSelectionNeededError(
                 service=service_name,
-                user_id="",  # Will be filled in by caller
+                user_id=user_id or "",  # Use provided user_id or empty string as fallback
                 available_credentials=credential_list,
                 ordered_credentials=list(range(1, len(credential_list) + 1)),
             )

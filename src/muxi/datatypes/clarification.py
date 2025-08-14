@@ -253,7 +253,8 @@ class ClarificationConfig:
     """Configuration for the clarification system"""
 
     enabled: bool = True
-    max_questions: int = 5
+    max_questions: Optional[int] = None  # Kept for backward compatibility - None means not explicitly set
+    max_rounds: Optional[Dict[str, int]] = None  # New mode-specific configuration
     style: QuestionStyle = QuestionStyle.CONVERSATIONAL
     persist_learned_info: bool = False
     timeout_seconds: int = 300

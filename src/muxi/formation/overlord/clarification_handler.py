@@ -18,7 +18,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from ...services import observability
 from ...datatypes.response import MuxiResponse
-from ..clarification import ClarificationContext
+from ...datatypes.clarification import ClarificationContext
 from ..background.request_tracker import RequestStatus
 
 
@@ -42,9 +42,7 @@ class ClarificationHandler:
         # Cache frequently accessed attributes for performance
         self._pending_clarifications = overlord._pending_clarifications
         self.credential_resolver = overlord.credential_resolver
-        self.clarification_analyzer = overlord.clarification_analyzer
-        self.clarification_manager = overlord.clarification_manager
-        self.clarification_question_generator = overlord.clarification_question_generator
+        self.clarification = overlord.clarification  # Use unified clarification system
         self.request_tracker = overlord.request_tracker
 
         # Create a lock to protect concurrent access to _pending_clarifications
@@ -590,8 +588,8 @@ Token:"""
     """
 
             # No regex, no pattern matching - pure LLM understanding
-            if self.clarification_analyzer and self.clarification_analyzer.model:
-                result = await self.clarification_analyzer.model.chat(
+            if self.clarification and self.clarification.llm:
+                result = await self.clarification.llm.chat(
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=100,
                     temperature=0.3
@@ -682,10 +680,10 @@ Token:"""
                     # Fallback to routing_model if available (legacy)
                     llm_model = self.overlord.routing_model
 
-            # If still no model, try the clarification analyzer's model as last resort
-            if not llm_model and self.clarification_analyzer:
-                if hasattr(self.clarification_analyzer, 'model'):
-                    llm_model = self.clarification_analyzer.model
+            # If still no model, try the clarification system's model as last resort
+            if not llm_model and self.clarification:
+                if hasattr(self.clarification, 'llm'):
+                    llm_model = self.clarification.llm
 
             # If no LLM model is available, we can't properly assess fulfillment
             if not llm_model:
@@ -765,8 +763,8 @@ Token:"""
     Be direct and specific.
     """
 
-            if self.clarification_analyzer and self.clarification_analyzer.model:
-                question_response = await self.clarification_analyzer.model.chat(
+            if self.clarification and self.clarification.llm:
+                question_response = await self.clarification.llm.chat(
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=100,
                     temperature=0.3
@@ -1036,48 +1034,27 @@ Token:"""
         Returns:
             Tuple of (clarification_question, request_id) if clarification needed, None otherwise
         """
-        if not self.clarification_analyzer or not session_id:
+        if not self.clarification or not session_id:
             return None
 
         try:
-            # Analyze for missing information
-            user_context = {}
-            if hasattr(self.overlord, 'user_context_manager'):
-                user_context = await self.overlord.user_context_manager.get_user_context(user_id)
+            # Use the unified clarification system to check if clarification is needed
+            context = {"user_id": user_id} if user_id else {}
 
-            available_tools = []
-            if hasattr(self.overlord, 'mcp_coordinator'):
-                tool_registry = self.overlord.mcp_coordinator.get_tool_registry()
-                for server_tools in tool_registry.values():
-                    available_tools.extend(server_tools.keys())
-
-            analysis_result = await self.clarification_analyzer.analyze_request(
-                user_message=message,
-                intent="general",
-                available_tools=available_tools,
-                user_context=user_context,
+            clarification_result = await self.clarification.needs_clarification(
+                message=message,
+                request_id=request_id,
+                session_id=session_id,
+                context=context
             )
 
-            if analysis_result and analysis_result.missing_info:
-                # Generate clarification question
-                question = "Could you please provide more details?"
-                if self.clarification_question_generator:
-                    missing_context = (
-                        analysis_result.missing_info[0]
-                        if analysis_result.missing_info
-                        else "more details"
-                    )
-                    question_obj = await self.clarification_question_generator.generate_reasoning_question(
-                        intent="general",
-                        missing_context=missing_context,
-                        user_background={},
-                    )
-                    question = question_obj.question_text
-
+            if clarification_result.action == "clarify":
                 # Update request status to awaiting clarification
                 if self.request_tracker:
                     await self.request_tracker.update_status(
-                        request_id, RequestStatus.AWAITING_CLARIFICATION, clarification_question=question
+                        request_id,
+                        RequestStatus.AWAITING_CLARIFICATION,
+                        clarification_question=clarification_result.question
                     )
 
                 # Store pending clarification
@@ -1085,12 +1062,12 @@ Token:"""
                     "type": "async_clarification",
                     "request_id": request_id,
                     "original_message": message,
-                    "missing_info": analysis_result.missing_info,
+                    "mode": clarification_result.mode,
                     "user_id": user_id,
                     "created_at": time.time(),
                 })
 
-                return (question, request_id)
+                return (clarification_result.question, request_id)
 
             return None
 

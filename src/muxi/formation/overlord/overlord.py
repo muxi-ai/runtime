@@ -93,7 +93,7 @@ import os
 
 from ..agents import Agent
 from ..background.request_tracker import RequestStatus
-from ..clarification import create_clarification_system, ClarificationContext
+from .clarification import UnifiedClarificationSystem
 from .clarification_handler import ClarificationHandler
 from ...services import observability
 from ...datatypes.response import MuxiResponse
@@ -378,6 +378,9 @@ class Overlord:
 
         # Pending clarifications tracking
         self._pending_clarifications: Dict[str, Dict[str, Any]] = {}
+
+        # Session service history tracking for better follow-up handling
+        self._session_service_history: Dict[str, Set[str]] = {}
 
         # MCP coordination system with configuration
         mcp_config = configured_services.get("mcp_config") if configured_services else None
@@ -710,27 +713,14 @@ class Overlord:
                 max_questions=5, style=QuestionStyle.CONVERSATIONAL, persist_learned_info=False
             )
 
-        # Create the complete clarification system
-        # create_clarification_system expects (overlord, model) as positional args
-        clarification_components = create_clarification_system(
-            self, None  # overlord instance  # model will be set later
-        )
-
-        # Unpack the components
-        self.clarification_analyzer = clarification_components["analyzer"]
-        self.clarification_manager = clarification_components["manager"]
-        self.clarification_question_generator = clarification_components["generator"]
-        self.clarification_response_parser = clarification_components["parser"]
-        self.clarification_parameter_enricher = clarification_components["enricher"]
-        self.clarification_proactive_detector = clarification_components["proactive_detector"]
-        self.clarification_mode_manager = clarification_components["mode_manager"]
-        self.clarification_plan_analyzer = clarification_components["plan_analyzer"]
+        # Create the unified clarification system
+        self.clarification = UnifiedClarificationSystem(self)
 
         observability.observe(
             event_type="service.initialized",
             level=observability.EventLevel.INFO,
-            data={"service": "clarification", "components": list(clarification_components.keys())},
-            description="Clarification system initialized with all components",
+            data={"service": "clarification", "components": ["unified_system"]},
+            description="Clarification system initialized with unified components",
         )
 
         # Initialize the ClarificationHandler with delegation pattern
@@ -1230,22 +1220,9 @@ class Overlord:
             if isinstance(text_config, dict) and "model" in text_config:
                 # Create actual LLM instance for clarification
                 try:
-                    clarification_llm = await self.create_model(
-                        model=text_config["model"],
-                        temperature=0.3,  # Lower temperature for clarification analysis
-                        max_tokens=100,   # Small responses for clarification
-                        api_key=text_config.get("api_key"),
-                    )
-
-                    # Set the LLM for all clarification components
-                    self.clarification_analyzer.model = clarification_llm
-                    if self.clarification_question_generator:
-                        self.clarification_question_generator.model = clarification_llm
-                    if self.clarification_proactive_detector:
-                        self.clarification_proactive_detector.model = clarification_llm
-                    if self.clarification_plan_analyzer:
-                        self.clarification_plan_analyzer.model = clarification_llm
-
+                    # Legacy clarification components have been replaced by UnifiedClarificationSystem
+                    # The unified system gets its LLM reference directly from overlord.default_llm_model
+                    # No separate clarification_llm instance needed
                     observability.observe(
                         event_type="service.started",
                         level=observability.EventLevel.INFO,
@@ -1260,15 +1237,8 @@ class Overlord:
                         description=f"Failed to create clarification LLM: {e}",
                     )
 
-        # Update with actual managers
-        if hasattr(self, "mcp_coordinator") and self.mcp_coordinator:
-            mcp_manager = getattr(self.mcp_coordinator, "mcp_manager", None)
-            self.clarification_analyzer.mcp_manager = mcp_manager
-
-        if hasattr(self, "buffer_memory_manager"):
-            self.clarification_analyzer.memory_manager = self.buffer_memory_manager
-            if self.clarification_parameter_enricher:
-                self.clarification_parameter_enricher.memory_manager = self.buffer_memory_manager
+        # Legacy clarification components have been replaced by UnifiedClarificationSystem
+        # No additional manager updates needed
 
         observability.observe(
             event_type="service.updated",
@@ -4880,8 +4850,10 @@ Make it conversational and friendly while keeping accuracy."""
         if message and message.startswith("## Task:"):
             return True
 
-        # Use the analyzer's core method to determine if clarification should be skipped
-        if self.clarification_analyzer:
+        # TODO: Replace with unified clarification system logic
+        # The old clarification_analyzer has been replaced by UnifiedClarificationSystem
+        # For now, use simple heuristics to determine when to skip clarification
+        if True:  # Legacy analyzer check disabled
             try:
                 # Extract the actual user message from formatted context if needed
                 actual_message = message
@@ -4895,15 +4867,14 @@ Make it conversational and friendly while keeping accuracy."""
                                 actual_message = next_line[5:].strip()  # Remove "User: " prefix
                                 break
 
-                # Quick analyzer check using the core method
-                context_gaps = await self.clarification_analyzer._analyze_generic_context_needs(
-                    user_message=actual_message,
-                    user_context={},
-                    style=self.clarification_config.style if hasattr(self, 'clarification_config') else "conversational"
-                )
-
-                # Skip clarification if no context gaps found (request is clear enough)
-                return not context_gaps
+                # Simple heuristic: skip clarification for specific, clear commands
+                # TODO: Replace with unified system call when this method is refactored
+                clear_patterns = [
+                    len(actual_message) > 20,  # Reasonably detailed
+                    any(word in actual_message.lower() for word in ['show', 'list', 'get', 'create', 'run']),
+                    actual_message.count(' ') > 3  # Multi-word requests
+                ]
+                return any(clear_patterns)
 
             except Exception:
                 # If analyzer fails, fall back to default behavior
@@ -5047,6 +5018,12 @@ Make it conversational and friendly while keeping accuracy."""
                             # Clean up pending clarification
                             del self._pending_clarifications[session_id]
 
+                            # Track service use in session history
+                            if session_id and service:
+                                if session_id not in self._session_service_history:
+                                    self._session_service_history[session_id] = set()
+                                self._session_service_history[session_id].add(service)
+
                             # If we have the original message, retry it now with credentials stored
                             if original_message:
                                 # Recursively call _process_sync_chat with the original message
@@ -5171,6 +5148,12 @@ Make it conversational and friendly while keeping accuracy."""
                             original_message = clarification_info.get("original_message")
                             del self._pending_clarifications[session_id]
 
+                            # Track service use in session history
+                            if session_id and service:
+                                if session_id not in self._session_service_history:
+                                    self._session_service_history[session_id] = set()
+                                self._session_service_history[session_id].add(service)
+
                             # Retry the original message with the selected credential
                             if original_message:
                                 # Just retry with the original message - the credential is already cached
@@ -5213,25 +5196,55 @@ Make it conversational and friendly while keeping accuracy."""
                             content="I encountered an error processing your selection. Please try again.",
                         )
 
-                elif clarification_info.get("type") in ["reactive", "proactive"]:
-                    # Handle general clarification response through the manager
+                elif clarification_info.get("type") in [
+                    "direct", "brainstorm", "planning", "reactive", "proactive", "execution"
+                ]:
+                    # Handle general clarification response using unified system
                     observability.observe(
                         event_type=observability.ConversationEvents.CLARIFICATION_RESPONSE_RECEIVED,
                         level=observability.EventLevel.INFO,
                         data={
                             "session_id": session_id,
                             "clarification_type": clarification_info.get("type"),
+                            "request_id": clarification_info.get("request_id"),
                         },
                         description=f"Processing {clarification_info.get('type')} clarification response",
                     )
 
+                    # Use unified system to handle response
                     response_result = None
-                    if self.clarification_manager:
+                    if self.clarification and clarification_info.get("request_id"):
                         try:
-                            response_result = await self.clarification_manager.process_user_response(
+                            response_result = await self.clarification.handle_response(
                                 request_id=clarification_info.get("request_id"),
-                                user_response=message
+                                response=message
                             )
+
+                            if response_result.action == "clarify":
+                                # Need more clarification - update pending and return question
+                                self._pending_clarifications[session_id].update({
+                                    "depth": self._pending_clarifications[session_id].get("depth", 0) + 1
+                                })
+
+                                return MuxiResponse(
+                                    role="assistant",
+                                    content=response_result.question,
+                                    metadata={"clarification": True, "mode": response_result.mode}
+                                )
+                            elif response_result.action == "execute":
+                                # Clarification complete or cancelled - clean up and process
+                                del self._pending_clarifications[session_id]
+
+                                # Process the enhanced/final request
+                                return await self._process_sync_chat(
+                                    message=response_result.request,
+                                    agent_name=agent_name,
+                                    user_id=user_id,
+                                    session_id=session_id,
+                                    request_id=request_id,
+                                    skip_clarification=True,
+                                )
+
                         except Exception as e:
                             observability.observe(
                                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
@@ -5240,34 +5253,14 @@ Make it conversational and friendly while keeping accuracy."""
                                 description=f"Failed to process clarification response: {e}",
                             )
 
-                    # Fallback if no manager or processing failed
-                    if not response_result:
-                        # Simple fallback: combine original message with response
-                        original_message = clarification_info.get("original_message", "")
-                        # Remove trailing punctuation to avoid double periods
-                        original_message = original_message.rstrip(".,!?;:")
-                        enhanced_message = f"{original_message}. {message}"
-
-                        # Clean up
-                        del self._pending_clarifications[session_id]
-
-                        # Process with enhanced context - skip clarification check
-                        return await self._process_sync_chat(
-                            message=enhanced_message,
-                            agent_name=agent_name,
-                            user_id=user_id,
-                            session_id=session_id,
-                            request_id=request_id,
-                            skip_clarification=True,
-                        )
-
-                    if response_result and response_result.status == ClarificationResultStatus.COMPLETE:
+                    # Fallback if unified system not available
                         # Clarification complete - process enhanced request
                         original_message = clarification_info.get("original_message", "")
                         collected_info = response_result.complete_params or {}
 
                         # Enrich the original message with collected information
-                        if self.clarification_parameter_enricher and collected_info:
+                        # TODO: Replace clarification_parameter_enricher with unified system
+                        if False and collected_info:  # Legacy enricher disabled
                             try:
                                 user_context = {}
                                 if hasattr(self, "user_context_manager"):
@@ -5539,10 +5532,12 @@ Make it conversational and friendly while keeping accuracy."""
                     else:
                         # None means clarification resolved, continue processing
                         # Get the combined/resolved message to process
-                        if isinstance(self._pending_clarifications.get(session_id), ClarificationContext):
-                            context = self._pending_clarifications[session_id]
-                            # Build combined message from context
-                            message = context.original_intent
+                        # Check if we have pending clarification data
+                        if session_id in self._pending_clarifications:
+                            clarification_data = self._pending_clarifications[session_id]
+                            # Get the original message if available
+                            if isinstance(clarification_data, dict) and "original_message" in clarification_data:
+                                message = clarification_data["original_message"]
                             # Message will be processed normally below
                         # If we get here, clarification was resolved and we continue with normal processing
 
@@ -5565,154 +5560,45 @@ Make it conversational and friendly while keeping accuracy."""
                 description="Clarification bypassed"
             )
 
-        # Check if clarification is needed for ambiguous requests
+        # Check if clarification is needed using unified system with request_id
         if (
             not skip_clarification
             and not is_clarification_response
             and not agent_name
-            and self.clarification_analyzer
+            and self.clarification
+            and request_id
         ):
-            # Check for proactive clarification requests first
-            proactive_request = None
-            if self.clarification_proactive_detector:
-                try:
-                    proactive_request = (
-                        await self.clarification_proactive_detector.detect_proactive_request(
-                            message
-                        )
-                    )
-                except Exception as e:
-                    observability.observe(
-                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                        level=observability.EventLevel.WARNING,
-                        data={"error": str(e)},
-                        description=f"Proactive detection failed: {e}",
-                    )
-
-            if proactive_request:
-                # Handle proactive clarification mode
-                await self.clarification_mode_manager.set_mode(
-                    user_id=user_id, mode="proactive", goal=proactive_request.goal
-                )
-
-                # Create a clarification request through the manager
-                clarification_request = None
-                if self.clarification_manager:
-                    try:
-                        clarification_request = await self.clarification_manager.start_clarification(
-                            user_id=user_id,
-                            agent_id="overlord",
-                            request_type=RequestType.REASONING,
-                            intent=message,
-                            provided_info={}
-                        )
-                    except Exception as e:
-                        observability.observe(
-                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                            level=observability.EventLevel.WARNING,
-                            data={"error": str(e)},
-                            description=f"Failed to create clarification request: {e}",
-                        )
-
-                # Generate first question
-                first_question = await self.clarification_question_generator.generate_question(
-                    missing_info={"goal_details": "Understanding your requirements"},
-                    style=self.clarification_config.style,
-                )
-
-                self._pending_clarifications[session_id] = {
-                    "type": "proactive",
-                    "request_id": clarification_request.request_id if clarification_request else None,
-                    "original_message": message,
-                    "mode": "proactive",
-                    "user_id": user_id,
-                    "created_at": time.time(),
-                }
-
-                return MuxiResponse(
-                    role="assistant",
-                    content=first_question,
-                    metadata={"clarification": True, "mode": "proactive"},
-                )
-
-            # Analyze for missing information (reactive mode)
+            # Use unified clarification system with request_id
             try:
-                # Extract the actual user message from formatted context if needed
-                actual_message = message
-                if "=== CURRENT REQUEST ===" in message and "User:" in message:
-                    # Extract the user's actual message from the formatted context
-                    lines = message.split("\n")
-                    for i, line in enumerate(lines):
-                        if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                            next_line = lines[i + 1].strip()
-                            if next_line.startswith("User:"):
-                                actual_message = next_line[5:].strip()  # Remove "User: " prefix
-                                break
-
-                user_context = {}
-                if hasattr(self, "user_context_manager"):
-                    user_context = await self.user_context_manager.get_user_context(user_id)
-
-                available_tools = []
-                if hasattr(self, "mcp_coordinator"):
-                    # Get all tools from the registry
-                    tool_registry = self.mcp_coordinator.get_tool_registry()
-                    available_tools = []
-                    for server_tools in tool_registry.values():
-                        available_tools.extend(server_tools.keys())
-
-                analysis_result = await self.clarification_analyzer.analyze_request(
-                    user_message=actual_message,  # Use extracted message
-                    intent="general",  # Will be inferred from message
-                    available_tools=available_tools,
-                    user_context=user_context,
-                    style=self.clarification_config.style,  # Pass the configured style
+                clarification_result = await self.clarification.needs_clarification(
+                    message=message,
+                    request_id=request_id,
+                    session_id=session_id,
+                    context={"user_id": user_id}
                 )
 
-                # Check if clarification is needed
-                # analysis_result is an InformationAnalysis object, not a dict
-                if analysis_result.missing_info:
-                    # Create clarification request
-                    clarification_request = await self.clarification_manager.start_clarification(
-                        user_id=str(user_id),
-                        agent_id="overlord",
-                        request_type=RequestType.REASONING,
-                        intent="general",
-                        tool_name=None,
-                        provided_info={},
-                    )
-
-                    # The first missing_info item now contains the actual clarification question from the LLM
-                    if analysis_result.missing_info and isinstance(analysis_result.missing_info[0], str):
-                        # Use the question directly from the analyzer
-                        question = analysis_result.missing_info[0]
-                    else:
-                        # Fallback to generic question if something goes wrong
-                        question = "Could you please provide more details about what you're looking for?"
-
-                    # Store pending clarification
-                    self._pending_clarifications[session_id] = {
-                        "type": "reactive",
-                        "request_id": clarification_request.request_id,
-                        "original_message": actual_message,  # Store the extracted message, not the enhanced one
-                        "missing_info": analysis_result.missing_info,
-                        "user_id": user_id,
-                        "created_at": time.time(),
-                    }
+                if clarification_result.action == "clarify":
+                    # Store pending clarification state for this session
+                    if session_id:
+                        self._pending_clarifications[session_id] = {
+                            "type": clarification_result.mode or "reactive",
+                            "original_message": message,
+                            "request_id": request_id,
+                            "user_id": user_id
+                        }
 
                     return MuxiResponse(
                         role="assistant",
-                        content=question,
-                        metadata={
-                            "clarification": True,
-                            "missing_info": (
-                                analysis_result.missing_info
-                                if isinstance(analysis_result.missing_info, list)
-                                else list(analysis_result.missing_info.keys())
-                            ),
-                        },
+                        content=clarification_result.question,
+                        metadata={"clarification": True, "mode": clarification_result.mode}
                     )
             except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e)},
+                    description=f"Unified clarification failed: {e}",
+                )
                 observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
@@ -5727,11 +5613,12 @@ Make it conversational and friendly while keeping accuracy."""
         skip_clarification = await self._should_skip_clarification(message)
 
         # Check if clarification is needed (before workflow analysis)
+        # TODO: This large section uses legacy clarification components - replace with unified system
         if (
-            not skip_clarification
+            False  # Legacy clarification section disabled
+            and not skip_clarification
             and not is_clarification_response
             and not agent_name
-            and self.clarification_analyzer
             and session_id
         ):
             try:
@@ -5829,11 +5716,39 @@ Make it conversational and friendly while keeping accuracy."""
                     except Exception:
                         pass  # Continue without context
 
+                # Build execution context (same as above)
+                execution_context = {
+                    "has_mcp_servers": bool(hasattr(self, "mcp_coordinator") and self.mcp_coordinator),
+                    "mcp_services": [],
+                    "session_has_prior_service_use": False
+                }
+
+                # Check if MCP servers are available and what services they provide
+                if hasattr(self, "mcp_coordinator") and self.mcp_coordinator:
+                    try:
+                        # Get list of MCP servers
+                        servers = (
+                            self.mcp_coordinator.get_servers()
+                            if hasattr(self.mcp_coordinator, "get_servers")
+                            else []
+                        )
+                        execution_context["mcp_services"] = [
+                            server.replace("-mcp", "").replace("_mcp", "") for server in servers
+                        ]
+
+                        # Check if this session has already used any MCP services
+                        if session_id and hasattr(self, "_session_service_history"):
+                            session_history = self._session_service_history.get(session_id, set())
+                            execution_context["session_has_prior_service_use"] = bool(session_history)
+                    except Exception:
+                        pass  # Continue with empty execution context
+
                 analysis_result = await self.clarification_analyzer.analyze_request(
                     user_message=actual_message,
                     intent="general",  # Will be inferred from message
                     available_tools=available_tools,
                     user_context=user_context,
+                    execution_context=execution_context,  # NEW parameter
                 )
 
                 # Check if clarification is needed
@@ -6265,28 +6180,58 @@ Make it conversational and friendly while keeping accuracy."""
                 )
 
             elif isinstance(e, AmbiguousCredentialError):
-                # Store pending clarification if we have a session
-                if session_id:
-                    self._pending_clarifications[session_id] = {
-                        "type": "ambiguous_credential",
-                        "service": e.service,
-                        "user_id": e.user_id,
-                        "timestamp": time.time(),
-                        "original_message": actual_message_for_credential,  # Store the extracted message
-                        "available_credentials": e.available_credentials,
-                        "ordered_credentials": e.ordered_credentials,
-                    }
-                else:
-                    # No session_id, log warning
-                    pass
+                # Use unified system to handle credential error
+                if self.clarification and request_id:
+                    try:
+                        clarification_result = await self.clarification.handle_credential_error(
+                            error=e,
+                            request_id=request_id
+                        )
 
-                # Generate clarification question
+                        # Store pending clarification if we have a session
+                        if session_id:
+                            self._pending_clarifications[session_id] = {
+                                "type": "credential",
+                                "service": e.service,
+                                "user_id": e.user_id,
+                                "timestamp": time.time(),
+                                "original_message": actual_message_for_credential,
+                                "available_credentials": e.available_credentials,
+                                "ordered_credentials": getattr(e, 'ordered_credentials', None),
+                                "request_id": request_id
+                            }
+
+                        # Apply persona to the question
+                        formatted_content = await self._apply_persona(clarification_result.question, message)
+
+                        return MuxiResponse(
+                            role="assistant",
+                            content=formatted_content,
+                            metadata={
+                                "clarification_requested": True,
+                                "clarification_type": "credential",
+                                "service": e.service,
+                                "user_id": e.user_id,
+                                "session_id": session_id,
+                            }
+                        )
+                    except Exception as unified_error:
+                        observability.observe(
+                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                            level=observability.EventLevel.WARNING,
+                            data={"error": str(unified_error)},
+                            description=f"Failed to handle credential error with unified system: {unified_error}",
+                        )
+                        # Fall through to default error handling
+
+                # Fallback if unified system not available
+                # Generate clarification question manually
                 service_display = e.service.capitalize()
                 if e.service == "github":
                     service_display = "GitHub"
 
                 # Format the credential options
-                if e.ordered_credentials:
+                if hasattr(e, 'ordered_credentials') and e.ordered_credentials:
                     # Use LLM ordering
                     ordered_names = []
                     for idx in e.ordered_credentials:
@@ -6303,21 +6248,6 @@ Make it conversational and friendly while keeping accuracy."""
                     f"I found multiple {service_display} accounts for you. "
                     f"Which account would you like to use?\n\n"
                     f"Available accounts:\n{options_text}"
-                )
-
-                # Apply persona to format the error message
-                formatted_content = await self._apply_persona(error_content, message)
-
-                return MuxiResponse(
-                    role="assistant",
-                    content=formatted_content,
-                    metadata={
-                        "clarification_requested": True,
-                        "clarification_type": "ambiguous_credential",
-                        "service": e.service,
-                        "user_id": e.user_id,
-                        "session_id": session_id,
-                    },
                 )
 
             raise
@@ -8100,10 +8030,10 @@ Make it conversational and friendly while keeping accuracy."""
             agent_name = clarification_metadata.get("agent_name")
 
             # Check if this is a credential clarification response
+            # TODO: Replace legacy clarification_manager with unified system
             if (
-                self.clarification_manager
+                False  # Legacy clarification_manager disabled
                 and user_id
-                and user_id in self.clarification_manager._user_to_request
             ):
                 request_id = self.clarification_manager._user_to_request[user_id]
                 if request_id in self.clarification_manager.active_requests:
@@ -8561,18 +8491,27 @@ Make it conversational and friendly while keeping accuracy."""
         # Fallback: Create clear, specific message from collected info
         # Try to build a complete sentence that won't re-trigger clarification
         if collected_info:
+            # IMPORTANT: Always preserve the original message
+            # Don't return just the collected value - combine it with the original request
+
+            # Check if this is a credential/account selection
+            if "github_account" in collected_info or "account" in collected_info:
+                account = collected_info.get("github_account") or collected_info.get("account")
+                return f"{original_message} using {account} account"
+
             # Get the main subject/action from collected info
             values = list(collected_info.values())
             if len(values) == 1:
-                return str(values[0])  # Single value is likely the clarified request
+                # Single value - combine with original message, don't replace it
+                return f"{original_message}. {values[0]}"
             else:
                 # Multiple values - combine them intelligently
                 main_value = values[0] if values else ""
                 additional = " ".join(str(v) for v in values[1:] if v)
                 if main_value and additional:
-                    return f"{main_value} - {additional}"
+                    return f"{original_message}. {main_value} - {additional}"
                 elif main_value:
-                    return str(main_value)
+                    return f"{original_message}. {main_value}"
 
         # Last resort: append collected info to original
         context_parts = [original_message]
@@ -8639,8 +8578,8 @@ Make it conversational and friendly while keeping accuracy."""
             is needed, None if message can proceed without clarification
         """
         try:
-            # Use the initialized analyzer (not hasattr check)
-            if not self.clarification_analyzer:
+            # TODO: Replace legacy clarification_analyzer with unified system
+            if True:  # Legacy analyzer disabled
                 return None
 
             # Get user context for analysis
@@ -8777,14 +8716,12 @@ Make it conversational and friendly while keeping accuracy."""
 
             # Process the clarification response
             if request_state.clarification_request_id:
-                from ..clarification import ClarificationManager
-
-                manager = ClarificationManager(overlord=self)
-                result = await manager.process_user_response(
+                # Use unified clarification system
+                result = await self.clarification.handle_response(
                     request_state.clarification_request_id, clarification_response
                 )
 
-                if result.status == ClarificationResultStatus.COMPLETE:
+                if result.action == "execute":
                     # Resume processing with complete parameters
                     #  Info - TODO: add observability
                     # ConversationEvents.CLARIFICATION_COMPLETED

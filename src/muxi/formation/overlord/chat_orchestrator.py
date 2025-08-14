@@ -694,6 +694,11 @@ class ChatOrchestrator:
         Returns:
             Enhanced message with context in priority order
         """
+        # Check if message is already enhanced to prevent double enhancement
+        if "=== CURRENT REQUEST ===" in message:
+            # Message is already enhanced, return as-is
+            return message
+
         # Get configuration from formation
         buffer_config = self.overlord.formation_config.get("memory", {}).get("buffer", {})
         buffer_size = buffer_config.get("size", 10)

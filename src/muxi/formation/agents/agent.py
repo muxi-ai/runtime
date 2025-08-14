@@ -170,9 +170,24 @@ class Agent:
                     f"This ensures you understand the context and permissions of your actions."
                 )
                 enhanced_system_message = self.system_message + auth_instruction
-                self._messages.append({"role": "system", "content": enhanced_system_message})
             else:
-                self._messages.append({"role": "system", "content": self.system_message})
+                enhanced_system_message = self.system_message
+
+            # Add error reporting honesty instruction
+            error_reporting_instruction = (
+                "\n\nIMPORTANT Error Reporting Guidelines: "
+                "When you cannot fulfill a request, be honest and specific about the actual limitation. "
+                "- If you lack the necessary tools: Say 'I don't have the tools needed to [specific action]' "
+                "- If credentials are working (e.g., you can retrieve profile info): Don't blame credentials "
+                "- If you successfully accessed some information but not all: Acknowledge what worked "
+                "- Be PROACTIVE about limitations: If asked to 'list projects' but you can only search, "
+                "immediately clarify: 'I can see you have X projects, but I can only search for specific "
+                "ones by name, not list them all. Would you like to search for a particular project?' "
+                "- Never offer to do something you cannot actually do"
+            )
+            enhanced_system_message = enhanced_system_message + error_reporting_instruction
+
+            self._messages.append({"role": "system", "content": enhanced_system_message})
 
         # Emit agent initialization event
         observability.observe(

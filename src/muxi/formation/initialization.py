@@ -24,6 +24,10 @@ from .config.document_processing import DocumentProcessingConfig
 from .documents.storage.chunk_manager import DocumentChunkManager
 
 
+# Configuration limits
+MAX_CLARIFICATION_ROUNDS = 32  # Maximum rounds allowed for any clarification mode
+
+
 def _resolve_embedding_model_name(explicit_model: str = None, formation: Any = None) -> str:
     """
     Resolve the embedding model name from configuration.
@@ -602,14 +606,27 @@ def initialize_clarification_config(formation) -> None:
         return
 
     try:
+        # Parse max_rounds configuration (new structure)
+        max_rounds = clarification_config.get("max_rounds")
+        if max_rounds and isinstance(max_rounds, dict):
+            # Validate max_rounds values
+            for mode, rounds in max_rounds.items():
+                if not isinstance(rounds, int) or rounds < 1 or rounds > MAX_CLARIFICATION_ROUNDS:
+                    raise ValueError(f"max_rounds.{mode} must be integer 1-{MAX_CLARIFICATION_ROUNDS}, got {rounds}")
+
         # Create ClarificationConfig from formation config
+        # Only set max_questions if explicitly provided for better hierarchy logic
+        max_questions = clarification_config.get("max_questions") if "max_questions" in clarification_config else None
+
         formation._clarification_config_obj = ClarificationConfig(
             enabled=clarification_config.get("enabled", True),
-            max_questions=clarification_config.get("max_questions", 5),
-            question_style=QuestionStyle(clarification_config.get("question_style", "numbered")),
-            require_all_answers=clarification_config.get("require_all_answers", False),
-            context_retention=clarification_config.get("context_retention", "full"),
-            auto_clarify_threshold=clarification_config.get("auto_clarify_threshold", 0.3),
+            max_questions=max_questions,  # Backward compatibility - only if explicitly set
+            max_rounds=max_rounds,  # New mode-specific configuration
+            style=QuestionStyle(clarification_config.get("style", "conversational")),
+            persist_learned_info=clarification_config.get("persist_learned_info", False),
+            timeout_seconds=clarification_config.get("timeout_seconds", 300),
+            auto_fill_from_context=clarification_config.get("auto_fill_from_context", True),
+            reasoning_requirements=clarification_config.get("reasoning_requirements", True),
         )
 
         observability.observe(
@@ -619,12 +636,17 @@ def initialize_clarification_config(formation) -> None:
                 "service": "clarification",
                 "enabled": formation._clarification_config_obj.enabled,
                 "max_questions": formation._clarification_config_obj.max_questions,
+                "max_rounds": formation._clarification_config_obj.max_rounds,
+                "style": formation._clarification_config_obj.style.value,
             },
             description="Clarification configuration initialized",
         )
 
+    except ValueError:
+        # Re-raise ValueError for configuration validation errors
+        raise
     except Exception as e:
-        # Use default on error
+        # Use default on error (but not for validation errors)
         formation._clarification_config_obj = ClarificationConfig()
         observability.observe(
             event_type=observability.ErrorEvents.INTERNAL_ERROR,

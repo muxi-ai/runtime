@@ -1494,7 +1494,9 @@ class Formation:
 
     def _setup_clarification_config(self) -> None:
         """Setup and validate clarification configuration."""
-        self._clarification_config = self.config.get("clarification", {})
+        # Clarification config is under overlord.clarification in formation YAML
+        overlord_config = self.config.get("overlord", {})
+        self._clarification_config = overlord_config.get("clarification", {})
 
         # Validate clarification structure
         if not isinstance(self._clarification_config, dict):
