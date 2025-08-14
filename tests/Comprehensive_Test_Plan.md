@@ -243,7 +243,7 @@ memory:
 **Implementation Status: COMPLETED ✅**
 - **Test Groups Completed**: 2 groups (1A Formation Loading, 1B Agent Communication)
 - **Tests Passing**: 10/10 (100% success rate)
-- **Test Reports**: [tests/reports/1a.md](tests/reports/1a.md), [tests/reports/1b.md](tests/reports/1b.md)
+- **Test Reports**: [reports/1a.md](reports/1a.md), [reports/1b.md](reports/1b.md)
 - **Real Service Integration**: All tests use actual OpenAI models, no mocks
 
 ### Test Group 1A: Formation Loading (6/6 tests ✅)
@@ -310,20 +310,20 @@ memory:
 
 | Group | Focus Area | Status | Report |
 |-------|------------|--------|---------|
-| **2A** | Basic Conversation Context | ✅ | [tests/reports/2a.md](tests/reports/2a.md) |
-| **2B** | SQLite Persistence | ✅ | [tests/reports/2b.md](tests/reports/2b.md) |
-| **2C** | PostgreSQL User Isolation | ✅ | [tests/reports/2c.md](tests/reports/2c.md) |
-| **2D** | Buffer Memory Modes | ✅ | [tests/reports/2d.md](tests/reports/2d.md) |
-| **2E** | Remote Faiss Vector Store | ✅ | [tests/reports/2e.md](tests/reports/2e.md) |
-| **2F** | Advanced Memory Features | ✅ | [tests/reports/2f.md](tests/reports/2f.md) |
-| **2G** | Memory Context Integration | ✅ | [tests/reports/2g.md](tests/reports/2g.md) |
-| **2H** | Buffer Memory Context Enhancement | ✅ | [tests/reports/2h.md](tests/reports/2h.md) |
-| **2I** | Natural Language Memory Extraction | ✅ | [tests/reports/2i.md](tests/reports/2i.md) |
-| **2J** | Collection-Based Memory Organization | ✅ | [tests/reports/2j.md](tests/reports/2j.md) |
-| **2K** | Memory System Integration | ✅ | [tests/reports/2k.md](tests/reports/2k.md) |
-| **2L** | Database Optimization | ✅ | [tests/reports/2l.md](tests/reports/2l.md) |
-| **2M** | Error Resilience | ✅ | [tests/reports/2m.md](tests/reports/2m.md) |
-| **2O** | Preference System | 🔄 | [tests/reports/2o.md](tests/reports/2o.md) |
+| **2A** | Basic Conversation Context | ✅ | [reports/2a.md](reports/2a.md) |
+| **2B** | SQLite Persistence | ✅ | [reports/2b.md](reports/2b.md) |
+| **2C** | PostgreSQL User Isolation | ✅ | [reports/2c.md](reports/2c.md) |
+| **2D** | Buffer Memory Modes | ✅ | [reports/2d.md](reports/2d.md) |
+| **2E** | Remote Faiss Vector Store | ✅ | [reports/2e.md](reports/2e.md) |
+| **2F** | Advanced Memory Features | ✅ | [reports/2f.md](reports/2f.md) |
+| **2G** | Memory Context Integration | ✅ | [reports/2g.md](reports/2g.md) |
+| **2H** | Buffer Memory Context Enhancement | ✅ | [reports/2h.md](reports/2h.md) |
+| **2I** | Natural Language Memory Extraction | ✅ | [reports/2i.md](reports/2i.md) |
+| **2J** | Collection-Based Memory Organization | ✅ | [reports/2j.md](reports/2j.md) |
+| **2K** | Memory System Integration | ✅ | [reports/2k.md](reports/2k.md) |
+| **2L** | Database Optimization | ✅ | [reports/2l.md](reports/2l.md) |
+| **2M** | Error Resilience | ✅ | [reports/2m.md](reports/2m.md) |
+| **2O** | Preference System | 🔄 | [reports/2o.md](reports/2o.md) |
 
 ### Key Memory System Features Validated
 
@@ -388,16 +388,16 @@ memory:
 
 | Group | Focus Area | Status | Report |
 |-------|------------|--------|---------|
-| **3A** | Document Processing (PDF, DOCX, OCR) | ✅ 3/3 | [tests/reports/3a.md](tests/reports/3a.md) |
-| **3B** | Audio Processing & Speech Transcription | ✅ 4/4 | [tests/reports/3b.md](tests/reports/3b.md) |
-| **3C** | Video Frame Analysis & Understanding | ✅ 4/4 | [tests/reports/3c.md](tests/reports/3c.md) |
-| **3D** | Cross-Modal Analysis (Doc + Image) | ✅ 3/3 | [tests/reports/3d.md](tests/reports/3d.md) |
-| **3E** | Processing Modes (Sync/Async) | ✅ 2/2 | [tests/reports/3e.md](tests/reports/3e.md) |
-| **3F** | Real File Processing with Webhooks | ✅ 5/5 | [tests/reports/3f.md](tests/reports/3f.md) |
-| **3G** | Content Extraction Accuracy | ✅ 4/4 | [tests/reports/3g.md](tests/reports/3g.md) |
-| **3H** | Large File Handling (>25MB) | ⚠️ 2/3 | [tests/reports/3h.md](tests/reports/3h.md) |
-| **3I** | Cross-Format Validation | ⚠️ 2/4 | [tests/reports/3i.md](tests/reports/3i.md) |
-| **3J** | Error Handling & Edge Cases | ✅ 3/4 | [tests/reports/3j.md](tests/reports/3j.md) |
+| **3A** | Document Processing (PDF, DOCX, OCR) | ✅ 3/3 | [reports/3a.md](reports/3a.md) |
+| **3B** | Audio Processing & Speech Transcription | ✅ 4/4 | [reports/3b.md](reports/3b.md) |
+| **3C** | Video Frame Analysis & Understanding | ✅ 4/4 | [reports/3c.md](reports/3c.md) |
+| **3D** | Cross-Modal Analysis (Doc + Image) | ✅ 3/3 | [reports/3d.md](reports/3d.md) |
+| **3E** | Processing Modes (Sync/Async) | ✅ 2/2 | [reports/3e.md](reports/3e.md) |
+| **3F** | Real File Processing with Webhooks | ✅ 5/5 | [reports/3f.md](reports/3f.md) |
+| **3G** | Content Extraction Accuracy | ✅ 4/4 | [reports/3g.md](reports/3g.md) |
+| **3H** | Large File Handling (>25MB) | ⚠️ 2/3 | [reports/3h.md](reports/3h.md) |
+| **3I** | Cross-Format Validation | ⚠️ 2/4 | [reports/3i.md](reports/3i.md) |
+| **3J** | Error Handling & Edge Cases | ✅ 3/4 | [reports/3j.md](reports/3j.md) |
 
 ### Key Technical Achievements
 
@@ -443,11 +443,11 @@ memory:
 
 | Group | Focus Area | Status | Report |
 |-------|------------|--------|---------|
-| **4A** | Single MCP Server Operations | ✅ PASSED | [tests/reports/4a.md](tests/reports/4a.md) |
-| **4B** | Multi-MCP Integration | ✅ PASSED | [tests/reports/4b.md](tests/reports/4b.md) |
-| **4C** | Linear MCP (Formation Secrets) | ✅ PASSED | [tests/reports/4c.md](tests/reports/4c.md) |
-| **4D** | GitHub MCP (User Credentials) | ✅ PASSED (7/7) | [tests/reports/4d.md](tests/reports/4d.md) |
-| **4E** | User Credential Isolation | ✅ PASSED | [tests/reports/4e.md](tests/reports/4e.md) |
+| **4A** | Single MCP Server Operations | ✅ PASSED | [reports/4a.md](reports/4a.md) |
+| **4B** | Multi-MCP Integration | ✅ PASSED | [reports/4b.md](reports/4b.md) |
+| **4C** | Linear MCP (Formation Secrets) | ✅ PASSED | [reports/4c.md](reports/4c.md) |
+| **4D** | GitHub MCP (User Credentials) | ✅ PASSED (7/7) | [reports/4d.md](reports/4d.md) |
+| **4E** | User Credential Isolation | ✅ PASSED | [reports/4e.md](reports/4e.md) |
 
 ### Key Technical Achievements
 
@@ -501,19 +501,19 @@ For detailed test implementations and results, see the individual test reports l
 **Implementation Status: COMPLETED ✅**
 - **Test Groups Completed**: 6 groups (5A through 5F)
 - **Tests Passing**: 21/22 (95.5% success rate)
-- **Test Reports**: Complete reports in `tests/reports/`
+- **Test Reports**: Complete reports in `reports/`
 - **Formation Used**: `tests/assets/formations/formation-file-generation/`
 
 ### Test Group Summary
 
 | Group | Focus Area | Status | Report |
 |-------|------------|--------|---------|
-| **5A** | Basic File Generation | ✅ 3/3 | [tests/reports/5a.md](tests/reports/5a.md) |
-| **5B** | Multiple File Types | ✅ 3/3 | [tests/reports/5b.md](tests/reports/5b.md) |
-| **5C** | Large File Handling | ✅ 3/3 | [tests/reports/5c.md](tests/reports/5c.md) |
-| **5D** | Security & Validation | ✅ 4/4 | [tests/reports/5d.md](tests/reports/5d.md) |
-| **5E** | Complex Multi-Format Generation | ✅ 4/4 | [tests/reports/5e.md](tests/reports/5e.md) |
-| **5F** | Implicit File Generation | ✅ 4/5 | [tests/reports/5f.md](tests/reports/5f.md) |
+| **5A** | Basic File Generation | ✅ 3/3 | [reports/5a.md](reports/5a.md) |
+| **5B** | Multiple File Types | ✅ 3/3 | [reports/5b.md](reports/5b.md) |
+| **5C** | Large File Handling | ✅ 3/3 | [reports/5c.md](reports/5c.md) |
+| **5D** | Security & Validation | ✅ 4/4 | [reports/5d.md](reports/5d.md) |
+| **5E** | Complex Multi-Format Generation | ✅ 4/4 | [reports/5e.md](reports/5e.md) |
+| **5F** | Implicit File Generation | ✅ 4/5 | [reports/5f.md](reports/5f.md) |
 
 ### Key Technical Achievements
 
@@ -605,11 +605,11 @@ memory:
 
 | Group | Focus Area | Status | Report |
 |-------|------------|--------|---------|
-| **6A** | Knowledge Loading & Embedding | ✅ PASSED | [tests/reports/6a.md](tests/reports/6a.md) |
-| **6B** | Knowledge Caching & Change Detection | ✅ PASSED | [tests/reports/6b.md](tests/reports/6b.md) |
-| **6C** | Knowledge Search & Retrieval | ✅ PASSED | [tests/reports/6c.md](tests/reports/6c.md) |
-| **6D** | Agent Knowledge Isolation | ✅ PASSED | [tests/reports/6d.md](tests/reports/6d.md) |
-| **6E** | Knowledge Loading Edge Cases | ✅ PASSED | [tests/reports/6e.md](tests/reports/6e.md) |
+| **6A** | Knowledge Loading & Embedding | ✅ PASSED | [reports/6a.md](reports/6a.md) |
+| **6B** | Knowledge Caching & Change Detection | ✅ PASSED | [reports/6b.md](reports/6b.md) |
+| **6C** | Knowledge Search & Retrieval | ✅ PASSED | [reports/6c.md](reports/6c.md) |
+| **6D** | Agent Knowledge Isolation | ✅ PASSED | [reports/6d.md](reports/6d.md) |
+| **6E** | Knowledge Loading Edge Cases | ✅ PASSED | [reports/6e.md](reports/6e.md) |
 
 ### Key Technical Achievements
 
@@ -704,10 +704,10 @@ response = await overlord.chat(
 
 | Group | Focus Area | Status | Report |
 |-------|------------|--------|---------|
-| **7A** | Task Decomposition & Workflow Orchestration | ✅ PASSED | [tests/reports/7a.md](tests/reports/7a.md) |
-| **7B** | A2A Communication & Integration | ✅ PASSED | [tests/reports/7b.md](tests/reports/7b.md) |
-| **7C** | SOP-Guided Task Decomposition | ✅ PASSED | [tests/reports/7c.md](tests/reports/7c.md) |
-| **7D** | SOP Discovery and Relevance | ✅ PASSED | [tests/reports/7d.md](tests/reports/7d.md) |
+| **7A** | Task Decomposition & Workflow Orchestration | ✅ PASSED | [reports/7a.md](reports/7a.md) |
+| **7B** | A2A Communication & Integration | ✅ PASSED | [reports/7b.md](reports/7b.md) |
+| **7C** | SOP-Guided Task Decomposition | ✅ PASSED | [reports/7c.md](reports/7c.md) |
+| **7D** | SOP Discovery and Relevance | ✅ PASSED | [reports/7d.md](reports/7d.md) |
 
 ### Test Group 7A: Task Decomposition & Workflow Orchestration ✅
 ```python
@@ -916,7 +916,7 @@ response = await overlord.chat("Actually, nevermind, just show me the code")
 **Implementation Status: COMPLETED ✅**
 - **Test Groups Completed**: 1 group (8C)
 - **Tests Passing**: 100% success rate
-- **Test Reports**: Complete reports in `tests/reports/`
+- **Test Reports**: Complete reports in `reports/`
 
 ### Test Group 8C: Multiple Clarification Sequences ✅
 ```python
