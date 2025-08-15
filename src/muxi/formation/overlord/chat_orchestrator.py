@@ -133,7 +133,7 @@ class ChatOrchestrator:
             if self.overlord.buffer_memory_manager:
                 asyncio.create_task(
                     self.overlord.buffer_memory_manager.add_to_buffer_memory(
-                        message=f"User: {message}",
+                        message=message,
                         metadata={
                             "user_id": user_id,
                             "session_id": session_id,

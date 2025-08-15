@@ -6189,7 +6189,7 @@ Make it conversational and friendly while keeping accuracy."""
                 response_content = result.content if hasattr(result, 'content') else str(result)
                 asyncio.create_task(
                     self.buffer_memory_manager.add_to_buffer_memory(
-                        message=f"Assistant: {response_content}",
+                        message=response_content,  # Store without "Assistant: " prefix - role is in metadata
                         metadata={
                             "user_id": user_id,
                             "session_id": session_id,
