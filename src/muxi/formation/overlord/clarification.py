@@ -48,8 +48,8 @@ class UnifiedClarificationSystem:
             self.timeout = 300
             self.style = "conversational"
 
-        # Get LLM reference - overlord has default_llm_model
-        self.llm = overlord.default_llm_model if hasattr(overlord, "default_llm_model") else None
+        # Get LLM reference - use extraction_model which has proper fallback to text model
+        self.llm = overlord.extraction_model
 
     async def needs_clarification(
         self, message: str, request_id: str, session_id: str = None, context: Optional[Dict] = None
@@ -289,39 +289,50 @@ class UnifiedClarificationSystem:
             if hasattr(self.overlord.formation, "agents"):
                 capabilities.extend([a.name for a in self.overlord.formation.agents])
 
+        response_style = {
+            "conversational": "natural, friendly, like a helpful colleague",
+            "technical": "precise, specific, professional",
+            "brief": "very concise, minimal words"
+        }.get(self.style, "natural, friendly, like a helpful colleague")
+
+        conversation = message.split("=== CONVERSATION CONTEXT (Most Recent First) ===")[-1].strip()
+        conversation = conversation.replace("User: User: ", "User: ")
+
         prompt = f"""
-        Analyze this request to determine if clarification is needed.
+Analyze this transcript to determine if clarification is needed regarding the user most recent request.
 
-        User request: {message}
-        Available context: {json.dumps(context) if context else "{}"}
-        System capabilities: {capabilities}
+=== CONVERSATION TRANSCRIPT ===
+{conversation}
 
-        Determine:
-        1. Is the request clear enough to attempt execution?
-        2. What mode of interaction does the user want?
-        3. If clarification needed, what should we ask?
+=== AVAILABLE CONTEXT ===
+{json.dumps(context) if context else "{}"}
 
-        IMPORTANT RULES:
-        - If the request is clear enough to make an attempt, don't clarify
-        - If user provides code or specific error, that's usually enough
-        - For vague requests like "help me" or "fix this", DO clarify
-        - If we lack the tools/capabilities, don't clarify (fail fast)
-        - Detect if user wants brainstorming/planning vs direct action
+=== SYSTEM CAPABILITIES ===
+{", ".join(capabilities) if capabilities else "Conversation"}
 
-        Question Style: {self.style}
-        Style Guidelines:
-        - conversational: Natural, friendly, like a helpful colleague
-        - technical: Precise, specific, professional
-        - brief: Very concise, minimal words
+=== INSTRUCTIONS ===
+Be {response_style}.
 
-        Return JSON:
-        {{
-            "needs_clarification": boolean,
-            "reason": "ambiguous|missing_info|no_capability|clear",
-            "mode": "direct|brainstorm|planning",
-            "question": "clarification question in the specified style or null",
-            "confidence": 0.0 to 1.0
-        }}
+Determine:
+1. Is the request clear enough to attempt execution?
+2. What mode of interaction does the user want?
+3. If clarification needed, what should we ask?
+
+IMPORTANT RULES:
+- If the request is clear enough to make an attempt, don't clarify
+- If user provides code or specific error, that's usually enough
+- For vague requests like "help me" or "fix this", DO clarify
+- If we lack the tools/capabilities, don't clarify (fail fast)
+- Detect if user wants brainstorming/planning vs direct action
+
+Return JSON:
+{{
+    "needs_clarification": boolean,
+    "reason": "ambiguous|missing_info|no_capability|clear",
+    "mode": "direct|brainstorm|planning",
+    "question": "clarification question in the specified style or null",
+    "confidence": 0.0 to 1.0
+}}
         """
 
         if not self.llm:
