@@ -1282,7 +1282,7 @@ class Overlord:
                 # Create actual LLM instance for clarification
                 try:
                     # Legacy clarification components have been replaced by UnifiedClarificationSystem
-                    # The unified system gets its LLM reference directly from overlord.default_llm_model
+                    # The unified system gets its LLM reference directly from overlord
                     # No separate clarification_llm instance needed
                     observability.observe(
                         event_type="service.started",
@@ -2441,6 +2441,10 @@ Make it conversational and friendly while keeping accuracy."""
                 # Update the extractor's model if it exists
                 if hasattr(self, "extractor") and self.extractor and self.auto_extract_user_info:
                     self.extractor.extraction_model = self.extraction_model
+
+                # Update the clarification system's LLM if it exists
+                if hasattr(self, "clarification") and self.clarification:
+                    self.clarification.llm = self.extraction_model
 
                 # Also set default_model for fallback
                 self.default_model = self.extraction_model
