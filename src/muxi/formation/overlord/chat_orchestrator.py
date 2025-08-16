@@ -103,8 +103,30 @@ class ChatOrchestrator:
 
         user_id = str(user_id).lower().strip() if user_id is not None else None
 
-        # Generate unique request ID for all requests (for tracking and logging)
-        request_id = f"req_{generate_nanoid()}"
+        # Check if there's a pending clarification for this session
+        # If so, reuse its request_id for multi-turn clarification continuity
+        if session_id and session_id in self.overlord._pending_clarifications:
+            # Reuse the existing request_id for multi-turn clarification
+            stored_request_id = self.overlord._pending_clarifications[session_id].get("request_id")
+            if stored_request_id:
+                request_id = stored_request_id
+                observability.observe(
+                    event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "session_id": session_id,
+                        "reused_request_id": request_id,
+                        "clarification_type": self.overlord._pending_clarifications[session_id].get("type")
+                    },
+                    description=f"Reusing request_id {request_id} for clarification response"
+                )
+            else:
+                # Fallback if somehow request_id is missing
+                request_id = f"req_{generate_nanoid()}"
+        else:
+            # Generate new request ID for new conversations
+            request_id = f"req_{generate_nanoid()}"
+        
         timestamp = time.time()
 
         # Start request tracking with observability
