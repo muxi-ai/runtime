@@ -2,6 +2,7 @@
 
 import time
 import json
+import re
 from typing import Dict, Optional, Any
 from dataclasses import dataclass
 
@@ -37,7 +38,19 @@ class UnifiedClarificationSystem:
         if self.clarification_config:
             # Get values from config - max_questions may be None if not explicitly set
             self.max_questions = getattr(self.clarification_config, "max_questions", None)
-            self.max_rounds = getattr(self.clarification_config, "max_rounds", None)
+
+            # Parse max_rounds - can be dict or single value
+            max_rounds_raw = getattr(self.clarification_config, "max_rounds", None)
+            if max_rounds_raw:
+                if isinstance(max_rounds_raw, dict):
+                    # Already a dict with mode-specific limits
+                    self.max_rounds = max_rounds_raw
+                else:
+                    # Single value - convert to dict with "other" key
+                    self.max_rounds = {"other": max_rounds_raw}
+            else:
+                self.max_rounds = None
+
             self.timeout = getattr(self.clarification_config, "timeout_seconds", 300)
             style_enum = getattr(self.clarification_config, "style", None)
             self.style = style_enum.value if style_enum else "conversational"
@@ -228,8 +241,10 @@ class UnifiedClarificationSystem:
 
         state["request_id"] = request_id
 
+        # Use consistent prefixed key
+        key = f"clarification:{request_id}"
         await self.buffer_memory.kv_set(
-            key=request_id,
+            key=key,
             value=state,
             ttl=self.timeout,
             namespace=self.namespace
@@ -245,7 +260,9 @@ class UnifiedClarificationSystem:
                 return self._fallback_storage.get(request_id)
             return None
 
-        return await self.buffer_memory.kv_get(request_id, namespace=self.namespace)
+        # Use consistent prefixed key
+        key = f"clarification:{request_id}"
+        return await self.buffer_memory.kv_get(key, namespace=self.namespace)
 
     async def _cleanup_state(self, request_id: str):
         """Remove state from buffer memory"""
@@ -256,7 +273,9 @@ class UnifiedClarificationSystem:
             self.active_requests.discard(request_id)
             return
 
-        await self.buffer_memory.kv_delete(request_id, namespace=self.namespace)
+        # Use consistent prefixed key
+        key = f"clarification:{request_id}"
+        await self.buffer_memory.kv_delete(key, namespace=self.namespace)
         self.active_requests.discard(request_id)
 
     async def _create_state(self, request_id: str, message: str, mode: str, session_id: str = None):
@@ -295,8 +314,18 @@ class UnifiedClarificationSystem:
             "brief": "very concise, minimal words"
         }.get(self.style, "natural, friendly, like a helpful colleague")
 
-        conversation = message.split("=== CONVERSATION CONTEXT (Most Recent First) ===")[-1].strip()
-        conversation = conversation.replace("User: User: ", "User: ")
+        print("---- line 298 -------------------")
+        print(message)
+        print("--------------------------------")
+        # Extract conversation context if it exists, otherwise use the full message
+        if "=== CONVERSATION CONTEXT (Most Recent First) ===" in message:
+            conversation = message.split("=== CONVERSATION CONTEXT (Most Recent First) ===")[-1].strip()
+        elif "=== CURRENT REQUEST ===" in message:
+            # Use the entire enhanced message if no conversation context
+            conversation = message
+        else:
+            # Fallback to raw message
+            conversation = f"User: {message}"
 
         prompt = f"""
 Analyze this transcript to determine if clarification is needed regarding the user most recent request.
@@ -335,7 +364,10 @@ Return JSON:
 }}
         """
 
+        print("--------------------------------")
+        print(prompt)
         if not self.llm:
+            print("No LLM available")
             # Fallback when no LLM available
             return {
                 "needs_clarification": False,
@@ -344,10 +376,14 @@ Return JSON:
                 "question": None,
                 "confidence": 0.0,
             }
+        print("--------------------------------")
 
         messages = [{"role": "user", "content": prompt}]
         response = await self.llm.chat(messages, temperature=0, max_tokens=200)
         content = response.content if hasattr(response, "content") else str(response)
+
+        print(content)
+        print("--------------------------------")
 
         # Parse JSON
         try:
@@ -525,3 +561,162 @@ Return JSON:
         """Check if clarification has timed out."""
         elapsed = time.time() - state["started_at"]
         return elapsed > self.timeout
+
+    # Token detection utilities (migrated from ClarificationHandler)
+
+    async def looks_like_credential_token(self, message: str) -> bool:
+        """
+        Check if a message appears to contain a credential token.
+
+        Args:
+            message: The message to check
+
+        Returns:
+            True if the message likely contains a token
+        """
+        if not message or not isinstance(message, str):
+            return False
+
+        # Check for common token patterns
+        token_patterns = [
+            r"ghp_[A-Za-z0-9]{36}",  # GitHub personal access token
+            r"github_pat_[A-Za-z0-9_]+",  # GitHub PAT (new format)
+            r"ghs_[A-Za-z0-9]{36}",  # GitHub server token
+            r"glpat-[A-Za-z0-9\-_]+",  # GitLab token
+            r"sk-[A-Za-z0-9]+",  # OpenAI and similar
+            r"token:[A-Za-z0-9]+",  # Generic token format
+            r"api[_-]?key[:\s]+[A-Za-z0-9]+",  # API key patterns
+        ]
+
+        for pattern in token_patterns:
+            if re.search(pattern, message, re.IGNORECASE):
+                return True
+
+        # Check if the entire message is a token-like string
+        stripped = message.strip().strip('"').strip("'")
+        if self._is_token_string(stripped):
+            return True
+
+        # Additional heuristic for potential tokens not caught by patterns
+        # Only flag as credential if it meets multiple criteria to reduce false positives
+        if " " not in stripped and 20 <= len(stripped) <= 200:
+            # Skip common ID patterns that are unlikely to be credentials
+            lower_stripped = stripped.lower()
+
+            # Common non-credential patterns to exclude
+            if any(pattern in lower_stripped for pattern in [
+                'product_id', 'user_id', 'session_id', 'request_id', 'order_id',
+                'transaction_id', 'customer_id', 'account_id', 'invoice_id',
+                'http://', 'https://', '.com', '.org', '.net'  # URLs
+            ]):
+                return False
+
+            # Require both letters and digits
+            has_letter = any(c.isalpha() for c in stripped)
+            has_digit = any(c.isdigit() for c in stripped)
+
+            if has_letter and has_digit:
+                # Check for case transitions (common in tokens like "aB3cD4eF")
+                has_case_transition = False
+                for i in range(len(stripped) - 1):
+                    if stripped[i].isalpha() and stripped[i + 1].isalpha():
+                        if stripped[i].islower() != stripped[i + 1].islower():
+                            has_case_transition = True
+                            break
+
+                # Check for known credential-like prefixes (case-insensitive)
+                has_credential_prefix = any(
+                    lower_stripped.startswith(prefix) for prefix in [
+                        'key_', 'token_', 'api_', 'apikey', 'secret_', 'password',
+                        'bearer', 'access_token', 'private_', 'auth_'
+                    ]
+                ) or any(
+                    # Exact match for short prefixes to avoid false positives
+                    lower_stripped == prefix or lower_stripped.startswith(prefix + '-')
+                    for prefix in ['key', 'token', 'api', 'secret', 'auth']
+                )
+
+                # Check for high entropy (mix of upper, lower, digits, special chars)
+                has_upper = any(c.isupper() for c in stripped)
+                has_lower = any(c.islower() for c in stripped)
+                has_special = any(c in '-_+/=' for c in stripped)
+                high_entropy = sum([has_upper, has_lower, has_digit, has_special]) >= 3
+
+                # Return True only if it strongly resembles a credential
+                # Require at least TWO indicators to reduce false positives
+                indicators = sum([has_case_transition, has_credential_prefix, high_entropy])
+                if indicators >= 2 or (has_credential_prefix and len(stripped) >= 32):
+                    return True
+
+        return False
+
+    async def extract_token_from_text(self, message: str) -> Optional[str]:
+        """
+        Extract a credential token from a message using regex patterns.
+
+        Args:
+            message: The message that may contain a token
+
+        Returns:
+            The extracted token if found, None otherwise
+        """
+        if not message or not isinstance(message, str):
+            return None
+
+        # Try regex patterns for known token formats
+        token_patterns = [
+            (r"(ghp_[A-Za-z0-9]{36})", "github"),
+            (r"(github_pat_[A-Za-z0-9_]+)", "github"),
+            (r"(ghs_[A-Za-z0-9]{36})", "github"),
+            (r"(glpat-[A-Za-z0-9\-_]+)", "gitlab"),
+            (r"(sk-[A-Za-z0-9]+)", "openai"),
+        ]
+
+        for pattern, service in token_patterns:
+            match = re.search(pattern, message)
+            if match:
+                return match.group(1)
+
+        # If no regex match, check if entire message is a token
+        stripped = message.strip().strip('"').strip("'")
+        if self._is_token_string(stripped):
+            return stripped
+
+        return None
+
+    def _is_token_string(self, token: str) -> bool:
+        """Check if a string is itself a token (no surrounding text)."""
+        # Check length - tokens are usually at least 20 characters
+        if len(token) < 20:
+            return False
+
+        # Check for common token patterns
+        # GitHub personal access tokens
+        if token.startswith(("ghp_", "github_pat_", "ghs_")):
+            return True
+
+        # GitLab tokens
+        if token.startswith(("glpat-", "gldt-", "glrt-")):
+            return True
+
+        # Generic API key patterns
+        if token.startswith(("sk-", "pk-", "api-", "key-")):
+            return True
+
+        # Check if it looks like a base64 or hex encoded string
+        # Base64 pattern
+        if re.match(r"^[A-Za-z0-9+/]{20,}={0,2}$", token):
+            return True
+        # Hex pattern
+        if re.match(r"^[A-Fa-f0-9]{32,}$", token):
+            return True
+
+        # Check if it has no spaces and reasonable length (likely a token)
+        if " " not in token and 20 <= len(token) <= 200:
+            # Additional heuristic: has mix of letters and numbers
+            has_letter = any(c.isalpha() for c in token)
+            has_digit = any(c.isdigit() for c in token)
+            if has_letter and has_digit:
+                return True
+
+        return False
