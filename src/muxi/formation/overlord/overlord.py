@@ -3586,13 +3586,10 @@ Make it conversational and friendly while keeping accuracy."""
             user_id: Optional user ID for multi-user support.
                 Required for user context enhancement in multi-user mode.
         """
-        # Normalize user_id - lowercase and strip whitespace
-        if user_id is not None:
-            user_id = str(user_id).lower().strip()
 
         # Override user_id to "0" for single-user mode (SQLite)
         # This ensures consistent user isolation in single-user deployments
-        if not self.is_multi_user:
+        if user_id is None or not self.is_multi_user:
             user_id = "0"
 
         # Always add to buffer memory regardless of user context
