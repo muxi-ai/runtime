@@ -225,6 +225,38 @@ async def chat(self, message: str, user_id: str):
 - **Vector Memory**: FAISSx integration for semantic search
 - **Multi-user**: Isolated contexts via Memobase partitioning
 
+### ID Hierarchy and Roles
+
+The system uses a three-level ID hierarchy for request tracking and user isolation:
+
+```
+user_id (user isolation)
+  └── session_id (chat grouping)
+      └── request_id (single interaction with all clarifications)
+```
+
+**request_id**:
+- Tracks ONE complete interaction from initial request to final response
+- Includes all clarification turns within that interaction
+- Used as key for UnifiedClarificationSystem state: `clarification:{request_id}`
+- Must remain constant throughout entire clarification flow
+- Example: "Build it" → clarify → "a website" → clarify → "with React" = ONE request_id
+
+**session_id**:
+- Groups multiple requests into a chat conversation
+- Used for buffer memory filtering: `{"user_id": user_id, "session_id": session_id}`
+- Provides conversation context across multiple requests
+- Developer-supplied identifier for chat continuity
+- Enables request_id reuse for multi-turn clarification
+
+**user_id**:
+- Provides user isolation in multi-user mode
+- Top-level filter for all memory operations
+- Normalized to lowercase, "0" for single-user mode
+- Ensures users only see their own data
+
+This hierarchy ensures proper isolation, context preservation, and multi-turn clarification support.
+
 ## Testing Philosophy
 
 **No mocks allowed** - Test against real services only:

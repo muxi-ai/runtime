@@ -25,12 +25,35 @@ async def test_ambiguous_request():
         print("Starting overlord...")
         overlord = await formation.start_overlord()
 
+        # Clear entire buffer memory at start
+        print("\n=== CLEARING ENTIRE BUFFER MEMORY ===")
+        if overlord.buffer_memory_manager:
+            # Clear the entire buffer to start fresh
+            overlord.buffer_memory_manager.buffer = []
+            print("Buffer memory cleared")
+
         # Create unique test context to avoid buffer memory contamination
         ctx = TestContext("test_8a1")
         print(f"Using unique IDs - User: {ctx.user_id}, Session: {ctx.session_id}")
 
         # Test 1: Very ambiguous request
         print("\n1. Testing with: 'Build it'")
+
+        # Debug: Print entire buffer before request
+        print("\n=== BUFFER BEFORE REQUEST 1 ===")
+        if overlord.buffer_memory_manager:
+            all_messages = await overlord.buffer_memory_manager.search_buffer_memory(
+                query="", k=100, filter_metadata={}
+            )
+            print(f"Total messages in buffer: {len(all_messages)}")
+            for i, msg in enumerate(all_messages):
+                role = msg.get("metadata", {}).get("role", "unknown")
+                content = msg.get("text", "")[:50]
+                user = msg.get("metadata", {}).get("user_id", "unknown")
+                session = msg.get("metadata", {}).get("session_id", "unknown")
+                print(f"  [{i}] Role: {role}, User: {user[:20]}, Session: {session[:20]}, Content: {content}...")
+        print("=== END BUFFER ===\n")
+
         response = await overlord.chat(
             message="Build it", user_id=ctx.user_id, session_id=ctx.session_id, stream=False
         )
@@ -56,16 +79,33 @@ async def test_ambiguous_request():
         print("   ✅ Clarification triggered correctly")
 
         # Follow-up with more specific clarification (same session to maintain context)
-        print(
-            "\n2. Providing specific clarification: 'A Python web scraper to extract article titles from news.ycombinator.com'"  # noqa: E501
-        )
+        # print(
+        #     "\n2. Providing specific clarification: 'A Python web scraper to extract article titles from news.ycombinator.com'"  # noqa: E501
+        # )
+
+        # Debug: Print entire buffer before request 2
+        print("\n=== BUFFER BEFORE REQUEST 2 ===")
+        if overlord.buffer_memory_manager:
+            all_messages = await overlord.buffer_memory_manager.search_buffer_memory(
+                query="", k=100, filter_metadata={}
+            )
+            print(f"Total messages in buffer: {len(all_messages)}")
+            for i, msg in enumerate(all_messages):
+                role = msg.get("metadata", {}).get("role", "unknown")
+                content = msg.get("text", "")[:50]
+                user = msg.get("metadata", {}).get("user_id", "unknown")
+                session = msg.get("metadata", {}).get("session_id", "unknown")
+                print(f"  [{i}] Role: {role}, User: {user[:20]}, Session: {session[:20]}, Content: {content}...")
+        print("=== END BUFFER ===\n")
+
         # Add timeout to prevent hanging if agents take too long
         import asyncio
 
         try:
             response2 = await asyncio.wait_for(
                 overlord.chat(
-                    message="A Python web scraper to extract article titles from news.ycombinator.com",
+                    # message="A Python web scraper to extract article titles from news.ycombinator.com",
+                    message="I want to build a",
                     user_id=ctx.user_id,
                     session_id=ctx.session_id,
                     stream=False,
@@ -117,6 +157,22 @@ async def test_ambiguous_request():
         # Test 2: Another ambiguous request (new session to test fresh context)
         ctx.new_session()  # Generate new session ID
         print(f"\n3. Testing with: 'Fix the bug' (New session: {ctx.session_id})")
+
+        # Debug: Print entire buffer before request 3
+        print("\n=== BUFFER BEFORE REQUEST 3 ===")
+        if overlord.buffer_memory_manager:
+            all_messages = await overlord.buffer_memory_manager.search_buffer_memory(
+                query="", k=100, filter_metadata={}
+            )
+            print(f"Total messages in buffer: {len(all_messages)}")
+            for i, msg in enumerate(all_messages):
+                role = msg.get("metadata", {}).get("role", "unknown")
+                content = msg.get("text", "")[:50]
+                user = msg.get("metadata", {}).get("user_id", "unknown")
+                session = msg.get("metadata", {}).get("session_id", "unknown")
+                print(f"  [{i}] Role: {role}, User: {user[:20]}, Session: {session[:20]}, Content: {content}...")
+        print("=== END BUFFER ===\n")
+
         response3 = await overlord.chat(
             message="Fix the bug", user_id=ctx.user_id, session_id=ctx.session_id, stream=False
         )
@@ -158,6 +214,21 @@ async def test_ambiguous_request():
         print(f"System: {response3_content}")
 
         print("\n" + "=" * 40)
+
+        # Debug: Print entire buffer before shutdown
+        print("\n=== BUFFER BEFORE SHUTDOWN ===")
+        if overlord.buffer_memory_manager:
+            all_messages = await overlord.buffer_memory_manager.search_buffer_memory(
+                query="", k=100, filter_metadata={}
+            )
+            print(f"Total messages in buffer: {len(all_messages)}")
+            for i, msg in enumerate(all_messages):
+                role = msg.get("metadata", {}).get("role", "unknown")
+                content = msg.get("text", "")[:50]
+                user = msg.get("metadata", {}).get("user_id", "unknown")
+                session = msg.get("metadata", {}).get("session_id", "unknown")
+                print(f"  [{i}] Role: {role}, User: {user[:20]}, Session: {session[:20]}, Content: {content}...")
+        print("=== END BUFFER ===\n")
 
         # Properly shut down to prevent timeout
         await formation.stop_overlord()
@@ -212,7 +283,7 @@ async def test_ambiguous_request():
         # Try to shut down even on failure
         if "formation" in locals():
             try:
-                await formation.stop_overlord()
+                await formation.kill_overlord()
                 formation.shutdown()
             except Exception:
                 pass

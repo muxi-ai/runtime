@@ -8,17 +8,19 @@
 
 | Test ID | Test Plan Requirement | Implementation File | Status |
 |---------|----------------------|-------------------|---------|
-| 8A1 | Ambiguous Request | `test_8a1_ambiguous_request.py` | ✅ |
-| 8A2 | Multi-agent Clarification | `test_8a2_multi_agent_clarification.py` | ✅ |
-| 8A3 | Credential Selection | (Moved to Area 4 - already tested) | ✅ |
+| 8A1 | Ambiguous Request | `test_8a1_ambiguous_request.py` | ✅ Passing |
+| 8A2 | Multi-agent Clarification | `test_8a2_multi_agent_clarification.py` | ✅ Passing |
+| 8A3 | Credential Selection | `test_8a3_credential_clarification.py` | ❌ Failing |
 
 #### Test Group 8B: Information Flow
 
 | Test ID | Test Plan Requirement | Implementation File | Status |
 |---------|----------------------|-------------------|---------|
-| 8B1 | Context Propagation | `test_8b1_context_propagation.py` | ✅ |
-| 8B2 | Information Extraction | `test_8b2_information_extraction.py` | ✅ |
-| 8B3 | Multi-turn Context | `test_8b3_multi_turn_context.py` | ✅ |
+| 8B-baseline | Baseline Behavior | `test_8b_baseline.py` | ✅ Passing |
+| 8B-ecommerce | Context Acknowledgment | `test_8b_ecommerce_check.py` | ✅ Passing |
+| 8B1 | Context Propagation | `test_8b1_context_propagation.py` | ✅ Passing |
+| 8B2 | Information Extraction | `test_8b2_information_extraction.py` | ⚠️ Timeout |
+| 8B3 | Multi-turn Context | `test_8b3_multi_turn_context.py` | ⚠️ Partial |
 
 ### Part 2: Enhanced Clarification
 
@@ -26,9 +28,9 @@
 
 | Test ID | Test Plan Requirement | Implementation File | Status |
 |---------|----------------------|-------------------|---------|
-| 8C1 | Credential Rejection Flow | `test_8c1_credential_rejection_flow.py` | ✅ |
-| 8C2 | Multi-step Clarification | `test_8c2_multi_step_clarification.py` | ✅ |
-| 8C3 | Complex Parameter Collection | `test_8c3_complex_parameter_collection.py` | ✅ |
+| 8C1 | Credential Rejection Flow | `test_8c1_credential_rejection_flow.py` | - |
+| 8C2 | Multi-step Clarification | `test_8c2_multi_step_clarification.py` | - |
+| 8C3 | Complex Parameter Collection | `test_8c3_complex_parameter_collection.py` | - |
 
 #### Test Group 8D: Clarification Stack Management
 
@@ -41,27 +43,27 @@
 ## Test Coverage Summary
 
 ### Single Clarification Features (8A)
-- ✅ Ambiguous request detection using LLM
-- ✅ Clarification question generation
-- ✅ Single-turn clarification flow
-- ✅ Response after clarification
-- ✅ Multi-agent clarification scenarios
+- Ambiguous request detection using LLM
+- Clarification question generation
+- Single-turn clarification flow
+- Response after clarification
+- Multi-agent clarification scenarios
 
 ### Information Flow Features (8B)
-- ✅ Context propagation across turns
-- ✅ User context isolation
-- ✅ Information extraction from messages
-- ✅ Constraint tracking across conversation
-- ✅ Multi-turn conversation management
-- ✅ Topic switching with context retention
+- Context propagation across turns
+- User context isolation
+- Information extraction from messages
+- Constraint tracking across conversation
+- Multi-turn conversation management
+- Topic switching with context retention
 
 ### Multiple Clarification Features (8C)
-- ✅ Credential rejection and re-selection
-- ✅ Nested clarification sequences
-- ✅ Branching clarification paths
-- ✅ Multi-parameter collection
-- ✅ Parameter validation and correction
-- ✅ Complex workflow clarification
+- Credential rejection and re-selection
+- Nested clarification sequences
+- Branching clarification paths
+- Multi-parameter collection
+- Parameter validation and correction
+- Complex workflow clarification
 
 ### Clarification Stack Management (8D)
 - 🔲 3-level deep clarification handling
@@ -104,6 +106,8 @@ python tests/e2e/8_clarification/test_8a2_multi_agent_clarification.py
 python tests/e2e/8_clarification/test_8b1_context_propagation.py
 python tests/e2e/8_clarification/test_8b2_information_extraction.py
 python tests/e2e/8_clarification/test_8b3_multi_turn_context.py
+python tests/e2e/8_clarification/test_8b_baseline.py
+python tests/e2e/8_clarification/test_8b_ecommerce_check.py
 
 # Group 8C - Multiple Sequences
 python tests/e2e/8_clarification/test_8c1_credential_rejection_flow.py
@@ -113,13 +117,13 @@ python tests/e2e/8_clarification/test_8c3_complex_parameter_collection.py
 
 ## Success Metrics
 
-✅ **75% Test Coverage**: Test groups 8A, 8B, 8C fully implemented (9/12 tests)
+- **75% Test Coverage**: Test groups 8A, 8B, 8C fully implemented (9/12 tests)
 🔲 **25% Remaining**: Test group 8D (Stack Management) to be implemented (3/12 tests)
-✅ **Feature Validation**: Core clarification features validated
-✅ **Production Ready**: Base clarification system handles real-world scenarios
-✅ **User Isolation**: Multi-tenant support with proper context isolation
+- **Feature Validation**: Core clarification features validated
+- **Production Ready**: Base clarification system handles real-world scenarios
+- **User Isolation**: Multi-tenant support with proper context isolation
 
 ### Implementation Status
-- **Completed**: 9 tests (8A1, 8A2, 8B1, 8B2, 8B3, 8C1, 8C2, 8C3 + 8A3 moved to Area 4)
+- **Completed**: 11 tests (8A1, 8A2, 8B1, 8B2, 8B3, 8B-baseline, 8B-ecommerce, 8C1, 8C2, 8C3 + 8A3 moved to Area 4)
 - **TODO**: 3 tests (8D1, 8D2, 8D3)
-- **Total Coverage**: 9/12 tests = 75%
+- **Total Coverage**: 11/14 tests = 78%
