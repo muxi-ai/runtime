@@ -126,17 +126,6 @@ class ToolCall:
 
 
 @dataclass
-class ToolCallResult:
-    """Result of a tool call execution"""
-
-    call_id: str
-    success: bool
-    result: Any = None
-    error: Optional[str] = None
-    execution_time: Optional[float] = None
-
-
-@dataclass
 class InformationAnalysis:
     """Result of analyzing information requirements"""
 
@@ -168,26 +157,6 @@ class ReasoningInformationAnalysis(InformationAnalysis):
     context_gaps: List[str] = field(default_factory=list)
     user_background_needed: List[str] = field(default_factory=list)
     complexity_level: str = "moderate"  # "simple", "moderate", "complex"
-
-
-@dataclass
-class ClarificationContext:
-    """Context information for clarification operations"""
-
-    user_context: Optional[Dict[str, Any]] = None
-    conversation_history: Optional[List[str]] = None
-    session_data: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class ContextAnalysis:
-    """Analysis of reasoning context needs"""
-
-    needs_more_info: bool
-    missing_context: List[str]
-    intent: str
-    confidence: float
-    suggested_questions: List[str]
 
 
 @dataclass
@@ -236,16 +205,6 @@ class ClarificationResponse:
     request_type: str = "credential_required"
     answers: List[Dict[str, Any]] = field(default_factory=list)
     raw_response: Optional[str] = None
-
-
-@dataclass
-class ParameterMapping:
-    """Mapping between user context keys and parameter names"""
-
-    parameter_name: str
-    context_keys: List[str]
-    transformation_function: Optional[str] = None
-    confidence_threshold: float = 0.7
 
 
 @dataclass

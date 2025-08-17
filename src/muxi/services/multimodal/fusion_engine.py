@@ -11,7 +11,6 @@ import time
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from dataclasses import dataclass, field
 from enum import Enum
-from ...datatypes.workflow import Workflow, SubTask
 import re
 
 if TYPE_CHECKING:
@@ -1144,98 +1143,3 @@ Create a comprehensive fusion analysis as JSON:
             processing_mode=ProcessingMode.SEQUENTIAL,
             fusion_quality_score=0.5,
         )
-
-
-class MultiModalWorkflowIntegrator:
-    """
-    Integrates multi-modal processing into workflow execution.
-
-    Enhances workflows with multi-modal content handling and intelligent
-    task routing based on content modalities.
-    """
-
-    def __init__(self, fusion_engine: MultiModalFusionEngine):
-        self.fusion_engine = fusion_engine
-        self.modality_task_mapping: Dict[ModalityType, List[str]] = {
-            ModalityType.TEXT: ["text_analysis", "content_generation", "summarization"],
-            ModalityType.IMAGE: ["image_analysis", "visual_description", "object_detection"],
-            ModalityType.AUDIO: ["transcription", "audio_analysis", "speech_processing"],
-        }
-
-    async def enhance_workflow_with_multimodal(
-        self, workflow: Workflow, multimodal_content: List[MultiModalContent]
-    ) -> Workflow:
-        """Enhance workflow with multi-modal content processing"""
-
-        try:
-            # Process multi-modal content
-            processing_result = await self.fusion_engine.process_multimodal_content(
-                multimodal_content
-            )
-
-            # Add multi-modal context to workflow
-            workflow.context.update(
-                {
-                    "multimodal_processing": processing_result.unified_representation,
-                    "dominant_modality": (
-                        processing_result.dominant_modality.value
-                        if processing_result.dominant_modality
-                        else None
-                    ),
-                    "modality_results": {
-                        modality.value: result
-                        for modality, result in processing_result.modality_results.items()
-                    },
-                }
-            )
-
-            # Enhance tasks with modality-specific information
-            for task_id, task in workflow.tasks.items():
-                await self._enhance_task_with_modality_info(task, processing_result)
-
-            #  Multimodal info - TODO: add observability
-            return workflow
-
-        except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
-            return workflow
-
-    async def _enhance_task_with_modality_info(
-        self, task: SubTask, processing_result: MultiModalProcessingResult
-    ) -> None:
-        """Enhance individual task with relevant modality information"""
-
-        # Add relevant modality results to task context
-        relevant_modalities = self._find_relevant_modalities_for_task(task)
-
-        for modality in relevant_modalities:
-            if modality in processing_result.modality_results:
-                modality_analysis = processing_result.modality_results[modality]
-                task.context[f"{modality.value}_analysis"] = modality_analysis
-
-        # Add cross-modal attention if relevant
-        task.context["cross_modal_attention"] = [
-            {
-                "source": att.source_modality.value,
-                "target": att.target_modality.value,
-                "weight": att.attention_weight,
-            }
-            for att in processing_result.cross_modal_attention
-        ]
-
-    def _find_relevant_modalities_for_task(self, task: SubTask) -> List[ModalityType]:
-        """Find modalities relevant to a specific task"""
-
-        relevant_modalities = []
-
-        # Check task capabilities against modality mappings
-        for modality, capabilities in self.modality_task_mapping.items():
-            if any(cap in task.required_capabilities for cap in capabilities):
-                relevant_modalities.append(modality)
-
-        # If no specific mapping, include all available modalities
-        if not relevant_modalities:
-            relevant_modalities = list(ModalityType)
-
-        return relevant_modalities
