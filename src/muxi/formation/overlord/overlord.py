@@ -94,7 +94,8 @@ import os
 from ..agents import Agent
 from ..background.request_tracker import RequestStatus
 from .clarification import UnifiedClarificationSystem
-from .clarification_handler import ClarificationHandler
+
+# ClarificationHandler removed - using UnifiedClarificationSystem
 from ...services import observability
 from ...datatypes.response import MuxiResponse
 from ...datatypes.clarification import ClarificationRequest, ClarificationResponse, RequestType
@@ -722,10 +723,6 @@ class Overlord:
             data={"service": "clarification", "components": ["unified_system"]},
             description="Clarification system initialized with unified components",
         )
-
-        # Initialize the ClarificationHandler with delegation pattern
-        self.clarification_handler = ClarificationHandler(self)
-
         # ===================================================================
         # SERVICE REFERENCES - References to pre-configured services
         # ===================================================================
@@ -1308,21 +1305,6 @@ class Overlord:
             description="Clarification system updated with actual services",
         )
 
-        # Start clarification cleanup task
-        if not self._clarification_cleanup_task or self._clarification_cleanup_task.done():
-            self._clarification_cleanup_task = self._create_tracked_task(
-                self.clarification_handler.cleanup_stale_clarifications(), name="clarification_cleanup"
-            )
-            observability.observe(
-                event_type=observability.SystemEvents.SERVICE_STARTED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "ttl_seconds": self._clarification_ttl_seconds,
-                    "check_interval_seconds": self._clarification_cleanup_interval_seconds,
-                },
-                description="Started clarification cleanup task",
-            )
-
         # Start scheduler service if enabled
         if hasattr(self, "formation_config") and self.formation_config.get("scheduler", {}).get(
             "enabled", False
@@ -1453,7 +1435,7 @@ class Overlord:
                 # Execute workflow with parallel execution disabled
                 result = await self.workflow_executor.execute_workflow(...)
         """
-        if not self.workflow_executor or not hasattr(self.workflow_executor, 'config'):
+        if not self.workflow_executor or not hasattr(self.workflow_executor, "config"):
             # No workflow executor or config, nothing to do
             yield
             return
@@ -1740,7 +1722,9 @@ class Overlord:
                     _ = msg  # remove this after implementing observability
 
             # Append multilingual instruction
-            self._default_persona += "\n\nIMPORTANT: Always reply in the same language as the user's original request."
+            self._default_persona += (
+                "\n\nIMPORTANT: Always reply in the same language as the user's original request."
+            )
 
         except Exception as e:
             # Fallback if there's an error reading the file
@@ -1774,7 +1758,7 @@ class Overlord:
             return False
 
         # For more complex cases, use LLM if available
-        if self._capability_models.get('text'):
+        if self._capability_models.get("text"):
             try:
                 # Quick LLM check with formation's text model
                 prompt = """Is this message requesting action or just providing information/greeting?
@@ -1795,11 +1779,13 @@ Examples of NON_ACTIONABLE messages (information, context, greetings):
 
 Reply with only:
 ACTIONABLE - if the user wants something done or answered
-NON_ACTIONABLE - if it's just information, greeting, or acknowledgment""".format(message)
+NON_ACTIONABLE - if it's just information, greeting, or acknowledgment""".format(
+                    message
+                )
 
                 # Use formation's text model for this quick check
-                text_model_config = self._capability_models.get('text')
-                model_name = text_model_config.get('model')
+                text_model_config = self._capability_models.get("text")
+                model_name = text_model_config.get("model")
                 cache_key = f"actionability_{model_name}"
 
                 if cache_key in self._model_cache:
@@ -1807,10 +1793,10 @@ NON_ACTIONABLE - if it's just information, greeting, or acknowledgment""".format
                 else:
                     llm = await self.create_model(
                         model=model_name,
-                        api_key=text_model_config.get('api_key'),
+                        api_key=text_model_config.get("api_key"),
                         temperature=0.1,  # Very low temperature for consistent classification
                         max_tokens=20,
-                        **text_model_config.get('settings', {})
+                        **text_model_config.get("settings", {}),
                     )
                     self._model_cache[cache_key] = llm
 
@@ -1837,7 +1823,7 @@ NON_ACTIONABLE - if it's just information, greeting, or acknowledgment""".format
             True if message should NOT trigger workflow
         """
         # Use LLM to determine if this is non-actionable
-        if self._capability_models.get('text'):
+        if self._capability_models.get("text"):
             try:
                 prompt = """Determine if this message is non-actionable (greeting, acknowledgment, or pure information).
 
@@ -1852,11 +1838,13 @@ Non-actionable messages include:
 If the message is a greeting, acknowledgment, or pure information with no action needed, respond with: NON_ACTIONABLE
 If the message requests action, asks a question, or needs a response, respond with: ACTIONABLE
 
-Response:""".format(message_lower)
+Response:""".format(
+                    message_lower
+                )
 
                 # Use cached model if available
-                text_model_config = self._capability_models['text']
-                model_name = text_model_config.get('model', 'openai/gpt-4o-mini')
+                text_model_config = self._capability_models["text"]
+                model_name = text_model_config.get("model", "openai/gpt-4o-mini")
                 cache_key = f"workflow_check_{model_name}"
 
                 if cache_key in self._model_cache:
@@ -1864,10 +1852,10 @@ Response:""".format(message_lower)
                 else:
                     llm = await self.create_model(
                         model=model_name,
-                        api_key=text_model_config.get('api_key'),
+                        api_key=text_model_config.get("api_key"),
                         temperature=0.1,
                         max_tokens=20,
-                        **text_model_config.get('settings', {})
+                        **text_model_config.get("settings", {}),
                     )
                     self._model_cache[cache_key] = llm
 
@@ -1894,7 +1882,7 @@ Response:""".format(message_lower)
             True if this is a simple question
         """
         # Use LLM to determine if this is a simple question
-        if self._capability_models.get('text'):
+        if self._capability_models.get("text"):
             try:
                 prompt = """Determine if this is a simple question that can be answered directly.
 
@@ -1915,11 +1903,13 @@ Complex questions that need workflows:
 If this is a simple question that can be answered directly, respond with: SIMPLE
 If this requires complex multi-step work, respond with: COMPLEX
 
-Response:""".format(message_lower)
+Response:""".format(
+                    message_lower
+                )
 
                 # Use cached model if available
-                text_model_config = self._capability_models['text']
-                model_name = text_model_config.get('model', 'openai/gpt-4o-mini')
+                text_model_config = self._capability_models["text"]
+                model_name = text_model_config.get("model", "openai/gpt-4o-mini")
                 cache_key = f"question_check_{model_name}"
 
                 if cache_key in self._model_cache:
@@ -1927,10 +1917,10 @@ Response:""".format(message_lower)
                 else:
                     llm = await self.create_model(
                         model=model_name,
-                        api_key=text_model_config.get('api_key'),
+                        api_key=text_model_config.get("api_key"),
                         temperature=0.1,
                         max_tokens=20,
-                        **text_model_config.get('settings', {})
+                        **text_model_config.get("settings", {}),
                     )
                     self._model_cache[cache_key] = llm
 
@@ -1958,14 +1948,14 @@ Response:""".format(message_lower)
         # CRITICAL CHANGE: Use formation's text model (from formation.llm.models[0].text)
         # NOT the overlord's specialized decomposition model
         # The _capability_models dict contains the formation's LLM models
-        text_model_config = self._capability_models.get('text')
+        text_model_config = self._capability_models.get("text")
         if not text_model_config:
             # Fallback if no text model configured in formation
             return raw_response or "I understand. How can I help you?"
 
         # text_model_config contains the formation's text model from formation.llm.models[0].text
-        model_name = text_model_config.get('model')
-        api_key = text_model_config.get('api_key')
+        model_name = text_model_config.get("model")
+        api_key = text_model_config.get("api_key")
 
         # Get or create LLM instance for persona/conversation
         cache_key = f"persona_{model_name}"
@@ -1973,11 +1963,7 @@ Response:""".format(message_lower)
             llm = self._model_cache[cache_key]
         else:
             # Create LLM using formation's text model (not overlord's specialized model)
-            llm = await self.create_model(
-                model=model_name,
-                api_key=api_key,
-                temperature=0.7
-            )
+            llm = await self.create_model(model=model_name, api_key=api_key, temperature=0.7)
             self._model_cache[cache_key] = llm
 
         try:
@@ -2021,7 +2007,7 @@ Response: "You're welcome! Let me know if you need anything else."
                 messages = [{"role": "user", "content": prompt}]
                 response = await llm.chat(messages, max_tokens=300, temperature=0.7)
 
-                if hasattr(response, 'content'):
+                if hasattr(response, "content"):
                     return response.content
                 elif isinstance(response, str):
                     return response
@@ -2040,7 +2026,7 @@ Make it conversational and friendly while keeping accuracy."""
                 messages = [{"role": "user", "content": prompt}]
                 response = await llm.chat(messages, max_tokens=2000, temperature=0.7)
 
-                if hasattr(response, 'content'):
+                if hasattr(response, "content"):
                     return response.content
                 elif isinstance(response, str):
                     return response
@@ -2318,13 +2304,16 @@ Make it conversational and friendly while keeping accuracy."""
                 if hasattr(self, "request_analyzer"):
                     # Import ComplexityMethod enum for proper type conversion
                     from ..workflow.analyzer import ComplexityMethod
+
                     # Convert string to enum if needed
                     if isinstance(self.workflow_config.complexity_method, str):
                         self.request_analyzer.complexity_method = ComplexityMethod(
                             self.workflow_config.complexity_method
                         )
                     else:
-                        self.request_analyzer.complexity_method = self.workflow_config.complexity_method
+                        self.request_analyzer.complexity_method = (
+                            self.workflow_config.complexity_method
+                        )
                     self.request_analyzer.complexity_threshold = (
                         self.workflow_config.complexity_threshold
                     )
@@ -2915,7 +2904,10 @@ Make it conversational and friendly while keeping accuracy."""
                                 # Remove the agent from registry
                                 self.task_decomposer.agent_registry.pop(agent_id, None)
 
-                        if hasattr(self, "workflow_executor") and self.workflow_executor is not None:
+                        if (
+                            hasattr(self, "workflow_executor")
+                            and self.workflow_executor is not None
+                        ):
                             if hasattr(self.workflow_executor, "agent_registry"):
                                 self.workflow_executor.agent_registry.pop(agent_id, None)
                     except Exception as rollback_error:
@@ -4933,8 +4925,11 @@ Make it conversational and friendly while keeping accuracy."""
                 # TODO: Replace with unified system call when this method is refactored
                 clear_patterns = [
                     len(actual_message) > 20,  # Reasonably detailed
-                    any(word in actual_message.lower() for word in ['show', 'list', 'get', 'create', 'run']),
-                    actual_message.count(' ') > 3  # Multi-word requests
+                    any(
+                        word in actual_message.lower()
+                        for word in ["show", "list", "get", "create", "run"]
+                    ),
+                    actual_message.count(" ") > 3,  # Multi-word requests
                 ]
                 return any(clear_patterns)
 
@@ -4980,33 +4975,20 @@ Make it conversational and friendly while keeping accuracy."""
             description=f"_process_sync_chat ENTRY: agent={agent_name}, session={session_id}",
         )
         # Check if this might be a credential response (e.g., GitHub token)
-        contains_token = await self.clarification_handler.looks_like_credential_token(message) if session_id else False
+        # Check if message contains a credential token using UnifiedClarificationSystem
+        contains_token = (
+            await self.clarification.looks_like_credential_token(message)
+            if (session_id and self.clarification)
+            else False
+        )
 
-        # Check if this might be a clarification response
-        is_clarification_response = False
-        if session_id and session_id in self._pending_clarifications:
-            # If there's a pending clarification, ANY response should be treated as a clarification response
-            # What else could it be? The user is responding to our clarification question.
-            is_clarification_response = True
-            observability.observe(
-                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
-                level=observability.EventLevel.DEBUG,
-                data={
-                    "session_id": session_id,
-                    "clarification_type": self._pending_clarifications[session_id].get("type"),
-                    "is_clarification_response": is_clarification_response,
-                },
-                description=f"Found pending clarification for session {session_id}",
-            )
-
-        if session_id and (contains_token or is_clarification_response):
+        if session_id and contains_token:
             observability.observe(
                 event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
                 level=observability.EventLevel.INFO,
                 data={
                     "session_id": session_id,
                     "contains_token": contains_token,
-                    "is_clarification_response": is_clarification_response,
                     "message_preview": message[:100],
                 },
                 description="Entering clarification handling block",
@@ -5024,7 +5006,12 @@ Make it conversational and friendly while keeping accuracy."""
                             # Store the credential using the correct method
                             # Store as-is: string credentials remain strings, JSON remains JSON
                             # First try to extract token from text
-                            extracted_token = await self.clarification_handler.extract_token_from_text(message)
+                            # Extract token using UnifiedClarificationSystem
+                            extracted_token = (
+                                await self.clarification.extract_token_from_text(message)
+                                if self.clarification
+                                else None
+                            )
                             if extracted_token:
                                 cleaned_message = extracted_token
                             else:
@@ -5259,7 +5246,12 @@ Make it conversational and friendly while keeping accuracy."""
                         )
 
                 elif clarification_info.get("type") in [
-                    "direct", "brainstorm", "planning", "reactive", "proactive", "execution"
+                    "direct",
+                    "brainstorm",
+                    "planning",
+                    "reactive",
+                    "proactive",
+                    "execution",
                 ]:
                     # Handle general clarification response using unified system
                     observability.observe(
@@ -5278,20 +5270,24 @@ Make it conversational and friendly while keeping accuracy."""
                     if self.clarification and clarification_info.get("request_id"):
                         try:
                             response_result = await self.clarification.handle_response(
-                                request_id=clarification_info.get("request_id"),
-                                response=message
+                                request_id=clarification_info.get("request_id"), response=message
                             )
 
                             if response_result.action == "clarify":
                                 # Need more clarification - update pending and return question
-                                self._pending_clarifications[session_id].update({
-                                    "depth": self._pending_clarifications[session_id].get("depth", 0) + 1
-                                })
+                                self._pending_clarifications[session_id].update(
+                                    {
+                                        "depth": self._pending_clarifications[session_id].get(
+                                            "depth", 0
+                                        )
+                                        + 1
+                                    }
+                                )
 
                                 return MuxiResponse(
                                     role="assistant",
                                     content=response_result.question,
-                                    metadata={"clarification": True, "mode": response_result.mode}
+                                    metadata={"clarification": True, "mode": response_result.mode},
                                 )
                             elif response_result.action == "execute":
                                 # Clarification complete or cancelled - clean up and process
@@ -5315,98 +5311,9 @@ Make it conversational and friendly while keeping accuracy."""
                                 description=f"Failed to process clarification response: {e}",
                             )
 
-                    # Fallback if unified system not available
-                        # Clarification complete - process enhanced request
-                        original_message = clarification_info.get("original_message", "")
-                        collected_info = response_result.complete_params or {}
-
-                        # Enrich the original message with collected information
-                        # TODO: Replace clarification_parameter_enricher with unified system
-                        if False and collected_info:  # Legacy enricher disabled
-                            try:
-                                user_context = {}
-                                if hasattr(self, "user_context_manager"):
-                                    user_context = await self.user_context_manager.get_user_context(
-                                        user_id
-                                    )
-
-                                enriched_params, confidence_scores = (
-                                    await self.clarification_parameter_enricher.enrich_reasoning_context(
-                                        intent=original_message,
-                                        provided_context=collected_info,
-                                        user_context=user_context,
-                                    )
-                                )
-                                collected_info.update(enriched_params)
-                            except Exception as e:
-                                observability.observe(
-                                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                                    level=observability.EventLevel.WARNING,
-                                    data={"error": str(e)},
-                                    description=f"Parameter enrichment failed: {e}",
-                                )
-
-                        # Build enhanced message
-                        enhanced_message = self._build_enhanced_message(
-                            original_message, collected_info
-                        )
-
-                        # Clean up
-                        del self._pending_clarifications[session_id]
-
-                        observability.observe(
-                            event_type=observability.ConversationEvents.CLARIFICATION_COMPLETED,
-                            level=observability.EventLevel.INFO,
-                            data={"collected_info": list(collected_info.keys())},
-                            description="Clarification complete, processing enhanced request",
-                        )
-
-                        # Process with enhanced context - skip clarification check
-                        return await self._process_sync_chat(
-                            message=enhanced_message,
-                            agent_name=agent_name,
-                            user_id=user_id,
-                            session_id=session_id,
-                            request_id=request_id,
-                            skip_clarification=True,
-                        )
-
-                    elif response_result and response_result.status == ClarificationResultStatus.CONTINUE:
-                        # Need more clarification
-                        next_question = response_result.next_question or "Could you provide more details?"
-
-                        # Update pending clarification
-                        self._pending_clarifications[session_id]["questions_asked"] = (
-                            response_result.extracted_info.get("questions_asked", [])
-                        )
-
-                        return MuxiResponse(
-                            role="assistant",
-                            content=next_question,
-                            metadata={
-                                "clarification": True,
-                                "questions_remaining": response_result.extracted_info.get("questions_remaining"),
-                            },
-                        )
-                    else:
-                        # Unexpected status - fallback
-                        original_message = clarification_info.get("original_message", "")
-                        # Remove trailing punctuation to avoid double periods
-                        original_message = original_message.rstrip(".,!?;:")
-                        enhanced_message = f"{original_message}. {message}"
-
-                        # Clean up
-                        del self._pending_clarifications[session_id]
-
-                        # Process with enhanced context - skip clarification check
-                        return await self._process_sync_chat(
-                            message=enhanced_message,
-                            agent_name=agent_name,
-                            user_id=user_id,
-                            session_id=session_id,
-                            request_id=request_id,
-                            skip_clarification=True,
-                        )
+                        # Legacy clarification handling removed - all handled by UnifiedClarificationSystem
+                        # The unified system handles all clarification logic internally and returns
+                        # the enhanced request when action="execute"
 
                 elif clarification_info.get("type") == "workflow_approval":
                     # Handle workflow approval response
@@ -5581,27 +5488,9 @@ Make it conversational and friendly while keeping accuracy."""
 
                 # Handle general clarifications (reactive/proactive) with multi-turn support
                 elif clarification_info.get("type") in ["reactive", "proactive", "multi_turn"]:
-                    # Check if we should use the new multi-turn handler
-                    # This handles rejection, multi-turn sequences, etc.
-                    multi_turn_response = await self.clarification_handler.handle_clarification_response_v2(
-                        message=message,
-                        session_id=session_id
-                    )
-
-                    if multi_turn_response:
-                        # Return the clarification response (could be another question, cancellation, etc.)
-                        return multi_turn_response
-                    else:
-                        # None means clarification resolved, continue processing
-                        # Get the combined/resolved message to process
-                        # Check if we have pending clarification data
-                        if session_id in self._pending_clarifications:
-                            clarification_data = self._pending_clarifications[session_id]
-                            # Get the original message if available
-                            if isinstance(clarification_data, dict) and "original_message" in clarification_data:
-                                message = clarification_data["original_message"]
-                            # Message will be processed normally below
-                        # If we get here, clarification was resolved and we continue with normal processing
+                    # Multi-turn clarification is handled entirely by UnifiedClarificationSystem
+                    # When action="execute", the enhanced request is already in clarification_result.request
+                    pass
 
         # ===================================================================
         # CLARIFICATION CHECK - MUST HAPPEN BEFORE ANY AGENT SELECTION
@@ -5617,15 +5506,19 @@ Make it conversational and friendly while keeping accuracy."""
                 data={
                     "clarification_bypassed": True,
                     "is_workflow_task": message and message.startswith("## Task:"),
-                    "reason": "workflow_task" if message and message.startswith("## Task:") else "analyzer_clear"
+                    "reason": (
+                        "workflow_task"
+                        if message and message.startswith("## Task:")
+                        else "analyzer_clear"
+                    ),
                 },
-                description="Clarification bypassed"
+                description="Clarification bypassed",
             )
 
         # Check if clarification is needed using unified system with request_id
         if (
             not skip_clarification
-            and not is_clarification_response
+            # and not is_clarification_response
             and not agent_name
             and self.clarification
             and request_id
@@ -5636,24 +5529,32 @@ Make it conversational and friendly while keeping accuracy."""
                     message=message,
                     request_id=request_id,
                     session_id=session_id,
-                    context={"user_id": user_id}
+                    context={"user_id": user_id},
                 )
 
                 if clarification_result.action == "clarify":
-                    # Store pending clarification state for this session
+                    # Store minimal info - just request_id for reuse
                     if session_id:
                         self._pending_clarifications[session_id] = {
-                            "type": clarification_result.mode or "reactive",
-                            "original_message": message,
-                            "request_id": request_id,
-                            "user_id": user_id
+                            "request_id": request_id,  # Essential for request_id reuse
+                            "type": clarification_result.mode,  # Optional, for observability
                         }
 
                     return MuxiResponse(
                         role="assistant",
                         content=clarification_result.question,
-                        metadata={"clarification": True, "mode": clarification_result.mode}
+                        metadata={"clarification": True, "mode": clarification_result.mode},
                     )
+
+                elif clarification_result.action == "execute":
+                    # Clarification complete - clean up
+                    if session_id in self._pending_clarifications:
+                        del self._pending_clarifications[session_id]
+
+                    # Use the enhanced request from clarification
+                    message = clarification_result.request
+
+                    # Continue with normal processing using enhanced message
             except Exception as e:
                 observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,
@@ -5679,9 +5580,9 @@ Make it conversational and friendly while keeping accuracy."""
                 data={
                     "message_preview": message[:50],
                     "path": "fast_conversational",
-                    "message_type": "non_actionable"
+                    "message_type": "non_actionable",
                 },
-                description="Non-actionable message, using fast conversational path"
+                description="Non-actionable message, using fast conversational path",
             )
 
             # Skip all heavy processing - go straight to persona
@@ -5697,9 +5598,9 @@ Make it conversational and friendly while keeping accuracy."""
                             "session_id": session_id,
                             "role": "assistant",
                             "timestamp": time.time(),
-                            "request_id": request_id
+                            "request_id": request_id,
                         },
-                        agent_id="overlord"
+                        agent_id="overlord",
                     )
                 )
 
@@ -5710,8 +5611,8 @@ Make it conversational and friendly while keeping accuracy."""
                     "handled_by": "overlord_direct",
                     "is_actionable": False,
                     "fast_path": True,
-                    "processing_time_ms": (time.time() - start_time) * 1000
-                }
+                    "processing_time_ms": (time.time() - start_time) * 1000,
+                },
             )
 
         # ===================================================================
@@ -5725,7 +5626,6 @@ Make it conversational and friendly while keeping accuracy."""
                 "session_id": session_id,
                 "agent_name": agent_name,
                 "auto_decomposition": self.auto_decomposition,
-                "is_clarification_response": is_clarification_response,
                 "has_pending_clarifications": (
                     session_id in self._pending_clarifications if session_id else False
                 ),
@@ -5760,10 +5660,7 @@ Make it conversational and friendly while keeping accuracy."""
                 "agent_name": agent_name,
                 "agent_name_is_none": agent_name is None,
                 "auto_decomposition": self.auto_decomposition,
-                "is_clarification_response": is_clarification_response,
-                "should_analyze": agent_name is None
-                and self.auto_decomposition
-                and not is_clarification_response,
+                "should_analyze": agent_name is None and self.auto_decomposition,
                 "session_id": session_id,
                 "has_pending_clarifications": (
                     session_id in self._pending_clarifications if session_id else False
@@ -5772,13 +5669,12 @@ Make it conversational and friendly while keeping accuracy."""
             },
             description=(
                 f"WORKFLOW DECISION: agent_name={agent_name}, auto_decomp={self.auto_decomposition}, "
-                f"clarification={is_clarification_response}, "
-                f"SHOULD_TRIGGER={agent_name is None and self.auto_decomposition and not is_clarification_response}"
+                f"SHOULD_TRIGGER={agent_name is None and self.auto_decomposition}"
             ),
         )
 
         # Check for workflow analysis and decomposition (complexity-based routing)
-        if agent_name is None and self.auto_decomposition and not is_clarification_response:
+        if agent_name is None and self.auto_decomposition:
             # Analyze request complexity
             try:
                 # Extract the actual user message from formatted context if needed
@@ -5902,7 +5798,6 @@ Make it conversational and friendly while keeping accuracy."""
                 level=observability.EventLevel.WARNING,
                 data={
                     "session_id": session_id,
-                    "is_clarification_response": is_clarification_response,
                     "has_pending_clarifications": (
                         session_id in self._pending_clarifications if session_id else False
                     ),
@@ -5957,7 +5852,7 @@ Make it conversational and friendly while keeping accuracy."""
 
             # Store assistant response in buffer memory (fire-and-forget)
             if self.buffer_memory_manager and result:
-                response_content = result.content if hasattr(result, 'content') else str(result)
+                response_content = result.content if hasattr(result, "content") else str(result)
                 asyncio.create_task(
                     self.buffer_memory_manager.add_to_buffer_memory(
                         message=response_content,  # Store without "Assistant: " prefix - role is in metadata
@@ -5969,7 +5864,7 @@ Make it conversational and friendly while keeping accuracy."""
                             "agent_name": agent_name,
                             "request_id": request_id,
                         },
-                        agent_id=agent_name or "overlord"
+                        agent_id=agent_name or "overlord",
                     )
                 )
 
@@ -5995,7 +5890,9 @@ Make it conversational and friendly while keeping accuracy."""
                     if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
                         next_line = lines[i + 1].strip()
                         if next_line.startswith("User:"):
-                            actual_message_for_credential = next_line[5:].strip()  # Remove "User: " prefix
+                            actual_message_for_credential = next_line[
+                                5:
+                            ].strip()  # Remove "User: " prefix
                             break
 
             if isinstance(e, MissingCredentialError):
@@ -6041,8 +5938,7 @@ Make it conversational and friendly while keeping accuracy."""
                 if self.clarification and request_id:
                     try:
                         clarification_result = await self.clarification.handle_credential_error(
-                            error=e,
-                            request_id=request_id
+                            error=e, request_id=request_id
                         )
 
                         # Store pending clarification if we have a session
@@ -6054,12 +5950,14 @@ Make it conversational and friendly while keeping accuracy."""
                                 "timestamp": time.time(),
                                 "original_message": actual_message_for_credential,
                                 "available_credentials": e.available_credentials,
-                                "ordered_credentials": getattr(e, 'ordered_credentials', None),
-                                "request_id": request_id
+                                "ordered_credentials": getattr(e, "ordered_credentials", None),
+                                "request_id": request_id,
                             }
 
                         # Apply persona to the question
-                        formatted_content = await self._apply_persona(clarification_result.question, message)
+                        formatted_content = await self._apply_persona(
+                            clarification_result.question, message
+                        )
 
                         return MuxiResponse(
                             role="assistant",
@@ -6070,7 +5968,7 @@ Make it conversational and friendly while keeping accuracy."""
                                 "service": e.service,
                                 "user_id": e.user_id,
                                 "session_id": session_id,
-                            }
+                            },
                         )
                     except Exception as unified_error:
                         observability.observe(
@@ -6088,7 +5986,7 @@ Make it conversational and friendly while keeping accuracy."""
                     service_display = "GitHub"
 
                 # Format the credential options
-                if hasattr(e, 'ordered_credentials') and e.ordered_credentials:
+                if hasattr(e, "ordered_credentials") and e.ordered_credentials:
                     # Use LLM ordering
                     ordered_names = []
                     for idx in e.ordered_credentials:
@@ -6122,7 +6020,7 @@ Make it conversational and friendly while keeping accuracy."""
             )
 
         # Apply persona to format the response (except for clarifications)
-        if result and hasattr(result, 'content'):
+        if result and hasattr(result, "content"):
             if isinstance(result.content, str):
                 # Simple string content - apply persona directly
                 formatted_content = await self._apply_persona(result.content, message)
@@ -6130,43 +6028,44 @@ Make it conversational and friendly while keeping accuracy."""
             elif isinstance(result.content, dict):
                 # Dictionary content (e.g., from tool execution) - extract and format
                 import json as json_lib
+
                 extracted_text = None
 
                 # Try to extract meaningful text from the dict structure
-                if 'content' in result.content:
-                    content = result.content['content']
-                    if isinstance(content, dict) and 'content' in content:
+                if "content" in result.content:
+                    content = result.content["content"]
+                    if isinstance(content, dict) and "content" in content:
                         # Handle nested content.content structure
-                        nested_content = content['content']
+                        nested_content = content["content"]
                         if isinstance(nested_content, list):
                             # Extract text from content items
                             text_parts = []
                             for item in nested_content:
-                                if isinstance(item, dict) and item.get('type') == 'text':
-                                    text_parts.append(item.get('text', ''))
+                                if isinstance(item, dict) and item.get("type") == "text":
+                                    text_parts.append(item.get("text", ""))
                             if text_parts:
-                                extracted_text = '\n'.join(text_parts)
+                                extracted_text = "\n".join(text_parts)
                         else:
                             extracted_text = str(nested_content)
                     elif isinstance(content, list):
                         # Direct list of content items
                         text_parts = []
                         for item in content:
-                            if isinstance(item, dict) and item.get('type') == 'text':
-                                text_parts.append(item.get('text', ''))
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                text_parts.append(item.get("text", ""))
                         if text_parts:
-                            extracted_text = '\n'.join(text_parts)
+                            extracted_text = "\n".join(text_parts)
                     elif isinstance(content, str):
                         extracted_text = content
 
                 # If we couldn't extract text, try other common patterns
                 if not extracted_text:
-                    if 'result' in result.content:
-                        extracted_text = str(result.content['result'])
-                    elif 'output' in result.content:
-                        extracted_text = str(result.content['output'])
-                    elif 'text' in result.content:
-                        extracted_text = str(result.content['text'])
+                    if "result" in result.content:
+                        extracted_text = str(result.content["result"])
+                    elif "output" in result.content:
+                        extracted_text = str(result.content["output"])
+                    elif "text" in result.content:
+                        extracted_text = str(result.content["text"])
                     else:
                         # Last resort - format as JSON
                         extracted_text = json_lib.dumps(result.content, indent=2)
@@ -6276,7 +6175,9 @@ Make it conversational and friendly while keeping accuracy."""
                 sop_instructions_path = Path(__file__).parent.parent / "prompts" / sop_file
                 try:
                     with open(sop_instructions_path, "r", encoding="utf-8") as f:
-                        sop_instructions = f"<sop_execution_mode>\n{f.read()}\n</sop_execution_mode>"
+                        sop_instructions = (
+                            f"<sop_execution_mode>\n{f.read()}\n</sop_execution_mode>"
+                        )
                 except FileNotFoundError:
                     sop_instructions = ""
 
@@ -7873,10 +7774,7 @@ Make it conversational and friendly while keeping accuracy."""
 
             # Check if this is a credential clarification response
             # TODO: Replace legacy clarification_manager with unified system
-            if (
-                False  # Legacy clarification_manager disabled
-                and user_id
-            ):
+            if False and user_id:  # Legacy clarification_manager disabled
                 request_id = self.clarification_manager._user_to_request[user_id]
                 if request_id in self.clarification_manager.active_requests:
                     clarification_request = self.clarification_manager.active_requests[request_id]
@@ -8288,81 +8186,6 @@ Make it conversational and friendly while keeping accuracy."""
 
         return True
 
-    def _build_enhanced_message(self, original_message: str, collected_info: dict) -> str:
-        """
-        Build enhanced message with collected information from clarification.
-
-        Args:
-            original_message: The original user message
-            collected_info: Information collected during clarification
-
-        Returns:
-            Enhanced message combining original and collected info
-        """
-        if not collected_info:
-            return original_message
-
-        # Build a clear, specific message that won't trigger clarification again
-
-        # Handle bug/error clarification
-        if "error_type" in collected_info or "issue" in collected_info:
-            error_type = collected_info.get("error_type", collected_info.get("issue", ""))
-            context = collected_info.get("context", "")
-            if error_type and context:
-                return f"Help me fix {error_type} in {context}"
-            elif error_type:
-                return f"Help me fix {error_type}"
-
-        # Handle project creation
-        project_type = collected_info.get("project_type", "")
-        language = collected_info.get("language", "")
-        if project_type and language:
-            enhanced = f"Create a {language} {project_type}"
-            # Add any additional details
-            for key, value in collected_info.items():
-                if key not in ["project_type", "language"] and value:
-                    enhanced += f" with {key}: {value}"
-            return enhanced
-
-        # Handle repository/service clarification
-        if "service" in collected_info or "repository_type" in collected_info:
-            service = collected_info.get("service", collected_info.get("repository_type", ""))
-            if service:
-                return f"{original_message} on {service}"
-
-        # Fallback: Create clear, specific message from collected info
-        # Try to build a complete sentence that won't re-trigger clarification
-        if collected_info:
-            # IMPORTANT: Always preserve the original message
-            # Don't return just the collected value - combine it with the original request
-
-            # Check if this is a credential/account selection
-            if "github_account" in collected_info or "account" in collected_info:
-                account = collected_info.get("github_account") or collected_info.get("account")
-                return f"{original_message} using {account} account"
-
-            # Get the main subject/action from collected info
-            values = list(collected_info.values())
-            if len(values) == 1:
-                # Single value - combine with original message, don't replace it
-                return f"{original_message}. {values[0]}"
-            else:
-                # Multiple values - combine them intelligently
-                main_value = values[0] if values else ""
-                additional = " ".join(str(v) for v in values[1:] if v)
-                if main_value and additional:
-                    return f"{original_message}. {main_value} - {additional}"
-                elif main_value:
-                    return f"{original_message}. {main_value}"
-
-        # Last resort: append collected info to original
-        context_parts = [original_message]
-        for key, value in collected_info.items():
-            formatted_key = key.replace("_", " ").title()
-            context_parts.append(f"{formatted_key}: {value}")
-
-        return ". ".join(context_parts)
-
     async def get_async_request_status(self, request_id: str) -> Optional[Dict[str, Any]]:
         """
         Get status of an async request.
@@ -8449,7 +8272,7 @@ Make it conversational and friendly while keeping accuracy."""
                 user_message=message,
                 intent="general",
                 available_tools=available_tools,
-                user_context=user_context
+                user_context=user_context,
             )
 
             # Check if clarification is needed
@@ -8463,7 +8286,7 @@ Make it conversational and friendly while keeping accuracy."""
                         request_type=RequestType.REASONING,
                         intent="general",
                         tool_name=None,
-                        provided_info={}
+                        provided_info={},
                     )
 
                 # Generate clarification question
@@ -8475,11 +8298,13 @@ Make it conversational and friendly while keeping accuracy."""
                         if analysis_result.missing_info
                         else "more details"
                     )
-                    question_obj = await self.clarification_question_generator.generate_reasoning_question(
-                        intent="general",
-                        missing_context=missing_context,
-                        user_background={},
-                        style=self.clarification_config.style
+                    question_obj = (
+                        await self.clarification_question_generator.generate_reasoning_question(
+                            intent="general",
+                            missing_context=missing_context,
+                            user_background={},
+                            style=self.clarification_config.style,
+                        )
                     )
                     question = question_obj.question_text
 

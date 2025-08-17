@@ -35,7 +35,38 @@ class UnifiedClarificationSystem:
 - `handle_credential_error(error, request_id)` - Handle credential selection
 - `cancel_clarification(request_id)` - Clean up active clarification
 
-## Clarification Flow
+## The Correct Request Flow (November 2025)
+
+The clarification system now supports full multi-turn clarification through this flow:
+
+```
+User Message
+    ↓
+Overlord._process_sync_chat()
+    ↓
+Call UnifiedClarificationSystem.needs_clarification(message, request_id)
+    │
+    └─ [INTERNAL to UnifiedClarificationSystem]:
+        ├─ Has active clarification for this request_id?
+        │   ├─ Yes → handle_response()
+        │   │        ├─ Merge with previous responses
+        │   │        ├─ Check turn limits
+        │   │        └─ Decide if more clarification needed
+        │   └─ No → Analyze if new request needs clarification
+        └─ Returns: action="clarify" or action="execute"
+    ↓
+Process result in Overlord
+    ├─ action="clarify" → Store request_id, Return question to user
+    └─ action="execute" → Clean up, Use enhanced request, Continue
+```
+
+**Key Points**:
+- **No Bypass Logic**: Every message goes through clarification, including responses
+- **Request ID Continuity**: Same request_id used throughout entire interaction
+- **Internal Routing**: UnifiedClarificationSystem internally determines if it's a new request or response
+- **Enhanced Request**: When complete, the system returns an enhanced request with all collected information
+
+## Clarification Flow Details
 
 ### 1. Initial Analysis
 
@@ -64,22 +95,41 @@ The LLM analyzes the request and returns a decision:
 }
 ```
 
-### 3. State Management
+### 3. State Management & ID Hierarchy
 
-If clarification is needed, state is stored in buffer memory:
+If clarification is needed, state is stored in buffer memory using a three-level ID hierarchy:
+
+**ID Hierarchy**:
+- **request_id**: Tracks ONE complete interaction (initial request + all clarification turns)
+  - Used as primary key for state storage: `clarification:{request_id}`
+  - Remains constant throughout entire clarification flow
+  - Example: "Build it" → clarify → "a website" → clarify → "with React" = ONE request_id
+  
+- **session_id**: Groups multiple requests into a chat conversation
+  - Enables request_id reuse for clarification continuity
+  - Used for buffer memory filtering when retrieving context
+  - Developer-supplied identifier for chat continuity
+
+- **user_id**: Provides user isolation in multi-user mode
+  - Top-level filter for all memory operations
+  - Ensures users only see their own data
 
 ```python
 state = {
-    "request_id": "req_123",
-    "session_id": "sess_456", 
+    "request_id": "req_123",         # PRIMARY KEY for state management
+    "session_id": "sess_456",         # For grouping and request_id reuse
     "original_request": "Help me with my project",
     "mode": "planning",
     "depth": 0,
     "max_depth": 7,                  # Mode-specific limit from configuration
     "collected_info": [],
-    "context": {...},
+    "context": {"user_id": "user_789"},
     "started_at": timestamp
 }
+
+# Store using request_id as key
+key = f"clarification:{request_id}"
+await buffer_memory.set(key, state, ttl=300)
 ```
 
 ### 4. Multi-Turn Handling

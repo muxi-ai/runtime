@@ -116,9 +116,11 @@ class ChatOrchestrator:
                     data={
                         "session_id": session_id,
                         "reused_request_id": request_id,
-                        "clarification_type": self.overlord._pending_clarifications[session_id].get("type")
+                        "clarification_type": self.overlord._pending_clarifications[session_id].get(
+                            "type"
+                        ),
                     },
-                    description=f"Reusing request_id {request_id} for clarification response"
+                    description=f"Reusing request_id {request_id} for clarification response",
                 )
             else:
                 # Fallback if somehow request_id is missing
@@ -126,7 +128,7 @@ class ChatOrchestrator:
         else:
             # Generate new request ID for new conversations
             request_id = f"req_{generate_nanoid()}"
-        
+
         timestamp = time.time()
 
         # Start request tracking with observability
@@ -154,21 +156,16 @@ class ChatOrchestrator:
 
             # Store user message in buffer memory immediately for all messages (fire-and-forget)
             # This ensures agents have access to full conversation context
-            if self.overlord.buffer_memory_manager:
-                asyncio.create_task(
-                    self.overlord.buffer_memory_manager.add_to_buffer_memory(
-                        message=message,
-                        metadata={
-                            "user_id": user_id,
-                            "session_id": session_id,
-                            "role": "user",
-                            "timestamp": timestamp,
-                            "agent_name": agent_name,
-                            "request_id": request_id,
-                        },
-                        agent_id="overlord"
-                    )
-                )
+            # asyncio.create_task(
+            #     self._store_user_message_async(
+            #         message=message,  # Store original message, not enhanced
+            #         timestamp=timestamp,
+            #         agent_name=agent_name,
+            #         user_id=user_id,
+            #         session_id=session_id,
+            #         request_id=request_id,
+            #     )
+            # )
 
             # Process files if provided
             file_results = None
@@ -794,6 +791,13 @@ class ChatOrchestrator:
                 if session_id:
                     metadata_filter["session_id"] = session_id
 
+                # DEBUG: Print the filter being used
+                print(f"\n=== DEBUG: Using filter for context retrieval ===")
+                print(f"  Filter: {metadata_filter}")
+                print(f"  vector_search: {vector_search}")
+                print(f"  buffer_size: {buffer_size}")
+                print("=== END DEBUG ===\n")
+
                 # Retrieve context based on vector_search setting
                 if vector_search:
                     # Semantic search using current message as query
@@ -815,6 +819,19 @@ class ChatOrchestrator:
                     )
 
                 if context_messages_list:
+                    # DEBUG: Check for duplicates in buffer memory
+                    print(
+                        f"\n=== DEBUG: Buffer Memory Contents (found {len(context_messages_list)} messages) ==="
+                    )
+                    for i, msg in enumerate(context_messages_list):
+                        role = msg.get("metadata", {}).get("role", "unknown")
+                        content = msg.get("text", "")
+                        timestamp = msg.get("metadata", {}).get("timestamp", "")
+                        print(
+                            f"  [{i}] Role: {role}, Content: {content[:50]}..., Timestamp: {timestamp}"
+                        )
+                    print("=== END DEBUG ===\n")
+
                     # Format context with timestamps in REVERSE order (most recent first)
                     context_parts = []
                     for msg in reversed(context_messages_list):  # Reverse for most recent first
@@ -867,6 +884,9 @@ class ChatOrchestrator:
             enhanced_parts.append("")
 
         # 5. Conversation context (lowest priority - truncated first if needed)
+        print(f"\n=== DEBUG: context_text content) ===")
+        print(context_text)
+        print("=== END DEBUG ===\n")
         if context_text:
             enhanced_parts.append("=== CONVERSATION CONTEXT (Most Recent First) ===")
             enhanced_parts.append(context_text)
