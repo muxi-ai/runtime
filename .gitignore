@@ -124,8 +124,6 @@ pids
 .a2a_registry/
 .registry_data/
 src/muxi/observability/health/.status
-.claude/settings.local.json
-src/muxi/.claude/settings.local.json
 .key
 
 .claude/.mcp.json
