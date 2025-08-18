@@ -181,6 +181,7 @@ async def test_ambiguous_request():
             "Build it",
             user_id=ctx.user_id,
             session_id=ctx.session_id,
+            stream=False
         )
 
         if isinstance(response_var1, str):
@@ -198,6 +199,7 @@ async def test_ambiguous_request():
             "A Python web scraper to extract article titles from news.ycombinator.com and save them to a Google Sheet",
             user_id=ctx.user_id,
             session_id=ctx.session_id,
+            stream=False
         )
 
         if isinstance(response_var2, str):
