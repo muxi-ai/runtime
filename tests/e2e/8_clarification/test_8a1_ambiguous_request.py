@@ -174,7 +174,7 @@ async def test_ambiguous_request():
 
         # Test 2: Test with more specific requirements to see if it needs clarification
         ctx.new_session()  # Generate new session ID
-        print(f"\n3. Testing variation: 'Build it' with detailed Google Sheets response (New session: {ctx.session_id})")
+        print(f"\n3. Testing variation: 'Build it' with detailed Google Sheets response (New session: {ctx.session_id})")  # noqa: E501
 
         # First ambiguous request
         response_var1 = await overlord.chat(
@@ -192,11 +192,11 @@ async def test_ambiguous_request():
         print(f"   Response: {response_var1_content[:200]}...")
 
         # Should ask for clarification
-        assert "clarif" in response_var1_content.lower() or "detail" in response_var1_content.lower(), "Should ask for clarification"
+        assert "clarif" in response_var1_content.lower() or "detail" in response_var1_content.lower(), "Should ask for clarification"  # noqa: E501
 
         # Provide detailed response with Google Sheets
         response_var2 = await overlord.chat(
-            "A Python web scraper to extract article titles from news.ycombinator.com and save them to a Google Sheet",
+            "A Python web scraper to extract article titles from news.ycombinator.com and save them to a Google Sheet",  # noqa: E501
             user_id=ctx.user_id,
             session_id=ctx.session_id,
             stream=False
