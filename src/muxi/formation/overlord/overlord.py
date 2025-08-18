@@ -6860,7 +6860,7 @@ Make it conversational and friendly while keeping accuracy."""
 
             # Collect artifacts from all tasks
             all_artifacts = []
-            for task in completed_workflow.tasks.values():
+            for task_id, task in completed_workflow.tasks.items():
                 # Check if task completed successfully and has result (both COMPLETED and DONE are success states)
                 if task.status in SUCCESS_STATE_VALUES or task.status in SUCCESS_STATES:
                     if task.result and isinstance(task.result, dict):
