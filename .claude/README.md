@@ -17,17 +17,21 @@ No "vibe coding" - every line of code traces back to a specification.
 
 ```
 .claude/
-├── CLAUDE.md          # Always-on instructions & repo metadata
+├── CLAUDE.md          # Always-on instructions (copy content to your project's CLAUDE.md dile)
+├── agents/            # Task-oriented agents (for context preservation)
+├── commands/          # Command definitions
+│   ├── context/       # Create, update and prime context
+│   ├── pm/            # ← Project management commands (this system)
+│   └── testing/       # Prime and execute tests (edit this)
 ├── context/           # Project-wide context files
-├── prds/              # Product requirement documents
 ├── epics/             # ← PM's local workspace (place in .gitignore)
-│   ├── [epic-name]/   # Epic and related tasks
-│   │   ├── epic.md    # Implementation plan
-│   │   ├── [#].md     # Individual task files
-│   │   └── updates/   # Work-in-progress updates
-├── agents/            # Specialized agent configurations
-└── commands/          # Command definitions
-    └── pm/            # ← Project management commands (this system)
+│   └── [epic-name]/   # Epic and related tasks
+│       ├── epic.md    # Implementation plan
+│       ├── [#].md     # Individual task files
+│       └── updates/   # Work-in-progress updates
+├── prds/              # ← PM's PRD files
+├── rules/             # Place any rule files you'd like to refernce here
+└── scripts/           # Place any scripts files you'd like to use here
 ```
 
 ## Workflow
