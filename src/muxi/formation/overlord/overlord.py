@@ -4904,39 +4904,8 @@ Make it conversational and friendly while keeping accuracy."""
         if message and message.startswith("## Task:"):
             return True
 
-        # TODO: Replace with unified clarification system logic
-        # The old clarification_analyzer has been replaced by UnifiedClarificationSystem
-        # For now, use simple heuristics to determine when to skip clarification
-        if True:  # Legacy analyzer check disabled
-            try:
-                # Extract the actual user message from formatted context if needed
-                actual_message = message
-                if "=== CURRENT REQUEST ===" in message and "User:" in message:
-                    # Extract the user's actual message from the formatted context
-                    lines = message.split("\n")
-                    for i, line in enumerate(lines):
-                        if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                            next_line = lines[i + 1].strip()
-                            if next_line.startswith("User:"):
-                                actual_message = next_line[5:].strip()  # Remove "User: " prefix
-                                break
-
-                # Simple heuristic: skip clarification for specific, clear commands
-                # TODO: Replace with unified system call when this method is refactored
-                clear_patterns = [
-                    len(actual_message) > 20,  # Reasonably detailed
-                    any(
-                        word in actual_message.lower()
-                        for word in ["show", "list", "get", "create", "run"]
-                    ),
-                    actual_message.count(" ") > 3,  # Multi-word requests
-                ]
-                return any(clear_patterns)
-
-            except Exception:
-                # If analyzer fails, fall back to default behavior
-                pass
-
+        # For all other messages, let the UnifiedClarificationSystem decide
+        # This ensures multilingual support and avoids pattern matching
         return False
 
     async def _process_sync_chat(
@@ -5273,25 +5242,30 @@ Make it conversational and friendly while keeping accuracy."""
                                 request_id=clarification_info.get("request_id"), response=message
                             )
 
+                            # ALWAYS clear the pending clarification after handling response
+                            del self._pending_clarifications[session_id]
+
                             if response_result.action == "clarify":
-                                # Need more clarification - update pending and return question
-                                self._pending_clarifications[session_id].update(
-                                    {
-                                        "depth": self._pending_clarifications[session_id].get(
-                                            "depth", 0
-                                        )
-                                        + 1
+                                # Need more clarification - the UnifiedClarificationSystem already
+                                # has the context and knows we need to ask another question
+                                # We just need to store a new pending and return the question
+                                if session_id:
+                                    self._pending_clarifications[session_id] = {
+                                        "request_id": request_id,  # Keep the same request_id
+                                        "type": (
+                                            response_result.mode
+                                            if hasattr(response_result, 'mode')
+                                            else "direct"
+                                        ),
                                     }
-                                )
 
                                 return MuxiResponse(
                                     role="assistant",
                                     content=response_result.question,
-                                    metadata={"clarification": True, "mode": response_result.mode},
+                                    metadata={"clarification": True},
                                 )
+
                             elif response_result.action == "execute":
-                                # Clarification complete or cancelled - clean up and process
-                                del self._pending_clarifications[session_id]
 
                                 # Process the enhanced/final request
                                 return await self._process_sync_chat(
@@ -5496,7 +5470,9 @@ Make it conversational and friendly while keeping accuracy."""
         # CLARIFICATION CHECK - MUST HAPPEN BEFORE ANY AGENT SELECTION
         # ===================================================================
         # Determine if clarification should be skipped for this message
-        skip_clarification = await self._should_skip_clarification(message)
+        # Honor the skip_clarification parameter if explicitly set
+        if not skip_clarification:
+            skip_clarification = await self._should_skip_clarification(message)
 
         # Log clarification bypass decision
         if skip_clarification:
@@ -5904,6 +5880,7 @@ Make it conversational and friendly while keeping accuracy."""
                         "user_id": e.user_id,
                         "timestamp": time.time(),
                         "original_message": actual_message_for_credential,  # Store the extracted message
+                        "request_id": request_id,  # Essential for request_id reuse
                     }
 
                 # Return a simple response asking for credentials
@@ -5951,7 +5928,7 @@ Make it conversational and friendly while keeping accuracy."""
                                 "original_message": actual_message_for_credential,
                                 "available_credentials": e.available_credentials,
                                 "ordered_credentials": getattr(e, "ordered_credentials", None),
-                                "request_id": request_id,
+                                "request_id": request_id,  # Essential for request_id reuse
                             }
 
                         # Apply persona to the question
@@ -7989,7 +7966,10 @@ Make it conversational and friendly while keeping accuracy."""
             # This allows us to handle the response when it comes back
             session_id = context.get("session_id") if context else None
             if session_id:
-                self._pending_clarifications[session_id] = {
+                # Get request_id from context if available
+                request_id = context.get("request_id") if context else None
+
+                pending_data = {
                     "type": "credential",
                     "service": service,
                     "user_id": user_id,
@@ -7997,6 +7977,12 @@ Make it conversational and friendly while keeping accuracy."""
                     "handler": handler,
                     "timestamp": time.time(),
                 }
+
+                # Add request_id if available for multi-turn clarification support
+                if request_id:
+                    pending_data["request_id"] = request_id
+
+                self._pending_clarifications[session_id] = pending_data
 
             observability.observe(
                 event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
