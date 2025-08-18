@@ -246,7 +246,7 @@ class UnifiedClarificationSystem:
         await self.buffer_memory.kv_set(
             key=key,
             value=state,
-            ttl=self.timeout,
+            ttl=None,  # No TTL - let FIFO handle cleanup
             namespace=self.namespace
         )
 
