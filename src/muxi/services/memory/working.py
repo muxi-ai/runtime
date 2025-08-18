@@ -970,12 +970,17 @@ class WorkingMemory:
         Args:
             key: The key to store the value under
             value: The dictionary value to store
-            ttl: Time to live in seconds (default: 5 minutes)
+            ttl: Time to live in seconds (default: 5 minutes, None for no expiry)
             namespace: Optional namespace for key isolation (e.g., "clarification", "workflow")
         """
         full_key = f"{namespace}:{key}" if namespace else key
         self.kv_store[full_key] = value
-        self.kv_expiry[full_key] = time.time() + ttl
+        # Only set expiry if ttl is provided (not None)
+        if ttl is not None:
+            self.kv_expiry[full_key] = time.time() + ttl
+        elif full_key in self.kv_expiry:
+            # Remove expiry if ttl is None
+            del self.kv_expiry[full_key]
 
     async def kv_get(self, key: str, namespace: str = None) -> Optional[dict]:
         """
@@ -989,7 +994,7 @@ class WorkingMemory:
             The stored dictionary value or None if not found/expired
         """
         full_key = f"{namespace}:{key}" if namespace else key
-        
+
         # Check if key exists and is not expired
         if full_key in self.kv_expiry and time.time() > self.kv_expiry[full_key]:
             await self.kv_delete(key, namespace)

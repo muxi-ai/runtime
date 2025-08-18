@@ -105,9 +105,13 @@ class ChatOrchestrator:
 
         # Check if there's a pending clarification for this session
         # If so, reuse its request_id for multi-turn clarification continuity
-        if session_id and session_id in self.overlord._pending_clarifications:
+        pending_clarification = None
+        if session_id:
+            pending_clarification = await self.overlord._get_pending_clarification(session_id)
+
+        if pending_clarification:
             # Reuse the existing request_id for multi-turn clarification
-            stored_request_id = self.overlord._pending_clarifications[session_id].get("request_id")
+            stored_request_id = pending_clarification.get("request_id")
             if stored_request_id:
                 request_id = stored_request_id
                 observability.observe(
@@ -116,9 +120,7 @@ class ChatOrchestrator:
                     data={
                         "session_id": session_id,
                         "reused_request_id": request_id,
-                        "clarification_type": self.overlord._pending_clarifications[session_id].get(
-                            "type"
-                        ),
+                        "clarification_type": pending_clarification.get("type"),
                     },
                     description=f"Reusing request_id {request_id} for clarification response",
                 )
@@ -764,13 +766,6 @@ class ChatOrchestrator:
                 if session_id:
                     metadata_filter["session_id"] = session_id
 
-                # DEBUG: Print the filter being used
-                print(f"\n=== DEBUG: Using filter for context retrieval ===")
-                print(f"  Filter: {metadata_filter}")
-                print(f"  vector_search: {vector_search}")
-                print(f"  buffer_size: {buffer_size}")
-                print("=== END DEBUG ===\n")
-
                 # Retrieve context based on vector_search setting
                 if vector_search:
                     # Semantic search using current message as query
@@ -792,19 +787,6 @@ class ChatOrchestrator:
                     )
 
                 if context_messages_list:
-                    # DEBUG: Check for duplicates in buffer memory
-                    print(
-                        f"\n=== DEBUG: Buffer Memory Contents (found {len(context_messages_list)} messages) ==="
-                    )
-                    for i, msg in enumerate(context_messages_list):
-                        role = msg.get("metadata", {}).get("role", "unknown")
-                        content = msg.get("text", "")
-                        timestamp = msg.get("metadata", {}).get("timestamp", "")
-                        print(
-                            f"  [{i}] Role: {role}, Content: {content[:50]}..., Timestamp: {timestamp}"
-                        )
-                    print("=== END DEBUG ===\n")
-
                     # Format context with timestamps in REVERSE order (most recent first)
                     context_parts = []
                     for msg in reversed(context_messages_list):  # Reverse for most recent first
@@ -857,9 +839,6 @@ class ChatOrchestrator:
             enhanced_parts.append("")
 
         # 5. Conversation context (lowest priority - truncated first if needed)
-        print(f"\n=== DEBUG: context_text content) ===")
-        print(context_text)
-        print("=== END DEBUG ===\n")
         if context_text:
             enhanced_parts.append("=== CONVERSATION CONTEXT (Most Recent First) ===")
             enhanced_parts.append(context_text)

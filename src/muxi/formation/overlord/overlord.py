@@ -377,8 +377,8 @@ class Overlord:
         # Chat orchestration system
         self.chat_orchestrator = ChatOrchestrator(self)
 
-        # Pending clarifications tracking
-        self._pending_clarifications: Dict[str, Dict[str, Any]] = {}
+        # Pending clarifications namespace for buffer memory KV store
+        self.pending_clarification_namespace = "pending_clarification"
 
         # Session service history tracking for better follow-up handling
         self._session_service_history: Dict[str, Set[str]] = {}
@@ -4908,6 +4908,75 @@ Make it conversational and friendly while keeping accuracy."""
         # This ensures multilingual support and avoids pattern matching
         return False
 
+    async def _get_pending_clarification(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get pending clarification from buffer memory KV store.
+
+        Args:
+            session_id: The session ID to look up
+
+        Returns:
+            The pending clarification data if found, None otherwise
+        """
+        if not session_id or not self.buffer_memory:
+            return None
+
+        try:
+            result = await self.buffer_memory.kv_get(
+                key=session_id,
+                namespace=self.pending_clarification_namespace
+            )
+            return result
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"error": str(e), "session_id": session_id},
+                description=f"Failed to get pending clarification: {e}",
+            )
+            return None
+
+    def _set_pending_clarification(self, session_id: str, data: Dict[str, Any]) -> None:
+        """
+        Store pending clarification in buffer memory KV store.
+        Fire-and-forget for performance - no await needed.
+
+        Args:
+            session_id: The session ID to store under
+            data: The clarification data to store
+        """
+        if not session_id or not self.buffer_memory:
+            return
+
+        # Fire-and-forget for performance
+        asyncio.create_task(
+            self.buffer_memory.kv_set(
+                key=session_id,
+                value=data,
+                ttl=None,  # No TTL - let FIFO handle cleanup
+                namespace=self.pending_clarification_namespace
+            )
+        )
+
+    def _delete_pending_clarification(self, session_id: str) -> None:
+        """
+        Delete pending clarification from buffer memory KV store.
+        Fire-and-forget for performance - no await needed.
+
+        Args:
+            session_id: The session ID to delete
+        """
+        if not session_id or not self.buffer_memory:
+            return
+
+        # Fire-and-forget for performance
+        asyncio.create_task(
+            self.buffer_memory.kv_delete(
+                key=session_id,
+                namespace=self.pending_clarification_namespace
+            )
+        )
+
     async def _process_sync_chat(
         self,
         message: str,
@@ -4964,8 +5033,8 @@ Make it conversational and friendly while keeping accuracy."""
             )
 
             # Check if we have a pending credential request for this session
-            if session_id in self._pending_clarifications:
-                clarification_info = self._pending_clarifications[session_id]
+            clarification_info = await self._get_pending_clarification(session_id)
+            if clarification_info:
 
                 if clarification_info.get("type") == "credential":
                     service = clarification_info.get("service")
@@ -5034,7 +5103,7 @@ Make it conversational and friendly while keeping accuracy."""
                             original_message = clarification_info.get("original_message")
 
                             # Clean up pending clarification
-                            del self._pending_clarifications[session_id]
+                            self._delete_pending_clarification(session_id)
 
                             # Track service use in session history
                             if session_id and service:
@@ -5164,7 +5233,7 @@ Make it conversational and friendly while keeping accuracy."""
 
                             # Get the original message and clean up
                             original_message = clarification_info.get("original_message")
-                            del self._pending_clarifications[session_id]
+                            self._delete_pending_clarification(session_id)
 
                             # Track service use in session history
                             if session_id and service:
@@ -5243,21 +5312,21 @@ Make it conversational and friendly while keeping accuracy."""
                             )
 
                             # ALWAYS clear the pending clarification after handling response
-                            del self._pending_clarifications[session_id]
+                            self._delete_pending_clarification(session_id)
 
                             if response_result.action == "clarify":
                                 # Need more clarification - the UnifiedClarificationSystem already
                                 # has the context and knows we need to ask another question
                                 # We just need to store a new pending and return the question
                                 if session_id:
-                                    self._pending_clarifications[session_id] = {
+                                    self._set_pending_clarification(session_id, {
                                         "request_id": request_id,  # Keep the same request_id
                                         "type": (
                                             response_result.mode
                                             if hasattr(response_result, 'mode')
                                             else "direct"
                                         ),
-                                    }
+                                    })
 
                                 return MuxiResponse(
                                     role="assistant",
@@ -5334,7 +5403,7 @@ Make it conversational and friendly while keeping accuracy."""
                             # Handle different approval outcomes
                             if approval_status == ApprovalStatus.APPROVED:
                                 # Clean up pending states
-                                del self._pending_clarifications[session_id]
+                                self._delete_pending_clarification(session_id)
                                 self.workflow_manager.remove_pending_approval(workflow_id)
 
                                 # NEW: Check if execution should be async now that approval is obtained
@@ -5363,7 +5432,7 @@ Make it conversational and friendly while keeping accuracy."""
 
                             elif approval_status == ApprovalStatus.REJECTED:
                                 # Clean up pending states
-                                del self._pending_clarifications[session_id]
+                                self._delete_pending_clarification(session_id)
                                 self.workflow_manager.remove_pending_approval(workflow_id)
 
                                 # Return rejection acknowledgment
@@ -5451,7 +5520,7 @@ Make it conversational and friendly while keeping accuracy."""
                             )
                     else:
                         # Workflow not found - it may have expired or been cleaned up
-                        del self._pending_clarifications[session_id]
+                        self._delete_pending_clarification(session_id)
                         return MuxiResponse(
                             role="assistant",
                             content=(
@@ -5511,10 +5580,10 @@ Make it conversational and friendly while keeping accuracy."""
                 if clarification_result.action == "clarify":
                     # Store minimal info - just request_id for reuse
                     if session_id:
-                        self._pending_clarifications[session_id] = {
+                        self._set_pending_clarification(session_id, {
                             "request_id": request_id,  # Essential for request_id reuse
                             "type": clarification_result.mode,  # Optional, for observability
-                        }
+                        })
 
                     return MuxiResponse(
                         role="assistant",
@@ -5524,8 +5593,9 @@ Make it conversational and friendly while keeping accuracy."""
 
                 elif clarification_result.action == "execute":
                     # Clarification complete - clean up
-                    if session_id in self._pending_clarifications:
-                        del self._pending_clarifications[session_id]
+                    pending = await self._get_pending_clarification(session_id)
+                    if pending:
+                        self._delete_pending_clarification(session_id)
 
                     # Use the enhanced request from clarification
                     message = clarification_result.request
@@ -5603,7 +5673,7 @@ Make it conversational and friendly while keeping accuracy."""
                 "agent_name": agent_name,
                 "auto_decomposition": self.auto_decomposition,
                 "has_pending_clarifications": (
-                    session_id in self._pending_clarifications if session_id else False
+                    bool(await self._get_pending_clarification(session_id)) if session_id else False
                 ),
                 "message_preview": message[:100],
             },
@@ -5639,7 +5709,7 @@ Make it conversational and friendly while keeping accuracy."""
                 "should_analyze": agent_name is None and self.auto_decomposition,
                 "session_id": session_id,
                 "has_pending_clarifications": (
-                    session_id in self._pending_clarifications if session_id else False
+                    bool(await self._get_pending_clarification(session_id)) if session_id else False
                 ),
                 "message_preview": message[:50],
             },
@@ -5775,11 +5845,11 @@ Make it conversational and friendly while keeping accuracy."""
                 data={
                     "session_id": session_id,
                     "has_pending_clarifications": (
-                        session_id in self._pending_clarifications if session_id else False
+                        bool(await self._get_pending_clarification(session_id)) if session_id else False
                     ),
                     "pending_clarification_type": (
-                        self._pending_clarifications.get(session_id, {}).get("type")
-                        if session_id and session_id in self._pending_clarifications
+                        (await self._get_pending_clarification(session_id) or {}).get("type")
+                        if session_id
                         else None
                     ),
                     "message": message[:100],
@@ -5874,14 +5944,14 @@ Make it conversational and friendly while keeping accuracy."""
             if isinstance(e, MissingCredentialError):
                 # Store pending clarification if we have a session
                 if session_id:
-                    self._pending_clarifications[session_id] = {
+                    self._set_pending_clarification(session_id, {
                         "type": "credential",
                         "service": e.service,
                         "user_id": e.user_id,
                         "timestamp": time.time(),
                         "original_message": actual_message_for_credential,  # Store the extracted message
                         "request_id": request_id,  # Essential for request_id reuse
-                    }
+                    })
 
                 # Return a simple response asking for credentials
 
@@ -5920,7 +5990,7 @@ Make it conversational and friendly while keeping accuracy."""
 
                         # Store pending clarification if we have a session
                         if session_id:
-                            self._pending_clarifications[session_id] = {
+                            self._set_pending_clarification(session_id, {
                                 "type": "credential",
                                 "service": e.service,
                                 "user_id": e.user_id,
@@ -5929,7 +5999,7 @@ Make it conversational and friendly while keeping accuracy."""
                                 "available_credentials": e.available_credentials,
                                 "ordered_credentials": getattr(e, "ordered_credentials", None),
                                 "request_id": request_id,  # Essential for request_id reuse
-                            }
+                            })
 
                         # Apply persona to the question
                         formatted_content = await self._apply_persona(
@@ -6423,13 +6493,13 @@ Make it conversational and friendly while keeping accuracy."""
 
         # Store clarification info if session_id exists
         if session_id:
-            self._pending_clarifications[session_id] = {
+            self._set_pending_clarification(session_id, {
                 "type": "workflow_approval",
                 "workflow_id": workflow.id,
                 "original_message": message,
                 "user_id": user_id,
                 "request_id": request_id,
-            }
+            })
 
         # Debug: Before returning response
         observability.observe(
@@ -7982,7 +8052,7 @@ Make it conversational and friendly while keeping accuracy."""
                 if request_id:
                     pending_data["request_id"] = request_id
 
-                self._pending_clarifications[session_id] = pending_data
+                self._set_pending_clarification(session_id, pending_data)
 
             observability.observe(
                 event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
@@ -8028,8 +8098,8 @@ Make it conversational and friendly while keeping accuracy."""
         """
         try:
             # Get the pending clarification info
-            if session_id and session_id in self._pending_clarifications:
-                clarification_info = self._pending_clarifications[session_id]
+            clarification_info = await self._get_pending_clarification(session_id) if session_id else None
+            if clarification_info:
                 if (
                     clarification_info.get("type") == "credential"
                     and clarification_info.get("service") == service
@@ -8081,7 +8151,7 @@ Make it conversational and friendly while keeping accuracy."""
                                 return False
 
                             # Clean up pending clarification
-                            del self._pending_clarifications[session_id]
+                            self._delete_pending_clarification(session_id)
 
                             observability.observe(
                                 event_type=observability.SystemEvents.CREDENTIAL_UPDATE,
