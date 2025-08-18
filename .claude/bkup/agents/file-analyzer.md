@@ -51,15 +51,15 @@ You are an expert file analyzer specializing in extracting and summarizing criti
    ```
    ## Summary
    [1-2 sentence overview of what was analyzed and key outcome]
-
+   
    ## Critical Findings
    - [Most important issues/errors with specific details]
    - [Include exact error messages when crucial]
-
+   
    ## Key Observations
    - [Patterns, trends, or notable behaviors]
    - [Performance indicators if relevant]
-
+   
    ## Recommendations (if applicable)
    - [Actionable next steps based on findings]
    ```

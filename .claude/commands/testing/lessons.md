@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash, Read
+allowed-tools: Bash, Read, Write, LS
 ---
 
 # Update test plan

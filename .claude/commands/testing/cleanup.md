@@ -1,10 +1,10 @@
 ---
-allowed-tools: Bash, Read
+allowed-tools: Bash, Read, Write, LS
 ---
 
 # Cleanup tests
 
-Please clean up the tests/e2e/$ARGUMENTS directory.
+Please clean up the $ARGUMENTS test directory.
 
 Remove old tests that are no longer relevant and not covered in tests/reports/$ARGUMENTS*.md
 

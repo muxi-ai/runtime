@@ -1,5 +1,5 @@
 ---
-allowed-tools: Read, Write, Bash
+allowed-tools: Read, Write, Bash, LS
 ---
 
 Implement $ARGUMENTS **to the letter**!
