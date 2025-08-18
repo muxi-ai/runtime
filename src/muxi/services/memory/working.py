@@ -110,6 +110,9 @@ class WorkingMemory:
     - Remote mode: Connects to remote FAISS/FAISSx server for distributed vector storage
     """
 
+    # Namespaces excluded from FIFO cleanup
+    _NAMESPACES_EXCLUDED_FROM_FIFO = ["knowledge", "sops"]
+
     def __init__(
         self,
         formation_id: str,
@@ -343,6 +346,7 @@ class WorkingMemory:
     def check_memory_usage_and_cleanup(self) -> None:
         """
         Check memory usage and perform FIFO cleanup if needed.
+        Now includes KV store cleanup for non-excluded namespaces.
 
         This method checks if the estimated buffer memory usage exceeds the configured
         max_memory_mb limit. If so, it removes the oldest items from the buffer
@@ -375,6 +379,15 @@ class WorkingMemory:
                 if item.get("namespace", "buffer") == "buffer":
                     buffer_namespace_indices.append(i)
 
+            # Include KV store items in memory estimation
+            if self.kv_store:
+                for key, value in self.kv_store.items():
+                    # Estimate size of key and value
+                    key_size = len(key.encode("utf-8"))
+                    value_size = len(str(value).encode("utf-8"))
+                    kv_item_size_mb = (key_size + value_size) / (1024**2)
+                    estimated_usage_mb += kv_item_size_mb
+
             #  Debug - TODO: add observability
             #     f"Buffer memory usage: {estimated_usage_mb:.2f}MB, "
             #     f"configured limit: {self.max_memory_mb}MB"
@@ -406,6 +419,41 @@ class WorkingMemory:
                 # Rebuild the index after removing items
                 if self.model:
                     self._rebuild_index()
+
+            # NEW: KV Store cleanup
+            if self.kv_store and estimated_usage_mb > self.max_memory_mb:
+                # Get all namespaces in KV store
+                all_namespaces = set()
+                for key in self.kv_store.keys():
+                    if ":" in key:  # Format: "namespace:actual_key"
+                        namespace = key.split(":", 1)[0]
+                        all_namespaces.add(namespace)
+
+                # Clean up non-excluded namespaces
+                for namespace in all_namespaces:
+                    if namespace in self._NAMESPACES_EXCLUDED_FROM_FIFO:
+                        continue
+
+                    # Get all items in this namespace sorted by timestamp
+                    namespace_items = []
+                    for key in list(self.kv_store.keys()):
+                        if key.startswith(f"{namespace}:"):
+                            item = self.kv_store[key]
+                            # Add timestamp if not present (use current time as fallback)
+                            timestamp = item.get("timestamp", item.get("created_at", time.time()))
+                            namespace_items.append((timestamp, key))
+
+                    # Sort by timestamp (oldest first) and remove oldest items
+                    namespace_items.sort()
+
+                    # Remove oldest 10% of items in this namespace
+                    items_to_remove = max(1, len(namespace_items) // 10)
+                    for _, key in namespace_items[:items_to_remove]:
+                        del self.kv_store[key]
+                        # Log the removal for observability
+                        #  KV FIFO cleanup - TODO: add observability
+                        #     f"Removed KV item {key} from namespace {namespace}"
+                        # )
 
         except Exception as e:
             #  Buffer cleanup error - TODO: add observability
