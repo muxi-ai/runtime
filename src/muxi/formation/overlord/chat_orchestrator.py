@@ -511,57 +511,30 @@ class ChatOrchestrator:
                 )
             )
 
-        # Check if result is a MuxiResponse with artifacts
-        if result and hasattr(result, "content") and hasattr(result, "artifacts"):
-            # If it has artifacts, return the full MuxiResponse object
-            if result.artifacts and len(result.artifacts) > 0:
-                return result
+        # ALWAYS return MuxiResponse objects
+        from ...datatypes.response import MuxiResponse
 
-        # Extract content from MuxiResponse for return to user (no artifacts case)
+        if isinstance(result, MuxiResponse):
+            return result
+
+        # If we didn't get a MuxiResponse, create one
+        # This should rarely happen but ensures consistency
         if result and hasattr(result, "content"):
-            # After overlord processing, content should already be a formatted string
-            # If it's still a dict, the persona wasn't applied properly
-            if isinstance(result.content, str):
-                return result.content
-            elif isinstance(result.content, dict):
-                # Extract text from nested dictionary structure
-                if "content" in result.content:
-                    content = result.content["content"]
-                    # Handle nested content.content structure
-                    if isinstance(content, dict) and "content" in content:
-                        nested_content = content["content"]
-                        if isinstance(nested_content, list):
-                            # Extract text from content items
-                            text_parts = []
-                            for item in nested_content:
-                                if isinstance(item, dict) and item.get("type") == "text":
-                                    text_parts.append(item.get("text", ""))
-                            if text_parts:
-                                return "\n".join(text_parts)
-                    elif isinstance(content, list):
-                        # Direct list of content items
-                        text_parts = []
-                        for item in content:
-                            if isinstance(item, dict) and item.get("type") == "text":
-                                text_parts.append(item.get("text", ""))
-                        if text_parts:
-                            return "\n".join(text_parts)
-                # Try other common patterns
-                if "result" in result.content:
-                    return str(result.content["result"])
-                elif "output" in result.content:
-                    return str(result.content["output"])
-                elif "text" in result.content:
-                    return str(result.content["text"])
-                # Fallback - format as JSON for readability
-                import json
-
-                return json.dumps(result.content, indent=2)
-            else:
-                # Handle other complex content types
-                return str(result.content)
-
-        return result
+            return MuxiResponse(
+                role="assistant",
+                content=result.content if isinstance(result.content, str) else str(result.content)
+            )
+        elif isinstance(result, str):
+            return MuxiResponse(
+                role="assistant",
+                content=result
+            )
+        else:
+            # Fallback for unexpected types
+            return MuxiResponse(
+                role="assistant",
+                content=str(result) if result else ""
+            )
 
     async def _process_streaming_chat(
         self,
