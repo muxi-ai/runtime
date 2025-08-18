@@ -40,30 +40,84 @@ class UnifiedClarificationSystem:
 The clarification system now supports full multi-turn clarification through this flow:
 
 ```
-User Message
+Incoming Request
     ↓
-Overlord._process_sync_chat()
-    ↓
-Call UnifiedClarificationSystem.needs_clarification(message, request_id)
-    │
-    └─ [INTERNAL to UnifiedClarificationSystem]:
-        ├─ Has active clarification for this request_id?
-        │   ├─ Yes → handle_response()
-        │   │        ├─ Merge with previous responses
-        │   │        ├─ Check turn limits
-        │   │        └─ Decide if more clarification needed
-        │   └─ No → Analyze if new request needs clarification
-        └─ Returns: action="clarify" or action="execute"
-    ↓
-Process result in Overlord
-    ├─ action="clarify" → Store request_id, Return question to user
-    └─ action="execute" → Clean up, Use enhanced request, Continue
+Is session_id in pending clarifications?
+    ├─ Yes → Process clarification response
+    │        ├─ Reuse stored request_id
+    │        ├─ Call UnifiedClarificationSystem.handle_response()
+    │        ├─ ALWAYS clear pending clarification
+    │        └─ Check if more clarification needed
+    │            ├─ Yes → Store request_id in pending → Return question
+    │            └─ No → Continue with enhanced request
+    └─ No → Continue to clarification check
+         ↓
+    Skip clarification check? (only for workflow tasks or when skip_clarification=True)
+         ├─ Yes → Continue to actionability check
+         └─ No → Check if clarification needed
+                 ├─ Call UnifiedClarificationSystem.needs_clarification()
+                 ├─ Need clarification?
+                 │   ├─ Yes → Store request_id in pending → Return question
+                 │   └─ No → Continue to actionability check
+                 ↓
+    Continue to actionability check → SOP/Workflow/Agent selection → Process request
+```
+
+### Detailed Flow in Overlord._process_sync_chat()
+
+```python
+# 1. Check for pending clarification (handles multi-turn)
+if session_id in _pending_clarifications:
+    # Reuse the stored request_id for continuity
+    request_id = _pending_clarifications[session_id]["request_id"]
+    
+    # Process clarification response
+    result = await clarification.handle_response(request_id, message)
+    
+    # ALWAYS clear pending after handling
+    del _pending_clarifications[session_id]
+    
+    if result.action == "clarify":
+        # Need more clarification - store new pending with SAME request_id
+        _pending_clarifications[session_id] = {
+            "request_id": request_id,  # Keep same ID
+            "type": result.mode
+        }
+        return clarification_question
+    else:
+        # Clarification complete - continue with enhanced request
+        return process(result.request)
+
+# 2. No pending clarification - check if new request needs clarification
+if not skip_clarification:
+    skip_clarification = await _should_skip_clarification(message)
+    # Only skips for workflow tasks (starting with "## Task:")
+
+if not skip_clarification and not agent_name and clarification:
+    result = await clarification.needs_clarification(
+        message=message,
+        request_id=request_id,  # New request_id
+        session_id=session_id
+    )
+    
+    if result.action == "clarify":
+        # Store pending for multi-turn support
+        _pending_clarifications[session_id] = {
+            "request_id": request_id,
+            "type": result.mode
+        }
+        return clarification_question
+
+# 3. Continue to normal processing
+# → Actionability check → SOP/Workflow → Agent selection → Process
 ```
 
 **Key Points**:
-- **No Bypass Logic**: Every message goes through clarification, including responses
-- **Request ID Continuity**: Same request_id used throughout entire interaction
-- **Internal Routing**: UnifiedClarificationSystem internally determines if it's a new request or response
+- **Pending Clarifications Dictionary**: `_pending_clarifications[session_id]` stores request_id for multi-turn continuity
+- **Request ID Persistence**: Same request_id used throughout entire clarification interaction
+- **Always Clear Pending**: After handling response, always clear pending before checking if more needed
+- **Skip Only for Workflows**: Only workflow tasks (starting with "## Task:") skip clarification
+- **No Pattern Matching**: All clarification decisions made by LLM for multilingual support
 - **Enhanced Request**: When complete, the system returns an enhanced request with all collected information
 
 ## Clarification Flow Details
