@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash, Read, Write, LS
+allowed-tools: Read, LS
 ---
 
 # Epic Oneshot
@@ -11,107 +11,79 @@ Decompose epic into tasks and sync to GitHub in one operation.
 /pm:epic-oneshot <feature_name>
 ```
 
-## Preflight Checklist
-
-Before proceeding, complete ALL validation steps:
-
-1. **Epic Validation:**
-   - Check if `.claude/epics/$ARGUMENTS/epic.md` exists
-   - If not found, tell user: "❌ Epic not found. First run: /pm:prd-parse $ARGUMENTS"
-   - Verify epic frontmatter is valid
-
-2. **Check for Existing Work:**
-   - Check if tasks already exist in `.claude/epics/$ARGUMENTS/`
-   - Check if epic frontmatter has a GitHub URL (already synced)
-   - If either exists, warn: "⚠️ This epic already has tasks/GitHub issues. Running oneshot will create duplicates."
-   - Ask: "Continue anyway? (yes/no)"
-
-3. **GitHub Prerequisites:**
-   - Run: `gh auth status`
-   - Run: `gh repo view --json name`
-   - Check rate limit: `gh api rate_limit`
-   - If any fail, provide specific fix instructions
-
 ## Instructions
 
-You are performing a complete epic decomposition and GitHub sync in a single operation for: **$ARGUMENTS**
+### 1. Validate Prerequisites
 
-### 1. Atomic Operation Warning
-Inform user: "🔄 Starting atomic operation: decompose + sync. This will create multiple GitHub issues."
+Check that epic exists and hasn't been processed:
+```bash
+# Epic must exist
+test -f .claude/epics/$ARGUMENTS/epic.md || echo "❌ Epic not found. Run: /pm:prd-parse $ARGUMENTS"
 
-### 2. Execute Decomposition
-First, run the epic decomposition process:
-- Read and analyze the epic for "$ARGUMENTS"
-- Create all task files with proper structure
-- Follow the same process as `/pm:epic-decompose $ARGUMENTS`
+# Check for existing tasks
+if ls .claude/epics/$ARGUMENTS/[0-9]*.md 2>/dev/null | grep -q .; then
+  echo "⚠️ Tasks already exist. This will create duplicates."
+  echo "Delete existing tasks or use /pm:epic-sync instead."
+  exit 1
+fi
+
+# Check if already synced
+if grep -q "github:" .claude/epics/$ARGUMENTS/epic.md; then
+  echo "⚠️ Epic already synced to GitHub."
+  echo "Use /pm:epic-sync to update."
+  exit 1
+fi
+```
+
+### 2. Execute Decompose
+
+Simply run the decompose command:
+```
+Running: /pm:epic-decompose $ARGUMENTS
+```
+
+This will:
+- Read the epic
+- Create task files (using parallel agents if appropriate)
+- Update epic with task summary
 
 ### 3. Execute Sync
-Then, immediately sync to GitHub:
+
+Immediately follow with sync:
+```
+Running: /pm:epic-sync $ARGUMENTS
+```
+
+This will:
 - Create epic issue on GitHub
-- Create all task issues on GitHub
-- Follow the same process as `/pm:epic-sync $ARGUMENTS`
+- Create sub-issues (using parallel agents if appropriate)
+- Rename task files to issue IDs
+- Create worktree
 
-### 4. Validation
-After completion:
-- Verify all issues were created successfully
-- Check that labels are applied correctly
-- Confirm task-epic relationships are established
+### 4. Output
 
-### 5. Output Summary
-Provide comprehensive summary:
 ```
 🚀 Epic Oneshot Complete: $ARGUMENTS
 
-📝 Decomposition Results:
-   Tasks created: {task_count}
-   Parallel tasks: {parallel_count}
-   Sequential tasks: {sequential_count}
+Step 1: Decomposition ✓
+  - Tasks created: {count}
+  
+Step 2: GitHub Sync ✓
+  - Epic: #{number}
+  - Sub-issues created: {count}
+  - Worktree: ../epic-$ARGUMENTS
 
-☁️ GitHub Sync Results:
-   Epic Issue: #{epic_number}
-   Task Issues: #{task1}, #{task2}, #{task3}...
-   
-🏷️ Labels Applied:
-   epic:$ARGUMENTS
-   
-✅ Ready for development!
-   Use /pm:issue-start #{task_number} to begin work
+Ready for development!
+  Start work: /pm:epic-start $ARGUMENTS
+  Or single task: /pm:issue-start {task_number}
 ```
 
-### 6. Error Recovery
+## Important Notes
 
-**Failure Points and Recovery:**
+This is simply a convenience wrapper that runs:
+1. `/pm:epic-decompose` 
+2. `/pm:epic-sync`
 
-1. **Decomposition Failed:**
-   - If decomposition fails, stop immediately
-   - No GitHub issues should be created
-   - Tell user: "Fix the issue and retry: /pm:epic-oneshot $ARGUMENTS"
+Both commands handle their own error checking, parallel execution, and validation. This command just orchestrates them in sequence.
 
-2. **Sync Failed After Decomposition:**
-   - Tasks exist locally but not on GitHub
-   - Tell user: "Decomposition succeeded, sync failed"
-   - Provide recovery: "Run: /pm:epic-sync $ARGUMENTS to retry sync"
-
-3. **Partial Sync:**
-   - Some issues created, others failed
-   - List what succeeded and what failed
-   - Offer rollback: "Delete created issues and retry? (yes/no)"
-   - If no, provide: "Continue with: /pm:epic-sync $ARGUMENTS --resume"
-
-### 7. Success Validation
-
-After completion, verify:
-- [ ] All task files created with valid frontmatter
-- [ ] Epic issue exists on GitHub
-- [ ] All task issues exist on GitHub
-- [ ] All frontmatter updated with GitHub URLs
-- [ ] Mapping file created
-
-### 8. Post-Operation
-
-On success:
-1. Show comprehensive summary (as above)
-2. Suggest: "View on GitHub: {epic_url}"
-3. Recommend: "Start with highest priority task: /pm:next"
-
-This command is ideal for confident workflows where the "$ARGUMENTS" epic is well-defined and ready for immediate decomposition and sync. Use with caution as it creates multiple GitHub issues in one operation.
+Use this when you're confident the epic is ready and want to go from epic to GitHub issues in one step.

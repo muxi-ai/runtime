@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash, Read, Write, LS
+allowed-tools: Bash, Read, Write, LS, Task
 ---
 
 # Epic Decompose
@@ -47,7 +47,38 @@ You are decomposing an epic into specific, actionable tasks for: **$ARGUMENTS**
 - Understand the technical approach and requirements
 - Review the task breakdown preview
 
-### 2. Task File Format with Frontmatter
+### 2. Analyze for Parallel Creation
+
+Determine if tasks can be created in parallel:
+- If tasks are mostly independent: Create in parallel using Task agents
+- If tasks have complex dependencies: Create sequentially
+- For best results: Group independent tasks for parallel creation
+
+### 3. Parallel Task Creation (When Possible)
+
+If tasks can be created in parallel, spawn sub-agents:
+
+```yaml
+Task:
+  description: "Create task files batch {X}"
+  subagent_type: "general-purpose"
+  prompt: |
+    Create task files for epic: $ARGUMENTS
+    
+    Tasks to create:
+    - {list of 3-4 tasks for this batch}
+    
+    For each task:
+    1. Create file: .claude/epics/$ARGUMENTS/{number}.md
+    2. Use exact format with frontmatter and all sections
+    3. Follow task breakdown from epic
+    4. Set parallel/depends_on fields appropriately
+    5. Number sequentially (001.md, 002.md, etc.)
+    
+    Return: List of files created
+```
+
+### 4. Task File Format with Frontmatter
 For each task, create a file with this exact structure:
 
 ```markdown
@@ -121,14 +152,39 @@ Save tasks as: `.claude/epics/$ARGUMENTS/{task_number}.md`
 ### 6. Parallelization
 Mark tasks with `parallel: true` if they can be worked on simultaneously without conflicts.
 
-### 7. Task Dependency Validation
+### 7. Execution Strategy
+
+Choose based on task count and complexity:
+
+**Small Epic (< 5 tasks)**: Create sequentially for simplicity
+
+**Medium Epic (5-10 tasks)**: 
+- Batch into 2-3 groups
+- Spawn agents for each batch
+- Consolidate results
+
+**Large Epic (> 10 tasks)**:
+- Analyze dependencies first
+- Group independent tasks
+- Launch parallel agents (max 5 concurrent)
+- Create dependent tasks after prerequisites
+
+Example for parallel execution:
+```markdown
+Spawning 3 agents for parallel task creation:
+- Agent 1: Creating tasks 001-003 (Database layer)
+- Agent 2: Creating tasks 004-006 (API layer)
+- Agent 3: Creating tasks 007-009 (UI layer)
+```
+
+### 8. Task Dependency Validation
 
 When creating tasks with dependencies:
 - Ensure referenced dependencies exist (e.g., if Task 003 depends on Task 002, verify 002 was created)
 - Check for circular dependencies (Task A → Task B → Task A)
 - If dependency issues found, warn but continue: "⚠️ Task dependency warning: {details}"
 
-### 8. Update Epic with Task Summary
+### 9. Update Epic with Task Summary
 After creating all tasks, update the epic file by adding this section:
 ```markdown
 ## Tasks Created

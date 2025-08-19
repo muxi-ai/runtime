@@ -14,14 +14,13 @@ Analyze an issue to identify parallel work streams for maximum efficiency.
 ## Quick Check
 
 1. **Find local task file:**
-   Search for file containing `github:.*issues/$ARGUMENTS` in frontmatter.
-   If not found: "❌ No local task for issue #$ARGUMENTS. Run: /pm:import first"
+   - First check if `.claude/epics/*/$ARGUMENTS.md` exists (new naming convention)
+   - If not found, search for file containing `github:.*issues/$ARGUMENTS` in frontmatter (old naming)
+   - If not found: "❌ No local task for issue #$ARGUMENTS. Run: /pm:import first"
 
 2. **Check for existing analysis:**
    ```bash
-   test -f .claude/epics/*/
-
--analysis.md && echo "⚠️ Analysis already exists. Overwrite? (yes/no)"
+   test -f .claude/epics/*/$ARGUMENTS-analysis.md && echo "⚠️ Analysis already exists. Overwrite? (yes/no)"
    ```
 
 ## Instructions
