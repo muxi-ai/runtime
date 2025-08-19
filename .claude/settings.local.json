@@ -43,7 +43,11 @@
       "Bash(PYTHONUNBUFFERED=1 timeout 30 python tests/e2e/7_orchestration/test_internal_sops.py)",
       "Bash(PYTHONUNBUFFERED=1 timeout 30 python tests/e2e/8_clarification/test_8a2_multi_agent_clarification.py)",
       "Bash(PYTHONUNBUFFERED=1 timeout 30 python tests/e2e/8_clarification/test_8a1_ambiguous_requests.py)",
-      "Bash(PYTHONUNBUFFERED=1 timeout 30 python tests/e2e/8_clarification/test_8a1_ambiguous_request.py)"
+      "Bash(PYTHONUNBUFFERED=1 timeout 30 python tests/e2e/8_clarification/test_8a1_ambiguous_request.py)",
+      "Bash(bash .claude/scripts/test-and-log.sh:*)",
+      "Bash(.claude/scripts/test-and-log.sh:*)",
+      "Bash(bash .claude/scripts/pm/*)",
+      "Bash(.claude/scripts/pm/*)"
     ]
   }
 }
