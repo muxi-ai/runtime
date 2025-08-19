@@ -1,5 +1,4 @@
 #!/bin/bash
-
 echo "Getting epics..."
 echo ""
 echo ""

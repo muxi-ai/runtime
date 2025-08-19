@@ -2,7 +2,7 @@
 allowed-tools: Bash
 ---
 
-Run `bash .claude/scripts/pm/validate.sh` and show me the complete output.
+Run `bash .claude/scripts/pm/validate.sh` using a sub-agent and show me the complete output.
 
 - DO NOT truncate.
 - DO NOT collapse.
