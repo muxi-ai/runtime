@@ -1,3 +1,7 @@
+---
+allowed-tools: Bash, Read, LS
+---
+
 # Issue Status
 
 Check issue status (open/closed) and current state.

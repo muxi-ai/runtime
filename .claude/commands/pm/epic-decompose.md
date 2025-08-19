@@ -1,3 +1,7 @@
+---
+allowed-tools: Bash, Read, Write, LS
+---
+
 # Epic Decompose
 
 Break epic into concrete, actionable tasks.
@@ -6,6 +10,33 @@ Break epic into concrete, actionable tasks.
 ```
 /pm:epic-decompose <feature_name>
 ```
+
+## Required Rules
+
+**IMPORTANT:** Before executing this command, read and follow:
+- `.claude/rules/datetime.md` - For getting real current date/time
+
+## Preflight Checklist
+
+Before proceeding, complete these validation steps:
+
+1. **Verify epic exists:**
+   - Check if `.claude/epics/$ARGUMENTS/epic.md` exists
+   - If not found, tell user: "❌ Epic not found: $ARGUMENTS. First create it with: /pm:prd-parse $ARGUMENTS"
+   - Stop execution if epic doesn't exist
+
+2. **Check for existing tasks:**
+   - Check if any numbered task files (001.md, 002.md, etc.) already exist in `.claude/epics/$ARGUMENTS/`
+   - If tasks exist, list them and ask: "⚠️ Found {count} existing tasks. Delete and recreate all tasks? (yes/no)"
+   - Only proceed with explicit 'yes' confirmation
+   - If user says no, suggest: "View existing tasks with: /pm:epic-show $ARGUMENTS"
+
+3. **Validate epic frontmatter:**
+   - Verify epic has valid frontmatter with: name, status, created, prd
+   - If invalid, tell user: "❌ Invalid epic frontmatter. Please check: .claude/epics/$ARGUMENTS/epic.md"
+
+4. **Check epic status:**
+   - If epic status is already "completed", warn user: "⚠️ Epic is marked as completed. Are you sure you want to decompose it again?"
 
 ## Instructions
 
@@ -26,6 +57,9 @@ status: open
 created: [Current ISO date/time]
 updated: [Current ISO date/time]
 github: [Will be updated when synced to GitHub]
+depends_on: []  # List of task numbers this depends on, e.g., [001, 002]
+parallel: true  # Can this run in parallel with other tasks?
+conflicts_with: []  # Tasks that modify same files, e.g., [003, 004]
 ---
 
 # Task: [Task Title]
@@ -68,9 +102,12 @@ Save tasks as: `.claude/epics/$ARGUMENTS/{task_number}.md`
 ### 4. Frontmatter Guidelines
 - **name**: Use a descriptive task title (without "Task:" prefix)
 - **status**: Always start with "open" for new tasks
-- **created**: Use current date/time in ISO format
-- **updated**: Same as created for new tasks
+- **created**: Get REAL current datetime by running: `date -u +"%Y-%m-%dT%H:%M:%SZ"`
+- **updated**: Use the same real datetime as created for new tasks
 - **github**: Leave placeholder text - will be updated during sync
+- **depends_on**: List task numbers that must complete before this can start (e.g., [001, 002])
+- **parallel**: Set to true if this can run alongside other tasks without conflicts
+- **conflicts_with**: List task numbers that modify the same files (helps coordination)
 
 ### 5. Task Types to Consider
 - **Setup tasks**: Environment, dependencies, scaffolding
@@ -84,7 +121,14 @@ Save tasks as: `.claude/epics/$ARGUMENTS/{task_number}.md`
 ### 6. Parallelization
 Mark tasks with `parallel: true` if they can be worked on simultaneously without conflicts.
 
-### 7. Update Epic with Task Summary
+### 7. Task Dependency Validation
+
+When creating tasks with dependencies:
+- Ensure referenced dependencies exist (e.g., if Task 003 depends on Task 002, verify 002 was created)
+- Check for circular dependencies (Task A → Task B → Task A)
+- If dependency issues found, warn but continue: "⚠️ Task dependency warning: {details}"
+
+### 8. Update Epic with Task Summary
 After creating all tasks, update the epic file by adding this section:
 ```markdown
 ## Tasks Created
@@ -95,8 +139,35 @@ After creating all tasks, update the epic file by adding this section:
 Total tasks: {count}
 Parallel tasks: {parallel_count}
 Sequential tasks: {sequential_count}
+Estimated total effort: {sum of hours}
 ```
 
 Also update the epic's frontmatter progress if needed (still 0% until tasks actually start).
+
+### 9. Quality Validation
+
+Before finalizing tasks, verify:
+- [ ] All tasks have clear acceptance criteria
+- [ ] Task sizes are reasonable (1-3 days each)
+- [ ] Dependencies are logical and achievable
+- [ ] Parallel tasks don't conflict with each other
+- [ ] Combined tasks cover all epic requirements
+
+### 10. Post-Decomposition
+
+After successfully creating tasks:
+1. Confirm: "✅ Created {count} tasks for epic: $ARGUMENTS"
+2. Show summary:
+   - Total tasks created
+   - Parallel vs sequential breakdown
+   - Total estimated effort
+3. Suggest next step: "Ready to sync to GitHub? Run: /pm:epic-sync $ARGUMENTS"
+
+## Error Recovery
+
+If any step fails:
+- If task creation partially completes, list which tasks were created
+- Provide option to clean up partial tasks
+- Never leave the epic in an inconsistent state
 
 Aim for tasks that can be completed in 1-3 days each. Break down larger tasks into smaller, manageable pieces for the "$ARGUMENTS" epic.

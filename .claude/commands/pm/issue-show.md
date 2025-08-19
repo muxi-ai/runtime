@@ -1,3 +1,7 @@
+---
+allowed-tools: Bash, Read, LS
+---
+
 # Issue Show
 
 Display issue and sub-issues with detailed information.

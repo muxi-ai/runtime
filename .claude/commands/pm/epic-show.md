@@ -1,3 +1,7 @@
+---
+allowed-tools: Bash, Read, LS
+---
+
 # Epic Show
 
 Display epic and its tasks with current status.
@@ -20,6 +24,7 @@ You are displaying comprehensive information about an epic and its tasks for: **
 
 ### 2. Epic Overview
 Display epic header using frontmatter data:
+
 ```
 📚 Epic: $ARGUMENTS ({status}) - {progress}%
    Created: {created}

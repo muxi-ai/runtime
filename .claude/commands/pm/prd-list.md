@@ -1,3 +1,7 @@
+---
+allowed-tools: Read, LS
+---
+
 # PRD List
 
 List all existing Product Requirements Documents.
@@ -6,6 +10,15 @@ List all existing Product Requirements Documents.
 ```
 /pm:prd-list
 ```
+
+## Preflight Checklist
+
+Before proceeding, complete these validation steps:
+
+1. **Verify PRD directory exists:**
+   - Check if `.claude/prds/` directory exists
+   - If not found, tell user: "📁 No PRD directory found. Create your first PRD with: /pm:prd-new <feature-name>"
+   - Exit gracefully if directory doesn't exist
 
 ## Instructions
 
@@ -54,12 +67,26 @@ Display summary statistics:
    Oldest: {oldest_name} ({created_date})
 ```
 
-### 5. Suggested Actions
+### 5. Error Handling
+
+Handle these cases gracefully:
+- **Empty directory:** Show "📁 No PRDs found. Create your first PRD with: /pm:prd-new <feature-name>"
+- **Invalid frontmatter:** For files with invalid/missing frontmatter, show: "⚠️ {filename} - Invalid frontmatter (skipped)"
+- **Non-markdown files:** Ignore any non-.md files silently
+
+### 6. Suggested Actions
 Based on PRD statuses:
 - For backlog PRDs: suggest parsing to epic with `/pm:prd-parse {name}`
 - For in-progress PRDs: suggest checking epic status with `/pm:epic-show {name}`
 - For implemented PRDs: suggest reviewing for lessons learned
 
 If no PRDs exist, suggest creating one with `/pm:prd-new`.
+
+### 7. Data Consistency
+
+When parsing frontmatter:
+- Use defaults if fields are missing (status: "unknown", created: "unknown")
+- Show actual filename if 'name' field doesn't match filename
+- Handle dates gracefully (show relative time like "2 days ago" when possible)
 
 Parse frontmatter carefully to extract accurate metadata for each PRD in the display.

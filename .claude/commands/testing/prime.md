@@ -2,15 +2,15 @@
 allowed-tools: Bash, Read, Write, LS
 ---
 
-# How to run tests
+# Prime Testing Environment
 
-- Run `git ls-files` to understand the codebase structure and file organization
-- Read the README.md to understand the project purpose, setup instructions, and key information
-- Provide a concise overview of the project based on the gathered context
-- Read the formation spec
-- Read the test plan and guide
+This command prepares the testing environment by detecting the test framework, validating dependencies, and configuring the test-runner agent for optimal test execution.
 
-## Context
+
+## Preflight Checklist
+
+Before proceeding, consume the following context:
+
 - Codebase structure git accessible: !`git ls-files`
 - Codebase structure all: !`eza . --tree`
 - Project README: @README.md
@@ -20,13 +20,51 @@ allowed-tools: Bash, Read, Write, LS
 - Read the test plan
    - [Runtime Test Plan.md](tests/Comprehensive_Test_Plan.md)
    - [Runtime Testing Guide](tests/Lessons-Learned.md)
+   
+## Instructions
 
+### Always use the test-runner sub-agent to run tests and analyze the test results.
 
-### IMPORTANT
-- Use the test-runner agent to execute tests.
-- Do not use mock services for anything ever.
-- Do not move on to the next test until the current test is complete.
-- If the test fails, consider checking if the test is structured correctly before deciding we need to refactor the codebase.
-- Tests to be verbose so we can use them for debugging.
+Using the test-runner agent ensures:
 
+- Full test output is captured for debugging
+- Main conversation stays clean and focused
+- Context usage is optimized
+- All issues are properly surfaced
+- No approval dialogs interrupt the workflow
 
+### Note about e2e tests
+
+Ensure every test ends up with a summary and the correspondence between the user and the overlord.
+
+After all the logs are printed, add:
+
+```
+========================================
+
+### Test Result:
+  🎉 SUCCESS: ...
+  ✓ ...
+  ✓ ...
+  ✓ ...
+
+========================================
+
+### Chat transcript:
+
+User: ...
+System: ...
+User: ...
+System: ...
+```
+
+## Important Notes
+
+- **Always detect** rather than assume test framework
+- **Validate dependencies** before claiming ready
+- **Configure for debugging** - verbose output is critical
+- **No mocking** - use real services for accurate testing
+- **Sequential execution** - avoid parallel test issues
+- **Store configuration** for consistent future runs
+
+$ARGUMENTS

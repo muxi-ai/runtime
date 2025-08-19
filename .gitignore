@@ -126,6 +126,7 @@ pids
 src/muxi/observability/health/.status
 .key
 
+.claude/epics
 .claude/.mcp.json
 webhook_log.json
 

@@ -1,3 +1,7 @@
+---
+allowed-tools: Read, LS
+---
+
 # Epic List
 
 List all existing epics in the project.
@@ -6,6 +10,13 @@ List all existing epics in the project.
 ```
 /pm:epic-list
 ```
+
+## Preflight Checklist
+
+1. **Verify epic directory exists:**
+   - Check if `.claude/epics/` directory exists
+   - If not found, tell user: "📁 No epics directory found. Create your first epic with: /pm:prd-parse <feature-name>"
+   - Exit gracefully if directory doesn't exist
 
 ## Instructions
 
@@ -83,6 +94,21 @@ Use visual indicators:
 - 🟡 Needs attention (stuck/blocked tasks)
 - 🔴 Stalled (no recent activity)
 - ✅ Complete (100% progress)
+
+### 8. Error Handling
+
+Handle these cases gracefully:
+- **Empty directory:** Show "📁 No epics found. Start by creating a PRD: /pm:prd-new <feature-name>"
+- **Invalid epic structure:** For directories without epic.md, show: "⚠️ {dirname} - Invalid epic structure (missing epic.md)"
+- **Corrupt frontmatter:** Show epic but mark as "⚠️ Invalid frontmatter"
+- **Missing task count:** If can't count tasks, show "? tasks"
+
+### 9. Performance Considerations
+
+For large projects:
+- Don't read full file contents, only frontmatter
+- Cache task counts if possible
+- Show progress indicator if scanning takes time
 
 If no epics exist, suggest creating one with `/pm:prd-new` followed by `/pm:prd-parse`.
 

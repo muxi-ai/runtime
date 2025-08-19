@@ -1,135 +1,85 @@
+---
+allowed-tools: Bash, Read, LS
+---
+
 # Next
 
-Show the next issue to work on with its relation to the epic.
+Find the next priority task to work on.
 
 ## Usage
 ```
 /pm:next
 ```
 
+## Quick Check
+
+```bash
+# Check for epics
+ls -d .claude/epics/*/ 2>/dev/null | head -1
+```
+
+If no epics: "❌ No epics found. Start with: /pm:prd-new {feature-name}"
+
 ## Instructions
 
-You are identifying the next priority issue to work on and showing its context within the epic structure.
+### 1. Scan All Epics
 
-### 1. Scan All Local Epics
-- Read the `.claude/epics/` directory
-- Find all epic directories with `epic.md` files
-- Parse epic frontmatter for status and progress
-- Look for associated task files and their statuses
+For each epic directory in `.claude/epics/`:
+- Read epic frontmatter for status and progress
+- Count tasks with `status: open` in frontmatter
+- Note any tasks marked `parallel: true`
 
-### 2. Analyze Task Status from Frontmatter
-For each epic, examine task frontmatter to determine:
-- Tasks with `status: open` (available to start)
-- Tasks with `status: closed` (completed)
-- Tasks currently assigned or in progress
-- Dependencies between tasks
+### 2. Simple Priority Logic
 
-### 3. Check GitHub Issue Status
-For tasks with GitHub URLs in frontmatter:
-- Use `gh issue list --label "epic:{epic_name}" --state open` to get current status
-- Cross-reference with local frontmatter
-- Identify any sync discrepancies
+Find the best next task using these rules:
 
-### 4. Priority Logic Using Frontmatter
-Find the next issue using this priority based on frontmatter analysis:
-1. **Blocking sequential tasks** - Open tasks that unlock others
-2. **Ready parallel tasks** - Tasks marked `parallel: true` with no dependencies  
-3. **Next sequential task** - Follow logical order in epics
-4. **Consider epic progress** - Prioritize epics with higher completion rates
+1. **Incomplete epics near completion** (>70% done) - finish what's almost done
+2. **First open task in active epics** - maintain momentum
+3. **Any parallel task** - can start immediately
+4. **First task in backlog epics** - start something new
 
-### 5. Display Next Issue with Context
-Show the recommended next issue using frontmatter data:
+### 3. Check GitHub Status (Optional)
+
+If task has GitHub URL in frontmatter:
+```bash
+gh issue view {number} --json state
 ```
-🎯 Next Recommended Issue
+Skip if already closed on GitHub.
 
-📋 Issue #{github_issue}: {task_name}
-   Epic: {epic_name} ({epic_status}) - {epic_progress}%
-   Task Status: {task_status}
-   Created: {task_created}
-   Updated: {task_updated}
-   
-📚 Epic Context:
-   Progress: {completed_tasks}/{total_tasks} tasks complete ({epic_progress}%)
-   This task: #{position} in sequence
-   PRD: {prd_path}
-   
-🔗 Dependencies:
-   ✅ {completed_dependency}
-   ⏸️ {pending_dependency}
-   
-📊 Task Details:
-   File: .claude/epics/{epic_name}/{task_file}
-   Parallel execution: {parallel_flag}
-   GitHub: {github_url}
-   
-🚀 Quick Start:
-   /pm:issue-start {github_issue}
+### 4. Display Recommendation
+
+```
+Next task: {task_name}
+
+Epic: {epic_name} ({progress}% complete)
+File: .claude/epics/{epic_name}/{task_file}
+Type: {parallel|sequential}
+
+Start with: /pm:issue-start {github_issue_number}
 ```
 
-### 6. Alternative Options from Frontmatter
-If multiple good options exist, show alternatives using frontmatter:
+If multiple good options:
 ```
-🔄 Other Available Tasks:
-   Issue #{alt1}: {name} ({epic_name}, parallel, {estimate})
-   Issue #{alt2}: {name} ({epic_name}, sequential, {estimate})
-   Issue #{alt3}: {name} ({epic_name}, parallel, {estimate})
+Other available tasks:
+- {task_2}: {epic} (parallel)
+- {task_3}: {epic} (sequential)
 ```
 
-### 7. Epic Health Check from Frontmatter
-Show overall project status using frontmatter analysis:
+### 5. No Tasks Available
+
+If no open tasks found:
 ```
-📊 Epic Status Overview:
-   Active epics: {active_count}
-   
-🔍 Backlog Epics: {backlog_count}
-   {epic1_name} (0% complete)
-   {epic2_name} (0% complete)
-   
-🔄 In-Progress Epics: {in_progress_count}
-   {epic3_name} ({progress}% complete)
-   {epic4_name} ({progress}% complete)
-   
-✅ Completed Epics: {completed_count}
-   
-🏃‍♂️ Velocity Analysis:
-   Average epic progress: {avg_progress}%
-   Ready tasks across all epics: {ready_count}
-   Blocked tasks: {blocked_count}
+No open tasks found.
+
+Options:
+- Create new epic: /pm:prd-new {feature}
+- Check GitHub for updates: gh issue list --label task --state open
+- Review completed work: /pm:epic-list
 ```
 
-### 8. No Work Available
-If no issues are ready based on frontmatter analysis:
-```
-⏸️ No Ready Issues Found
+## Important Notes
 
-Possible reasons:
-- All current tasks have status: closed
-- Tasks waiting for dependencies
-- No epics with open tasks
-
-🚀 Suggested Actions:
-- Check /pm:epic-list for epics needing decomposition
-- Review blocked tasks for dependency resolution
-- Create new epic with /pm:prd-new {feature}
-- Sync status with GitHub: /pm:epic-sync {epic_name}
-```
-
-### 9. Smart Recommendations from Metadata
-Consider these factors from frontmatter:
-- **Epic progress** - Prioritize epics closer to completion
-- **Task creation dates** - Consider age and priority
-- **GitHub sync status** - Prefer synced tasks for transparency
-- **Parallel vs sequential** - Balance workload distribution
-
-### 10. Status Synchronization Check
-Compare frontmatter with GitHub and suggest sync if needed:
-```
-⚠️ Sync Recommendations:
-   Epic {epic_name}: Local progress differs from GitHub
-   → Run: /pm:issue-sync {issue_number}
-   
-   Epic {epic_name}: Not synced to GitHub
-   → Run: /pm:epic-sync {epic_name}
-```
-
-Provide a clear, actionable recommendation that helps developers maintain momentum and make progress on the most important work, using frontmatter as the authoritative source for all status and progress information.
+- Keep priority logic simple
+- Trust local frontmatter over GitHub state
+- Focus on finishing epics before starting new ones
+- Don't over-analyze - any forward progress is good

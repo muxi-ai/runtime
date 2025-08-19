@@ -1,180 +1,162 @@
+---
+allowed-tools: Bash, Read, Write, LS, Task
+---
+
 # Issue Start
 
-Begin work on issue with specialized agent and progress tracking.
+Begin work on a GitHub issue with parallel agents based on work stream analysis.
 
 ## Usage
 ```
 /pm:issue-start <issue_number>
 ```
 
+## Quick Check
+
+1. **Get issue details:**
+   ```bash
+   gh issue view $ARGUMENTS --json state,title,labels,body
+   ```
+   If it fails: "❌ Cannot access issue #$ARGUMENTS. Check number or run: gh auth login"
+
+2. **Find local task file:**
+   - Search for task file containing `github:.*issues/$ARGUMENTS` in frontmatter
+   - If not found: "❌ No local task for issue #$ARGUMENTS. This issue may have been created outside the PM system."
+
+3. **Check for analysis:**
+   ```bash
+   test -f .claude/epics/*/$ARGUMENTS-analysis.md || echo "❌ No analysis found for issue #$ARGUMENTS
+   
+   Run: /pm:issue-analyze $ARGUMENTS first
+   Or: /pm:issue-start $ARGUMENTS --analyze to do both"
+   ```
+   If no analysis exists and no --analyze flag, stop execution.
+
 ## Instructions
 
-You are initiating work on a specific GitHub issue with proper setup and agent configuration for: **Issue #$ARGUMENTS**
+### 1. Ensure Worktree Exists
 
-### 1. Issue Validation
-- Fetch issue details from GitHub using `gh issue view #$ARGUMENTS`
-- Verify issue is open and assignable
-- Check for any blocking dependencies
+Check if epic worktree exists:
+```bash
+# Find epic name from task file
+epic_name={extracted_from_path}
 
-### 2. Find Local Task File
-- Search for local task file with GitHub URL matching issue #$ARGUMENTS
-- Look in all epic directories under `.claude/epics/`
-- Extract task details and epic context
-
-### 3. Update Task File Frontmatter
-Update the local task file frontmatter to reflect work starting:
-```yaml
----
-name: [Task Title]
-status: open
-created: [existing date]
-updated: [current date/time]
-github: https://github.com/{org}/{repo}/issues/$ARGUMENTS
----
+# Check worktree
+if ! git worktree list | grep -q "epic-$epic_name"; then
+  echo "❌ No worktree for epic. Run: /pm:epic-start $epic_name"
+  exit 1
+fi
 ```
 
-### 4. Local Workspace Setup
-Create/verify local working environment:
-```
-.claude/epics/{epic_name}/
-├── epic.md
-├── {task_number}.md              # Task file for this issue
-└── updates/
-    └── $ARGUMENTS/               # Work-in-progress updates
-        ├── progress.md           # Progress tracking
-        ├── notes.md             # Development notes
-        └── commits.md           # Commit history
+### 2. Read Analysis
+
+Read `.claude/epics/{epic_name}/$ARGUMENTS-analysis.md`:
+- Parse parallel streams
+- Identify which can start immediately
+- Note dependencies between streams
+
+### 3. Setup Progress Tracking
+
+Get current datetime: `date -u +"%Y-%m-%dT%H:%M:%SZ"`
+
+Create workspace structure:
+```bash
+mkdir -p .claude/epics/{epic_name}/updates/$ARGUMENTS
 ```
 
-### 5. Initialize Progress Tracking
-Create initial progress file with frontmatter:
+Update task file frontmatter `updated` field with current datetime.
+
+### 4. Launch Parallel Agents
+
+For each stream that can start immediately:
+
+Create `.claude/epics/{epic_name}/updates/$ARGUMENTS/stream-{X}.md`:
 ```markdown
 ---
 issue: $ARGUMENTS
-started: [current date/time]
-last_sync: null
-completion: 0%
+stream: {stream_name}
+agent: {agent_type}
+started: {current_datetime}
+status: in_progress
 ---
 
-# Progress: Issue #$ARGUMENTS
+# Stream {X}: {stream_name}
 
-## Started
-Date: {current_date}
-Assignee: {github_username}
+## Scope
+{stream_description}
 
-## Task Overview
-{task_description}
+## Files
+{file_patterns}
 
-## Acceptance Criteria
-- [ ] {criterion_1}
-- [ ] {criterion_2}
-- [ ] {criterion_3}
-
-## Work Log
-### {current_date}
-- Started work on issue
-- Set up local development environment
-- {initial_steps}
-
-## Next Steps
-- {planned_next_actions}
-
-## Blockers
-None currently
-
-## Notes
-{any_initial_observations}
+## Progress
+- Starting implementation
 ```
 
-### 6. Agent Configuration
-Based on issue labels and content, configure specialized agent:
-
-**Frontend Tasks** (labels: ui, frontend, component):
-```markdown
-# Agent: Frontend Developer
-
-You are working on Issue #$ARGUMENTS: {title}
-
-## Context
-- Read the full task requirements from the local task file
-- Review the epic context for architectural decisions
-- Follow the project's UI/UX guidelines
-
-## Development Approach
-- Create components following the design system
-- Implement responsive designs
-- Add proper accessibility features
-- Write component tests
-
-## Progress Tracking
-- Update progress.md with completed work
-- Document any design decisions in notes.md
-- Log commits and key changes
-- Update task file frontmatter when status changes
+Launch agent using Task tool:
+```yaml
+Task:
+  description: "Issue #$ARGUMENTS Stream {X}"
+  subagent_type: "{agent_type}"
+  prompt: |
+    You are working on Issue #$ARGUMENTS in the epic worktree.
+    
+    Worktree location: ../epic-{epic_name}/
+    Your stream: {stream_name}
+    
+    Your scope:
+    - Files to modify: {file_patterns}
+    - Work to complete: {stream_description}
+    
+    Requirements:
+    1. Read full task from: .claude/epics/{epic_name}/{task_file}
+    2. Work ONLY in your assigned files
+    3. Commit frequently with format: "Issue #$ARGUMENTS: {specific change}"
+    4. Update progress in: .claude/epics/{epic_name}/updates/$ARGUMENTS/stream-{X}.md
+    5. Follow coordination rules in /rules/agent-coordination.md
+    
+    If you need to modify files outside your scope:
+    - Check if another stream owns them
+    - Wait if necessary
+    - Update your progress file with coordination notes
+    
+    Complete your stream's work and mark as completed when done.
 ```
 
-**Backend Tasks** (labels: api, backend, service):
-```markdown
-# Agent: Backend Developer
+### 5. GitHub Assignment
 
-You are working on Issue #$ARGUMENTS: {title}
-
-## Context
-- Read the full task requirements from the local task file
-- Review API design patterns from the epic
-- Follow security and performance guidelines
-
-## Development Approach
-- Implement API endpoints with proper validation
-- Add comprehensive error handling
-- Include monitoring and logging
-- Write integration tests
-
-## Progress Tracking
-- Update progress.md with API completion status
-- Document endpoint specifications
-- Track performance metrics
-- Update task file frontmatter when status changes
+```bash
+# Assign to self and mark in-progress
+gh issue edit $ARGUMENTS --add-assignee @me --add-label "in-progress"
 ```
 
-### 7. GitHub Assignment
-- Assign issue to current user: `gh issue edit #$ARGUMENTS --add-assignee @me`
-- Add "in-progress" label: `gh issue edit #$ARGUMENTS --add-label "in-progress"`
+### 6. Output
 
-### 8. Development Environment
-Check and prepare:
-- Verify git branch strategy
-- Check for required dependencies
-- Set up any necessary environment variables
-- Run initial tests to ensure clean starting state
-
-### 9. Output Summary
 ```
-🚀 Started work on Issue #$ARGUMENTS
+✅ Started parallel work on issue #$ARGUMENTS
 
-📋 Task: {issue_title}
-   Epic: {epic_name}
-   Assignee: {username}
-   
-📁 Local workspace:
-   Task file: .claude/epics/{epic_name}/{task_file}
-   Updates: .claude/epics/{epic_name}/updates/$ARGUMENTS/
-   
-🤖 Agent configured: {agent_type}
-   
-✅ Ready to develop!
-   
-💡 Next steps:
-   1. Review task requirements carefully
-   2. Start implementation following the technical approach
-   3. Update progress regularly in progress.md
-   4. Sync updates with: /pm:issue-sync $ARGUMENTS
+Epic: {epic_name}
+Worktree: ../epic-{epic_name}/
+
+Launching {count} parallel agents:
+  Stream A: {name} (Agent-1) ✓ Started
+  Stream B: {name} (Agent-2) ✓ Started
+  Stream C: {name} - Waiting (depends on A)
+
+Progress tracking:
+  .claude/epics/{epic_name}/updates/$ARGUMENTS/
+
+Monitor with: /pm:epic-status {epic_name}
+Sync updates: /pm:issue-sync $ARGUMENTS
 ```
 
-### 10. Error Handling
-- Handle authentication issues with GitHub
-- Check for conflicting assignments
-- Verify write permissions to local directories
-- Provide clear guidance for resolution
+## Error Handling
 
-This command sets up everything needed for focused, tracked development work on Issue #$ARGUMENTS, ensuring frontmatter is properly maintained throughout the process.
+If any step fails, report clearly:
+- "❌ {What failed}: {How to fix}"
+- Continue with what's possible
+- Never leave partial state
+
+## Important Notes
+
+Follow `/rules/datetime.md` for timestamps.
+Keep it simple - trust that GitHub and file system work.
