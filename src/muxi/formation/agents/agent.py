@@ -1010,6 +1010,23 @@ class Agent:
                 or ("THIS SPECIFIC TASK ONLY" in user_message)  # Workflow instruction
             )
 
+        # Extract actual user request from enhanced message for planning
+        # The enhanced message contains conversation context which confuses the planning LLM
+        actual_user_request = user_message
+        if "=== CURRENT REQUEST ===" in user_message and "User:" in user_message:
+            # Extract just the current request from the enhanced message
+            lines = user_message.split("\n")
+            for i, line in enumerate(lines):
+                if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    if next_line.startswith("User:"):
+                        actual_user_request = next_line[5:].strip()  # Remove "User: " prefix
+                        print(f"[DEBUG] Extracted actual request from enhanced message:")
+                        print(f"[DEBUG]   Original length: {len(user_message)}")
+                        print(f"[DEBUG]   Extracted: '{actual_user_request}'")
+                        print(f"[DEBUG]   Extracted length: {len(actual_user_request)}")
+                        break
+
         # Skip planning for workflow tasks or A2A tasks (to prevent loops)
         if is_workflow_task or is_a2a_task:
             # Log that we're bypassing planning
@@ -1042,7 +1059,8 @@ class Agent:
             and not is_a2a_task
         ):
             try:
-                execution_plan = await self._plan_before_execution(user_message, tools)
+                # Use the extracted actual request for planning, not the full enhanced message
+                execution_plan = await self._plan_before_execution(actual_user_request, tools)
 
                 # Log the execution plan
                 observability.observe(
