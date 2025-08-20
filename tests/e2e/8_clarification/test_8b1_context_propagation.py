@@ -33,11 +33,14 @@ async def test_context_propagation():
 
         # Test 1: Establish context
         print("\n1. Establishing e-commerce platform context...")
-        response1 = await overlord.chat(
-            message="I'm working on an e-commerce platform using React and Node.js",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False,
+        response1 = await asyncio.wait_for(
+            overlord.chat(
+                message="I'm working on an e-commerce platform using React and Node.js",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False,
+            ),
+            timeout=120.0  # 2 minute timeout
         )
 
         # Handle different response types
@@ -51,11 +54,14 @@ async def test_context_propagation():
 
         # Test 2: Ask question that should use context
         print("\n2. Asking database recommendation (should consider e-commerce context)...")
-        response2 = await overlord.chat(
-            message="What database should I use?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False,
+        response2 = await asyncio.wait_for(
+            overlord.chat(
+                message="What database should I use?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False,
+            ),
+            timeout=120.0  # 2 minute timeout
         )
 
         # Handle different response types
@@ -89,11 +95,14 @@ async def test_context_propagation():
 
         # Test 3: Further context refinement
         print("\n3. Adding scalability requirement...")
-        response3 = await overlord.chat(
-            message="I expect high traffic during sales events with millions of users",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False,
+        response3 = await asyncio.wait_for(
+            overlord.chat(
+                message="I expect high traffic during sales events with millions of users",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False,
+            ),
+            timeout=120.0  # 2 minute timeout
         )
 
         # Handle different response types
@@ -109,11 +118,14 @@ async def test_context_propagation():
         print(
             "\n4. Asking about caching strategy (should consider React, Node.js, high traffic)..."
         )
-        response4 = await overlord.chat(
-            message="What caching strategy would you recommend?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False,
+        response4 = await asyncio.wait_for(
+            overlord.chat(
+                message="What caching strategy would you recommend?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False,
+            ),
+            timeout=120.0  # 2 minute timeout
         )
 
         # Handle different response types

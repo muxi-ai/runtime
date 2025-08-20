@@ -33,11 +33,14 @@ async def test_multi_turn_context():
 
         # Turn 1: Initial request
         print("\n1. Initial request with ambiguity...")
-        response1 = await overlord.chat(
-            message="I need to build a dashboard",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False,
+        response1 = await asyncio.wait_for(
+            overlord.chat(
+                message="I need to build a dashboard",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False,
+            ),
+            timeout=120.0  # 2 minute timeout
         )
 
         # Handle different response types
@@ -63,11 +66,14 @@ async def test_multi_turn_context():
 
         # Turn 2: Provide clarification
         print("\n2. Providing clarification...")
-        response2 = await overlord.chat(
-            message="It's for monitoring server metrics - CPU, memory, disk usage",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False,
+        response2 = await asyncio.wait_for(
+            overlord.chat(
+                message="It's for monitoring server metrics - CPU, memory, disk usage",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False,
+            ),
+            timeout=120.0  # 2 minute timeout
         )
 
         # Handle different response types
@@ -81,11 +87,14 @@ async def test_multi_turn_context():
 
         # Turn 3: Follow-up question
         print("\n3. Follow-up question about refresh rate...")
-        response3 = await overlord.chat(
-            message="How often should the data refresh?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False,
+        response3 = await asyncio.wait_for(
+            overlord.chat(
+                message="How often should the data refresh?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False,
+            ),
+            timeout=120.0  # 2 minute timeout
         )
 
         # Handle different response types
@@ -111,11 +120,14 @@ async def test_multi_turn_context():
 
         # Turn 4: Change aspect but maintain context
         print("\n4. Asking about visualization libraries...")
-        response4 = await overlord.chat(
-            message="What charting libraries would work well for this?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False,
+        response4 = await asyncio.wait_for(
+            overlord.chat(
+                message="What charting libraries would work well for this?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False,
+            ),
+            timeout=120.0  # 2 minute timeout
         )
 
         # Handle different response types
@@ -148,11 +160,14 @@ async def test_multi_turn_context():
 
         # Turn 5: Reference earlier context
         print("\n5. Referencing earlier context...")
-        response5 = await overlord.chat(
-            message="Should I use WebSockets for the real-time updates you mentioned?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False,
+        response5 = await asyncio.wait_for(
+            overlord.chat(
+                message="Should I use WebSockets for the real-time updates you mentioned?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False,
+            ),
+            timeout=120.0  # 2 minute timeout
         )
 
         # Handle different response types

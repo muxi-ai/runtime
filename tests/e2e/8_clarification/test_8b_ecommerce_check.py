@@ -32,11 +32,14 @@ async def test_ecommerce_statement():
         
         # Test 1: The exact statement from 8b1
         print("\n1. Testing e-commerce platform statement...")
-        response1 = await overlord.chat(
-            message="I'm working on an e-commerce platform using React and Node.js",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response1 = await asyncio.wait_for(
+            overlord.chat(
+                message="I'm working on an e-commerce platform using React and Node.js",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         
         # Handle different response types
@@ -92,11 +95,14 @@ async def test_ecommerce_statement():
         # Test 2: Follow-up question
         print("\n" + "=" * 40)
         print("\n2. Testing follow-up question...")
-        response2 = await overlord.chat(
-            message="What database should I use?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response2 = await asyncio.wait_for(
+            overlord.chat(
+                message="What database should I use?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         
         if isinstance(response2, str):

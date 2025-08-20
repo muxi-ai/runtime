@@ -16,11 +16,11 @@
 
 | Test ID | Test Plan Requirement | Implementation File | Status | Last Updated |
 |---------|----------------------|-------------------|---------|--------------|
-| 8B-baseline | Baseline Behavior | `test_8b_baseline.py` | ✅ Passing | 2025-08-13 |
-| 8B-ecommerce | Context Acknowledgment | `test_8b_ecommerce_check.py` | ✅ Passing | 2025-08-13 |
-| 8B1 | Context Propagation | `test_8b1_context_propagation.py` | ✅ Passing | 2025-08-13 |
-| 8B2 | Information Extraction | `test_8b2_information_extraction.py` | ⚠️ Timeout | 2025-08-13 |
-| 8B3 | Multi-turn Context | `test_8b3_multi_turn_context.py` | ⚠️ Partial | 2025-08-13 |
+| 8B-baseline | Baseline Behavior | `test_8b_baseline.py` | ✅ Passing | 2025-08-20 |
+| 8B-ecommerce | Context Acknowledgment | `test_8b_ecommerce_check.py` | ✅ Passing | 2025-08-20 |
+| 8B1 | Context Propagation | `test_8b1_context_propagation.py` | ✅ Passing | 2025-08-20 |
+| 8B2 | Information Extraction | `test_8b2_information_extraction.py` | ✅ Passing | 2025-08-20 |
+| 8B3 | Multi-turn Context | `test_8b3_multi_turn_context.py` | ✅ Passing | 2025-08-20 |
 
 ### Part 2: Enhanced Clarification
 
@@ -50,7 +50,7 @@
 - Multi-agent clarification scenarios
 - Credential/service selection clarification
 
-### Information Flow Features (8B)
+### Information Flow Features (8B) - ✅ 100% Passing
 - Context propagation across turns
 - User context isolation
 - Information extraction from messages
@@ -119,19 +119,20 @@ python tests/e2e/8_clarification/test_8c3_complex_parameter_collection.py
 ## Success Metrics
 
 - **Test Group 8A**: ✅ **100% Passing** (3/3 tests) - All single clarification patterns working
-- **Test Group 8B**: ⚠️ **60% Passing** (3/5 tests fully passing, 2 with issues) - Information flow features
+- **Test Group 8B**: ✅ **100% Passing** (5/5 tests) - All information flow features working
 - **Test Group 8C**: 🔲 Implemented but status unknown - Multiple clarification sequences
 - **Test Group 8D**: 🔲 TODO - Stack management features (3 tests)
 
 ### Implementation Status
 - **8A Completed & Passing**: 3 tests (8A1 with multi-turn support, 8A2, 8A3) - ✅ 100%
-- **8B Tested**: 5 tests (3 passing, 2 with issues) - ⚠️ 60% passing
+- **8B Completed & Passing**: 5 tests (all passing with 2-minute timeouts) - ✅ 100%
 - **8C Implemented**: 3 tests (8C1, 8C2, 8C3) - need status verification
 - **8D TODO**: 3 tests (8D1, 8D2, 8D3)
 - **Total Verified**: 8/14 tests with known status = 57%
 
-### Key Recent Improvements (2025-08-18)
-- ✅ Multi-turn clarification support added and working
-- ✅ 8A3 credential selection now passing (was failing)
-- ✅ Request ID persistence across clarification turns
-- ✅ Better handling of reasonable follow-up questions
+### Key Recent Improvements (2025-08-20)
+- ✅ Fixed nested conversation context issue preventing "matryoshka doll" effect
+- ✅ Fixed planning prompt extraction to use actual request instead of enhanced message
+- ✅ Updated planning prompt to prevent unnecessary delegation between agents
+- ✅ Extended timeouts to 2 minutes for all 8B tests - all now passing
+- ✅ 8B2 and 8B3 now passing (were timing out previously)

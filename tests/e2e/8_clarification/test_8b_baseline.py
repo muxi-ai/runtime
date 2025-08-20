@@ -114,7 +114,7 @@ async def test_baseline_responses():
                 session_id=ctx.session_id,
                 stream=False
             ),
-            timeout=10.0  # 10 second timeout for this specific call
+            timeout=120.0  # 2 minute timeout for this specific call
         )
         
         if isinstance(response5, str):

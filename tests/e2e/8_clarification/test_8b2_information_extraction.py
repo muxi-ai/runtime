@@ -33,11 +33,14 @@ async def test_information_extraction():
 
         # Test 1: Extract budget and timeline
         print("\n1. Providing budget and timeline information...")
-        response1 = await overlord.chat(
-            message="My budget is $5000 and timeline is 2 weeks for the MVP",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False,
+        response1 = await asyncio.wait_for(
+            overlord.chat(
+                message="My budget is $5000 and timeline is 2 weeks for the MVP",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False,
+            ),
+            timeout=120.0  # 2 minute timeout
         )
 
         # Handle different response types
@@ -51,11 +54,14 @@ async def test_information_extraction():
 
         # Test 2: Ask for recommendations that should consider budget/timeline
         print("\n2. Asking for tech stack recommendation...")
-        response2 = await overlord.chat(
-            message="What tech stack would you recommend for a quick prototype?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False,
+        response2 = await asyncio.wait_for(
+            overlord.chat(
+                message="What tech stack would you recommend for a quick prototype?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False,
+            ),
+            timeout=120.0  # 2 minute timeout
         )
 
         # Handle different response types
@@ -90,11 +96,14 @@ async def test_information_extraction():
 
         # Test 3: Extract technical requirements
         print("\n3. Providing technical requirements...")
-        response3 = await overlord.chat(
-            message="The app needs user authentication, real-time chat, and payment processing",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False,
+        response3 = await asyncio.wait_for(
+            overlord.chat(
+                message="The app needs user authentication, real-time chat, and payment processing",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False,
+            ),
+            timeout=120.0  # 2 minute timeout
         )
 
         # Handle different response types
@@ -108,11 +117,14 @@ async def test_information_extraction():
 
         # Test 4: Ask specific question that should use extracted requirements
         print("\n4. Asking about authentication solution...")
-        response4 = await overlord.chat(
-            message="Which authentication solution would work best?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False,
+        response4 = await asyncio.wait_for(
+            overlord.chat(
+                message="Which authentication solution would work best?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False,
+            ),
+            timeout=120.0  # 2 minute timeout
         )
 
         # Handle different response types
