@@ -794,6 +794,30 @@ class ChatOrchestrator:
                         timestamp = msg.get("metadata", {}).get("timestamp", "")
                         content = msg.get("text", "")
 
+                        # CRITICAL FIX: Skip messages that already contain context markers
+                        # This prevents the matryoshka doll effect of nested contexts
+                        if any(marker in content for marker in [
+                            "=== CONVERSATION CONTEXT",
+                            "=== CURRENT REQUEST ===",
+                            "=== USER PROFILE ===",
+                            "=== FILE PROCESSING RESULTS ===",
+                            "=== RELEVANT MEMORIES ==="
+                        ]):
+                            # This is an enhanced message, extract just the actual content
+                            # Look for the actual user/assistant message
+                            if "=== CURRENT REQUEST ===" in content and "User:" in content:
+                                # Extract just the user's actual message
+                                lines = content.split("\n")
+                                for i, line in enumerate(lines):
+                                    if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                                        next_line = lines[i + 1].strip()
+                                        if next_line.startswith("User:"):
+                                            content = next_line[5:].strip()  # Remove "User: " prefix
+                                            break
+                            else:
+                                # Skip this message entirely if we can't extract clean content
+                                continue
+
                         if timestamp:
                             # Format timestamp for readability
                             import datetime
