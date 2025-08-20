@@ -48,7 +48,8 @@
       "Bash(.claude/scripts/test-and-log.sh:*)",
       "Bash(bash .claude/scripts/pm/*)",
       "Bash(.claude/scripts/pm/*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "WebFetch(domain:docs.python.org)"
     ]
   }
 }

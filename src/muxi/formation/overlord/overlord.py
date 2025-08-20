@@ -5114,12 +5114,14 @@ Make it conversational and friendly while keeping accuracy."""
                             # If we have the original message, retry it now with credentials stored
                             if original_message:
                                 # Recursively call _process_sync_chat with the original message
+                                # IMPORTANT: Skip clarification to avoid infinite loop
                                 return await self._process_sync_chat(
                                     message=original_message,
                                     user_id=user_id,
                                     session_id=session_id,
                                     request_id=request_id,
                                     agent_name=agent_name,
+                                    skip_clarification=True,  # Prevent infinite clarification loop
                                 )
                             else:
                                 # Fallback if no original message stored
@@ -5245,6 +5247,7 @@ Make it conversational and friendly while keeping accuracy."""
                             if original_message:
                                 # Just retry with the original message - the credential is already cached
                                 # The agent doesn't need to know about the clarification that happened
+                                # IMPORTANT: Skip clarification to avoid infinite loop
 
                                 return await self._process_sync_chat(
                                     message=original_message,
@@ -5252,6 +5255,7 @@ Make it conversational and friendly while keeping accuracy."""
                                     session_id=session_id,
                                     request_id=request_id,
                                     agent_name=agent_name,
+                                    skip_clarification=True,  # Prevent infinite clarification loop
                                 )
                             else:
                                 return MuxiResponse(

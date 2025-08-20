@@ -106,11 +106,15 @@ async def test_baseline_responses():
         
         # Test 5: Now ask a question that should use context
         print("\n5. Testing question that should use context...")
-        response5 = await overlord.chat(
-            message="What testing framework would you recommend?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        # Add timeout to prevent hanging
+        response5 = await asyncio.wait_for(
+            overlord.chat(
+                message="What testing framework would you recommend?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=10.0  # 10 second timeout for this specific call
         )
         
         if isinstance(response5, str):
@@ -196,12 +200,18 @@ async def test_baseline_responses():
         # Try to shut down even on failure
         if 'formation' in locals():
             try:
-                await formation.stop_overlord()
+                await formation.kill_overlord()
                 formation.shutdown()
             except Exception:
                 pass
         
         return False
+    finally:
+        # Ensure test terminates properly
+        if 'test_passed' in locals():
+            sys.exit(0 if test_passed else 1)
+        else:
+            sys.exit(1)
 
 
 if __name__ == "__main__":
