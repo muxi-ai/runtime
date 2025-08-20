@@ -28,9 +28,9 @@
 
 | Test ID | Test Plan Requirement | Implementation File | Status |
 |---------|----------------------|-------------------|---------|
-| 8C1 | Credential Rejection Flow | `test_8c1_credential_rejection_flow.py` | - |
-| 8C2 | Multi-step Clarification | `test_8c2_multi_step_clarification.py` | - |
-| 8C3 | Complex Parameter Collection | `test_8c3_complex_parameter_collection.py` | - |
+| 8C1 | Multi-step Clarification | `test_8c1_multi_step_clarification.py` | - |
+| 8C2 | Complex Parameter Collection | `test_8c2_complex_parameter_collection.py` | - |
+| 8C3 | Branching Clarification Paths | `test_8c3_branching_clarification.py` | - |
 
 #### Test Group 8D: Clarification Stack Management
 
@@ -39,6 +39,26 @@
 | 8D1 | Stack Depth Handling | `test_8d1_stack_depth_handling.py` | 🔲 TODO |
 | 8D2 | Parallel Clarification Branches | `test_8d2_parallel_clarification.py` | 🔲 TODO |
 | 8D3 | Clarification Timeout | `test_8d3_clarification_timeout.py` | 🔲 TODO |
+
+#### Test Group 8E: Credential Handling Modes
+
+| Test ID | Test Plan Requirement | Implementation File | Status |
+|---------|----------------------|-------------------|---------|
+| 8E1a | API Key in Redirect Mode | `test_8e1a_apikey_redirect.py` | 🔲 TODO |
+| 8E1b | Bearer Token in Redirect Mode | `test_8e1b_bearer_redirect.py` | 🔲 TODO |
+| 8E1c | OAuth in Redirect Mode | `test_8e1c_oauth_redirect.py` | 🔲 TODO |
+| 8E2a | API Key in Dynamic Mode | `test_8e2a_apikey_dynamic.py` | 🔲 TODO |
+| 8E2b | PAT with allow_inline | `test_8e2b_pat_dynamic.py` | 🔲 TODO |
+| 8E2c | Basic Auth in Dynamic Mode | `test_8e2c_basic_dynamic.py` | 🔲 TODO |
+| 8E3a | OAuth Bearer without Hint | `test_8e3a_oauth_dynamic.py` | 🔲 TODO |
+| 8E3b | Bearer with allow_inline false | `test_8e3b_bearer_no_inline.py` | 🔲 TODO |
+| 8E4a | List Credentials | `test_8e4a_list_credentials.py` | 🔲 TODO |
+| 8E4b | Remove Credential | `test_8e4b_remove_credential.py` | 🔲 TODO |
+| 8E4c | Edit Credential Not Supported | `test_8e4c_edit_credential.py` | 🔲 TODO |
+| 8E5a | Credential Redaction | `test_8e5a_redaction.py` | 🔲 TODO |
+| 8E5b | Context Switch During Credential | `test_8e5b_context_switch.py` | 🔲 TODO |
+| 8E5c | Invalid Credential Format | `test_8e5c_invalid_format.py` | 🔲 TODO |
+| 8E5d | Missing Configuration | `test_8e5d_missing_config.py` | 🔲 TODO |
 
 ## Test Coverage Summary
 
@@ -59,10 +79,10 @@
 - Topic switching with context retention
 
 ### Multiple Clarification Features (8C)
-- Credential rejection and re-selection
-- Nested clarification sequences
+- Multi-step clarification sequences
+- Complex parameter collection
 - Branching clarification paths
-- Multi-parameter collection
+- Nested clarifications leading to more clarifications
 - Parameter validation and correction
 - Complex workflow clarification
 
@@ -73,6 +93,18 @@
 - 🔲 Stack depth limits and overflow handling
 - 🔲 Context preservation across deep stacks
 - 🔲 Recovery from abandoned clarifications
+
+### Credential Handling Modes (8E)
+- 🔲 Redirect mode enforcement (enterprise security)
+- 🔲 Dynamic mode intelligence (developer friendly)
+- 🔲 API key inline acceptance
+- 🔲 PAT with allow_inline hint support
+- 🔲 OAuth redirect enforcement
+- 🔲 Basic auth with security warnings
+- 🔲 Credential listing and removal
+- 🔲 Security redaction and isolation
+- 🔲 Context switching during credential flow
+- 🔲 Invalid credential format handling
 
 ## Key Achievements
 
@@ -126,9 +158,10 @@ python tests/e2e/8_clarification/test_8c3_complex_parameter_collection.py
 ### Implementation Status
 - **8A Completed & Passing**: 3 tests (8A1 with multi-turn support, 8A2, 8A3) - ✅ 100%
 - **8B Completed & Passing**: 5 tests (all passing with 2-minute timeouts) - ✅ 100%
-- **8C Implemented**: 3 tests (8C1, 8C2, 8C3) - need status verification
-- **8D TODO**: 3 tests (8D1, 8D2, 8D3)
-- **Total Verified**: 8/14 tests with known status = 57%
+- **8C Implemented**: 3 tests (need reorganization after 8E addition) - status unknown
+- **8D TODO**: 3 tests (8D1, 8D2, 8D3) - stack management features
+- **8E TODO**: 15 tests (8E1-8E5) - credential handling modes
+- **Total Verified**: 8/29 tests with known status = 28%
 
 ### Key Recent Improvements (2025-08-20)
 - ✅ Fixed nested conversation context issue preventing "matryoshka doll" effect
