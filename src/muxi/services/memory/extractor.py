@@ -61,6 +61,7 @@ class MemoryExtractor:
         whitelist_users: Set[int] = None,
         blacklist_users: Set[int] = None,
         retention_days: int = 365,  # Default to 1 year retention
+        similarity_threshold: float = 0.1,  # Threshold for semantic deduplication
     ):
         """
         Initialize the MemoryExtractor.
@@ -76,6 +77,8 @@ class MemoryExtractor:
             whitelist_users: If set, only these users will have extraction
             blacklist_users: These users will be excluded from extraction
             retention_days: Number of days to retain extracted information
+            similarity_threshold: Distance threshold for semantic deduplication (0.0-1.0)
+                Lower values mean stricter matching. Default 0.1 means >90% similarity.
         """
         self.overlord = overlord
         self.extraction_model = extraction_model
@@ -87,6 +90,7 @@ class MemoryExtractor:
         self.whitelist_users = whitelist_users
         self.blacklist_users = blacklist_users or set()
         self.retention_days = retention_days
+        self.similarity_threshold = similarity_threshold
 
         # Add default privacy settings
         self._sensitive_key_patterns = {
@@ -456,10 +460,10 @@ class MemoryExtractor:
 
                         if existing:
                             # Check the first result for similarity
-                            # Distance of 0 = identical, Distance < 0.1 = very similar (>90% similarity)
+                            # Distance of 0 = identical, Distance < similarity_threshold = very similar
                             first_result = existing[0] if isinstance(existing, list) else existing
                             distance = first_result.get("distance", 1.0) if isinstance(first_result, dict) else 1.0
-                            if distance < 0.1:
+                            if distance < self.similarity_threshold:
                                 should_store = False
 
                     if should_store:
