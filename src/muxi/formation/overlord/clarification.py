@@ -32,7 +32,9 @@ class UnifiedClarificationSystem:
         self.active_requests = set()
 
         # Configuration - store reference to config object for hierarchy lookup
-        self.clarification_config = overlord.clarification_config if hasattr(overlord, "clarification_config") else None
+        self.clarification_config = (
+            overlord.clarification_config if hasattr(overlord, "clarification_config") else None
+        )
 
         # Extract configuration values
         if self.clarification_config:
@@ -165,6 +167,54 @@ class UnifiedClarificationSystem:
                 action="execute", request=enhanced, context={"collected": state["collected_info"]}
             )
 
+    async def handle_mcp_credential_request(
+        self, service_id: str, user_id: str, request_id: str
+    ) -> ClarificationResult:
+        """
+        Handle credential request for MCP service based on configuration mode.
+
+        Args:
+            service_id: The MCP service requesting credentials
+            user_id: The user ID for whom credentials are needed
+            request_id: The current request ID
+
+        Returns:
+            ClarificationResult with redirect message or credential prompt
+        """
+        # Access user_credentials config (top-level, not under clarification)
+        cred_config = (
+            self.overlord.formation_config.get("user_credentials", {})
+            if hasattr(self.overlord, "formation_config") and self.overlord.formation_config
+            else {}
+        )
+        mode = cred_config.get("mode", "redirect")
+
+        if mode == "redirect":
+            # Always redirect in redirect mode
+            redirect_message = cred_config.get(
+                "redirect_message",
+                "For security, credentials must be configured outside of this chat interface.\n"
+                "Please use your organization's credential management system to set up authentication.",
+            )
+
+            # Add service context to the message
+            full_message = f"{redirect_message}\n\nService '{service_id}' requires authentication."
+
+            # Return redirect message without starting clarification
+            return ClarificationResult(action="message", question=full_message, mode="redirect")
+
+        # Dynamic mode handling will be implemented in task #33
+        # For now, fall back to redirect behavior
+        redirect_message = cred_config.get(
+            "redirect_message",
+            "For security, credentials must be configured outside of this chat interface.\n"
+            "Please use your organization's credential management system to set up authentication.",
+        )
+
+        full_message = f"{redirect_message}\n\nService '{service_id}' requires authentication."
+
+        return ClarificationResult(action="message", question=full_message, mode="redirect")
+
     async def handle_credential_error(self, error: Any, request_id: str) -> ClarificationResult:
         """
         Handle AmbiguousCredentialError using request_id.
@@ -254,7 +304,7 @@ class UnifiedClarificationSystem:
                 key=key,
                 value=state,
                 ttl=None,  # No TTL - let FIFO handle cleanup
-                namespace=self.namespace
+                namespace=self.namespace,
             )
             self.active_requests.add(request_id)
         except Exception as e:
@@ -271,7 +321,7 @@ class UnifiedClarificationSystem:
                 },
                 description=f"Failed to store clarification state in buffer memory: {str(e)}",
             )
-            
+
             # Fallback to in-memory storage
             if not hasattr(self, "_fallback_storage"):
                 self._fallback_storage = {}
@@ -338,12 +388,14 @@ class UnifiedClarificationSystem:
         response_style = {
             "conversational": "natural, friendly, like a helpful colleague",
             "technical": "precise, specific, professional",
-            "brief": "very concise, minimal words"
+            "brief": "very concise, minimal words",
         }.get(self.style, "natural, friendly, like a helpful colleague")
 
         # Extract conversation context if it exists, otherwise use the full message
         if "=== CONVERSATION CONTEXT (Most Recent First) ===" in message:
-            conversation = message.split("=== CONVERSATION CONTEXT (Most Recent First) ===")[-1].strip()
+            conversation = message.split("=== CONVERSATION CONTEXT (Most Recent First) ===")[
+                -1
+            ].strip()
         elif "=== CURRENT REQUEST ===" in message:
             # Use the entire enhanced message if no conversation context
             conversation = message
@@ -563,7 +615,7 @@ Return JSON:
             "planning": 7,
             "execution": 3,
             "credential": 2,  # Updated from 1 to 2
-            "other": 3
+            "other": 3,
         }
 
         # Check for new max_rounds configuration (highest priority)
@@ -629,11 +681,25 @@ Return JSON:
             lower_stripped = stripped.lower()
 
             # Common non-credential patterns to exclude
-            if any(pattern in lower_stripped for pattern in [
-                'product_id', 'user_id', 'session_id', 'request_id', 'order_id',
-                'transaction_id', 'customer_id', 'account_id', 'invoice_id',
-                'http://', 'https://', '.com', '.org', '.net'  # URLs
-            ]):
+            if any(
+                pattern in lower_stripped
+                for pattern in [
+                    "product_id",
+                    "user_id",
+                    "session_id",
+                    "request_id",
+                    "order_id",
+                    "transaction_id",
+                    "customer_id",
+                    "account_id",
+                    "invoice_id",
+                    "http://",
+                    "https://",
+                    ".com",
+                    ".org",
+                    ".net",  # URLs
+                ]
+            ):
                 return False
 
             # Require both letters and digits
@@ -651,20 +717,29 @@ Return JSON:
 
                 # Check for known credential-like prefixes (case-insensitive)
                 has_credential_prefix = any(
-                    lower_stripped.startswith(prefix) for prefix in [
-                        'key_', 'token_', 'api_', 'apikey', 'secret_', 'password',
-                        'bearer', 'access_token', 'private_', 'auth_'
+                    lower_stripped.startswith(prefix)
+                    for prefix in [
+                        "key_",
+                        "token_",
+                        "api_",
+                        "apikey",
+                        "secret_",
+                        "password",
+                        "bearer",
+                        "access_token",
+                        "private_",
+                        "auth_",
                     ]
                 ) or any(
                     # Exact match for short prefixes to avoid false positives
-                    lower_stripped == prefix or lower_stripped.startswith(prefix + '-')
-                    for prefix in ['key', 'token', 'api', 'secret', 'auth']
+                    lower_stripped == prefix or lower_stripped.startswith(prefix + "-")
+                    for prefix in ["key", "token", "api", "secret", "auth"]
                 )
 
                 # Check for high entropy (mix of upper, lower, digits, special chars)
                 has_upper = any(c.isupper() for c in stripped)
                 has_lower = any(c.islower() for c in stripped)
-                has_special = any(c in '-_+/=' for c in stripped)
+                has_special = any(c in "-_+/=" for c in stripped)
                 high_entropy = sum([has_upper, has_lower, has_digit, has_special]) >= 3
 
                 # Return True only if it strongly resembles a credential

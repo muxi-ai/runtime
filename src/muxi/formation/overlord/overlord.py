@@ -5949,6 +5949,41 @@ Make it conversational and friendly while keeping accuracy."""
                             break
 
             if isinstance(e, MissingCredentialError):
+                # Use unified system to handle credential request based on configuration
+                if self.clarification and request_id:
+                    try:
+                        clarification_result = await self.clarification.handle_mcp_credential_request(
+                            service_id=e.service,
+                            user_id=e.user_id,
+                            request_id=request_id
+                        )
+
+                        # Check if this is a redirect (no clarification needed)
+                        if clarification_result.action == "message" and clarification_result.mode == "redirect":
+                            # Apply persona to format the redirect message
+                            formatted_content = await self._apply_persona(clarification_result.question, message)
+
+                            return MuxiResponse(
+                                role="assistant",
+                                content=formatted_content,
+                                metadata={
+                                    "credential_mode": "redirect",
+                                    "service": e.service,
+                                    "user_id": e.user_id,
+                                    "session_id": session_id,
+                                },
+                            )
+
+                        # For dynamic mode (future implementation), would store pending clarification
+                        # and handle credential collection
+
+                    except Exception as clarification_error:
+                        observability.log_warning(
+                            f"Failed to handle credential request via clarification: {clarification_error}"
+                        )
+                        # Fall through to default behavior
+
+                # Fallback behavior if clarification system not available
                 # Store pending clarification if we have a session
                 if session_id:
                     self._set_pending_clarification(session_id, {
@@ -5961,16 +5996,23 @@ Make it conversational and friendly while keeping accuracy."""
                     })
 
                 # Return a simple response asking for credentials
-
                 service_display = e.service.capitalize()
                 if e.service == "github":
                     service_display = "GitHub"
 
-                # Create error message
-                error_content = (
-                    f"I need access to your {service_display} credentials to complete this task. "
-                    f"Could you please provide your {service_display} personal access token?"
-                )
+                # Use configured redirect message if available
+                cred_config = self.formation_config.get('user_credentials', {}) if hasattr(self, 'formation_config') else {}
+                if cred_config.get('mode', 'redirect') == 'redirect':
+                    redirect_message = cred_config.get('redirect_message',
+                        'For security, credentials must be configured outside of this chat interface.\n'
+                        'Please use your organization\'s credential management system to set up authentication.')
+                    error_content = f"{redirect_message}\n\nService '{e.service}' requires authentication."
+                else:
+                    # Default message for dynamic mode or missing config
+                    error_content = (
+                        f"I need access to your {service_display} credentials to complete this task. "
+                        f"Could you please provide your {service_display} personal access token?"
+                    )
 
                 # Apply persona to format the error message
                 formatted_content = await self._apply_persona(error_content, message)
@@ -5979,8 +6021,9 @@ Make it conversational and friendly while keeping accuracy."""
                     role="assistant",
                     content=formatted_content,
                     metadata={
-                        "clarification_requested": True,
+                        "clarification_requested": cred_config.get('mode', 'redirect') != 'redirect',
                         "clarification_type": "missing_credential",
+                        "credential_mode": cred_config.get('mode', 'redirect'),
                         "service": e.service,
                         "user_id": e.user_id,
                         "session_id": session_id,
