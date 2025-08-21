@@ -3219,12 +3219,9 @@ class Formation:
         Args:
             prefix: The prefix to match (e.g., "agents[0]")
         """
-        # Early return to avoid unnecessary locking if no placeholders exist
-        if self._secret_placeholders is None or not self._secret_placeholders:
-            return
-
         with self._config_lock:
-            if self._secret_placeholders is not None:
+            # Check if placeholders exist and contain entries
+            if self._secret_placeholders:
                 keys_to_remove = [k for k in self._secret_placeholders if k.startswith(prefix)]
                 for k in keys_to_remove:
                     del self._secret_placeholders[k]
