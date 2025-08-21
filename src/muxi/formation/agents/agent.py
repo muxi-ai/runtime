@@ -1338,7 +1338,8 @@ class Agent:
                         # Show the delegation responses as the primary result
                         response_content = "\n\n".join(planning_response_parts)
 
-                        # Always include local results if we have them - they're part of the complete response
+                        # Include local tool execution results only if we have any successful local executions
+                        # my_results contains tool outputs from local (non-delegated) tool executions
                         if my_results:
                             response_content += "\n\n---\n\nAdditional information gathered:\n"
                             for placeholder, result in my_results.items():
@@ -2757,6 +2758,9 @@ class Agent:
                                     "token",
                                     "api",
                                     "key",
+                                    "login",
+                                    "password",
+                                    "secret",
                                 ]
                             ):
                                 conversation_context.append(f"Assistant: {msg['content'][:200]}")
