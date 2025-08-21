@@ -64,7 +64,7 @@ class CredentialRepository:
                 """,
                 user_id_int,
                 service,
-                json.dumps(credential_data)  # Store as JSON string for JSONB column
+                json.dumps(credential_data),  # Store as JSON string for JSONB column
             )
             logger.info(f"Stored credential for user={user_id}, service={service}")
 
@@ -93,12 +93,12 @@ class CredentialRepository:
                 WHERE user_id = $1 AND service = $2
                 """,
                 user_id_int,
-                service
+                service,
             )
 
             if result:
                 # Parse JSONB data
-                credentials = result['credentials']
+                credentials = result["credentials"]
                 if isinstance(credentials, str):
                     credentials = json.loads(credentials)
 
@@ -132,10 +132,10 @@ class CredentialRepository:
                 WHERE user_id = $1
                 ORDER BY service
                 """,
-                user_id_int
+                user_id_int,
             )
 
-            services = [row['service'] for row in results]
+            services = [row["service"] for row in results]
             logger.info(f"Listed {len(services)} services for user={user_id}")
             return services
 
@@ -163,11 +163,11 @@ class CredentialRepository:
                 WHERE user_id = $1 AND service = $2
                 """,
                 user_id_int,
-                service
+                service,
             )
 
             # Check if any rows were affected
-            deleted = result.split()[-1] != '0' if isinstance(result, str) else False
+            deleted = result.split()[-1] != "0" if isinstance(result, str) else False
 
             if deleted:
                 logger.info(f"Removed credential for user={user_id}, service={service}")
@@ -200,7 +200,7 @@ class CredentialRepository:
                 WHERE user_id = $1 AND service = $2
                 """,
                 user_id_int,
-                service
+                service,
             )
 
             logger.debug(f"Updated last used for user={user_id}, service={service}")
@@ -231,7 +231,7 @@ class CredentialRepository:
                 )
                 """,
                 user_id_int,
-                service
+                service,
             )
 
             return bool(result)
@@ -259,7 +259,7 @@ class CredentialRepository:
                 FROM credentials
                 WHERE user_id = $1
                 """,
-                user_id_int
+                user_id_int,
             )
 
             return int(count) if count else 0

@@ -455,11 +455,36 @@ class Overlord:
                         description=f"Error extracting text model from config: {str(e)}",
                     )
 
-                self.credential_resolver = CredentialResolver(
-                    async_session_maker=db_manager.AsyncSession,
-                    formation_id=self.formation_id,
-                    llm_model=llm_model,
-                )
+                # Check if encryption is configured
+                cred_config = self.formation_config.get("user_credentials", {})
+                encryption_key = cred_config.get("encryption_key")
+
+                # Use encrypted resolver if we have cryptography available
+                try:
+                    from ..memory.encrypted_credential_resolver import EncryptedCredentialResolver
+                    self.credential_resolver = EncryptedCredentialResolver(
+                        async_session_maker=db_manager.AsyncSession,
+                        formation_id=self.formation_id,
+                        llm_model=llm_model,
+                        encryption_key=encryption_key  # Optional custom key
+                    )
+                    observability.observe(
+                        event_type=observability.SystemEvents.SERVICE_INITIALIZED,
+                        level=observability.EventLevel.INFO,
+                        description="Initialized encrypted credential resolver"
+                    )
+                except ImportError:
+                    # Fall back to non-encrypted resolver if cryptography not available
+                    self.credential_resolver = CredentialResolver(
+                        async_session_maker=db_manager.AsyncSession,
+                        formation_id=self.formation_id,
+                        llm_model=llm_model,
+                    )
+                    observability.observe(
+                        event_type=observability.SystemEvents.SERVICE_INITIALIZED,
+                        level=observability.EventLevel.WARNING,
+                        description="Using non-encrypted credential resolver (cryptography not installed)"
+                    )
 
         # Accept pre-generated API keys from Formation
         api_keys = api_keys or {}

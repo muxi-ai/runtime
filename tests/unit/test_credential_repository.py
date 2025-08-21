@@ -10,7 +10,7 @@ import json
 from unittest.mock import AsyncMock
 from datetime import datetime
 
-from muxi.database.repositories.credential_repository import CredentialRepository
+from muxi.memory.credential_repository import CredentialRepository
 
 
 class TestCredentialRepository:

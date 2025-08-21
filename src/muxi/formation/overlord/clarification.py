@@ -95,6 +95,147 @@ class UnifiedClarificationSystem:
         # No clarification needed
         return ClarificationResult(action="execute", request=message, mode="direct")
 
+    async def store_accepted_credential(self, user_id: str, service_name: str,
+                                        credential_data: str, auth_type: str) -> bool:
+        """
+        Store credential after inline acceptance.
+
+        Args:
+            user_id: The user identifier
+            service_name: The service name for the credential
+            credential_data: The raw credential data from user
+            auth_type: The authentication type
+
+        Returns:
+            True if storage was successful, False otherwise
+        """
+        try:
+            # Parse credential based on auth_type
+            parsed_cred = self.parse_credential(credential_data, auth_type)
+
+            # Check if credential repository is available
+            if hasattr(self.overlord, 'credential_repository'):
+                # Store via repository
+                await self.overlord.credential_repository.store(
+                    user_id=user_id,
+                    service=service_name,
+                    credential_data=parsed_cred
+                )
+
+                # Credential stored successfully
+                return True
+            else:
+                # Repository not available
+                return False
+
+        except Exception:
+            # Failed to store credential - never log actual credentials
+            return False
+
+    def parse_credential(self, credential_data: str, auth_type: str) -> dict:
+        """
+        Parse credential data based on authentication type.
+
+        Args:
+            credential_data: Raw credential string from user
+            auth_type: The authentication type
+
+        Returns:
+            Parsed credential dictionary
+
+        Raises:
+            ValueError: If credential format is invalid
+        """
+        credential_data = credential_data.strip()
+
+        if auth_type == "api_key":
+            # API keys are stored as-is
+            return {
+                "type": "api_key",
+                "value": credential_data
+            }
+
+        elif auth_type == "basic":
+            # Parse "username:password" format
+            if ':' not in credential_data:
+                raise ValueError("Basic auth must be in format: username:password")
+
+            parts = credential_data.split(':', 1)  # Split only on first colon
+            return {
+                "type": "basic",
+                "username": parts[0],
+                "password": parts[1]
+            }
+
+        elif auth_type == "bearer":
+            # Store bearer token value
+            # Remove "Bearer " prefix if present
+            token = credential_data
+            if token.lower().startswith("bearer "):
+                token = token[7:]
+
+            return {
+                "type": "bearer",
+                "token": token
+            }
+
+        else:
+            # Generic storage for unknown types
+            return {
+                "type": auth_type,
+                "value": credential_data
+            }
+
+    async def get_service_credential(self, user_id: str, service_name: str) -> Optional[dict]:
+        """
+        Retrieve credential for MCP service use.
+
+        Args:
+            user_id: The user identifier
+            service_name: The service name
+
+        Returns:
+            Credential data if found, None otherwise
+        """
+        try:
+            if hasattr(self.overlord, 'credential_repository'):
+                # Retrieve from repository
+                credential = await self.overlord.credential_repository.get(
+                    user_id=user_id,
+                    service=service_name
+                )
+
+                if credential:
+                    # Update last used timestamp
+                    await self.overlord.credential_repository.update_last_used(
+                        user_id=user_id,
+                        service=service_name
+                    )
+
+                    # Update successful
+
+                return credential
+
+        except Exception:
+            # Failed to retrieve credential
+            pass
+
+        return None
+
+    async def check_stored_credential(self, user_id: str, service_name: str) -> bool:
+        """
+        Check if a credential is already stored for a service.
+
+        Args:
+            user_id: The user ID
+            service_name: The service name
+
+        Returns:
+            True if credential exists, False otherwise
+        """
+        credential = await self.get_service_credential(user_id, service_name)
+        return credential is not None
+
     async def handle_response(self, request_id: str, response: str) -> ClarificationResult:
         """
         Handle clarification response and determine next action.
@@ -104,7 +245,41 @@ class UnifiedClarificationSystem:
             # No active clarification
             return ClarificationResult(action="execute", request=response)
 
-        # Update state
+        # Check if this is a credential response
+        if state.get("type") == "credential" and state.get("auth_type") and state.get("service_id"):
+            # Store the credential
+            user_id = state.get("user_id", "0")  # Default to "0" for single-user mode
+            service_id = state["service_id"]
+            auth_type = state["auth_type"]
+
+            # Attempt to store the credential
+            success = await self.store_accepted_credential(user_id, service_id, response, auth_type)
+
+            if success:
+                # Credential stored successfully - cleanup and return success
+                await self._cleanup_state(request_id)
+                return ClarificationResult(
+                    action="credential_stored",
+                    request=state["original_request"],
+                    context={
+                        "service_id": service_id,
+                        "credential_stored": True,
+                        "message": f"Credential for {service_id} has been securely stored."
+                    }
+                )
+            else:
+                # Storage failed - cleanup and return error
+                await self._cleanup_state(request_id)
+                return ClarificationResult(
+                    action="error",
+                    request=state["original_request"],
+                    context={
+                        "service_id": service_id,
+                        "error": "Failed to store credential. Please try again or configure externally."
+                    }
+                )
+
+        # Update state for non-credential clarifications
         state["collected_info"].append(response)
         state["depth"] += 1
 
@@ -219,6 +394,7 @@ class UnifiedClarificationSystem:
                 if state:
                     state["service_id"] = service_id
                     state["auth_type"] = auth_type
+                    state["user_id"] = user_id  # Store user_id for credential storage
                     state["max_depth"] = 1  # Single question for credential
                     await self._store_state(request_id, state)
 
