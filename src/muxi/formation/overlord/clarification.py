@@ -203,8 +203,45 @@ class UnifiedClarificationSystem:
             # Return redirect message without starting clarification
             return ClarificationResult(action="message", question=full_message, mode="redirect")
 
-        # Dynamic mode handling will be implemented in task #33
-        # For now, fall back to redirect behavior
+        # Dynamic mode handling
+        if mode == "dynamic":
+            # Get service metadata to determine auth type
+            auth_type = await self._get_service_auth_type(service_id)
+            accept_inline = await self._get_service_accept_inline(service_id)
+
+            if self.can_accept_inline(auth_type, accept_inline):
+                # Request credential inline with appropriate warnings
+                prompt = await self.request_inline_credential(service_id, auth_type, request_id)
+
+                # Start clarification flow for credential collection
+                await self._create_state(request_id, f"Provide {auth_type} for {service_id}", "credential")
+                state = await self._get_state(request_id)
+                if state:
+                    state["service_id"] = service_id
+                    state["auth_type"] = auth_type
+                    state["max_depth"] = 1  # Single question for credential
+                    await self._store_state(request_id, state)
+
+                return ClarificationResult(
+                    action="clarify",
+                    question=prompt,
+                    mode="dynamic"
+                )
+            else:
+                # Cannot accept inline, redirect instead
+                redirect_message = cred_config.get(
+                    "redirect_message",
+                    "For security, credentials must be configured outside of this chat interface.\n"
+                    "Please use your organization's credential management system to set up authentication.",
+                )
+
+                # Add context about why we're redirecting
+                reason = self._get_redirect_reason(auth_type)
+                full_message = f"{redirect_message}\n\n{reason}\n\nService '{service_id}' requires authentication."
+
+                return ClarificationResult(action="message", question=full_message, mode="redirect")
+
+        # Unknown mode, fall back to redirect
         redirect_message = cred_config.get(
             "redirect_message",
             "For security, credentials must be configured outside of this chat interface.\n"
@@ -749,6 +786,143 @@ Return JSON:
                     return True
 
         return False
+
+    def can_accept_inline(self, auth_type: str, accept_inline: bool) -> bool:
+        """
+        Determine if a credential can be accepted inline based on auth type.
+
+        Args:
+            auth_type: The authentication type (api_key, basic, bearer, oauth, etc.)
+            accept_inline: Service hint about whether inline acceptance is allowed
+
+        Returns:
+            True if the credential can be accepted inline, False otherwise
+        """
+        if auth_type == "api_key":
+            return True  # API keys are always safe to accept inline
+
+        if auth_type == "basic":
+            return True  # Basic auth accepted but with security warning
+
+        if auth_type == "bearer" and accept_inline:
+            return True  # Bearer tokens only if service explicitly allows (e.g., PATs)
+
+        if auth_type in ["oauth", "oauth2", "oauth2_flow"]:
+            return False  # OAuth flows always require redirect
+
+        # Default to redirect for unknown auth types
+        return False
+
+    async def request_inline_credential(self, service_id: str, auth_type: str, request_id: str) -> str:
+        """
+        Generate a prompt for inline credential collection with appropriate warnings.
+
+        Args:
+            service_id: The service requesting credentials
+            auth_type: The authentication type
+            request_id: The current request ID
+
+        Returns:
+            A prompt string with appropriate security warnings
+        """
+        base_prompt = f"Please provide the {auth_type} for '{service_id}':"
+
+        if auth_type == "basic":
+            # Add security warning for basic auth
+            return (
+                "⚠️ Security Warning: Basic authentication transmits credentials in a reversible format.\n"
+                "Only provide these credentials if you trust this environment.\n\n"
+                f"{base_prompt}\n"
+                "Format: username:password"
+            )
+
+        if auth_type == "api_key":
+            return f"{base_prompt}\n\nNote: Your API key will be securely stored for this session."
+
+        if auth_type == "bearer":
+            return (
+                f"{base_prompt}\n\n"
+                "Please provide your personal access token or bearer token."
+            )
+
+        # Generic prompt for other types
+        return base_prompt
+
+    async def _get_service_auth_type(self, service_id: str) -> str:
+        """
+        Get the authentication type for a service.
+
+        Args:
+            service_id: The service identifier
+
+        Returns:
+            The authentication type string (defaults to 'unknown')
+        """
+        # Try to get from MCP registry if available
+        if hasattr(self.overlord, 'mcp_registry'):
+            service = self.overlord.mcp_registry.get(service_id)
+            if service and hasattr(service, 'auth'):
+                return service.auth.get('type', 'unknown')
+
+        # Try to get from MCP coordinator
+        if hasattr(self.overlord, 'mcp_coordinator'):
+            # Access service configuration
+            if hasattr(self.overlord.mcp_coordinator, 'config'):
+                services = getattr(self.overlord.mcp_coordinator.config, 'services', {})
+                if service_id in services:
+                    service_config = services[service_id]
+                    if 'auth' in service_config:
+                        return service_config['auth'].get('type', 'unknown')
+
+        return 'unknown'
+
+    async def _get_service_accept_inline(self, service_id: str) -> bool:
+        """
+        Check if a service accepts inline credential collection.
+
+        Args:
+            service_id: The service identifier
+
+        Returns:
+            True if the service accepts inline credentials, False otherwise
+        """
+        # Try to get from MCP registry if available
+        if hasattr(self.overlord, 'mcp_registry'):
+            service = self.overlord.mcp_registry.get(service_id)
+            if service and hasattr(service, 'auth'):
+                return service.auth.get('accept_inline', False)
+
+        # Try to get from MCP coordinator
+        if hasattr(self.overlord, 'mcp_coordinator'):
+            if hasattr(self.overlord.mcp_coordinator, 'config'):
+                services = getattr(self.overlord.mcp_coordinator.config, 'services', {})
+                if service_id in services:
+                    service_config = services[service_id]
+                    if 'auth' in service_config:
+                        return service_config['auth'].get('accept_inline', False)
+
+        return False
+
+    def _get_redirect_reason(self, auth_type: str) -> str:
+        """
+        Get a user-friendly reason for why we're redirecting.
+
+        Args:
+            auth_type: The authentication type
+
+        Returns:
+            A user-friendly explanation string
+        """
+        if auth_type in ["oauth", "oauth2", "oauth2_flow"]:
+            return "OAuth authentication requires browser-based authorization flow."
+
+        if auth_type == "bearer" and not self.can_accept_inline(auth_type, False):
+            return "This service requires bearer token authentication through external configuration."
+
+        if auth_type == "unknown":
+            return "Authentication type could not be determined."
+
+        return f"{auth_type.capitalize()} authentication requires external configuration for security."
 
     async def extract_token_from_text(self, message: str) -> Optional[str]:
         """
