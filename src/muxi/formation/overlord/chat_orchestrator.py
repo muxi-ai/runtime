@@ -498,10 +498,30 @@ class ChatOrchestrator:
 
         # Store overlord's final response in buffer memory (fire-and-forget)
         if result and hasattr(result, "content") and result.content:
-            # Extract content for storage
-            content_for_storage = (
-                result.content if isinstance(result.content, str) else str(result.content)
-            )
+            # Extract content for storage with error handling
+            try:
+                content_for_storage = (
+                    result.content if isinstance(result.content, str) else str(result.content)
+                )
+            except Exception as e:
+                # Log the error and use a safe fallback
+                observability.observe(
+                    event_type=observability.ErrorEvents.PROCESSING_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "error": str(e),
+                        "content_type": type(result.content).__name__,
+                        "content_repr": repr(result.content)[:100],  # Truncate for safety
+                        "user_id": user_id,
+                        "session_id": session_id,
+                        "request_id": request_id,
+                    },
+                    description=f"Failed to extract content for storage: {str(e)}",
+                )
+                # Use repr as fallback to ensure we have a string
+                content_for_storage = repr(result.content)
+
+            # Always call storage with valid data
             asyncio.create_task(
                 self._store_assistant_response_async(
                     content=content_for_storage,
