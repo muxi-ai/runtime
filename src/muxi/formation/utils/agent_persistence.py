@@ -68,8 +68,8 @@ def _validate_and_sanitize_agent_id(agent_id: str, agents_dir: Path) -> Path:
             "Only alphanumeric characters, underscores, and hyphens are allowed."
         )
 
-    # Check for path separators (both Unix and Windows)
-    if '/' in agent_id or '\\' in agent_id or os.sep in agent_id:
+    # Check for path separators
+    if any(sep in agent_id for sep in ('/', os.sep)):
         raise ValueError(f"Agent ID '{agent_id}' contains path separators which are not allowed")
 
     # Verify basename equals the original (prevents directory traversal attempts)
@@ -148,6 +148,13 @@ async def save_agent_to_file(
         # Validate and sanitize agent_id to prevent directory traversal
         agent_file_path = _validate_and_sanitize_agent_id(agent_id, agents_dir)
 
+        # Check if agent already exists in formation config BEFORE creating file
+        if auto_load and formation:
+            agents = formation.config.get("agents", [])
+            existing_agent = next((a for a in agents if a.get("id") == agent_id), None)
+            if existing_agent:
+                raise ValueError(f"Agent with id '{agent_id}' already exists in formation")
+
         # Prepare agent config for serialization
         # Remove any None values and ensure clean YAML output
         clean_config = _clean_config_for_yaml(agent_config)
@@ -175,21 +182,6 @@ async def save_agent_to_file(
         # Auto-load into formation if requested
         if auto_load and formation:
             try:
-                # Check if agent already exists in config
-                agents = formation.config.get("agents", [])
-                existing_agent = next((a for a in agents if a.get("id") == agent_id), None)
-
-                if existing_agent:
-                    # Agent already exists - this is a duplicate creation attempt
-                    # Clean up the file we just created and raise error
-                    try:
-                        agent_file_path.unlink()
-                    except OSError as e:
-                        logger.warning(
-                            f"Failed to clean up agent file after duplicate detection: {agent_file_path}. "
-                            f"Error: {e}"
-                        )
-                    raise ValueError(f"Agent with id '{agent_id}' already exists")
 
                 # Check if runtime imports are available
                 if not RUNTIME_IMPORTS_AVAILABLE:
@@ -519,10 +511,10 @@ def list_agent_files(formation_path: str, agents_subdir: str = "agents") -> list
             return []
 
         # Find all YAML files (both .yaml and .yml extensions)
-        # Using glob pattern "*.y*ml" captures both .yaml and .yml in one pass
+        # Explicitly check for the two desired extensions
         agent_files = []
-        for file_path in agents_dir.glob("*.y*ml"):
-            if file_path.is_file():
+        for file_path in agents_dir.iterdir():
+            if file_path.is_file() and file_path.suffix in {".yaml", ".yml"}:
                 agent_files.append(str(file_path))
 
         return sorted(agent_files)
