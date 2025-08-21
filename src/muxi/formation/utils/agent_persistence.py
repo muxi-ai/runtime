@@ -8,10 +8,12 @@ import copy
 import logging
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict
 
 import aiofiles
+import aiofiles.os
 import yaml
 
 # Import runtime processor functions at module level
@@ -332,7 +334,7 @@ async def update_agent_file(
         # Clean and save the updated configuration
         clean_config = _clean_config_for_yaml(updated_config)
 
-        # Convert to YAML string first, then write asynchronously
+        # Convert to YAML string first
         yaml_content = yaml.safe_dump(
             clean_config,
             default_flow_style=False,
@@ -341,8 +343,47 @@ async def update_agent_file(
             indent=2,
         )
 
-        async with aiofiles.open(agent_file_path, "w", encoding="utf-8") as f:
-            await f.write(yaml_content)
+        # Atomic write pattern to prevent data loss
+        # Create temp file in same directory to ensure same filesystem
+        agent_dir = os.path.dirname(agent_file_path)
+        temp_fd, temp_path = tempfile.mkstemp(
+            suffix='.tmp',
+            prefix='.agent_',
+            dir=agent_dir,
+            text=True
+        )
+
+        try:
+            # Close the file descriptor as we'll use aiofiles
+            os.close(temp_fd)
+
+            # Write to temporary file
+            async with aiofiles.open(temp_path, "w", encoding="utf-8") as f:
+                await f.write(yaml_content)
+                await f.flush()
+                # Ensure data is written to disk
+                os.fsync(f.fileno())
+
+            # Get original file stats to preserve permissions (if file exists)
+            try:
+                original_stats = os.stat(agent_file_path)
+                # Preserve file permissions
+                os.chmod(temp_path, original_stats.st_mode)
+            except FileNotFoundError:
+                # Original file doesn't exist, use default permissions
+                pass
+
+            # Atomically replace the original file
+            # os.replace is atomic on POSIX systems and Windows
+            os.replace(temp_path, agent_file_path)
+
+        except Exception:
+            # Clean up temp file on error
+            try:
+                os.unlink(temp_path)
+            except (OSError, FileNotFoundError):
+                pass
+            raise
 
         # Auto-reload into formation if requested
         if auto_reload and formation:
@@ -394,23 +435,11 @@ async def update_agent_file(
                     await add_agent_to_overlord_runtime(formation, processed_config)
 
             except Exception as e:
-                # If auto-reload fails, restore the original file
-                try:
-                    with open(agent_file_path, "w", encoding="utf-8") as f:
-                        yaml.dump(
-                            existing_config,
-                            f,
-                            default_flow_style=False,
-                            sort_keys=False,
-                            allow_unicode=True,
-                            indent=2,
-                        )
-                except OSError as restore_error:
-                    logger.error(
-                        f"Failed to restore original file after auto-reload failure for agent '{agent_id}': "
-                        f"{agent_file_path}. Error: {restore_error}. "
-                        f"File may be in an inconsistent state."
-                    )
+                # With atomic write, the file has already been successfully written
+                # No need to restore as the file update was completed before auto-reload
+                logger.error(
+                    f"Failed to auto-reload agent '{agent_id}' into formation after save to {agent_file_path}: {e}"
+                )
                 raise AgentPersistenceError(
                     f"Failed to auto-reload agent '{agent_id}': {str(e)}"
                 ) from e
