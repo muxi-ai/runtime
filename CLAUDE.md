@@ -62,6 +62,12 @@ Using the test-runner agent ensures:
 - All issues are properly surfaced
 - No approval dialogs interrupt the workflow
 
+**Important**: When using the test-runner agent, instruct it to use:
+```bash
+bash .claude/scripts/test-and-log.sh path/to/test.py
+```
+This ensures proper logging and test result capture.
+
 #### Note about e2e tests
 
 Ensure every test ends up with a summary and the correspondence between the user and the overlord.
@@ -88,6 +94,19 @@ System: ...
 ```
 
 ## Recent Architectural Changes
+
+### August 2025: Clarification System Improvements
+
+**Impact**: Fixed critical context preservation bug and improved context switch detection.
+
+1. **Context Preservation Fix**:
+   - Fixed bug in overlord.py line 5610 that was replacing enhanced message after clarification
+   - Ensured buffer memory context is preserved throughout clarification flow
+   
+2. **Context Switch Detection**:
+   - UnifiedClarificationSystem now tracks `last_question` asked
+   - Enables accurate detection of whether user is answering clarification vs making new request
+   - Prevents misinterpretation of answers like "REST API endpoint" as new requests
 
 ### August 2025: SOP System Refactoring
 
@@ -255,6 +274,11 @@ user_id (user isolation)
 - Normalized to lowercase, "0" for single-user mode
 - Ensures users only see their own data
 
+**Clarification State Coordination**:
+- Overlord tracks pending clarifications: `_pending_clarification[session_id]` → returns `request_id`
+- UnifiedClarificationSystem stores state: `clarification:{request_id}` → clarification state
+- This two-level lookup is intentional and correct - DO NOT attempt to "fix" this coordination
+
 This hierarchy ensures proper isolation, context preservation, and multi-turn clarification support.
 
 ## Testing Philosophy
@@ -264,6 +288,11 @@ This hierarchy ensures proper isolation, context preservation, and multi-turn cl
 - Real database instances
 - Live MCP servers
 - Actual embeddings for vector search
+
+**Test Focus**: When testing specific features (e.g., clarification), focus on testing that feature, not unrelated capabilities:
+- Clarification tests should validate clarification flow, not tool availability
+- If a test fails due to missing tools but the tested feature works, update the test to handle this expected scenario
+- Tests should pass when the feature being tested works correctly, regardless of other system limitations
 
 Test organization by feature day:
 - Day 1-3: Foundation, Memory, Multimodal
@@ -352,3 +381,28 @@ llm:
 - NO MIXED CONCERNS - Don't put validation logic inside API handlers, database queries inside UI components, etc. instead of proper separation
 - NO RESOURCE LEAKS - Don't forget to close database connections, clear timeouts, remove event listeners, or clean up file handles
 - READ THE DAMN CODEBASE FIRST - actually examine existing patterns, utilities, and architecture before writing new code
+
+## Reflections for Self-Improvment
+
+### Objective:
+Offer opportunities to continuously improve CLAUDE.md based on user interactions and feedback.
+
+### Trigger:
+After any task that involved insightful user feedback, or involved multiple non-trivial steps (e.g., multiple file edits, complex logic generation).
+
+### Process:
+
+- Offer Reflection: Ask the user: "Would you like me to reflect on our interaction and suggest potential improvements to the active CLAUDE.md file?"
+- Await User Confirmation: Proceed to attempt_completion immediately if the user declines or doesn't respond affirmatively.
+- If User Confirms:
+  - a. Review Interaction: Synthesize all feedback provided by the user throughout the entire conversation history for the task. Analyze how this feedback relates to the active CLAUDE.md and identify areas where modified instructions could have improved the outcome or better aligned with user preferences.
+  - b. Identify Active Rules: List the specific global and workspace CLAUDE.md files active during the task.
+  - c. Formulate & Propose Improvements: Generate specific, actionable suggestions for improving the content of the relevant active rule files. Prioritize suggestions directly addressing user feedback. Use replace_in_file diff blocks when practical, otherwise describe changes clearly.
+  - d. Await User Action on Suggestions: Ask the user if they agree with the proposed improvements and if they'd like me to apply them now using the appropriate tool (replace_in_file or write_to_file). Apply changes if approved, then proceed to attempt_completion.
+
+<example>
+User: "I think you should use the file-analyzer sub-agent more often."
+Claude: "Would you like me to reflect on our interaction and suggest potential improvements to the active CLAUDE.md file?"
+User: "Yes"
+Claude: "I will now review our interaction and suggest potential improvements to the active CLAUDE.md file."
+</example>
