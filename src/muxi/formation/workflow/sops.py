@@ -5,7 +5,6 @@ enabling consistent execution of complex multi-step operations.
 """
 
 import asyncio
-import concurrent.futures
 import hashlib
 import yaml
 from pathlib import Path
@@ -504,16 +503,19 @@ class SOPSystem:
                     try:
                         loop = asyncio.get_event_loop()
                         if loop.is_running():
-                            # We're in a running loop - use thread pool executor to avoid blocking
-                            # This allows sync embed() to work even from async contexts
-                            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                                future = executor.submit(asyncio.run, self.embed_async(text))
-                                return future.result()
+                            # We're in a running loop - callers should use embed_async directly
+                            raise RuntimeError(
+                                "Cannot call synchronous embed() from within an async context. "
+                                "Please use await embed_async() instead, or call this from a different thread."
+                            )
                         else:
                             # No running loop, we can run it directly
-                            return loop.run_until_complete(self.embed_async(text))
-                    except RuntimeError:
-                        # No event loop exists, create one and run
+                            return asyncio.run(self.embed_async(text))
+                    except RuntimeError as e:
+                        # Check if it's our specific error about async context
+                        if "Cannot call synchronous embed()" in str(e):
+                            raise
+                        # No event loop exists, create one and run (for older Python contexts)
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
                         try:
