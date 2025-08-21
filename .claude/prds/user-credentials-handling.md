@@ -80,8 +80,10 @@ The current MUXI Runtime accepts credentials directly in chat, creating signific
 ### Functional Requirements
 
 **Configuration System:**
-- Support `credential_handling` mode selection: "redirect" or "dynamic"
-- Customizable redirect messages per formation
+- Top-level `user_credentials` configuration in formation YAML
+- Support `mode` selection: "redirect" or "dynamic"
+- Optional `encryption_key` (defaults to formation_id if not specified)
+- Customizable `redirect_message` per formation
 - Default to redirect mode for security
 - Per-service configuration via `accept_inline` hint
 
@@ -176,6 +178,31 @@ The current MUXI Runtime accepts credentials directly in chat, creating signific
 - Must reuse existing clarification system
 - Limited to current database schema
 - No additional infrastructure requirements
+
+## Technical Implementation
+
+**Formation YAML Configuration:**
+```yaml
+# Top-level configuration (not under clarification)
+user_credentials:
+  encryption_key: "your-encryption-key"  # Optional - defaults to formation_id
+  mode: "redirect"  # or "dynamic"
+  redirect_message: |
+    For security compliance, credentials must be managed through:
+    https://secure.enterprise.com/credentials
+```
+
+**Encryption Approach:**
+- Zero-configuration: Uses formation_id as default encryption key
+- Per-user isolation: Combines encryption_key (or formation_id) + user_id
+- Uses PBKDF2 key derivation with Fernet encryption
+- Credentials stored encrypted in existing `credentials` table (JSONB field)
+- No key files to manage - keys derived deterministically
+
+**Database:**
+- Uses existing `credentials` table - no migration needed
+- Table already has user_id, service, credentials (JSONB) fields
+- Encryption happens at repository layer, not database level
 
 ## Out of Scope
 
