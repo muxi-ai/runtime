@@ -20,8 +20,7 @@ from urllib.parse import urlparse
 
 from contextlib import asynccontextmanager
 from sqlalchemy import create_engine, MetaData
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 from . import observability
@@ -143,6 +142,7 @@ class DatabaseManager:
         # Lazy initialization for async engine to avoid import errors
         self._async_engine = None
         self._async_session_factory = None
+        self._async_pgvector_initialized = False
 
         # Keep track of cleanup tasks to avoid warnings about unawaited tasks
         self._cleanup_tasks = []
@@ -370,6 +370,11 @@ class DatabaseManager:
         Yields:
             AsyncSession: An active asynchronous SQLAlchemy session.
         """
+        # Initialize pgvector extension on first use for PostgreSQL
+        if self.database_type == "postgresql" and not self._async_pgvector_initialized:
+            await self._init_async_pgvector()
+            self._async_pgvector_initialized = True
+
         async with self.AsyncSession() as session:
             try:
                 yield session
@@ -492,7 +497,7 @@ class DatabaseManager:
                 pass
 
 
-# Global database manager instance (will be initialized by formation)
+# Global database manager instance (initialized on first use)
 _db_manager: Optional[DatabaseManager] = None
 
 
