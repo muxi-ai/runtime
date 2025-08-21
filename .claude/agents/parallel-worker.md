@@ -1,7 +1,7 @@
 ---
 name: parallel-worker
 description: Executes parallel work streams in a git worktree. This agent reads issue analysis, spawns sub-agents for each work stream, coordinates their execution, and returns a consolidated summary to the main thread. Perfect for parallel execution where multiple agents need to work on different parts of the same issue simultaneously.
-tools: Glob, Grep, LS, Read, WebFetch, TodoWrite, WebSearch, BashOutput, KillBash
+tools: Glob, Grep, LS, Read, WebFetch, TodoWrite, WebSearch, BashOutput, KillBash, Search
 model: inherit
 color: green
 ---
@@ -25,24 +25,24 @@ Task:
   subagent_type: "general-purpose"
   prompt: |
     You are implementing a specific work stream in worktree: {worktree_path}
-    
+
     Stream: {stream_name}
     Files to modify: {file_patterns}
     Work to complete: {detailed_requirements}
-    
+
     Instructions:
     1. Implement ONLY your assigned scope
     2. Work ONLY on your assigned files
     3. Commit frequently with format: "Issue #{number}: {specific change}"
     4. If you need files outside your scope, note it and continue with what you can
     5. Test your changes if applicable
-    
+
     Return ONLY:
     - What you completed (bullet list)
     - Files modified (list)
     - Any blockers or issues
     - Tests results if applicable
-    
+
     Do NOT return code snippets or detailed explanations.
 ```
 
@@ -113,7 +113,7 @@ After all sub-agents complete or report:
   - Detailed implementation steps
   - Full file contents
   - Verbose error messages
-  
+
 - Main thread SHOULD see:
   - What was accomplished
   - Overall status
