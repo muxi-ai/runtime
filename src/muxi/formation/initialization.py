@@ -581,7 +581,7 @@ def initialize_background_services(formation) -> None:
         observability.observe(
             event_type=observability.SystemEvents.INITIALIZING,
             level=observability.EventLevel.INFO,
-            data={"services": ["cache_manager", "request_tracker", "webhook_manager"]},
+            data={"services": ["request_tracker", "webhook_manager"]},
             description="Background services initialized",
         )
 
