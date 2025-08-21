@@ -4923,8 +4923,7 @@ Make it conversational and friendly while keeping accuracy."""
 
         try:
             result = await self.buffer_memory.kv_get(
-                key=session_id,
-                namespace=self.pending_clarification_namespace
+                key=session_id, namespace=self.pending_clarification_namespace
             )
             return result
         except Exception as e:
@@ -4954,7 +4953,7 @@ Make it conversational and friendly while keeping accuracy."""
                 key=session_id,
                 value=data,
                 ttl=None,  # No TTL - let FIFO handle cleanup
-                namespace=self.pending_clarification_namespace
+                namespace=self.pending_clarification_namespace,
             )
         )
 
@@ -4972,8 +4971,7 @@ Make it conversational and friendly while keeping accuracy."""
         # Fire-and-forget for performance
         asyncio.create_task(
             self.buffer_memory.kv_delete(
-                key=session_id,
-                namespace=self.pending_clarification_namespace
+                key=session_id, namespace=self.pending_clarification_namespace
             )
         )
 
@@ -5323,14 +5321,17 @@ Make it conversational and friendly while keeping accuracy."""
                                 # has the context and knows we need to ask another question
                                 # We just need to store a new pending and return the question
                                 if session_id:
-                                    self._set_pending_clarification(session_id, {
-                                        "request_id": request_id,  # Keep the same request_id
-                                        "type": (
-                                            response_result.mode
-                                            if hasattr(response_result, 'mode')
-                                            else "direct"
-                                        ),
-                                    })
+                                    self._set_pending_clarification(
+                                        session_id,
+                                        {
+                                            "request_id": request_id,  # Keep the same request_id
+                                            "type": (
+                                                response_result.mode
+                                                if hasattr(response_result, "mode")
+                                                else "direct"
+                                            ),
+                                        },
+                                    )
 
                                 return MuxiResponse(
                                     role="assistant",
@@ -5584,10 +5585,13 @@ Make it conversational and friendly while keeping accuracy."""
                 if clarification_result.action == "clarify":
                     # Store minimal info - just request_id for reuse
                     if session_id:
-                        self._set_pending_clarification(session_id, {
-                            "request_id": request_id,  # Essential for request_id reuse
-                            "type": clarification_result.mode,  # Optional, for observability
-                        })
+                        self._set_pending_clarification(
+                            session_id,
+                            {
+                                "request_id": request_id,  # Essential for request_id reuse
+                                "type": clarification_result.mode,  # Optional, for observability
+                            },
+                        )
 
                     return MuxiResponse(
                         role="assistant",
@@ -5852,7 +5856,9 @@ Make it conversational and friendly while keeping accuracy."""
                 data={
                     "session_id": session_id,
                     "has_pending_clarifications": (
-                        bool(await self._get_pending_clarification(session_id)) if session_id else False
+                        bool(await self._get_pending_clarification(session_id))
+                        if session_id
+                        else False
                     ),
                     "pending_clarification_type": (
                         (await self._get_pending_clarification(session_id) or {}).get("type")
@@ -5952,16 +5958,21 @@ Make it conversational and friendly while keeping accuracy."""
                 # Use unified system to handle credential request based on configuration
                 if self.clarification and request_id:
                     try:
-                        clarification_result = await self.clarification.handle_mcp_credential_request(
-                            service_id=e.service,
-                            user_id=e.user_id,
-                            request_id=request_id
+                        clarification_result = (
+                            await self.clarification.handle_mcp_credential_request(
+                                service_id=e.service, user_id=e.user_id, request_id=request_id
+                            )
                         )
 
                         # Check if this is a redirect (no clarification needed)
-                        if clarification_result.action == "message" and clarification_result.mode == "redirect":
+                        if (
+                            clarification_result.action == "message"
+                            and clarification_result.mode == "redirect"
+                        ):
                             # Apply persona to format the redirect message
-                            formatted_content = await self._apply_persona(clarification_result.question, message)
+                            formatted_content = await self._apply_persona(
+                                clarification_result.question, message
+                            )
 
                             return MuxiResponse(
                                 role="assistant",
@@ -5986,14 +5997,17 @@ Make it conversational and friendly while keeping accuracy."""
                 # Fallback behavior if clarification system not available
                 # Store pending clarification if we have a session
                 if session_id:
-                    self._set_pending_clarification(session_id, {
-                        "type": "credential",
-                        "service": e.service,
-                        "user_id": e.user_id,
-                        "timestamp": time.time(),
-                        "original_message": actual_message_for_credential,  # Store the extracted message
-                        "request_id": request_id,  # Essential for request_id reuse
-                    })
+                    self._set_pending_clarification(
+                        session_id,
+                        {
+                            "type": "credential",
+                            "service": e.service,
+                            "user_id": e.user_id,
+                            "timestamp": time.time(),
+                            "original_message": actual_message_for_credential,  # Store the extracted message
+                            "request_id": request_id,  # Essential for request_id reuse
+                        },
+                    )
 
                 # Return a simple response asking for credentials
                 service_display = e.service.capitalize()
@@ -6001,12 +6015,20 @@ Make it conversational and friendly while keeping accuracy."""
                     service_display = "GitHub"
 
                 # Use configured redirect message if available
-                cred_config = self.formation_config.get('user_credentials', {}) if hasattr(self, 'formation_config') else {}
-                if cred_config.get('mode', 'redirect') == 'redirect':
-                    redirect_message = cred_config.get('redirect_message',
-                        'For security, credentials must be configured outside of this chat interface.\n'
-                        'Please use your organization\'s credential management system to set up authentication.')
-                    error_content = f"{redirect_message}\n\nService '{e.service}' requires authentication."
+                cred_config = (
+                    self.formation_config.get("user_credentials", {})
+                    if hasattr(self, "formation_config")
+                    else {}
+                )
+                if cred_config.get("mode", "redirect") == "redirect":
+                    redirect_message = cred_config.get(
+                        "redirect_message",
+                        "For security, credentials must be configured outside of this chat interface.\n"
+                        "Please use your organization's credential management system to set up authentication.",
+                    )
+                    error_content = (
+                        f"{redirect_message}\n\nService '{e.service}' requires authentication."
+                    )
                 else:
                     # Default message for dynamic mode or missing config
                     error_content = (
@@ -6021,9 +6043,10 @@ Make it conversational and friendly while keeping accuracy."""
                     role="assistant",
                     content=formatted_content,
                     metadata={
-                        "clarification_requested": cred_config.get('mode', 'redirect') != 'redirect',
+                        "clarification_requested": cred_config.get("mode", "redirect")
+                        != "redirect",
                         "clarification_type": "missing_credential",
-                        "credential_mode": cred_config.get('mode', 'redirect'),
+                        "credential_mode": cred_config.get("mode", "redirect"),
                         "service": e.service,
                         "user_id": e.user_id,
                         "session_id": session_id,
@@ -6040,16 +6063,19 @@ Make it conversational and friendly while keeping accuracy."""
 
                         # Store pending clarification if we have a session
                         if session_id:
-                            self._set_pending_clarification(session_id, {
-                                "type": "credential",
-                                "service": e.service,
-                                "user_id": e.user_id,
-                                "timestamp": time.time(),
-                                "original_message": actual_message_for_credential,
-                                "available_credentials": e.available_credentials,
-                                "ordered_credentials": getattr(e, "ordered_credentials", None),
-                                "request_id": request_id,  # Essential for request_id reuse
-                            })
+                            self._set_pending_clarification(
+                                session_id,
+                                {
+                                    "type": "credential",
+                                    "service": e.service,
+                                    "user_id": e.user_id,
+                                    "timestamp": time.time(),
+                                    "original_message": actual_message_for_credential,
+                                    "available_credentials": e.available_credentials,
+                                    "ordered_credentials": getattr(e, "ordered_credentials", None),
+                                    "request_id": request_id,  # Essential for request_id reuse
+                                },
+                            )
 
                         # Apply persona to the question
                         formatted_content = await self._apply_persona(
@@ -6543,13 +6569,16 @@ Make it conversational and friendly while keeping accuracy."""
 
         # Store clarification info if session_id exists
         if session_id:
-            self._set_pending_clarification(session_id, {
-                "type": "workflow_approval",
-                "workflow_id": workflow.id,
-                "original_message": message,
-                "user_id": user_id,
-                "request_id": request_id,
-            })
+            self._set_pending_clarification(
+                session_id,
+                {
+                    "type": "workflow_approval",
+                    "workflow_id": workflow.id,
+                    "original_message": message,
+                    "user_id": user_id,
+                    "request_id": request_id,
+                },
+            )
 
         # Debug: Before returning response
         observability.observe(
@@ -8148,7 +8177,9 @@ Make it conversational and friendly while keeping accuracy."""
         """
         try:
             # Get the pending clarification info
-            clarification_info = await self._get_pending_clarification(session_id) if session_id else None
+            clarification_info = (
+                await self._get_pending_clarification(session_id) if session_id else None
+            )
             if clarification_info:
                 if (
                     clarification_info.get("type") == "credential"
