@@ -200,15 +200,12 @@ class TaskAdapter:
             # Find all dependency tasks that haven't completed yet
             blocked_by = set()
             for dep_id in subtask.dependencies:
-                # Find the dependency task in the workflow
-                dep_task = None
-                for task in workflow.tasks.values():
-                    if task.id == dep_id:
-                        dep_task = task
-                        break
+                # Direct lookup by ID - O(1) instead of O(N)
+                dep_task = workflow.tasks.get(dep_id)
 
                 # If dependency task exists and isn't completed, add to blocked_by
-                if dep_task and dep_task.status not in ['COMPLETED', 'DONE', TaskStatus.COMPLETED]:
+                # Check both string and enum values for COMPLETED and DONE
+                if dep_task and dep_task.status not in ['COMPLETED', 'DONE', TaskStatus.COMPLETED, TaskStatus.DONE]:
                     blocked_by.add(dep_id)
 
             # Update the state with calculated blocked_by
