@@ -594,7 +594,9 @@ class MCPService:
                 "tool_name": tool_name,
                 "has_user_credentials": resolved_auth is not None,
                 "auth_type": (
-                    resolved_auth.get("type") if isinstance(resolved_auth, dict) else "string"
+                    "none" if resolved_auth is None
+                    else resolved_auth.get("type") if isinstance(resolved_auth, dict)
+                    else "string"
                 ),
                 "description": f"Executing tool with user credentials for {server_id}",
             },
@@ -1037,37 +1039,39 @@ class MCPService:
         if server_id not in self.locks:
             self.locks[server_id] = asyncio.Lock()
 
-        # Create fresh MCPHandler instance
-        handler = MCPHandler(model=None, tool_registry=self.tool_registry)
+        # Serialize connect/execute/disconnect sequence per server
+        async with self.locks[server_id]:
+            # Create fresh MCPHandler instance
+            handler = MCPHandler(model=None, tool_registry=self.tool_registry)
 
-        try:
-            # Connect with user credentials using stored configuration
-            await handler.connect_server(
-                name=server_name,
-                url=config.get("url"),
-                command=config.get("command"),
-                args=config.get("args"),
-                credentials=user_credentials,
-                request_timeout=request_timeout or config.get("request_timeout", 60),
-                server_id=server_id,
-            )
-
-            # Execute the tool
-            result = await handler.execute_tool(
-                server_name=server_name,
-                tool_name=tool_name,
-                params=params,
-                cancellation_token=None,
-            )
-
-            return result
-
-        finally:
-            # Always disconnect, even if tool execution failed
             try:
-                await handler.disconnect_server(server_name)
-            except Exception:
-                pass  # Ignore disconnect errors
+                # Connect with user credentials using stored configuration
+                await handler.connect_server(
+                    name=server_name,
+                    url=config.get("url"),
+                    command=config.get("command"),
+                    args=config.get("args"),
+                    credentials=user_credentials,
+                    request_timeout=request_timeout or config.get("request_timeout", 60),
+                    server_id=server_id,
+                )
+
+                # Execute the tool
+                result = await handler.execute_tool(
+                    server_name=server_name,
+                    tool_name=tool_name,
+                    params=params,
+                    cancellation_token=None,
+                )
+
+                return result
+
+            finally:
+                # Always disconnect, even if tool execution failed
+                try:
+                    await handler.disconnect_server(server_name)
+                except Exception:
+                    pass  # Ignore disconnect errors
 
     async def disconnect_server(self, server_id: str) -> bool:
         """
@@ -1675,12 +1679,12 @@ class MCPService:
 
     async def _select_best_credential_with_llm(
         self,
-        credential_list: List[Dict],
+        credential_list: List[Dict[str, Any]],
         parameters: Dict[str, Any],
         service_name: str,
         conversation_context: Optional[List[str]] = None,
         user_id: Optional[str] = None,
-    ) -> Optional[Dict]:
+    ) -> Optional[Any]:
         """
         Use LLM to select the best credential from multiple options based on user parameters and conversation context.
 
@@ -1689,6 +1693,7 @@ class MCPService:
             parameters: Tool parameters that may contain user intent
             service_name: Name of the service (e.g., 'github')
             conversation_context: Recent conversation messages for context
+            user_id: Optional user identifier used only for error context and caching; not included in LLM prompts
 
         Returns:
             Selected credential data or None if LLM can't decide
@@ -1728,7 +1733,7 @@ class MCPService:
             prompt_parts.extend(
                 [
                     f"\nThey have the following {service_name} credentials available:",
-                    chr(10).join(f"{i+1}. {name}" for i, name in enumerate(credential_names)),
+                    '\n'.join(f"{i+1}. {name}" for i, name in enumerate(credential_names)),
                     "\nWhich credential should be used?",
                     "\nPRIORITY ORDER (most important first):",
                     "1. Use the MOST RECENTLY mentioned account in the conversation context",
@@ -1788,7 +1793,7 @@ class MCPService:
                         # The agent will decide whether to trigger clarification
                         raise CredentialSelectionNeededError(
                             service=service_name,
-                            user_id=user_id or "",  # Use provided user_id or empty string as fallback
+                            user_id=str(user_id or ""),  # Ensure user_id is always a string
                             available_credentials=credential_list,
                             ordered_credentials=ordered_credentials,
                         )
@@ -1805,7 +1810,7 @@ class MCPService:
             # If LLM didn't give a clear answer, raise CredentialSelectionNeededError
             raise CredentialSelectionNeededError(
                 service=service_name,
-                user_id=user_id or "",  # Use provided user_id or empty string as fallback
+                user_id=str(user_id or ""),  # Ensure user_id is always a string
                 available_credentials=credential_list,
                 ordered_credentials=list(range(1, len(credential_list) + 1)),
             )
