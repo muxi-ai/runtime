@@ -81,6 +81,11 @@ class UnifiedClarificationSystem:
         if analysis["needs_clarification"]:
             # Start clarification - store in buffer memory
             await self._create_state(request_id, message, analysis["mode"], session_id)
+            # Store the question we're asking
+            state = await self._get_state(request_id)
+            if state:
+                state["last_question"] = analysis["question"]
+                await self._store_state(request_id, state)
             return ClarificationResult(
                 action="clarify", question=analysis["question"], mode=analysis["mode"]
             )
@@ -146,7 +151,8 @@ class UnifiedClarificationSystem:
         need_more = await self._check_need_more(state)
 
         if need_more["needs_more"]:
-            # Update state in buffer
+            # Update state in buffer with the new question
+            state["last_question"] = need_more["question"]
             await self._store_state(request_id, state)
             return ClarificationResult(
                 action="clarify", question=need_more["question"], mode=state["mode"]
@@ -449,12 +455,16 @@ Return JSON:
         if not self.llm:
             return False  # Assume no context switch without LLM
 
+        # Get the last question we asked
+        last_question = state.get("last_question", "a clarification question")
+
         prompt = f"""
         We're in a clarification dialog about: {state['original_request']}
-        We asked a clarifying question and the user responded: {response}
+        We asked: "{last_question}"
+        The user responded: "{response}"
 
         Determine if the user is:
-        1. Answering or relating to our clarification question
+        1. Answering our specific question (even if briefly)
         2. Asking for something completely different/unrelated
 
         Examples of context switches:
@@ -462,12 +472,16 @@ Return JSON:
         - We ask "What language?" → User says "what's the weather?"
         - We ask "Which file?" → User says "create a new project"
 
-        Examples of NOT context switches:
+        Examples of NOT context switches (these ARE answers):
+        - We ask "What is the second source?" → User says "REST API endpoint"
         - We ask "Which account?" → User says "the first one"
-        - We ask "What language?" → User says "I don't know, you choose"
+        - We ask "What language?" → User says "Python"
         - We ask "Which file?" → User says "never mind"
 
-        Return "answering" if related to clarification, "different" if unrelated.
+        IMPORTANT: Short answers like "REST API endpoint" or "PostgreSQL database" are
+        typically ANSWERS to our question, not context switches.
+
+        Return "answering" if related to our question, "different" if unrelated.
         """
 
         messages = [{"role": "user", "content": prompt}]

@@ -5601,8 +5601,9 @@ Make it conversational and friendly while keeping accuracy."""
                     if pending:
                         self._delete_pending_clarification(session_id)
 
-                    # Use the enhanced request from clarification
-                    message = clarification_result.request
+                    # IMPORTANT: Don't replace the enhanced message!
+                    # The 'message' variable already contains buffer memory context
+                    # message = clarification_result.request  # <-- This would lose context!
 
                     # Continue with normal processing using enhanced message
             except Exception as e:
@@ -5623,7 +5624,9 @@ Make it conversational and friendly while keeping accuracy."""
         # NON-ACTIONABLE MESSAGE FAST PATH
         # ===================================================================
         # Check if message requires any action at all
-        if not await self._is_actionable_message(message):
+        is_actionable = await self._is_actionable_message(message)
+
+        if not is_actionable:
             observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_PROCESSING,
                 level=observability.EventLevel.DEBUG,
