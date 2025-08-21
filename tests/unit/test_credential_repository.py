@@ -6,9 +6,8 @@ without encryption (encryption tests will be added in task #35).
 """
 
 import pytest
-import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 from datetime import datetime
 
 from muxi.database.repositories.credential_repository import CredentialRepository
@@ -236,7 +235,7 @@ class TestCredentialRepository:
         assert result is None
 
         # Verify user_id was properly used in query
-        call_args = mock_db.fetchrow.call_args
+        _ = mock_db.fetchrow.call_args
         # user2_id should be hashed differently than user1_id
         user1_int = int(user1_id) if user1_id.isdigit() else hash(user1_id) % 2147483647
         user2_int = int(user2_id) if user2_id.isdigit() else hash(user2_id) % 2147483647

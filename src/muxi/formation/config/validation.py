@@ -389,7 +389,7 @@ class FormationValidator:
         # Validate runtime configuration
         if "runtime" in config:
             self._validate_runtime_config(config["runtime"])
-        
+
         # Validate user credentials configuration
         if "user_credentials" in config:
             self._validate_user_credentials_config(config["user_credentials"])
@@ -399,7 +399,7 @@ class FormationValidator:
         if not isinstance(credentials_config, dict):
             self.result.add_error("user_credentials must be a dictionary")
             return
-        
+
         # Validate mode
         if "mode" in credentials_config:
             mode = credentials_config["mode"]
@@ -407,7 +407,7 @@ class FormationValidator:
                 self.result.add_error(
                     f"Invalid user_credentials.mode: {mode}. Must be 'redirect' or 'dynamic'"
                 )
-        
+
         # Validate redirect_message
         if "redirect_message" in credentials_config:
             redirect_msg = credentials_config["redirect_message"]
@@ -415,7 +415,7 @@ class FormationValidator:
                 self.result.add_error(
                     "user_credentials.redirect_message must be a non-empty string"
                 )
-        
+
         # Validate encryption_key
         if "encryption_key" in credentials_config:
             enc_key = credentials_config["encryption_key"]
@@ -423,7 +423,7 @@ class FormationValidator:
                 self.result.add_error(
                     "user_credentials.encryption_key must be null or a non-empty string"
                 )
-        
+
         # Validate security settings for dynamic mode
         if credentials_config.get("mode") == "dynamic":
             # Validate allowed_environments
@@ -437,7 +437,7 @@ class FormationValidator:
                     self.result.add_error(
                         "user_credentials.allowed_environments must contain only strings"
                     )
-            
+
             # Validate require_https
             if "require_https" in credentials_config:
                 require_https = credentials_config["require_https"]
@@ -445,7 +445,7 @@ class FormationValidator:
                     self.result.add_error(
                         "user_credentials.require_https must be a boolean"
                     )
-            
+
             # Validate credential_ttl_minutes
             if "credential_ttl_minutes" in credentials_config:
                 ttl = credentials_config["credential_ttl_minutes"]
@@ -453,7 +453,7 @@ class FormationValidator:
                     self.result.add_error(
                         "user_credentials.credential_ttl_minutes must be a positive number"
                     )
-            
+
             # Validate max_attempts
             if "max_attempts" in credentials_config:
                 max_attempts = credentials_config["max_attempts"]
