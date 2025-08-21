@@ -4,6 +4,8 @@ import re
 from typing import Dict, Optional, Any
 from dataclasses import dataclass
 
+from ...services import observability
+
 
 @dataclass
 class ClarificationResult:
@@ -247,14 +249,35 @@ class UnifiedClarificationSystem:
 
         # Use consistent prefixed key
         key = f"clarification:{request_id}"
-        await self.buffer_memory.kv_set(
-            key=key,
-            value=state,
-            ttl=None,  # No TTL - let FIFO handle cleanup
-            namespace=self.namespace
-        )
-
-        self.active_requests.add(request_id)
+        try:
+            await self.buffer_memory.kv_set(
+                key=key,
+                value=state,
+                ttl=None,  # No TTL - let FIFO handle cleanup
+                namespace=self.namespace
+            )
+            self.active_requests.add(request_id)
+        except Exception as e:
+            # Log the error with context
+            observability.observe(
+                event_type=observability.ErrorEvents.MEMORY_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "request_id": request_id,
+                    "key": key,
+                    "namespace": self.namespace,
+                },
+                description=f"Failed to store clarification state in buffer memory: {str(e)}",
+            )
+            
+            # Fallback to in-memory storage
+            if not hasattr(self, "_fallback_storage"):
+                self._fallback_storage = {}
+            self._fallback_storage[request_id] = state
+            self.active_requests.add(request_id)
+            return
 
     async def _get_state(self, request_id: str) -> Optional[Dict]:
         """Retrieve state from buffer memory"""
