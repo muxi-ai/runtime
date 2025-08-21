@@ -263,6 +263,16 @@ class StreamTransport(BaseTransport):
                     }
                 )
 
+            # Verify KafkaProducer is available before instantiation
+            if not KafkaProducer:
+                error_msg = (
+                    "Kafka transport requires kafka-python library. "
+                    "Install it with: pip install kafka-python"
+                )
+                self.last_error = error_msg
+                self.status = TransportStatus.FAILED
+                raise RuntimeError(error_msg)
+            
             self.kafka_producer = KafkaProducer(**producer_config)
             self.status = TransportStatus.HEALTHY
             return True
