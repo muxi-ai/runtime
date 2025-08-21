@@ -2,14 +2,15 @@
 """Test remote memory configuration validation in formations"""
 
 import sys
-import os
+from pathlib import Path
+
+
+import pytest  # noqa: F401, E402
+import tempfile  # noqa: F401
+import asyncio  # noqa: F401
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-import pytest
-from pathlib import Path
-import tempfile
-import yaml
-import asyncio
 
 async def test_remote_memory_requires_url():
     """Test that remote memory mode requires a URL"""
@@ -32,14 +33,17 @@ memory:
         formation_path.write_text(formation_yaml)
 
         from muxi.formation.formation import Formation
+
         formation = Formation()
 
         with pytest.raises(Exception) as exc_info:
             await formation.load(str(formation_path))
 
         error_msg = str(exc_info.value).lower()
-        assert "url" in error_msg or "required" in error_msg, \
-            f"Expected error about missing URL, got: {exc_info.value}"
+        assert (
+            "url" in error_msg or "required" in error_msg
+        ), f"Expected error about missing URL, got: {exc_info.value}"
+
 
 async def test_remote_memory_requires_tenant():
     """Test that remote memory mode requires a tenant"""
@@ -62,14 +66,17 @@ memory:
         formation_path.write_text(formation_yaml)
 
         from muxi.formation.formation import Formation
+
         formation = Formation()
 
         with pytest.raises(Exception) as exc_info:
             await formation.load(str(formation_path))
 
         error_msg = str(exc_info.value).lower()
-        assert "tenant" in error_msg or "required" in error_msg, \
-            f"Expected error about missing tenant, got: {exc_info.value}"
+        assert (
+            "tenant" in error_msg or "required" in error_msg
+        ), f"Expected error about missing tenant, got: {exc_info.value}"
+
 
 async def test_remote_memory_requires_explicit_max_memory():
     """Test that remote memory mode requires explicit max_memory_mb (not 'auto')"""
@@ -92,15 +99,17 @@ memory:
         formation_path.write_text(formation_yaml)
 
         from muxi.formation.formation import Formation
+
         formation = Formation()
 
         with pytest.raises(Exception) as exc_info:
             await formation.load(str(formation_path))
 
         error_msg = str(exc_info.value).lower()
-        assert ("auto" in error_msg and "remote" in error_msg) or \
-               ("max_memory_mb" in error_msg and "explicit" in error_msg), \
-            f"Expected error about auto not allowed for remote, got: {exc_info.value}"
+        assert ("auto" in error_msg and "remote" in error_msg) or (
+            "max_memory_mb" in error_msg and "explicit" in error_msg
+        ), f"Expected error about auto not allowed for remote, got: {exc_info.value}"
+
 
 async def test_remote_memory_valid_configuration():
     """Test that valid remote memory configuration loads successfully"""
@@ -128,6 +137,7 @@ memory:
         formation_path.write_text(formation_yaml)
 
         from muxi.formation.formation import Formation
+
         formation = Formation()
 
         # Should load without errors
@@ -141,6 +151,7 @@ memory:
         assert working_config.get("max_memory_mb") == 512
         assert working_config.get("remote", {}).get("url") == "tcp://localhost:45678"
         assert working_config.get("remote", {}).get("tenant") == "test-tenant"
+
 
 async def test_local_memory_allows_auto():
     """Test that local memory mode allows 'auto' for max_memory_mb"""
@@ -165,6 +176,7 @@ memory:
         formation_path.write_text(formation_yaml)
 
         from muxi.formation.formation import Formation
+
         formation = Formation()
 
         # Should load without errors
@@ -176,6 +188,7 @@ memory:
 
         assert working_config.get("mode") == "local"
         assert working_config.get("max_memory_mb") == "auto"
+
 
 async def test_remote_memory_with_auth():
     """Test remote memory configuration with authentication"""
@@ -204,6 +217,7 @@ memory:
         formation_path.write_text(formation_yaml)
 
         from muxi.formation.formation import Formation
+
         formation = Formation()
 
         # Should load without errors
@@ -220,6 +234,7 @@ memory:
         assert remote_config.get("tenant") == "auth-tenant"
         assert remote_config.get("api_key") == "test-api-key"
 
+
 if __name__ == "__main__":
     # Run all tests
     async def run_tests():
@@ -232,7 +247,7 @@ if __name__ == "__main__":
             ("Explicit max_memory_mb", test_remote_memory_requires_explicit_max_memory),
             ("Valid configuration", test_remote_memory_valid_configuration),
             ("Local mode allows auto", test_local_memory_allows_auto),
-            ("Remote with auth", test_remote_memory_with_auth)
+            ("Remote with auth", test_remote_memory_with_auth),
         ]
 
         passed = 0

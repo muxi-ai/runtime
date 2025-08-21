@@ -20,7 +20,7 @@ async def test_execute_with_timeout():
         timeout=5.0
     )
 
-    print(f"\nResult details:")
+    print("\nResult details:")
     print(f"  operation_id: {result.operation_id}")
     print(f"  status: {result.status}")
     print(f"  status type: {type(result.status)}")
