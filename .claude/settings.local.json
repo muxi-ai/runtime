@@ -50,8 +50,8 @@
       "Bash(.claude/scripts/pm/*)",
       "Bash(bash:*)",
       "WebFetch(domain:docs.python.org)",
-      "WebFetch(domain:)",
-      "Search(pattern:)"
+      "WebFetch(domain:*)",
+      "Search(pattern:*)"
     ]
   }
 }
