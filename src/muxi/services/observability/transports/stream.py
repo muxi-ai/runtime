@@ -272,7 +272,7 @@ class StreamTransport(BaseTransport):
                 self.last_error = error_msg
                 self.status = TransportStatus.FAILED
                 raise RuntimeError(error_msg)
-            
+
             self.kafka_producer = KafkaProducer(**producer_config)
             self.status = TransportStatus.HEALTHY
             return True
