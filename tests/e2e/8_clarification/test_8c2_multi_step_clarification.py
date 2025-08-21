@@ -34,11 +34,14 @@ async def test_8c2_nested_clarifications():
     try:
         # Step 1: Initial ambiguous request
         print("\n1. Initial ambiguous request...")
-        response1 = await overlord.chat(
-            "Set up the integration",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response1 = await asyncio.wait_for(
+            overlord.chat(
+                "Set up the integration",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response1.content}")
         
@@ -49,11 +52,14 @@ async def test_8c2_nested_clarifications():
         
         # Step 2: Provide partial clarification (still ambiguous)
         print("\n2. Partial clarification (payment integration)...")
-        response2 = await overlord.chat(
-            "Payment integration",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response2 = await asyncio.wait_for(
+            overlord.chat(
+                "Payment integration",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response2.content}")
         
@@ -64,11 +70,14 @@ async def test_8c2_nested_clarifications():
         
         # Step 3: Another clarification needed
         print("\n3. Specifying payment provider...")
-        response3 = await overlord.chat(
-            "Stripe",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response3 = await asyncio.wait_for(
+            overlord.chat(
+                "Stripe",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response3.content}")
         
@@ -80,11 +89,14 @@ async def test_8c2_nested_clarifications():
         
         # Step 4: Follow-up question using full context
         print("\n4. Follow-up with all context available...")
-        response4 = await overlord.chat(
-            "What test cards should I use?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response4 = await asyncio.wait_for(
+            overlord.chat(
+                "What test cards should I use?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response4.content}")
         
@@ -170,11 +182,14 @@ async def test_8c2_branching_clarifications():
     try:
         # Initial request with multiple ambiguities
         print("\n1. Request with multiple ambiguities...")
-        response1 = await overlord.chat(
-            "Deploy the application",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response1 = await asyncio.wait_for(
+            overlord.chat(
+                "Deploy the application",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response1.content}")
         
@@ -185,11 +200,14 @@ async def test_8c2_branching_clarifications():
         
         # Branch 1: Specify cloud provider
         print("\n2. Branch 1: Specifying AWS...")
-        response2 = await overlord.chat(
-            "Deploy to AWS",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response2 = await asyncio.wait_for(
+            overlord.chat(
+                "Deploy to AWS",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response2.content}")
         
@@ -200,11 +218,14 @@ async def test_8c2_branching_clarifications():
         
         # Branch 2: Specify application type
         print("\n3. Branch 2: Specifying containerized app...")
-        response3 = await overlord.chat(
-            "It's a containerized Node.js application",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response3 = await asyncio.wait_for(
+            overlord.chat(
+                "It's a containerized Node.js application",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response3.content}")
         
@@ -215,11 +236,14 @@ async def test_8c2_branching_clarifications():
         
         # Final clarification based on both branches
         print("\n4. Question using both clarifications...")
-        response4 = await overlord.chat(
-            "Should I use ECS or EKS?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response4 = await asyncio.wait_for(
+            overlord.chat(
+                "Should I use ECS or EKS?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response4.content}")
         

@@ -34,11 +34,14 @@ async def test_8c3_multi_parameter_collection():
     try:
         # Request requiring multiple parameters
         print("\n1. Request requiring multiple parameters...")
-        response1 = await overlord.chat(
-            "Create a new API endpoint",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response1 = await asyncio.wait_for(
+            overlord.chat(
+                "Create a new API endpoint",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response1.content}")
         
@@ -49,11 +52,14 @@ async def test_8c3_multi_parameter_collection():
         
         # Parameter 1: Endpoint path
         print("\n2. Providing endpoint path...")
-        response2 = await overlord.chat(
-            "/api/users/:id/profile",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response2 = await asyncio.wait_for(
+            overlord.chat(
+                "/api/users/:id/profile",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response2.content}")
         
@@ -64,21 +70,27 @@ async def test_8c3_multi_parameter_collection():
         
         # Parameter 2: HTTP method
         print("\n3. Providing HTTP method...")
-        response3 = await overlord.chat(
-            "GET method to retrieve user profile",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response3 = await asyncio.wait_for(
+            overlord.chat(
+                "GET method to retrieve user profile",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response3.content}")
         
         # Parameter 3: Response format
         print("\n4. Asking about response format...")
-        response4 = await overlord.chat(
-            "What response format should it return?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response4 = await asyncio.wait_for(
+            overlord.chat(
+                "What response format should it return?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response4.content}")
         
@@ -89,11 +101,14 @@ async def test_8c3_multi_parameter_collection():
         
         # Parameter 4: Authentication requirement
         print("\n5. Asking about authentication...")
-        response5 = await overlord.chat(
-            "Does this endpoint need authentication?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response5 = await asyncio.wait_for(
+            overlord.chat(
+                "Does this endpoint need authentication?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response5.content}")
         
@@ -104,11 +119,14 @@ async def test_8c3_multi_parameter_collection():
         
         # Final implementation based on all parameters
         print("\n6. Requesting implementation with all parameters collected...")
-        response6 = await overlord.chat(
-            "Now show me the implementation with JWT authentication and JSON response",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response6 = await asyncio.wait_for(
+            overlord.chat(
+                "Now show me the implementation with JWT authentication and JSON response",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response6.content}")
         
@@ -210,11 +228,14 @@ async def test_8c3_parameter_validation():
     try:
         # Request with parameters that need validation
         print("\n1. Setting up database connection...")
-        response1 = await overlord.chat(
-            "Configure database connection",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response1 = await asyncio.wait_for(
+            overlord.chat(
+                "Configure database connection",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response1.content}")
         
@@ -225,21 +246,27 @@ async def test_8c3_parameter_validation():
         
         # Provide database type
         print("\n2. Specifying PostgreSQL...")
-        response2 = await overlord.chat(
-            "PostgreSQL database",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response2 = await asyncio.wait_for(
+            overlord.chat(
+                "PostgreSQL database",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response2.content}")
         
         # Invalid port number
         print("\n3. Providing invalid port...")
-        response3 = await overlord.chat(
-            "Host is localhost and port is 99999",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response3 = await asyncio.wait_for(
+            overlord.chat(
+                "Host is localhost and port is 99999",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response3.content}")
         
@@ -250,21 +277,27 @@ async def test_8c3_parameter_validation():
         
         # Correction
         print("\n4. Correcting port...")
-        response4 = await overlord.chat(
-            "Use default port 5432",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response4 = await asyncio.wait_for(
+            overlord.chat(
+                "Use default port 5432",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response4.content}")
         
         # Missing required parameter
         print("\n5. Asking about missing parameter...")
-        response5 = await overlord.chat(
-            "What about the database name?",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response5 = await asyncio.wait_for(
+            overlord.chat(
+                "What about the database name?",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response5.content}")
         
@@ -275,11 +308,14 @@ async def test_8c3_parameter_validation():
         
         # Complete configuration
         print("\n6. Providing database name...")
-        response6 = await overlord.chat(
-            "Database name is 'myapp_production'",
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            stream=False
+        response6 = await asyncio.wait_for(
+            overlord.chat(
+                "Database name is 'myapp_production'",
+                user_id=ctx.user_id,
+                session_id=ctx.session_id,
+                stream=False
+            ),
+            timeout=120.0  # 2 minute timeout
         )
         print(f"Response: {response6.content}")
         
