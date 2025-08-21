@@ -1021,10 +1021,6 @@ class Agent:
                     next_line = lines[i + 1].strip()
                     if next_line.startswith("User:"):
                         actual_user_request = next_line[5:].strip()  # Remove "User: " prefix
-                        print(f"[DEBUG] Extracted actual request from enhanced message:")
-                        print(f"[DEBUG]   Original length: {len(user_message)}")
-                        print(f"[DEBUG]   Extracted: '{actual_user_request}'")
-                        print(f"[DEBUG]   Extracted length: {len(actual_user_request)}")
                         break
 
         # Skip planning for workflow tasks or A2A tasks (to prevent loops)

@@ -320,9 +320,6 @@ class UnifiedClarificationSystem:
             "brief": "very concise, minimal words"
         }.get(self.style, "natural, friendly, like a helpful colleague")
 
-        print("---- line 298 -------------------")
-        print(message)
-        print("--------------------------------")
         # Extract conversation context if it exists, otherwise use the full message
         if "=== CONVERSATION CONTEXT (Most Recent First) ===" in message:
             conversation = message.split("=== CONVERSATION CONTEXT (Most Recent First) ===")[-1].strip()
@@ -370,10 +367,7 @@ Return JSON:
 }}
         """
 
-        print("--------------------------------")
-        print(prompt)
         if not self.llm:
-            print("No LLM available")
             # Fallback when no LLM available
             return {
                 "needs_clarification": False,
@@ -382,14 +376,10 @@ Return JSON:
                 "question": None,
                 "confidence": 0.0,
             }
-        print("--------------------------------")
 
         messages = [{"role": "user", "content": prompt}]
         response = await self.llm.chat(messages, temperature=0, max_tokens=200)
         content = response.content if hasattr(response, "content") else str(response)
-
-        print(content)
-        print("--------------------------------")
 
         # Parse JSON
         try:
