@@ -18,26 +18,31 @@ Convert PRD to technical implementation epic.
 
 ## Preflight Checklist
 
-Before proceeding, complete these validation steps:
+Before proceeding, complete these validation steps.
+Do not bother the user with preflight checks progress ("I'm not going to ..."). Just do them and move on.
 
 ### Validation Steps
-1. **Verify PRD exists:**
+1. **Verify <feature_name> was provided as a parameter:**
+   - If not, tell user: "❌ <feature_name> was not provided as parameter. Please run: /pm:prd-parse <feature_name>"
+   - Stop execution if <feature_name> was not provided
+
+2. **Verify PRD exists:**
    - Check if `.claude/prds/$ARGUMENTS.md` exists
    - If not found, tell user: "❌ PRD not found: $ARGUMENTS. First create it with: /pm:prd-new $ARGUMENTS"
    - Stop execution if PRD doesn't exist
 
-2. **Validate PRD frontmatter:**
+3. **Validate PRD frontmatter:**
    - Verify PRD has valid frontmatter with: name, description, status, created
    - If frontmatter is invalid or missing, tell user: "❌ Invalid PRD frontmatter. Please check: .claude/prds/$ARGUMENTS.md"
    - Show what's missing or invalid
 
-3. **Check for existing epic:**
+4. **Check for existing epic:**
    - Check if `.claude/epics/$ARGUMENTS/epic.md` already exists
    - If it exists, ask user: "⚠️ Epic '$ARGUMENTS' already exists. Overwrite? (yes/no)"
    - Only proceed with explicit 'yes' confirmation
    - If user says no, suggest: "View existing epic with: /pm:epic-show $ARGUMENTS"
 
-4. **Verify directory permissions:**
+5. **Verify directory permissions:**
    - Ensure `.claude/epics/` directory exists or can be created
    - If cannot create, tell user: "❌ Cannot create epic directory. Please check permissions."
 
@@ -164,3 +169,7 @@ If any step fails:
 - Never create an epic with incomplete information
 
 Focus on creating a technically sound implementation plan that addresses all PRD requirements while being practical and achievable for "$ARGUMENTS".
+
+## IMPORTANT:
+- Aim for as few tasks as possible and limit the total number of tasks to 10 or less.
+- When creating the epic, identify ways to simplify and improve it. Look for ways to leverage existing functionality instead of creating more code when possible.
