@@ -231,10 +231,23 @@ class WorkflowExecutor:
             #  Info - TODO: add observability
 
         except Exception as e:
-            #  Error - TODO: add observability
+            #  Error - add observability
             workflow.status = WorkflowStatus.FAILED
             workflow.completed_at = datetime.now()
             # Note: Workflow model doesn't have error_message field
+            # Log error for debuggability since workflow doesn't store error_message
+            observability.observe(
+                event_type=observability.ErrorEvents.WORKFLOW_EXECUTION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "workflow_id": workflow.id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "status": str(workflow.status),
+                    "user_request": workflow.user_request[:100] if workflow.user_request else None,
+                },
+                description=f"Workflow {workflow.id} failed: {str(e)}",
+            )
 
         finally:
             # Cancel timeout monitor if still running
@@ -337,6 +350,20 @@ class WorkflowExecutor:
             workflow.status = WorkflowStatus.FAILED
             workflow.completed_at = datetime.now()
             # Note: Workflow model doesn't have error_message field
+            # Log error for debuggability since workflow doesn't store error_message
+            observability.observe(
+                event_type=observability.ErrorEvents.WORKFLOW_EXECUTION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "workflow_id": workflow.id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "status": str(workflow.status),
+                    "user_request": workflow.user_request[:100] if workflow.user_request else None,
+                    "streaming": True,
+                },
+                description=f"Workflow {workflow.id} failed during streaming: {str(e)}",
+            )
 
             # Notify workflow failed
             if progress_callback:
@@ -1420,6 +1447,21 @@ class WorkflowExecutor:
             ):
                 workflow.status = WorkflowStatus.FAILED
                 # Note: Workflow model doesn't have error_message field
+                # Log timeout for debuggability since workflow doesn't store error_message
+                observability.observe(
+                    event_type=observability.ErrorEvents.CONNECTION_TIMEOUT,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "workflow_id": workflow.id,
+                        "timeout": self.config.timeout_config.workflow_timeout,
+                        "elapsed": elapsed,
+                        "status": str(workflow.status),
+                    },
+                    description=(
+                        f"Workflow {workflow.id} exceeded timeout of "
+                        f"{self.config.timeout_config.workflow_timeout}s"
+                    ),
+                )
                 return False
 
         # Check failure strategy
