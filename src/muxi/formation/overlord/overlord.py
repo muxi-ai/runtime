@@ -462,16 +462,17 @@ class Overlord:
                 # Use encrypted resolver if we have cryptography available
                 try:
                     from ..memory.encrypted_credential_resolver import EncryptedCredentialResolver
+
                     self.credential_resolver = EncryptedCredentialResolver(
                         async_session_maker=db_manager.AsyncSession,
                         formation_id=self.formation_id,
                         llm_model=llm_model,
-                        encryption_key=encryption_key  # Optional custom key
+                        encryption_key=encryption_key,  # Optional custom key
                     )
                     observability.observe(
                         event_type=observability.SystemEvents.INITIALIZING,
                         level=observability.EventLevel.INFO,
-                        description="Initialized encrypted credential resolver"
+                        description="Initialized encrypted credential resolver",
                     )
                 except ImportError:
                     # Fall back to non-encrypted resolver if cryptography not available
@@ -483,7 +484,7 @@ class Overlord:
                     observability.observe(
                         event_type=observability.SystemEvents.SERVICE_INITIALIZED,
                         level=observability.EventLevel.WARNING,
-                        description="Using non-encrypted credential resolver (cryptography not installed)"
+                        description="Using non-encrypted credential resolver (cryptography not installed)",
                     )
 
         # Accept pre-generated API keys from Formation
@@ -1345,8 +1346,60 @@ class Overlord:
             self.scheduler_service = await SchedulerService.get_instance(self)
             await self.scheduler_service.start()
 
+        # Populate formation capabilities after all services are loaded
+        self._populate_formation_capabilities()
+
         #  Info - TODO: add observability
         #  SystemEvents.STARTED (overlord)
+
+    def _populate_formation_capabilities(self) -> None:
+        """Populate formation capabilities after all services are loaded"""
+        # Get formation capabilities (Agents)
+        capabilities = []
+        if hasattr(self, "agent_metadata"):
+            for agent in self.agent_metadata.values():
+                capabilities.append(agent.get("name", ""))
+                capabilities.extend(agent.get("specialties", []))
+        if hasattr(self, "agents"):
+            capabilities.extend([a.name for a in self.agents.values()])
+
+        # Get formation capabilities (MCP Servers)
+        mcp_servers = []
+        if hasattr(self, "mcp_coordinator"):
+            if hasattr(self.mcp_coordinator, "connections"):
+                mcp_servers = [
+                    s.replace("mcp", "").strip("-") for s in self.mcp_coordinator.connections.keys()
+                ]
+        elif hasattr(self, "formation_config"):
+            if self.formation_config.get("mcp", {}).get("servers", []):
+                mcp_servers = list(
+                    set(
+                        [
+                            s.get("id", "").replace("mcp", "").strip("-")
+                            for s in self.formation_config.get("mcp", {}).get("servers", [])
+                        ]
+                    )
+                )
+        capabilities.extend(mcp_servers)
+
+        # Remove duplicates and convert to lowercase
+        capabilities = list(set([c.lower() for c in capabilities]))
+
+        # Store on overlord for easy access
+        self.capabilities = capabilities
+        self.mcp_servers = mcp_servers
+
+        observability.observe(
+            event_type=observability.SystemEvents.SERVICE_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "formation_capabilities",
+                "agent_count": len([c for c in capabilities if c not in mcp_servers]),
+                "mcp_service_count": len(mcp_servers),
+                "total_capabilities": len(capabilities),
+            },
+            description=f"Formation capabilities populated: {len(capabilities)} total",
+        )
 
     async def ensure_started(self) -> None:
         """Ensure that the overlord startup is complete.
