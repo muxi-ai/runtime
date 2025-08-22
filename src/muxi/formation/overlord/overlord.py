@@ -469,7 +469,7 @@ class Overlord:
                         encryption_key=encryption_key  # Optional custom key
                     )
                     observability.observe(
-                        event_type=observability.SystemEvents.SERVICE_INITIALIZED,
+                        event_type=observability.SystemEvents.INITIALIZING,
                         level=observability.EventLevel.INFO,
                         description="Initialized encrypted credential resolver"
                     )
