@@ -523,7 +523,7 @@ class UnifiedClarificationSystem:
         except Exception as e:
             # Log the error with context
             observability.observe(
-                event_type=observability.ErrorEvents.MEMORY_ERROR,
+                event_type=observability.SystemEvents.MEMORY_OPERATION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "error": str(e),
