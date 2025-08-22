@@ -3180,6 +3180,11 @@ class Formation:
         """Get the secret placeholder mappings (returns a copy to prevent external modification)."""
         return self._secret_placeholders.copy()
 
+    @property
+    def mcp_servers(self) -> List[Dict[str, Any]]:
+        """Get the list of MCP server configurations."""
+        return getattr(self, "_mcp_servers", [])
+
     def get_overlord(self) -> Optional[Any]:
         """
         Get the overlord instance if it's running.
