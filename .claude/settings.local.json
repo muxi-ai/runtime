@@ -51,7 +51,8 @@
       "Bash(bash:*)",
       "WebFetch(domain:docs.python.org)",
       "WebFetch(domain:*)",
-      "Search(pattern:*)"
+      "Search(pattern:*)",
+      "Bash(psql:*)"
     ]
   }
 }
