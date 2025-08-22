@@ -590,14 +590,11 @@ class UnifiedClarificationSystem:
         """
         Analyze request using LLM - no pattern matching.
         """
-        # Get formation capabilities
-        capabilities = []
-        if hasattr(self.overlord, "formation"):
-            if hasattr(self.overlord.formation, "mcp_servers"):
-                capabilities.extend(self.overlord.formation.mcp_servers.keys())
-            if hasattr(self.overlord.formation, "agents"):
-                capabilities.extend([a.name for a in self.overlord.formation.agents])
+        # Get formation capabilities (pre-computed during overlord initialization)
+        capabilities = getattr(self.overlord, "capabilities", [])
+        mcp_servers = getattr(self.overlord, "mcp_servers", [])
 
+        # Get response style
         response_style = {
             "conversational": "natural, friendly, like a helpful colleague",
             "technical": "precise, specific, professional",
@@ -628,6 +625,9 @@ Analyze this transcript to determine if clarification is needed regarding the us
 === SYSTEM CAPABILITIES ===
 {", ".join(capabilities) if capabilities else "Conversation"}
 
+=== MCP SERVICES AVAILABLE ===
+{", ".join(mcp_servers) if mcp_servers else "None"}
+
 === INSTRUCTIONS ===
 Be {response_style}.
 
@@ -635,6 +635,7 @@ Determine:
 1. Is the request clear enough to attempt execution?
 2. What mode of interaction does the user want?
 3. If clarification needed, what should we ask?
+4. Which MCP service (if any) is this request about?
 
 IMPORTANT RULES:
 - If the request is clear enough to make an attempt, don't clarify
@@ -643,13 +644,18 @@ IMPORTANT RULES:
 - If we lack the tools/capabilities, don't clarify (fail fast)
 - Detect if user wants brainstorming/planning vs direct action
 
+MCP SERVICE DETECTION:
+- Only set mcp_service if the request clearly needs one of the available MCP services
+- Set to null if not relevant or not asking about MCP service
+
 Return JSON:
 {{
     "needs_clarification": boolean,
     "reason": "ambiguous|missing_info|no_capability|clear",
     "mode": "direct|brainstorm|planning",
     "question": "clarification question in the specified style or null",
-    "confidence": 0.0 to 1.0
+    "confidence": 0.0 to 1.0,
+    "mcp_service": "service_name or null"
 }}
         """
 
@@ -661,10 +667,11 @@ Return JSON:
                 "mode": "direct",
                 "question": None,
                 "confidence": 0.0,
+                "mcp_service": None,
             }
 
         messages = [{"role": "user", "content": prompt}]
-        response = await self.llm.chat(messages, temperature=0, max_tokens=200)
+        response = await self.llm.chat(messages, temperature=0, max_tokens=250)
         content = response.content if hasattr(response, "content") else str(response)
 
         # Parse JSON
@@ -679,6 +686,7 @@ Return JSON:
                 "mode": "direct",
                 "question": None,
                 "confidence": 0.5,
+                "mcp_service": None,
             }
 
     async def _check_need_more(self, state: Dict) -> Dict:
