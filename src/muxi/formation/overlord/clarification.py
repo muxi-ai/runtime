@@ -74,7 +74,13 @@ class UnifiedClarificationSystem:
         Uses request_id as primary identifier.
         """
         # Check for existing clarification
-        if await self.has_active_clarification(request_id):
+        print(f"🔍 DEBUG needs_clarification: request_id={request_id}, message='{message}'")
+        
+        has_active = await self.has_active_clarification(request_id)
+        print(f"🔍 DEBUG has_active_clarification = {has_active}")
+        
+        if has_active:
+            print(f"🔍 DEBUG: Routing to handle_response for existing clarification")
             return await self.handle_response(request_id, message)
 
         # Analyze new request
@@ -83,7 +89,7 @@ class UnifiedClarificationSystem:
         if analysis["needs_clarification"]:
             # Start clarification - store in buffer memory
             await self._create_state(request_id, message, analysis["mode"], session_id)
-            # Store the question we're asking
+            # Store the question we're asking and MCP service if detected
             state = await self._get_state(request_id)
             if state:
                 state["last_question"] = analysis["question"]
@@ -249,8 +255,14 @@ class UnifiedClarificationSystem:
         """
         Handle clarification response and determine next action.
         """
+        print(f"🔍 DEBUG handle_response: request_id={request_id}")
+        print(f"🔍 DEBUG handle_response: response='{response}'")
+        
         state = await self._get_state(request_id)
+        print(f"🔍 DEBUG handle_response: state={state}")
+        
         if not state:
+            print("❌ DEBUG: No state found for request_id")
             # No active clarification
             return ClarificationResult(action="execute", request=response)
 
@@ -284,9 +296,78 @@ class UnifiedClarificationSystem:
                     request=state["original_request"],
                     context={
                         "service_id": service_id,
-                        "error": "Failed to store credential. Please try again or configure externally."
-                    }
+                        "error": "Failed to store credential. Please try again or configure externally.",
+                    },
                 )
+
+        # Check if user is requesting to add new credentials
+        print(f"🔍 DEBUG: About to check credential request with state: {state}")
+        print(f"🔍 DEBUG: state.get('mcp_service') = {state.get('mcp_service')}")
+        print(f"🔍 DEBUG: state.get('user_id') = {state.get('user_id')}")
+        
+        is_credential_request = await self._check_credential_request(state, response)
+        print(f"🔍 DEBUG: is_credential_request = {is_credential_request}")
+
+        # Log for debugging
+        if is_credential_request:
+            observability.observe(
+                event_type=observability.SystemEvents.CLARIFICATION_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "request_id": request_id,
+                    "credential_request_detected": True,
+                    "mcp_service": state.get("mcp_service"),
+                    "user_response": response[:100],
+                },
+                description="Credential request detected in clarification response"
+            )
+
+        if is_credential_request:
+            # Check if we have an MCP service context
+            mcp_service = state.get("mcp_service")
+
+            if mcp_service:
+                # We know which service this is for - use the proper handler
+                user_id = state.get("user_id", "0")
+
+                # Call the existing credential handler with the service context
+                result = await self.handle_mcp_credential_request(
+                    service_id=mcp_service, user_id=user_id, request_id=request_id
+                )
+
+                # Handle the result based on action
+                if result.action == "message" and result.mode == "redirect":
+                    # Redirect mode - clean up and return message
+                    await self._cleanup_state(request_id)
+                    return result
+                elif result.action == "clarify":
+                    # Dynamic mode asking for credentials - update state
+                    state["type"] = "credential"
+                    state["service_id"] = mcp_service
+                    state["auth_type"] = await self._get_service_auth_type(mcp_service)
+                    await self._store_state(request_id, state)
+                    return result
+            else:
+                # No MCP service context - fall back to generic redirect if configured
+                cred_config = (
+                    self.overlord.formation_config.get("user_credentials", {})
+                    if hasattr(self.overlord, "formation_config") and self.overlord.formation_config
+                    else {}
+                )
+                mode = cred_config.get("mode", "redirect")
+
+                if mode == "redirect":
+                    redirect_message = cred_config.get(
+                        "redirect_message",
+                        "For security, credentials must be configured outside of this chat interface.",
+                    )
+                    await self._cleanup_state(request_id)
+                    return ClarificationResult(
+                        action="message",
+                        question=redirect_message,
+                        mode="redirect",
+                        context={"credential_redirect": True},
+                    )
 
         # Update state for non-credential clarifications
         state["collected_info"].append(response)
@@ -492,6 +573,7 @@ class UnifiedClarificationSystem:
     async def has_active_clarification(self, request_id: str) -> bool:
         """Check if request has active clarification in buffer."""
         state = await self._get_state(request_id)
+        print(f"🔍 DEBUG has_active_clarification: request_id={request_id}, state={state}")
         return state is not None
 
     async def cancel_clarification(self, request_id: str) -> bool:
@@ -667,7 +749,7 @@ Return JSON:
     "mcp_service": "service_name or null"
 }}
         """
-
+        print(prompt)
         if not self.llm:
             # Fallback when no LLM available
             return {
@@ -682,11 +764,58 @@ Return JSON:
         messages = [{"role": "user", "content": prompt}]
         response = await self.llm.chat(messages, temperature=0, max_tokens=250)
         content = response.content if hasattr(response, "content") else str(response)
+        print(content)
 
         # Parse JSON
         try:
             json_str = content[content.index("{"):content.rindex("}") + 1]
-            return json.loads(json_str)
+            result = json.loads(json_str)
+
+            # If an MCP service was detected and needs clarification, check for available credentials
+            if result.get("needs_clarification") and result.get("mcp_service"):
+                mcp_service = result["mcp_service"]
+                # Extract user_id from context or message
+                user_id = context.get("user_id", "0") if context else "0"
+
+                # Check if we have credential resolver to get available accounts
+                available_accounts = []
+                if hasattr(self.overlord, "credential_resolver"):
+                    try:
+                        credentials = await self.overlord.credential_resolver.get_user_credentials(
+                            user_id, mcp_service
+                        )
+                        if credentials:
+                            available_accounts = [
+                                cred.get("name", f"Account {i+1}") for i, cred in enumerate(credentials)
+                            ]
+                    except Exception as e:
+                        # Log the error for debugging
+                        observability.observe(
+                            event_type=observability.SystemEvents.CLARIFICATION_COMPLETED,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "error": str(e),
+                                "user_id": user_id,
+                                "service": mcp_service,
+                            },
+                            description=f"Failed to get credentials for {mcp_service}: {e}"
+                        )
+
+                # If we have available accounts, include them in the question
+                if available_accounts:
+                    # Re-generate the question with available accounts
+                    account_list = ", ".join(available_accounts[:-1])
+                    if len(available_accounts) > 1:
+                        account_list = f"{account_list} or {available_accounts[-1]}"
+                    else:
+                        account_list = available_accounts[0]
+
+                    # Update the question to include available accounts
+                    base_question = result.get("question", f"Which {mcp_service} account would you like to use?")
+                    result["question"] = f"{base_question.rstrip('?')}? Available: {account_list}"
+                    result["available_accounts"] = available_accounts
+
+            return result
         except Exception:
             # Fallback if JSON parsing fails
             return {
@@ -739,6 +868,60 @@ Return JSON:
             return json.loads(json_str)
         except Exception:
             return {"needs_more": False, "question": None}
+
+    async def _check_credential_request(self, state: Dict, response: str) -> bool:
+        """
+        Check if the user is requesting to add new credentials.
+        Uses LLM to detect credential addition requests.
+        """
+        print(f"🔍 DEBUG _check_credential_request called")
+        print(f"🔍 DEBUG state: {state}")
+        print(f"🔍 DEBUG response: '{response}'")
+        
+        if not self.llm:
+            print("❌ DEBUG: No LLM available for credential request detection")
+            return False  # Can't detect without LLM
+
+        # Get the last question we asked
+        last_question = state.get("last_question", "a clarification question")
+        print(f"🔍 DEBUG last_question: '{last_question}'")
+
+        prompt = f"""
+        We're in a clarification dialog about: {state['original_request']}
+        We asked: "{last_question}"
+        The user responded: "{response}"
+
+        Determine if the user is requesting to ADD NEW CREDENTIALS, API keys, or accounts.
+
+        Examples of credential requests (return "yes"):
+        - "I need to add a new Xero account with different credentials"
+        - "I want to use a different API key"
+        - "Let me add a new account"
+        - "I need to configure new credentials"
+        - "None of the above, I want to add a new account"
+        - "I'd like to set up a different token"
+
+        Examples of NOT credential requests (return "no"):
+        - "Use the first account"
+        - "My account is newuser123" (just providing a username, not asking to add credentials)
+        - "The second one"
+        - "Never mind"
+
+        Return "yes" if user wants to ADD/CONFIGURE new credentials, "no" otherwise.
+        """
+
+        messages = [{"role": "user", "content": prompt}]
+        print(f"🔍 DEBUG sending prompt to LLM: {prompt}")
+        
+        result = await self.llm.chat(messages, temperature=0, max_tokens=20)
+        content = result.content if hasattr(result, "content") else str(result)
+        
+        print(f"🔍 DEBUG LLM response: '{content}'")
+        
+        is_credential_request = "yes" in content.lower()
+        print(f"🔍 DEBUG final result: {is_credential_request}")
+        
+        return is_credential_request
 
     async def _check_context_switch(self, state: Dict, response: str) -> bool:
         """
@@ -1051,6 +1234,13 @@ Return JSON:
         Returns:
             The authentication type string (defaults to 'unknown')
         """
+        # Try to get from formation's mcp_servers list first
+        if hasattr(self.overlord, "formation") and hasattr(self.overlord.formation, "mcp_servers"):
+            for server in self.overlord.formation.mcp_servers:
+                if server.get("id") == service_id:
+                    auth = server.get("auth", {})
+                    return auth.get("type", "unknown")
+
         # Try to get from MCP registry if available
         if hasattr(self.overlord, 'mcp_registry'):
             service = self.overlord.mcp_registry.get(service_id)
