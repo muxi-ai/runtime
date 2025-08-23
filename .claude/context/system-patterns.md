@@ -495,6 +495,13 @@ async def test_multi_agent_system():
     # Verify agent coordination worked
 ```
 
+---
+created: 2025-08-21T17:31:00Z
+last_updated: 2025-08-23T23:22:07Z
+version: 1.1
+author: Claude Code PM System
+---
+
 ## Clarification System Patterns (August 2025)
 
 ### Unified Clarification Architecture
@@ -526,6 +533,33 @@ class UnifiedClarificationSystem:
         
         return ClarificationResult(action="execute", request=message)
 ```
+
+### Credential Handling Integration (Issue #47 - August 2025)
+
+The clarification system now integrates with credential management:
+
+```python
+# Enhanced clarification prompt includes credential detection
+CREDENTIAL_HANDLING_RULES = '''
+If user is asking to ADD NEW CREDENTIALS/API keys/accounts:
+  - In redirect mode: Set action="message" with redirect message
+  - In dynamic mode: Collect credentials through clarification dialog
+'''
+
+# Support for message action in clarification results
+if result.action == "message":
+    # Return message directly without agent processing
+    return SyncChatResponse(
+        content=result.question,
+        metadata={"clarification": "redirect"}
+    )
+```
+
+**Key Features**:
+- **LLM-based detection**: No pattern matching, works in any language
+- **Mode-specific behavior**: Redirect vs dynamic credential collection
+- **Security-first**: No inline credential prompting in redirect mode
+- **Simplified architecture**: Removed session-based request_id override
 
 ### Five Specialized Clarification Modes
 
