@@ -55,7 +55,9 @@
       "WebFetch(domain:a2a-protocol.org)",
       "WebFetch(domain:docs.python.org)",
       "WebFetch(domain:google-a2a.github.io)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(timeout:*)",
+      "Bash(python -m flake8:*)"
     ]
   }
 }
