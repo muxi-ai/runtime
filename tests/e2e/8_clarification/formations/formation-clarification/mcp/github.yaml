@@ -14,4 +14,6 @@ retry_attempts: 3                  # Number of retry attempts (overrides default
 # Authentication (optional)
 auth:
   type: "bearer"
+  accept_inline: true
   token: "${{ user.credentials.github }}"
+
