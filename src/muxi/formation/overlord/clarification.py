@@ -74,45 +74,14 @@ class UnifiedClarificationSystem:
         Uses request_id as primary identifier.
         """
         # Check for existing clarification
-        print(f"🔍 DEBUG needs_clarification: request_id={request_id}, message='{message}'")
 
         has_active = await self.has_active_clarification(request_id)
-        print(f"🔍 DEBUG has_active_clarification = {has_active}")
 
         if has_active:
-            print(f"🔍 DEBUG: Routing to handle_response for existing clarification")
             return await self.handle_response(request_id, message)
 
         # Analyze new request
         analysis = await self._analyze_request(message, context or {})
-
-        # Check for credential requests in redirect mode
-        if analysis.get("is_credential_request"):
-            print(f"🚀 DEBUG: Credential request detected! analysis={analysis}")
-            # Get credential config
-            cred_config = (
-                self.overlord.formation_config.get("user_credentials", {})
-                if hasattr(self.overlord, "formation_config") and self.overlord.formation_config
-                else {}
-            )
-            cred_mode = cred_config.get("mode", "redirect")
-            print(f"🚀 DEBUG: Credential config - mode={cred_mode}, config={cred_config}")
-
-            if cred_mode == "redirect":
-                redirect_message = cred_config.get(
-                    "redirect_message",
-                    "Please configure your API credentials in the external credential manager."
-                )
-                print(f"🚀 DEBUG: Returning redirect message: {redirect_message}")
-
-                # This is a credential request in redirect mode - return message directly
-                return ClarificationResult(
-                    action="message",
-                    question=redirect_message,
-                    mode="redirect"
-                )
-            else:
-                print(f"🚀 DEBUG: Not redirect mode, mode={cred_mode}")
 
         if analysis["needs_clarification"]:
             # Start clarification - store in buffer memory
@@ -283,14 +252,10 @@ class UnifiedClarificationSystem:
         """
         Handle clarification response and determine next action.
         """
-        print(f"🔍 DEBUG handle_response: request_id={request_id}")
-        print(f"🔍 DEBUG handle_response: response='{response}'")
 
         state = await self._get_state(request_id)
-        print(f"🔍 DEBUG handle_response: state={state}")
 
         if not state:
-            print("❌ DEBUG: No state found for request_id")
             # No active clarification
             return ClarificationResult(action="execute", request=response)
 
@@ -329,12 +294,8 @@ class UnifiedClarificationSystem:
                 )
 
         # Check if user is requesting to add new credentials
-        print(f"🔍 DEBUG: About to check credential request with state: {state}")
-        print(f"🔍 DEBUG: state.get('mcp_service') = {state.get('mcp_service')}")
-        print(f"🔍 DEBUG: state.get('user_id') = {state.get('user_id')}")
 
         is_credential_request = await self._check_credential_request(state, response)
-        print(f"🔍 DEBUG: is_credential_request = {is_credential_request}")
 
         # Log for debugging
         if is_credential_request:
@@ -601,7 +562,6 @@ class UnifiedClarificationSystem:
     async def has_active_clarification(self, request_id: str) -> bool:
         """Check if request has active clarification in buffer."""
         state = await self._get_state(request_id)
-        print(f"🔍 DEBUG has_active_clarification: request_id={request_id}, state={state}")
         return state is not None
 
     async def cancel_clarification(self, request_id: str) -> bool:
@@ -732,6 +692,18 @@ class UnifiedClarificationSystem:
             "brief": "very concise, minimal words",
         }.get(self.style, "natural, friendly, like a helpful colleague")
 
+        # Get credential handling configuration
+        cred_config = (
+            self.overlord.formation_config.get("user_credentials", {})
+            if hasattr(self.overlord, "formation_config") and self.overlord.formation_config
+            else {}
+        )
+        cred_mode = cred_config.get("mode", "redirect")
+        redirect_message = cred_config.get(
+            "redirect_message",
+            "Please configure your API credentials in the external credential manager."
+        )
+
         # Extract conversation context if it exists, otherwise use the full message
         if "=== CONVERSATION CONTEXT (Most Recent First) ===" in message:
             conversation = message.split("=== CONVERSATION CONTEXT (Most Recent First) ===")[
@@ -759,9 +731,6 @@ Analyze this transcript to determine if clarification is needed regarding the us
 === MCP SERVICES AVAILABLE ===
 {", ".join(mcp_servers) if mcp_servers else "None"}
 
-=== CREDENTIAL HANDLING MODE ===
-Mode: {cred_mode}
-{f"Redirect message: {redirect_message}" if cred_mode == "redirect" else ""}
 
 === INSTRUCTIONS ===
 Be {response_style}.
@@ -779,11 +748,15 @@ IMPORTANT RULES:
 - If we lack the tools/capabilities, don't clarify (fail fast)
 - Detect if user wants brainstorming/planning vs direct action
 
-CREDENTIAL HANDLING RULES:
-- If user is asking to ADD NEW CREDENTIALS/API keys/accounts OR requesting services that typically require API keys:
-  - Mark as credential request for special handling
-- Examples of credential requests: "add new account", "different credentials", "new API key", "configure auth"
-- Examples of services requiring API keys: "generate text with AI", "use OpenAI", "create content with AI", "access GitHub", "scrape websites"
+{f'''CREDENTIAL HANDLING RULES:
+- If user is asking to ADD NEW CREDENTIALS/API keys/accounts OR wants to add new accounts
+  with different credentials: Set needs_clarification=true and question="{redirect_message}"
+  (translate to the user's language)
+- Examples: "add new account", "different credentials", "new API key", "configure auth",
+  "add new GitHub account with different credentials"
+- IMPORTANT: For any credential-related request, respond with needs_clarification=true
+  and the exact redirect message above
+''' if cred_mode == "redirect" else ""}
 
 MCP SERVICE DETECTION:
 - Only set mcp_service if the request clearly needs one of the available MCP services
@@ -796,12 +769,9 @@ Return JSON:
     "mode": "direct|brainstorm|planning",
     "question": "clarification question in the specified style or null",
     "confidence": 0.0 to 1.0,
-    "mcp_service": "service_name or null",
-    "is_credential_request": boolean
+    "mcp_service": "service_name or null"
 }}
         """
-        print("🚀 DEBUG: Using ENHANCED prompt with credential handling!")
-        print(prompt)
         if not self.llm:
             # Fallback when no LLM available
             return {
@@ -811,7 +781,6 @@ Return JSON:
                 "question": None,
                 "confidence": 0.0,
                 "mcp_service": None,
-                "is_credential_request": False,
             }
 
         messages = [{"role": "user", "content": prompt}]
@@ -823,7 +792,6 @@ Return JSON:
         try:
             json_str = content[content.index("{"):content.rindex("}") + 1]
             result = json.loads(json_str)
-
 
             # If an MCP service was detected and needs clarification, check for available credentials
             if result.get("needs_clarification") and result.get("mcp_service"):
@@ -879,7 +847,6 @@ Return JSON:
                 "question": None,
                 "confidence": 0.5,
                 "mcp_service": None,
-                "is_credential_request": False,
             }
 
     async def _check_need_more(self, state: Dict) -> Dict:
@@ -929,17 +896,12 @@ Return JSON:
         Check if the user is requesting to add new credentials.
         Uses LLM to detect credential addition requests.
         """
-        print(f"🔍 DEBUG _check_credential_request called")
-        print(f"🔍 DEBUG state: {state}")
-        print(f"🔍 DEBUG response: '{response}'")
 
         if not self.llm:
-            print("❌ DEBUG: No LLM available for credential request detection")
             return False  # Can't detect without LLM
 
         # Get the last question we asked
         last_question = state.get("last_question", "a clarification question")
-        print(f"🔍 DEBUG last_question: '{last_question}'")
 
         prompt = f"""
         We're in a clarification dialog about: {state['original_request']}
@@ -966,16 +928,11 @@ Return JSON:
         """
 
         messages = [{"role": "user", "content": prompt}]
-        print(f"🔍 DEBUG sending prompt to LLM: {prompt}")
 
         result = await self.llm.chat(messages, temperature=0, max_tokens=20)
         content = result.content if hasattr(result, "content") else str(result)
 
-        print(f"🔍 DEBUG LLM response: '{content}'")
-
         is_credential_request = "yes" in content.lower()
-        print(f"🔍 DEBUG final result: {is_credential_request}")
-
         return is_credential_request
 
     async def _check_context_switch(self, state: Dict, response: str) -> bool:

@@ -5089,29 +5089,6 @@ Make it conversational and friendly while keeping accuracy."""
             description=f"_process_sync_chat ENTRY: agent={agent_name}, session={session_id}",
         )
 
-        # ===================================================================
-        # SESSION-BASED PENDING CLARIFICATION CHECK - MUST BE FIRST
-        # ===================================================================
-        # Check if session has pending clarification and override request_id if needed
-        if session_id:
-            clarification_info = await self._get_pending_clarification(session_id)
-            if clarification_info and clarification_info.get("request_id"):
-                # Override request_id with stored one to continue same logical request
-                original_request_id = request_id
-                request_id = clarification_info.get("request_id")
-                observability.observe(
-                    event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "session_id": session_id,
-                        "original_request_id": original_request_id,
-                        "overridden_request_id": request_id,
-                        "clarification_type": clarification_info.get("type"),
-                        "message_preview": message[:100],
-                    },
-                    description="Overriding request_id from pending clarification",
-                )
-
         # Check if this might be a credential response (e.g., GitHub token)
         # Check if message contains a credential token using UnifiedClarificationSystem
         contains_token = (
@@ -5677,7 +5654,7 @@ Make it conversational and friendly while keeping accuracy."""
         ):
             # Check if we have pending clarification to handle response
             clarification_info = await self._get_pending_clarification(session_id) if session_id else None
-            
+
             # Use unified clarification system with request_id
             try:
                 if clarification_info and clarification_info.get("type") in ["reactive", "proactive", "multi_turn"]:
@@ -5712,6 +5689,14 @@ Make it conversational and friendly while keeping accuracy."""
                         role="assistant",
                         content=clarification_result.question,
                         metadata={"clarification": True, "mode": clarification_result.mode},
+                    )
+
+                elif clarification_result.action == "message":
+                    # Direct message response (e.g., credential redirect)
+                    return MuxiResponse(
+                        role="assistant",
+                        content=clarification_result.question,
+                        metadata={"message_type": clarification_result.mode},
                     )
 
                 elif clarification_result.action == "execute":
