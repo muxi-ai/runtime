@@ -87,6 +87,15 @@ class UnifiedClarificationSystem:
             state = await self._get_state(request_id)
             if state:
                 state["last_question"] = analysis["question"]
+                # Store MCP service if detected
+                if analysis.get("mcp_service"):
+                    state["mcp_service"] = analysis["mcp_service"]
+                # Store user_id from context
+                if context and context.get("user_id"):
+                    state["user_id"] = context["user_id"]
+                # Store available accounts if we found any
+                if analysis.get("available_accounts"):
+                    state["available_accounts"] = analysis["available_accounts"]
                 await self._store_state(request_id, state)
             return ClarificationResult(
                 action="clarify", question=analysis["question"], mode=analysis["mode"]
