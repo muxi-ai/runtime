@@ -21,14 +21,15 @@ The MUXI Runtime is not just a request-response system; it's an intelligent proc
 A request passing through MUXI undergoes:
 
 1. **Session & Memory Initialization**: Context loading from three memory tiers with vector similarity search
-2. **Clarification & Actionability**: Multi-turn clarification system resolves unclear requests; non-actionable statements get direct responses
-3. **Intelligent Routing**: Priority-based routing with agent specification check, then SOP matching, then complexity analysis
-4. **SOP-First Processing**: Standard Operating Procedures override all other routing when matched, ensuring consistent execution of predefined workflows
-5. **Workflow Analysis**: Complex requests (above threshold) trigger multi-agent orchestration when no SOP exists
-6. **Agent Processing**: Tool execution via MCP, agent-to-agent delegation, parallel task execution
-7. **Response Generation**: Batch, streaming, or webhook delivery based on execution mode and user preferences
-8. **Persona Application**: Style and tone consistency regardless of which agents were involved
-9. **Memory Updates**: Learning from interactions for future personalization
+2. **Credential Detection**: Intercepts credential-related requests (SERVICE_USE or CREDENTIAL_REQUEST) before clarification, handling them based on configured mode (redirect/dynamic). See [User Credentials Flow](./user-credentials-flow.md) for details
+3. **Clarification & Actionability**: Multi-turn clarification system resolves unclear requests; non-actionable statements get direct responses
+4. **Intelligent Routing**: Priority-based routing with agent specification check, then SOP matching, then complexity analysis
+5. **SOP-First Processing**: Standard Operating Procedures override all other routing when matched, ensuring consistent execution of predefined workflows
+6. **Workflow Analysis**: Complex requests (above threshold) trigger multi-agent orchestration when no SOP exists
+7. **Agent Processing**: Tool execution via MCP, agent-to-agent delegation, parallel task execution
+8. **Response Generation**: Batch, streaming, or webhook delivery based on execution mode and user preferences
+9. **Persona Application**: Style and tone consistency regardless of which agents were involved
+10. **Memory Updates**: Learning from interactions for future personalization
 
 The system seamlessly handles everything from simple queries ("What's the weather?") to complex orchestrations ("Analyze my codebase, generate security audit, create Linear issues, and notify my team") through the same intelligent pipeline.
 
@@ -68,8 +69,17 @@ flowchart TD
 
     WorkingMem --> FormatMsg[Format Message with Full Context<br/>- User context<br/>- Recent history<br/>- Current state]
 
+    %% Credential Check (Issue #53)
+    FormatMsg --> CredentialCheck{Need<br/>Credentials?}
+    CredentialCheck -->|SERVICE_USE| HandleCredentials[Handle Credentials<br/>- Check MCP registry<br/>- Verify user has creds<br/>- Redirect or prompt]
+    CredentialCheck -->|CREDENTIAL_REQUEST| HandleCredentials
+    CredentialCheck -->|NONE| PendingClarification
+
+    HandleCredentials -->|Handled| End([Return Response])
+    HandleCredentials -->|Has Credentials| PendingClarification
+
     %% Clarification Check
-    FormatMsg --> PendingClarification{Has pending<br/>Clarification?}
+    PendingClarification{Has pending<br/>Clarification?}
     PendingClarification -->|Yes| ProcessClarification[Process Clarification<br/>Response]
     PendingClarification -->|No| NeedClarification{Need<br/>Clarification?}
 

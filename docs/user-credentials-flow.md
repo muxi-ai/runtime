@@ -1,69 +1,130 @@
-# User-Specific Credentials Chat Flow
+# User Credentials Flow
 
-This document explains how user-specific credentials work in the MUXI Runtime, including credential storage, resolution, selection, and the complete chat flow with clarification handling.
+This document explains the credential handling system in the MUXI Runtime, including credential detection, routing based on modes (redirect/dynamic), storage, and the complete flow with MCP server registry.
 
 ## Overview
 
-The MUXI Runtime supports user-specific credentials for external services (like GitHub, Linear, etc.) with intelligent selection and clarification flows. This system allows:
+The MUXI Runtime provides a sophisticated credential handling system that:
 
-- **Multi-user support**: Each user has isolated credentials
-- **Multiple credentials per service**: Users can have multiple accounts for the same service
-- **Intelligent selection**: LLM-based credential selection with partial name matching
-- **Session caching**: Selected credentials are remembered within a conversation
-- **Clarification flow**: Ambiguous requests trigger user clarification
+- **Intercepts credential requests early**: Before clarification, preventing confusion
+- **Supports two modes**: `redirect` (external management) and `dynamic` (inline collection)
+- **Uses MCP server registry**: Tracks which services use credentials and accept inline entry
+- **LLM-powered detection**: Intelligently identifies SERVICE_USE vs CREDENTIAL_REQUEST
+- **Handles missing services**: Raises UnsupportedServiceError for unconfigured services
+- **Encrypted storage**: Per-user encryption with key derivation
 
-## Sequence Diagram(s)
+## Credential Handling Modes
 
-### Credential-Aware Tool Invocation Flow
+### Redirect Mode (Default)
+- Shows configured `redirect_message` when credentials are needed
+- User manages credentials externally (e.g., web portal, CLI tool)
+- No credential values pass through the chat interface
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Overlord
-    participant Agent
-    participant MCPService
-    participant CredentialResolver
-    participant LLM
+### Dynamic Mode
+- Prompts users for credentials inline during chat
+- Only works if service has `accept_inline: true`
+- Validates credentials via MCP connection before storage
+- Performs identity discovery for meaningful naming
 
-    User->>Overlord: Sends chat message
-    Overlord->>Agent: Forwards message
-    Agent->>MCPService: Requests tool call (with user_id)
-    MCPService->>CredentialResolver: Resolve credentials for user/service
-    alt Multiple credentials found
-        CredentialResolver->>LLM: Select best credential
-        LLM-->>CredentialResolver: Returns selection
-    end
-    CredentialResolver-->>MCPService: Returns credential
-    MCPService->>MCPService: Connects ephemerally with credential
-    MCPService->>MCPService: Executes tool call
-    MCPService-->>Agent: Returns tool result
-    Agent-->>Overlord: Returns response
-    Overlord-->>User: Delivers result
-```
-
-### Clarification Request for Missing Credentials
+## Complete Flow Diagram
 
 ```mermaid
-sequenceDiagram
-    participant Agent
-    participant Overlord
-    participant CredentialHandler
-    participant User
-
-    Agent->>Overlord: Raises MissingCredentialError
-    Overlord->>CredentialHandler: Generate clarification request
-    CredentialHandler-->>Overlord: Returns ClarificationRequest
-    Overlord-->>User: Sends clarification prompt
-    User-->>Overlord: Submits credential response
-    Overlord->>CredentialHandler: Parse credential response
-    CredentialHandler-->>Overlord: Extracted credential
-    Overlord->>CredentialResolver: Store credential
-    Overlord->>Agent: Retry tool call with credential
+flowchart TD
+    Start([User Message:<br/>'Show my repos']) --> Detect[LLM Detection<br/>with Registry]
+    
+    Detect --> IsCredRequest{Detection Type?}
+    
+    IsCredRequest -->|SERVICE_USE| CheckRegistry2{Check MCP Registry:<br/>Is service configured?}
+    IsCredRequest -->|CREDENTIAL_REQUEST| CheckRegistry1{Check MCP Registry:<br/>Is service configured?}
+    IsCredRequest -->|NONE| PassThrough[[Not credential-related<br/>Continue normal flow]]
+    
+    CheckRegistry1 -->|Service NOT in registry| RaiseUnsupported[Raise<br/>UnsupportedServiceError]
+    CheckRegistry1 -->|Service in registry| CheckCreds{Type of request}
+    
+    CheckCreds -->|Update/Delete credential| Proceed[[Show redirect message]]
+    CheckCreds -->|Add new credential| CheckMode1[Check credential mode]
+    
+    CheckMode1 -->|redirect| ShowRedirect1[[Show redirect message:<br/>'Configure in external manager']]
+    CheckMode1 -->|dynamic| CheckInline1{Accept inline?}
+    
+    CheckInline1 -->|Yes| PromptToken1[Prompt:<br/>'Please provide your<br/>GitHub token:']
+    CheckInline1 -->|No| ShowRedirect2[Show redirect message]
+    
+    CheckRegistry2 -->|Service NOT in registry| RaiseUnsupported
+    CheckRegistry2 -->|Service in registry| CheckExisting{Check existing<br/>credentials}
+    
+    CheckExisting -->|Has credentials| UseCredentials[[Proceed with<br/>service use]]
+    CheckExisting -->|No credentials| CheckMode2[Check credential mode]
+    
+    CheckMode2 -->|redirect| ShowRedirect3[[Show redirect message]]
+    CheckMode2 -->|dynamic| CheckInline2{Accept inline?}
+    
+    CheckInline2 -->|Yes| PromptToken2[Prompt for token]
+    CheckInline2 -->|No| ShowRedirect4[[Show redirect message]]
+    
+    PromptToken1 --> UserProvidesToken[User provides token]
+    PromptToken2 --> UserProvidesToken
+    
+    UserProvidesToken --> Validate[Validate with<br/>MCP connection]
+    
+    Validate -->|Valid| StoreAndDiscover[Store credential +<br/>Identity discovery]
+    Validate -->|Invalid| ShowError[Show error:<br/>'Invalid token']
+    
+    StoreAndDiscover --> Success[Success:<br/>'Added GitHub<br/>account username']
+    
+    RaiseUnsupported --> CatchError[Overlord catches<br/>UnsupportedServiceError]
+    CatchError --> FriendlyMessage[Show:<br/>'GitHub is not available<br/>in this formation']
+    
+    style RaiseUnsupported fill:#ff6b6b
+    style CatchError fill:#ff6b6b
+    style FriendlyMessage fill:#ffd93d
+    style Success fill:#6bcf7f
+    style UseCredentials fill:#6bcf7f
 ```
 
 ## Architecture Components
 
-### 1. Credential Storage (PostgreSQL)
+### 1. MCP Server Registry (formation.py)
+
+During formation initialization, the system builds a registry of MCP servers that use user credentials:
+
+```python
+# In formation._register_mcp_servers()
+self._mcp_servers_with_user_credentials = {
+    "github-mcp": {
+        "service": "github",        # Normalized service name
+        "server_id": "github-mcp",  # Full MCP server ID
+        "accept_inline": True,       # From auth.accept_inline
+        "auth_type": "bearer",       # Auth type
+        "uses_user_credentials": True,
+        "description": "GitHub MCP Server"
+    }
+}
+```
+
+### 2. Credential Detection (overlord.py)
+
+LLM-based detection identifies credential needs:
+
+```python
+async def _detect_credential_need(message: str, user_id: str) -> Dict:
+    # Returns detection result with type:
+    # - SERVICE_USE: User wants to use a service
+    # - CREDENTIAL_REQUEST: User wants to add/update credentials
+    # - NONE: Not credential-related
+```
+
+### 3. Credential Storage
+
+```
+src/muxi/formation/credentials/
+├── __init__.py           # Module exports
+├── resolver.py           # CredentialResolver (database operations)
+├── encrypted.py          # EncryptedCredentialResolver (encryption layer)
+└── exceptions.py         # MissingCredentialError, AmbiguousCredentialError
+```
+
+### 4. Database Schema
 
 ```sql
 -- Users table
@@ -78,313 +139,216 @@ credentials:
   - id: Integer (primary key)
   - user_id: Integer (foreign key to users.id)
   - credential_id: String (unique ID)
-  - name: String (e.g., "lily automaze", "ranaroussi")
-  - service: String (lowercase, e.g., "github", "linear")
-  - credentials: JSON (encrypted credential data)
+  - name: String (e.g., "ranaroussi")
+  - service: String (normalized, e.g., "github")
+  - credentials: JSON (encrypted with per-user key)
 ```
 
-### 2. Key Classes and Services
+## Configuration
 
-- **CredentialResolver** (`credential_resolver.py`): Database operations and caching
-- **MCPService** (`services/mcp/service.py`): Credential selection logic
-- **Overlord** (`overlord.py`): Clarification flow orchestration
-- **Agent** (`agent.py`): Tool invocation and error handling
+### Formation YAML
 
-## Complete Chat Flow Diagram
+```yaml
+# Credential handling configuration
+user_credentials:
+  mode: "redirect"  # or "dynamic"
+  redirect_message: "Please configure your API credentials in the external credential manager."
+  # encryption_key: "optional-custom-key"  # Defaults to formation_id
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           USER SENDS MESSAGE                                │
-│                        "list my repositories"                               │
-└─────────────────────────┬───────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    OVERLORD.chat(user_id="user1")                           │
-│              overlord/overlord.py:~1200                                     │
-│  • Checks for pending clarifications                                        │
-│  • Routes to appropriate agent                                              │
-│  • Passes user_id through the call chain                                    │
-└─────────────────────────┬───────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                   AGENT.process_message()                                   │
-│               agents/agent.py:~400                                          │
-│  • Optional: Enhances message if mcp.enhance_user_prompts=true              │
-│  • Sends enhanced message to LLM                                            │
-│  • LLM decides to call GitHub tools                                         │
-└─────────────────────────┬───────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    AGENT.invoke_tool()                                      │
-│               agents/agent.py:~1875                                         │
-│  • Calls MCP service to execute tool                                        │
-│  • Passes user_id and credential_resolver                                   │
-└─────────────────────────┬───────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                  MCP_SERVICE.invoke_tool()                                  │
-│               services/mcp/service.py:~400                                  │
-│  • Checks if server needs user credentials                                  │
-│  • Calls credential_resolver.resolve(user_id, service)                      │
-└─────────────────────────┬───────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│              CREDENTIAL_RESOLVER.resolve()                                  │
-│           memory/credential_resolver.py:~140                                │
-│  • Checks cache first                                                       │
-│  • Queries database: finds 2 credentials                                    │
-│    - "lily automaze"                                                        │
-│    - "ranaroussi"                                                           │
-│  • Returns list of credentials (multiple found)                             │
-└─────────────────────────┬───────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│          MCP_SERVICE._handle_multiple_credentials()                         │
-│               services/mcp/service.py:~1500                                 │
-│  • Checks session cache for previous selection                              │
-│  • No cached selection found                                                │
-│  • Analyzes user message for explicit credential mentions                   │
-└─────────────────────────┬───────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│           MCP_SERVICE._select_best_credential_with_llm()                    │
-│               services/mcp/service.py:~1631                                 │
-│  • Calls LLM with credential selection prompt                               │
-│  • LLM analyzes "list my repositories" (ambiguous)                          │
-│  • LLM returns selection: 0 (needs clarification)                           │
-│  • RAISES CredentialSelectionNeededError                                    │
-└─────────────────────────┬───────────────────────────────────────────────────┘
-                          │ Exception bubbles up
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    AGENT.invoke_tool()                                      │
-│               agents/agent.py:~1972                                         │
-│  • Catches CredentialSelectionNeededError                                   │
-│  • Converts to AmbiguousCredentialError                                     │
-│  • RE-RAISES with credential details                                        │
-└─────────────────────────┬───────────────────────────────────────────────────┘
-                          │ Exception bubbles up
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    OVERLORD.chat()                                          │
-│              overlord/overlord.py:~3800                                     │
-│  • Catches AmbiguousCredentialError                                         │
-│  • Stores clarification in _pending_clarifications                          │
-│  • Generates clarification message                                          │
-└─────────────────────────┬───────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        USER SEES RESPONSE                                   │
-│   "I found multiple GitHub accounts for you. Which would you like to use?"  │
-│                    "1. lily automaze"                                       │
-│                    "2. ranaroussi"                                          │
-└─────────────────────────┬───────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      USER RESPONDS: "1"                                     │
-└─────────────────────────┬───────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    OVERLORD.chat()                                          │
-│              overlord/overlord.py:~1200                                     │
-│  • Detects pending clarification exists                                     │
-│  • Parses user response "1" → selects "lily automaze"                       │
-│  • Caches selection in MCP service                                          │
-│  • Retries original request with selected credential                        │
-└─────────────────────────┬───────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                  SUCCESSFUL API CALL                                        │
-│          GitHub API called with "lily automaze" credentials                 │
-│                 Returns repository list                                     │
-└─────────────────────────────────────────────────────────────────────────────┘
+# MCP server configuration
+mcp_servers:
+  - id: "github-mcp"
+    endpoint: "https://api.github.com/mcp"
+    auth:
+      type: "bearer"
+      accept_inline: true  # Allow dynamic credential collection
+      token: "${{ user.credentials.github }}"
 ```
 
-## Credential Selection Logic
+## Detection Examples
 
-### 1. Message Enhancement (Optional)
-When `mcp.enhance_user_prompts` is enabled:
+### SERVICE_USE Detection
+```
+User: "Show my repos"
+User: "List my GitHub PRs"
+User: "Check my issues"
+→ Detection: SERVICE_USE (user wants to use a service)
+```
+
+### CREDENTIAL_REQUEST Detection
+```
+User: "Add new GitHub account"
+User: "I need to configure my API key"
+User: "Set up different credentials"
+→ Detection: CREDENTIAL_REQUEST (user wants to add/update credentials)
+```
+
+### NONE Detection
+```
+User: "What's the weather?"
+User: "Write a Python function"
+User: "Explain quantum computing"
+→ Detection: NONE (not credential-related)
+```
+
+## Flow Examples
+
+### Example 1: Redirect Mode - New Account Request
+```
+Formation config: mode: "redirect"
+
+User: "I need to add a new GitHub account with different credentials"
+System: "Please configure your API credentials in the external credential manager."
+```
+
+### Example 2: Dynamic Mode - New Account Request
+```
+Formation config: mode: "dynamic", GitHub has accept_inline: true
+
+User: "I need to add a new GitHub account"
+System: "Please provide your GitHub personal access token:"
+User: "ghp_xxxxxxxxxxxx"
+System: "Successfully added GitHub account 'ranaroussi'"
+```
+
+### Example 3: Service Use Without Credentials
+```
+User: "Show my repos"
+System: [Detects SERVICE_USE, checks GitHub configured, no credentials]
+
+Redirect mode:
+System: "Please configure your API credentials in the external credential manager."
+
+Dynamic mode with accept_inline:
+System: "You need GitHub credentials to do that. Please provide your GitHub personal access token:"
+```
+
+### Example 4: Unconfigured Service
+```
+User: "Show my Slack messages"
+System: [Detects SERVICE_USE, Slack not in MCP registry]
+System: "Slack service is not available in this formation."
+```
+
+## Security Features
+
+### Per-User Encryption
+- Each user's credentials encrypted with unique key
+- Key derivation: PBKDF2(formation_id + user_id)
+- Fernet encryption for credential storage
+- Zero-configuration: works out of the box
+
+### Isolation
+- **Formation-level**: Credentials isolated by formation_id
+- **User-level**: No cross-user credential access
+- **Service-level**: Credentials scoped to specific services
+
+### Validation
+- Credentials validated via MCP connection before storage
+- Invalid credentials rejected immediately
+- No storage of unverified credentials
+
+## Identity Discovery
+
+When storing credentials in dynamic mode, the system:
+
+1. Validates the credential via MCP connection
+2. Discovers the identity (e.g., GitHub username)
+3. Stores with meaningful name instead of generic "github"
+
 ```python
-# Original: "list my repos"
-# Enhanced: "list my GitHub repositories"
-```
-
-### 2. LLM Credential Selection
-The system uses an LLM to intelligently select credentials based on:
-
-1. **Explicit mentions**: "list repos in my lily account" → selects lily
-2. **Partial name matching**: "lily" matches "lily automaze"
-3. **Context clues**: Previous conversation history
-4. **Ambiguous requests**: "list my repos" → triggers clarification
-
-### 3. Session Caching
-- Selected credentials are cached per user per service per session
-- Follow-up requests use cached selection automatically
-- Explicit mentions override cache: "now use ranaroussi account"
-
-## Credential Flow Examples
-
-### Example 1: Single Credential (No Clarification)
-```
-User: "list my GitHub repos" (user has only 1 GitHub credential)
-System: [Uses the single credential directly]
-Response: "Here are your repositories..."
-```
-
-### Example 2: Multiple Credentials with Clarification
-```
-User: "list my repos" (user has 2 GitHub credentials)
-System: "Which GitHub account would you like to use?
-         1. lily automaze
-         2. ranaroussi"
-User: "1"
-System: [Uses lily automaze credential]
-Response: "Here are the repositories in lily automaze..."
-```
-
-### Example 3: Explicit Credential Selection
-```
-User: "list repos in my ranaroussi account"
-System: [Directly uses ranaroussi credential, no clarification]
-Response: "Here are the repositories in ranaroussi..."
-```
-
-### Example 4: Session Caching
-```
-User: "list my repos"
-System: "Which account?" [User selects lily]
-User: "how many stars do I have?"
-System: [Uses cached lily credential without asking]
-Response: "In lily automaze, you have..."
-```
-
-## Database Operations
-
-### Storing Credentials
-```python
-await credential_resolver.store_credential(
-    user_id="user1",
-    service="github",
-    credentials={"token": "ghp_xxx"},
-    credential_name="lily automaze"
-)
-```
-
-### Resolving Credentials
-```python
-# Single credential returns dict
-creds = await credential_resolver.resolve("user1", "github")
-# {"token": "ghp_xxx"}
-
-# Multiple credentials returns list
-creds = await credential_resolver.resolve("user1", "github")
-# [
-#   {"name": "lily automaze", "credentials": {"token": "ghp_xxx"}},
-#   {"name": "ranaroussi", "credentials": {"token": "ghp_yyy"}}
-# ]
+# Instead of storing as "github"
+credential_name = await discover_identity(service, credential)
+# Stores as "ranaroussi" or "lily-automaze"
 ```
 
 ## Error Handling
 
-### MissingCredentialError
-- Raised when user has no credentials for a service
-- Triggers clarification asking user to provide credentials
+### UnsupportedServiceError
+- Raised when user requests a service not in the formation
+- Caught by overlord and converted to friendly message
+- Example: "GitHub is not available in this formation"
 
-### CredentialSelectionNeededError
-- Internal error from MCP service
-- Converted to AmbiguousCredentialError by Agent
+### MissingCredentialError
+- Raised when credentials needed but not found
+- Triggers redirect message or dynamic prompt
+- Includes service name and user ID
 
 ### AmbiguousCredentialError
-- Raised when multiple credentials exist and selection is ambiguous
-- Contains available credentials and LLM ordering
-- Triggers numbered clarification dialog
+- Raised when multiple credentials exist
+- In redirect mode: Shows redirect message
+- In dynamic mode: Shows existing accounts
 
-## Configuration
+## Implementation Details
 
-### Formation Configuration
-```yaml
-# Enable message enhancement for better tool selection
-mcp:
-  enhance_user_prompts: true
-  max_tool_calls: 10
+### Request Interception Point
 
-# MCP server with user credentials
-mcp/github.yaml:
-  id: "github-mcp"
-  use_user_credentials: true  # Enable user-specific credentials
+The credential detection happens in the request lifecycle at:
+```
+Format Message → Credential Detection → Has Pending Clarification → ...
 ```
 
-### Security Considerations
-1. **Isolation**: Credentials are isolated by user AND formation
-2. **Encryption**: Credentials are encrypted in the database
-3. **No Cross-User Access**: Users cannot access other users' credentials
-4. **Session Scope**: Credential cache is per-session, not persistent
+This ensures credential requests are handled before entering the clarification system.
 
-## Future Enhancements (Default Credentials)
+### Registry Usage
 
-The system is designed to support default credentials in the future:
-
-### Setting Defaults
-```
-User: "Set ranaroussi as my default GitHub account"
-System: "I've set ranaroussi as your default GitHub account."
-```
-
-### Using Defaults
-```
-User: "list my repos" (has default set)
-System: [Uses default credential without clarification]
-```
-
-### Database Schema for Defaults
-```sql
-ALTER TABLE credentials ADD COLUMN is_default BOOLEAN DEFAULT FALSE;
-
-CREATE UNIQUE INDEX idx_credentials_default
-ON credentials (user_id, service)
-WHERE is_default = TRUE;
-```
+The MCP server registry (`_mcp_servers_with_user_credentials`) enables:
+- Dynamic discovery of credential-using services
+- No hardcoding of service names
+- Runtime configuration from formation YAML
+- Per-service inline acceptance settings
 
 ## Testing
 
-The credential system has comprehensive test coverage:
+### Test Coverage
+- **test_8e1a**: Redirect mode credential handling
+- **test_8e2**: Dynamic mode credential collection
+- **test_4d** series: Multi-credential selection and caching
+- **Integration tests**: Encryption and storage verification
 
-- **test_4d1**: Single credential usage
-- **test_4d2**: Missing credential handling
-- **test_4d3**: Multiple credential clarification
-- **test_4d3_explicit**: Direct credential selection
-- **test_4d3_clarification**: Ambiguous request flow
-- **test_4d3_cache**: Session caching verification
-- **test_4d3_cache_switch**: Cache override testing
-- **test_4d4**: Multi-user isolation
-- **test_4e1/4e2**: Security isolation testing
+### Key Test Scenarios
+1. Credential request detection (both modes)
+2. Service use without credentials
+3. Unconfigured service handling
+4. Identity discovery validation
+5. Encryption/decryption cycle
+6. Multi-user isolation
 
-## Troubleshooting
+## Migration from Old System
 
-### Common Issues
+The new system replaces the previous clarification-based approach:
 
-1. **Credentials not found**: Check database and formation_id
-2. **Wrong credential selected**: Verify credential names are distinct
-3. **Clarification not triggered**: Check message enhancement settings
-4. **Cache not working**: Ensure session_id is consistent
+### Old Flow (Pre-#53)
+- Credential requests went through clarification
+- Pattern matching for detection
+- Credentials handled as clarification responses
 
-### Debug Points
-- Enable debug logging in credential_resolver.py
-- Check `_pending_clarifications` in Overlord
-- Verify MCP server `use_user_credentials` flag
-- Monitor LLM credential selection responses
+### New Flow (Issue #53)
+- Credential requests intercepted before clarification
+- LLM-based detection with registry
+- Direct handling based on mode
+
+## Future Enhancements
+
+### Planned Features
+1. **OAuth flow support**: Beyond simple tokens
+2. **Credential rotation**: Automatic refresh for expiring tokens
+3. **Default credentials**: User-preferred credentials per service
+4. **Credential sharing**: Team-level shared credentials
+5. **Audit logging**: Track credential usage
+
+### API Extensions
+```python
+# Future: Set default credential
+await resolver.set_default(user_id, service, credential_name)
+
+# Future: Share credential with team
+await resolver.share_credential(credential_id, team_id)
+
+# Future: Rotate credential
+await resolver.rotate_credential(user_id, service)
+```
 
 ---
 
-*This document describes the user credential system as implemented in MUXI Runtime v0.0.1*
+*This document describes the credential handling system as implemented in MUXI Runtime v0.0.1 (Issue #53)*
