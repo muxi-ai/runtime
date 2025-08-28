@@ -92,6 +92,8 @@ if git rev-parse --git-dir > /dev/null 2>&1; then
   if git remote -v | grep -q origin; then
     remote_url=$(git remote get-url origin)
     echo "  ✅ Remote configured: $remote_url"
+    gh label create "epic"
+    gh label create "task"
   else
     echo "  ⚠️ No remote configured"
     echo "  Add with: git remote add origin <url>"

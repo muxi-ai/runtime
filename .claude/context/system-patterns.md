@@ -497,10 +497,96 @@ async def test_multi_agent_system():
 
 ---
 created: 2025-08-21T17:31:00Z
-last_updated: 2025-08-23T23:22:07Z
-version: 1.1
+last_updated: 2025-08-28T21:12:39Z
+version: 1.2
 author: Claude Code PM System
 ---
+
+## Credential Handling Patterns (August 2025 - Issue #53)
+
+### Early Interception Architecture
+
+Credential requests are intercepted BEFORE clarification to prevent confusion:
+
+```python
+# In overlord._process_sync_chat()
+# After formatting message with context
+credential_detection = await self._detect_credential_need(message, user_id)
+
+if credential_detection:
+    # Handle based on detection type
+    if credential_detection["type"] == "CREDENTIAL_REQUEST":
+        return await self._handle_credential_request(...)
+    elif credential_detection["type"] == "SERVICE_USE":
+        if credential_detection["needs_credentials"]:
+            return await self._handle_credential_request(...)
+
+# Only then check for clarification
+if await self.clarification.has_active_clarification(request_id):
+    ...
+```
+
+### MCP Server Registry Pattern
+
+Registry built during formation initialization:
+
+```python
+# In formation._register_mcp_servers()
+self._mcp_servers_with_user_credentials = {}
+
+for server_config in self._mcp_servers:
+    if contains_user_credentials(auth):
+        self._mcp_servers_with_user_credentials[server_id] = {
+            "service": service_name,
+            "server_id": server_id,
+            "accept_inline": auth.get("accept_inline", False),
+            "auth_type": auth.get("type", "bearer"),
+            "uses_user_credentials": True
+        }
+
+# Pass to overlord via configured_services
+self._configured_services["mcp_servers_with_user_credentials"] = self._mcp_servers_with_user_credentials
+```
+
+### LLM-Based Detection Pattern
+
+Replace pattern matching with intelligent detection:
+
+```python
+async def _detect_credential_need(self, message: str, user_id: str) -> Optional[Dict]:
+    # Get available services from registry
+    for server_id, info in self._mcp_servers_with_user_credentials.items():
+        available_services.append(info["service"])
+    
+    # Use LLM to detect intent
+    prompt = f"""Analyze if this message relates to any credential service.
+    Available services: {available_services}
+    Message: {message}
+    
+    Respond with: SERVICE_USE:<service>, CREDENTIAL_REQUEST:<service>, or NONE
+    """
+    
+    # Return detection with type and service info
+    return {
+        "type": "SERVICE_USE|CREDENTIAL_REQUEST|NONE",
+        "service": service_name,
+        "server_id": server_id,
+        "has_credentials": bool,
+        "accept_inline": bool
+    }
+```
+
+### Module Organization Pattern
+
+Dedicated credential module for separation of concerns:
+
+```
+src/muxi/formation/credentials/
+├── __init__.py           # Module exports
+├── resolver.py           # Base credential resolver
+├── encrypted.py          # Encrypted credential resolver
+└── exceptions.py         # Credential-specific exceptions
+```
 
 ## Clarification System Patterns (August 2025)
 

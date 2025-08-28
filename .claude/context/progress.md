@@ -1,7 +1,7 @@
 ---
 created: 2025-08-21T17:31:00Z
-last_updated: 2025-08-23T23:22:07Z
-version: 1.1
+last_updated: 2025-08-28T21:12:39Z
+version: 1.2
 author: Claude Code PM System
 ---
 
@@ -41,6 +41,26 @@ The foundational runtime engine that powers AI agent formations is now complete 
 | **Test Coverage** | ✅ Complete | 100% | 7 days of comprehensive testing, all passing |
 
 ## 🎉 Major Achievements
+
+### August 2025: Credential Handling Refactoring (Issue #53) ✅
+
+**Status**: Complete - Implemented sophisticated credential detection and handling system
+
+**Implementation Details**:
+- ✅ **Early Interception**: Credential requests now intercepted BEFORE clarification system
+- ✅ **MCP Server Registry**: Built during formation init to track credential-using services
+- ✅ **LLM-Powered Detection**: Replaced pattern matching with intelligent detection
+- ✅ **Dual Mode Support**: Redirect mode (external) and Dynamic mode (inline collection)
+- ✅ **Module Restructuring**: Created `src/muxi/formation/credentials/` module
+- ✅ **UnsupportedServiceError**: Proper handling of unconfigured services
+- ✅ **Identity Discovery**: Automatic username discovery for meaningful credential naming
+- ✅ **Encrypted Storage**: Per-user encryption with PBKDF2 key derivation
+
+**Architecture Changes**:
+- Moved credential resolvers from `memory/` to dedicated `credentials/` module
+- Registry tracks which MCP servers use credentials and accept inline entry
+- Detection differentiates SERVICE_USE vs CREDENTIAL_REQUEST vs NONE
+- Request lifecycle updated to include credential check before clarification
 
 ### December 2025: Pending Clarification Memory Migration ✅
 

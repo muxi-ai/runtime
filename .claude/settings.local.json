@@ -57,7 +57,8 @@
       "WebFetch(domain:google-a2a.github.io)",
       "WebSearch",
       "Bash(timeout:*)",
-      "Bash(python -m flake8:*)"
+      "Bash(python -m flake8:*)",
+      "Bash(PYTHONUNBUFFERED=1 timeout 120 python tests/e2e/8_clarification/test_8e2_dynamic.py)"
     ]
   }
 }

@@ -1,3 +1,10 @@
+---
+created: 2025-08-21T17:31:00Z
+last_updated: 2025-08-28T21:12:39Z
+version: 1.1
+author: Claude Code PM System
+---
+
 # MUXI Runtime Project Structure
 
 This document describes the current structure of the MUXI Runtime repository - the core execution engine that powers AI agent formations.
@@ -47,6 +54,7 @@ Core formation orchestration and lifecycle:
 - `artifacts/` - Built-in file generation system
 - `background/` - Async operations and webhooks
 - `config/` - Configuration loading and validation
+- `credentials/` - User credential storage and encryption (Issue #53)
 - `documents/` - Document processing and chunking
 - `memory/` - Memory coordination and user context
 - `overlord/` - Central orchestration with SOP guidance (includes unified clarification system)
@@ -125,6 +133,8 @@ Comprehensive documentation covering all aspects:
 - `artifacts.md` - File generation system
 - `observability.md` - Event streaming guide
 - `multi-user-architecture.md` - Multi-tenant design
+- `user-credentials-flow.md` - Credential handling system (Issue #53)
+- `request-lifecycle.md` - Complete request processing flow
 
 ## Example Formations (`test-formations/`)
 
