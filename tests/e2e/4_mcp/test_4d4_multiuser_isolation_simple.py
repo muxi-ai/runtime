@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 import os  # noqa: E402
 os.environ["POSTGRES_DATABASE_URL"] = "postgresql://ran:@localhost:5432/muxi_framework"  # noqa: E402
 
-from muxi.formation.memory.credential_resolver import CredentialResolver, Credential, User  # noqa: E402
+from muxi.formation.credentials.resolver import CredentialResolver, Credential, User  # noqa: E402
 from muxi.services.db import get_database_manager  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
