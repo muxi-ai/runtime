@@ -26,15 +26,15 @@ async def test_direct_credential_redirect():
     """Test that direct credential requests are redirected in redirect mode."""
     try:
         print("\n=== Test 8E1a Simple: Direct Credential Request in Redirect Mode ===")
-        
+
         # Load formation with redirect mode enabled (configured in formation.yaml)
         formation_path = Path(__file__).parent / "formations" / "formation-clarification"
         formation = Formation()
         await formation.load(str(formation_path))
-        
+
         print("Starting overlord...")
         overlord = await formation.start_overlord()
-        
+
         # Use a user that doesn't have any credentials
         ctx = TestContext("test_8e1a_simple")
         user_id = "testuser_nocreds"  # A user with no existing credentials
@@ -51,13 +51,13 @@ async def test_direct_credential_redirect():
             ),
             timeout=120.0
         )
-        
+
         print(f"   Response: {response1.content}")
-        
+
         # Should redirect to external credential management
         response_lower = response1.content.lower()
         redirect_indicators = ["external", "configure", "outside", "portal", "credential", "redirect", "security"]
-        
+
         # Check if it mentions needing credentials
         if "credential" in response_lower or "api" in response_lower or "auth" in response_lower:
             if any(indicator in response_lower for indicator in redirect_indicators):
@@ -67,7 +67,7 @@ async def test_direct_credential_redirect():
                 assert False, f"Should redirect when credentials are needed. Got: {response1.content}"
         else:
             print("   ℹ️ Response didn't mention credentials - may not need them for this request")
-        
+
         # Step 2: Try a more explicit credential-requiring request
         print("\n2. Testing explicit API request: 'Use the GitHub API to list my repositories'")
         response2 = await asyncio.wait_for(
@@ -79,11 +79,11 @@ async def test_direct_credential_redirect():
             ),
             timeout=120.0
         )
-        
+
         print(f"   Response: {response2.content}")
-        
+
         response_lower = response2.content.lower()
-        
+
         # This should definitely need credentials and redirect
         if any(indicator in response_lower for indicator in redirect_indicators):
             print("   ✅ Redirected to external credential management")
@@ -95,7 +95,7 @@ async def test_direct_credential_redirect():
                 assert False, f"In redirect mode, should not ask for credentials inline. Got: {response2.content}"
         else:
             print("   ℹ️ Response handled differently than expected")
-        
+
         print("\n" + "="*40)
         print("\n### Test Result:")
         print("🎉 SUCCESS: Direct credential request redirect mode working")
@@ -114,7 +114,7 @@ async def test_direct_credential_redirect():
         await formation.stop_overlord()
         formation.shutdown()
         return True
-        
+
     except Exception as e:
         print(f"\n❌ Test 8E1a Simple FAILED: {e}")
         import traceback

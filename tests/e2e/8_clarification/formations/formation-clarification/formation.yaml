@@ -35,6 +35,9 @@ overlord:
   #   plan_approval_threshold: 10  # Keep approval high to avoid approval prompts
 
 user_credentials:
-  mode: "redirect"  # Redirect mode for testing
+  mode: "dynamic"  # Redirect mode for testing
   redirect_message: "Please configure your API credentials in the external credential manager."
+
+mcp:
+  default_timeout_seconds: 10         # Timeout per individual tool call
 

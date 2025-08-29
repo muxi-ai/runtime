@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from muxi.formation.formation import Formation
 from muxi.formation.overlord.overlord import Overlord
 from muxi.formation.overlord.clarification import UnifiedClarificationSystem, ClarificationResponse
-from muxi.formation.memory.credential_resolver import CredentialResolver
+from muxi.formation.credentials.resolver import CredentialResolver
 from muxi.services.logging.filters import CredentialRedactionFilter
 
 
