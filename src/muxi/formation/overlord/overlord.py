@@ -5675,6 +5675,38 @@ Make it conversational and friendly while keeping accuracy."""
                         context={"user_id": user_id},
                     )
                 else:
+                    # Handle pending credential response (must be before detection)
+                    if self.credential_handler and session_id in self.credential_handler._pending:
+                        response = await self.credential_handler.handle_credential_response(
+                            message=message,
+                            session_id=session_id,
+                            user_id=user_id,
+                        )
+                        if response:
+                            # Check if this is a dict response with continuation signal
+                            if isinstance(response, dict) and response.get("action") == "credential_stored":
+                                # Send success message first
+                                success_response = MuxiResponse(role="assistant", content=response.get("message"))
+
+                                # If there's an original message to replay, process it now
+                                if response.get("continue_with"):
+                                    # Recursively process the original request now that credentials are stored
+                                    continuation_response = await self._process_sync_chat(
+                                        message=response["continue_with"],
+                                        user_id=user_id,
+                                        agent_name=agent_name,
+                                        session_id=session_id,
+                                        request_id=request_id
+                                    )
+                                    # Combine the success message with the continuation response
+                                    combined_content = f"{success_response.content}\n\n{continuation_response.content}"
+                                    return MuxiResponse(role="assistant", content=combined_content)
+                                else:
+                                    return success_response
+                            else:
+                                # Simple string response (e.g., cancellation or error)
+                                return MuxiResponse(role="assistant", content=response)
+
                     # Check for credential needs FIRST (issue #54)
                     credential_detection = await self.credential_handler.detect_credential_need(message, user_id)
                     print(f"DEBUG overlord: credential_detection for user {user_id}: {credential_detection}")

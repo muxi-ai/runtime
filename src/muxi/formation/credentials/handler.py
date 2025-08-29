@@ -15,6 +15,7 @@ class CredentialHandler:
     def __init__(self, overlord):
         """Initialize with reference to overlord for accessing services."""
         self.overlord = overlord
+        self._pending = {}  # session_id -> {service, service_id, auth_type, timestamp}
 
     async def detect_credential_need(self, message: str, user_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -144,17 +145,165 @@ Respond in JSON format:
                     "confidence": detection.get("confidence", 0.0)
                 }
 
-            # For SERVICE_USE - ALWAYS return None
-            # Let the normal flow (MCP service) handle credential selection
-            # The MCP service will detect if there are multiple credentials
-            # and raise AmbiguousCredentialError if needed
+            # For SERVICE_USE - check if user has credentials
             if detection["type"] == "SERVICE_USE":
+                # Check if user has any credentials for this service
+                has_credentials = await self._user_has_credentials(user_id, detected_service)
+
+                if not has_credentials:
+                    # User needs credentials - trigger credential addition flow
+                    return {
+                        "type": "CREDENTIAL_REQUEST",  # Treat as credential request
+                        "service": detected_service,
+                        "service_id": service_config["server_id"],
+                        "needs_credentials": True,
+                        "accept_inline": service_config.get("accept_inline", False),
+                        "auth_type": service_config.get("auth_type", "bearer"),
+                        "confidence": detection.get("confidence", 0.0)
+                    }
+
+                # User has credentials - let normal flow handle selection
                 return None
 
         except Exception:
             # Failed to detect credential need via LLM
             pass
             return None
+
+    async def _user_has_credentials(self, user_id: str, service: str) -> bool:
+        """
+        Check if user has any credentials for the given service.
+
+        Args:
+            user_id: User identifier
+            service: Service name (e.g., "github")
+
+        Returns:
+            True if user has at least one credential for the service
+        """
+        try:
+            # Check if we have credential resolver
+            if hasattr(self.overlord, "credential_resolver"):
+                resolver = self.overlord.credential_resolver
+
+                # Try to get credentials for this user and service
+                credentials = await resolver.resolve(user_id, service)
+
+                # If credentials is not None and not empty list, user has credentials
+                if credentials is not None:
+                    if isinstance(credentials, list):
+                        return len(credentials) > 0
+                    else:
+                        return True  # Single credential
+
+            return False
+
+        except Exception:
+            return False
+
+    async def handle_credential_response(self, message: str, session_id: str, user_id: str):
+        """Handle response to credential prompt - with retry loop."""
+        if session_id not in self._pending:
+            return None
+
+        # Check for cancellation first
+        if await self._is_cancellation(message):
+            self._pending.pop(session_id)  # Clear state
+            return await self._generate_cancellation_message()
+
+        # DON'T pop - keep state for retry on failure!
+        pending = self._pending[session_id]
+
+        # Check for timeout (>5 minutes)
+        import time
+        if time.time() - pending["timestamp"] > 300:
+            self._pending.pop(session_id)  # Clear stale state
+            return None  # Ignore stale requests
+
+        try:
+            # Extract credential from natural language
+            credential = await self._extract_credential_from_text(message)
+
+            # Store with temporary name (required for validation)
+            await self.overlord.credential_resolver.store_credential(
+                user_id=user_id,
+                service=pending["service"],
+                credentials=credential,
+                credential_name=pending["service"]  # Generic initially
+            )
+
+            # Try to validate by discovering account name with the real token
+            try:
+                # This should work with a real GitHub token
+                # Get timeout from MCP config or use default
+                timeout = 30.0  # Default timeout
+
+                # Try to get timeout from MCP configuration
+                if hasattr(self.overlord, 'formation_config'):
+                    mcp_config = self.overlord.formation_config.get('mcp', {})
+                    timeout = float(mcp_config.get('default_timeout_seconds', 30))
+
+                # Also check if the specific server has a timeout configured
+                for server_config in self.overlord._mcp_servers_with_user_credentials.values():
+                    if server_config.get('service') == pending["service"]:
+                        # Server-specific timeout overrides default
+                        if 'timeout_seconds' in server_config:
+                            timeout = float(server_config['timeout_seconds'])
+                        break
+
+                print(f"Using timeout of {timeout} seconds for credential validation")
+
+                import asyncio
+                account_name = await asyncio.wait_for(
+                    self.overlord.credential_resolver.update_credential_name_with_discovery(
+                        user_id=user_id,
+                        service=pending["service"],
+                        mcp_service=self.overlord.mcp_service
+                    ),
+                    timeout=timeout
+                )
+
+                # SUCCESS! Get original message before clearing state
+                original_message = pending.get("original_message")
+                self._pending.pop(session_id)
+
+                # Generate success message
+                if account_name and account_name != pending["service"]:
+                    success_msg = await self._generate_success_message(pending['service'], account_name)
+                else:
+                    success_msg = await self._generate_success_message(pending['service'], pending['service'])
+
+                # Return with signal to continue processing original request
+                return {
+                    "message": success_msg,
+                    "continue_with": original_message,  # Signal to replay original request
+                    "action": "credential_stored"
+                }
+
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                # Validation timed out or was cancelled - likely a bad token
+                print(f"Credential validation timed out for {pending['service']} - likely invalid token")
+                # Don't pop state - keep for retry
+                return await self._generate_validation_failure_message(
+                    pending["service"],
+                    self._get_token_creation_url(pending["service"])
+                )
+            except Exception as e:
+                # Other validation failures - might still be a valid token
+                print(f"Credential validation failed with error: {e}")
+                # For now, treat all failures as invalid tokens requiring retry
+                # Don't pop state - keep for retry
+                return await self._generate_validation_failure_message(
+                    pending["service"],
+                    self._get_token_creation_url(pending["service"])
+                )
+
+        except Exception:
+            # FAILED - keep state for retry, user stays in loop
+            return await self._generate_validation_failure_message(
+                pending["service"],
+                self._get_token_creation_url(pending["service"])
+            )
 
     async def is_credential_request(self, message: str) -> bool:
         """
@@ -263,6 +412,17 @@ Respond with only "YES" if requesting to add credentials, "NO" otherwise."""
             auth_type = detection_result.get("auth_type", "bearer")
 
             if accept_inline:
+                # Store minimal state with timestamp for timeout handling
+                import time
+                if session_id:
+                    self._pending[session_id] = {
+                        "service": service,
+                        "service_id": service_id,
+                        "auth_type": auth_type,
+                        "timestamp": time.time(),
+                        "original_message": message  # Store for replay after success
+                    }
+
                 # Prompt for inline credential collection
                 prompt_message = await self._generate_credential_prompt(
                     service, service_id, auth_type
@@ -305,28 +465,268 @@ Respond with only "YES" if requesting to add credentials, "NO" otherwise."""
     async def _generate_credential_prompt(
         self, service: str, service_id: str, auth_type: str
     ) -> str:
-        """Generate appropriate prompt for credential collection."""
-        base_prompt = f"Please provide the {auth_type} for '{service}':"
+        """Generate appropriate prompt for credential collection using persona."""
+        # Get LLM configuration
+        text_model_config = self.overlord._capability_models.get("text")
+        if not text_model_config:
+            # Fallback if no LLM available
+            return f"Please provide credentials for {service}"
 
-        if auth_type == "basic":
+        # Prepare context based on auth type
+        auth_description = {
+            "bearer": "personal access token or API token",
+            "api_key": "API key",
+            "basic": "username and password",
+            "oauth": "OAuth token"
+        }.get(auth_type, "credentials")
+
+        prompt = f"""
+Generate a natural, friendly message asking the user to provide their {auth_description} for {service}.
+
+Important:
+- Be conversational and friendly
+- Mention that credentials will be stored securely
+- Keep it brief (1-2 sentences)
+- Match the user's language if they're not using English
+- Don't use technical jargon like 'bearer token' - use friendly terms
+
+Example good responses:
+- "I'll need your GitHub personal access token to continue. Could you share it with me?"
+- "To access your GitHub repositories, I'll need your access token. Don't worry, I'll store it securely."
+
+Generate the message now:"""
+
+        try:
+            # Get or create LLM instance
+            # Create a hashable cache key from the config
+            cache_key = ("text", text_model_config.get("provider"), text_model_config.get("model"))
+            if cache_key not in self.overlord._model_cache:
+                from ...services.llm import LLM
+                llm = LLM(
+                    provider=text_model_config.get("provider"),
+                    model=text_model_config.get("model"),
+                    temperature=0.7,
+                    max_tokens=100,
+                    **text_model_config.get("settings", {})
+                )
+                self.overlord._model_cache[cache_key] = llm
+            else:
+                llm = self.overlord._model_cache[cache_key]
+
+            response = await llm.generate_text(prompt)
+            return response.strip()
+        except Exception as e:
+            print(f"Warning: Failed to generate credential prompt via LLM: {e}")
+            # Fallback to simple message
+            if auth_type == "bearer":
+                return f"I need your {service} personal access token to continue. Could you share it with me?"
+            elif auth_type == "api_key":
+                return f"I need your {service} API key to continue. It will be stored securely."
+            elif auth_type == "basic":
+                return f"I need your {service} username and password to continue. Format: username:password"
+            return f"I need your {service} credentials to continue."
+
+    async def _is_cancellation(self, message: str) -> bool:
+        """Check if user wants to cancel credential entry using LLM."""
+        prompt = f"""The user is in the middle of providing credentials.
+        They just said: "{message}"
+
+        Are they trying to cancel/abort/skip the credential entry process?
+
+        Examples of cancellation (in any language):
+        - "nevermind"
+        - "forget it"
+        - "cancel"
+        - "I don't want to"
+        - "skip this"
+        - "later"
+        - "stop"
+        - "no thanks"
+        - "pas maintenant" (French: not now)
+        - "cancelar" (Spanish: cancel)
+        - "やめる" (Japanese: stop)
+
+        Respond with only YES or NO."""
+
+        try:
+            from ...services.llm import LLM
+            llm = LLM()
+            response = await llm.generate_text(prompt, max_tokens=10)
+            return response.strip().upper().startswith("YES")
+        except Exception:
+            # On LLM failure, assume not cancellation to avoid accidental exits
+            return False
+
+    async def _extract_credential_from_text(self, message: str) -> str:
+        """Extract credential from natural language using LLM."""
+        prompt = f"""The user is providing an API credential/token.
+        They said: "{message}"
+
+        Extract ONLY the actual credential/token/key from their message.
+        If the message appears to be just the credential itself, return it as-is.
+
+        Examples:
+        - "Here's my token: abc123" → "abc123"
+        - "The key is xyz789" → "xyz789"
+        - "ghp_1234567890" → "ghp_1234567890"
+        - "mi token es abc123" (Spanish) → "abc123"
+        - "voici mon jeton: xyz" (French) → "xyz"
+        - "abc123" → "abc123"
+
+        Return ONLY the credential itself, no quotes, no explanation."""
+
+        try:
+            from ...services.llm import LLM
+            llm = LLM()
+            extracted = await llm.generate_text(prompt, max_tokens=100)
+            # Clean up any quotes the LLM might have added
+            return extracted.strip().strip('"').strip("'")
+        except Exception:
+            # Fallback: assume the whole message is the credential
+            return message.strip().strip('"').strip("'")
+
+    def _get_token_creation_url(self, service: str) -> str:
+        """Get the URL where users can create tokens for a service."""
+        urls = {
+            "github": "https://github.com/settings/tokens",
+            "gitlab": "https://gitlab.com/-/profile/personal_access_tokens",
+            "jira": "https://id.atlassian.com/manage-profile/security/api-tokens",
+        }
+        return urls.get(service, f"the {service} settings page")
+
+    async def _generate_validation_failure_message(self, service: str, help_url: str) -> str:
+        """Generate validation failure message respecting persona."""
+        # Get LLM configuration
+        text_model_config = self.overlord._capability_models.get("text")
+        if not text_model_config:
+            # Fallback if no LLM available
             return (
-                "⚠️ Security Warning: Basic authentication transmits credentials in a reversible format.\n"
-                "Only provide these credentials if you trust this environment.\n\n"
-                f"{base_prompt}\n"
-                "Format: username:password"
+                f"That token didn't work. Please check you have the right {service} token, "
+                f"or create a new one at: {help_url}\n\nYou can say 'nevermind' if you'd like to cancel."
             )
 
-        elif auth_type == "api_key":
-            return f"{base_prompt}\n\nNote: Your API key will be securely stored for this session."
+        prompt = f"""The user just provided a {service} credential but it failed validation.
 
-        elif auth_type == "bearer":
+Generate a helpful, understanding message that:
+- Gently explains the token didn't work
+- Suggests they double-check the token
+- Mentions they can create a new one at: {help_url}
+- Notes they can say 'nevermind' to cancel
+- Is supportive, not frustrating
+- Keeps it brief (2-3 sentences)
+
+Example good responses:
+- "Hmm, that token didn't seem to work. Could you double-check it? You can also create a new one at {help_url}, or say 'nevermind' to cancel."
+- "I couldn't validate that token. Please make sure it's correct, or you can generate a new one at {help_url}. Say 'nevermind' if you'd like to stop."
+
+Generate the message now:"""
+
+        try:
+            response = await self.overlord.llm.chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=100
+            )
+            return response.content.strip()
+        except Exception as e:
+            print(f"Warning: Failed to generate failure message via LLM: {e}")
             return (
-                f"{base_prompt}\n\n"
-                "Please provide your personal access token or bearer token."
+                f"That token didn't work. "
+                f"Please check you have the right {service} token, or create a new one at: {help_url}\n\n"
+                f"You can say 'nevermind' if you'd like to cancel."
             )
 
-        # Generic prompt for other types
-        return base_prompt
+    async def _generate_success_message(self, service: str, account_name: str) -> str:
+        """Generate success message respecting persona."""
+        # Get LLM configuration
+        text_model_config = self.overlord._capability_models.get("text")
+        if not text_model_config:
+            # Fallback if no LLM available
+            return f"Successfully connected to {service} as {account_name}!"
+
+        prompt = f"""The user just provided their credentials and successfully authenticated with {service}.
+Their account name is: {account_name}
+
+Generate a brief, friendly confirmation message that:
+- Confirms successful connection
+- Mentions the account name
+- Is conversational and positive
+- Keeps it to 1 sentence
+
+Example good responses:
+- "Great! I've successfully connected to GitHub as {account_name}."
+- "Perfect! You're now connected to GitHub as {account_name}."
+- "All set! I can now access your GitHub account ({account_name})."
+
+Generate the message now:"""
+
+        try:
+            # Get or create LLM instance
+            # Create a hashable cache key from the config
+            cache_key = ("text", text_model_config.get("provider"), text_model_config.get("model"))
+            if cache_key not in self.overlord._model_cache:
+                from ...services.llm import LLM
+                llm = LLM(
+                    provider=text_model_config.get("provider"),
+                    model=text_model_config.get("model"),
+                    temperature=0.7,
+                    max_tokens=50,
+                    **text_model_config.get("settings", {})
+                )
+                self.overlord._model_cache[cache_key] = llm
+            else:
+                llm = self.overlord._model_cache[cache_key]
+
+            response = await llm.generate_text(prompt)
+            return response.strip()
+        except Exception as e:
+            print(f"Warning: Failed to generate success message via LLM: {e}")
+            return f"Successfully connected to {service} as {account_name}!"
+
+    async def _generate_cancellation_message(self) -> str:
+        """Generate cancellation message respecting persona."""
+        # Get LLM configuration
+        text_model_config = self.overlord._capability_models.get("text")
+        if not text_model_config:
+            return "No problem! Let me know if you'd like to add credentials later."
+
+        prompt = """The user just cancelled providing their API credentials.
+
+Generate a brief, understanding message that:
+- Acknowledges their choice
+- Is supportive and not pushy
+- Mentions they can add credentials later if needed
+- Keeps it to 1-2 sentences
+
+Example good responses:
+- "No problem! Let me know if you'd like to add credentials later."
+- "Sure, no worries! You can always add your credentials when you're ready."
+- "Understood! Feel free to add credentials anytime you need them."
+
+Generate the message now:"""
+
+        try:
+            # Get or create LLM instance
+            # Create a hashable cache key from the config
+            cache_key = ("text", text_model_config.get("provider"), text_model_config.get("model"))
+            if cache_key not in self.overlord._model_cache:
+                from ...services.llm import LLM
+                llm = LLM(
+                    provider=text_model_config.get("provider"),
+                    model=text_model_config.get("model"),
+                    temperature=0.7,
+                    max_tokens=50,
+                    **text_model_config.get("settings", {})
+                )
+                self.overlord._model_cache[cache_key] = llm
+            else:
+                llm = self.overlord._model_cache[cache_key]
+
+            response = await llm.generate_text(prompt)
+            return response.strip()
+        except Exception as e:
+            print(f"Warning: Failed to generate cancellation message via LLM: {e}")
+            return "No problem! Let me know if you'd like to add credentials later."
 
     def _get_redirect_reason(self, auth_type: str) -> str:
         """Get user-friendly reason for redirect."""
