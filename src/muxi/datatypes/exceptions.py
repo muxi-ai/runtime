@@ -94,6 +94,20 @@ class ServiceDependencyError(FormationServiceError):
         self.missing_dependencies = missing_dependencies
 
 
+class UnsupportedServiceError(FormationServiceError):
+    """
+    Raised when user requests a service not configured in the formation.
+
+    This error is raised when a user tries to use a service (e.g., "show my repos")
+    but that service is not configured in the formation's MCP servers.
+    """
+
+    def __init__(self, service_name: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Service '{service_name}' is not configured in this formation"
+        super().__init__(message, details)
+        self.service_name = service_name
+
+
 # Overlord Errors
 class OverlordError(FormationError):
     """Base class for overlord-related errors."""

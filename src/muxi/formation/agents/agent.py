@@ -1797,7 +1797,7 @@ class Agent:
 
                 except Exception as e:
                     # Check if this is a credential error that needs to bubble up
-                    from ..memory.credential_resolver import (
+                    from ..credentials import (
                         MissingCredentialError,
                         AmbiguousCredentialError,
                     )
@@ -2656,7 +2656,7 @@ class Agent:
         Raises:
             Exception: If tool invocation fails or tool is not allowed.
         """
-        from ..memory.credential_resolver import MissingCredentialError
+        from ..credentials import MissingCredentialError
 
         try:
             # Special handling for generate_file tool - use artifact service directly
@@ -2817,7 +2817,7 @@ class Agent:
 
         except Exception as e:
             # Check if this is a credential error
-            from ..memory.credential_resolver import AmbiguousCredentialError
+            from ..credentials import AmbiguousCredentialError
             from ...services.mcp.service import CredentialSelectionNeededError
 
             if isinstance(e, CredentialSelectionNeededError):

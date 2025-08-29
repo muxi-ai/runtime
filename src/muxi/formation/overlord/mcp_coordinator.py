@@ -11,7 +11,7 @@ import re
 from ...services.mcp.service import MCPService
 from ...services.llm import LLM
 from ...datatypes.schema import MCPServiceSchema
-from ..memory.credential_resolver import MissingCredentialError
+from ..credentials import MissingCredentialError
 
 
 class MCPCoordinator:

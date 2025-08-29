@@ -44,7 +44,7 @@ from .sampling.creator import MCPSamplingCreator
 from .templates.discovery import MCPTemplateDiscovery
 from .health.monitor import MCPHealthMonitor, MCPCapabilitiesNegotiator
 from .. import observability
-from ...formation.memory.credential_resolver import (
+from ...formation.credentials import (
     MissingCredentialError,
     AmbiguousCredentialError,
 )
@@ -64,9 +64,15 @@ class CredentialSelectionNeededError(Exception):
         self.user_id = user_id
         self.available_credentials = available_credentials
         self.ordered_credentials = ordered_credentials or []
+        # Handle both list of dicts and list of strings
+        if available_credentials and isinstance(available_credentials[0], dict):
+            names = [c['name'] for c in available_credentials]
+        else:
+            names = available_credentials
+
         super().__init__(
             f"Multiple credentials found for {service}, selection needed. "
-            f"Available: {[c['name'] for c in available_credentials]}"
+            f"Available: {names}"
         )
 
 
@@ -556,9 +562,12 @@ class MCPService:
                             e.user_id = user_id
                             raise
 
-                    # Only format and cache credentials if we have a valid selection
-                    # (This code should not run if AmbiguousCredentialError was raised)
-                    if credentials:
+                        # If we reach here, LLM successfully selected a credential
+                        # credentials now contains the selected credential
+
+                    # Only format and cache credentials if we have a valid single credential
+                    # At this point, credentials should be a single credential dict, not a list
+                    if credentials and not isinstance(credentials, list):
                         # Format credentials based on stored_creds structure
                         # Replace the user credential placeholder with actual value
                         resolved_auth = self._replace_credential_in_auth(stored_creds, credentials)
@@ -1607,9 +1616,7 @@ class MCPService:
         self, auth_config: Dict[str, Any], credential_value: Any
     ) -> Dict[str, Any]:
         """
-        Replace user credential placeholders in auth config with actual values.
-
-        Args:
+        Replace user credential placeholders in auth config with placeholders
             auth_config: Original auth config with placeholders
             credential_value: The actual credential value from database
 
@@ -1662,7 +1669,9 @@ class MCPService:
                 # Non-string, non-dict, non-list values pass through
                 return data
 
-        return replace_recursive(auth_config)
+        result = replace_recursive(auth_config)
+
+        return result
 
     def get_user_credential_servers(self) -> List[str]:
         """
@@ -1759,14 +1768,24 @@ class MCPService:
 
             prompt = "\n".join(prompt_parts)
 
-            # Debug logging
+            # Use the standard LLM class with default configuration from formation
+            try:
+                # Create LLM instance - it will use the default model from formation YAML
+                llm = LLM()
 
-            # Create a basic LLM instance - we'll use the default from the environment
-            llm = LLM()
-
-            # Use chat method with simple messages format
-            messages = [{"role": "user", "content": prompt}]
-            response = await llm.chat(messages, max_tokens=100)
+                # Use the standard chat method with specific parameters for this use case
+                messages = [{"role": "user", "content": prompt}]
+                response = await llm.chat(messages, max_tokens=100, temperature=0.1)
+            except Exception:
+                # If LLM fails, we should raise an error to trigger clarification
+                # Return None to indicate we couldn't select, which should trigger clarification
+                # Use the correct constructor signature for CredentialSelectionNeededError
+                raise CredentialSelectionNeededError(
+                    service=service_name,
+                    user_id=user_id or "unknown",
+                    available_credentials=credential_names,
+                    ordered_credentials=list(range(1, len(credential_names) + 1))
+                )
 
             # Parse the JSON response
             import json
@@ -1791,10 +1810,11 @@ class MCPService:
                     elif selection == 0:
                         # Ambiguous - trigger credential selection needed error
                         # The agent will decide whether to trigger clarification
+                        # Pass only the credential names, not the full dict objects
                         raise CredentialSelectionNeededError(
                             service=service_name,
                             user_id=str(user_id or ""),  # Ensure user_id is always a string
-                            available_credentials=credential_list,
+                            available_credentials=credential_names,  # Use names list, not full dicts
                             ordered_credentials=ordered_credentials,
                         )
 
@@ -1811,7 +1831,7 @@ class MCPService:
             raise CredentialSelectionNeededError(
                 service=service_name,
                 user_id=str(user_id or ""),  # Ensure user_id is always a string
-                available_credentials=credential_list,
+                available_credentials=credential_names,  # Use names list, not full dicts
                 ordered_credentials=list(range(1, len(credential_list) + 1)),
             )
 

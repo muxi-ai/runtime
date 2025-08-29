@@ -202,6 +202,9 @@ class Formation:
         # Track secret placeholder mappings
         self._secret_placeholders: Dict[str, str] = {}
 
+        # Registry of MCP servers that use user credentials
+        self._mcp_servers_with_user_credentials: Dict[str, Dict[str, Any]] = {}
+
     def set_secrets_manager(self, secrets_manager: SecretsManager) -> None:
         """
         Inject a pre-configured SecretsManager instance.
@@ -1107,6 +1110,7 @@ class Formation:
         self._configured_services.update(
             {
                 "formation_config": self.config,
+                "mcp_servers_with_user_credentials": self._mcp_servers_with_user_credentials,
                 "secrets_manager": self.secrets_manager,
                 "formation_path": formation_dir,  # Pass directory, not file
                 "api_keys": self._api_keys.copy(),
@@ -2191,16 +2195,49 @@ class Formation:
                         # IMPORTANT: Store original auth config for runtime resolution
                         registration_params["original_credentials"] = original_auth
 
-                        observability.observe(
-                            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
-                            level=observability.EventLevel.INFO,
-                            data={
+                        # Build registry entry for this server
+                        # Extract service name from auth config
+                        service_name = None
+                        for value in original_auth.values() if isinstance(original_auth, dict) else []:
+                            if isinstance(value, str):
+                                match = USER_CREDENTIAL_PATTERN.search(value)
+                                if match:
+                                    service_name = match.group(1)
+                                    break
+
+                        if service_name:
+                            # Add to user credential server registry
+                            self._mcp_servers_with_user_credentials[server_id] = {
+                                "service": service_name,
                                 "server_id": server_id,
-                                "uses_user_credentials": True,
-                                "description": "Using formation secrets for initial connection",
-                            },
-                            description=f"MCP server {server_id} configured with user credentials",
-                        )
+                                "accept_inline": original_auth.get("accept_inline", False),
+                                "auth_type": original_auth.get("type", "bearer"),
+                                "uses_user_credentials": True
+                            }
+
+                            observability.observe(
+                                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
+                                level=observability.EventLevel.INFO,
+                                data={
+                                    "server_id": server_id,
+                                    "service": service_name,
+                                    "accept_inline": original_auth.get("accept_inline", False),
+                                    "uses_user_credentials": True,
+                                    "description": "Registered in user credential server registry",
+                                },
+                                description=f"MCP server {server_id} configured for {service_name} user credentials",
+                            )
+                        else:
+                            observability.observe(
+                                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
+                                level=observability.EventLevel.INFO,
+                                data={
+                                    "server_id": server_id,
+                                    "uses_user_credentials": True,
+                                    "description": "Using formation secrets for initial connection",
+                                },
+                                description=f"MCP server {server_id} configured with user credentials",
+                            )
                     else:
                         # No user credentials, interpolate secrets normally
                         if hasattr(self, "secrets_manager") and self.secrets_manager:

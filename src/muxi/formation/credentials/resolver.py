@@ -18,55 +18,6 @@ from ...services import observability
 Base = declarative_base()
 
 
-class MissingCredentialError(FormationError):
-    """Raised when a required user credential is not found."""
-
-    def __init__(self, service: str, user_id: str):
-        self.service = service
-        self.user_id = user_id
-        super().__init__(
-            f"Missing credential for service '{service}' for user '{user_id}'",
-            {
-                "service": service,
-                "user_id": user_id,
-                "error_type": "missing_credential",
-            },
-        )
-
-
-class AmbiguousCredentialError(FormationError):
-    """Raised when multiple credentials exist but selection is ambiguous."""
-
-    def __init__(
-        self,
-        service: str,
-        user_id: str,
-        available_credentials: list,
-        ordered_credentials: list = None,
-    ):
-        self.service = service
-        self.user_id = user_id
-        self.available_credentials = (
-            available_credentials  # List of credential dicts with 'name' and 'credentials'
-        )
-        self.ordered_credentials = ordered_credentials or []  # LLM-provided ordering (indices)
-
-        credential_names = [cred["name"] for cred in available_credentials]
-        super().__init__(
-            (
-                f"Ambiguous credential selection for service '{service}' for user '{user_id}'. "
-                f"Available: {credential_names}. Ordered: {ordered_credentials}"
-            ),
-            {
-                "service": service,
-                "user_id": user_id,
-                "error_type": "ambiguous_credential",
-                "available_credentials": credential_names,
-                "ordered_credentials": ordered_credentials,
-            },
-        )
-
-
 class User(Base):
     """SQLAlchemy model for users table that works with both PostgreSQL and SQLite."""
 

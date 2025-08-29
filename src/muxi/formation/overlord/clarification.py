@@ -1,7 +1,7 @@
 import time
 import json
 import re
-from typing import Dict, Optional, Any
+from typing import Dict, Optional
 from dataclasses import dataclass
 
 from ...services import observability
@@ -107,10 +107,17 @@ class UnifiedClarificationSystem:
         # No clarification needed
         return ClarificationResult(action="execute", request=message, mode="direct")
 
+    # ==================== START: CREDENTIAL METHODS TO BE MOVED ====================
+    # TODO: All these credential-related methods should be moved to a dedicated
+    # credential handler service or to overlord.py where credential detection happens.
+    # Credential requests are NOT clarifications - they're clear, direct requests
+    # that should be handled based on the configured mode (redirect/dynamic).
+    # Commenting out for now to avoid confusion.
+
+    '''
     async def store_accepted_credential(self, user_id: str, service_name: str,
                                         credential_data: str, auth_type: str) -> bool:
-        """
-        Store credential after inline acceptance.
+        """Store credential after inline acceptance.
 
         Args:
             user_id: The user identifier
@@ -247,6 +254,8 @@ class UnifiedClarificationSystem:
         """
         credential = await self.get_service_credential(user_id, service_name)
         return credential is not None
+    '''
+    # ==================== END: CREDENTIAL METHODS (commented out) ====================
 
     async def handle_response(self, request_id: str, response: str) -> ClarificationResult:
         """
@@ -259,104 +268,8 @@ class UnifiedClarificationSystem:
             # No active clarification
             return ClarificationResult(action="execute", request=response)
 
-        # Check if this is a credential response
-        if state.get("type") == "credential" and state.get("auth_type") and state.get("service_id"):
-            # Store the credential
-            user_id = state.get("user_id", "0")  # Default to "0" for single-user mode
-            service_id = state["service_id"]
-            auth_type = state["auth_type"]
-
-            # Attempt to store the credential
-            success = await self.store_accepted_credential(user_id, service_id, response, auth_type)
-
-            if success:
-                # Credential stored successfully - cleanup and return success
-                await self._cleanup_state(request_id)
-                return ClarificationResult(
-                    action="credential_stored",
-                    request=state["original_request"],
-                    context={
-                        "service_id": service_id,
-                        "credential_stored": True,
-                        "message": f"Credential for {service_id} has been securely stored."
-                    }
-                )
-            else:
-                # Storage failed - cleanup and return error
-                await self._cleanup_state(request_id)
-                return ClarificationResult(
-                    action="error",
-                    request=state["original_request"],
-                    context={
-                        "service_id": service_id,
-                        "error": "Failed to store credential. Please try again or configure externally.",
-                    },
-                )
-
-        # Check if user is requesting to add new credentials
-
-        is_credential_request = await self._check_credential_request(state, response)
-
-        # Log for debugging
-        if is_credential_request:
-            observability.observe(
-                event_type=observability.SystemEvents.CLARIFICATION_COMPLETED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "request_id": request_id,
-                    "credential_request_detected": True,
-                    "mcp_service": state.get("mcp_service"),
-                    "user_response": response[:100],
-                },
-                description="Credential request detected in clarification response"
-            )
-
-        if is_credential_request:
-            # Check if we have an MCP service context
-            mcp_service = state.get("mcp_service")
-
-            if mcp_service:
-                # We know which service this is for - use the proper handler
-                user_id = state.get("user_id", "0")
-
-                # Call the existing credential handler with the service context
-                result = await self.handle_mcp_credential_request(
-                    service_id=mcp_service, user_id=user_id, request_id=request_id
-                )
-
-                # Handle the result based on action
-                if result.action == "message" and result.mode == "redirect":
-                    # Redirect mode - clean up and return message
-                    await self._cleanup_state(request_id)
-                    return result
-                elif result.action == "clarify":
-                    # Dynamic mode asking for credentials - update state
-                    state["type"] = "credential"
-                    state["service_id"] = mcp_service
-                    state["auth_type"] = await self._get_service_auth_type(mcp_service)
-                    await self._store_state(request_id, state)
-                    return result
-            else:
-                # No MCP service context - fall back to generic redirect if configured
-                cred_config = (
-                    self.overlord.formation_config.get("user_credentials", {})
-                    if hasattr(self.overlord, "formation_config") and self.overlord.formation_config
-                    else {}
-                )
-                mode = cred_config.get("mode", "redirect")
-
-                if mode == "redirect":
-                    redirect_message = cred_config.get(
-                        "redirect_message",
-                        "For security, credentials must be configured outside of this chat interface.",
-                    )
-                    await self._cleanup_state(request_id)
-                    return ClarificationResult(
-                        action="message",
-                        question=redirect_message,
-                        mode="redirect",
-                        context={"credential_redirect": True},
-                    )
+        # TODO: Credential handling has been moved out of clarification
+        # Credential requests are now handled before clarification in overlord
 
         # Update state for non-credential clarifications
         state["collected_info"].append(response)
@@ -421,11 +334,15 @@ class UnifiedClarificationSystem:
                 action="execute", request=enhanced, context={"collected": state["collected_info"]}
             )
 
+    # TODO: Move credential handling methods to proper location (overlord or credential service)
+    # These don't belong in clarification since credential requests aren't clarifications
+    '''
+    # The following credential methods have been commented out and moved to overlord:
+
+    """
     async def handle_mcp_credential_request(
         self, service_id: str, user_id: str, request_id: str
     ) -> ClarificationResult:
-        """
-        Handle credential request for MCP service based on configuration mode.
 
         Args:
             service_id: The MCP service requesting credentials
@@ -558,6 +475,8 @@ class UnifiedClarificationSystem:
             question = response.content if hasattr(response, "content") else str(response)
 
         return ClarificationResult(action="clarify", question=question, mode="credential")
+    '''
+    # ==================== END: CREDENTIAL METHODS (commented out) ====================
 
     async def has_active_clarification(self, request_id: str) -> bool:
         """Check if request has active clarification in buffer."""
@@ -748,15 +667,14 @@ IMPORTANT RULES:
 - If we lack the tools/capabilities, don't clarify (fail fast)
 - Detect if user wants brainstorming/planning vs direct action
 
-{f'''CREDENTIAL HANDLING RULES:
-- If user is asking to ADD NEW CREDENTIALS/API keys/accounts OR wants to add new accounts
-  with different credentials: Set needs_clarification=true and question="{redirect_message}"
-  (translate to the user's language)
-- Examples: "add new account", "different credentials", "new API key", "configure auth",
-  "add new GitHub account with different credentials"
-- IMPORTANT: For any credential-related request, respond with needs_clarification=true
-  and the exact redirect message above
-''' if cred_mode == "redirect" else ""}
+CREDENTIAL HANDLING RULES:
+- Mode: {cred_mode}
+- If user wants to add credentials/accounts for an MCP service (GitHub, etc):
+  * Set needs_clarification=true
+  * Set mcp_service to the relevant service (e.g., "github-mcp" for GitHub)
+  * question: "{redirect_message if cred_mode == "redirect" else "Please provide your credential"}"
+- Examples: "add new GitHub account", "I want to add a new GitHub account", "configure GitHub auth"
+- For requests that need MCP services but lack credentials, also trigger this flow
 
 MCP SERVICE DETECTION:
 - Only set mcp_service if the request clearly needs one of the available MCP services
@@ -786,7 +704,7 @@ Return JSON:
         messages = [{"role": "user", "content": prompt}]
         response = await self.llm.chat(messages, temperature=0, max_tokens=250)
         content = response.content if hasattr(response, "content") else str(response)
-        print(content)
+        print(f"DEBUG clarification: LLM response for user {context.get('user_id', 'unknown')}: {content}")
 
         # Parse JSON
         try:
@@ -1281,6 +1199,13 @@ Return JSON:
         Returns:
             True if the service accepts inline credentials, False otherwise
         """
+        # Check formation's mcp_servers FIRST (most direct source)
+        if hasattr(self.overlord, "formation") and hasattr(self.overlord.formation, "mcp_servers"):
+            for server in self.overlord.formation.mcp_servers:
+                if server.get("id") == service_id:
+                    auth = server.get("auth", {})
+                    return auth.get("accept_inline", False)
+
         # Try to get from MCP registry if available
         if hasattr(self.overlord, 'mcp_registry'):
             service = self.overlord.mcp_registry.get(service_id)

@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.fernet import Fernet
 
-from .credential_resolver import CredentialResolver
+from .resolver import CredentialResolver
 
 
 class EncryptedCredentialResolver(CredentialResolver):
@@ -166,14 +166,31 @@ class EncryptedCredentialResolver(CredentialResolver):
             # Multiple credentials - decrypt each one
             decrypted_list = []
             for item in stored_data:
-                decrypted_creds = self._decrypt_credentials(user_id, item["credentials"])
+                # The credentials might be a JSON string that needs parsing
+                cred_data = item["credentials"]
+                if isinstance(cred_data, str):
+                    try:
+                        cred_data = json.loads(cred_data)
+                    except (json.JSONDecodeError, TypeError):
+                        pass  # Keep as string if not JSON
+
+                decrypted_creds = self._decrypt_credentials(user_id, cred_data)
                 decrypted_list.append({
                     "name": item["name"],
                     "credentials": decrypted_creds
                 })
             return decrypted_list
         else:
-            # Single credential - decrypt and return
+            # Single credential - handle as JSON string if needed
+            # The database might return a JSON string that needs parsing
+            if isinstance(stored_data, str):
+                try:
+                    stored_data = json.loads(stored_data)
+                except (json.JSONDecodeError, TypeError):
+                    # Not JSON, treat as raw credential value
+                    return stored_data
+
+            # Now decrypt and return
             return self._decrypt_credentials(user_id, stored_data)
 
     async def store_credential(

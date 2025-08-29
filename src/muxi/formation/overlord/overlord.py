@@ -106,7 +106,7 @@ from ...services.memory.memobase import Memobase
 from ...services.llm import LLM
 from ...services.a2a.registry_client import A2ARegistryClient
 from ...services.a2a.server import A2AServer
-from ..memory.credential_resolver import CredentialResolver
+from ..credentials import CredentialResolver, CredentialHandler
 from .agent_router import AgentRouter
 from .chat_orchestrator import ChatOrchestrator
 from .mcp_coordinator import MCPCoordinator
@@ -417,6 +417,9 @@ class Overlord:
         self.formation_config = formation_config or {}
         self._configured_services = configured_services or {}
 
+        # Extract MCP server registry that use user credentials from configured services
+        self._mcp_servers_with_user_credentials = self._configured_services.get("mcp_servers_with_user_credentials", {})
+
         # Set formation_id for unified response format
         self.formation_id = self.formation_config.get("formation_id", "default-formation")
         set_formation_id(self.formation_id)
@@ -461,7 +464,7 @@ class Overlord:
 
                 # Use encrypted resolver if we have cryptography available
                 try:
-                    from ..memory.encrypted_credential_resolver import EncryptedCredentialResolver
+                    from ..credentials import EncryptedCredentialResolver
 
                     self.credential_resolver = EncryptedCredentialResolver(
                         async_session_maker=db_manager.AsyncSession,
@@ -481,11 +484,15 @@ class Overlord:
                         formation_id=self.formation_id,
                         llm_model=llm_model,
                     )
+
                     observability.observe(
                         event_type=observability.SystemEvents.SERVICE_INITIALIZED,
                         level=observability.EventLevel.WARNING,
                         description="Using non-encrypted credential resolver (cryptography not installed)",
                     )
+
+        # Initialize credential handler for LLM-based detection and processing
+        self.credential_handler = CredentialHandler(self)
 
         # Accept pre-generated API keys from Formation
         api_keys = api_keys or {}
@@ -5089,6 +5096,8 @@ Make it conversational and friendly while keeping accuracy."""
             description=f"_process_sync_chat ENTRY: agent={agent_name}, session={session_id}",
         )
 
+        # OLD credential handling has been removed - now handled in _detect_credential_need
+
         # Check if this might be a credential response (e.g., GitHub token)
         # Check if message contains a credential token using UnifiedClarificationSystem
         contains_token = (
@@ -5666,12 +5675,34 @@ Make it conversational and friendly while keeping accuracy."""
                         context={"user_id": user_id},
                     )
                 else:
+                    # Check for credential needs FIRST (issue #54)
+                    credential_detection = await self.credential_handler.detect_credential_need(message, user_id)
+                    print(f"DEBUG overlord: credential_detection for user {user_id}: {credential_detection}")
+
+                    if credential_detection:
+                        # Handle based on detection type
+                        if credential_detection["type"] == "CREDENTIAL_REQUEST":
+                            # Direct credential request - handle immediately
+                            result = await self.credential_handler.handle_credential_request(
+                                message=message,
+                                user_id=user_id,
+                                detection_result=credential_detection,
+                                session_id=session_id
+                            )
+                            return MuxiResponse(role="assistant", content=result["message"])
+                        # SERVICE_USE now always returns None from detection
+                        # so it won't reach here
+
+                    # Check if we need to enhance message with credential info for clarification
+                    enhanced_message = message
+                    clarification_context = {"user_id": user_id}
+
                     # This is a new request - check if clarification is needed
                     clarification_result = await self.clarification.needs_clarification(
-                        message=message,
+                        message=enhanced_message,
                         request_id=request_id,
                         session_id=session_id,
-                        context={"user_id": user_id},
+                        context=clarification_context,
                     )
 
                 if clarification_result.action == "clarify":
@@ -6035,7 +6066,7 @@ Make it conversational and friendly while keeping accuracy."""
             await self.active_agent_tracker.mark_agent_idle(agent_name)
 
             # Check if this is a credential error that needs clarification
-            from ..memory.credential_resolver import (
+            from ..credentials import (
                 MissingCredentialError,
                 AmbiguousCredentialError,
             )
@@ -8012,7 +8043,7 @@ Make it conversational and friendly while keeping accuracy."""
                     ):
 
                         # Parse the credential selection from the response
-                        selected_credential = await self._parse_credential_selection(
+                        selected_credential = await self.credential_handler.parse_credential_selection(
                             clarification_response, clarification_request
                         )
 
@@ -8077,95 +8108,6 @@ Make it conversational and friendly while keeping accuracy."""
                     "information. Please try again."
                 ),
             )
-
-    async def _parse_credential_selection(
-        self, clarification_response: str, clarification_request
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Parse user's credential selection response and retrieve the actual credential.
-
-        Args:
-            clarification_response: User's response (e.g., "1", "ranaroussi", etc.)
-            clarification_request: The original clarification request with context
-
-        Returns:
-            The selected credential data, or None if parsing failed
-        """
-        try:
-            # Get the ordered credentials from the clarification context
-
-            # Handle different types of clarification info
-            if isinstance(clarification_request, dict):
-                # Direct dictionary access
-                ordered_credentials = clarification_request.get("ordered_credentials", [])
-                service = clarification_request.get("service")
-                user_id = clarification_request.get("user_id")
-            else:
-                # Object attribute access
-                ordered_credentials = clarification_request.context.get("ordered_credentials", [])
-                service = clarification_request.context.get("service")
-                user_id = clarification_request.user_id
-
-            if not ordered_credentials or not service or not user_id:
-                return None
-
-            # Try to parse the response as a number first
-            import re
-
-            numbers = re.findall(r"\d+", clarification_response.strip())
-            if numbers:
-                try:
-                    choice_index = int(numbers[0]) - 1  # Convert to 0-based index
-                    if 0 <= choice_index < len(ordered_credentials):
-                        selected_name = ordered_credentials[choice_index]
-                    else:
-                        return None
-                except (ValueError, IndexError):
-                    return None
-            else:
-                # Try to match the response directly to a credential name
-                response_lower = clarification_response.lower().strip()
-                selected_name = None
-                for cred_name in ordered_credentials:
-                    if cred_name.lower() in response_lower or response_lower in cred_name.lower():
-                        selected_name = cred_name
-                        break
-
-                if not selected_name:
-                    return None
-
-            # Now retrieve the actual credential from the database
-            if self.credential_resolver:
-                try:
-                    # Get all credentials for this user and service
-                    all_credentials = await self.credential_resolver.get_user_credentials(
-                        user_id, service
-                    )
-
-                    # Find the credential with the matching name
-                    for cred in all_credentials:
-                        if cred.get("name") == selected_name:
-                            # Return the credential in the format expected by MCP service
-                            return {"type": "bearer", "token": cred.get("credential_data")}
-
-                except Exception as e:
-                    observability.observe(
-                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                        level=observability.EventLevel.ERROR,
-                        data={"error": str(e), "service": service, "user_id": user_id},
-                        description=f"Failed to retrieve selected credential: {str(e)}",
-                    )
-
-            return None
-
-        except Exception as e:
-            observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                level=observability.EventLevel.ERROR,
-                data={"error": str(e)},
-                description=f"Failed to parse credential selection: {str(e)}",
-            )
-            return None
 
     async def handle_missing_credential(
         self, service: str, user_id: str, context: Optional[Dict[str, Any]] = None
@@ -8293,7 +8235,7 @@ Make it conversational and friendly while keeping accuracy."""
 
                         if credential_data and self.credential_resolver:
                             # Validate credential data structure before storing
-                            if self._validate_credential_data(credential_data, service):
+                            if self.credential_handler.validate_credential_data(credential_data, service):
                                 # Store the credential
                                 await self.credential_resolver.store_credential(
                                     user_id=user_id,
@@ -8361,67 +8303,6 @@ Make it conversational and friendly while keeping accuracy."""
                 description=f"Failed to process credential clarification response: {str(e)}",
             )
             return False
-
-    def _validate_credential_data(self, credential_data: Any, service: str) -> bool:
-        """
-        Validate credential data structure before storing.
-
-        Args:
-            credential_data: The credential data to validate
-            service: The service the credential is for
-
-        Returns:
-            True if credential data is valid, False otherwise
-        """
-        # Must be a non-empty dictionary
-        if not isinstance(credential_data, dict):
-            return False
-
-        if not credential_data:
-            return False
-
-        # Validate that all keys are strings
-        for key in credential_data.keys():
-            if not isinstance(key, str) or not key.strip():
-                return False
-
-        # Validate that all values are non-empty strings
-        for value in credential_data.values():
-            if not isinstance(value, str) or not value.strip():
-                return False
-
-        # Service-specific validation
-        common_credential_fields = {
-            "token",
-            "api_key",
-            "key",
-            "secret",
-            "password",
-            "access_token",
-            "auth_token",
-            "bearer_token",
-            "client_id",
-            "client_secret",
-            "app_key",
-            "app_secret",
-        }
-
-        # Ensure at least one field matches common credential patterns
-        has_valid_field = any(
-            key.lower().replace("_", "").replace("-", "")
-            in {field.replace("_", "").replace("-", "") for field in common_credential_fields}
-            for key in credential_data.keys()
-        )
-
-        if not has_valid_field:
-            return False
-
-        # Basic length validation - credentials should be reasonably long
-        for value in credential_data.values():
-            if len(value.strip()) < 8:  # Minimum reasonable credential length
-                return False
-
-        return True
 
     async def get_async_request_status(self, request_id: str) -> Optional[Dict[str, Any]]:
         """
