@@ -58,7 +58,7 @@ class CredentialHandler:
                 api_key=text_model_config.get("api_key"),
                 temperature=0.0,
                 max_tokens=100,
-                **text_model_config.get("settings", {})
+                **text_model_config.get("settings", {}),
             )
             self.overlord._model_cache[cache_key] = llm
 
@@ -106,9 +106,10 @@ Respond in JSON format:
             # Parse JSON response
             # Extract JSON from response if it contains other text
             import json
-            if '{' in response and '}' in response:
-                json_start = response.index('{')
-                json_end = response.rindex('}') + 1
+
+            if "{" in response and "}" in response:
+                json_start = response.index("{")
+                json_end = response.rindex("}") + 1
                 json_str = response[json_start:json_end]
                 detection = json.loads(json_str)
             else:
@@ -142,7 +143,7 @@ Respond in JSON format:
                     "needs_credentials": True,
                     "accept_inline": service_config.get("accept_inline", False),
                     "auth_type": service_config.get("auth_type", "bearer"),
-                    "confidence": detection.get("confidence", 0.0)
+                    "confidence": detection.get("confidence", 0.0),
                 }
 
             # For SERVICE_USE - check if user has credentials
@@ -159,7 +160,7 @@ Respond in JSON format:
                         "needs_credentials": True,
                         "accept_inline": service_config.get("accept_inline", False),
                         "auth_type": service_config.get("auth_type", "bearer"),
-                        "confidence": detection.get("confidence", 0.0)
+                        "confidence": detection.get("confidence", 0.0),
                     }
 
                 # User has credentials - let normal flow handle selection
@@ -201,6 +202,116 @@ Respond in JSON format:
         except Exception:
             return False
 
+    async def validate_credential(
+        self, service: str, service_id: str, credential: str, timeout: float = 5.0
+    ) -> bool:
+        """
+        Validate a credential by attempting to connect to its MCP server.
+
+        Args:
+            service: The service name (e.g., "github")
+            service_id: The MCP server ID (e.g., "github-mcp")
+            credential: The credential to validate
+            timeout: Connection timeout in seconds
+
+        Returns:
+            True if credential is valid, False otherwise
+        """
+        # Get the server configuration from registered servers
+        if (
+            not hasattr(self.overlord.mcp_service, "connections")
+            or service_id not in self.overlord.mcp_service.connections
+        ):
+            print(f"Server {service_id} not found in MCP service connections")
+            return False
+
+        config = self.overlord.mcp_service.connections[service_id]
+
+        # Get auth type from configuration (default to bearer for GitHub)
+        auth_type = config.get("auth_type", "bearer")
+
+        # Create temporary credentials object with proper structure
+        if auth_type == "bearer":
+            temp_credentials = {"type": "bearer", "token": credential}
+        else:
+            # For other auth types, might need different structure
+            temp_credentials = {service: credential}
+
+        print(f"Validating credential for {service}: {credential[:20]}...")
+
+        # For GitHub, do a simple API test instead of full MCP connection
+        if service == "github" and auth_type == "bearer":
+            import aiohttp
+            import asyncio
+
+            try:
+                # Simple GitHub API call to test the token
+                async with aiohttp.ClientSession() as session:
+                    headers = {"Authorization": f"Bearer {credential}"}
+                    url = "https://api.github.com/user"
+
+                    async with session.get(
+                        url, headers=headers, timeout=aiohttp.ClientTimeout(total=timeout)
+                    ) as response:
+                        if response.status == 200:
+                            print(f"Credential validation successful for {service}")
+                            return True
+                        elif response.status == 401:
+                            print(f"Credential validation failed for {service}: unauthorized")
+                            return False
+                        else:
+                            print(
+                                f"Credential validation failed for {service}: status {response.status}"
+                            )
+                            return False
+            except asyncio.TimeoutError:
+                print(f"Credential validation timed out after {timeout}s")
+                return False
+            except Exception as e:
+                print(f"Credential validation failed for {service}: {e}")
+                return False
+
+        # For other services, fallback to MCP connection test (but with strict timeout)
+        from muxi.services.mcp.handler import MCPHandler
+        import asyncio
+
+        handler = MCPHandler(model=None, tool_registry=self.overlord.mcp_service.tool_registry)
+
+        try:
+            success = await asyncio.wait_for(
+                handler.connect_server(
+                    name=f"{service_id}_validation",
+                    url=config.get("url"),
+                    command=config.get("command"),
+                    args=config.get("args"),
+                    credentials=temp_credentials,
+                    request_timeout=int(timeout),
+                    server_id=service_id,
+                ),
+                timeout=timeout,
+            )
+
+            if success:
+                print(f"Credential validation successful for {service}")
+                # Try to disconnect
+                try:
+                    await asyncio.wait_for(
+                        handler.disconnect_server(f"{service_id}_validation"), timeout=1.0
+                    )
+                except Exception:
+                    pass
+                return True
+            else:
+                print(f"Credential validation failed for {service}")
+                return False
+
+        except asyncio.TimeoutError:
+            print(f"Credential validation timed out after {timeout}s")
+            return False
+        except Exception as e:
+            print(f"Credential validation failed for {service}: {e}")
+            return False
+
     async def handle_credential_response(self, message: str, session_id: str, user_id: str):
         """Handle response to credential prompt - with retry loop."""
         if session_id not in self._pending:
@@ -216,6 +327,7 @@ Respond in JSON format:
 
         # Check for timeout (>5 minutes)
         import time
+
         if time.time() - pending["timestamp"] > 300:
             self._pending.pop(session_id)  # Clear stale state
             return None  # Ignore stale requests
@@ -224,86 +336,65 @@ Respond in JSON format:
             # Extract credential from natural language
             credential = await self._extract_credential_from_text(message)
 
-            # Store with temporary name (required for validation)
-            await self.overlord.credential_resolver.store_credential(
-                user_id=user_id,
+            # Use a SHORT timeout for validation only
+            # Validation should be quick - just testing if credentials work
+            validation_timeout = 5.0  # 5 seconds is plenty for auth validation
+            print(f"Using timeout of {validation_timeout} seconds for credential validation")
+
+            # VALIDATE FIRST by testing MCP connection (no database touch!)
+            is_valid = await self.validate_credential(
                 service=pending["service"],
-                credentials=credential,
-                credential_name=pending["service"]  # Generic initially
+                service_id=pending["service_id"],
+                credential=credential,
+                timeout=validation_timeout,
             )
 
-            # Try to validate by discovering account name with the real token
-            try:
-                # This should work with a real GitHub token
-                # Get timeout from MCP config or use default
-                timeout = 30.0  # Default timeout
+            if is_valid:
+                # NOW store the validated credential
+                await self.overlord.credential_resolver.store_credential(
+                    user_id=user_id,
+                    service=pending["service"],
+                    credentials=credential,
+                    credential_name=pending["service"],  # Generic name for now
+                )
+                print(f"Stored validated credential for {pending['service']}")
 
-                # Try to get timeout from MCP configuration
-                if hasattr(self.overlord, 'formation_config'):
-                    mcp_config = self.overlord.formation_config.get('mcp', {})
-                    timeout = float(mcp_config.get('default_timeout_seconds', 30))
-
-                # Also check if the specific server has a timeout configured
-                for server_config in self.overlord._mcp_servers_with_user_credentials.values():
-                    if server_config.get('service') == pending["service"]:
-                        # Server-specific timeout overrides default
-                        if 'timeout_seconds' in server_config:
-                            timeout = float(server_config['timeout_seconds'])
-                        break
-
-                print(f"Using timeout of {timeout} seconds for credential validation")
-
+                # Async update the name (fire and forget, don't wait or block)
                 import asyncio
-                account_name = await asyncio.wait_for(
+
+                asyncio.create_task(
                     self.overlord.credential_resolver.update_credential_name_with_discovery(
                         user_id=user_id,
                         service=pending["service"],
-                        mcp_service=self.overlord.mcp_service
-                    ),
-                    timeout=timeout
+                        mcp_service=self.overlord.mcp_service,
+                    )
                 )
 
-                # SUCCESS! Get original message before clearing state
+                # Clear pending state and continue with original request
                 original_message = pending.get("original_message")
                 self._pending.pop(session_id)
 
                 # Generate success message
-                if account_name and account_name != pending["service"]:
-                    success_msg = await self._generate_success_message(pending['service'], account_name)
-                else:
-                    success_msg = await self._generate_success_message(pending['service'], pending['service'])
+                success_msg = await self._generate_success_message(
+                    pending["service"], pending["service"]
+                )
 
                 # Return with signal to continue processing original request
                 return {
                     "message": success_msg,
-                    "continue_with": original_message,  # Signal to replay original request
-                    "action": "credential_stored"
+                    "continue_with": original_message,
+                    "action": "credential_stored",
                 }
+            else:
+                # Invalid credential - don't store, just ask for retry
+                print(f"Invalid credential for {pending['service']} - asking for retry")
 
-            except (asyncio.TimeoutError, asyncio.CancelledError):
-                # Validation timed out or was cancelled - likely a bad token
-                print(f"Credential validation timed out for {pending['service']} - likely invalid token")
                 # Don't pop state - keep for retry
-                return await self._generate_validation_failure_message(
-                    pending["service"],
-                    self._get_token_creation_url(pending["service"])
-                )
-            except Exception as e:
-                # Other validation failures - might still be a valid token
-                print(f"Credential validation failed with error: {e}")
-                # For now, treat all failures as invalid tokens requiring retry
-                # Don't pop state - keep for retry
-                return await self._generate_validation_failure_message(
-                    pending["service"],
-                    self._get_token_creation_url(pending["service"])
-                )
+                return await self._generate_validation_failure_message(pending["service"])
 
         except Exception:
             # FAILED - keep state for retry, user stays in loop
-            return await self._generate_validation_failure_message(
-                pending["service"],
-                self._get_token_creation_url(pending["service"])
-            )
+            return await self._generate_validation_failure_message(pending["service"])
 
     async def is_credential_request(self, message: str) -> bool:
         """
@@ -332,7 +423,7 @@ Respond in JSON format:
                 api_key=text_model_config.get("api_key"),
                 temperature=0.0,
                 max_tokens=10,
-                **text_model_config.get("settings", {})
+                **text_model_config.get("settings", {}),
             )
             self.overlord._model_cache[cache_key] = llm
 
@@ -368,7 +459,7 @@ Respond with only "YES" if requesting to add credentials, "NO" otherwise."""
         message: str,
         user_id: str,
         detection_result: Dict[str, Any],
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Handle credential request based on formation mode configuration.
@@ -397,13 +488,13 @@ Respond with only "YES" if requesting to add credentials, "NO" otherwise."""
             # Show redirect message
             redirect_message = cred_config.get(
                 "redirect_message",
-                "Please configure your API credentials in the external credential manager."
+                "Please configure your API credentials in the external credential manager.",
             )
 
             return {
                 "action": "redirect",
                 "message": f"{redirect_message}\n\nService '{service}' requires authentication.",
-                "mode": "redirect"
+                "mode": "redirect",
             }
 
         elif mode == "dynamic":
@@ -414,13 +505,14 @@ Respond with only "YES" if requesting to add credentials, "NO" otherwise."""
             if accept_inline:
                 # Store minimal state with timestamp for timeout handling
                 import time
+
                 if session_id:
                     self._pending[session_id] = {
                         "service": service,
                         "service_id": service_id,
                         "auth_type": auth_type,
                         "timestamp": time.time(),
-                        "original_message": message  # Store for replay after success
+                        "original_message": message,  # Store for replay after success
                     }
 
                 # Prompt for inline credential collection
@@ -434,32 +526,32 @@ Respond with only "YES" if requesting to add credentials, "NO" otherwise."""
                     "mode": "dynamic",
                     "service": service,
                     "service_id": service_id,
-                    "auth_type": auth_type
+                    "auth_type": auth_type,
                 }
             else:
                 # Cannot accept inline, fall back to redirect
                 redirect_message = cred_config.get(
                     "redirect_message",
-                    "Please configure your API credentials in the external credential manager."
+                    "Please configure your API credentials in the external credential manager.",
                 )
                 reason = self._get_redirect_reason(auth_type)
 
                 return {
                     "action": "redirect",
                     "message": f"{redirect_message}\n\n{reason}\n\nService '{service}' requires authentication.",
-                    "mode": "redirect_fallback"
+                    "mode": "redirect_fallback",
                 }
 
         # Unknown mode, default to redirect
         redirect_message = cred_config.get(
             "redirect_message",
-            "Please configure your API credentials in the external credential manager."
+            "Please configure your API credentials in the external credential manager.",
         )
 
         return {
             "action": "redirect",
             "message": f"{redirect_message}\n\nService '{service}' requires authentication.",
-            "mode": "redirect_default"
+            "mode": "redirect_default",
         }
 
     async def _generate_credential_prompt(
@@ -477,7 +569,7 @@ Respond with only "YES" if requesting to add credentials, "NO" otherwise."""
             "bearer": "personal access token or API token",
             "api_key": "API key",
             "basic": "username and password",
-            "oauth": "OAuth token"
+            "oauth": "OAuth token",
         }.get(auth_type, "credentials")
 
         prompt = f"""
@@ -502,12 +594,13 @@ Generate the message now:"""
             cache_key = ("text", text_model_config.get("provider"), text_model_config.get("model"))
             if cache_key not in self.overlord._model_cache:
                 from ...services.llm import LLM
+
                 llm = LLM(
                     provider=text_model_config.get("provider"),
                     model=text_model_config.get("model"),
                     temperature=0.7,
                     max_tokens=100,
-                    **text_model_config.get("settings", {})
+                    **text_model_config.get("settings", {}),
                 )
                 self.overlord._model_cache[cache_key] = llm
             else:
@@ -550,6 +643,7 @@ Generate the message now:"""
 
         try:
             from ...services.llm import LLM
+
             llm = LLM()
             response = await llm.generate_text(prompt, max_tokens=10)
             return response.strip().upper().startswith("YES")
@@ -577,6 +671,7 @@ Generate the message now:"""
 
         try:
             from ...services.llm import LLM
+
             llm = LLM()
             extracted = await llm.generate_text(prompt, max_tokens=100)
             # Clean up any quotes the LLM might have added
@@ -585,24 +680,15 @@ Generate the message now:"""
             # Fallback: assume the whole message is the credential
             return message.strip().strip('"').strip("'")
 
-    def _get_token_creation_url(self, service: str) -> str:
-        """Get the URL where users can create tokens for a service."""
-        urls = {
-            "github": "https://github.com/settings/tokens",
-            "gitlab": "https://gitlab.com/-/profile/personal_access_tokens",
-            "jira": "https://id.atlassian.com/manage-profile/security/api-tokens",
-        }
-        return urls.get(service, f"the {service} settings page")
-
-    async def _generate_validation_failure_message(self, service: str, help_url: str) -> str:
+    async def _generate_validation_failure_message(self, service: str) -> str:
         """Generate validation failure message respecting persona."""
         # Get LLM configuration
         text_model_config = self.overlord._capability_models.get("text")
         if not text_model_config:
             # Fallback if no LLM available
             return (
-                f"That token didn't work. Please check you have the right {service} token, "
-                f"or create a new one at: {help_url}\n\nYou can say 'nevermind' if you'd like to cancel."
+                f"That {service} token didn't work. Please double-check the token "
+                f"or create a new one in your {service} settings."
             )
 
         prompt = f"""The user just provided a {service} credential but it failed validation.
@@ -610,30 +696,28 @@ Generate the message now:"""
 Generate a helpful, understanding message that:
 - Gently explains the token didn't work
 - Suggests they double-check the token
-- Mentions they can create a new one at: {help_url}
-- Notes they can say 'nevermind' to cancel
+- Mentions they should check their {service} account settings to create a new token if needed
 - Is supportive, not frustrating
 - Keeps it brief (2-3 sentences)
+- Do NOT include specific URLs
+- Let them know they can provide a different token or move on
 
 Example good responses:
-- "Hmm, that token didn't seem to work. Could you double-check it? You can also create a new one at {help_url}, or say 'nevermind' to cancel."
-- "I couldn't validate that token. Please make sure it's correct, or you can generate a new one at {help_url}. Say 'nevermind' if you'd like to stop."
+- "Hmm, that token didn't seem to work. Could you double-check it? You can also create a new one in your {service} settings."
+- "I couldn't validate that token. Please make sure it's correct, or you can generate a new one in your {service} account settings."
 
 Generate the message now:"""
 
         try:
             response = await self.overlord.llm.chat(
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
-                max_tokens=100
+                messages=[{"role": "user", "content": prompt}], temperature=0.7, max_tokens=100
             )
             return response.content.strip()
         except Exception as e:
             print(f"Warning: Failed to generate failure message via LLM: {e}")
             return (
-                f"That token didn't work. "
-                f"Please check you have the right {service} token, or create a new one at: {help_url}\n\n"
-                f"You can say 'nevermind' if you'd like to cancel."
+                f"That {service} token didn't work. "
+                f"Please double-check the token or create a new one in your {service} settings."
             )
 
     async def _generate_success_message(self, service: str, account_name: str) -> str:
@@ -666,12 +750,13 @@ Generate the message now:"""
             cache_key = ("text", text_model_config.get("provider"), text_model_config.get("model"))
             if cache_key not in self.overlord._model_cache:
                 from ...services.llm import LLM
+
                 llm = LLM(
                     provider=text_model_config.get("provider"),
                     model=text_model_config.get("model"),
                     temperature=0.7,
                     max_tokens=50,
-                    **text_model_config.get("settings", {})
+                    **text_model_config.get("settings", {}),
                 )
                 self.overlord._model_cache[cache_key] = llm
             else:
@@ -711,12 +796,13 @@ Generate the message now:"""
             cache_key = ("text", text_model_config.get("provider"), text_model_config.get("model"))
             if cache_key not in self.overlord._model_cache:
                 from ...services.llm import LLM
+
                 llm = LLM(
                     provider=text_model_config.get("provider"),
                     model=text_model_config.get("model"),
                     temperature=0.7,
                     max_tokens=50,
-                    **text_model_config.get("settings", {})
+                    **text_model_config.get("settings", {}),
                 )
                 self.overlord._model_cache[cache_key] = llm
             else:
@@ -734,12 +820,16 @@ Generate the message now:"""
             return "OAuth authentication requires browser-based authorization flow."
 
         if auth_type == "bearer":
-            return "This service requires bearer token authentication through external configuration."
+            return (
+                "This service requires bearer token authentication through external configuration."
+            )
 
         if auth_type == "unknown":
             return "Authentication type could not be determined."
 
-        return f"{auth_type.capitalize()} authentication requires external configuration for security."
+        return (
+            f"{auth_type.capitalize()} authentication requires external configuration for security."
+        )
 
     def validate_credential_data(self, credential_data: Any, service: str) -> bool:
         """
