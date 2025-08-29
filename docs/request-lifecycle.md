@@ -20,15 +20,15 @@ The MUXI Runtime is not just a request-response system; it's an intelligent proc
 
 A request passing through MUXI undergoes:
 
-1. **Session & Memory Initialization**: Context loading from three memory tiers with vector similarity search
-2. **Credential Detection**: Intercepts credential-related requests (SERVICE_USE or CREDENTIAL_REQUEST) before clarification, handling them based on configured mode (redirect/dynamic). See [User Credentials Flow](./user-credentials-flow.md) for details
-3. **Clarification & Actionability**: Multi-turn clarification system resolves unclear requests; non-actionable statements get direct responses
-4. **Intelligent Routing**: Priority-based routing with agent specification check, then SOP matching, then complexity analysis
-5. **SOP-First Processing**: Standard Operating Procedures override all other routing when matched, ensuring consistent execution of predefined workflows
-6. **Workflow Analysis**: Complex requests (above threshold) trigger multi-agent orchestration when no SOP exists
-7. **Agent Processing**: Tool execution via MCP, agent-to-agent delegation, parallel task execution
-8. **Response Generation**: Batch, streaming, or webhook delivery based on execution mode and user preferences
-9. **Persona Application**: Style and tone consistency regardless of which agents were involved
+ 1. **Session & Memory Initialization**: Context loading from three memory tiers with vector similarity search
+ 2. **Credential Detection**: Intercepts credential-related requests (SERVICE_USE or CREDENTIAL_REQUEST) before clarification, handling them based on configured mode (redirect/dynamic). See [User Credentials Flow](./user-credentials-flow.md) for details
+ 3. **Clarification & Actionability**: Multi-turn clarification system resolves unclear requests; non-actionable statements get direct responses
+ 4. **Intelligent Routing**: Priority-based routing with agent specification check, then SOP matching, then complexity analysis
+ 5. **SOP-First Processing**: Standard Operating Procedures override all other routing when matched, ensuring consistent execution of predefined workflows
+ 6. **Workflow Analysis**: Complex requests (above threshold) trigger multi-agent orchestration when no SOP exists
+ 7. **Agent Processing**: Tool execution via MCP, agent-to-agent delegation, parallel task execution
+ 8. **Response Generation**: Batch, streaming, or webhook delivery based on execution mode and user preferences
+ 9. **Persona Application**: Style and tone consistency regardless of which agents were involved
 10. **Memory Updates**: Learning from interactions for future personalization
 
 The system seamlessly handles everything from simple queries ("What's the weather?") to complex orchestrations ("Analyze my codebase, generate security audit, create Linear issues, and notify my team") through the same intelligent pipeline.
@@ -188,36 +188,42 @@ flowchart TD
 
 ## Component Details
 
-### 1. Entry Points
+### 1\. Entry Points
 
 **REST API:**
+
 - Primary HTTP interface for web applications
 - Supports JSON payloads and multipart file uploads
 - RESTful endpoints for all operations
 
 **MCP (Model Context Protocol):**
+
 - Native protocol for AI-to-AI communication
 - Efficient binary protocol with lower overhead
 - Built-in tool discovery and schema validation
 
 **SDK:**
+
 - Language-specific client libraries (Python, TypeScript, Go)
 - High-level abstractions over REST API
 - Built-in retry logic and error handling
 
 **CLI:**
+
 - Command-line interface for terminal operations
 - Interactive and non-interactive modes
 - Scriptable for automation
 
 **Embedded:**
+
 - Direct library integration for in-process usage
 - Zero network overhead
 - Shared memory context
 
-### 2. Session Management
+### 2\. Session Management
 
 **Session ID Generation:**
+
 - New users receive a unique session ID (nano ID)
 - Sessions persist across multiple requests
 - Session data includes:
@@ -227,13 +233,15 @@ flowchart TD
   - Active workflows
 
 **User ID:**
+
 - Can be provided by client or auto-generated
 - Links to long-term memory storage
 - Enables personalization and context retention
 
-### 3. Request Initialization
+### 3\. Request Initialization
 
 **Request Tracking:**
+
 ```python
 request_id = f"req_{generate_id()}"
 request_data = {
@@ -247,13 +255,15 @@ request_data = {
 ```
 
 **Observability Events:**
+
 - `request.received` - Initial request logging
 - `request.processing` - Processing stages
 - `request.completed` - Final response delivered
 
-### 4. File Upload Processing
+### 4\. File Upload Processing
 
 **File Handling Flow:**
+
 1. Files uploaded as multipart form data or base64
 2. Stored in temporary directory: `/tmp/muxi_uploads/{session_id}/`
 3. Metadata extracted:
@@ -264,23 +274,27 @@ request_data = {
 5. Files available to agents via MCP tools
 
 **Supported File Types:**
+
 - Documents: PDF, DOCX, TXT, MD
 - Images: PNG, JPG, GIF
 - Data: CSV, JSON, YAML
 - Code: Various programming languages
 
-### 5. Memory System Integration
+### 5\. Memory System Integration
 
 **Three-Tier Memory Architecture:**
 
 #### Smart Buffer Memory
+
 - **Intelligent Message Management:**
+
   - Stores last N messages (configurable, default: 50)
   - Multiplier system for expanded context (N × multiplier)
   - FIFO eviction with importance weighting
   - Preserves critical messages longer
 
 - **Vector Similarity Search:**
+
   ```python
   # Find similar past interactions
   similar_messages = await buffer_memory.search_similar(
@@ -291,12 +305,14 @@ request_data = {
   ```
 
 - **Automatic Summarization:**
+
   - Triggers when buffer approaches capacity
   - Summarizes older conversations
   - Preserves key information while reducing tokens
   - Maintains conversation continuity
 
 - **Context Window Optimization:**
+
   ```python
   buffer_config = {
       "size": 50,
@@ -308,12 +324,15 @@ request_data = {
   ```
 
 #### Long-term Memory (Optional)
+
 - **Storage Backends:**
+
   - PostgreSQL with pgvector extension
   - SQLite for single-user deployments
   - Redis for distributed systems
 
 - **User Profile Management:**
+
   ```python
   user_profile = {
       "user_id": "usr_nanoid123",
@@ -329,6 +348,7 @@ request_data = {
   ```
 
 - **Semantic Search Capabilities:**
+
   ```python
   # Search historical interactions
   results = await long_term_memory.semantic_search(
@@ -340,6 +360,7 @@ request_data = {
   ```
 
 - **Context Building:**
+
   ```python
   # Build rich user context from long-term memory
   user_context = await long_term_memory.build_context(
@@ -354,13 +375,16 @@ request_data = {
   ```
 
 #### Working Memory
+
 - **Session State Management:**
+
   - Current task context and progress
   - Active file references and metadata
   - Tool call results and intermediate outputs
   - Temporary data with TTL
 
 - **Dynamic Context Updates:**
+
   ```python
   working_memory = {
       "session_id": "ses_nanoid456",
@@ -385,6 +409,7 @@ request_data = {
   ```
 
 **Memory Loading Sequence:**
+
 ```python
 async def load_memory_context(user_id, session_id):
     # 1. Initialize smart buffer memory
@@ -427,6 +452,7 @@ async def load_memory_context(user_id, session_id):
 ```
 
 **Memory Update After Response:**
+
 ```python
 async def update_memory_systems(request, response, context):
     # 1. Update buffer memory
@@ -470,7 +496,7 @@ async def update_memory_systems(request, response, context):
         })
 ```
 
-### 6. Unified Clarification System
+### 6\. Unified Clarification System
 
 **Clarification Detection Flow:**
 
@@ -509,12 +535,14 @@ async def is_actionable(message):
 ```
 
 **Non-Actionable Handling:**
+
 - Acknowledged by overlord directly
 - No agent delegation
 - Persona response applied
 - Memory updated for context
 
 **Unified Clarification Process:**
+
 1. **Single Entry Point**: All clarification through `UnifiedClarificationSystem`
 2. **LLM-Based Analysis**: No pattern matching, all decisions via LLM
 3. **Buffer Memory State**: Uses request_id as primary key with TTL cleanup
@@ -522,11 +550,12 @@ async def is_actionable(message):
 5. **Five Clarification Modes**: direct, brainstorm, planning, credential, execution
 
 **Clarification Styles:**
+
 - `conversational` - Natural, friendly tone
 - `formal` - Professional, structured
 - `brief` - Minimal, direct questions
 
-### 7. SOP (Standard Operating Procedure) System
+### 7\. SOP (Standard Operating Procedure) System
 
 **SOP-First Priority Routing:**
 
@@ -539,18 +568,21 @@ Request → Agent Specified? → (No) → SOP Detection (PRIORITY) → Execute S
 ```
 
 **Key SOP Behaviors:**
+
 - **Checked FIRST**: SOPs are detected before workflow protection logic
 - **Override Everything**: SOPs bypass complexity thresholds (including ≤ 2.0)
 - **Guaranteed Execution**: Matched SOPs always execute, regardless of other configuration
 - **Agent Bypass**: Direct agent requests skip SOP detection (respects explicit intent)
 
 **SOP Detection Process:**
+
 1. Semantic search against indexed SOPs (FAISS)
 2. Keyword and tag matching with relevance scoring
 3. Similarity threshold filtering (≥ 0.7 semantic, ≥ 3 tag-based)
 4. Immediate execution when matched
 
 **SOP Execution:**
+
 ```yaml
 # Example SOP Structure
 name: system-report-override
@@ -565,15 +597,17 @@ template: |
 ```
 
 **SOP Processing:**
+
 - Templates passed directly to task decomposer
 - Automatic workflow generation with mode-specific instructions
 - Agent assignment based on capabilities
 - Artifact generation support
 - Bypasses approval requirements by default
 
-### 8. Workflow System
+### 8\. Workflow System
 
 **Complexity Analysis:**
+
 ```python
 complexity_score = analyze_request_complexity(message)
 # Factors:
@@ -583,7 +617,8 @@ complexity_score = analyze_request_complexity(message)
 # - Parallel execution opportunities
 ```
 
-**Workflow Decomposition (Score >= Threshold):**
+**Workflow Decomposition (Score &gt;= Threshold):**
+
 1. Break request into atomic tasks
 2. Identify dependencies
 3. Create execution graph
@@ -624,6 +659,7 @@ async def handle_workflow_approval(workflow_plan):
 ```
 
 **Approval Configuration:**
+
 ```yaml
 workflow:
   requires_approval: true  # Ask for confirmation
@@ -633,6 +669,7 @@ workflow:
 ```
 
 **Task Structure:**
+
 ```python
 task = {
     "id": "task_123",
@@ -644,7 +681,7 @@ task = {
 }
 ```
 
-### 9. Agent Routing
+### 9\. Agent Routing
 
 **Priority-Based Routing Logic:**
 
@@ -661,23 +698,26 @@ The MUXI Runtime uses a priority-based routing system:
 ```
 
 **Direct Agent Specification:**
+
 - User can specify: `agent_name="researcher"`
 - **Highest Priority**: Bypasses SOP detection and workflow analysis
 - **Respects Explicit Intent**: User gets exactly what they requested
 - Still subject to clarification if the request is unclear
 
 **Auto-routing Logic** (when no agent specified and no SOP found):
+
 1. Extract intent from message
 2. Match against agent capabilities
 3. Consider agent availability and load balancing
 4. Route to best-suited agent
 
 **SOP Override Behavior:**
+
 - SOPs take precedence over auto-routing
 - Ensures consistent execution of standardized procedures
 - User cannot accidentally bypass SOPs with complex requests
 
-### 10. Agent Processing & Communication
+### 10\. Agent Processing & Communication
 
 **Agent Processing Flow:**
 
@@ -686,6 +726,7 @@ Once a request reaches an agent, the following internal processing occurs:
 #### MCP Tool Execution
 
 **Tool Discovery & Connection:**
+
 ```python
 # Agent loads its configured MCP servers
 mcp_servers = agent.config.get("mcp_servers", [])
@@ -696,15 +737,18 @@ for server in mcp_servers:
 ```
 
 **Tool Call Process:**
+
 1. **Intent Analysis**: Agent analyzes which tools are needed
 2. **Parameter Extraction**: Extract required parameters from context
 3. **Connection Management**:
+
    ```python
    # Reconnect if needed (connections are ephemeral)
    if not client.is_connected():
        await client.connect()
    ```
 4. **Tool Execution**:
+
    ```python
    result = await client.call_tool(
        name="sys_info",
@@ -715,6 +759,7 @@ for server in mcp_servers:
 6. **Result Processing**: Parse and integrate tool outputs
 
 **MCP Server Types:**
+
 - **Filesystem**: File operations (read, write, search)
 - **System Info**: System metrics and diagnostics
 - **Web Scraper**: Data extraction from websites
@@ -726,6 +771,7 @@ for server in mcp_servers:
 **Communication Patterns:**
 
 1. **Delegation Pattern:**
+
    ```python
    # Primary agent delegates entire task
    response = await a2a_client.call(
@@ -737,6 +783,7 @@ for server in mcp_servers:
    ```
 
 2. **Consultation Pattern:**
+
    ```python
    # Agent consults another for specific expertise
    insights = await a2a_client.call(
@@ -749,6 +796,7 @@ for server in mcp_servers:
    ```
 
 3. **Parallel Execution:**
+
    ```python
    # Execute tasks across multiple agents
    tasks = [
@@ -762,12 +810,14 @@ for server in mcp_servers:
 **A2A Transport Mechanisms:**
 
 1. **Internal Transport** (Same Formation):
+
    - Direct function calls
    - Shared memory context
    - Zero network overhead
    - Synchronous or async
 
 2. **External Transport** (Cross-Formation):
+
    - HTTP/REST endpoints
    - gRPC for performance
    - WebSocket for streaming
@@ -795,16 +845,19 @@ response = await target_agent.process(
 **Multi-Agent Coordination:**
 
 1. **Orchestrated Flow:**
+
    - Overlord manages agent sequence
    - Context passed between agents
    - Results aggregated centrally
 
 2. **Autonomous Collaboration:**
+
    - Agents discover and call each other
    - Self-organizing based on capabilities
    - Emergent problem-solving
 
 3. **Hybrid Approach:**
+
    - Overlord sets high-level plan
    - Agents handle detailed coordination
    - Dynamic adaptation based on results
@@ -848,6 +901,7 @@ During agent handoffs and tool calls, context is preserved through:
 **Agent Lifecycle:**
 
 1. **Initialization**:
+
    ```python
    agent = Agent(
        id="researcher",
@@ -860,6 +914,7 @@ During agent handoffs and tool calls, context is preserved through:
    ```
 
 2. **Request Processing**:
+
    ```python
    async def process_request(self, message, context):
        # 1. Understand intent
@@ -955,13 +1010,14 @@ def select_best_agent(request, available_agents):
     return max(scores, key=scores.get)
 ```
 
-### 11. Overlord Persona Application
+### 11\. Overlord Persona Application
 
 **Persona System:**
 
 The Overlord applies a consistent communication style and personality to all responses before returning them to the user. This ensures a cohesive user experience regardless of which agents or tools were involved in processing.
 
 **Persona Configuration:**
+
 ```yaml
 overlord:
   persona:
@@ -1021,14 +1077,17 @@ async def apply_persona(raw_response, persona_config, user_context):
 **Style Transformation Examples:**
 
 1. **Technical to Friendly:**
+
    - Raw: "The API endpoint returned HTTP 404 status code indicating resource not found."
    - Styled: "It looks like the API couldn't find what you're looking for (404 error). Let me help you fix that!"
 
 2. **Verbose to Concise:**
+
    - Raw: "After analyzing the system performance metrics, I have determined that the CPU utilization is at 85%, memory usage is at 72%, and disk I/O is within normal parameters."
    - Styled: "System load: CPU 85%, Memory 72%, Disk I/O normal."
 
 3. **Adding Personality:**
+
    - Raw: "Task completed successfully."
    - Styled: "Great news! I've successfully completed that task for you."
 
@@ -1078,7 +1137,7 @@ The persona system adapts based on:
 4. **User Expertise**: Detected from conversation complexity
 5. **Cultural Preferences**: Region-specific communication styles
 
-### 12. Execution Time Estimation & Response Mode
+### 12\. Execution Time Estimation & Response Mode
 
 **Execution Time Estimation:**
 
@@ -1168,14 +1227,16 @@ async def notify_user_of_async_processing(request_id, estimated_time):
 ```
 
 The key difference is that for async requests:
+
 1. User receives immediate feedback with task ID and time estimate
 2. Processing continues in the background
 3. Results are delivered via webhook when complete
 4. User can check status using the task ID at any time
 
-### 13. Response Generation
+### 13\. Response Generation
 
 #### Synchronous Batch Response
+
 ```python
 # Complete processing before returning
 response = await agent.process(message, context)
@@ -1192,6 +1253,7 @@ return MuxiResponse(
 ```
 
 #### Synchronous Streaming Response
+
 ```python
 # Stream chunks as they're generated
 async def stream_response():
@@ -1205,6 +1267,7 @@ async def stream_response():
 ```
 
 #### Asynchronous Response with Webhook
+
 ```python
 # Return immediately with task ID
 task_id = f"task_{generate_nano_id()}"
@@ -1269,15 +1332,17 @@ response:
     flush_interval: 100  # ms
 ```
 
-### 14. Artifact Handling
+### 14\. Artifact Handling
 
 **Artifact Types:**
+
 - PDF reports
 - Generated files
 - Data exports
 - Images/charts
 
 **Artifact Storage:**
+
 ```python
 artifact = MuxiArtifact(
     filename="report.pdf",
@@ -1288,21 +1353,24 @@ artifact = MuxiArtifact(
 )
 ```
 
-### 15. Memory Updates
+### 15\. Memory Updates
 
 **Post-Response Memory Updates:**
 
 1. **Buffer Memory:**
+
    - Add user message and response
    - Maintain conversation flow
    - Trigger summarization if needed
 
 2. **Working Memory:**
+
    - Clear task-specific data
    - Retain relevant context
    - Update user preferences
 
 3. **Long-term Memory:**
+
    - Persist important information
    - Update user profile
    - Store successful patterns
@@ -1312,21 +1380,25 @@ artifact = MuxiArtifact(
 **Error Recovery Strategies:**
 
 1. **Clarification Errors:**
+
    - Fall back to direct processing
    - Log error and continue
    - Use default assumptions
 
 2. **Agent Failures:**
+
    - Retry with exponential backoff
    - Route to fallback agent
    - Return graceful error message
 
 3. **Workflow Failures:**
+
    - Skip non-critical tasks
    - Aggregate partial results
    - Report completion status
 
 4. **Memory Failures:**
+
    - Continue without historical context
    - Use in-memory fallback
    - Log for debugging
@@ -1334,16 +1406,19 @@ artifact = MuxiArtifact(
 ## Performance Optimizations
 
 ### Parallel Processing
+
 - Concurrent workflow task execution
 - Parallel MCP tool calls
 - Asynchronous memory operations
 
 ### Caching
+
 - LLM response caching (TTL: 3600s)
 - SOP index caching
 - Tool schema caching
 
 ### Resource Management
+
 - Connection pooling for MCP servers
 - Token budget management
 - Memory size limits
@@ -1351,6 +1426,7 @@ artifact = MuxiArtifact(
 ## Metrics and Observability
 
 **Key Metrics:**
+
 - Request latency (p50, p95, p99)
 - Token usage per request
 - Clarification rate
@@ -1360,6 +1436,7 @@ artifact = MuxiArtifact(
 - Error rates by component
 
 **Logging Levels:**
+
 - `DEBUG`: Detailed execution flow
 - `INFO`: Request lifecycle events
 - `WARNING`: Degraded functionality
@@ -1398,17 +1475,20 @@ response:
 ## Security Considerations
 
 1. **File Upload Security:**
+
    - Size limits enforced
    - MIME type validation
    - Virus scanning (optional)
    - Sandboxed storage
 
 2. **Memory Isolation:**
+
    - User data segregation
    - Session isolation
    - Encrypted storage (optional)
 
 3. **Token Redaction:**
+
    - Automatic API key detection
    - Credential masking in logs
    - Secure credential storage
@@ -1425,6 +1505,7 @@ The MUXI Runtime request lifecycle is designed to be flexible, resilient, and in
 The system maintains context through sophisticated three-tier memory systems, ensures consistent execution through SOPs, and provides comprehensive clarification capabilities. The architecture supports horizontal scaling, graceful degradation, and comprehensive observability for production deployments.
 
 Key architectural principles:
+
 - **Priority-based routing** prevents conflicts and ensures predictable behavior
 - **SOP override capability** guarantees consistent execution of critical procedures
 - **Clarification-first approach** resolves ambiguity before processing
