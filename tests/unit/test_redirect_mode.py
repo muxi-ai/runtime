@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from dataclasses import dataclass
 
 from muxi.formation.overlord.clarification import UnifiedClarificationSystem, ClarificationResult
-from muxi.formation.memory.credential_resolver import MissingCredentialError
+from muxi.formation.credentials import MissingCredentialError
 
 
 class TestRedirectMode:

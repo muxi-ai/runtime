@@ -218,7 +218,7 @@ class TestPersonaIntegration:
     @pytest.mark.asyncio
     async def test_error_response_gets_persona(self, overlord_with_persona):
         """Test that error responses get persona applied."""
-        from src.muxi.formation.memory.credential_resolver import MissingCredentialError
+        from src.muxi.formation.credentials import MissingCredentialError
 
         # Mock the error scenario
         mock_agent = AsyncMock()
