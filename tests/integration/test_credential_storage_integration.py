@@ -7,8 +7,8 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from cryptography.fernet import Fernet
 
-from muxi.formation.memory.encrypted_credential_resolver import EncryptedCredentialResolver
-from muxi.formation.memory.credential_resolver import CredentialResolver, User, Credential
+from muxi.formation.credentials import EncryptedCredentialResolver
+from muxi.formation.credentials.resolver import CredentialResolver, User, Credential
 from muxi.formation.overlord.clarification import UnifiedClarificationSystem
 
 

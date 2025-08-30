@@ -4,8 +4,8 @@ Integration tests for user isolation in credential handling.
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from muxi.formation.memory.encrypted_credential_resolver import EncryptedCredentialResolver
-from muxi.formation.memory.credential_resolver import CredentialResolver, User, Credential
+from muxi.formation.credentials import EncryptedCredentialResolver
+from muxi.formation.credentials.resolver import CredentialResolver, User, Credential
 
 
 @pytest.fixture
