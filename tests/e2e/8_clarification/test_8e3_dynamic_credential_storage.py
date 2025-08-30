@@ -65,9 +65,9 @@ async def test_user3_simple():
         print(f"   System: {response1.content}")
 
         # Step 2: Provide the token
-        print("\n2. User: my github token is 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")
+        print("\n2. User: my github token is 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")
         response2 = await overlord.chat(
-            message="my github token is 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",
+            message="my github token is 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",
             user_id=user_id,
             session_id=ctx.session_id,
             stream=False

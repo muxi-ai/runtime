@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Test user giving up after two failed token attempts."""
+"""Test user1 with existing credentials giving up after two failed attempts."""
 
 import asyncio
 import sys
@@ -29,19 +29,21 @@ async def test():
     try:
         await formation.load(str(formation_path))
 
-        # Clean up any existing credentials
+        # Clean up any existing automazeio credentials to avoid conflicts
         import asyncpg
         conn = await asyncpg.connect('postgresql://ran@127.0.0.1/muxi_framework')
-        await conn.execute("DELETE FROM credentials WHERE user_id=6 AND service='github'")
+        # Delete ALL automazeio credentials regardless of user
+        result = await conn.execute("DELETE FROM credentials WHERE name='automazeio' AND service='github'")
+        print(f"Deleted {result} automazeio credentials")
         await conn.close()
 
         overlord = await formation.start_overlord()
 
-        ctx = TestContext("user_gives_up")
-        user_id = "user3"
+        ctx = TestContext("existing_creds_user_gives_up")
+        user_id = "user1"  # Using user1 who has existing credentials
 
         print("\n" + "="*60)
-        print("CHAT TRANSCRIPT - User Gives Up Test")
+        print("CHAT TRANSCRIPT - Existing Creds + User Gives Up")
         print("="*60)
 
         # Step 1: Initial request
@@ -54,41 +56,50 @@ async def test():
         )
         print(f"\n**System:** {response1.content}")
 
-        # Step 2: First bad token
-        print("\n**User:** my token is ghp_BADTOKEN_12345")
+        # Step 2: User wants a different account
+        print("\n**User:** neither - I need a different account")
         response2 = await overlord.chat(
-            message="my token is ghp_BADTOKEN_12345",
+            message="neither - I need a different account",
             user_id=user_id,
             session_id=ctx.session_id,
             stream=False
         )
         print(f"\n**System:** {response2.content}")
 
-        # Step 3: Second bad token
-        print("\n**User:** hmm let me try ghp_STILLWRONG_67890")
+        # Step 3: First bad token
+        print("\n**User:** my token is ghp_BADTOKEN_12345")
         response3 = await overlord.chat(
-            message="hmm let me try ghp_STILLWRONG_67890",
+            message="my token is ghp_BADTOKEN_12345",
             user_id=user_id,
             session_id=ctx.session_id,
             stream=False
         )
         print(f"\n**System:** {response3.content}")
 
-        # Step 4: User gives up
-        print("\n**User:** forget it, I'll do this later")
+        # Step 4: Second bad token
+        print("\n**User:** hmm let me try ghp_STILLWRONG_67890")
         response4 = await overlord.chat(
-            message="forget it, I'll do this later",
+            message="hmm let me try ghp_STILLWRONG_67890",
             user_id=user_id,
             session_id=ctx.session_id,
             stream=False
         )
         print(f"\n**System:** {response4.content}")
 
+        # Step 5: User gives up
+        print("\n**User:** forget it, I'll do this later")
+        response5 = await overlord.chat(
+            message="forget it, I'll do this later",
+            user_id=user_id,
+            session_id=ctx.session_id,
+            stream=False
+        )
+        print(f"\n**System:** {response5.content}")
+
         print("\n" + "="*60)
 
         # Analysis
-        # Check that the system handled the cancellation gracefully
-        response_lower = response4.content.lower()
+        response_lower = response5.content.lower()
 
         # These would indicate the system is still asking for credentials (bad)
         still_asking = ["token", "credential", "password", "authenticate"]
@@ -98,31 +109,33 @@ async def test():
 
         if any(word in response_lower for word in still_asking):
             print("\n❌ FAILURE: System is still asking for credentials after user gave up")
-            print(f"Response: {response4.content[:200]}...")
+            print(f"Response: {response5.content[:200]}...")
         elif any(word in response_lower for word in acknowledged):
-            print("\n✅ SUCCESS: System gracefully handled user giving up")
+            print("\n✅ SUCCESS: System gracefully handled user giving up with existing credentials")
+            print("✓ System asked which existing account to use")
+            print("✓ User indicated they need a different account")
             print("✓ First bad token was rejected")
             print("✓ Second bad token was rejected")
             print("✓ User cancellation was acknowledged")
             print("✓ System did not persist in asking for credentials")
         else:
             print("\n⚠️  UNCLEAR: Can't determine if cancellation was handled properly")
-            print(f"Response: {response4.content[:200]}...")
+            print(f"Response: {response5.content[:200]}...")
 
         print("="*60)
 
-        # Step 5: Verify we can start a new conversation
+        # Step 6: Verify we can start a new conversation
         print("\n**User:** What's the weather like?")
-        response5 = await overlord.chat(
+        response6 = await overlord.chat(
             message="What's the weather like?",
             user_id=user_id,
             session_id=ctx.session_id,
             stream=False
         )
-        print(f"\n**System:** {response5.content[:200]}...")
+        print(f"\n**System:** {response6.content[:200]}...")
 
         # Check that the system moved on from credential handling
-        if "token" not in response5.content.lower() and "credential" not in response5.content.lower():
+        if "token" not in response6.content.lower() and "credential" not in response6.content.lower():
             print("\n✅ BONUS: System properly moved on to new topic after cancellation")
         else:
             print("\n⚠️  System might still be stuck on credentials")

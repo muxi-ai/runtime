@@ -62,9 +62,9 @@ async def test():
         )
         print(f"\n**System:** {response2.content}")
 
-        print("\n**User:** oops wrong one, here's the real token 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")
+        print("\n**User:** oops wrong one, here's the real token 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")
         response3 = await overlord.chat(
-            message="oops wrong one, here's the real token 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",
+            message="oops wrong one, here's the real token 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",
             user_id=user_id,
             session_id=ctx.session_id,
             stream=False

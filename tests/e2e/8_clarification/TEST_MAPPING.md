@@ -44,30 +44,33 @@
 
 | Test ID | Test Plan Requirement | Implementation File | Status | Last Updated |
 |---------|----------------------|-------------------|---------|--------------|
-| 8E1a | API Key in Redirect Mode | `test_8e1a_apikey_redirect.py` | ✅ Implemented | 2025-08-22 |
-| 8E1b | Bearer Token in Redirect Mode | `test_8e1b_bearer_redirect.py` | ✅ Implemented | 2025-08-22 |
-| 8E1c | OAuth in Redirect Mode | `test_8e1c_oauth_redirect.py` | ✅ Implemented | 2025-08-22 |
-| 8E2a | API Key in Dynamic Mode | `test_8e2a_apikey_dynamic.py` | ✅ Implemented | 2025-08-22 |
-| 8E2b | PAT with allow_inline | `test_8e2b_pat_dynamic.py` | ✅ Implemented | 2025-08-22 |
-| 8E2c | Basic Auth in Dynamic Mode | `test_8e2c_basic_dynamic.py` | ✅ Implemented | 2025-08-22 |
-| 8E3a | OAuth Bearer without Hint | `test_8e3a_oauth_dynamic.py` | ✅ Implemented | 2025-08-22 |
-| 8E3b | Bearer with allow_inline false | `test_8e3b_bearer_no_inline.py` | ✅ Implemented | 2025-08-22 |
-| 8E4a | List Credentials | `test_8e4a_list_credentials.py` | ✅ Implemented | 2025-08-22 |
-| 8E4b | Remove Credential | `test_8e4b_remove_credential.py` | ✅ Implemented | 2025-08-22 |
-| 8E4c | Edit Credential Not Supported | `test_8e4c_edit_credential.py` | ✅ Implemented | 2025-08-22 |
-| 8E5a | Credential Redaction | `test_8e5a_redaction.py` | ✅ Implemented | 2025-08-22 |
-| 8E5b | Context Switch During Credential | `test_8e5b_context_switch.py` | ✅ Implemented | 2025-08-22 |
-| 8E5c | Invalid Credential Format | `test_8e5c_invalid_format.py` | ✅ Implemented | 2025-08-22 |
-| 8E5d | Missing Configuration | `test_8e5d_missing_config.py` | ✅ Implemented | 2025-08-22 |
-
-#### Test Group 8E: Dynamic Credential Handling with Retry Loop
-
-| Test ID | Test Plan Requirement | Implementation File | Status | Last Updated |
-|---------|----------------------|-------------------|---------|--------------|
+| 8E1a | API Key in Redirect Mode | `test_8e1a_apikey_redirect.py` | ✅ Passing | 2025-08-29 |
+| 8E1a-simple | API Key Redirect (Simplified) | `test_8e1a_apikey_redirect_simple.py` | ✅ Passing | 2025-08-28 |
+| 8E1b | Bearer Token in Redirect Mode | `test_8e1b_bearer_redirect.py` | ✅ Passing | 2025-08-28 |
+| 8E1c | OAuth in Redirect Mode | `test_8e1c_oauth_redirect.py` | ✅ Passing | 2025-08-28 |
+| 8E2 | Dynamic Mode Core | `test_8e2_dynamic.py` | ✅ Passing | 2025-08-29 |
+| 8E2a | API Key in Dynamic Mode | `test_8e2a_apikey_dynamic.py` | ✅ Passing | 2025-08-22 |
+| 8E2b | PAT with allow_inline | `test_8e2b_pat_dynamic.py` | ✅ Passing | 2025-08-28 |
+| 8E2c | Basic Auth in Dynamic Mode | `test_8e2c_basic_dynamic.py` | ✅ Passing | 2025-08-22 |
 | 8E3 | Dynamic Credential Storage | `test_8e3_dynamic_credential_storage.py` | ✅ Passing | 2025-08-30 |
+| 8E3a | OAuth Bearer without Hint | `test_8e3a_oauth_dynamic.py` | ✅ Passing | 2025-08-22 |
+| 8E3b | Bearer with allow_inline false | `test_8e3b_bearer_no_inline.py` | ✅ Passing | 2025-08-22 |
 | 8E4 | Credential Retry Single Failure | `test_8e4_credential_retry_single_failure.py` | ✅ Passing | 2025-08-30 |
+| 8E4a | List Credentials | `test_8e4a_list_credentials.py` | ✅ Passing | 2025-08-22 |
+| 8E4b | Remove Credential | `test_8e4b_remove_credential.py` | ✅ Passing | 2025-08-22 |
+| 8E4c | Edit Credential Not Supported | `test_8e4c_edit_credential.py` | ✅ Passing | 2025-08-22 |
 | 8E5 | Credential Retry Double Failure | `test_8e5_credential_retry_double_failure.py` | ✅ Passing | 2025-08-30 |
+| 8E5a | Credential Redaction | `test_8e5a_redaction.py` | ✅ Passing | 2025-08-22 |
+| 8E5b | Context Switch During Credential | `test_8e5b_context_switch.py` | ✅ Passing | 2025-08-22 |
+| 8E5c | Invalid Credential Format | `test_8e5c_invalid_format.py` | ✅ Passing | 2025-08-22 |
+| 8E5d | Missing Configuration | `test_8e5d_missing_config.py` | ✅ Passing | 2025-08-22 |
 | 8E6 | Credential User Cancellation | `test_8e6_credential_user_cancellation.py` | ✅ Passing | 2025-08-30 |
+| 8E7 | Existing Creds + New Account | `test_8e7_existing_creds_new_account.py` | ✅ Passing | 2025-08-30 |
+| 8E8 | Existing Creds + Single Retry | `test_8e8_existing_creds_retry_single.py` | ✅ Passing | 2025-08-30 |
+| 8E9 | Existing Creds + Double Retry | `test_8e9_existing_creds_retry_double.py` | ✅ Passing | 2025-08-30 |
+| 8E10 | Existing Creds + User Cancellation | `test_8e10_existing_creds_user_cancellation.py` | ✅ Passing | 2025-08-30 |
+| 8E11 | Duplicate Token Detection | `test_8e11_duplicate_token.py` | ✅ Passing | 2025-08-30 |
+| 8E11v2 | Duplicate Token Detection (Enhanced) | `test_8e11_duplicate_token_v2.py` | ✅ Passing | 2025-08-30 |
 
 ## Test Coverage Summary
 
@@ -104,7 +107,7 @@
 - ✅ Context preservation across deep stacks (after fix)
 - ✅ Recovery from abandoned clarifications
 
-### Credential Handling Modes (8E) - ✅ 100% Implemented
+### Credential Handling Modes (8E) - ✅ 100% Passing
 - ✅ Redirect mode enforcement (enterprise security)
 - ✅ Dynamic mode intelligence (developer friendly)
 - ✅ Dynamic credential storage and validation
@@ -119,6 +122,9 @@
 - ✅ Security redaction and isolation
 - ✅ Context switching during credential flow
 - ✅ Invalid credential format handling
+- ✅ Duplicate token detection (prevents storing same token twice)
+- ✅ Multiple accounts per service support
+- ✅ Identity discovery for meaningful naming
 
 ## Key Achievements
 
@@ -168,16 +174,16 @@ python tests/e2e/8_clarification/test_8c3_complex_parameter_collection.py
 - **Test Group 8B**: ✅ **100% Passing** (5/5 tests) - All information flow features working
 - **Test Group 8C**: ✅ **100% Passing** (3/3 tests) - All multiple clarification sequences working
 - **Test Group 8D**: ✅ **100% Passing** (3/3 tests) - All clarification stack management working
-- **Test Group 8E**: ✅ Implemented - Credential handling modes (15 tests)
+- **Test Group 8E**: ✅ **100% Passing** (27/27 tests) - All credential handling modes working
 
 ### Implementation Status
 - **8A Completed & Passing**: 3 tests (8A1 with multi-turn support, 8A2, 8A3) - ✅ 100%
 - **8B Completed & Passing**: 5 tests (all passing with 2-minute timeouts) - ✅ 100%
 - **8C Completed & Passing**: 3 tests (all passing with 2-minute timeouts) - ✅ 100%
 - **8D Completed & Passing**: 3 tests (8D1 ✅, 8D2 ✅, 8D3 ✅) - ✅ 100%
-- **8E Implemented**: 15 tests (8E1a-8E5d) - credential handling modes
-- **Total Implemented**: 29/29 tests = 100%
-- **Total Ready for Testing**: 29/29 tests = 100%
+- **8E Completed & Passing**: 27 tests (all credential handling scenarios) - ✅ 100%
+- **Total Implemented**: 41/41 tests = 100%
+- **Total Passing**: 41/41 tests = 100%
 
 ### Key Recent Improvements
 #### 2025-08-20
@@ -208,3 +214,13 @@ python tests/e2e/8_clarification/test_8c3_complex_parameter_collection.py
 - ✅ **8E5 (Security)**: Credential redaction, context switch, invalid format, missing config
 - ✅ **Test Structure**: All tests follow 8C pattern with proper chat transcripts and summaries
 - ✅ **Coverage Complete**: All 29 planned tests now implemented (14 passing + 15 new credential tests)
+
+#### 2025-08-30
+- ✅ **CREDENTIAL EPIC COMPLETED**: Finished user-credentials-handling epic (#29)
+- ✅ **Multiple Credentials Bug Fix**: Fixed SQLAlchemy error preventing multiple credentials per service
+- ✅ **Duplicate Detection**: Added duplicate token detection BEFORE validation (saves API calls)
+- ✅ **8E Tests Enhanced**: Added 12 more tests for retry loops and duplicate detection
+- ✅ **8E3-8E10**: Credential retry loops, user cancellation, existing credentials scenarios
+- ✅ **8E11**: Duplicate token detection tests (both v1 and v2)
+- ✅ **All 8E Tests Passing**: 27 tests covering all credential handling scenarios
+- ✅ **Documentation Updated**: Unified credential docs in `docs/user-credentials.md`
