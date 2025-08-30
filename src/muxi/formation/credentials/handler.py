@@ -69,7 +69,7 @@ class CredentialHandler:
 
         services_str = ", ".join([s["service"] for s in available_services])
 
-        prompt = f"""Analyze the user's message to determine if it involves credential-enabled services.
+        prompt = f"""Analyze the user's message to determine if it requires credentials for external services.
 
 Available credential services: {services_str}
 
@@ -84,14 +84,29 @@ Detection rules:
    - "Configure GitHub auth"
    - "I need to set up new credentials"
 
-2. SERVICE_USE - User wants to use a service (but may lack credentials):
-   - "List my GitHub repositories"
-   - "Get my account balance"
-   - "Show my pull requests"
-   - "Check my issues"
+2. SERVICE_USE - User wants to perform operations DIRECTLY on a specific service:
+   IMPORTANT: The service name MUST be explicitly mentioned in the message!
+   YES examples (service explicitly mentioned):
+   - "List my GitHub repositories" (mentions GitHub)
+   - "Create a GitHub issue" (mentions GitHub)
+   - "Show my Jira tickets" (mentions Jira)
+   - "Check my GitHub pull requests" (mentions GitHub)
+
+   NO examples (no service mentioned - return NONE):
+   - "Create a PDF document" (PDF creation, not a service operation)
+   - "Generate a report" (document generation, not a service operation)
+   - "Compile these ideas" (general task, not a service operation)
+   - "Summarize this into a document" (document creation, not a service operation)
+   - "Create a file" (file creation, not a service operation)
 
 3. NONE - Neither credential management nor service use:
-   - General questions, help requests, other topics
+   - Document creation (PDF, reports, summaries)
+   - General file operations
+   - Brainstorming or conceptual work
+   - Any request that doesn't explicitly mention a credential service
+
+CRITICAL: If the user message does NOT explicitly mention one of the available services ({services_str}),
+then return type: "NONE". Document creation is NOT a service operation.
 
 Respond in JSON format:
 {{
@@ -116,6 +131,11 @@ Respond in JSON format:
                 return None
 
             if detection["type"] == "NONE":
+                return None
+
+            # Check confidence threshold - only proceed with high confidence
+            confidence = detection.get("confidence", 0.0)
+            if confidence < 0.8:  # Require high confidence for credential detection
                 return None
 
             # Find the matching service configuration
