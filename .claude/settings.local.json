@@ -58,7 +58,10 @@
       "WebSearch",
       "Bash(timeout:*)",
       "Bash(python -m flake8:*)",
-      "Bash(PYTHONUNBUFFERED=1 timeout 120 python tests/e2e/8_clarification/test_8e2_dynamic.py)"
+      "Bash(PYTHONUNBUFFERED=1 timeout 120 python tests/e2e/8_clarification/test_8e2_dynamic.py)",
+      "Bash(PYTHONUNBUFFERED=1 timeout 120 python tests/e2e/8_clarification/test_8e1a_apikey_redirect.py)",
+      "Bash(git log:*)",
+      "Bash(timeout * python *)"
     ]
   }
 }
