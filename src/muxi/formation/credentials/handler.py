@@ -336,6 +336,21 @@ Respond in JSON format:
             # Extract credential from natural language
             credential = await self._extract_credential_from_text(message)
 
+            # Check if this token already exists BEFORE validating
+            is_duplicate = await self.overlord.credential_resolver.check_duplicate(
+                user_id=user_id,
+                service=pending["service"],
+                credentials=credential
+            )
+
+            if is_duplicate:
+                print(f"Token already stored for {pending['service']} - skipping validation")
+                # Clear pending state
+                self._pending.pop(session_id, None)
+                # Generate duplicate message and return just the message
+                duplicate_message = await self._generate_duplicate_message(pending["service"])
+                return duplicate_message
+
             # Use a SHORT timeout for validation only
             # Validation should be quick - just testing if credentials work
             validation_timeout = 5.0  # 5 seconds is plenty for auth validation
@@ -351,13 +366,23 @@ Respond in JSON format:
 
             if is_valid:
                 # NOW store the validated credential
-                await self.overlord.credential_resolver.store_credential(
-                    user_id=user_id,
-                    service=pending["service"],
-                    credentials=credential,
-                    credential_name=pending["service"],  # Generic name for now
-                )
-                print(f"Stored validated credential for {pending['service']}")
+                try:
+                    print(f"DEBUG: Storing credential for user_id={user_id}, service={pending['service']}")
+                    status = await self.overlord.credential_resolver.store_credential(
+                        user_id=user_id,
+                        service=pending["service"],
+                        credentials=credential,
+                        credential_name=pending["service"],  # Generic name for now
+                    )
+                    if status == "duplicate":
+                        print(f"Token already stored for {pending['service']}")
+                    else:
+                        print(f"Stored new credential for {pending['service']}")
+                except Exception as store_error:
+                    print(f"ERROR storing credential: {store_error}")
+                    import traceback
+                    traceback.print_exc()
+                    raise  # Re-raise to be caught by outer exception handler
 
                 # Async update the name (fire and forget, don't wait or block)
                 import asyncio
@@ -392,8 +417,11 @@ Respond in JSON format:
                 # Don't pop state - keep for retry
                 return await self._generate_validation_failure_message(pending["service"])
 
-        except Exception:
+        except Exception as e:
             # FAILED - keep state for retry, user stays in loop
+            print(f"ERROR in handle_credential_response: {e}")
+            import traceback
+            traceback.print_exc()
             return await self._generate_validation_failure_message(pending["service"])
 
     async def is_credential_request(self, message: str) -> bool:
@@ -709,16 +737,69 @@ Example good responses:
 Generate the message now:"""
 
         try:
-            response = await self.overlord.llm.chat(
-                messages=[{"role": "user", "content": prompt}], temperature=0.7, max_tokens=100
+            # Create LLM instance from config
+            from ...services.llm import LLM
+            llm = LLM(
+                provider=text_model_config.get("provider"),
+                model=text_model_config.get("model"),
+                temperature=0.7,
+                max_tokens=100,
+                **text_model_config.get("settings", {}),
             )
-            return response.content.strip()
+            response = await llm.generate_text(prompt)
+            return response.strip()
         except Exception as e:
             print(f"Warning: Failed to generate failure message via LLM: {e}")
             return (
                 f"That {service} token didn't work. "
                 f"Please double-check the token or create a new one in your {service} settings."
             )
+
+    async def _generate_duplicate_message(self, service: str) -> str:
+        """Generate message for duplicate token respecting persona."""
+        # Get LLM configuration
+        text_model_config = self.overlord._capability_models.get("text")
+        if not text_model_config:
+            # Fallback if no LLM available
+            return f"That {service} token is already stored in your account. You're all set!"
+
+        prompt = f"""The user just provided a {service} credential but it's already stored (duplicate).
+
+Generate a friendly message that:
+- Explains the token is already in their account
+- Reassures them they can use it
+- Is understanding, not frustrating
+- Keeps it brief (1-2 sentences)
+
+Example good responses:
+- "That token is already saved in your account! You're all set to use {service}."
+- "I already have that {service} token stored for you. Ready to go!"
+
+Return ONLY the message text, no quotes."""
+
+        try:
+            # Create LLM for message generation
+            model_name = text_model_config.get("name")
+            cache_key = f"text_model_{model_name}"
+
+            if cache_key not in self.overlord._model_cache:
+                llm = await self.overlord.create_model(
+                    model=model_name,
+                    api_key=text_model_config.get("api_key"),
+                    temperature=0.7,
+                    max_tokens=100,
+                    **text_model_config.get("settings", {}),
+                )
+                self.overlord._model_cache[cache_key] = llm
+            else:
+                llm = self.overlord._model_cache[cache_key]
+
+            response = await llm.generate_text(prompt)
+            return response.strip()
+        except Exception as e:
+            print(f"Warning: Failed to generate duplicate message via LLM: {e}")
+            # Fallback message
+            return f"That {service} token is already stored in your account. You're all set!"
 
     async def _generate_success_message(self, service: str, account_name: str) -> str:
         """Generate success message respecting persona."""

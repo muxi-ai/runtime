@@ -88,7 +88,7 @@ class EncryptedCredentialResolver(CredentialResolver):
 
         return fernet
 
-    def _encrypt_credentials(self, user_id: str, credentials: Dict[str, Any]) -> Dict[str, Any]:
+    def _encrypt_credentials(self, user_id: str, credentials: Any) -> Dict[str, Any]:
         """
         Encrypt credential data.
 
@@ -193,18 +193,79 @@ class EncryptedCredentialResolver(CredentialResolver):
             # Now decrypt and return
             return self._decrypt_credentials(user_id, stored_data)
 
+    async def check_duplicate(
+        self,
+        user_id: str,
+        service: str,
+        credentials: Any,
+    ) -> bool:
+        """
+        Check if a credential already exists by comparing decrypted values.
+
+        Args:
+            user_id: The user ID
+            service: The service name (will be normalized to lowercase)
+            credentials: The credential to check
+
+        Returns:
+            True if duplicate exists, False otherwise
+        """
+        from sqlalchemy import select
+        from .resolver import User, Credential
+
+        service = service.lower()
+
+        async with self.async_session_maker() as session:
+            # Get the user
+            user_stmt = select(User).where(
+                User.external_user_id == user_id,
+                User.formation_id == self.formation_id
+            )
+            user_result = await session.execute(user_stmt)
+            user = user_result.scalar_one_or_none()
+
+            if not user:
+                # No user, so no duplicates
+                return False
+
+            # Check existing credentials
+            cred_stmt = select(Credential).where(
+                Credential.user_id == user.id,
+                Credential.service == service,
+            )
+            result = await session.execute(cred_stmt)
+            existing_credentials = result.scalars().all()
+
+            # Check each existing credential
+            for existing in existing_credentials:
+                stored = existing.credentials
+
+                # Parse JSON string if needed
+                if isinstance(stored, str):
+                    try:
+                        stored = json.loads(stored)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+                decrypted = self._decrypt_credentials(user_id, stored)
+                if decrypted == credentials:
+                    return True  # Duplicate found
+
+            return False  # No duplicate
+
     async def store_credential(
         self,
         user_id: str,
         service: str,
-        credentials: Dict[str, Any],
+        credentials: Any,  # Can be string or dict
         credential_name: Optional[str] = None,
         mcp_service: Optional[Any] = None,
-    ) -> None:
+    ) -> str:
         """
         Store encrypted user credentials in the database.
 
         Overrides the base method to add encryption before storage.
+        Note: Duplicate checking should be done via check_duplicate() before calling this.
 
         Args:
             user_id: The user ID
@@ -217,7 +278,7 @@ class EncryptedCredentialResolver(CredentialResolver):
         encrypted_data = self._encrypt_credentials(user_id, credentials)
 
         # Store using parent class method
-        await super().store_credential(
+        return await super().store_credential(
             user_id=user_id,
             service=service,
             credentials=encrypted_data,  # Store encrypted version

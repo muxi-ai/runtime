@@ -146,7 +146,7 @@ class CredentialResolver:
         credentials: Dict[str, Any],
         credential_name: Optional[str] = None,
         mcp_service: Optional[Any] = None,
-    ) -> None:
+    ) -> str:
         """
         Store user credentials in the database.
 
@@ -187,30 +187,19 @@ class CredentialResolver:
                     session.add(user)
                     await session.flush()  # Flush to get the ID
 
-                # Check if credential already exists for this user
-                cred_stmt = select(Credential).where(
-                    Credential.user_id == user.id,
-                    Credential.service == service,
+                # Token is new, create it
+                # Note: Duplicate checking is handled by EncryptedCredentialResolver
+                new_cred = Credential(
+                    user_id=user.id,  # Use the integer user ID from users table
+                    credential_id=nanoid.generate(),  # Generate unique ID
+                    name=credential_name,  # Use discovered/provided name
+                    service=service,
+                    credentials=credentials,
                 )
-                result = await session.execute(cred_stmt)
-                existing = result.scalar_one_or_none()
-
-                if existing:
-                    # Update existing credential
-                    existing.credentials = credentials
-                    existing.updated_at = utc_now_naive()
-                else:
-                    # Create new credential
-                    new_cred = Credential(
-                        user_id=user.id,  # Use the integer user ID from users table
-                        credential_id=nanoid.generate(),  # Generate unique ID
-                        name=credential_name,  # Use discovered/provided name
-                        service=service,
-                        credentials=credentials,
-                    )
-                    session.add(new_cred)
+                session.add(new_cred)
 
                 await session.commit()
+                return "created"
 
                 # Clear cache for this user/service
                 if user_id in self._cache:
