@@ -48,6 +48,7 @@ from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
 
 from ..artifacts.extractor import extract_artifacts_from_tool_results
+from ..credentials import MissingCredentialError, AmbiguousCredentialError
 from ...utils.id_generator import generate_nanoid
 from ...datatypes.response import MuxiResponse
 from ...datatypes.intent import IntentType, IntentDetectionContext
@@ -1797,11 +1798,6 @@ class Agent:
 
                 except Exception as e:
                     # Check if this is a credential error that needs to bubble up
-                    from ..credentials import (
-                        MissingCredentialError,
-                        AmbiguousCredentialError,
-                    )
-
                     if isinstance(e, AmbiguousCredentialError):
                         # Stop processing all remaining tool calls and bubble up immediately
                         raise
@@ -2656,7 +2652,6 @@ class Agent:
         Raises:
             Exception: If tool invocation fails or tool is not allowed.
         """
-        from ..credentials import MissingCredentialError
 
         try:
             # Special handling for generate_file tool - use artifact service directly

@@ -4,6 +4,9 @@ Moved from overlord.py to proper separation of concerns.
 """
 
 from typing import Dict, Optional, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class CredentialHandler:
@@ -16,6 +19,47 @@ class CredentialHandler:
         """Initialize with reference to overlord for accessing services."""
         self.overlord = overlord
         self._pending = {}  # session_id -> {service, service_id, auth_type, timestamp}
+
+    async def _get_configured_llm(self, cache_suffix: str = "default", max_tokens: int = 100):
+        """
+        Get properly configured LLM instance using overlord or formation configuration.
+
+        Args:
+            cache_suffix: Suffix for cache key to allow different configs
+            max_tokens: Maximum tokens for response
+
+        Returns:
+            Configured LLM instance or None if no model available
+        """
+        # Get text model config from overlord's capability models
+        text_model_config = self.overlord._capability_models.get("text")
+        if not text_model_config:
+            return None
+
+        model_name = text_model_config.get("model")
+        if not model_name:
+            return None
+
+        cache_key = f"credential_{cache_suffix}_{model_name}"
+
+        # Check cache first
+        if cache_key in self.overlord._model_cache:
+            return self.overlord._model_cache[cache_key]
+
+        # Create new model instance with proper configuration
+        try:
+            llm = await self.overlord.create_model(
+                model=model_name,
+                api_key=text_model_config.get("api_key"),
+                temperature=0.7,  # Reasonable default for credential operations
+                max_tokens=max_tokens,
+                **text_model_config.get("settings", {}),
+            )
+            self.overlord._model_cache[cache_key] = llm
+            return llm
+        except Exception as e:
+            logger.error(f"Failed to create configured LLM: {e}")
+            return None
 
     async def detect_credential_need(self, message: str, user_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -122,12 +166,21 @@ Respond in JSON format:
             # Extract JSON from response if it contains other text
             import json
 
-            if "{" in response and "}" in response:
-                json_start = response.index("{")
-                json_end = response.rindex("}") + 1
-                json_str = response[json_start:json_end]
-                detection = json.loads(json_str)
+            # Use find/rfind for safe substring search
+            json_start = response.find("{")
+            json_end = response.rfind("}")
+
+            if json_start >= 0 and json_end >= 0 and json_end >= json_start:
+                json_str = response[json_start:json_end + 1]
+                try:
+                    detection = json.loads(json_str)
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.error(
+                        f"Failed to parse LLM JSON response: {e}. Response: {response[:200]}"
+                    )
+                    return None
             else:
+                logger.debug(f"No valid JSON found in LLM response: {response[:200]}")
                 return None
 
             if detection["type"] == "NONE":
@@ -186,9 +239,9 @@ Respond in JSON format:
                 # User has credentials - let normal flow handle selection
                 return None
 
-        except Exception:
+        except Exception as e:
             # Failed to detect credential need via LLM
-            pass
+            logger.error(f"Failed to detect credential need: {e}", exc_info=True)
             return None
 
     async def _user_has_credentials(self, user_id: str, service: str) -> bool:
@@ -257,8 +310,6 @@ Respond in JSON format:
             # For other auth types, might need different structure
             temp_credentials = {service: credential}
 
-        print(f"Validating credential for {service}: {credential[:20]}...")
-
         # For GitHub, do a simple API test instead of full MCP connection
         if service == "github" and auth_type == "bearer":
             import aiohttp
@@ -296,11 +347,12 @@ Respond in JSON format:
         import asyncio
 
         handler = MCPHandler(model=None, tool_registry=self.overlord.mcp_service.tool_registry)
+        validation_name = f"{service_id}_validation"
 
         try:
             success = await asyncio.wait_for(
                 handler.connect_server(
-                    name=f"{service_id}_validation",
+                    name=validation_name,
                     url=config.get("url"),
                     command=config.get("command"),
                     args=config.get("args"),
@@ -313,13 +365,6 @@ Respond in JSON format:
 
             if success:
                 print(f"Credential validation successful for {service}")
-                # Try to disconnect
-                try:
-                    await asyncio.wait_for(
-                        handler.disconnect_server(f"{service_id}_validation"), timeout=1.0
-                    )
-                except Exception:
-                    pass
                 return True
             else:
                 print(f"Credential validation failed for {service}")
@@ -331,6 +376,13 @@ Respond in JSON format:
         except Exception as e:
             print(f"Credential validation failed for {service}: {e}")
             return False
+        finally:
+            # Always try to disconnect and cleanup resources
+            try:
+                await asyncio.wait_for(handler.disconnect_server(validation_name), timeout=1.0)
+            except Exception as cleanup_error:
+                # Log but don't raise - cleanup is best effort
+                logger.debug(f"Failed to disconnect MCP handler during cleanup: {cleanup_error}")
 
     async def handle_credential_response(self, message: str, session_id: str, user_id: str):
         """Handle response to credential prompt - with retry loop."""
@@ -358,9 +410,7 @@ Respond in JSON format:
 
             # Check if this token already exists BEFORE validating
             is_duplicate = await self.overlord.credential_resolver.check_duplicate(
-                user_id=user_id,
-                service=pending["service"],
-                credentials=credential
+                user_id=user_id, service=pending["service"], credentials=credential
             )
 
             if is_duplicate:
@@ -387,7 +437,9 @@ Respond in JSON format:
             if is_valid:
                 # NOW store the validated credential
                 try:
-                    print(f"DEBUG: Storing credential for user_id={user_id}, service={pending['service']}")
+                    print(
+                        f"DEBUG: Storing credential for user_id={user_id}, service={pending['service']}"
+                    )
                     status = await self.overlord.credential_resolver.store_credential(
                         user_id=user_id,
                         service=pending["service"],
@@ -401,17 +453,35 @@ Respond in JSON format:
                 except Exception as store_error:
                     print(f"ERROR storing credential: {store_error}")
                     import traceback
+
                     traceback.print_exc()
                     raise  # Re-raise to be caught by outer exception handler
 
                 # Async update the name (fire and forget, don't wait or block)
                 import asyncio
 
-                asyncio.create_task(
-                    self.overlord.credential_resolver.update_credential_name_with_discovery(
-                        user_id=user_id,
-                        service=pending["service"],
-                        mcp_service=self.overlord.mcp_service,
+                async def update_name_wrapper():
+                    """Wrapper to handle errors in background name update."""
+                    try:
+                        await self.overlord.credential_resolver.update_credential_name_with_discovery(
+                            user_id=user_id,
+                            service=pending["service"],
+                            mcp_service=self.overlord.mcp_service,
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to update credential name for {pending['service']}: {e}",
+                            exc_info=True,
+                        )
+
+                # Create task with error handling
+                task = asyncio.create_task(update_name_wrapper())
+                # Add callback to log if task fails unexpectedly
+                task.add_done_callback(
+                    lambda t: (
+                        logger.error(f"Name update task failed: {t.exception()}")
+                        if t.exception()
+                        else None
                     )
                 )
 
@@ -441,6 +511,7 @@ Respond in JSON format:
             # FAILED - keep state for retry, user stays in loop
             print(f"ERROR in handle_credential_response: {e}")
             import traceback
+
             traceback.print_exc()
             return await self._generate_validation_failure_message(pending["service"])
 
@@ -690,12 +761,27 @@ Generate the message now:"""
         Respond with only YES or NO."""
 
         try:
-            from ...services.llm import LLM
+            # Use properly configured LLM from overlord/formation
+            llm = await self._get_configured_llm(cache_suffix="cancellation", max_tokens=10)
+            if not llm:
+                # No configured LLM available, fallback to simple pattern matching
+                cancel_patterns = [
+                    "cancel",
+                    "stop",
+                    "nevermind",
+                    "forget",
+                    "skip",
+                    "abort",
+                    "no",
+                    "later",
+                ]
+                message_lower = message.lower()
+                return any(pattern in message_lower for pattern in cancel_patterns)
 
-            llm = LLM()
-            response = await llm.generate_text(prompt, max_tokens=10)
+            response = await llm.generate_text(prompt)
             return response.strip().upper().startswith("YES")
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to check cancellation with LLM: {e}")
             # On LLM failure, assume not cancellation to avoid accidental exits
             return False
 
@@ -718,13 +804,18 @@ Generate the message now:"""
         Return ONLY the credential itself, no quotes, no explanation."""
 
         try:
-            from ...services.llm import LLM
+            # Use properly configured LLM from overlord/formation
+            llm = await self._get_configured_llm(cache_suffix="extraction", max_tokens=100)
+            if not llm:
+                # No configured LLM available, fallback to simple extraction
+                # Assume the whole message is the credential
+                return message.strip().strip('"').strip("'")
 
-            llm = LLM()
-            extracted = await llm.generate_text(prompt, max_tokens=100)
+            extracted = await llm.generate_text(prompt)
             # Clean up any quotes the LLM might have added
             return extracted.strip().strip('"').strip("'")
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to extract credential with LLM: {e}")
             # Fallback: assume the whole message is the credential
             return message.strip().strip('"').strip("'")
 
@@ -751,14 +842,17 @@ Generate a helpful, understanding message that:
 - Let them know they can provide a different token or move on
 
 Example good responses:
-- "Hmm, that token didn't seem to work. Could you double-check it? You can also create a new one in your {service} settings."
-- "I couldn't validate that token. Please make sure it's correct, or you can generate a new one in your {service} account settings."
+- "Hmm, that token didn't seem to work. Could you double-check it? "
+  "You can also create a new one in your {service} settings."
+- "I couldn't validate that token. Please make sure it's correct, "
+  "or you can generate a new one in your {service} account settings."
 
 Generate the message now:"""
 
         try:
             # Create LLM instance from config
             from ...services.llm import LLM
+
             llm = LLM(
                 provider=text_model_config.get("provider"),
                 model=text_model_config.get("model"),
@@ -799,7 +893,7 @@ Return ONLY the message text, no quotes."""
 
         try:
             # Create LLM for message generation
-            model_name = text_model_config.get("name")
+            model_name = text_model_config.get("model")
             cache_key = f"text_model_{model_name}"
 
             if cache_key not in self.overlord._model_cache:

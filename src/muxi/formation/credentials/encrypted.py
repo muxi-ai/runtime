@@ -32,7 +32,7 @@ class EncryptedCredentialResolver(CredentialResolver):
         async_session_maker,
         formation_id: str,
         llm_model: Optional[str] = None,
-        encryption_key: Optional[str] = None
+        encryption_key: Optional[str] = None,
     ):
         """
         Initialize the encrypted credential resolver.
@@ -68,15 +68,15 @@ class EncryptedCredentialResolver(CredentialResolver):
         base_key = self.custom_key or self.formation_id
 
         # Combine base key with user_id for per-user isolation
-        combined = f"{base_key}:{user_id}".encode('utf-8')
+        combined = f"{base_key}:{user_id}".encode("utf-8")
 
         # Derive key using PBKDF2
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
-            salt=b'muxi-user-credentials-v1',  # Static salt for deterministic key derivation
+            salt=b"muxi-user-credentials-v1",  # Static salt for deterministic key derivation
             iterations=100000,
-            backend=default_backend()
+            backend=default_backend(),
         )
 
         # Generate Fernet-compatible key
@@ -105,13 +105,13 @@ class EncryptedCredentialResolver(CredentialResolver):
         plaintext = json.dumps(credentials)
 
         # Encrypt
-        encrypted = fernet.encrypt(plaintext.encode('utf-8'))
+        encrypted = fernet.encrypt(plaintext.encode("utf-8"))
 
         # Return with version marker
         return {
             "version": "v1",
             "encrypted": True,
-            "data": encrypted.decode('utf-8')  # Store as string in DB
+            "data": encrypted.decode("utf-8"),  # Store as string in DB
         }
 
     def _decrypt_credentials(self, user_id: str, stored_data: Any) -> Dict[str, Any]:
@@ -134,10 +134,10 @@ class EncryptedCredentialResolver(CredentialResolver):
             encrypted_data = stored_data.get("data", "")
 
             # Decrypt
-            decrypted = fernet.decrypt(encrypted_data.encode('utf-8'))
+            decrypted = fernet.decrypt(encrypted_data.encode("utf-8"))
 
             # Parse JSON
-            return json.loads(decrypted.decode('utf-8'))
+            return json.loads(decrypted.decode("utf-8"))
         else:
             # Legacy plaintext data - return as-is
             return stored_data
@@ -175,10 +175,7 @@ class EncryptedCredentialResolver(CredentialResolver):
                         pass  # Keep as string if not JSON
 
                 decrypted_creds = self._decrypt_credentials(user_id, cred_data)
-                decrypted_list.append({
-                    "name": item["name"],
-                    "credentials": decrypted_creds
-                })
+                decrypted_list.append({"name": item["name"], "credentials": decrypted_creds})
             return decrypted_list
         else:
             # Single credential - handle as JSON string if needed
@@ -192,6 +189,51 @@ class EncryptedCredentialResolver(CredentialResolver):
 
             # Now decrypt and return
             return self._decrypt_credentials(user_id, stored_data)
+
+    def _canonicalize_credential(self, credential: Any) -> str:
+        """
+        Canonicalize a credential structure for consistent comparison.
+
+        Converts credentials to a normalized form that's invariant to:
+        - Dictionary key ordering
+        - Whitespace differences in strings
+        - Type variations (e.g., int vs string for numbers)
+
+        Args:
+            credential: The credential to canonicalize
+
+        Returns:
+            A canonical string representation
+        """
+
+        def _normalize(obj: Any) -> Any:
+            """Recursively normalize an object for canonical representation."""
+            if obj is None:
+                return None
+            elif isinstance(obj, bool):
+                # Handle bool before int since bool is a subclass of int
+                return obj
+            elif isinstance(obj, (int, float)):
+                return obj
+            elif isinstance(obj, str):
+                # Keep strings as-is but trimmed
+                return obj.strip()
+            elif isinstance(obj, dict):
+                # Sort keys and recursively normalize values
+                return {k: _normalize(v) for k, v in sorted(obj.items())}
+            elif isinstance(obj, (list, tuple)):
+                # Recursively normalize list items
+                return [_normalize(item) for item in obj]
+            else:
+                # Fallback for other types
+                return str(obj)
+
+        # Normalize the credential structure first
+        normalized = _normalize(credential)
+
+        # Convert to canonical JSON string with sorted keys
+        # This ensures consistent string representation
+        return json.dumps(normalized, sort_keys=True, separators=(",", ":"))
 
     async def check_duplicate(
         self,
@@ -218,8 +260,7 @@ class EncryptedCredentialResolver(CredentialResolver):
         async with self.async_session_maker() as session:
             # Get the user
             user_stmt = select(User).where(
-                User.external_user_id == user_id,
-                User.formation_id == self.formation_id
+                User.external_user_id == user_id, User.formation_id == self.formation_id
             )
             user_result = await session.execute(user_stmt)
             user = user_result.scalar_one_or_none()
@@ -236,6 +277,9 @@ class EncryptedCredentialResolver(CredentialResolver):
             result = await session.execute(cred_stmt)
             existing_credentials = result.scalars().all()
 
+            # Canonicalize the incoming credential for comparison
+            canonical_new = self._canonicalize_credential(credentials)
+
             # Check each existing credential
             for existing in existing_credentials:
                 stored = existing.credentials
@@ -248,7 +292,10 @@ class EncryptedCredentialResolver(CredentialResolver):
                         pass
 
                 decrypted = self._decrypt_credentials(user_id, stored)
-                if decrypted == credentials:
+
+                # Canonicalize the decrypted credential and compare
+                canonical_existing = self._canonicalize_credential(decrypted)
+                if canonical_existing == canonical_new:
                     return True  # Duplicate found
 
             return False  # No duplicate
@@ -283,5 +330,5 @@ class EncryptedCredentialResolver(CredentialResolver):
             service=service,
             credentials=encrypted_data,  # Store encrypted version
             credential_name=credential_name,
-            mcp_service=mcp_service
+            mcp_service=mcp_service,
         )

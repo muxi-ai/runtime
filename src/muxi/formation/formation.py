@@ -1047,14 +1047,12 @@ class Formation:
                         all_registries.append(reg)
 
                 # Get startup policies (prefer outbound, fall back to inbound)
-                startup_policy = (
-                    self._a2a_config.get("outbound", {}).get("startup_policy") or
-                    self._a2a_config.get("inbound", {}).get("startup_policy", "lenient")
-                )
-                retry_timeout = (
-                    self._a2a_config.get("outbound", {}).get("retry_timeout_seconds") or
-                    self._a2a_config.get("inbound", {}).get("retry_timeout_seconds", 30)
-                )
+                startup_policy = self._a2a_config.get("outbound", {}).get(
+                    "startup_policy"
+                ) or self._a2a_config.get("inbound", {}).get("startup_policy", "lenient")
+                retry_timeout = self._a2a_config.get("outbound", {}).get(
+                    "retry_timeout_seconds"
+                ) or self._a2a_config.get("inbound", {}).get("retry_timeout_seconds", 30)
 
                 a2a_config_obj = A2AServiceSchema(
                     enabled=self._a2a_config.get("enabled", True),
@@ -1075,9 +1073,12 @@ class Formation:
                     registries=all_registries,
                     # Map authentication from inbound.auth configuration
                     require_auth=(
-                        self._a2a_config.get("inbound", {}).get("auth", {}).get("type", "none") != "none"
+                        self._a2a_config.get("inbound", {}).get("auth", {}).get("type", "none")
+                        != "none"
                     ),
-                    auth_mode=self._a2a_config.get("inbound", {}).get("auth", {}).get("type", "none"),
+                    auth_mode=self._a2a_config.get("inbound", {})
+                    .get("auth", {})
+                    .get("type", "none"),
                     shared_key=self._get_inbound_auth_key(self._a2a_config.get("inbound", {})),
                     allowed_origins=self._a2a_config.get("security", {}).get("allowed_origins"),
                     # Map outbound configuration
@@ -1878,6 +1879,7 @@ class Formation:
             secret_names: Set of secret names to track as in-use
         """
         import re
+
         # Normalize secret names the same way as is_secret_in_use
         normalized_names = set()
         for name in secret_names:
@@ -1886,7 +1888,7 @@ class Formation:
             normalized_name = normalized_name.strip("_")
             normalized_names.add(normalized_name)
 
-        if hasattr(self, '_secrets_in_use'):
+        if hasattr(self, "_secrets_in_use"):
             self._secrets_in_use.update(normalized_names)
         else:
             self._secrets_in_use = normalized_names
@@ -2196,14 +2198,24 @@ class Formation:
                         registration_params["original_credentials"] = original_auth
 
                         # Build registry entry for this server
-                        # Extract service name from auth config
-                        service_name = None
-                        for value in original_auth.values() if isinstance(original_auth, dict) else []:
-                            if isinstance(value, str):
-                                match = USER_CREDENTIAL_PATTERN.search(value)
-                                if match:
-                                    service_name = match.group(1)
-                                    break
+                        # Extract first service name from auth config (recursive)
+                        def _find_service_name(obj: Any) -> Optional[str]:
+                            if isinstance(obj, str):
+                                m = USER_CREDENTIAL_PATTERN.search(obj)
+                                return m.group(1) if m else None
+                            if isinstance(obj, dict):
+                                for v in obj.values():
+                                    found = _find_service_name(v)
+                                    if found:
+                                        return found
+                            if isinstance(obj, list):
+                                for v in obj:
+                                    found = _find_service_name(v)
+                                    if found:
+                                        return found
+                            return None
+
+                        service_name = _find_service_name(original_auth)
 
                         if service_name:
                             # Add to user credential server registry
@@ -2212,7 +2224,7 @@ class Formation:
                                 "server_id": server_id,
                                 "accept_inline": original_auth.get("accept_inline", False),
                                 "auth_type": original_auth.get("type", "bearer"),
-                                "uses_user_credentials": True
+                                "uses_user_credentials": True,
                             }
 
                             observability.observe(
@@ -3297,7 +3309,7 @@ class Formation:
         Returns:
             The path to the formation file, or None if not set
         """
-        return self._formation_path if hasattr(self, '_formation_path') else None
+        return self._formation_path if hasattr(self, "_formation_path") else None
 
     def get_formation_id(self) -> str:
         """Get the formation ID."""
@@ -3690,9 +3702,7 @@ class Formation:
             self.config["agents"].append(agent_config)
 
     async def save_agent_to_file(
-        self,
-        agent_config: Dict[str, Any],
-        auto_load: bool = False
+        self, agent_config: Dict[str, Any], auto_load: bool = False
     ) -> str:
         """
         Save an agent configuration to a YAML file in the agents/ directory.
@@ -3712,18 +3722,16 @@ class Formation:
             raise ValueError("Formation path not set - cannot save agent file")
 
         from .utils.agent_persistence import save_agent_to_file
+
         return await save_agent_to_file(
             agent_config,
             self._formation_path,
             formation=self if auto_load else None,
-            auto_load=auto_load
+            auto_load=auto_load,
         )
 
     async def update_agent_file(
-        self,
-        agent_id: str,
-        updates: Dict[str, Any],
-        auto_reload: bool = False
+        self, agent_id: str, updates: Dict[str, Any], auto_reload: bool = False
     ) -> str:
         """
         Update an agent's YAML file with partial data and optionally reload it.
@@ -3744,12 +3752,13 @@ class Formation:
             raise ValueError("Formation path not set - cannot update agent file")
 
         from .utils.agent_persistence import update_agent_file
+
         return await update_agent_file(
             agent_id,
             updates,
             self._formation_path,
             formation=self if auto_reload else None,
-            auto_reload=auto_reload
+            auto_reload=auto_reload,
         )
 
     def update_agent_in_config(self, agent_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:

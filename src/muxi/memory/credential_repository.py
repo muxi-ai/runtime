@@ -7,7 +7,7 @@ in task #35 to maintain clean separation of concerns.
 """
 
 from typing import Optional, List, Dict, Any
-import json
+import hashlib
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,10 @@ class CredentialRepository:
     own credentials.
     """
 
+    # PostgreSQL int4 range limits
+    INT4_MIN = -2147483648
+    INT4_MAX = 2147483647
+
     def __init__(self, db_connection):
         """
         Initialize the credential repository.
@@ -33,6 +37,36 @@ class CredentialRepository:
         """
         self.db = db_connection
         logger.info("CredentialRepository initialized")
+
+    def _normalize_service(self, service: str) -> str:
+        """Normalize service name for consistent lookups."""
+        return service.strip().lower()
+
+    def _user_id_to_int(self, user_id: str) -> int:
+        """
+        Convert user_id to a stable int4 value for PostgreSQL.
+
+        Uses SHA-256 for deterministic hashing across process restarts.
+        For numeric IDs, validates they fit in int4 range.
+        """
+        # If user_id is numeric, try to use it directly (with range validation)
+        if user_id.isdigit():
+            numeric_id = int(user_id)
+            # Clamp to int4 range if needed
+            if numeric_id < self.INT4_MIN:
+                return self.INT4_MIN
+            elif numeric_id > self.INT4_MAX:
+                return self.INT4_MAX
+            return numeric_id
+
+        # For non-numeric IDs, use stable SHA-256 hash
+        # Normalize the string first for consistency
+        normalized = user_id.strip()
+        hash_bytes = hashlib.sha256(normalized.encode("utf-8")).digest()
+        # Take first 4 bytes and convert to int, then ensure positive int4 range
+        hash_int = int.from_bytes(hash_bytes[:4], byteorder="big")
+        # Map to positive int4 range (0 to INT4_MAX)
+        return hash_int % self.INT4_MAX
 
     async def store(self, user_id: str, service: str, credential_data: dict) -> None:
         """
@@ -50,9 +84,7 @@ class CredentialRepository:
             added in task #35.
         """
         try:
-            # Convert user_id to appropriate format for database
-            # The table expects int4 for user_id, but we handle string conversion
-            user_id_int = int(user_id) if user_id.isdigit() else hash(user_id) % 2147483647
+            user_id_int = self._user_id_to_int(user_id)
 
             await self.db.execute(
                 """
@@ -63,10 +95,12 @@ class CredentialRepository:
                     updated_at = NOW()
                 """,
                 user_id_int,
-                service,
-                json.dumps(credential_data),  # Store as JSON string for JSONB column
+                self._normalize_service(service),
+                credential_data,  # asyncpg handles dict to JSONB conversion natively
             )
-            logger.info(f"Stored credential for user={user_id}, service={service}")
+            logger.info(
+                f"Stored credential for user={user_id}, service={self._normalize_service(service)}"
+            )
 
         except Exception as e:
             logger.error(f"Failed to store credential: {e}")
@@ -84,7 +118,7 @@ class CredentialRepository:
             Credential data dictionary if found, None otherwise
         """
         try:
-            user_id_int = int(user_id) if user_id.isdigit() else hash(user_id) % 2147483647
+            user_id_int = self._user_id_to_int(user_id)
 
             result = await self.db.fetchrow(
                 """
@@ -93,19 +127,20 @@ class CredentialRepository:
                 WHERE user_id = $1 AND service = $2
                 """,
                 user_id_int,
-                service,
+                self._normalize_service(service),
             )
 
             if result:
-                # Parse JSONB data
+                # asyncpg automatically converts JSONB to dict
                 credentials = result["credentials"]
-                if isinstance(credentials, str):
-                    credentials = json.loads(credentials)
-
-                logger.info(f"Retrieved credential for user={user_id}, service={service}")
+                logger.info(
+                    f"Retrieved credential for user={user_id}, service={self._normalize_service(service)}"
+                )
                 return credentials
 
-            logger.debug(f"No credential found for user={user_id}, service={service}")
+            logger.debug(
+                f"No credential found for user={user_id}, service={self._normalize_service(service)}"
+            )
             return None
 
         except Exception as e:
@@ -123,7 +158,7 @@ class CredentialRepository:
             List of service names (never returns actual credentials)
         """
         try:
-            user_id_int = int(user_id) if user_id.isdigit() else hash(user_id) % 2147483647
+            user_id_int = self._user_id_to_int(user_id)
 
             results = await self.db.fetch(
                 """
@@ -155,24 +190,30 @@ class CredentialRepository:
             True if credential was removed, False if it didn't exist
         """
         try:
-            user_id_int = int(user_id) if user_id.isdigit() else hash(user_id) % 2147483647
+            user_id_int = self._user_id_to_int(user_id)
 
-            result = await self.db.execute(
+            # Use DELETE ... RETURNING to atomically delete and check if row existed
+            deleted_row = await self.db.fetchrow(
                 """
                 DELETE FROM credentials
                 WHERE user_id = $1 AND service = $2
+                RETURNING id
                 """,
                 user_id_int,
-                service,
+                self._normalize_service(service),
             )
 
-            # Check if any rows were affected
-            deleted = result.split()[-1] != "0" if isinstance(result, str) else False
+            # Check if a row was actually deleted
+            deleted = deleted_row is not None
 
             if deleted:
-                logger.info(f"Removed credential for user={user_id}, service={service}")
+                logger.info(
+                    f"Removed credential for user={user_id}, service={self._normalize_service(service)}"
+                )
             else:
-                logger.debug(f"No credential to remove for user={user_id}, service={service}")
+                logger.debug(
+                    f"No credential to remove for user={user_id}, service={self._normalize_service(service)}"
+                )
 
             return deleted
 
@@ -191,7 +232,7 @@ class CredentialRepository:
             service: Service name
         """
         try:
-            user_id_int = int(user_id) if user_id.isdigit() else hash(user_id) % 2147483647
+            user_id_int = self._user_id_to_int(user_id)
 
             await self.db.execute(
                 """
@@ -200,10 +241,12 @@ class CredentialRepository:
                 WHERE user_id = $1 AND service = $2
                 """,
                 user_id_int,
-                service,
+                self._normalize_service(service),
             )
 
-            logger.debug(f"Updated last used for user={user_id}, service={service}")
+            logger.debug(
+                f"Updated last used for user={user_id}, service={self._normalize_service(service)}"
+            )
 
         except Exception as e:
             logger.error(f"Failed to update last used timestamp: {e}")
@@ -221,7 +264,7 @@ class CredentialRepository:
             True if credential exists, False otherwise
         """
         try:
-            user_id_int = int(user_id) if user_id.isdigit() else hash(user_id) % 2147483647
+            user_id_int = self._user_id_to_int(user_id)
 
             result = await self.db.fetchval(
                 """
@@ -231,7 +274,7 @@ class CredentialRepository:
                 )
                 """,
                 user_id_int,
-                service,
+                self._normalize_service(service),
             )
 
             return bool(result)
@@ -251,7 +294,7 @@ class CredentialRepository:
             Number of stored credentials
         """
         try:
-            user_id_int = int(user_id) if user_id.isdigit() else hash(user_id) % 2147483647
+            user_id_int = self._user_id_to_int(user_id)
 
             count = await self.db.fetchval(
                 """

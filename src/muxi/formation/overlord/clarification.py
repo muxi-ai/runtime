@@ -598,7 +598,7 @@ class UnifiedClarificationSystem:
         cred_mode = cred_config.get("mode", "redirect")
         redirect_message = cred_config.get(
             "redirect_message",
-            "Please configure your API credentials in the external credential manager."
+            "Please configure your API credentials in the external credential manager.",
         )
 
         # Get response style
@@ -607,18 +607,6 @@ class UnifiedClarificationSystem:
             "technical": "precise, specific, professional",
             "brief": "very concise, minimal words",
         }.get(self.style, "natural, friendly, like a helpful colleague")
-
-        # Get credential handling configuration
-        cred_config = (
-            self.overlord.formation_config.get("user_credentials", {})
-            if hasattr(self.overlord, "formation_config") and self.overlord.formation_config
-            else {}
-        )
-        cred_mode = cred_config.get("mode", "redirect")
-        redirect_message = cred_config.get(
-            "redirect_message",
-            "Please configure your API credentials in the external credential manager."
-        )
 
         # Extract conversation context if it exists, otherwise use the full message
         if "=== CONVERSATION CONTEXT (Most Recent First) ===" in message:
@@ -722,19 +710,20 @@ Return JSON:
                         )
                         if credentials:
                             available_accounts = [
-                                cred.get("name", f"Account {i+1}") for i, cred in enumerate(credentials)
+                                cred.get("name", f"Account {i+1}")
+                                for i, cred in enumerate(credentials)
                             ]
                     except Exception as e:
                         # Log the error for debugging
                         observability.observe(
-                            event_type=observability.SystemEvents.CLARIFICATION_COMPLETED,
+                            event_type=observability.SystemEvents.AUTHENTICATION_FAILED,
                             level=observability.EventLevel.WARNING,
                             data={
                                 "error": str(e),
                                 "user_id": user_id,
                                 "service": mcp_service,
                             },
-                            description=f"Failed to get credentials for {mcp_service}: {e}"
+                            description=f"Failed to get credentials for {mcp_service}: {e}",
                         )
 
                 # If we have available accounts, include them in the question
@@ -747,7 +736,9 @@ Return JSON:
                         account_list = available_accounts[0]
 
                     # Update the question to include available accounts
-                    base_question = result.get("question", f"Which {mcp_service} account would you like to use?")
+                    base_question = result.get(
+                        "question", f"Which {mcp_service} account would you like to use?"
+                    )
                     result["question"] = f"{base_question.rstrip('?')}? Available: {account_list}"
                     result["available_accounts"] = available_accounts
 
@@ -804,50 +795,6 @@ Return JSON:
             return json.loads(json_str)
         except Exception:
             return {"needs_more": False, "question": None}
-
-    async def _check_credential_request(self, state: Dict, response: str) -> bool:
-        """
-        Check if the user is requesting to add new credentials.
-        Uses LLM to detect credential addition requests.
-        """
-
-        if not self.llm:
-            return False  # Can't detect without LLM
-
-        # Get the last question we asked
-        last_question = state.get("last_question", "a clarification question")
-
-        prompt = f"""
-        We're in a clarification dialog about: {state['original_request']}
-        We asked: "{last_question}"
-        The user responded: "{response}"
-
-        Determine if the user is requesting to ADD NEW CREDENTIALS, API keys, or accounts.
-
-        Examples of credential requests (return "yes"):
-        - "I need to add a new Xero account with different credentials"
-        - "I want to use a different API key"
-        - "Let me add a new account"
-        - "I need to configure new credentials"
-        - "None of the above, I want to add a new account"
-        - "I'd like to set up a different token"
-
-        Examples of NOT credential requests (return "no"):
-        - "Use the first account"
-        - "My account is newuser123" (just providing a username, not asking to add credentials)
-        - "The second one"
-        - "Never mind"
-
-        Return "yes" if user wants to ADD/CONFIGURE new credentials, "no" otherwise.
-        """
-
-        messages = [{"role": "user", "content": prompt}]
-
-        result = await self.llm.chat(messages, temperature=0, max_tokens=20)
-        content = result.content if hasattr(result, "content") else str(result)
-
-        is_credential_request = "yes" in content.lower()
-        return is_credential_request
 
     async def _check_context_switch(self, state: Dict, response: str) -> bool:
         """
@@ -1115,7 +1062,9 @@ Return JSON:
         # Default to redirect for unknown auth types
         return False
 
-    async def request_inline_credential(self, service_id: str, auth_type: str, request_id: str) -> str:
+    async def request_inline_credential(
+        self, service_id: str, auth_type: str, request_id: str
+    ) -> str:
         """
         Generate a prompt for inline credential collection with appropriate warnings.
 
@@ -1142,10 +1091,7 @@ Return JSON:
             return f"{base_prompt}\n\nNote: Your API key will be securely stored for this session."
 
         if auth_type == "bearer":
-            return (
-                f"{base_prompt}\n\n"
-                "Please provide your personal access token or bearer token."
-            )
+            return f"{base_prompt}\n\n" "Please provide your personal access token or bearer token."
 
         # Generic prompt for other types
         return base_prompt
@@ -1168,22 +1114,22 @@ Return JSON:
                     return auth.get("type", "unknown")
 
         # Try to get from MCP registry if available
-        if hasattr(self.overlord, 'mcp_registry'):
+        if hasattr(self.overlord, "mcp_registry"):
             service = self.overlord.mcp_registry.get(service_id)
-            if service and hasattr(service, 'auth'):
-                return service.auth.get('type', 'unknown')
+            if service and hasattr(service, "auth"):
+                return service.auth.get("type", "unknown")
 
         # Try to get from MCP coordinator
-        if hasattr(self.overlord, 'mcp_coordinator'):
+        if hasattr(self.overlord, "mcp_coordinator"):
             # Access service configuration
-            if hasattr(self.overlord.mcp_coordinator, 'config'):
-                services = getattr(self.overlord.mcp_coordinator.config, 'services', {})
+            if hasattr(self.overlord.mcp_coordinator, "config"):
+                services = getattr(self.overlord.mcp_coordinator.config, "services", {})
                 if service_id in services:
                     service_config = services[service_id]
-                    if 'auth' in service_config:
-                        return service_config['auth'].get('type', 'unknown')
+                    if "auth" in service_config:
+                        return service_config["auth"].get("type", "unknown")
 
-        return 'unknown'
+        return "unknown"
 
     async def _get_service_accept_inline(self, service_id: str) -> bool:
         """
@@ -1203,19 +1149,19 @@ Return JSON:
                     return auth.get("accept_inline", False)
 
         # Try to get from MCP registry if available
-        if hasattr(self.overlord, 'mcp_registry'):
+        if hasattr(self.overlord, "mcp_registry"):
             service = self.overlord.mcp_registry.get(service_id)
-            if service and hasattr(service, 'auth'):
-                return service.auth.get('accept_inline', False)
+            if service and hasattr(service, "auth"):
+                return service.auth.get("accept_inline", False)
 
         # Try to get from MCP coordinator
-        if hasattr(self.overlord, 'mcp_coordinator'):
-            if hasattr(self.overlord.mcp_coordinator, 'config'):
-                services = getattr(self.overlord.mcp_coordinator.config, 'services', {})
+        if hasattr(self.overlord, "mcp_coordinator"):
+            if hasattr(self.overlord.mcp_coordinator, "config"):
+                services = getattr(self.overlord.mcp_coordinator.config, "services", {})
                 if service_id in services:
                     service_config = services[service_id]
-                    if 'auth' in service_config:
-                        return service_config['auth'].get('accept_inline', False)
+                    if "auth" in service_config:
+                        return service_config["auth"].get("accept_inline", False)
 
         return False
 
@@ -1233,12 +1179,16 @@ Return JSON:
             return "OAuth authentication requires browser-based authorization flow."
 
         if auth_type == "bearer" and not self.can_accept_inline(auth_type, False):
-            return "This service requires bearer token authentication through external configuration."
+            return (
+                "This service requires bearer token authentication through external configuration."
+            )
 
         if auth_type == "unknown":
             return "Authentication type could not be determined."
 
-        return f"{auth_type.capitalize()} authentication requires external configuration for security."
+        return (
+            f"{auth_type.capitalize()} authentication requires external configuration for security."
+        )
 
     async def extract_token_from_text(self, message: str) -> Optional[str]:
         """

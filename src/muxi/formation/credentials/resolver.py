@@ -5,7 +5,7 @@ This service handles runtime resolution of user credentials for MCP servers
 and other components that need to access services on behalf of users.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from sqlalchemy import Column, Integer, String, DateTime, select, Text
 from sqlalchemy.orm import declarative_base
 import nanoid
@@ -199,11 +199,12 @@ class CredentialResolver:
                 session.add(new_cred)
 
                 await session.commit()
-                return "created"
 
                 # Clear cache for this user/service
                 if user_id in self._cache:
                     self._cache[user_id].pop(service, None)
+
+                return "created"
 
             except Exception as e:
                 await session.rollback()
@@ -336,7 +337,7 @@ class CredentialResolver:
 
             return False
 
-    async def list_credentials(self, user_id: str) -> Dict[str, Dict[str, Any]]:
+    async def list_credentials(self, user_id: str) -> Dict[str, List[Dict[str, Any]]]:
         """
         List all credentials for a user.
 
@@ -344,7 +345,7 @@ class CredentialResolver:
             user_id: The user ID
 
         Returns:
-            Dictionary mapping service names to credentials
+            Dictionary mapping service names to lists of credential objects
         """
         async with self.async_session_maker() as session:
             stmt = (
@@ -358,7 +359,25 @@ class CredentialResolver:
             result = await session.execute(stmt)
             credentials = result.scalars().all()
 
-            return {cred.service: cred.credentials for cred in credentials}
+            # Group credentials by service, preserving all credentials for each service
+            service_credentials = {}
+            for cred in credentials:
+                if cred.service not in service_credentials:
+                    service_credentials[cred.service] = []
+
+                # Include credential metadata along with the actual credentials
+                service_credentials[cred.service].append(
+                    {
+                        "id": cred.id,
+                        "credential_id": cred.credential_id,
+                        "name": cred.name,
+                        "credentials": cred.credentials,
+                        "created_at": cred.created_at.isoformat() if cred.created_at else None,
+                        "updated_at": cred.updated_at.isoformat() if cred.updated_at else None,
+                    }
+                )
+
+            return service_credentials
 
     async def _discover_credential_name(
         self,

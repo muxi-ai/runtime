@@ -104,7 +104,14 @@ class UnsupportedServiceError(FormationServiceError):
 
     def __init__(self, service_name: str, details: Optional[Dict[str, Any]] = None):
         message = f"Service '{service_name}' is not configured in this formation"
-        super().__init__(message, details)
+        # Create a new dict with the service name, preserving any existing details
+        if details is None:
+            merged_details = {"service": service_name}
+        else:
+            # Create a shallow copy to avoid mutating the caller's dict
+            merged_details = dict(details)
+            merged_details["service"] = service_name
+        super().__init__(message, merged_details)
         self.service_name = service_name
 
 
@@ -143,34 +150,36 @@ class RegistryConfigurationError(OverlordStartupError):
 
         # Create user-friendly message
         error_lines = [
-            "\n" + "="*60,
+            "\n" + "=" * 60,
             "⚠️  FORMATION STARTUP FAILED",
-            "="*60,
+            "=" * 60,
             "",
             f"Policy: {policy.upper()}",
             "Required registries are unreachable:",
-            ""
+            "",
         ]
 
         for registry in unreachable_registries:
             error_lines.append(f"  ❌ {registry}")
 
-        error_lines.extend([
-            "",
-            "To resolve this issue, you can:",
-            "  1. Start the registry server(s) listed above",
-            "  2. Change startup_policy to 'lenient' in formation.yaml",
-            "  3. Remove the unreachable registries from configuration",
-            "",
-            "="*60
-        ])
+        error_lines.extend(
+            [
+                "",
+                "To resolve this issue, you can:",
+                "  1. Start the registry server(s) listed above",
+                "  2. Change startup_policy to 'lenient' in formation.yaml",
+                "  3. Remove the unreachable registries from configuration",
+                "",
+                "=" * 60,
+            ]
+        )
 
         self.user_message = "\n".join(error_lines)
 
         details = {
             "policy": policy,
             "unreachable_registries": unreachable_registries,
-            "user_message": self.user_message
+            "user_message": self.user_message,
         }
 
         super().__init__(reason, details)
