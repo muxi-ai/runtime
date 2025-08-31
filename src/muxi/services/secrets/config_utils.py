@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from copy import deepcopy
 
 if TYPE_CHECKING:
-    from ...formation.formation import Formation
+    from ...formation.formation import Formation  # noqa: E402
 
 
 def get_config_item_with_secrets_restored(

@@ -16,7 +16,7 @@ from pathlib import Path
 from muxi.formation.config.loader import ConfigLoader
 
 if TYPE_CHECKING:
-    from .formation import Formation
+    from .formation import Formation  # noqa: E402
 
 # Get logger for this module
 logger = logging.getLogger(__name__)

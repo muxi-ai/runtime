@@ -7,7 +7,7 @@ from typing import Optional, List, Dict, Any, Set, Tuple, TYPE_CHECKING
 from starlette.datastructures import Headers
 
 if TYPE_CHECKING:
-    from ..formation import Formation
+    from ..formation import Formation  # noqa: E402
 
 # Precompiled regex patterns for performance
 # Pattern to match ${{ secrets.* }} and ${{ user.credentials.* }}

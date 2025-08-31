@@ -14,7 +14,7 @@
 #
 # Usage Pattern:
 #
-#   from muxi import Formation
+#   from muxi import Formation  # noqa: E402
 #
 #   formation = Formation()
 #   formation.load("my-formation.yaml")

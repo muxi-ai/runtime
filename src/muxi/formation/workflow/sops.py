@@ -435,7 +435,7 @@ class SOPSystem:
                     return self._faiss_service
 
                 # Try BufferMemory as fallback
-                from ...formation import Formation
+                from ...formation import Formation  # noqa: E402
                 formation = Formation.get_instance()
                 if formation and hasattr(formation, '_configured_services'):
                     buffer_memory = formation._configured_services.get('buffer_memory')
@@ -583,7 +583,7 @@ class SOPSystem:
             from ..documents.storage.chunk_manager import DocumentChunkManager
 
             # Try to get from formation's configured services
-            from ...formation import Formation
+            from ...formation import Formation  # noqa: E402
             formation = Formation.get_instance()
 
             # First try to get existing chunk manager

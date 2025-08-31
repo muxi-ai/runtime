@@ -30,7 +30,7 @@ except ImportError as e:
     RUNTIME_IMPORTS_AVAILABLE = False
 
 if TYPE_CHECKING:
-    from ..formation import Formation
+    from ..formation import Formation  # noqa: E402
 
 # Get logger for this module
 logger = logging.getLogger(__name__)

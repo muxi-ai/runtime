@@ -23,7 +23,7 @@ from ...services import observability
 from ...utils.version import get_version
 
 if TYPE_CHECKING:
-    from ..formation import Formation
+    from ..formation import Formation  # noqa: E402
 
 
 # HTTP status code to error code mapping

@@ -26,7 +26,7 @@ from .utils.version import get_version
 # Lazy imports to avoid circular dependency at module load time
 def __getattr__(name):
     if name == "Formation":
-        from .formation import Formation
+        from .formation import Formation  # noqa: E402
 
         return Formation
     elif name == "LLM":
@@ -52,7 +52,7 @@ __all__ = [
 ]
 
 # Usage:
-# from muxi import Formation
+# from muxi import Formation  # noqa: E402
 # formation = Formation()
 # formation.load("formation.yaml")
 # muxi = formation.start_overlord()  # Returns Overlord instance

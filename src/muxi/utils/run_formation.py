@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Import using relative imports to avoid sys.path manipulation
 try:
-    from ...formation import Formation
+    from ...formation import Formation  # noqa: E402
     from ...services import observability
     from ...datatypes.exceptions import (
         ConfigurationLoadError,
@@ -41,7 +41,7 @@ except ImportError:
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
-    from src.muxi.formation import Formation
+    from src.muxi.formation import Formation  # noqa: E402
     from src.muxi.services import observability
     from src.muxi.datatypes.exceptions import (
         ConfigurationLoadError,
