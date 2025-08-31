@@ -268,9 +268,6 @@ class UnifiedClarificationSystem:
             # No active clarification
             return ClarificationResult(action="execute", request=response)
 
-        # TODO: Credential handling has been moved out of clarification
-        # Credential requests are now handled before clarification in overlord
-
         # Update state for non-credential clarifications
         state["collected_info"].append(response)
         state["depth"] += 1
@@ -704,7 +701,6 @@ Return JSON:
         messages = [{"role": "user", "content": prompt}]
         response = await self.llm.chat(messages, temperature=0, max_tokens=250)
         content = response.content if hasattr(response, "content") else str(response)
-        print(f"DEBUG clarification: LLM response for user {context.get('user_id', 'unknown')}: {content}")
 
         # Parse JSON
         try:

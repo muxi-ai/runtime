@@ -5096,7 +5096,19 @@ Make it conversational and friendly while keeping accuracy."""
             description=f"_process_sync_chat ENTRY: agent={agent_name}, session={session_id}",
         )
 
-        # OLD credential handling has been removed - now handled in _detect_credential_need
+        # ===================================================================
+        # EARLY WORKFLOW APPROVAL CHECK - SET BYPASS FLAG
+        # ===================================================================
+        # Check if this is a response to a workflow approval request
+        # If so, we'll skip credential and clarification checks
+        is_workflow_approval_response = False
+        if session_id:
+            pending_clarification = await self._get_pending_clarification(session_id)
+            if pending_clarification and pending_clarification.get("type") == "workflow_approval":
+                is_workflow_approval_response = True
+                # Set skip_clarification flag to bypass clarification analysis
+                skip_clarification = True
+
 
         # Check if this might be a credential response (e.g., GitHub token)
         # Check if message contains a credential token using UnifiedClarificationSystem
@@ -5106,7 +5118,8 @@ Make it conversational and friendly while keeping accuracy."""
             else False
         )
 
-        if session_id and contains_token:
+        # Check for ANY pending clarification (not just credential tokens)
+        if session_id:
             observability.observe(
                 event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
                 level=observability.EventLevel.INFO,
@@ -5115,11 +5128,12 @@ Make it conversational and friendly while keeping accuracy."""
                     "contains_token": contains_token,
                     "message_preview": message[:100],
                 },
-                description="Entering clarification handling block",
+                description="Checking for pending clarifications (workflow approval, credentials, etc.)",
             )
 
-            # Check if we have a pending credential request for this session
+            # Check if we have a pending clarification for this session
             clarification_info = await self._get_pending_clarification(session_id)
+
             if clarification_info:
 
                 if clarification_info.get("type") == "credential":
@@ -5168,9 +5182,6 @@ Make it conversational and friendly while keeping accuracy."""
                             # This happens after storage so credentials are available for MCP
                             async def update_credential_name():
                                 try:
-                                    print(
-                                        f"\n\n[DEBUG] Starting async credential name update for {service}/{user_id}"
-                                    )
                                     # Re-initialize MCP connection with new credentials
                                     # and discover the account name
                                     await self.credential_resolver.update_credential_name_with_discovery(
@@ -5708,8 +5719,11 @@ Make it conversational and friendly while keeping accuracy."""
                                 return MuxiResponse(role="assistant", content=response)
 
                     # Check for credential needs FIRST (issue #54)
-                    credential_detection = await self.credential_handler.detect_credential_need(message, user_id)
-                    print(f"DEBUG overlord: credential_detection for user {user_id}: {credential_detection}")
+                    # BUT skip if this is a workflow approval response
+                    credential_detection = None
+                    if not is_workflow_approval_response:
+                        credential_detection = await self.credential_handler.detect_credential_need(message, user_id)
+                    else:
 
                     if credential_detection:
                         # Handle based on detection type
@@ -5738,6 +5752,7 @@ Make it conversational and friendly while keeping accuracy."""
                     )
 
                 if clarification_result.action == "clarify":
+
                     # Store minimal info - just request_id for reuse
                     if session_id:
                         self._set_pending_clarification(
@@ -5763,6 +5778,7 @@ Make it conversational and friendly while keeping accuracy."""
                     )
 
                 elif clarification_result.action == "execute":
+
                     # Clarification complete - clean up
                     pending = await self._get_pending_clarification(session_id)
                     if pending:
@@ -6521,6 +6537,35 @@ Make it conversational and friendly while keeping accuracy."""
 
             # Fall back to standard decomposition if no SOP found
             if workflow is None:
+                # Build enhanced message with buffer memory context
+                enhanced_message = message
+                if self.buffer_memory_manager and session_id:
+                    # Get buffer memory for context using search with empty query
+                    buffer_entries = await self.buffer_memory_manager.search_buffer_memory(
+                        query="",  # Empty query to get all recent messages
+                        k=20,  # Limit to 20 messages
+                        filter_metadata={"user_id": user_id, "session_id": session_id}
+                    )
+
+                    if buffer_entries:
+                        # Build conversation context
+                        context_lines = []
+                        for entry in buffer_entries:
+                            role = entry.get("metadata", {}).get("role", "user")
+                            content = entry.get("text", "")  # Changed from "message" to "text"
+                            if role == "user":
+                                context_lines.append(f"User: {content}")
+                            elif role == "assistant":
+                                context_lines.append(f"Assistant: {content}")
+
+                        if context_lines:
+                            enhanced_message = (
+                                f"=== CONVERSATION CONTEXT ===\n"
+                                f"{chr(10).join(context_lines)}\n\n"
+                                f"=== CURRENT REQUEST ===\n"
+                                f"{message}"
+                            )
+
                 # Decompose the request into a workflow
                 observability.observe(
                     event_type=observability.ServerEvents.SERVER_STARTED,
@@ -6534,7 +6579,7 @@ Make it conversational and friendly while keeping accuracy."""
                 )
 
                 workflow = await self.task_decomposer.decompose_request(
-                    request=message,
+                    request=enhanced_message,
                     context={"available_agents": list(self.agents.keys())},
                     analysis=analysis,
                     requires_approval=needs_approval,
