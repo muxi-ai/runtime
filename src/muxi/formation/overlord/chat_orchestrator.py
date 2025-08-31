@@ -544,7 +544,8 @@ class ChatOrchestrator:
         if result and hasattr(result, "content"):
             return MuxiResponse(
                 role="assistant",
-                content=result.content if isinstance(result.content, str) else str(result.content)
+                content=result.content if isinstance(result.content, str) else str(result.content),
+                artifacts=result.artifacts if hasattr(result, 'artifacts') and result.artifacts else None
             )
         elif isinstance(result, str):
             return MuxiResponse(

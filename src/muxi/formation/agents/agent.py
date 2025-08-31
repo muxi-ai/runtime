@@ -1373,6 +1373,54 @@ class Agent:
                         content=response_content.strip() or "I've completed the requested tasks.",
                     )
 
+                    # Extract artifacts from my_results if any tools generated files
+                    if my_results:
+                        # Convert my_results to ToolExecutionResult format for extraction
+                        from ...datatypes.clarification import ToolExecutionResult
+
+                        tool_execution_results = []
+                        for placeholder, result in my_results.items():
+                            # Check if this result contains a generate_file artifact
+                            if isinstance(result, dict) and "_artifact" in result:
+                                # This is a generate_file result with an artifact
+                                tool_exec_result = ToolExecutionResult(
+                                    tool_name="generate_file",
+                                    parameters={},  # Parameters not needed for extraction
+                                    result=result,
+                                    execution_time=0.0,
+                                    success=True,
+                                )
+                                tool_execution_results.append(tool_exec_result)
+
+                        # Extract artifacts if we have any tool results with artifacts
+                        if tool_execution_results:
+                            try:
+                                artifacts = await extract_artifacts_from_tool_results(tool_execution_results)
+                                if artifacts:
+                                    response.artifacts = artifacts
+                                    observability.observe(
+                                        event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                                        level=observability.EventLevel.INFO,
+                                        data={
+                                            "agent_id": self.agent_id,
+                                            "artifacts_count": len(artifacts),
+                                            "artifact_files": [a.filename for a in artifacts],
+                                            "phase": "planning_execution",
+                                        },
+                                        description=f"Agent {self.agent_id} extracted {len(artifacts)} artifacts from planning execution",  # noqa: E501
+                                    )
+                            except Exception as e:
+                                observability.observe(
+                                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                    level=observability.EventLevel.WARNING,
+                                    data={
+                                        "agent_id": self.agent_id,
+                                        "error": str(e),
+                                        "phase": "planning_execution",
+                                    },
+                                    description=f"Failed to extract artifacts in planning: {e}",
+                                )
+
                     # Add response to conversation context
                     self._messages.append({"role": "assistant", "content": response.content})
 
