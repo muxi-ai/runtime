@@ -98,6 +98,7 @@ async def test_brainstorming_session():
                 message="Yes, please proceed with the plan",
                 user_id="test_user",
                 session_id="brainstorm_session_1",
+                use_async=False,
                 stream=False
             )
             print(f"\n**System:** {response7.content}")
@@ -139,7 +140,7 @@ async def test_brainstorming_session():
 
         # Analyze the brainstorming flow
         all_responses = [response1.content, response2.content, response3.content,
-                        response4.content, response5.content]
+                         response4.content, response5.content]
 
         # Count probing questions
         probing_questions = sum(1 for r in all_responses if '?' in r)
@@ -171,7 +172,7 @@ async def test_brainstorming_session():
 
         # Check final synthesis (already set in approval handling above)
         has_synthesis = any(word in final_response for word in
-                           ['concept', 'summary', 'app idea', 'proposal', 'overview', 'pdf', 'document'])
+                            ['concept', 'summary', 'app idea', 'proposal', 'overview', 'pdf', 'document'])
 
         includes_user_input = (
             'finance' in final_response and
