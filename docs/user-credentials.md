@@ -230,13 +230,25 @@ async def check_duplicate(self, user_id: str, service: str, credentials: Any) ->
     # Fetch all existing credentials for user/service
     existing_credentials = await self._fetch_credentials(user_id, service)
     
+    # Canonicalize the incoming credential for comparison
+    canonical_new = self._canonicalize_credential(credentials)
+    
     # Decrypt and compare each one
     for existing in existing_credentials:
         decrypted = self._decrypt_credentials(user_id, existing.credentials)
-        if decrypted == credentials:
+        # Use canonical comparison to handle key ordering differences
+        canonical_existing = self._canonicalize_credential(decrypted)
+        if canonical_existing == canonical_new:
             return True  # Duplicate found
     
     return False  # No duplicate
+
+def _canonicalize_credential(self, credential: Any) -> str:
+    """
+    Canonicalize credentials for consistent comparison.
+    Handles dictionary key ordering, whitespace differences, and type variations.
+    Returns a normalized JSON string representation.
+    """
 ```
 
 **Benefits**:
@@ -456,6 +468,17 @@ async def update_credential_name_with_discovery(
     mcp_service: Any
 ) -> Optional[str]:
     """Discover and update credential identity."""
+
+async def list_credentials(user_id: str) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    List all credentials for a user.
+    Returns dictionary mapping service names to lists of credential objects.
+    Each credential includes: id, credential_id, name, credentials, created_at, updated_at.
+    Supports multiple credentials per service.
+    """
+
+async def remove_credential(user_id: str, service: str, credential_name: str) -> bool:
+    """Remove a specific credential by user, service, and name."""
 ```
 
 ### CredentialHandler Methods
