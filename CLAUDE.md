@@ -4,6 +4,8 @@ Critical development context for the MUXI Runtime execution engine.
 
 > Think carefully and implement the most concise solution that changes as little code as possible.
 
+> Always remove whitespaces from blank lines
+
 ## Core Architecture Principles
 
 ### Formation-First Architecture
@@ -102,7 +104,7 @@ System: ...
 1. **Context Preservation Fix**:
    - Fixed bug in overlord.py line 5610 that was replacing enhanced message after clarification
    - Ensured buffer memory context is preserved throughout clarification flow
-   
+
 2. **Context Switch Detection**:
    - UnifiedClarificationSystem now tracks `last_question` asked
    - Enables accurate detection of whether user is answering clarification vs making new request
