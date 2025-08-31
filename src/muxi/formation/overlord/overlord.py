@@ -418,7 +418,9 @@ class Overlord:
         self._configured_services = configured_services or {}
 
         # Extract MCP server registry that use user credentials from configured services
-        self._mcp_servers_with_user_credentials = self._configured_services.get("mcp_servers_with_user_credentials", {})
+        self._mcp_servers_with_user_credentials = self._configured_services.get(
+            "mcp_servers_with_user_credentials", {}
+        )
 
         # Set formation_id for unified response format
         self.formation_id = self.formation_config.get("formation_id", "default-formation")
@@ -5109,7 +5111,6 @@ Make it conversational and friendly while keeping accuracy."""
                 # Set skip_clarification flag to bypass clarification analysis
                 skip_clarification = True
 
-
         # Check if this might be a credential response (e.g., GitHub token)
         # Check if message contains a credential token using UnifiedClarificationSystem
         contains_token = (
@@ -5182,6 +5183,9 @@ Make it conversational and friendly while keeping accuracy."""
                             # This happens after storage so credentials are available for MCP
                             async def update_credential_name():
                                 try:
+                                    print(
+                                        f"\n\n[DEBUG] Starting async credential name update for {service}/{user_id}"
+                                    )
                                     # Re-initialize MCP connection with new credentials
                                     # and discover the account name
                                     await self.credential_resolver.update_credential_name_with_discovery(
@@ -5673,11 +5677,17 @@ Make it conversational and friendly while keeping accuracy."""
             and request_id
         ):
             # Check if we have pending clarification to handle response
-            clarification_info = await self._get_pending_clarification(session_id) if session_id else None
+            clarification_info = (
+                await self._get_pending_clarification(session_id) if session_id else None
+            )
 
             # Use unified clarification system with request_id
             try:
-                if clarification_info and clarification_info.get("type") in ["reactive", "proactive", "multi_turn"]:
+                if clarification_info and clarification_info.get("type") in [
+                    "reactive",
+                    "proactive",
+                    "multi_turn",
+                ]:
                     # This is a response to an existing clarification - call handle_response
                     clarification_result = await self.clarification.handle_response(
                         response=message,
@@ -5695,9 +5705,14 @@ Make it conversational and friendly while keeping accuracy."""
                         )
                         if response:
                             # Check if this is a dict response with continuation signal
-                            if isinstance(response, dict) and response.get("action") == "credential_stored":
+                            if (
+                                isinstance(response, dict)
+                                and response.get("action") == "credential_stored"
+                            ):
                                 # Send success message first
-                                success_response = MuxiResponse(role="assistant", content=response.get("message"))
+                                success_response = MuxiResponse(
+                                    role="assistant", content=response.get("message")
+                                )
 
                                 # If there's an original message to replay, process it now
                                 if response.get("continue_with"):
@@ -5707,7 +5722,7 @@ Make it conversational and friendly while keeping accuracy."""
                                         user_id=user_id,
                                         agent_name=agent_name,
                                         session_id=session_id,
-                                        request_id=request_id
+                                        request_id=request_id,
                                     )
                                     # Combine the success message with the continuation response
                                     combined_content = f"{success_response.content}\n\n{continuation_response.content}"
@@ -5722,8 +5737,9 @@ Make it conversational and friendly while keeping accuracy."""
                     # BUT skip if this is a workflow approval response
                     credential_detection = None
                     if not is_workflow_approval_response:
-                        credential_detection = await self.credential_handler.detect_credential_need(message, user_id)
-                    else:
+                        credential_detection = await self.credential_handler.detect_credential_need(
+                            message, user_id
+                        )
 
                     if credential_detection:
                         # Handle based on detection type
@@ -5733,7 +5749,7 @@ Make it conversational and friendly while keeping accuracy."""
                                 message=message,
                                 user_id=user_id,
                                 detection_result=credential_detection,
-                                session_id=session_id
+                                session_id=session_id,
                             )
                             return MuxiResponse(role="assistant", content=result["message"])
                         # SERVICE_USE now always returns None from detection
@@ -5752,7 +5768,6 @@ Make it conversational and friendly while keeping accuracy."""
                     )
 
                 if clarification_result.action == "clarify":
-
                     # Store minimal info - just request_id for reuse
                     if session_id:
                         self._set_pending_clarification(
@@ -5778,7 +5793,6 @@ Make it conversational and friendly while keeping accuracy."""
                     )
 
                 elif clarification_result.action == "execute":
-
                     # Clarification complete - clean up
                     pending = await self._get_pending_clarification(session_id)
                     if pending:
@@ -6544,7 +6558,7 @@ Make it conversational and friendly while keeping accuracy."""
                     buffer_entries = await self.buffer_memory_manager.search_buffer_memory(
                         query="",  # Empty query to get all recent messages
                         k=20,  # Limit to 20 messages
-                        filter_metadata={"user_id": user_id, "session_id": session_id}
+                        filter_metadata={"user_id": user_id, "session_id": session_id},
                     )
 
                     if buffer_entries:
@@ -6777,6 +6791,7 @@ Make it conversational and friendly while keeping accuracy."""
 
         # Store clarification info if session_id exists
         if session_id:
+
             self._set_pending_clarification(
                 session_id,
                 {
@@ -6787,6 +6802,9 @@ Make it conversational and friendly while keeping accuracy."""
                     "request_id": request_id,
                 },
             )
+
+            # Note: Verification happens through buffer memory KV store
+            print(f"  Workflow approval stored in buffer memory for session: {session_id}")
 
         # Debug: Before returning response
         observability.observe(
@@ -8120,8 +8138,10 @@ Make it conversational and friendly while keeping accuracy."""
                     ):
 
                         # Parse the credential selection from the response
-                        selected_credential = await self.credential_handler.parse_credential_selection(
-                            clarification_response, clarification_request
+                        selected_credential = (
+                            await self.credential_handler.parse_credential_selection(
+                                clarification_response, clarification_request
+                            )
                         )
 
                         if selected_credential:
@@ -8312,7 +8332,9 @@ Make it conversational and friendly while keeping accuracy."""
 
                         if credential_data and self.credential_resolver:
                             # Validate credential data structure before storing
-                            if self.credential_handler.validate_credential_data(credential_data, service):
+                            if self.credential_handler.validate_credential_data(
+                                credential_data, service
+                            ):
                                 # Store the credential
                                 await self.credential_resolver.store_credential(
                                     user_id=user_id,
