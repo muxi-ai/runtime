@@ -4686,6 +4686,81 @@ Make it conversational and friendly while keeping accuracy."""
             files=files,
         )
 
+    async def avchat(
+        self,
+        files: List[Dict[str, Any]],  # Required media files
+        agent_name: Optional[str] = None,
+        user_id: Any = None,
+        session_id: Optional[str] = None,
+        use_async: Optional[bool] = None,
+        webhook_url: Optional[str] = None,
+        threshold_seconds: Optional[float] = None,
+        stream: Optional[bool] = None,
+        prompt_template: Optional[str] = None,
+    ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
+        """
+        Process audio/video files as primary conversation input.
+        
+        Automatically transcribes audio or analyzes video content and uses
+        the result as the conversation prompt. Perfect for voice messages,
+        video clips, and other media-first interactions.
+        
+        Args:
+            files: List of media files (audio/video) to process. Required.
+                Each file should be a dict with filename, content, content_type, size.
+            agent_name: Optional specific agent to use.
+            user_id: Optional user ID for multi-user support.
+            session_id: Optional session ID for conversation tracking.
+            use_async: Optional async behavior control.
+            webhook_url: Optional webhook URL for async completion.
+            threshold_seconds: Optional threshold for async decision.
+            stream: Optional streaming behavior control.
+            prompt_template: Optional custom prompt template. If not provided,
+                generates appropriate prompt based on media type.
+        
+        Returns:
+            Same as chat() - response content, async dict, or stream generator.
+            
+        Example:
+            # Handle Telegram voice message
+            response = await overlord.avchat(
+                files=[voice_file_dict],
+                user_id="telegram_user_123"
+            )
+        """
+        # Validate files parameter
+        if not files:
+            raise ValueError("files parameter is required for avchat()")
+        
+        # Detect media types
+        media_types = [f.get('content_type', '') for f in files]
+        has_audio = any(ct.startswith('audio/') for ct in media_types)
+        has_video = any(ct.startswith('video/') for ct in media_types)
+        
+        # Generate or use custom prompt
+        if prompt_template:
+            prompt = prompt_template
+        elif has_video:
+            prompt = "Please analyze this video, transcribe any speech, and respond appropriately to the content."
+        elif has_audio:
+            prompt = "Please transcribe this audio and respond to what was said."
+        else:
+            # Fallback for other file types (images, documents)
+            prompt = "Please analyze these files and respond appropriately."
+        
+        # Pass through to chat() with files
+        return await self.chat(
+            message=prompt,
+            files=files,
+            agent_name=agent_name,
+            user_id=user_id,
+            session_id=session_id,
+            use_async=use_async,
+            webhook_url=webhook_url,
+            threshold_seconds=threshold_seconds,
+            stream=stream,
+        )
+
     async def _execute_async_request(
         self,
         request_id: str,
