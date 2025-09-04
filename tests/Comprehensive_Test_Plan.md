@@ -954,633 +954,832 @@ user_id (user isolation)
 <details>
 <summary>Area 9 (Async): Async Operations & Webhook Integration</summary>
 
-#### Goal: Validate thinking visibility features for orchestration transparency
+#### Goal: Validate async processing and webhook delivery for long-running operations
 
-### Test Group 9A: Thinking Model Detection
+### Test Group 9A: Async Decision Logic
 ```python
-# Test 9A1: Automatic Model Detection
-formation = Formation.load("formations/thinking-enabled.yaml")
+# Test 9A1: Automatic Async Triggering
+formation = Formation.load("formations/async.yaml")
 overlord = await formation.start()
 
-# Check if model detection happened during init
-assert overlord.model_supports_thinking is not None
-# For Claude 3.5 Sonnet, should be True
-if "claude-3.5-sonnet" in overlord.model:
-    assert overlord.model_supports_thinking == True
-
-# Test 9A2: Non-Thinking Model Detection
-formation_gpt = Formation.load("formations/thinking-gpt4.yaml")
-overlord_gpt = await formation_gpt.start()
-
-# GPT-4 should report as non-thinking
-if "gpt-4" in overlord_gpt.model:
-    assert overlord_gpt.model_supports_thinking == False
-
-# Test 9A3: Runtime Thinking Detection
-# Even if model says no, runtime detection should catch it
-response = await overlord.chat("Explain step by step how to solve x^2 + 5x + 6 = 0")
-# If response contains thinking tags, model_supports_thinking should be True
-if "<thinking>" in response:
-    assert overlord.model_supports_thinking == True
-```
-
-### Test Group 9B: Thinking Visibility Control
-```python
-# Test 9B1: Thinking Enabled (Default)
-formation = Formation.load("formations/thinking-default.yaml")
-overlord = await formation.start()
-
-response = await overlord.chat("Analyze the pros and cons of microservices architecture")
-# With thinking enabled and a thinking model, tags should be visible
-if overlord.model_supports_thinking:
-    assert "<thinking>" in response or "thinking" not in response.lower()
-
-# Test 9B2: Thinking Disabled
-formation_no_think = Formation.load("formations/thinking-disabled.yaml")
-overlord_no_think = await formation_no_think.start()
-
-response = await overlord_no_think.chat("Analyze the pros and cons of microservices architecture")
-# Should strip thinking tags even from thinking models
-assert "<thinking>" not in response
-
-# Test 9B3: Thinking Configuration Override
-formation = Formation.load("formations/thinking-config.yaml")
-overlord = await formation.start()
-
-# Verify configuration loaded correctly
-assert overlord.thinking_enabled == False  # Based on formation config
-response = await overlord.chat("What's the best sorting algorithm for large datasets?")
-assert "<thinking>" not in response  # Should be stripped
-```
-
-### Test Group 9C: Response Format Handling
-```python
-# Test 9C1: Synchronous Response with Thinking
-formation = Formation.load("formations/thinking-sync.yaml")
-overlord = await formation.start()
-
-response = await overlord.chat("Design a REST API for a blog system")
-# Check response structure based on thinking visibility
-if isinstance(response, dict):
-    if overlord.thinking_enabled and overlord.model_supports_thinking:
-        # Could have thinking in response content
-        assert "thinking" in response or "<thinking>" in str(response)
-
-# Test 9C2: Streaming Response with Thinking
-response_stream = await overlord.chat(
-    "Explain database normalization forms",
-    stream=True
-)
-chunks = []
-async for chunk in response_stream:
-    chunks.append(chunk)
-full_response = "".join(chunks)
-
-# Streaming should include thinking tags when enabled
-if overlord.thinking_enabled and overlord.model_supports_thinking:
-    assert "<thinking>" in full_response or not overlord.model_supports_thinking
-```
-
-### Test Group 9D: Multi-Agent Thinking
-```python
-# Test 9D1: Agent Thinking Extraction
-formation = Formation.load("formations/multi-agent-thinking.yaml")
-overlord = await formation.start()
-
+# Complex request that should trigger async (use_async=None lets system decide)
 response = await overlord.chat(
-    "I need help with both frontend React optimization and backend database scaling"
+    "Research AI market trends, analyze competitors, create visualizations, "
+    "write comprehensive report, and create Linear issues for action items",
+    use_async=None  # Let system decide based on complexity
 )
-# Should coordinate multiple agents, potentially with thinking from each
+# Should return async response with webhook info
+assert "webhook" in response or "async" in response.lower()
+assert "request_id" in response
 
-# Test 9D2: Workflow Decomposition Thinking Stream
-# NOTE: Enhancement needed - stream task decomposition process as <thinking>
-# Currently only execution progress is streamed, not the planning/decomposition phase
-formation = Formation.load("formations/thinking-workflow.yaml")
+# Test 9A2: Forced Async Mode
+response = await overlord.chat(
+    "What's 2+2?",  # Simple request
+    use_async=True,  # Force async
+    webhook_url="http://localhost:8080/webhook"
+)
+# Should process async even for simple request
+assert "webhook" in response
+
+# Test 9A3: Forced Sync Mode
+response = await overlord.chat(
+    "Complex multi-step analysis...",  # Complex request
+    use_async=False  # Force sync
+)
+# Should process synchronously and return full response
+assert isinstance(response, str) and len(response) > 100
+```
+
+### Test Group 9B: Workflow and Clarification Before Async
+```python
+# Test 9B1: Workflow Approval Before Async
+formation = Formation.load("formations/workflow-async.yaml")
 overlord = await formation.start()
 
-# When streaming=True and complexity > threshold, should stream decomposition
-response_stream = await overlord.chat(
-    "Research AI trends, analyze market data, create visualizations, write comprehensive report",
-    stream=True
-)
-
-thinking_decomposition_seen = False
-async for chunk in response_stream:
-    # Should see the workflow decomposition process in <thinking> tags
-    # Example expected output:
-    # <thinking>
-    # Analyzing request complexity: 8.5/10
-    # This requires multiple specialized tasks:
-    # 1. Research AI trends - requires web search and analysis capabilities
-    # 2. Analyze market data - requires data processing and statistical analysis
-    # 3. Create visualizations - requires charting and design capabilities
-    # 4. Write report - requires synthesis and writing capabilities
-    #
-    # Creating workflow with 4 subtasks...
-    # Task dependencies: research -> analysis -> visualization -> report
-    # Estimated total time: 15-20 minutes
-    # </thinking>
-    if "<thinking>" in chunk and "analyzing request" in chunk.lower():
-        thinking_decomposition_seen = True
-
-# TODO: Implement streaming of workflow decomposition phase as thinking
-# This would provide transparency into the Overlord's planning process
-# before execution begins
-
-# Test 9D2: Thinking Consolidation
+# Complex request requiring approval should stay sync for approval
 response = await overlord.chat(
-    "Analyze our system architecture and suggest improvements for scalability and security"
+    "Delete all files in production database and rebuild from scratch",
+    use_async=None  # Let system decide
 )
-# Should show consolidated thinking from multiple specialist agents
-assert len(response) > 1000  # Comprehensive response expected
+# Should NOT go async yet - needs approval first
+assert "approve" in response.lower() or "confirm" in response.lower()
+assert "webhook" not in response  # No async yet
 
-# Test 9D3: Mixed Thinking Models
-# Formation with some thinking agents and some non-thinking
-formation_mixed = Formation.load("formations/mixed-thinking-agents.yaml")
-overlord_mixed = await formation_mixed.start()
+# After approval, then it can go async
+response = await overlord.chat(
+    "yes, proceed",
+    webhook_url="http://localhost:8080/webhook"
+)
+# NOW it should go async
+assert "webhook" in response or "processing" in response.lower()
 
-response = await overlord_mixed.chat("Design a full-stack application")
-# Should handle mixed agent capabilities gracefully
+# Test 9B2: Clarification Before Async
+response = await overlord.chat(
+    "Create a report",  # Ambiguous request
+    use_async=None
+)
+# Should clarify BEFORE going async
+assert "what kind of report" in response.lower() or "clarify" in response.lower()
+assert "webhook" not in response
+
+# Test 9B3: Task Decomposition Happens Sync
+response = await overlord.chat(
+    "Complex task requiring decomposition...",
+    use_async=True,
+    webhook_url="http://localhost:8080/webhook"
+)
+# Task decomposition should happen synchronously,
+# then individual tasks execute async
+assert "webhook" in response
+# Webhook should receive progress updates for each subtask
 ```
 
-### Test Group 9E: Edge Cases & Error Handling
+### Test Group 9C: Webhook Delivery & Status
 ```python
-# Test 9E1: Malformed Thinking Tags
-# Simulate response with unclosed thinking tags
-test_response = "<thinking>This is my reasoning... but no closing tag"
-processed = overlord._strip_thinking_tags(test_response)
-assert "<thinking>" not in processed
+# Test 9C1: Webhook Delivery
+import aiohttp
+from aiohttp import web
 
-# Test 9E2: Nested Thinking Tags
-test_response = "<thinking>Outer thought <thinking>Inner thought</thinking> back to outer</thinking>"
-if not overlord.thinking_enabled:
-    processed = overlord._strip_thinking_tags(test_response)
-    assert "<thinking>" not in processed
+# Start webhook receiver
+webhook_received = {}
+async def webhook_handler(request):
+    webhook_received['data'] = await request.json()
+    return web.Response(text="OK")
 
-# Test 9E3: Very Long Thinking Sections
-long_thinking = "<thinking>" + "x" * 10000 + "</thinking>Short answer"
-processed = overlord._strip_thinking_tags(long_thinking)
-assert processed == "Short answer"
-assert len(processed) < 100  # Thinking successfully removed
+app = web.Application()
+app.router.add_post('/webhook', webhook_handler)
+runner = web.AppRunner(app)
+await runner.setup()
+site = web.TCPSite(runner, 'localhost', 8080)
+await site.start()
+
+# Send async request
+response = await overlord.chat(
+    "Generate comprehensive analysis report",
+    use_async=True,
+    webhook_url="http://localhost:8080/webhook"
+)
+request_id = response['request_id']
+
+# Wait for webhook delivery
+await asyncio.sleep(30)  # Give time to process
+
+# Verify webhook received
+assert 'data' in webhook_received
+assert webhook_received['data']['request_id'] == request_id
+assert webhook_received['data']['status'] == 'completed'
+assert len(webhook_received['data']['response']) > 100
+
+# Test 9C2: Operation Status Tracking
+response = await overlord.chat(
+    "Long running task...",
+    use_async=True
+)
+request_id = response['request_id']
+
+# Check status while processing
+status = await overlord.get_operation_status(request_id)
+assert status['state'] in ['pending', 'processing', 'completed', 'failed']
+assert 'progress' in status  # Optional progress percentage
+
+# Test 9C3: Operation Cancellation
+response = await overlord.chat(
+    "Process large dataset...",
+    use_async=True
+)
+request_id = response['request_id']
+
+# Cancel the operation
+success = await overlord.cancel_operation(request_id)
+assert success == True
+
+# Verify cancelled
+status = await overlord.get_operation_status(request_id)
+assert status['state'] == 'cancelled'
 ```
 
-**Formations Required:** 8 thinking-enabled configurations
-**Automation:** Model detection, tag processing, streaming validation
-**Success Criteria:** 15 thinking tests pass, model detection validated, edge cases handled
+### Test Group 9D: Error Handling & Edge Cases
+```python
+# Test 9D1: Webhook Failure Handling
+formation = Formation.load("formations/async.yaml")
+overlord = await formation.start()
+
+# Test with unreachable webhook
+response = await overlord.chat(
+    "Process this task",
+    use_async=True,
+    webhook_url="http://nonexistent.local/webhook"
+)
+request_id = response['request_id']
+
+# Should still process, but webhook delivery fails
+await asyncio.sleep(10)
+status = await overlord.get_operation_status(request_id)
+assert status['state'] == 'completed'
+assert 'webhook_error' in status  # Should note delivery failure
+
+# Test 9D2: Timeout Handling
+response = await overlord.chat(
+    "This will take forever to process...",
+    use_async=True,
+    threshold_seconds=5  # Very short timeout
+)
+# Should handle timeout gracefully
+
+# Test 9D3: Async with Streaming (Should Fail)
+try:
+    response = await overlord.chat(
+        "Generate report",
+        use_async=True,
+        stream=True  # Can't stream async!
+    )
+    assert False, "Should have raised error"
+except ValueError as e:
+    assert "stream" in str(e).lower()
+```
+
+**Formations Required:**
+- `formations/async.yaml` - Async configuration with webhooks
+- `formations/workflow-async.yaml` - Workflow with async support
+
+**Test Implementation:** Use real webhook server for validation
+**Success Criteria:** All async tests pass, webhooks delivered, proper sync handling of approvals/clarifications
 
 </details>
 
 <details>
 <summary>Area 10 (Streaming): Streaming & Real-time Features</summary>
 
-#### Goal: Implement and validate intelligent chunking, splitting, and optimization for large multimodal files (>100MB)
+#### Goal: Validate streaming responses and real-time features
 
-### 🔧 **IMPLEMENTATION BREAK: Large File Multimodal Processing**
-**Implement**: Intelligent chunking strategies for video, audio, and documents
-**PRD**: [large-file-multimodal-processing.md](context/prds/large-file-multimodal-processing.md)
-**Duration**: 4-5 days
-
-### Test Group 10A: File Size Detection & Routing
+### Test Group 10A: Basic Streaming
 ```python
-# Test 10A1: Size-based Processing Strategy Selection
-formation = Formation.load("formations/large-file-multimodal.yaml")
+# Test 10A1: Simple Streaming Response
+formation = Formation.load("formations/streaming.yaml")
 overlord = await formation.start()
 
-# Small file - direct processing
-small_video = load_test_file("test-files/small_video_5mb.mp4")
-response = await overlord.chat(
-    "Analyze this video",
-    files=[{"filename": "small.mp4", "content": small_video, "content_type": "video/mp4"}]
+response_stream = await overlord.chat(
+    "Write a story about a robot",
+    stream=True
 )
-assert isinstance(response, str)  # Direct response
 
-# Medium file - chunked processing
-medium_video = load_test_file("test-files/presentation_127mb.mp4")
-response = await overlord.chat(
-    "Analyze this presentation video",
-    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
-)
-assert "processing" in response.lower() or "chunks" in response.lower()
+# Collect chunks
+chunks = []
+async for chunk in response_stream:
+    chunks.append(chunk)
+    # Verify chunks are strings
+    assert isinstance(chunk, str)
 
-# Test 10A2: Content Type Routing
-large_audio = load_test_file("test-files/podcast_150mb.mp3")
-response = await overlord.chat(
-    "Transcribe this podcast",
-    files=[{"filename": "podcast.mp3", "content": large_audio, "content_type": "audio/mp3"}]
-)
-# Should use audio-specific chunking strategy
+# Verify complete response
+full_response = "".join(chunks)
+assert len(full_response) > 100
+assert "robot" in full_response.lower()
 
-# Test 10A3: Very Large File Handling (>2GB)
-# Note: May use mock file metadata for testing
-response = await overlord.chat(
-    "Process this movie file",
-    files=[{"filename": "movie.mp4", "size": 3_000_000_000, "content_type": "video/mp4"}]
+# Test 10A2: Streaming with Files
+audio_file = load_test_file("test-files/speech.m4a")
+response_stream = await overlord.chat(
+    "Transcribe this audio",
+    files=[{"filename": "speech.m4a", "content": audio_file, "content_type": "audio/m4a"}],
+    stream=True
 )
-assert "sampling" in response.lower() or "key frames" in response.lower()
+
+chunks = []
+async for chunk in response_stream:
+    chunks.append(chunk)
+
+full_response = "".join(chunks)
+assert len(full_response) > 50
+
+# Test 10A3: Non-Streaming Mode
+response = await overlord.chat(
+    "What's the capital of France?",
+    stream=False  # Explicit non-streaming
+)
+assert isinstance(response, str)
+assert "Paris" in response
 ```
 
-### Test Group 10B: Video Chunking Implementation
+### Test Group 10B: Streaming Complex Operations
 ```python
-# Test 10B1: Video Segment Chunking
-formation = Formation.load("formations/video-chunking.yaml")
+# Test 10B1: Streaming Task Decomposition
+formation = Formation.load("formations/streaming-workflow.yaml")
 overlord = await formation.start()
 
-# 86MB iPhone video that currently times out
-iphone_video = load_test_file("test-files/iphone_launch_86mb.mov")
-response = await overlord.chat(
-    "Analyze this iPhone launch event video in detail",
-    files=[{"filename": "launch.mov", "content": iphone_video, "content_type": "video/quicktime"}]
+# Complex request that triggers workflow
+response_stream = await overlord.chat(
+    "Research renewable energy trends, analyze the data, create visualizations, and write a report",
+    stream=True
 )
-# Should successfully process via chunking
-assert "launch" in response.lower() or "iphone" in response.lower()
-assert len(response) > 500  # Detailed analysis
 
-# Test 10B2: Chunk Overlap & Continuity
-response = await overlord.chat(
-    "Create a timeline of events in this video",
-    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
-)
-# Should maintain temporal coherence across chunks
-assert "timeline" in response.lower() or any(time_word in response.lower() for time_word in ["0:00", "minute", "second"])
+# Should stream progress updates
+chunks = []
+async for chunk in response_stream:
+    chunks.append(chunk)
+    # May include progress indicators
 
-# Test 10B3: Audio Track Separation
-response = await overlord.chat(
-    "Transcribe all speech in this video presentation",
-    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
-)
-# Should extract and process audio separately for better quality
-assert len(response) > 1000  # Full transcription
+full_response = "".join(chunks)
+assert "research" in full_response.lower()
+assert "visualization" in full_response.lower()
 
-# Test 10B4: Key Frame Extraction
-response = await overlord.chat(
-    "Show me the key visual moments in this video",
-    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
+# Test 10B2: Streaming with Multi-Agent
+response_stream = await overlord.chat(
+    "I need help with Python code optimization and database design",
+    stream=True
 )
-# Should identify and analyze key frames
-assert any(visual_word in response.lower() for visual_word in ["scene", "slide", "visual", "shows"])
+
+chunks = []
+agent_switches = 0
+async for chunk in response_stream:
+    chunks.append(chunk)
+    # Could detect agent switches in stream
+    if "agent:" in chunk.lower() or "specialist" in chunk.lower():
+        agent_switches += 1
+
+full_response = "".join(chunks)
+assert len(full_response) > 200
+
+# Test 10B3: Streaming File Generation
+response_stream = await overlord.chat(
+    "Create a bar chart showing monthly sales data",
+    stream=True
+)
+
+chunks = []
+artifact_seen = False
+async for chunk in response_stream:
+    chunks.append(chunk)
+    if "artifact" in chunk.lower() or "file" in chunk.lower():
+        artifact_seen = True
+
+assert artifact_seen or "chart" in "".join(chunks).lower()
 ```
 
-### Test Group 10C: Audio Chunking & Processing
+### Test Group 10C: Streaming Error Handling
 ```python
-# Test 10C1: Large Audio File Chunking
-formation = Formation.load("formations/audio-chunking.yaml")
+# Test 10C1: Stream Interruption Handling
+formation = Formation.load("formations/streaming.yaml")
 overlord = await formation.start()
 
-# Audio file >25MB (OpenAI Whisper limit)
-large_audio = load_test_file("test-files/conference_call_45mb.m4a")
-response = await overlord.chat(
-    "Transcribe this conference call with speaker identification",
-    files=[{"filename": "call.m4a", "content": large_audio, "content_type": "audio/m4a"}]
+response_stream = await overlord.chat(
+    "Write a very long essay about space exploration",
+    stream=True
 )
-# Should chunk and process successfully
-assert "speaker" in response.lower() or len(response) > 2000
 
-# Test 10C2: Audio Overlap Processing
-podcast = load_test_file("test-files/podcast_2hour.mp3")
-response = await overlord.chat(
-    "Summarize the key topics discussed in this podcast",
-    files=[{"filename": "podcast.mp3", "content": podcast, "content_type": "audio/mp3"}]
+# Simulate early termination
+chunks_received = 0
+try:
+    async for chunk in response_stream:
+        chunks_received += 1
+        if chunks_received > 5:
+            break  # Early termination
+except Exception as e:
+    # Should handle gracefully
+    pass
+
+assert chunks_received > 5
+
+# Test 10C2: Stream with Errors
+response_stream = await overlord.chat(
+    "This will cause an error: divide by zero",
+    stream=True
 )
-# Should maintain context across chunks
-assert "topic" in response.lower() and len(response) > 500
 
-# Test 10C3: Music vs Speech Detection
-mixed_audio = load_test_file("test-files/presentation_with_music.mp3")
-response = await overlord.chat(
-    "Transcribe only the speech portions, ignoring background music",
-    files=[{"filename": "mixed.mp3", "content": mixed_audio, "content_type": "audio/mp3"}]
+error_seen = False
+chunks = []
+async for chunk in response_stream:
+    chunks.append(chunk)
+    if "error" in chunk.lower():
+        error_seen = True
+
+# Should stream error message properly
+assert error_seen or len("".join(chunks)) > 0
+
+# Test 10C3: Empty Stream Handling
+response_stream = await overlord.chat(
+    "",  # Empty request
+    stream=True
 )
-# Should intelligently process speech segments
-```
 
-### Test Group 10D: Document Chunking
-```python
-# Test 10D1: Large PDF Processing
-formation = Formation.load("formations/document-chunking.yaml")
-overlord = await formation.start()
+chunks = []
+async for chunk in response_stream:
+    chunks.append(chunk)
 
-# 500-page PDF document
-large_pdf = load_test_file("test-files/annual_report_500pages.pdf")
-response = await overlord.chat(
-    "Extract all financial data from this annual report",
-    files=[{"filename": "report.pdf", "content": large_pdf, "content_type": "application/pdf"}]
-)
-# Should chunk by sections/pages
-assert any(fin_word in response.lower() for fin_word in ["revenue", "financial", "profit"])
-
-# Test 10D2: Smart Section Detection
-technical_manual = load_test_file("test-files/technical_manual_300pages.pdf")
-response = await overlord.chat(
-    "Find the troubleshooting section and summarize common issues",
-    files=[{"filename": "manual.pdf", "content": technical_manual, "content_type": "application/pdf"}]
-)
-# Should intelligently identify relevant sections
-assert "troubleshoot" in response.lower() or "issue" in response.lower()
-
-# Test 10D3: Multi-Document Processing
-docs = [
-    {"filename": "doc1.pdf", "content": load_test_file("test-files/doc1_100pages.pdf"), "content_type": "application/pdf"},
-    {"filename": "doc2.pdf", "content": load_test_file("test-files/doc2_150pages.pdf"), "content_type": "application/pdf"},
-    {"filename": "doc3.pdf", "content": load_test_file("test-files/doc3_200pages.pdf"), "content_type": "application/pdf"}
-]
-response = await overlord.chat("Compare these three documents and find common themes", files=docs)
-# Should process multiple large documents efficiently
-```
-
-### Test Group 10E: Result Fusion & Quality
-```python
-# Test 10E1: Chunk Result Merging
-formation = Formation.load("formations/result-fusion.yaml")
-overlord = await formation.start()
-
-# Process video with multiple analysis types
-response = await overlord.chat(
-    "Provide a complete analysis: transcription, visual description, and key moments",
-    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
-)
-# Should merge chunk analyses coherently
-assert all(element in response.lower() for element in ["transcript", "visual", "moment"])
-
-# Test 10E2: Temporal Coherence
-response = await overlord.chat(
-    "Create a minute-by-minute breakdown of this presentation",
-    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
-)
-# Should maintain time sequence across chunks
-assert response.count(":") > 10  # Multiple timestamp references
-
-# Test 10E3: Quality vs Speed Tradeoff
-# Fast mode - sampling
-response_fast = await overlord.chat(
-    "Quick summary of this video",
-    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}],
-    processing_mode="fast"
-)
-time_fast = measure_processing_time()
-
-# Comprehensive mode - full chunking
-response_full = await overlord.chat(
-    "Detailed analysis of this video",
-    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}],
-    processing_mode="comprehensive"
-)
-time_full = measure_processing_time()
-
-assert len(response_full) > len(response_fast) * 1.5
-assert time_full < time_fast * 3  # Not more than 3x slower
-```
-
-### Test Group 10F: Performance & Optimization
-```python
-# Test 10F1: Memory Efficiency
-formation = Formation.load("formations/memory-efficient.yaml")
-overlord = await formation.start()
-
-initial_memory = get_memory_usage()
-# Process 500MB video
-large_video = load_test_file("test-files/training_video_500mb.mp4")
-response = await overlord.chat(
-    "Analyze this training video",
-    files=[{"filename": "training.mp4", "content": large_video, "content_type": "video/mp4"}]
-)
-peak_memory = get_peak_memory_usage()
-# Should not load entire file into memory at once
-assert peak_memory - initial_memory < 1000_000_000  # Less than 1GB increase
-
-# Test 10F2: Parallel Chunk Processing
-start_time = time.time()
-response = await overlord.chat(
-    "Analyze video and transcribe all speech",
-    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
-)
-processing_time = time.time() - start_time
-# Should process chunks in parallel
-assert processing_time < video_duration * 0.5  # Faster than real-time
-
-# Test 10F3: Caching & Reprocessing
-# First processing
-response1 = await overlord.chat(
-    "Analyze this video",
-    files=[{"filename": "video.mp4", "content": test_video, "content_type": "video/mp4"}]
-)
-time1 = measure_processing_time()
-
-# Second processing (should use cached chunks)
-response2 = await overlord.chat(
-    "What happens at minute 5 in this video?",
-    files=[{"filename": "video.mp4", "content": test_video, "content_type": "video/mp4"}]
-)
-time2 = measure_processing_time()
-assert time2 < time1 * 0.3  # Much faster due to caching
-```
-
-### Test Group 10G: Error Handling & Edge Cases
-```python
-# Test 10G1: Corrupted File Handling
-formation = Formation.load("formations/error-handling.yaml")
-overlord = await formation.start()
-
-corrupted_video = load_test_file("test-files/corrupted_video.mp4")
-response = await overlord.chat(
-    "Analyze this video",
-    files=[{"filename": "corrupted.mp4", "content": corrupted_video, "content_type": "video/mp4"}]
-)
-# Should handle gracefully
-assert "error" in response.lower() or "unable" in response.lower()
-assert "corrupted" in response.lower() or "damaged" in response.lower()
-
-# Test 10G2: Processing Timeout Recovery
-extremely_large = create_mock_file(size=5_000_000_000)  # 5GB
-response = await overlord.chat(
-    "Process this entire file in detail",
-    files=[{"filename": "huge.mp4", "content": extremely_large, "content_type": "video/mp4"}],
-    timeout=60  # 1 minute timeout
-)
-# Should gracefully handle timeout with partial results
-assert "partial" in response.lower() or "timeout" in response.lower()
-
-# Test 10G3: Format Mismatch Handling
-response = await overlord.chat(
-    "Analyze this video",
-    files=[{"filename": "image.mp4", "content": jpeg_image, "content_type": "video/mp4"}]
-)
-# Should detect and handle format mismatch
-assert "format" in response.lower() or "not a video" in response.lower()
+# Should handle empty request gracefully
+assert len(chunks) >= 0  # May return error or empty
 ```
 
 **Formations Required:**
-```yaml
-# formations/large-file-multimodal.yaml
-name: "large-file-processing"
-agents:
-  - id: "multimodal_agent"
-    specialty: "multimodal_analysis"
-    model: "google/gemini-2.0-flash"  # Best for video
-    system_message: "You are an expert at analyzing large multimedia files"
-llm:
-  capability_models:
-    vision:
-      model: "google/gemini-2.0-flash"
-    audio:
-      model: "openai/whisper-1"
-    video:
-      model: "google/gemini-2.0-flash"
-multimodal:
-  processing:
-    chunk_strategies:
-      video:
-        chunk_duration: 30  # seconds
-        overlap: 5  # seconds
-      audio:
-        chunk_duration: 120  # seconds
-        overlap: 15  # seconds
-      document:
-        chunk_size: 50  # pages
-        overlap: 5  # pages
-    size_thresholds:
-      direct: 20_000_000  # 20MB
-      chunked: 2_000_000_000  # 2GB
-      streaming: 2_000_000_001  # >2GB
-    timeouts:
-      default: 300  # 5 minutes
-      large_file: 600  # 10 minutes
-memory:
-  buffer: {enabled: true, size: 20}
-```
+- `formations/streaming.yaml` - Basic streaming configuration
+- `formations/streaming-workflow.yaml` - Workflow with streaming
 
-**Test Files Required:**
-- Various sizes: 5MB, 86MB, 127MB, 500MB test videos
-- Large audio files: 45MB, 150MB, 2-hour podcasts
-- Large PDFs: 300-500 page documents
-- Corrupted/invalid files for error testing
+**Test Implementation:** AsyncGenerator validation, chunk collection
+**Success Criteria:** All streaming tests pass, proper chunk handling
 
-**Dependencies:** ffmpeg for video/audio manipulation
-**Automation:** Chunk processing validation, memory monitoring, performance profiling
-**Success Criteria:** 25+ large file tests pass, <3x performance overhead, memory efficient
 
 </details>
 
 <details>
-<summary>Area 11 (Resilience): Resilience & Recovery</summary>
+<summary>Area 11 (Response Format): Response Format & Interactive Elements</summary>
 
-#### Goal: Validate async workflows and webhook integration
+#### Goal: Validate response formats (text/json/markdown) and interactive UI elements
 
-### Test Group 10A: Async Processing
+### Test Group 11A: Response Format Types
 ```python
-# Test 10A1: Long-running Task
-formation = Formation.load("formations/async.yaml")
+# Test 11A1: JSON Response Format
+formation = Formation.load("formations/json-response.yaml")
+# Formation has: overlord.response.format: "json"
 overlord = await formation.start()
 
-response = await overlord.chat(
-    "Analyze all Python files in this directory and create a complexity report"
-)
-# Should return immediately with job ID
-assert "job_id" in response or "processing" in response.lower()
+response = await overlord.chat("List three benefits of cloud computing")
+# Should return structured JSON
+assert isinstance(response, dict)
+assert "benefits" in response or "items" in response
+assert len(response.get("benefits", response.get("items", []))) == 3
 
-# Test 10A2: Webhook Delivery
-webhook_url = "http://localhost:8080/webhook"
-response = await overlord.chat(
-    "Generate a comprehensive market analysis report",
-    webhook_url=webhook_url
-)
-# Should deliver to webhook when complete
+# Test 11A2: Markdown Response Format
+formation = Formation.load("formations/markdown-response.yaml")
+# Formation has: overlord.response.format: "markdown"
+overlord = await formation.start()
+
+response = await overlord.chat("Create a simple README for a Python project")
+# Should return markdown with headers, lists, code blocks
+assert isinstance(response, str)
+assert "#" in response  # Headers
+assert "```" in response or "`" in response  # Code blocks
+
+# Test 11A3: Plain Text Response (Default)
+formation = Formation.load("formations/text-response.yaml")
+# Formation has: overlord.response.format: "text" (or not specified)
+overlord = await formation.start()
+
+response = await overlord.chat("Explain photosynthesis in simple terms")
+# Should return plain text without formatting
+assert isinstance(response, str)
+assert "```" not in response  # No code blocks
+assert "**" not in response   # No markdown emphasis
 ```
 
-### Test Group 10B: Operation Management
+### Test Group 11B: Interactive Elements
 ```python
-# Test 10B1: Operation Status
-job_id = extract_job_id(response)
-status = await overlord.get_operation_status(job_id)
-assert status["state"] in ["pending", "processing", "completed"]
+# Test 11B1: Buttons in Response
+formation = Formation.load("formations/interactive.yaml")
+# Formation has: overlord.response.interactive_elements: ["buttons"]
+overlord = await formation.start()
 
-# Test 10B2: Operation Cancellation
-response = await overlord.chat("Process this large dataset")
-job_id = extract_job_id(response)
-success = await overlord.cancel_operation(job_id)
-assert success == True
+response = await overlord.chat("Show me options for data visualization")
+# Should include interactive buttons
+assert "button" in str(response).lower() or "option" in str(response).lower()
+# Response might include structured buttons
+if isinstance(response, dict):
+    assert "buttons" in response or "options" in response
+
+# Test 11B2: Forms in Response
+formation = Formation.load("formations/forms.yaml")
+# Formation has: overlord.response.interactive_elements: ["forms"]
+overlord = await formation.start()
+
+response = await overlord.chat("I need to collect user information")
+# Should include form structure
+if isinstance(response, dict):
+    assert "form" in response or "fields" in response
+    # Form should have input fields
+    assert "inputs" in response or "fields" in response
+
+# Test 11B3: Tables in Response
+formation = Formation.load("formations/tables.yaml")
+# Formation has: overlord.response.interactive_elements: ["tables"]
+overlord = await formation.start()
+
+response = await overlord.chat("Compare Python, JavaScript, and Go")
+# Should format as table
+assert "|" in str(response)  # Table formatting
+# Or structured data
+if isinstance(response, dict):
+    assert "table" in response or "rows" in response
 ```
 
-**Webhook Server Required:** Mock webhook receiver
-**Automation:** Async operation tracking, webhook verification
-**Success Criteria:** 8 async tests pass, webhooks delivered
+### Test Group 11C: Combined Format and Elements
+```python
+# Test 11C1: JSON with Interactive Elements
+formation = Formation.load("formations/json-interactive.yaml")
+# Formation has:
+#   overlord.response.format: "json"
+#   overlord.response.interactive_elements: ["buttons", "tables"]
+overlord = await formation.start()
+
+response = await overlord.chat("Show product comparison with purchase options")
+assert isinstance(response, dict)
+assert "table" in response or "comparison" in response
+assert "buttons" in response or "actions" in response
+
+# Test 11C2: Markdown with Code Execution
+formation = Formation.load("formations/markdown-code.yaml")
+# Formation has:
+#   overlord.response.format: "markdown"
+#   overlord.response.interactive_elements: ["code_blocks"]
+overlord = await formation.start()
+
+response = await overlord.chat("Show me how to sort a list in Python")
+assert "```python" in response
+assert "sort" in response.lower()
+# May include runnable code blocks
+
+# Test 11C3: Response Format Override
+formation = Formation.load("formations/flexible-format.yaml")
+overlord = await formation.start()
+
+# Override formation default
+response = await overlord.chat(
+    "Give me data as JSON",
+    response_format="json"  # Override formation setting
+)
+assert isinstance(response, dict)
+```
+
+**Formations Required:**
+- Various formations with different response configurations
+- See schemas/formation/README.md for configuration options
+
+**Success Criteria:** All format tests pass, interactive elements properly rendered
 
 </details>
 
 <details>
-<summary>Area 12 (Observability): Observability & Monitoring</summary>
+<summary>Area 12 (Thinking): Thinking Visibility</summary>
 
-#### Goal: Validate enterprise features and production readiness
+#### Goal: Expose thinking process during streaming for transparency
 
-PRD: [text](context/prds/thinking-capabilities.md)
-
-### Test Group 11A: Scheduler Operations
+### Test Group 12A: Thinking in Stream
 ```python
-# Test 11A1: One-time Job
+# Test 12A1: Workflow Decomposition Thinking
+formation = Formation.load("formations/streaming.yaml")
+overlord = await formation.start()
+
+response_stream = await overlord.chat(
+    "Research AI trends, analyze data, create report with visualizations",
+    stream=True
+)
+
+thinking_seen = False
+chunks = []
+async for chunk in response_stream:
+    chunks.append(chunk)
+    if "<thinking>" in chunk:
+        thinking_seen = True
+        # Should expose decision process
+        # e.g., "<thinking>Analyzing complexity: This requires multiple steps...</thinking>"
+
+full_response = "".join(chunks)
+# When streaming, thinking process should be visible
+assert thinking_seen or "<thinking>" in full_response
+
+# Test 12A2: Agent Selection Thinking
+response_stream = await overlord.chat(
+    "I need help with database optimization and Python code review",
+    stream=True
+)
+
+chunks = []
+agent_thinking_seen = False
+async for chunk in response_stream:
+    chunks.append(chunk)
+    if "<thinking>" in chunk and "agent" in chunk.lower():
+        agent_thinking_seen = True
+        # Should show agent selection reasoning
+
+# Should expose which agents are being selected and why
+assert agent_thinking_seen or "selecting" in "".join(chunks).lower()
+
+# Test 12A3: Clarification Thinking
+response_stream = await overlord.chat(
+    "Create a report",  # Ambiguous
+    stream=True
+)
+
+chunks = []
+clarification_thinking = False
+async for chunk in response_stream:
+    chunks.append(chunk)
+    if "<thinking>" in chunk and ("clarify" in chunk.lower() or "ambiguous" in chunk.lower()):
+        clarification_thinking = True
+
+# Should show thinking about need for clarification
+assert clarification_thinking or "unclear" in "".join(chunks).lower()
+```
+
+### Test Group 12B: Thinking Control
+```python
+# Test 12B1: Disable Thinking in Non-Streaming
+formation = Formation.load("formations/no-thinking.yaml")
+overlord = await formation.start()
+
+# Non-streaming shouldn't show thinking by default
+response = await overlord.chat(
+    "Complex task requiring decomposition",
+    stream=False
+)
+# Should not include thinking tags
+assert "<thinking>" not in response
+
+# Test 12B2: Enable Thinking Explicitly
+response_stream = await overlord.chat(
+    "Analyze this problem step by step",
+    stream=True,
+    show_thinking=True  # Explicit control
+)
+
+thinking_shown = False
+async for chunk in response_stream:
+    if "<thinking>" in chunk:
+        thinking_shown = True
+        break
+
+assert thinking_shown
+
+# Test 12B3: Thinking for Errors
+response_stream = await overlord.chat(
+    "This will cause an error in processing",
+    stream=True
+)
+
+error_thinking = False
+chunks = []
+async for chunk in response_stream:
+    chunks.append(chunk)
+    if "<thinking>" in chunk and "error" in chunk.lower():
+        error_thinking = True
+
+# Should show thinking about error handling
+assert error_thinking or "error" in "".join(chunks).lower()
+```
+
+### Test Group 12C: Thinking Content Quality
+```python
+# Test 12C1: Thinking Should Be Informative
+formation = Formation.load("formations/streaming.yaml")
+overlord = await formation.start()
+
+response_stream = await overlord.chat(
+    "Build a REST API for a blog with authentication",
+    stream=True
+)
+
+thinking_chunks = []
+chunks = []
+async for chunk in response_stream:
+    chunks.append(chunk)
+    if "<thinking>" in chunk:
+        thinking_chunks.append(chunk)
+
+# Thinking should contain useful information
+thinking_content = "".join(thinking_chunks)
+useful_keywords = ["decompos", "step", "agent", "task", "workflow", "complex", "require"]
+assert any(keyword in thinking_content.lower() for keyword in useful_keywords)
+
+# Test 12C2: Thinking Should Not Leak Sensitive Info
+response_stream = await overlord.chat(
+    "Connect to database with password abc123",
+    stream=True
+)
+
+thinking_chunks = []
+async for chunk in response_stream:
+    if "<thinking>" in chunk:
+        thinking_chunks.append(chunk)
+
+# Should not expose passwords in thinking
+thinking_content = "".join(thinking_chunks)
+assert "abc123" not in thinking_content
+
+# Test 12C3: Thinking Formatting
+response_stream = await overlord.chat(
+    "Complex multi-step task",
+    stream=True
+)
+
+chunks = []
+async for chunk in response_stream:
+    chunks.append(chunk)
+
+full_response = "".join(chunks)
+# Thinking tags should be properly closed
+thinking_count = full_response.count("<thinking>")
+closing_count = full_response.count("</thinking>")
+assert thinking_count == closing_count
+```
+
+**Formations Required:**
+- Standard formations with streaming enabled
+- No special thinking configuration needed
+
+**Success Criteria:** Thinking exposed during streaming for transparency, properly formatted
+
+</details>
+
+<details>
+<summary>Area 13 (Scheduler): Task Scheduling & Job Management</summary>
+
+#### Goal: Validate scheduled task execution and job management
+
+### Test Group 13A: One-time Scheduled Tasks
+```python
+# Test 13A1: Schedule Future Task
 formation = Formation.load("formations/scheduler.yaml")
 overlord = await formation.start()
 
-# Schedule a job for 5 minutes from now
-run_at = datetime.now() + timedelta(minutes=5)
+# Schedule a task for 1 minute from now
+run_at = datetime.now() + timedelta(minutes=1)
 response = await overlord.chat(
-    "Remind me to check the deployment",
-    schedule={"run_at": run_at}
+    "Remind me to check the deployment status",
+    schedule={"run_at": run_at.isoformat()}
 )
 assert "scheduled" in response.lower()
-
-# Test 11A2: Recurring Job
-response = await overlord.chat(
-    "Generate daily sales report",
-    schedule={"cron": "0 9 * * *"}  # Daily at 9 AM
-)
 job_id = extract_job_id(response)
+
+# Wait and verify execution
+await asyncio.sleep(70)  # Wait for execution
+history = await overlord.scheduler.get_job_history(job_id)
+assert len(history) > 0
+assert history[0]["status"] == "success"
+
+# Test 13A2: Natural Language Scheduling
+response = await overlord.chat(
+    "In 5 minutes, generate a status report"
+)
+# Should parse natural language time
+assert "scheduled" in response.lower() or "will" in response.lower()
+
+# Test 13A3: Schedule with Context
+response = await overlord.chat(
+    "Every day at 9am, check for new pull requests and summarize them"
+)
+assert "scheduled" in response.lower()
+assert "daily" in response.lower() or "every day" in response.lower()
 ```
 
-### Test Group 11B: Job Management
+### Test Group 13B: Recurring Jobs
 ```python
-# Test 11B1: List Active Jobs
-jobs = await overlord.scheduler.get_active_jobs()
-assert len(jobs) > 0
-assert any(job["id"] == job_id for job in jobs)
+# Test 13B1: Cron-based Scheduling
+formation = Formation.load("formations/scheduler.yaml")
+overlord = await formation.start()
 
-# Test 11B2: Update Job
+response = await overlord.chat(
+    "Generate sales report every Monday at 8am",
+    schedule={"cron": "0 8 * * MON"}
+)
+job_id = extract_job_id(response)
+assert "scheduled" in response.lower()
+
+# Verify job created
+jobs = await overlord.scheduler.get_active_jobs()
+job = next((j for j in jobs if j["id"] == job_id), None)
+assert job is not None
+assert job["cron"] == "0 8 * * MON"
+
+# Test 13B2: Update Recurring Job
 success = await overlord.scheduler.update_job(
     job_id,
-    cron="0 10 * * *"  # Change to 10 AM
+    cron="0 9 * * MON"  # Change to 9am
 )
 assert success == True
 
-# Test 11B3: Job Execution History
-history = await overlord.scheduler.get_job_history(job_id)
-# After job runs
-assert len(history) > 0
-assert history[0]["status"] in ["success", "failure"]
+# Test 13B3: Cancel Job
+success = await overlord.scheduler.cancel_job(job_id)
+assert success == True
+
+# Verify cancelled
+jobs = await overlord.scheduler.get_active_jobs()
+assert not any(j["id"] == job_id for j in jobs)
 ```
 
-### Test Group 11C: Performance & Integration
+### Test Group 13C: Job Management & History
 ```python
-# Test 11C1: Response Time
-formation = Formation.load("formations/optimized.yaml")
+# Test 13C1: List All Jobs
+formation = Formation.load("formations/scheduler.yaml")
 overlord = await formation.start()
 
-# Simple query benchmark
-times = []
-for _ in range(10):
-    start = time.time()
-    await overlord.chat("What's 2+2?")
-    times.append(time.time() - start)
-assert statistics.mean(times) < 2.0  # Average under 2 seconds
+# Create multiple jobs
+for i in range(3):
+    await overlord.chat(f"Schedule test job {i}",
+                       schedule={"run_at": (datetime.now() + timedelta(hours=i+1)).isoformat()})
 
-# Test 11C2: Full Stack Integration
+jobs = await overlord.scheduler.get_active_jobs()
+assert len(jobs) >= 3
+
+# Test 13C2: Job Execution History
+# Wait for a job to execute
+job_id = jobs[0]["id"]
+await asyncio.sleep(3700)  # Wait for first job
+
+history = await overlord.scheduler.get_job_history(job_id)
+assert len(history) > 0
+assert "result" in history[0]
+assert "executed_at" in history[0]
+
+# Test 13C3: Failed Job Handling
 response = await overlord.chat(
-    "Search for recent AI news, analyze trends, create a summary document, "
-    "and generate a visualization chart"
+    "This will fail: divide by zero",
+    schedule={"run_at": (datetime.now() + timedelta(seconds=5)).isoformat()}
 )
-# Should coordinate: web search → analysis → document generation → chart creation
+job_id = extract_job_id(response)
+
+await asyncio.sleep(10)
+history = await overlord.scheduler.get_job_history(job_id)
+assert history[0]["status"] == "failed"
+assert "error" in history[0]
 ```
 
+### Test Group 13D: Complex Scheduling Scenarios
+```python
+# Test 13D1: Multi-User Job Isolation
+formation = Formation.load("formations/scheduler-multiuser.yaml")
+overlord = await formation.start()
+
+# User 1 schedules job
+response1 = await overlord.chat(
+    "Schedule my personal reminder",
+    user_id="user1",
+    schedule={"run_at": (datetime.now() + timedelta(minutes=1)).isoformat()}
+)
+job1_id = extract_job_id(response1)
+
+# User 2 schedules job
+response2 = await overlord.chat(
+    "Schedule my task",
+    user_id="user2",
+    schedule={"run_at": (datetime.now() + timedelta(minutes=1)).isoformat()}
+)
+job2_id = extract_job_id(response2)
+
+# User 1 should only see their job
+jobs = await overlord.scheduler.get_user_jobs("user1")
+assert any(j["id"] == job1_id for j in jobs)
+assert not any(j["id"] == job2_id for j in jobs)
+
+# Test 13D2: Scheduled Workflow
+response = await overlord.chat(
+    "Every Friday: research news, analyze trends, create report, send to team",
+    schedule={"cron": "0 10 * * FRI"}
+)
+# Should schedule complex workflow
+assert "scheduled" in response.lower()
+assert "workflow" in response.lower() or "tasks" in response.lower()
+
+# Test 13D3: Conditional Scheduling
+response = await overlord.chat(
+    "If stock price drops below $100, alert me immediately",
+    schedule={"condition": "stock_price < 100", "check_interval": 300}
+)
+# Should set up conditional monitoring
+assert "monitor" in response.lower() or "watch" in response.lower()
+```
+
+**Formations Required:**
+- `formations/scheduler.yaml` - Basic scheduler configuration
+- `formations/scheduler-multiuser.yaml` - Multi-user with PostgreSQL
+
 **Database Required:** PostgreSQL or SQLite for job persistence
-**Automation:** Scheduler testing framework, time simulation, performance profiling
-**Success Criteria:** 18 scheduler tests pass + performance targets met
+**Success Criteria:** All scheduler tests pass, jobs execute on time, proper isolation
 
 </details>
 
@@ -1597,10 +1796,11 @@ response = await overlord.chat(
 - **Area 6 (Knowledge):** 19/19 knowledge tests pass ✅ (100% success rate across all 5 test groups 6A-6E)
 - **Area 7 (Orchestration):** ✅ 7A: Workflow orchestration (9 tests pass) | ✅ 7B: A2A Communication (all tests pass) | ✅ 7C-7D: SOP System (6 tests pass, 72% code reduction)
 - **Area 8 (Clarification):** Base: 10 clarification tests pass ✅ | Enhanced: Multiple clarification sequences implemented ✅
-- **Area 9 (Async):** 15 async operation tests pass + webhook integration validated
-- **Area 10 (Streaming):** 25+ streaming tests pass + real-time SSE/WebSocket support
-- **Area 11 (Resilience):** 20+ resilience tests pass + circuit breakers + error recovery
-- **Area 12 (Observability):** 18 monitoring tests pass + distributed tracing + metrics
+- **Area 9 (Async):** Async operations with webhook delivery, clarification/approval before async
+- **Area 10 (Streaming):** Streaming responses with AsyncGenerator support
+- **Area 11 (Response Format):** JSON/Markdown/Text formats + interactive UI elements
+- **Area 12 (Thinking):** Thinking visibility during streaming for transparency
+- **Area 13 (Scheduler):** Scheduled tasks and job management with persistence
 
 ### **Final Validation Checklist**
 - [ ] All 22 feature dimensions tested in combination (including SOPs and multi-clarification)
