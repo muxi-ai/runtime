@@ -27,7 +27,63 @@ The Comprehensive Test Plan has been reorganized with correct focus areas:
 
 ---
 
-### Phase 2: New Features Implementation
+### Phase 2: Large File Multimodal Processing
+*Timeline: 2 weeks*
+
+#### Overview
+**GitHub Issue:** To be created
+**Priority:** HIGH
+**Description:** Add support for processing large audio/video files beyond current provider limits
+
+**Problem Solved:**
+- OpenAI has 25MB limit for audio files (Whisper API)
+- Video files over 100MB often timeout
+- No unified chunking strategy across providers
+- Limited fallback mechanisms for oversized content
+
+**Implementation Plan:**
+
+**Week 1: Core Infrastructure**
+```python
+# File routing based on size and provider
+class MultimodalFileRouter:
+    def route_file(self, file_info, provider, content_type):
+        if size < provider_limit:
+            return DirectProcessing(provider)
+        elif size < 2_000_000_000:  # 2GB
+            return ChunkedProcessing(content_type, provider)
+        else:
+            return StreamingProcessing(content_type, provider)
+```
+
+**Week 2: Audio & Video Chunking**
+- Audio chunking with overlap for continuity
+- Video keyframe extraction and sampling
+- Provider-specific optimizations
+- Cross-provider fallback support
+
+**Files to Create:**
+- `src/muxi/services/multimodal/file_router.py`
+- `src/muxi/services/multimodal/chunking/audio_chunker.py`
+- `src/muxi/services/multimodal/chunking/video_chunker.py`
+- `src/muxi/services/multimodal/chunking/result_fusion.py`
+
+**Files to Modify:**
+- `src/muxi/formation/overlord/overlord.py` - Update audio/video processing
+- `src/muxi/services/multimodal/service.py` - Add chunking integration
+
+**Success Metrics:**
+- Process 500MB+ audio files successfully
+- Process 1GB+ video files without timeout
+- Maintain transcription accuracy >95%
+- Provider fallback working seamlessly
+
+**References:**
+- [Full Implementation Plan](context/prds/large-file-multimodal-implementation-plan.md)
+
+---
+
+### Phase 3: New Features Implementation
 *Timeline: 2-3 weeks*
 
 #### 1. User Identity Resolution (Multiple IDs → Single User)
@@ -175,10 +231,60 @@ secrets:
 
 ---
 
-### Phase 3: System Improvements
+### Phase 4: System Improvements
 *Timeline: 1-2 weeks*
 
-#### 1. Observability Overhaul
+#### 1. Security Hardening (Integrated Approach)
+**Priority:** HIGH
+**Description:** Enterprise-grade security through integrated routing
+
+**Implementation:**
+- Integrate security validation into existing agent routing prompt
+- Add pattern pre-filter for instant blocking of obvious attacks (1ms)
+- Leverage existing ObservabilityManager for response redaction
+- Single LLM call for both routing AND security (50% cost reduction)
+
+**Key Benefits:**
+- **Zero additional infrastructure** - Uses existing agent_router.py
+- **50% latency reduction** - Single LLM call instead of two
+- **No new dependencies** - Removes need for separate security modules
+- **Backward compatible** - Works with existing formations
+
+**Files to Modify:**
+- `src/muxi/formation/overlord/agent_router.py` - Enhanced routing prompt with security
+- `src/muxi/formation/overlord/overlord.py` - Handle security blocks
+
+**References:**
+- [Full Security Hardening Strategy](context/prds/security-hardening-strategy.md)
+
+---
+
+#### 2. External Service Resilience
+**Priority:** HIGH
+**Description:** Escalating circuit breakers for external services that can be down for extended periods
+
+**Implementation:**
+- Escalating TTL lockouts (5min → 1hr → 24hr → permanent) for failing external services
+- Service-type level configuration (LLM, MCP, A2A, Observability)
+- OneLLM callback integration for fallback tracking
+- Opt-in model with per-service configuration
+
+**Key Benefits:**
+- **80% reduction** in wasted API calls to down services
+- **50% cost savings** during provider outages
+- **Automatic recovery** when services become available
+- **No cascading failures** from external service issues
+
+**Files to Create:**
+- `src/muxi/services/resilience/escalating_circuit_breaker.py`
+- `src/muxi/services/resilience/external_service_resilience.py`
+
+**References:**
+- [Full External Service Resilience Strategy](context/prds/external-service-resilience.md)
+
+---
+
+#### 3. Observability Overhaul
 **Goals:**
 - Replace all `print()` statements with proper observability
 - Reduce verbosity (currently too noisy)
@@ -193,9 +299,19 @@ print(f"Agent {agent_id} loaded {len(tools)} tools")
 
 # New (concise):
 observer.info("agent.load", agent_id=agent_id)  # Single event
+```
 
-# Boot-style display:
+**Boot-style display:**
+```text
+   __  _____  ___  ______  ___            __  _
+  /  |/  / / / / |/_/  _/ / _ \__ _____  / /_(_)_ _  ___
+ / /|_/ / /_/ />  <_/ /  / , _/ // / _ \/ __/ /  ' \/ -_)
+/_/  /_/\____/_/|_/___/ /_/|_|\_,_/_//_/\__/_/_/_/_/\__/
+
+Version: 1.3.0 | (c) 2025 Muxi, Inc.
+
 [  OK  ] Started Formation Engine
+[  OK  ] Loading formation <my-formation>
 [  OK  ] Loaded 3 agents
 [  OK  ] Connected to MCP servers (4 tools)
 [  OK  ] Memory systems initialized
@@ -236,7 +352,7 @@ async def process_query(query: str, context: dict):
 
 ---
 
-### Phase 4: API Implementation
+### Phase 5: API Implementation
 *Timeline: 1-2 weeks*
 
 #### Formation API
@@ -368,7 +484,7 @@ POST https://api.formation.ltd/trigger
 
 ---
 
-### Phase 5: Final Polish
+### Phase 6: Final Polish
 *Timeline: 1 week*
 
 #### 1. Code Cleanup
@@ -412,6 +528,7 @@ POST https://api.formation.ltd/trigger
 
 ### Must Have (P0)
 - [ ] Areas 9-10 tests complete (Async, Streaming)
+- [ ] Large file multimodal processing - Handle 500MB+ audio/1GB+ video
 - [ ] User identity resolution (#52) - Multiple IDs → Single User
 - [ ] Secrets example generation (#18)
 - [ ] API implementation (core endpoints + webhook triggers #48)
@@ -434,13 +551,14 @@ POST https://api.formation.ltd/trigger
 
 ## 📅 Timeline Summary
 
-**Total Duration:** 6-8 weeks
+**Total Duration:** 7-9 weeks
 
 1. **Weeks 1-2:** Complete test coverage (Areas 9-13)
-2. **Weeks 3-5:** Implement new features
-3. **Week 6:** System improvements (Observability, Caching)
-4. **Week 7:** API implementation
-5. **Week 8:** Final polish and documentation
+2. **Weeks 3-4:** Large file multimodal processing
+3. **Weeks 5-6:** Implement new features (identity, secrets, triggers)
+4. **Week 7:** System improvements (Observability, Caching)
+5. **Week 8:** API implementation
+6. **Week 9:** Final polish and documentation
 
 **Target Production Date:** End of current quarter
 
