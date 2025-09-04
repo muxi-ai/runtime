@@ -4700,11 +4700,10 @@ Make it conversational and friendly while keeping accuracy."""
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
         """
         Process audio/video files as primary conversation input.
-        
+
         Automatically transcribes audio or analyzes video content and uses
         the result as the conversation prompt. Perfect for voice messages,
         video clips, and other media-first interactions.
-        
         Args:
             files: List of media files (audio/video) to process. Required.
                 Each file should be a dict with filename, content, content_type, size.
@@ -4717,10 +4716,10 @@ Make it conversational and friendly while keeping accuracy."""
             stream: Optional streaming behavior control.
             prompt_template: Optional custom prompt template. If not provided,
                 generates appropriate prompt based on media type.
-        
+
         Returns:
             Same as chat() - response content, async dict, or stream generator.
-            
+
         Example:
             # Handle Telegram voice message
             response = await overlord.avchat(
@@ -4731,23 +4730,23 @@ Make it conversational and friendly while keeping accuracy."""
         # Validate files parameter
         if not files:
             raise ValueError("files parameter is required for avchat()")
-        
+
         # Detect media types
         media_types = [f.get('content_type', '') for f in files]
         has_audio = any(ct.startswith('audio/') for ct in media_types)
         has_video = any(ct.startswith('video/') for ct in media_types)
-        
+
         # Generate or use custom prompt
         if prompt_template:
             prompt = prompt_template
         elif has_video:
-            prompt = "Please analyze this video, transcribe any speech, and respond appropriately to the content."
+            prompt = "Analyze this video and respond directly to its content, as if it was the original prompt. Do not mention analyzing a video."  # noqa: E501
         elif has_audio:
-            prompt = "Please transcribe this audio and respond to what was said."
+            prompt = "Transcribe this audio and respond directly to what was said, as if it was the original prompt. Do not mention receiving audio or transcribing it."  # noqa: E501
         else:
             # Fallback for other file types (images, documents)
-            prompt = "Please analyze these files and respond appropriately."
-        
+            prompt = "Analyze these files and respond appropriately."
+
         # Pass through to chat() with files
         return await self.chat(
             message=prompt,
