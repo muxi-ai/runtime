@@ -26,7 +26,6 @@ from ..agents.agent import Agent
 from ..resilience import (
     ErrorClassifier,
     FallbackManager,
-    CircuitBreaker,
     RecoveryStrategist,
 )
 from .executor import WorkflowExecutor
@@ -49,15 +48,6 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
         self.error_classifier = ErrorClassifier()
         self.fallback_manager = FallbackManager()
         self.recovery_strategist = RecoveryStrategist(ResilienceConfig())
-
-        # TODO: Circuit breakers are initialized but not yet implemented.
-        # Future enhancement: Add circuit breakers for each agent/tool to prevent
-        # cascading failures. Example:
-        # self.circuit_breakers = {
-        #     'linear-mcp': CircuitBreaker(failure_threshold=3, recovery_timeout=60),
-        #     'github-mcp': CircuitBreaker(failure_threshold=3, recovery_timeout=60),
-        # }
-        self.circuit_breakers: Dict[str, CircuitBreaker] = {}
 
         # Track error history for better messages
         self.error_history: Dict[str, List[Dict[str, Any]]] = {}
