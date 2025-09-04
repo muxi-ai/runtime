@@ -71,7 +71,7 @@ Three-tier architecture for context management:
 Unified services for all runtime features:
 - **MCP Service**: Model Context Protocol implementation with agent isolation
 - **A2A Service**: Comprehensive internal/external agent communication with registry
-- **Multimodal Service**: File processing (MarkItDown)
+- **Multimodal Service**: File processing (MarkItDown) with A/V chat support
 - **Scheduler Service**: Natural language task scheduling
 - **Observability**: Event streaming and monitoring
 
@@ -139,6 +139,20 @@ async def main():
     # Process messages
     response = await overlord.chat(
         "Hello! Can you help me?",
+        user_id="user123"
+    )
+    print(response)
+    
+    # Process audio/video files
+    with open("audio.m4a", "rb") as f:
+        audio_content = f.read()
+    
+    response = await overlord.avchat(
+        files=[{
+            "filename": "audio.m4a",
+            "content": audio_content,
+            "content_type": "audio/m4a"
+        }],
         user_id="user123"
     )
     print(response)
