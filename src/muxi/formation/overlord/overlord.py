@@ -182,10 +182,11 @@ from ...services.multimodal import (
 )
 
 # Resilience components
-from ..resilience import (
-    ResilientWorkflowManager,
-    ResilienceConfig,
-)
+# COMMENTED OUT - ResilientWorkflowManager unused, architectural issues
+# from ..resilience import (
+#     ResilientWorkflowManager,
+#     ResilienceConfig,
+# )
 
 # Document Processing Components
 from ..documents.storage import (
@@ -676,9 +677,10 @@ class Overlord:
 
         # Intelligence components removed - using memory extractor for preferences
 
-        # Initialize resilience components (intelligence concerns)
-        resilience_config = ResilienceConfig(**self.formation_config.get("resilience", {}))
-        self.resilient_workflow_manager = ResilientWorkflowManager(resilience_config)
+        # COMMENTED OUT - ResilientWorkflowManager unused, has architectural issues with workflow execution
+        # See comment at line 7254-7255 where we explicitly use ResilientWorkflowExecutor instead
+        # resilience_config = ResilienceConfig(**self.formation_config.get("resilience", {}))
+        # self.resilient_workflow_manager = ResilientWorkflowManager(resilience_config)
 
         # ===================================================================
         # DOCUMENT PROCESSING INTELLIGENCE - Intelligence concerns

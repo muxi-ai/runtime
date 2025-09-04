@@ -30,7 +30,8 @@ from .error_classifier import ErrorClassifier
 from .recovery_strategist import RecoveryStrategist
 from .circuit_breaker import CircuitBreaker
 from .fallback_manager import FallbackManager
-from .resilient_workflow_manager import ResilientWorkflowManager
+# COMMENTED OUT - Unused, architectural issues with workflow execution
+# from .resilient_workflow_manager import ResilientWorkflowManager
 
 __all__ = [
     # Types
@@ -50,5 +51,5 @@ __all__ = [
     "RecoveryStrategist",
     "CircuitBreaker",
     "FallbackManager",
-    "ResilientWorkflowManager",
+    # "ResilientWorkflowManager",  # COMMENTED OUT - Unused
 ]
