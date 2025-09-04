@@ -6,6 +6,8 @@ Critical development context for the MUXI Runtime execution engine.
 
 > Always remove whitespaces from blank lines
 
+> Always use ast-grep instead of regex/text search when possible.
+
 ## Core Architecture Principles
 
 ### Formation-First Architecture
