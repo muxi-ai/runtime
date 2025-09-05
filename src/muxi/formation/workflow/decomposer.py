@@ -759,9 +759,11 @@ Analysis Results:
 
             # Estimate timeline
             total_complexity = sum(task.estimated_complexity for task in workflow.tasks.values())
-            estimated_minutes = total_complexity * 5  # Rough estimate
+            estimated_minutes = total_complexity * 2  # Rough estimate
 
-            if estimated_minutes < 10:
+            if estimated_minutes < 5:
+                time_estimate = "under 5 minutes"
+            elif estimated_minutes < 10:
                 time_estimate = "5-10 minutes"
             elif estimated_minutes < 30:
                 time_estimate = "15-30 minutes"
@@ -772,7 +774,7 @@ Analysis Results:
 
             plan_lines.extend(
                 [
-                    f"\n**Estimated completion time: {time_estimate}**\n",
+                    f"\n**Estimated completion time is {time_estimate}**\n",
                     "Does this approach work for you? "
                     "Would you like me to proceed, or should I adjust anything?",
                 ]
