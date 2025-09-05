@@ -17,6 +17,7 @@ import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs, urlencode, urljoin
+from typing import Optional, Dict, Any, cast
 import argparse
 import urllib.request
 import urllib.error
@@ -28,16 +29,19 @@ MUXI_LOGO_URL = "https://raw.githubusercontent.com/muxi-ai/.github/refs/heads/ma
 class OAuthCallbackHandler(BaseHTTPRequestHandler):
     """HTTP request handler for OAuth callback."""
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         """Handle GET request from OAuth callback."""
         # Parse the URL to extract token or code
         parsed = urlparse(self.path)
         query_params = parse_qs(parsed.query)
 
+        # Cast server to our custom type for attribute access
+        server = cast(OAuthHTTPServer, self.server)
+
         # Check for access token in query params (implicit flow)
         if "access_token" in query_params:
-            self.server.oauth_token = query_params["access_token"][0]
-            self.server.token_type = "access_token"
+            server.oauth_token = query_params["access_token"][0]
+            server.token_type = "access_token"
             self.send_success_response()
             return
 
@@ -46,15 +50,15 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         if parsed.fragment:
             fragment_params = parse_qs(parsed.fragment)
             if "access_token" in fragment_params:
-                self.server.oauth_token = fragment_params["access_token"][0]
-                self.server.token_type = "access_token"
+                server.oauth_token = fragment_params["access_token"][0]
+                server.token_type = "access_token"
                 self.send_success_response()
                 return
 
         # Check for authorization code (authorization code flow)
         if "code" in query_params:
-            self.server.oauth_token = query_params["code"][0]
-            self.server.token_type = "authorization_code"
+            server.oauth_token = query_params["code"][0]
+            server.token_type = "authorization_code"
             self.send_success_response()
             return
 
@@ -62,14 +66,14 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         if "error" in query_params:
             error = query_params["error"][0]
             error_desc = query_params.get("error_description", ["Unknown error"])[0]
-            self.server.oauth_error = f"{error}: {error_desc}"
+            server.oauth_error = f"{error}: {error_desc}"
             self.send_error_response(error_desc)
             return
 
         # If we get here, send a page with JavaScript to extract fragment
         self.send_fragment_extractor()
 
-    def send_success_response(self):
+    def send_success_response(self) -> None:
         """Send success response to browser."""
         self.send_response(200)
         self.send_header("Content-type", "text/html")
@@ -81,14 +85,14 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         <head>
             <title>OAuth Success - MUXI</title>
             <style>
-                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                        display: flex; align-items: center; justify-content: center; height: 100vh;
-                       margin: 0; background: #f5f5f5; }
-                .container { text-align: center; padding: 40px; background: white;
-                            border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                h1 { color: #2ecc71; margin-bottom: 20px; }
-                p { color: #666; margin-bottom: 30px; }
-                .logo { width: 80px; height: 80px; margin-bottom: 20px; }
+                       margin: 0; background: #f5f5f5; }}
+                .container {{ text-align: center; padding: 40px; background: white;
+                            border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                h1 {{ color: #2ecc71; margin-bottom: 20px; }}
+                p {{ color: #666; margin-bottom: 30px; }}
+                .logo {{ width: 80px; height: 80px; margin-bottom: 20px; }}
             </style>
         </head>
         <body>
@@ -96,7 +100,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
                 <img src="{logo}" alt="MUXI" class="logo" onerror="this.style.display='none'">
                 <h1>✅ Authorization Successful!</h1>
                 <p>You can now close this window and return to your terminal.</p>
-                <script>window.setTimeout(function(){{window.close();}}, 2000);</script>
+                <script>window.setTimeout(function(){{{{window.close();}}}}, 2000);</script>
             </div>
         </body>
         </html>
@@ -106,7 +110,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
 
         self.wfile.write(html.encode())
 
-    def send_error_response(self, error_message):
+    def send_error_response(self, error_message: str) -> None:
         """Send error response to browser."""
         self.send_response(400)
         self.send_header("Content-type", "text/html")
@@ -142,7 +146,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
 
         self.wfile.write(html.encode())
 
-    def send_fragment_extractor(self):
+    def send_fragment_extractor(self) -> None:
         """Send JavaScript to extract token from fragment."""
         self.send_response(200)
         self.send_header("Content-type", "text/html")
@@ -154,12 +158,12 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         <head>
             <title>Processing OAuth Response - MUXI</title>
             <style>
-                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                        display: flex; align-items: center; justify-content: center; height: 100vh;
-                       margin: 0; background: #f5f5f5; }
-                .container { text-align: center; padding: 40px; background: white;
-                            border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                .logo { width: 80px; height: 80px; margin-bottom: 20px; }
+                       margin: 0; background: #f5f5f5; }}
+                .container {{ text-align: center; padding: 40px; background: white;
+                            border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                .logo {{ width: 80px; height: 80px; margin-bottom: 20px; }}
             </style>
         </head>
         <body>
@@ -169,18 +173,18 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             </div>
             <script>
                 // Extract token from fragment and redirect
-                if (window.location.hash) {
+                if (window.location.hash) {{
                     var params = new URLSearchParams(window.location.hash.substring(1));
                     var token = params.get('access_token');
-                    if (token) {
+                    if (token) {{
                         // Redirect to callback with token in query params
                         window.location.href = '/callback?access_token=' + encodeURIComponent(token);
-                    } else {
+                    }} else {{
                         window.location.href = '/callback?error=no_token_found';
-                    }
-                } else {
+                    }}
+                }} else {{
                     window.location.href = '/callback?error=no_fragment';
-                }
+                }}
             </script>
         </body>
         </html>
@@ -190,9 +194,22 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
 
         self.wfile.write(html.encode())
 
-    def log_message(self, format, *args):
+    def log_message(self, format: str, *args) -> None:
         """Suppress default HTTP logging."""
         pass
+
+
+class OAuthHTTPServer(HTTPServer):
+    """Custom HTTP server with OAuth state tracking."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.oauth_token: Optional[str] = None
+        self.oauth_error: Optional[str] = None
+        self.token_type: Optional[str] = None
+        self.oauth_config: Optional[Dict[str, Any]] = None
+        self.client_info: Optional[Dict[str, Any]] = None
+        self.code_verifier: Optional[str] = None
 
 
 def find_available_port():
@@ -207,10 +224,7 @@ def find_available_port():
 def start_callback_server():
     """Start the OAuth callback server."""
     port = find_available_port()
-    server = HTTPServer(("localhost", port), OAuthCallbackHandler)
-    server.oauth_token = None
-    server.oauth_error = None
-    server.token_type = None
+    server = OAuthHTTPServer(("localhost", port), OAuthCallbackHandler)
 
     # Start server in a thread
     thread = threading.Thread(target=server.serve_forever)
