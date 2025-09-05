@@ -7066,6 +7066,21 @@ Make it conversational and friendly while keeping accuracy."""
                 workflow_id=workflow.id,
             )
 
+    async def _get_webhook_url_for_request(self, request_id: str) -> Optional[str]:
+        """
+        Get the webhook URL for a specific request from the tracker.
+
+        Args:
+            request_id: The unique request identifier
+
+        Returns:
+            The webhook URL if found, None otherwise
+        """
+        request_state = await self.request_tracker.get_request(request_id)
+        if request_state:
+            return request_state.webhook_url
+        return None
+
     async def _send_completion_webhook(
         self,
         webhook_url: str,

@@ -239,6 +239,20 @@ class ChatOrchestrator:
                 self.overlord, "async_threshold_seconds", 30
             )
 
+            # FAIL-SAFE: Force sync mode if no webhook URL is available
+            if use_async is not False and webhook_url is None:
+                observability.observe(
+                    event_type=observability.ConversationEvents.GENERAL,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "forced_sync": True,
+                        "reason": "no_webhook_url",
+                        "use_async_requested": use_async,
+                    },
+                    description="Forcing sync mode: No webhook URL configured or provided",
+                )
+                use_async = False
+
             # Smart async/sync decision making
             should_use_async = await self._determine_async_mode(
                 enhanced_message, agent_name, use_async, threshold_seconds
