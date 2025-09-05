@@ -6,6 +6,8 @@ allowed-tools: Bash, Read, Write, LS
 
 This command prepares the testing environment by detecting the test framework, validating dependencies, and configuring the test-runner agent for optimal test execution.
 
+## IMPORTANT
+DO NOT RUN ANY TESTS DURING THIS PRIME.
 
 ## Preflight Checklist
 
@@ -20,7 +22,7 @@ Before proceeding, consume the following context:
 - Read the test plan
    - [Runtime Test Plan.md](tests/Comprehensive_Test_Plan.md)
    - [Runtime Testing Guide](tests/Lessons-Learned.md)
-   
+
 ## Instructions
 
 ### Always use the test-runner sub-agent to run tests and analyze the test results.
