@@ -27,6 +27,8 @@ async def main():
     # Clear webhook log if it exists
     if webhook_log_path.exists():
         webhook_log_path.unlink()
+    # Small delay to ensure file is fully deleted
+    await asyncio.sleep(0.1)
 
     try:
         formation = Formation()
@@ -59,6 +61,7 @@ async def main():
             print(f"   Webhook URL: {response.get('webhook_url')}")
             
             request_id = response.get('request_id')
+            print(f"   Looking for request ID: {request_id}")
             
             # Wait for webhook to be delivered
             print("\n⏳ Waiting for webhook delivery...")
@@ -74,26 +77,50 @@ async def main():
                 # Check if webhook has been received
                 if webhook_log_path.exists():
                     try:
-                        with open(webhook_log_path) as f:
-                            webhook_data = json.load(f)
+                        with open(webhook_log_path, 'r') as f:
+                            content = f.read()
+                            if not content:
+                                continue  # File exists but empty, wait more
                             
-                        # Check if our webhook is in the log
-                        if webhook_data:
-                            for webhook in webhook_data:
-                                if webhook.get('request_id') == request_id:
-                                    print(f"\n✅ Webhook received after {waited}s!")
-                                    print(f"   Request ID: {webhook.get('request_id')}")
-                                    print(f"   Status: {webhook.get('status')}")
-                                    print(f"   Content preview: {str(webhook.get('result', ''))[:100]}...")
-                                    
-                                    # Verify the content is correct
-                                    result = str(webhook.get('result', '')).lower()
-                                    if '4' in result or 'four' in result:
-                                        print("   ✅ Result contains correct answer (4)")
-                                    
-                                    webhook_found = True
-                                    break
-                    except (json.JSONDecodeError, FileNotFoundError):
+                            # Read lines and parse each as JSON (JSONL format)
+                            for line in content.splitlines():
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                
+                                try:
+                                    webhook_entry = json.loads(line)
+                                    # The webhook entry contains the full HTTP request details
+                                    # The actual webhook payload is in the 'body' field
+                                    if 'body' in webhook_entry:
+                                        webhook = webhook_entry['body']
+                                        webhook_id = webhook.get('id') if isinstance(webhook, dict) else None
+                                        if waited <= 2:  # Only show debug for first 2 seconds
+                                            print(f"   Found webhook with ID: {webhook_id} (looking for {request_id})")
+                                        if isinstance(webhook, dict) and webhook.get('id') == request_id:
+                                            print(f"\n✅ Webhook received after {waited}s!")
+                                            print(f"   Request ID: {webhook.get('id')}")
+                                            print(f"   Status: {webhook.get('status')}")
+                                            print(f"   Processing time: {webhook.get('processing_time', 'N/A')}s")
+                                            
+                                            # Get the response content
+                                            response_data = webhook.get('response', [])
+                                            if response_data and isinstance(response_data, list):
+                                                for item in response_data:
+                                                    if item.get('type') == 'text':
+                                                        content = item.get('text', '')
+                                                        print(f"   Content preview: {content[:100]}...")
+                                                        
+                                                        # Verify the content is correct
+                                                        if '4' in content.lower() or 'four' in content.lower():
+                                                            print("   ✅ Result contains correct answer (4)")
+                                            
+                                            webhook_found = True
+                                            break
+                                except json.JSONDecodeError:
+                                    # Single line failed to parse, continue with next
+                                    continue
+                    except (IOError, OSError) as e:
                         # File might not be ready yet, continue waiting
                         pass
                 

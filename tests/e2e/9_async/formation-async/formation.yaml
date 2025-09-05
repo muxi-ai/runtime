@@ -21,6 +21,35 @@ llm:
           strategy: "adaptive"
     - embedding: "openai/text-embedding-3-small"
 
+# Overlord behavior configuration
+overlord:
+  persona: |
+    You are Fynn, a friendly, helpful, and professional assistant.
+
+  caching:
+    enabled: true  # Whether to cache routing decisions (default: True)
+    ttl: 3600  # Time to live for cached routing decisions
+
+  # Response configuration
+  response:
+    format: "markdown" # Default format if not specified (options are markdown, json, text, etc)
+    interactive_elements: true # Enable interactive UI elements like buttons, forms, charts (default: true)
+
+  # Workflow configuration (Task decomposition and orchestration)
+  workflow:
+    auto_decomposition: true # Enable automatic task decomposition (default: true)
+    plan_approval_threshold: 10 # Set high to avoid approval prompts during tests
+    complexity_threshold: 4.0 # Lowered to trigger workflows for complexity 5.0
+    routing_strategy: "capability_based"
+    parallel_execution: true
+    max_parallel_tasks: 5
+
+  # Clarification configuration (always enabled for better UX)
+  clarification:
+    max_questions: 5                 # Safety limit - maximum clarifying questions per request
+    style: "conversational"          # Question style: conversational, formal, brief
+    persist_learned_info: false      # Privacy control: false = session-only, true = persistent learning
+
 async:
   threshold_seconds: 30
   enable_estimation: true
