@@ -759,7 +759,7 @@ Analysis Results:
 
             # Estimate timeline
             total_complexity = sum(task.estimated_complexity for task in workflow.tasks.values())
-            estimated_minutes = total_complexity * 2  # Rough estimate
+            estimated_minutes = total_complexity * 0.5  # Rough estimate
 
             if estimated_minutes < 5:
                 time_estimate = "under 5 minutes"

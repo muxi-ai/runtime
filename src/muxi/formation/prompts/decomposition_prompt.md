@@ -54,6 +54,25 @@ Provide a short paragraph explaining:
 - EACH TASK SHOULD HAVE ONE PRIMARY RESPONSIBILITY TO BE CARRIED OUT BY A SINGLE AGENT
 - NEVER assign platform operations (issues, tickets) to developers or as "implementation"
 
+### AI EXECUTION CONTEXT - CRITICAL FOR COMPLEXITY ESTIMATION:
+**These tasks will be executed by AI agents, NOT humans. Adjust complexity estimates accordingly:**
+
+**AI Execution Speed:**
+- **Web research**: AI can process multiple sources simultaneously, extract key information in seconds
+- **Content analysis**: AI can analyze large amounts of text instantly, identify patterns rapidly  
+- **Writing/synthesis**: AI can generate comprehensive reports in 30-60 seconds
+- **API operations**: AI can create issues, tickets, posts in 5-15 seconds via API calls
+- **Data processing**: AI can handle large datasets and complex calculations instantly
+
+**Complexity Guidelines for AI Execution:**
+- **Complexity 1-2**: Simple API calls, basic queries, single-source lookups (5-30 seconds)
+- **Complexity 3-4**: Multi-source research, basic analysis, short content generation (30-90 seconds) 
+- **Complexity 5-6**: Complex analysis, comprehensive writing, multi-step research (1-3 minutes)
+- **Complexity 7-8**: Deep synthesis, complex integrations, extensive content creation (3-7 minutes)
+- **Complexity 9-10**: Extremely complex analysis, massive content generation, intricate workflows (7+ minutes)
+
+**Remember**: AI doesn't get tired, can process information in parallel, and works at machine speed - NOT human speed!
+
 ### EXAMPLES OF CORRECT TASK DESCRIPTIONS:
 - ✓ "Create issue with research findings" (matches platform-specific capability)
 - ✗ "Implement solution as issue" (WRONG - creating issues is not implementation)

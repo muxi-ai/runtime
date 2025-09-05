@@ -297,6 +297,8 @@ class ChatOrchestrator:
                     session_id=session_id,
                     request_id=request_id,
                     original_message=message,  # Pass original for extraction
+                    use_async=use_async,
+                    webhook_url=webhook_url,
                 )
 
     async def _determine_async_mode(
@@ -308,7 +310,8 @@ class ChatOrchestrator:
     ) -> bool:
         """
         Determine whether to use async or sync processing.
-        Now approval-aware to ensure approval flows stay synchronous.
+        Simplified: Just return the explicit preference or default to sync.
+        Workflow will make the actual decision based on time estimates.
 
         Args:
             message: The user's message
@@ -323,73 +326,9 @@ class ChatOrchestrator:
         if use_async is not None:
             return use_async
 
-        # NEW: Check if this would need approval - if so, force sync
-        try:
-            if await self.overlord.would_need_workflow_approval(message, agent_name):
-                # Log the decision for observability
-                observability.observe(
-                    event_type=observability.ConversationEvents.ASYNC_THRESHOLD_DETECTED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "decision": "force_sync_for_approval",
-                        "reason": "workflow_approval_required",
-                    },
-                    description="Forcing sync mode because workflow approval is required",
-                )
-                return False
-        except Exception:
-            # If approval check fails, continue with normal async logic
-            pass
-
-        # If no time estimator available, use sync
-        if not hasattr(self.overlord, "time_estimator") or not self.overlord.time_estimator:
-            return False
-
-        try:
-            # Estimate processing time
-            context = {
-                "agent_name": agent_name,
-                "formation_config": self.overlord.formation_config,
-            }
-            estimated_time = await self.overlord.time_estimator.estimate_processing_time(
-                request=message,
-                context=context,
-            )
-
-            # Use async if estimated time exceeds threshold
-            # If estimation returns None, default to sync
-            if estimated_time is None:
-                raise ValueError("Time estimation returned None")
-
-            should_async = estimated_time > threshold_seconds
-
-            # Emit decision event
-            if should_async:
-                observability.observe(
-                    event_type=observability.ConversationEvents.ASYNC_THRESHOLD_DETECTED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "estimated_time": estimated_time,
-                        "threshold_seconds": threshold_seconds,
-                        "decision": "async",
-                    },
-                    description=(
-                        f"Async threshold detected: {estimated_time}s estimated "
-                        f"> {threshold_seconds}s threshold"
-                    ),
-                )
-
-            return should_async
-
-        except Exception as e:
-            # If estimation fails, default to sync
-            observability.observe(
-                event_type=observability.ConversationEvents.ASYNC_PROCESSING_FAILED,
-                level=observability.EventLevel.WARNING,
-                data={"error": str(e)},
-                description="Time estimation failed, defaulting to sync processing",
-            )
-            return False
+        # Default to sync for non-workflow requests
+        # Workflow will make its own async decision based on task complexity
+        return False
 
     async def _execute_async_request(
         self,
@@ -489,6 +428,8 @@ class ChatOrchestrator:
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
         original_message: Optional[str] = None,
+        use_async: Optional[bool] = None,
+        webhook_url: Optional[str] = None,
     ) -> Union[str, MuxiResponse]:
         """
         Process a chat request synchronously.
@@ -497,6 +438,11 @@ class ChatOrchestrator:
             message: The user's message
             agent_name: Optional specific agent
             user_id: Optional user ID
+            session_id: Optional session ID
+            request_id: Optional request ID
+            original_message: Original message before enhancement
+            use_async: Explicit async preference to pass to workflow
+            webhook_url: Webhook URL for async responses
 
         Returns:
             The response string or MuxiResponse with artifacts
@@ -508,6 +454,8 @@ class ChatOrchestrator:
             user_id=user_id,
             session_id=session_id,
             request_id=request_id,
+            use_async=use_async,
+            webhook_url=webhook_url,
         )
 
         # Store overlord's final response in buffer memory (fire-and-forget)

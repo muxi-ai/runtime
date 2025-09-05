@@ -4670,10 +4670,11 @@ Make it conversational and friendly while keeping accuracy."""
             # Normalize user_id - lowercase and strip whitespace
             user_id = str(user_id).lower().strip()
 
-        # Force use_async=False if no webhook URL is configured in formation
-        # (and no webhook_url provided in this call)
-        async_webhook_url = self.formation_config.get("async", {}).get("webhook_url", webhook_url)
-        if use_async is not False and async_webhook_url is None:
+        # Get webhook URL from formation config or parameter
+        webhook_url = webhook_url or self.formation_config.get("async", {}).get("webhook_url")
+        
+        # Force use_async=False if no webhook URL available
+        if use_async is not False and webhook_url is None:
             use_async = False
 
         return await self.chat_orchestrator.chat(
@@ -4867,9 +4868,13 @@ Make it conversational and friendly while keeping accuracy."""
                     # No webhook available, proceed with regular processing
                     await self.request_tracker.update_request(request_id, RequestStatus.PROCESSING)
 
+            # Get webhook URL for the request
+            webhook_url = await self._get_webhook_url_for_request(request_id)
+            
             # Process using existing sync infrastructure
             result = await self._process_sync_chat(
-                message, agent_name, user_id, session_id=session_id, request_id=request_id
+                message, agent_name, user_id, session_id=session_id, request_id=request_id,
+                use_async=True, webhook_url=webhook_url
             )
             processing_time = time.time() - start_time
 
@@ -5146,6 +5151,8 @@ Make it conversational and friendly while keeping accuracy."""
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
         skip_clarification: bool = False,
+        use_async: Optional[bool] = None,
+        webhook_url: Optional[str] = None,
     ) -> MuxiResponse:
         """
         Process chat synchronously using existing infrastructure.
@@ -5586,16 +5593,85 @@ Make it conversational and friendly while keeping accuracy."""
 
                             # Handle different approval outcomes
                             if approval_status == ApprovalStatus.APPROVED:
+                                # Get preserved async intent from clarification info
+                                use_async = clarification_info.get("use_async")
+                                webhook_url = clarification_info.get("webhook_url")
+                                
+                                # Debug logging
+                                observability.observe(
+                                    event_type=observability.ServerEvents.SERVER_STARTED,
+                                    level=observability.EventLevel.INFO,
+                                    data={
+                                        "service": "workflow_approval_execution",
+                                        "use_async": use_async,
+                                        "webhook_url": webhook_url,
+                                        "has_webhook": webhook_url is not None,
+                                    },
+                                    description=f"Workflow approval execution: async={use_async}, has_webhook={webhook_url is not None}",
+                                )
+
                                 # Clean up pending states
                                 self._delete_pending_clarification(session_id)
                                 self.workflow_manager.remove_pending_approval(workflow_id)
 
-                                # NEW: Check if execution should be async now that approval is obtained
-                                should_execute_async = await self._should_execute_workflow_async(
-                                    workflow, original_message or message
+                                # Log initial state before recalculation
+                                observability.observe(
+                                    event_type=observability.ServerEvents.SERVER_STARTED,
+                                    level=observability.EventLevel.INFO,
+                                    data={
+                                        "service": "workflow_decision_before",
+                                        "use_async_before": use_async,
+                                        "webhook_url": webhook_url,
+                                    },
+                                    description=f"Before recalc: use_async={use_async}, webhook_url={webhook_url}",
                                 )
 
-                                if should_execute_async:
+                                # If use_async was not set, recalculate based on workflow complexity
+                                if use_async is None and workflow and workflow.tasks:
+                                    total_complexity = sum(
+                                        task.estimated_complexity for task in workflow.tasks.values()
+                                    )
+                                    estimated_minutes = total_complexity * 0.5  # Half minute per complexity point
+                                    threshold_minutes = self.async_threshold_seconds / 60  # Convert seconds to minutes
+                                    use_async = estimated_minutes > threshold_minutes
+                                    
+                                    observability.observe(
+                                        event_type=observability.ServerEvents.SERVER_STARTED,
+                                        level=observability.EventLevel.INFO,
+                                        data={
+                                            "service": "workflow_decision_recalc",
+                                            "total_complexity": total_complexity,
+                                            "estimated_minutes": estimated_minutes,
+                                            "threshold_minutes": threshold_minutes,
+                                            "use_async_recalc": use_async,
+                                        },
+                                        description=f"Recalculated: complexity={total_complexity}, est={estimated_minutes}min > {threshold_minutes}min = {use_async}",
+                                    )
+
+                                # Log final decision
+                                observability.observe(
+                                    event_type=observability.ServerEvents.SERVER_STARTED,
+                                    level=observability.EventLevel.INFO,
+                                    data={
+                                        "service": "workflow_decision_final",
+                                        "use_async_final": use_async,
+                                        "webhook_url": webhook_url,
+                                        "will_execute_async": use_async and webhook_url is not None,
+                                    },
+                                    description=f"Final decision: async={use_async and webhook_url is not None} (use_async={use_async}, has_webhook={webhook_url is not None})",
+                                )
+
+                                # Check if we should execute async
+                                if use_async and webhook_url:
+                                    observability.observe(
+                                        event_type=observability.ServerEvents.SERVER_STARTED,
+                                        level=observability.EventLevel.INFO,
+                                        data={
+                                            "service": "workflow_executing_async",
+                                            "webhook_url": webhook_url,
+                                        },
+                                        description="Executing workflow ASYNCHRONOUSLY",
+                                    )
                                     # Execute asynchronously with webhook notification
                                     return await self._execute_workflow_async(
                                         workflow=workflow,
@@ -5603,8 +5679,22 @@ Make it conversational and friendly while keeping accuracy."""
                                         user_id=user_id,
                                         session_id=session_id,
                                         request_id=request_id,
+                                        webhook_url=webhook_url,
                                     )
                                 else:
+                                    observability.observe(
+                                        event_type=observability.ServerEvents.SERVER_STARTED,
+                                        level=observability.EventLevel.INFO,
+                                        data={
+                                            "service": "workflow_executing_sync",
+                                            "use_async": use_async,
+                                            "webhook_url": webhook_url,
+                                            "reason": "sync because " + (
+                                                "use_async is False" if not use_async else "no webhook URL"
+                                            ),
+                                        },
+                                        description=f"Executing workflow SYNCHRONOUSLY: use_async={use_async}, webhook={webhook_url}",
+                                    )
                                     # Execute synchronously (existing code)
                                     return await self._execute_workflow(
                                         workflow=workflow,
@@ -6012,7 +6102,23 @@ Make it conversational and friendly while keeping accuracy."""
                         if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
                             next_line = lines[i + 1].strip()
                             if next_line.startswith("User:"):
-                                actual_message = next_line[5:].strip()  # Remove "User: " prefix
+                                # Handle multi-line messages: collect all content after "User:"
+                                content_lines = []
+                                # First, get any content on the same line as "User:"
+                                first_line_content = next_line[5:].strip()
+                                if first_line_content:
+                                    content_lines.append(first_line_content)
+
+                                # Then collect subsequent lines until we hit another section or end
+                                for j in range(i + 2, len(lines)):
+                                    line_content = lines[j].strip()
+                                    # Stop if we hit another section marker or empty line
+                                    if line_content.startswith("===") or (not line_content and len(content_lines) > 0):
+                                        break
+                                    if line_content:  # Only add non-empty lines
+                                        content_lines.append(line_content)
+
+                                actual_message = " ".join(content_lines)
                                 break
 
                 analysis = await self.request_analyzer.analyze_request(actual_message)
@@ -6059,6 +6165,8 @@ Make it conversational and friendly while keeping accuracy."""
                             user_id=user_id,
                             session_id=session_id,
                             request_id=request_id,
+                            use_async=use_async,
+                            webhook_url=webhook_url,
                             relevant_sop=relevant_sop,
                         )
 
@@ -6104,6 +6212,8 @@ Make it conversational and friendly while keeping accuracy."""
                                 user_id=user_id,
                                 session_id=session_id,
                                 request_id=request_id,
+                                use_async=use_async,
+                                webhook_url=webhook_url,
                                 relevant_sop=None,
                             )
             except Exception as e:
@@ -6501,6 +6611,8 @@ Make it conversational and friendly while keeping accuracy."""
         request_id: Optional[str] = None,
         stream: bool = False,
         relevant_sop: Optional[Dict] = None,
+        use_async: Optional[bool] = None,
+        webhook_url: Optional[str] = None,
     ) -> Union[MuxiResponse, AsyncGenerator[str, None]]:
         """
         Process a complex request using workflow orchestration.
@@ -6686,6 +6798,36 @@ Make it conversational and friendly while keeping accuracy."""
                 description=f"Task decomposition complete: {len(workflow.tasks) if workflow else 0} tasks",
             )
 
+            # NEW: Make async decision based on workflow time estimate
+            if use_async is None and workflow and workflow.tasks:
+                # Calculate estimated time based on task complexity
+                total_complexity = sum(
+                    task.estimated_complexity for task in workflow.tasks.values()
+                )
+                # More realistic time estimate: ~30 seconds per complexity point
+                estimated_minutes = total_complexity * 0.5
+
+                # Decide async based on configured threshold
+                threshold_minutes = self.async_threshold_seconds / 60  # Convert seconds to minutes
+                use_async = estimated_minutes > threshold_minutes
+
+                observability.observe(
+                    event_type=observability.ConversationEvents.ASYNC_THRESHOLD_DETECTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "estimated_minutes": estimated_minutes,
+                        "threshold_minutes": threshold_minutes,
+                        "decision": "async" if use_async else "sync",
+                        "reason": "workflow_time_estimate",
+                        "total_complexity": total_complexity,
+                        "task_count": len(workflow.tasks),
+                    },
+                    description=(
+                        f"Workflow async decision: {estimated_minutes:.1f} min estimated, "
+                        f"{'async' if use_async else 'sync'} mode selected"
+                    ),
+                )
+
             # Store workflow for tracking
             workflow_id = workflow.id
 
@@ -6726,6 +6868,8 @@ Make it conversational and friendly while keeping accuracy."""
                     user_id=user_id,
                     session_id=session_id,
                     request_id=request_id,
+                    use_async=use_async,
+                    webhook_url=webhook_url,
                 )
             else:
                 # Execute immediately without approval
@@ -6736,22 +6880,41 @@ Make it conversational and friendly while keeping accuracy."""
                     description="Executing workflow without approval",
                 )
 
-                # Debug: About to call _execute_workflow
-                observability.observe(
-                    event_type=observability.ServerEvents.SERVER_STARTED,
-                    level=observability.EventLevel.INFO,
-                    data={"service": "execute_workflow_call", "workflow_id": workflow_id},
-                    description="About to call _execute_workflow",
-                )
+                # Check if we should execute async or sync
+                if use_async and webhook_url:
+                    # Execute asynchronously
+                    observability.observe(
+                        event_type=observability.ServerEvents.SERVER_STARTED,
+                        level=observability.EventLevel.INFO,
+                        data={"service": "execute_workflow_async_call", "workflow_id": workflow_id},
+                        description="About to call _execute_workflow_async",
+                    )
 
-                result = await self._execute_workflow(
-                    workflow=workflow,
-                    message=message,
-                    user_id=user_id,
-                    session_id=session_id,
-                    request_id=request_id,
-                    stream=stream,
-                )
+                    result = await self._execute_workflow_async(
+                        workflow=workflow,
+                        message=message,
+                        user_id=user_id,
+                        session_id=session_id,
+                        request_id=request_id,
+                        webhook_url=webhook_url,
+                    )
+                else:
+                    # Execute synchronously
+                    observability.observe(
+                        event_type=observability.ServerEvents.SERVER_STARTED,
+                        level=observability.EventLevel.INFO,
+                        data={"service": "execute_workflow_sync_call", "workflow_id": workflow_id},
+                        description="About to call _execute_workflow",
+                    )
+
+                    result = await self._execute_workflow(
+                        workflow=workflow,
+                        message=message,
+                        user_id=user_id,
+                        session_id=session_id,
+                        request_id=request_id,
+                        stream=stream,
+                    )
 
                 # Debug: _execute_workflow completed
                 observability.observe(
@@ -6805,6 +6968,8 @@ Make it conversational and friendly while keeping accuracy."""
         user_id: str,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
+        use_async: Optional[bool] = None,
+        webhook_url: Optional[str] = None,
     ) -> MuxiResponse:
         """
         Handle workflow approval flow.
@@ -6876,6 +7041,8 @@ Make it conversational and friendly while keeping accuracy."""
                     "original_message": message,
                     "user_id": user_id,
                     "request_id": request_id,
+                    "use_async": use_async,  # Preserve async intent
+                    "webhook_url": webhook_url,  # Preserve webhook URL
                 },
             )
 
@@ -6990,12 +7157,26 @@ Make it conversational and friendly while keeping accuracy."""
         user_id: str,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
+        webhook_url: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Execute approved workflow asynchronously with webhook notification.
         """
-        # Get webhook URL from configuration
-        webhook_url = self.formation_config.get("async", {}).get("webhook_url")
+        # Use provided webhook URL or fallback to configuration
+        if not webhook_url:
+            webhook_url = self.formation_config.get("async", {}).get("webhook_url")
+        
+        # Log webhook URL for debugging
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "async_execution_webhook_url",
+                "webhook_url": webhook_url,
+                "request_id": request_id,
+            },
+            description=f"Async execution will use webhook URL: {webhook_url}",
+        )
 
         # Mark request as async for observability
         if hasattr(self, "observability_manager"):
@@ -7037,6 +7218,18 @@ Make it conversational and friendly while keeping accuracy."""
         webhook_url: str,
     ):
         """Execute workflow in background and send webhook notification."""
+        # Log that background execution started
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "workflow_background_execution_started",
+                "request_id": request_id,
+                "webhook_url": webhook_url,
+            },
+            description=f"Starting background execution for request {request_id}",
+        )
+        
         try:
             # Execute the workflow normally
             result = await self._execute_workflow(
@@ -7046,14 +7239,54 @@ Make it conversational and friendly while keeping accuracy."""
                 session_id=session_id,
                 request_id=request_id,
             )
+            
+            # Log before sending webhook
+            observability.observe(
+                event_type=observability.ServerEvents.SERVER_STARTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "service": "workflow_background_execution_completed",
+                    "request_id": request_id,
+                    "webhook_url": webhook_url,
+                },
+                description=f"Background execution completed for request {request_id}, sending webhook",
+            )
 
+            # Convert result to JSON-serializable format
+            serializable_result = None
+            if result:
+                if hasattr(result, 'content'):
+                    # Handle MuxiResponse objects
+                    serializable_result = {
+                        "content": str(result.content),
+                        "request_id": getattr(result, 'request_id', None),
+                        "status": getattr(result, 'status', None),
+                        "timestamp": getattr(result, 'timestamp', None)
+                    }
+                elif isinstance(result, dict):
+                    serializable_result = result
+                else:
+                    serializable_result = {"content": str(result)}
+            
             # Send success webhook (reuse existing webhook logic if available)
             await self._send_completion_webhook(
                 webhook_url=webhook_url,
                 request_id=request_id,
                 status="completed",
-                result=result,
+                result=serializable_result,
                 workflow_id=workflow.id,
+            )
+            
+            # Log after sending webhook
+            observability.observe(
+                event_type=observability.ServerEvents.SERVER_STARTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "service": "workflow_webhook_sent",
+                    "request_id": request_id,
+                    "webhook_url": webhook_url,
+                },
+                description=f"Webhook sent successfully for request {request_id}",
             )
 
         except Exception as e:
