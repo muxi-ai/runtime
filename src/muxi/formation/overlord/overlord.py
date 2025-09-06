@@ -3080,7 +3080,7 @@ Make it conversational and friendly while keeping accuracy."""
             except Exception as e:
                 # Log unexpected errors but continue
                 observability.observe(
-                    event_type=observability.SystemEvents.WARNING,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={
                         "component": "task_decomposer",
@@ -3120,7 +3120,7 @@ Make it conversational and friendly while keeping accuracy."""
             except Exception as e:
                 # Log unexpected errors but continue
                 observability.observe(
-                    event_type=observability.SystemEvents.WARNING,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={
                         "component": "workflow_executor",
@@ -4677,6 +4677,21 @@ Make it conversational and friendly while keeping accuracy."""
         if use_async is not False and webhook_url is None:
             use_async = False
 
+        # Handle streaming conflict: async mode takes precedence over streaming
+        # When both async and streaming are requested, ignore streaming
+        if use_async and stream:
+            observability.observe(
+                event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "use_async": use_async,
+                    "stream": stream,
+                    "resolution": "ignoring_stream",
+                },
+                description="Async mode requested with streaming - ignoring streaming to prevent conflict",
+            )
+            stream = False  # Disable streaming when async is active
+
         return await self.chat_orchestrator.chat(
             message=message,
             agent_name=agent_name,
@@ -5144,6 +5159,60 @@ Make it conversational and friendly while keeping accuracy."""
                 key=session_id, namespace=self.pending_clarification_namespace
             )
         )
+
+    async def _process_streaming_chat(
+        self,
+        message: str,
+        agent_name: Optional[str],
+        user_id: Any,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> AsyncGenerator[str, None]:
+        """
+        Process chat with streaming response chunks.
+
+        This method handles streaming chat processing by delegating to the sync
+        method and yielding the response in chunks. For simplicity, this
+        implementation yields the complete response as a single chunk, but
+        could be enhanced to yield true streaming chunks from the LLM.
+
+        Args:
+            message: The user's message
+            agent_name: Optional specific agent
+            user_id: Optional user ID
+            session_id: Optional session ID
+            request_id: Optional request ID
+
+        Yields:
+            Response chunks as strings
+        """
+        # For now, delegate to sync processing and yield response as single chunk
+        # This satisfies the interface requirements and can be enhanced later for true streaming
+        try:
+            # Process using the existing sync method
+            result = await self._process_sync_chat(
+                message=message,
+                agent_name=agent_name,
+                user_id=user_id,
+                session_id=session_id,
+                request_id=request_id,
+                skip_clarification=False,
+            )
+
+            # Extract content and yield as chunk
+            if result and hasattr(result, "content"):
+                content = result.content if isinstance(result.content, str) else str(result.content)
+                if content:
+                    # For now, yield the complete response as a single chunk
+                    # This can be enhanced later to provide true streaming chunks
+                    yield content
+            else:
+                # Fallback for unexpected response types
+                yield str(result) if result else ""
+
+        except Exception as e:
+            # Yield error message as chunk
+            yield f"Error processing streaming request: {str(e)}"
 
     async def _process_sync_chat(
         self,
@@ -7372,62 +7441,56 @@ Make it conversational and friendly while keeping accuracy."""
         webhook_url: str,
         request_id: Optional[str],
         status: str,
-        workflow_id: str,
+        workflow_id: Optional[str] = None,
         result: Optional[Dict[str, Any]] = None,
         error: Optional[str] = None,
+        processing_time: Optional[float] = None,
     ):
-        """Send webhook notification for completed workflow."""
-        try:
-            import aiohttp
-            from datetime import datetime
+        """
+        Send webhook notification for completed workflow using webhook_manager with retries.
 
-            payload = {
-                "request_id": request_id,
-                "workflow_id": workflow_id,
-                "status": status,
-                "timestamp": datetime.utcnow().isoformat(),
-            }
+        This method now uses the webhook_manager which provides:
+        - Automatic retries based on formation config
+        - Timeout handling based on formation config
+        - Exponential backoff between retries
+        - Better error handling and logging
+        """
+        # Use webhook_manager for delivery with retries
+        success = await self.webhook_manager.deliver_completion(
+            webhook_url=webhook_url,
+            request_id=request_id or "",
+            result=result,
+            error=error,
+            processing_time=processing_time,
+            processing_mode="async",
+            user_id=None,  # Can be enhanced to pass actual user_id if needed
+            formation_id=self.formation_id,
+            # Retries and timeout are already configured in webhook_manager from formation config
+        )
 
-            if result:
-                payload["result"] = result
-            if error:
-                payload["error"] = error
-
-            async with aiohttp.ClientSession() as session:
-                async with session.post(webhook_url, json=payload) as response:
-                    if response.status != 200:
-                        observability.observe(
-                            event_type=observability.ConversationEvents.ASYNC_PROCESSING_FAILED,
-                            level=observability.EventLevel.WARNING,
-                            data={
-                                "webhook_url": webhook_url,
-                                "status_code": response.status,
-                                "request_id": request_id,
-                            },
-                            description=f"Webhook notification failed with status {response.status}",
-                        )
-                    else:
-                        observability.observe(
-                            event_type=observability.ConversationEvents.ASYNC_THRESHOLD_DETECTED,
-                            level=observability.EventLevel.INFO,
-                            data={
-                                "webhook_url": webhook_url,
-                                "request_id": request_id,
-                                "status": status,
-                            },
-                            description="Webhook notification sent successfully",
-                        )
-
-        except Exception as e:
+        if success:
             observability.observe(
-                event_type=observability.ConversationEvents.ASYNC_PROCESSING_FAILED,
-                level=observability.EventLevel.ERROR,
+                event_type=observability.ConversationEvents.ASYNC_THRESHOLD_DETECTED,
+                level=observability.EventLevel.INFO,
                 data={
                     "webhook_url": webhook_url,
-                    "error": str(e),
                     "request_id": request_id,
+                    "status": status,
+                    "workflow_id": workflow_id,
                 },
-                description=f"Failed to send webhook notification: {str(e)}",
+                description="Webhook notification sent successfully with retries",
+            )
+        else:
+            observability.observe(
+                event_type=observability.ConversationEvents.ASYNC_PROCESSING_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "webhook_url": webhook_url,
+                    "request_id": request_id,
+                    "status": status,
+                    "workflow_id": workflow_id,
+                },
+                description=f"Webhook notification failed after all retries",
             )
 
     async def get_request_status(self, request_id: str) -> Dict[str, Any]:
@@ -9281,7 +9344,7 @@ Make it conversational and friendly while keeping accuracy."""
             except (TypeError, ValueError) as e:
                 # Fallback to string representation if JSON serialization fails
                 observability.observe(
-                    event_type=observability.SystemEvents.WARNING,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "properties_type": type(properties).__name__},
                     description="Failed to serialize properties to JSON, using string representation",
