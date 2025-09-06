@@ -81,6 +81,7 @@ Production-ready capabilities out of the box:
 - **Knowledge System**: Domain knowledge with MD5 caching
 - **User Credentials**: Encrypted per-user storage
 - **Async Operations**: Webhooks and background processing
+- **Request Lifecycle**: Status tracking and cancellation APIs with memory leak prevention
 - **SOPs**: Procedural guidance for complex tasks
 
 ## Developer Experience

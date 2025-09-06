@@ -1,7 +1,7 @@
 ---
 created: 2025-08-21T17:31:00Z
-last_updated: 2025-08-28T21:12:39Z
-version: 1.1
+last_updated: 2025-09-06T10:51:42Z
+version: 1.2
 author: Claude Code PM System
 ---
 
@@ -104,15 +104,26 @@ Comprehensive test coverage organized by feature:
 - `6_knowledge/` - Knowledge system with smart caching
 - `7_orchestration/` - Workflow orchestration and A2A communication
 - `8_clarification/` - Intelligent clarification flows
+- `9_async/` - Async decision logic and request lifecycle management (Group 9A & 9B)
 
 ### Feature Tests
 - `a2a/` - Agent communication tests
-- `async/` - Async operation tests
+- `async/` - Legacy async operation tests
 - `clarification/` - Parameter collection tests
 - `scheduler/` - Task scheduling tests
 - `observability/` - Event streaming tests
 - `integration/` - End-to-end tests
 - `api/` - Formation API server tests with OpenAPI compliance verification
+
+### Group 9 Async Operations (`9_async/`)
+Comprehensive testing of async decision logic and request lifecycle:
+- `formation-async/` - Test formation with async webhook configuration
+- `test_9a1_forced_async_mode.py` - Force async parameter testing
+- `test_9a3b_with_approval.py` - Async workflow with approval requirements
+- `test_9a4_no_webhook_yaml_passed_chat.py` - Webhook override in chat method
+- `test_9a5_webhook_yaml_override_chat.py` - YAML webhook configuration
+- `test_9b1_request_lifecycle.py` - Request status tracking and cancellation APIs
+- `run_async_tests.py` - Test suite runner
 
 ### Test Reports
 - `reports/` - Detailed test execution reports by day

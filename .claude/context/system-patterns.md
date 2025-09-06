@@ -362,6 +362,60 @@ class ChatOrchestrator:
         return await self._estimate_time(message) > threshold
 ```
 
+### Request Lifecycle Management (Group 9B - September 2025)
+
+Ultra-simplified request status tracking and cancellation system with memory leak prevention:
+
+```python
+# Two-tier storage pattern: RequestTracker → Buffer Memory
+class Overlord:
+    async def get_request_status(self, request_id: str) -> Dict[str, Any]:
+        """Get status with two-tier lookup for lifecycle management."""
+        # 1. Check active requests (RequestTracker dictionary)
+        request_state = await self.request_tracker.get_request(request_id)
+        if request_state:
+            return {
+                "request_id": request_id,
+                "status": request_state.status.value,
+                "progress": request_state.progress
+            }
+        
+        # 2. Check completed requests (Buffer Memory with 48h TTL)
+        completed_status = await self.buffer_memory.kv_get(request_id, namespace="request_status")
+        if completed_status:
+            return completed_status
+            
+        return {"error": "Request not found"}
+    
+    async def cancel_request(self, request_id: str) -> Dict[str, Any]:
+        """Cancel request via stored asyncio.Task reference."""
+        request_state = await self.request_tracker.get_request(request_id)
+        
+        if request_state and request_state.task_ref and not request_state.task_ref.done():
+            # Cancel the asyncio task
+            request_state.task_ref.cancel()
+            
+            # Store cancelled status in buffer memory
+            final_status = {
+                "status": "cancelled",
+                "error": None,
+                "completed_at": time.time(),
+                "request_id": request_id
+            }
+            await self.buffer_memory.kv_set(request_id, final_status, ttl=172800, namespace="request_status")
+            await self.request_tracker.remove_request(request_id)
+            
+            return {"success": True, "message": "Request cancelled"}
+        
+        return {"success": False, "message": "Cannot cancel (not found or already completed)"}
+```
+
+**Memory Management Pattern:**
+- **Active Requests**: Stay in RequestTracker dictionary for fast access
+- **Completed Requests**: Moved to buffer memory with 48h TTL for automatic cleanup  
+- **Ultra-Simplified**: Only 2 code locations modified, leveraging existing TTL infrastructure
+- **No Memory Leaks**: Completed requests auto-expire, preventing indefinite accumulation
+
 ### Error Handling Philosophy
 
 ```python
