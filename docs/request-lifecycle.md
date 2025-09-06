@@ -1442,6 +1442,206 @@ artifact = MuxiArtifact(
 - `WARNING`: Degraded functionality
 - `ERROR`: Component failures
 
+## Request Lifecycle Management (Group 9B)
+
+### Request Status Tracking and Cancellation
+
+MUXI Runtime provides comprehensive request lifecycle management through status tracking and cancellation APIs, implemented with ultra-simplified architecture to prevent memory leaks while maintaining full functionality.
+
+#### Two-Tier Storage Pattern
+
+**Architecture Overview:**
+- **Active Requests**: Stored in RequestTracker dictionary for fast access
+- **Completed Requests**: Migrated to Buffer Memory with 48-hour TTL for automatic cleanup
+- **Memory Leak Prevention**: Completed requests automatically expire, preventing indefinite accumulation
+
+#### Request Status API
+
+```python
+# Get status of any request (active or completed)
+status = await overlord.get_request_status(request_id)
+
+# Response format for active requests:
+{
+    "request_id": "req_abc123",
+    "status": "processing|running|pending|awaiting_clarification", 
+    "progress": "3/5 tasks" # Optional progress string
+}
+
+# Response format for completed requests:
+{
+    "request_id": "req_abc123",
+    "status": "completed|failed|cancelled",
+    "error": "error_message_if_failed",  # null for completed/cancelled
+    "completed_at": 1693934400.0,
+    "request_id": "req_abc123"
+}
+
+# Response for expired/not found:
+{
+    "error": "Request not found"
+}
+```
+
+**Status Definitions:**
+
+| Status | Meaning | Location |
+|--------|---------|----------|
+| **PENDING** | Request created, queued but not started | RequestTracker |
+| **PROCESSING** | Request being analyzed/routed/prepared | RequestTracker |
+| **RUNNING** | Request executing with agent/workflow | RequestTracker |
+| **AWAITING_CLARIFICATION** | Request needs user input | RequestTracker |
+| **COMPLETED** | Request finished successfully | Buffer Memory (48h TTL) |
+| **FAILED** | Request encountered unrecoverable error | Buffer Memory (48h TTL) |
+| **CANCELLED** | Request manually cancelled | Buffer Memory (48h TTL) |
+
+#### Request Cancellation API
+
+```python
+# Cancel a running request
+result = await overlord.cancel_request(request_id)
+
+# Success response:
+{
+    "success": True,
+    "message": "Request cancelled"
+}
+
+# Failure response:
+{
+    "success": False, 
+    "message": "Cannot cancel (not found or already completed)"
+}
+```
+
+**Cancellation Process:**
+1. Check if request exists and is cancellable (has active asyncio.Task)
+2. Cancel the underlying asyncio task via `task.cancel()`
+3. Store cancelled status in Buffer Memory with 48h TTL
+4. Remove from active RequestTracker to free memory
+5. Send cancellation webhook if configured
+6. Return success/failure response
+
+#### Implementation Details
+
+**Ultra-Simplified Architecture:**
+- **Only 2 code locations modified** for the entire feature
+- **Leverages existing infrastructure** (Buffer Memory TTL system)
+- **No new systems required** - uses proven cleanup mechanisms
+- **Production ready** with hard-coded 48h retention (no configuration overhead)
+
+**Memory Management:**
+```python
+# On completion (completed/failed/cancelled):
+final_status = {
+    "status": status_value,  # "completed", "failed", or "cancelled"
+    "error": error_msg if status == "failed" else None,
+    "completed_at": time.time(),
+    "request_id": request_id
+}
+
+# Store in buffer memory with 48h TTL
+await self.buffer_memory.kv_set(
+    request_id, final_status, 
+    ttl=172800,  # 48 hours
+    namespace="request_status"
+)
+
+# Remove from active tracker to prevent memory leaks
+await self.request_tracker.remove_request(request_id)
+```
+
+**Status Lookup Logic:**
+```python
+async def get_request_status(self, request_id: str):
+    # 1. Check active requests first (RequestTracker)
+    request_state = await self.request_tracker.get_request(request_id)
+    if request_state:
+        return format_active_status(request_state)
+    
+    # 2. Check completed requests (Buffer Memory) 
+    completed_status = await self.buffer_memory.kv_get(
+        request_id, namespace="request_status"
+    )
+    if completed_status:
+        return completed_status
+    
+    # 3. Not found (expired or never existed)
+    return {"error": "Request not found"}
+```
+
+#### Usage Patterns
+
+**Status Monitoring During Async Execution:**
+```python
+# Submit async request
+response = await overlord.chat(message, use_async=True)
+request_id = response["request_id"]
+
+# Monitor status periodically
+while True:
+    status = await overlord.get_request_status(request_id)
+    print(f"Status: {status.get('status')}")
+    
+    if status.get('status') in ['completed', 'failed', 'cancelled']:
+        break
+        
+    await asyncio.sleep(5)  # Check every 5 seconds
+```
+
+**Request Cancellation for Long-Running Operations:**
+```python
+# Start long-running async operation
+response = await overlord.chat(complex_request, use_async=True) 
+request_id = response["request_id"]
+
+# Cancel if needed (e.g., user clicked cancel button)
+cancel_result = await overlord.cancel_request(request_id)
+if cancel_result["success"]:
+    print("Operation cancelled successfully")
+```
+
+#### Integration with Webhook System
+
+**Cancellation Notifications:**
+When a request is cancelled, the system automatically sends webhook notifications if configured:
+
+```python
+# Webhook payload for cancelled request
+{
+    "task_id": request_id,
+    "status": "cancelled",
+    "timestamp": cancellation_time,
+    "message": "Request was cancelled by user"
+}
+```
+
+**Status History via Webhooks:**
+Webhooks are sent for all status transitions, providing complete request lifecycle visibility:
+- Initial: `{"status": "processing", "request_id": "..."}`
+- Completion: `{"status": "completed", "result": "...", "request_id": "..."}`
+- Failure: `{"status": "failed", "error": "...", "request_id": "..."}`
+- Cancellation: `{"status": "cancelled", "request_id": "..."}`
+
+#### Benefits
+
+**For Users:**
+- **Real-time Visibility**: Know exactly what's happening with async requests
+- **Control**: Cancel long-running operations when needed
+- **History**: Check status of requests up to 48 hours after completion
+
+**For Developers:**
+- **Memory Efficient**: No memory leaks from completed requests
+- **Simple Integration**: Two API methods provide full lifecycle management
+- **Production Ready**: Automatic cleanup with no configuration needed
+
+**For Operations:**
+- **Monitoring**: Track request lifecycle patterns and failure rates
+- **Debugging**: Investigate failed requests within 48-hour window
+- **Resource Management**: Bounded memory usage with predictable cleanup
+
+This request lifecycle management system provides enterprise-grade operational visibility while maintaining the ultra-simplified implementation philosophy that makes MUXI Runtime maintainable and reliable.
+
 ## Configuration
 
 **Key Configuration Parameters:**
@@ -1470,6 +1670,11 @@ response:
   default_mode: sync
   stream_chunk_size: 1024
   async_callback_timeout: 3600
+
+# Request lifecycle management (Group 9B)
+request_lifecycle:
+  completed_requests_ttl: 172800  # 48 hours (hard-coded, no config needed)
+  status_namespace: "request_status"  # Buffer memory namespace
 ```
 
 ## Security Considerations
