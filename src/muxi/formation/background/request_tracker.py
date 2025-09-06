@@ -149,7 +149,6 @@ class RequestTracker:
         async with self._lock:
             return dict(self._requests)
 
-
     async def get_request_count(self) -> int:
         """
         Get total number of tracked requests.

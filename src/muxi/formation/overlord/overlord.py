@@ -5609,7 +5609,10 @@ Make it conversational and friendly while keeping accuracy."""
                                         "webhook_url": webhook_url,
                                         "has_webhook": webhook_url is not None,
                                     },
-                                    description=f"Workflow approval execution: async={use_async}, has_webhook={webhook_url is not None}",
+                                    description=(
+                                        f"Workflow approval execution: async={use_async}, "
+                                        f"has_webhook={webhook_url is not None}"
+                                    ),
                                 )
 
                                 # Clean up pending states
@@ -5647,7 +5650,10 @@ Make it conversational and friendly while keeping accuracy."""
                                             "threshold_minutes": threshold_minutes,
                                             "use_async_recalc": use_async,
                                         },
-                                        description=f"Recalculated: complexity={total_complexity}, est={estimated_minutes}min > {threshold_minutes}min = {use_async}",
+                                        description=(
+                                            f"Recalculated: complexity={total_complexity}, ",
+                                            f"est={estimated_minutes}min > {threshold_minutes}min = {use_async}"
+                                        )
                                     )
 
                                 # Log final decision
@@ -5660,7 +5666,10 @@ Make it conversational and friendly while keeping accuracy."""
                                         "webhook_url": webhook_url,
                                         "will_execute_async": use_async and webhook_url is not None,
                                     },
-                                    description=f"Final decision: async={use_async and webhook_url is not None} (use_async={use_async}, has_webhook={webhook_url is not None})",
+                                    description=(
+                                        f"Final decision: async={use_async and webhook_url is not None} "
+                                        f"(use_async={use_async}, has_webhook={webhook_url is not None})"
+                                    ),
                                 )
 
                                 # Check if we should execute async
@@ -5695,7 +5704,10 @@ Make it conversational and friendly while keeping accuracy."""
                                                 "use_async is False" if not use_async else "no webhook URL"
                                             ),
                                         },
-                                        description=f"Executing workflow SYNCHRONOUSLY: use_async={use_async}, webhook={webhook_url}",
+                                        description=(
+                                            f"Executing workflow SYNCHRONOUSLY: use_async={use_async}, "
+                                            f"webhook={webhook_url}"
+                                        ),
                                     )
                                     # Execute synchronously (existing code)
                                     return await self._execute_workflow(
@@ -7450,7 +7462,11 @@ Make it conversational and friendly while keeping accuracy."""
 
         return {
             "request_id": request_id,
-            "status": request_state.status.value if hasattr(request_state.status, 'value') else str(request_state.status),
+            "status": (
+                request_state.status.value
+                if hasattr(request_state.status, 'value')
+                else str(request_state.status)
+            ),
             "progress": request_state.progress
         }
 
@@ -7464,7 +7480,6 @@ Make it conversational and friendly while keeping accuracy."""
         Returns:
             Dictionary indicating success or failure of cancellation
         """
-        from ..background.request_tracker import RequestStatus
 
         request_state = await self.request_tracker.get_request(request_id)
 
