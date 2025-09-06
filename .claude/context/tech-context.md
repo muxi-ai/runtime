@@ -2,7 +2,7 @@
 
 This document outlines the technical context of the MUXI Runtime, including technologies used, development setup, constraints, and dependencies.
 
-## Recent Technical Improvements (July-August 2025)
+## Recent Technical Improvements (July-September 2025)
 
 ### SOP System Simplification & Refactoring (August 2025)
 - **Architecture**: Direct pass to task decomposer (no manual parsing)
@@ -11,6 +11,15 @@ This document outlines the technical context of the MUXI Runtime, including tech
 - **Code Reduction**: 72% less code (1000+ → ~800 lines)
 - **Execution Modes**: Template (strict) and Guide (flexible)
 - **Discovery**: FAISS-based semantic search for SOP matching
+
+### Advanced Async Operations (September 2025)
+- **Request Lifecycle Management**: Ultra-simplified two-tier storage using existing buffer memory
+- **Memory Leak Prevention**: 48-hour TTL with automatic cleanup via proven FIFO system
+- **Status Tracking**: `get_request_status()` API for monitoring active/completed requests
+- **Cancellation Support**: `cancel_request()` with asyncio.Task cancellation
+- **Webhook Resilience**: Retry logic with graceful degradation, independent of core processing
+- **Conflict Resolution**: Async mode overrides streaming with transparent logging
+- **Production Architecture**: Only 2 code locations modified, leveraging existing infrastructure
 
 ### Resilience Integration
 - **User-Friendly Errors**: Context-aware error messages instead of generic failures

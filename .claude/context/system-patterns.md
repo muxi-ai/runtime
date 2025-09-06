@@ -416,6 +416,78 @@ class Overlord:
 - **Ultra-Simplified**: Only 2 code locations modified, leveraging existing TTL infrastructure
 - **No Memory Leaks**: Completed requests auto-expire, preventing indefinite accumulation
 
+### Advanced Async Scenarios (Group 9C - September 2025)
+
+Critical patterns for async/streaming conflict resolution and webhook resilience:
+
+```python
+# Conflict Resolution Pattern: Async overrides streaming
+async def chat(self, message: str, use_async: bool = None, stream: bool = False, **kwargs):
+    """Handle parameter conflicts with clear precedence."""
+    # Handle streaming conflict: async mode takes precedence over streaming
+    # When both async and streaming are requested, ignore streaming
+    if use_async and stream:
+        observability.observe(
+            event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+            level=observability.EventLevel.INFO,
+            data={
+                "use_async": use_async,
+                "stream": stream,
+                "resolution": "ignoring_stream",
+            },
+            description="Async mode requested with streaming - ignoring streaming to prevent conflict",
+        )
+        stream = False  # Disable streaming when async is active
+    
+    # Continue with processing
+    return await self.chat_orchestrator.chat(
+        message=message,
+        use_async=use_async,
+        stream=stream,
+        **kwargs
+    )
+
+# Webhook Resilience Pattern: Separate concerns
+async def process_with_webhook(self, request_data: Dict) -> None:
+    """Process request independently of webhook delivery."""
+    try:
+        # 1. Process request completely
+        result = await self.complete_processing(request_data)
+        
+        # 2. Store successful result
+        await self.store_result(request_data["request_id"], result)
+        
+        # 3. Attempt webhook delivery (independent of core processing)
+        await self.deliver_webhook(request_data["webhook_url"], result)
+        
+    except Exception as e:
+        # Core processing failure
+        await self.store_error_result(request_data["request_id"], e)
+        
+    # Note: Webhook delivery failures don't affect request processing status
+    
+async def deliver_webhook(self, webhook_url: str, result: Dict, retries: int = 3) -> None:
+    """Deliver webhook with retry logic, independent of core processing."""
+    for attempt in range(retries):
+        try:
+            async with aiohttp.ClientSession() as session:
+                await session.post(webhook_url, json=result, timeout=10)
+            return  # Success
+        except Exception as e:
+            if attempt == retries - 1:
+                # Log final failure, but don't raise - core processing succeeded
+                logger.warning(f"Webhook delivery failed after {retries} attempts: {e}")
+                return
+            await asyncio.sleep(2 ** attempt)  # Exponential backoff
+```
+
+**Key Patterns:**
+- **Clear Precedence**: When parameters conflict, choose the more restrictive option
+- **Transparent Logging**: Always log conflict resolution decisions  
+- **Separation of Concerns**: Core processing independent of webhook delivery
+- **Graceful Degradation**: Webhook failures don't affect request completion
+- **No Error States**: Conflicting parameters don't cause system failures
+
 ### Error Handling Philosophy
 
 ```python
