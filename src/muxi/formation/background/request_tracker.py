@@ -15,9 +15,12 @@ from typing import Any, Dict, Optional
 class RequestStatus(Enum):
     """Request status enumeration."""
 
+    PENDING = "pending"
     PROCESSING = "processing"
+    RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
     AWAITING_CLARIFICATION = "awaiting_clarification"
 
 
@@ -40,6 +43,9 @@ class RequestState:
     clarification_question: Optional[str] = None
     clarification_request_id: Optional[str] = None
     original_message: Optional[str] = None
+    # Lifecycle management fields
+    progress: Optional[str] = None  # Optional progress string (e.g., "3/5 tasks")
+    task_ref: Optional[asyncio.Task] = None  # Reference to asyncio task for cancellation
 
     @property
     def processing_time(self) -> Optional[float]:

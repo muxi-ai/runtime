@@ -4672,7 +4672,7 @@ Make it conversational and friendly while keeping accuracy."""
 
         # Get webhook URL from formation config or parameter
         webhook_url = webhook_url or self.formation_config.get("async", {}).get("webhook_url")
-        
+
         # Force use_async=False if no webhook URL available
         if use_async is not False and webhook_url is None:
             use_async = False
@@ -4870,7 +4870,7 @@ Make it conversational and friendly while keeping accuracy."""
 
             # Get webhook URL for the request
             webhook_url = await self._get_webhook_url_for_request(request_id)
-            
+
             # Process using existing sync infrastructure
             result = await self._process_sync_chat(
                 message, agent_name, user_id, session_id=session_id, request_id=request_id,
@@ -5047,12 +5047,14 @@ Make it conversational and friendly while keeping accuracy."""
                 _ = None  # remove this after implementing observability
 
         finally:
-            # Auto-remove failed request AFTER webhook delivery
-            await self.request_tracker.remove_request(request_id)
+            # Keep completed requests in tracker for status checking
+            # NOTE: Requests can be manually cleaned up later if needed via separate API
+            # await self.request_tracker.remove_request(request_id)
 
             # Always remove from async requests set when the method completes
             # This ensures cleanup happens regardless of success or failure
-            self.observability_manager._async_requests.discard(request_id)
+            if hasattr(self, 'observability_manager') and hasattr(self.observability_manager, '_async_requests'):
+                self.observability_manager._async_requests.discard(request_id)
 
     async def _should_skip_clarification(self, message: str) -> bool:
         """
@@ -5596,7 +5598,7 @@ Make it conversational and friendly while keeping accuracy."""
                                 # Get preserved async intent from clarification info
                                 use_async = clarification_info.get("use_async")
                                 webhook_url = clarification_info.get("webhook_url")
-                                
+
                                 # Debug logging
                                 observability.observe(
                                     event_type=observability.ServerEvents.SERVER_STARTED,
@@ -5634,7 +5636,7 @@ Make it conversational and friendly while keeping accuracy."""
                                     estimated_minutes = total_complexity * 0.5  # Half minute per complexity point
                                     threshold_minutes = self.async_threshold_seconds / 60  # Convert seconds to minutes
                                     use_async = estimated_minutes > threshold_minutes
-                                    
+
                                     observability.observe(
                                         event_type=observability.ServerEvents.SERVER_STARTED,
                                         level=observability.EventLevel.INFO,
@@ -7165,7 +7167,7 @@ Make it conversational and friendly while keeping accuracy."""
         # Use provided webhook URL or fallback to configuration
         if not webhook_url:
             webhook_url = self.formation_config.get("async", {}).get("webhook_url")
-        
+
         # Log webhook URL for debugging
         observability.observe(
             event_type=observability.ServerEvents.SERVER_STARTED,
@@ -7195,7 +7197,7 @@ Make it conversational and friendly while keeping accuracy."""
         }
 
         # Execute workflow in background
-        asyncio.create_task(
+        task = asyncio.create_task(
             self._execute_workflow_background(
                 workflow=workflow,
                 message=message,
@@ -7205,6 +7207,13 @@ Make it conversational and friendly while keeping accuracy."""
                 webhook_url=webhook_url,
             )
         )
+
+        # Store task reference in request state for lifecycle management
+        from ..background.request_tracker import RequestStatus
+        request_state = await self.request_tracker.get_request(request_id)
+        if request_state:
+            request_state.task_ref = task
+            request_state.status = RequestStatus.RUNNING
 
         return response_data
 
@@ -7229,7 +7238,7 @@ Make it conversational and friendly while keeping accuracy."""
             },
             description=f"Starting background execution for request {request_id}",
         )
-        
+
         try:
             # Execute the workflow normally
             result = await self._execute_workflow(
@@ -7239,7 +7248,23 @@ Make it conversational and friendly while keeping accuracy."""
                 session_id=session_id,
                 request_id=request_id,
             )
-            
+
+            # Store completed status in buffer memory before removing from tracker
+            import time
+            final_status = {
+                "status": "completed",
+                "error": None,
+                "completed_at": time.time(),
+                "request_id": request_id
+            }
+            await self.buffer_memory.kv_set(
+                request_id, final_status,
+                ttl=172800,  # 48 hours in seconds
+                namespace="request_status"
+            )
+            # Remove from active RequestTracker to prevent memory leaks
+            await self.request_tracker.remove_request(request_id)
+
             # Log before sending webhook
             observability.observe(
                 event_type=observability.ServerEvents.SERVER_STARTED,
@@ -7267,7 +7292,7 @@ Make it conversational and friendly while keeping accuracy."""
                     serializable_result = result
                 else:
                     serializable_result = {"content": str(result)}
-            
+
             # Send success webhook (reuse existing webhook logic if available)
             await self._send_completion_webhook(
                 webhook_url=webhook_url,
@@ -7276,7 +7301,7 @@ Make it conversational and friendly while keeping accuracy."""
                 result=serializable_result,
                 workflow_id=workflow.id,
             )
-            
+
             # Log after sending webhook
             observability.observe(
                 event_type=observability.ServerEvents.SERVER_STARTED,
@@ -7290,6 +7315,22 @@ Make it conversational and friendly while keeping accuracy."""
             )
 
         except Exception as e:
+            # Store failed status in buffer memory before removing from tracker
+            import time
+            final_status = {
+                "status": "failed",
+                "error": str(e),
+                "completed_at": time.time(),
+                "request_id": request_id
+            }
+            await self.buffer_memory.kv_set(
+                request_id, final_status,
+                ttl=172800,  # 48 hours in seconds
+                namespace="request_status"
+            )
+            # Remove from active RequestTracker to prevent memory leaks
+            await self.request_tracker.remove_request(request_id)
+
             # Send error webhook
             await self._send_completion_webhook(
                 webhook_url=webhook_url,
@@ -7376,6 +7417,88 @@ Make it conversational and friendly while keeping accuracy."""
                 },
                 description=f"Failed to send webhook notification: {str(e)}",
             )
+
+    async def get_request_status(self, request_id: str) -> Dict[str, Any]:
+        """
+        Get status of a request from the existing dictionary.
+
+        Args:
+            request_id: The unique request identifier
+
+        Returns:
+            Dictionary containing request status information
+        """
+        from ..background.request_tracker import RequestStatus
+
+        request_state = await self.request_tracker.get_request(request_id)
+        if not request_state:
+            # Check buffer memory for completed requests
+            completed_status = await self.buffer_memory.kv_get(request_id, namespace="request_status")
+            if completed_status:
+                return completed_status
+            return {"error": "Request not found"}
+
+        # Update status based on task state if task reference exists
+        if request_state.task_ref:
+            if request_state.task_ref.done():
+                if request_state.task_ref.cancelled():
+                    request_state.status = RequestStatus.CANCELLED
+                elif request_state.task_ref.exception():
+                    request_state.status = RequestStatus.FAILED
+                else:
+                    request_state.status = RequestStatus.COMPLETED
+
+        return {
+            "request_id": request_id,
+            "status": request_state.status.value if hasattr(request_state.status, 'value') else str(request_state.status),
+            "progress": request_state.progress
+        }
+
+    async def cancel_request(self, request_id: str) -> Dict[str, Any]:
+        """
+        Cancel a request using its stored task reference.
+
+        Args:
+            request_id: The unique request identifier to cancel
+
+        Returns:
+            Dictionary indicating success or failure of cancellation
+        """
+        from ..background.request_tracker import RequestStatus
+
+        request_state = await self.request_tracker.get_request(request_id)
+
+        if request_state and request_state.task_ref and not request_state.task_ref.done():
+            request_state.task_ref.cancel()
+
+            # Store cancelled status in buffer memory before removing from tracker
+            import time
+            final_status = {
+                "status": "cancelled",
+                "error": None,
+                "completed_at": time.time(),
+                "request_id": request_id
+            }
+            await self.buffer_memory.kv_set(
+                request_id, final_status,
+                ttl=172800,  # 48 hours in seconds
+                namespace="request_status"
+            )
+            # Remove from active RequestTracker to prevent memory leaks
+            await self.request_tracker.remove_request(request_id)
+
+            # Send cancellation webhook if configured
+            if request_state.webhook_url:
+                await self._send_completion_webhook(
+                    webhook_url=request_state.webhook_url,
+                    request_id=request_id,
+                    status="cancelled",
+                    workflow_id=None
+                )
+
+            return {"success": True, "message": "Request cancelled"}
+
+        return {"success": False, "message": "Cannot cancel (not found or already completed)"}
 
     async def _execute_workflow(
         self,
