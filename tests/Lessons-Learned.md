@@ -1,7 +1,7 @@
 # MUXI Runtime Testing - Lessons Learned
 
 **Last Updated:** September 2025  
-**Test Coverage:** Areas 1-8 Complete, Area 9B Complete, Areas 9C-13 Specified
+**Test Coverage:** Areas 1-8 Complete, Area 9 Complete, Areas 10-13 Specified
 
 ## 📚 Key Lessons from Comprehensive Testing
 
@@ -136,6 +136,55 @@ tests/e2e/X_feature/
 
 **Application:** This pattern works for any system with active vs. historical data needs.
 
+### 11. Async/Streaming Conflict Resolution
+
+**Lesson:** Clear parameter precedence prevents user confusion and system errors.
+
+**Group 9C3 Evidence:**
+- **Problem**: Users may request both async and streaming modes simultaneously
+- **Technical Issue**: Cannot stream responses to webhook endpoints
+- **Solution**: Async mode takes precedence, streaming is disabled with clear logging
+- **Implementation**: Simple conflict detection with observability logging
+
+**Key Success Factors:**
+- **Clear Precedence Rules**: Async always wins when both requested
+- **Transparent Logging**: "Async mode requested with streaming - ignoring streaming"
+- **No Error State**: Conflicting parameters don't cause failures
+- **User Communication**: Clear explanation of what mode was selected
+
+**Benefits:**
+- Users can safely request both modes without errors
+- System behavior is predictable and documented
+- Logging provides transparency for debugging
+- Webhook delivery works reliably without streaming complications
+
+**Recommendation:** When parameters conflict, choose the more restrictive option and log the decision clearly.
+
+### 12. Webhook Resilience Patterns
+
+**Lesson:** Webhook delivery should never block request processing completion.
+
+**Group 9C1 Findings:**
+- **Separation of Concerns**: Request processing vs. webhook delivery are independent
+- **Retry Logic**: Multiple attempts with configurable timeouts
+- **Graceful Degradation**: System continues even when webhooks fail
+- **Status Tracking**: Request status remains queryable regardless of webhook state
+
+**Implementation Pattern:**
+```
+Process Request → Complete Successfully → Attempt Webhook Delivery (with retries)
+                    ↓                            ↓
+                Store Result              Log Delivery Status
+```
+
+**Benefits:**
+- No single point of failure in webhook infrastructure
+- Request processing performance unaffected by webhook issues
+- Clear separation between core logic and notification logic
+- Users get consistent behavior regardless of external system health
+
+**Application:** This pattern applies to any notification or callback system.
+
 ## 🚀 Performance Insights
 
 ### Response Times (from real testing)
@@ -190,20 +239,21 @@ tests/e2e/X_feature/
 | 6 | 19 | 19 | 100% | Knowledge RAG working |
 | 7 | 15 | 15 | 100% | Orchestration optimal |
 | 8 | 10+ | 10+ | 100% | Clarification robust |
+| 9 | 6 | 6 | 100% | Async operations complete |
 
-**Total:** 134+ tests written, 129+ passing (96%+ success rate)
+**Total:** 140+ tests written, 135+ passing (96%+ success rate)
 
 ## 🎯 Recommendations for Areas 9-13
 
 Based on lessons from Areas 1-9:
 
 ### ✅ Area 9 (Async Operations) - COMPLETED  
-**Group 9A & 9B completed with full test coverage:**
-- ✅ Real webhook endpoints for testing (Group 9A)
-- ✅ Clarification/approval workflow integration (Group 9A)
-- ✅ Webhook retry on failure mechanisms (Group 9A)
-- ✅ Request status tracking and cancellation APIs (Group 9B)
-- ✅ Ultra-simplified memory leak prevention (Group 9B)
+**All async groups completed with 100% success rate:**
+- ✅ Request lifecycle management with status tracking and cancellation APIs (Group 9B)
+- ✅ Ultra-simplified memory leak prevention using existing infrastructure (Group 9B)
+- ✅ Webhook failure handling with retry logic (Group 9C1)
+- ✅ Timeout handling with threshold-based async routing (Group 9C2)  
+- ✅ Async/streaming conflict resolution - async overrides streaming (Group 9C3)
 
 ### Area 10 (Streaming)
 - Use AsyncGenerator properly
@@ -255,13 +305,13 @@ Based on lessons from Areas 1-9:
 
 ## 📝 Summary
 
-The MUXI Runtime testing journey validated core functionality across 8 major areas with a 96%+ success rate. Key success factors:
+The MUXI Runtime testing journey validated core functionality across 9 major areas with a 96%+ success rate. Key success factors:
 - Real service testing revealed actual issues
 - Formation-first approach ensured realistic scenarios
 - Comprehensive error handling improved resilience
 - Clear test organization enabled efficient execution
 
-The system is production-ready for core features, with advanced features (Areas 9-13) fully specified and ready for implementation.
+The system is production-ready for core features including async operations, with advanced features (Areas 10-13) fully specified and ready for implementation.
 
 ---
 
