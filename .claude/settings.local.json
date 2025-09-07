@@ -3,7 +3,13 @@
     "allow": [
       "Bash(grep:*)",
       "Bash(python:*)",
-      "Bash(timeout 30 python:*)"
+      "Bash(timeout:*)",
+      "Bash(ln:*)",
+      "Bash(pkill:*)",
+      "Bash(sed:*)",
+      "Bash(find:*)",
+      "WebSearch",
+      "Read(/Users/ran/Desktop/**)"
     ],
     "deny": [],
     "ask": []
