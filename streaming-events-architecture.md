@@ -477,7 +477,7 @@ The goal is to create a narrative experience for the user. For example:
 
 ## Implementation Phases
 
-### Phase 1: Raw Event Emission (Immediate)
+### Phase 1: Raw Event Emission (Immediate) - ✅ Completed
 **Builds on**: Original streaming infrastructure from sections above
 **Adds**: Streaming events at key decision points without rephrasing:
 - Request entry analysis
@@ -496,13 +496,13 @@ streaming.stream(request_id, "progress", "Executing web search...")
 streaming.stream(request_id, "tool_call", "GitHub: fetching repository data...")
 ```
 
-### Phase 2: LLM Rephrasing with @multitasking (Future Enhancement)
+### Phase 2: LLM Rephrasing with @multitasking
 **Builds on**: Phase 1 raw events
 **Adds**: Conversational rephrasing using fast LLM model:
 
 ```python
 @multitasking.task
-async def stream_event(request_id: str, event_type: str, content: str, rephrase: bool = True):
+async def stream(request_id: str, event_type: str, content: str, rephrase: bool = True):
     """Fire-and-forget streaming with optional LLM rephrasing"""
     if rephrase and event_type in ["thinking", "planning", "progress"]:
         # Use fast model to make conversational
