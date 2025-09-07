@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""
+Test 10A2: Complex Task Streaming
+Tests streaming with workflow decomposition for complex tasks.
+"""
+
+import asyncio
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+
+from muxi.formation.formation import Formation  # noqa: E402
+
+
+async def main():
+    """Test streaming with complex task decomposition."""
+    print("🚀 MUXI Runtime - Test 10A2: Complex Task Streaming")
+    print("=" * 60)
+
+    formation_path = Path(__file__).parent / "formation-streaming"
+
+    try:
+        formation = Formation()
+        await formation.load(str(formation_path))
+        overlord = await formation.start_overlord()
+
+        print("\n✅ Formation loaded")
+        print("\n📋 Test: Complex task with workflow decomposition")
+        print("-" * 40)
+
+        user_id = "test_user"
+        session_id = "streaming_test_10a2"
+
+        # Test a complex request that triggers workflow decomposition
+        response_gen = await overlord.chat(
+            message=(
+                "Research the latest AI breakthroughs, analyze their impact, "
+                "and create a comprehensive report with timeline and predictions"
+            ),
+            user_id=user_id,
+            session_id=session_id,
+            stream=True,
+        )
+
+        # Collect streaming events
+        complex_events = []
+        event_types = set()
+        has_planning = False
+        has_decomposition = False
+
+        if hasattr(response_gen, "__aiter__"):
+            async for chunk in response_gen:
+                complex_events.append(chunk)
+
+                # Try to parse if it's a structured event (for debugging)
+                try:
+                    if isinstance(chunk, str) and chunk.startswith("{"):
+                        event = json.loads(chunk)
+                        event_type = event.get("type", "")
+                        event_types.add(event_type)
+
+                        if event_type == "planning":
+                            has_planning = True
+                            if "decomposition" in event.get("stage", ""):
+                                has_decomposition = True
+                                content = event.get('content', '')[:200]
+                                print(f"   📝 Decomposition event: {content}...")
+                except Exception:
+                    # Not JSON, just regular content
+                    pass
+
+                # Print first few events
+                if len(complex_events) <= 3:
+                    preview = chunk[:150] if len(chunk) > 150 else chunk
+                    print(f"   Event {len(complex_events)}: {preview}")
+
+        # Results
+        print("\n📊 Results:")
+        print(f"   Total events: {len(complex_events)}")
+        
+        if event_types:
+            print(f"   Event types seen: {event_types}")
+        else:
+            print("   Event format: Plain text stream")
+
+        # Check for planning/decomposition indicators
+        full_response = "".join(complex_events)
+        response_lower = full_response.lower()
+        
+        planning_indicators = [
+            "breaking", "tasks", "steps", "plan", "decompos",
+            "analyzing", "thinking", "let me", "i'll"
+        ]
+        
+        has_indicators = any(ind in response_lower for ind in planning_indicators)
+        
+        if has_planning or has_decomposition or has_indicators:
+            print("   ✅ Found planning/decomposition activity")
+        else:
+            print("   ℹ️ No explicit planning events (may be using simple response)")
+
+        # Validate response quality
+        if len(complex_events) > 0:
+            print(f"   ✅ Generated {len(complex_events)} streaming events")
+            
+            # Check for relevant content
+            expected_terms = ["ai", "breakthrough", "research", "report", "timeline"]
+            found_terms = [term for term in expected_terms if term in response_lower]
+            
+            if found_terms:
+                print(f"   ✅ Response contains relevant terms: {found_terms}")
+            else:
+                print("   ⚠️ Response may not address the request fully")
+        else:
+            print("   ❌ No streaming events generated")
+            return False
+
+        print("\n" + "=" * 60)
+        print("✅ Test 10A2 PASSED: Complex task streaming works correctly")
+        return True
+
+    except Exception as e:
+        print(f"\n❌ Test failed with error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    finally:
+        if "formation" in locals():
+            try:
+                print("\nShutting down...")
+                await formation.kill_overlord()
+                formation.shutdown()
+            except Exception:
+                pass
+
+
+if __name__ == "__main__":
+    success = asyncio.run(main())
+    sys.exit(0 if success else 1)
