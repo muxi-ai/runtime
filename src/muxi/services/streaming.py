@@ -259,6 +259,12 @@ def stream(event_type: str, content: str, **metadata):
         # Get the streaming configuration (for future LLM rephrasing)
         llm_config = get_streaming_llm_config()
 
+        # Check if progress events are disabled (only stream final content)
+        if llm_config and not llm_config.get('progress', True):
+            # When progress is false, only emit "content" events (final response)
+            if event_type != "content":
+                return  # Skip all non-content events to save on LLM costs
+
         @multitasking.task
         def _emit_in_background(manager, req_id, evt_type, evt_content, evt_metadata, config):
             try:

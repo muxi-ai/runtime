@@ -188,11 +188,17 @@ def initialize_llm_config(formation) -> None:
     if streaming_config.get("settings", {}).get("enable_rephrasing") is not None:
         enable_rephrasing = streaming_config["settings"]["enable_rephrasing"]
 
+    # Get overlord response configuration for progress setting
+    overlord_config = formation.config.get("overlord", {})
+    response_config = overlord_config.get("response", {})
+    enable_progress = response_config.get("progress", True)  # Default to True
+
     set_streaming_llm_config({
         "model": streaming_config["model"],
         "api_key": streaming_config.get("api_key"),
         "settings": streaming_config.get("settings", {}),
-        "enabled": enable_rephrasing
+        "enabled": enable_rephrasing,
+        "progress": enable_progress  # Pass progress setting to streaming service
     })
 
     capabilities = list(formation._capability_models.keys())
