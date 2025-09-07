@@ -124,6 +124,109 @@ def get_streaming_llm_config() -> Optional[Dict[str, Any]]:
 
 
 # ===================================================================
+# LLM REPHRASING
+# ===================================================================
+
+async def rephrase_with_llm(
+    event_type: str,
+    content: str,
+    metadata: Dict[str, Any],
+    llm_config: Dict[str, Any]
+) -> str:
+    """
+    Rephrase streaming events using LLM for better user experience.
+
+    Returns rephrased content as internal monologue in user's language.
+    """
+    try:
+        from ..services.llm import LLM
+
+        # Extract context from metadata
+        stage = metadata.get('stage', '')
+        original_message = metadata.get('original_message', '')
+
+        # Build context-aware prompt
+        # For planning events (especially decomposition), we want full detail
+        if event_type == "planning" and metadata.get("stage") == "decomposition_complete":
+            prompt = (
+                "You are an AI assistant's internal thought process. "
+                "Rephrase the following task decomposition plan as an internal monologue.\n\n"
+                "CRITICAL RULES:\n"
+                "1. Write as if thinking to yourself (first person: \"I need to...\", \"Let me...\")\n"
+                "2. Communicate the FULL plan - this is important information for the user\n"
+                "3. Match the user's language (detect from their message if available)\n"
+                "4. Sound natural and conversational, not robotic\n"
+                "5. Preserve all task details and structure\n\n"
+            )
+        else:
+            prompt = (
+                "You are an AI assistant's internal thought process. "
+                "Rephrase the following progress update as a brief internal monologue.\n\n"
+                "CRITICAL RULES:\n"
+                "1. Write as if thinking to yourself (first person: \"I need to...\", \"Let me...\")\n"
+                "2. Be concise - maximum 1-2 paragraphs\n"
+                "3. Match the user's language (detect from their message if available)\n"
+                "4. Sound natural and conversational, not robotic\n"
+                "5. Use the metadata context to be specific when possible\n\n"
+            )
+
+        prompt += (
+            f"Event Type: {event_type}\n"
+            f"Stage: {stage}\n"
+            f"Original Update: {content}\n"
+            f"User's Message: {original_message[:500] if original_message else 'Not available'}\n\n"
+            "Additional Context:\n"
+        )
+
+        # Add relevant metadata to prompt
+        if metadata.get('task_count'):
+            prompt += f"- Breaking down into {metadata['task_count']} tasks\n"
+        if metadata.get('agent_name'):
+            prompt += f"- Using agent: {metadata['agent_name']}\n"
+        if metadata.get('service'):
+            prompt += f"- Using service: {metadata['service']}\n"
+        if metadata.get('complexity_score'):
+            prompt += f"- Complexity: {metadata['complexity_score']}/10\n"
+        if metadata.get('selected_agent'):
+            prompt += f"- Selected: {metadata['selected_agent']}\n"
+
+        # Different ending for decomposition vs other events
+        if event_type == "planning" and metadata.get("stage") == "decomposition_complete":
+            prompt += "\nRephrase as an internal monologue explaining the full plan:"
+        else:
+            prompt += "\nRephrase as a brief internal monologue:"
+
+        # Initialize LLM with streaming model config
+        llm = LLM(
+            model=llm_config['model'],
+            api_key=llm_config.get('api_key'),
+            **llm_config.get('settings', {})
+        )
+
+        # Adjust max_tokens based on event type
+        # Planning events (especially decomposition) need more tokens for full details
+        max_tokens = 500 if (event_type == "planning" and metadata.get("stage") == "decomposition_complete") else 50
+
+        # Generate rephrased content
+        rephrased = await llm.generate_text(
+            prompt,
+            max_tokens=max_tokens,
+            temperature=0.7
+        )
+
+        # Clean up the response
+        rephrased = rephrased.strip()
+
+        return rephrased
+
+    except Exception as e:
+        # On any error, return original content
+        # This ensures streaming continues even if LLM fails
+        print(f"Streaming rephrase failed: {e}")
+        return content
+
+
+# ===================================================================
 # STREAMING API
 # ===================================================================
 
@@ -159,14 +262,31 @@ def stream(event_type: str, content: str, **metadata):
         @multitasking.task
         def _emit_in_background(manager, req_id, evt_type, evt_content, evt_metadata, config):
             try:
-                # Phase 1: Direct emission (current implementation)
-                # Use all parameters passed explicitly - no closure dependencies
-                manager.emit_event(req_id, evt_type, evt_content, **evt_metadata)
+                # Check if LLM rephrasing is enabled
+                if config and config.get('enabled', False):
+                    # Phase 2: LLM rephrasing
+                    # Run async function in sync context
+                    try:
+                        # Create new event loop for this thread
+                        import asyncio
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            rephrased = loop.run_until_complete(
+                                rephrase_with_llm(evt_type, evt_content, evt_metadata, config)
+                            )
+                        finally:
+                            loop.close()
+                    except Exception as e:
+                        # Fallback to original content if rephrasing fails
+                        print(f"LLM rephrase failed: {e}")
+                        rephrased = evt_content
 
-                # Phase 2: LLM rephrasing will go here
-                # if config and config.get('enabled'):
-                #     rephrased = await rephrase_with_llm(evt_content, config)
-                #     manager.emit_event(req_id, evt_type, rephrased, **evt_metadata)
+                    # Emit rephrased content
+                    manager.emit_event(req_id, evt_type, rephrased, **evt_metadata)
+                else:
+                    # Phase 1: Direct emission (no rephrasing)
+                    manager.emit_event(req_id, evt_type, evt_content, **evt_metadata)
 
             except Exception:
                 # Silent failure like observability

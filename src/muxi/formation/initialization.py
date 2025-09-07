@@ -178,11 +178,21 @@ def initialize_llm_config(formation) -> None:
     # Configure streaming service with LLM configuration
     from ..services.streaming import set_streaming_llm_config
     streaming_config = formation._capability_models.get("streaming", text_model_config)
+
+    # Check if streaming model was explicitly configured
+    # If yes, enable rephrasing by default
+    streaming_explicitly_configured = "streaming" not in capabilities_using_text_fallback
+    enable_rephrasing = streaming_explicitly_configured
+
+    # Allow override from streaming settings
+    if streaming_config.get("settings", {}).get("enable_rephrasing") is not None:
+        enable_rephrasing = streaming_config["settings"]["enable_rephrasing"]
+
     set_streaming_llm_config({
         "model": streaming_config["model"],
         "api_key": streaming_config.get("api_key"),
         "settings": streaming_config.get("settings", {}),
-        "enabled": False  # Will be enabled in Phase 2
+        "enabled": enable_rephrasing
     })
 
     capabilities = list(formation._capability_models.keys())
