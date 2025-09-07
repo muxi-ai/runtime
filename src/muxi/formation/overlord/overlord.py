@@ -96,7 +96,7 @@ from ..background.request_tracker import RequestStatus
 from .clarification import UnifiedClarificationSystem
 
 # ClarificationHandler removed - using UnifiedClarificationSystem
-from ...services import observability
+from ...services import observability, streaming
 from ...datatypes.response import MuxiResponse
 from ...datatypes.clarification import ClarificationRequest, ClarificationResponse, RequestType
 from ...services.mcp.service import MCPService
@@ -215,10 +215,6 @@ from ..background import (
 # Unified Response Components
 from ...datatypes.clarification import ClarificationConfig, QuestionStyle, ClarificationResultStatus
 from ...utils.user_dirs import set_formation_id
-
-# Import streaming
-from ...services import streaming
-
 
 # Import MarkItDown - required dependency
 from markitdown import MarkItDown
@@ -5956,7 +5952,10 @@ Make it conversational and friendly while keeping accuracy."""
                         # Handle based on detection type
                         if credential_detection["type"] == "CREDENTIAL_REQUEST":
                             service = credential_detection.get('service', 'service')
-                            streaming.stream("planning", f"I need your {service} credentials. Let me help you with that...")
+                            streaming.stream(
+                                "planning",
+                                f"I need your {service} credentials. Let me help you with that..."
+                            )
                             # Direct credential request - handle immediately
                             result = await self.credential_handler.handle_credential_request(
                                 message=message,
@@ -6636,7 +6635,7 @@ Make it conversational and friendly while keeping accuracy."""
                 # Apply persona to the extracted text
                 formatted_content = await self._apply_persona(extracted_text, message)
                 result.content = formatted_content
-        
+
         # Emit the actual response content
         if result and hasattr(result, "content") and result.content:
             streaming.stream("content", result.content)

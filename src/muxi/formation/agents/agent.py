@@ -55,7 +55,7 @@ from ...datatypes.intent import IntentType, IntentDetectionContext
 from ...services.mcp.service import MCPService
 from ...services.llm import LLM
 from ...services.intent import IntentDetectionService
-from ...services import observability
+from ...services import observability, streaming
 
 
 class Agent:
@@ -3252,7 +3252,6 @@ class Agent:
         Returns a structured plan for multi-step requests.
         """
         # Emit streaming event for agent planning
-        from ...services import streaming
         streaming.stream("planning", "Planning approach to handle your request...")
 
         # Log available tools for debugging
