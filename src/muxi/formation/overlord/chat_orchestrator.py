@@ -12,6 +12,7 @@ from ..background.request_tracker import RequestStatus, RequestState
 from ...utils.id_generator import generate_nanoid
 from ...services import observability
 from ...datatypes.response import MuxiResponse
+from ...services import streaming
 from ...services.observability.context import (
     get_current_event_logger,
     get_current_request_context,
@@ -273,6 +274,9 @@ class ChatOrchestrator:
                     timestamp=timestamp,
                 )
 
+            # Always enable streaming for every request (debugging/monitoring)
+            streaming.enable_streaming(request_id, user_id, session_id)
+
             # Determine streaming behavior
             use_streaming = (
                 stream if stream is not None else getattr(self.overlord, "streaming", False)
@@ -280,15 +284,23 @@ class ChatOrchestrator:
 
             # Execute sync request
             if use_streaming:
-                # Return async generator directly for streaming behavior
-                return self._process_streaming_chat(
-                    message=enhanced_message,
-                    agent_name=agent_name,
-                    user_id=user_id,
-                    session_id=session_id,
-                    request_id=request_id,
-                    original_message=message,  # Pass original for extraction
+                # NEW: Fire-and-forget + return generator (replaces _process_streaming_chat)
+                asyncio.create_task(
+                    self._process_sync_chat(  # Same method, just fire-and-forget!
+                        message=enhanced_message,
+                        agent_name=agent_name,
+                        user_id=user_id,
+                        session_id=session_id,
+                        request_id=request_id,
+                        original_message=message,  # Pass original for extraction
+                        use_async=use_async,
+                        webhook_url=webhook_url,
+                    )
                 )
+
+                # Return the stream generator
+                async for event in self._stream_request(request_id, user_id, session_id):
+                    yield event
             else:
                 return await self._process_sync_chat(
                     message=enhanced_message,
@@ -519,56 +531,6 @@ class ChatOrchestrator:
             return MuxiResponse(
                 role="assistant",
                 content=str(result) if result else ""
-            )
-
-    async def _process_streaming_chat(
-        self,
-        message: str,
-        agent_name: Optional[str],
-        user_id: Any,
-        session_id: Optional[str] = None,
-        request_id: Optional[str] = None,
-        original_message: Optional[str] = None,
-    ) -> AsyncGenerator[str, None]:
-        """
-        Process a chat request with streaming.
-
-        Args:
-            message: The user's message
-            agent_name: Optional specific agent
-            user_id: Optional user ID
-            session_id: Optional session ID
-            request_id: Optional request ID
-
-        Yields:
-            Stream of response chunks
-        """
-        # Collect chunks for extraction while streaming
-        full_response = []
-
-        # Delegate to overlord's streaming processing method
-        async for chunk in self.overlord._process_streaming_chat(
-            message=message,
-            agent_name=agent_name,
-            user_id=user_id,
-            session_id=session_id,
-            request_id=request_id,
-        ):
-            full_response.append(chunk)
-            yield chunk
-
-        # Store the complete response in buffer memory after streaming
-        if full_response:
-            complete_response = "".join(full_response)
-            asyncio.create_task(
-                self._store_assistant_response_async(
-                    content=complete_response,
-                    timestamp=time.time(),
-                    agent_name=agent_name,
-                    user_id=user_id,
-                    session_id=session_id,
-                    request_id=request_id,
-                )
             )
 
     async def _store_user_message_async(
@@ -917,3 +879,9 @@ class ChatOrchestrator:
         except Exception:
             # Failed to store message in long-term memory
             pass
+
+    async def _stream_request(self, request_id: str, user_id: str, session_id: str):
+        """Internal streaming subscription (private method)"""
+        from ...services.streaming import streaming_manager
+        async for event in streaming_manager.subscribe(request_id, user_id, session_id):
+            yield event

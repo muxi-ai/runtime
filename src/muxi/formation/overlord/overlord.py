@@ -216,6 +216,10 @@ from ..background import (
 from ...datatypes.clarification import ClarificationConfig, QuestionStyle, ClarificationResultStatus
 from ...utils.user_dirs import set_formation_id
 
+# Import streaming
+from ...services import streaming
+
+
 # Import MarkItDown - required dependency
 from markitdown import MarkItDown
 
@@ -5160,60 +5164,6 @@ Make it conversational and friendly while keeping accuracy."""
             )
         )
 
-    async def _process_streaming_chat(
-        self,
-        message: str,
-        agent_name: Optional[str],
-        user_id: Any,
-        session_id: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> AsyncGenerator[str, None]:
-        """
-        Process chat with streaming response chunks.
-
-        This method handles streaming chat processing by delegating to the sync
-        method and yielding the response in chunks. For simplicity, this
-        implementation yields the complete response as a single chunk, but
-        could be enhanced to yield true streaming chunks from the LLM.
-
-        Args:
-            message: The user's message
-            agent_name: Optional specific agent
-            user_id: Optional user ID
-            session_id: Optional session ID
-            request_id: Optional request ID
-
-        Yields:
-            Response chunks as strings
-        """
-        # For now, delegate to sync processing and yield response as single chunk
-        # This satisfies the interface requirements and can be enhanced later for true streaming
-        try:
-            # Process using the existing sync method
-            result = await self._process_sync_chat(
-                message=message,
-                agent_name=agent_name,
-                user_id=user_id,
-                session_id=session_id,
-                request_id=request_id,
-                skip_clarification=False,
-            )
-
-            # Extract content and yield as chunk
-            if result and hasattr(result, "content"):
-                content = result.content if isinstance(result.content, str) else str(result.content)
-                if content:
-                    # For now, yield the complete response as a single chunk
-                    # This can be enhanced later to provide true streaming chunks
-                    yield content
-            else:
-                # Fallback for unexpected response types
-                yield str(result) if result else ""
-
-        except Exception as e:
-            # Yield error message as chunk
-            yield f"Error processing streaming request: {str(e)}"
-
     async def _process_sync_chat(
         self,
         message: str,
@@ -5237,6 +5187,9 @@ Make it conversational and friendly while keeping accuracy."""
         """
         # Track processing time
         start_time = time.time()
+
+        # Emit streaming event for processing start
+        streaming.stream("thinking", "Understanding the request...")
 
         # Debug: Entry point
         observability.observe(
@@ -5893,8 +5846,16 @@ Make it conversational and friendly while keeping accuracy."""
                     pass
 
         # ===================================================================
+        # INITIAL ANALYSIS
+        # ===================================================================
+        # Emit initial thinking event
+        streaming.stream("thinking", f"Understanding your request: {message[:100]}...")
+
+        # ===================================================================
         # CLARIFICATION CHECK - MUST HAPPEN BEFORE ANY AGENT SELECTION
         # ===================================================================
+        streaming.stream("thinking", "Checking if I need any clarification...")
+
         # Determine if clarification should be skipped for this message
         # Honor the skip_clarification parameter if explicitly set
         if not skip_clarification:
@@ -5986,6 +5947,7 @@ Make it conversational and friendly while keeping accuracy."""
                     # BUT skip if this is a workflow approval response
                     credential_detection = None
                     if not is_workflow_approval_response:
+                        streaming.stream("planning", "Checking if I need any credentials...")
                         credential_detection = await self.credential_handler.detect_credential_need(
                             message, user_id
                         )
@@ -5993,6 +5955,8 @@ Make it conversational and friendly while keeping accuracy."""
                     if credential_detection:
                         # Handle based on detection type
                         if credential_detection["type"] == "CREDENTIAL_REQUEST":
+                            service = credential_detection.get('service', 'service')
+                            streaming.stream("planning", f"I need your {service} credentials. Let me help you with that...")
                             # Direct credential request - handle immediately
                             result = await self.credential_handler.handle_credential_request(
                                 message=message,
@@ -6017,6 +5981,7 @@ Make it conversational and friendly while keeping accuracy."""
                     )
 
                 if clarification_result.action == "clarify":
+                    streaming.stream("thinking", "I need to clarify something with you...")
                     # Store minimal info - just request_id for reuse
                     if session_id:
                         self._set_pending_clarification(
@@ -6332,6 +6297,9 @@ Make it conversational and friendly while keeping accuracy."""
                 description="Agent selection triggered - check if this should have been handled as clarification",
             )
 
+            # Emit streaming event for agent selection planning
+            streaming.stream("planning", "Determining the best agent to handle this request...")
+
             # Emit agent selection started event
             observability.observe(
                 event_type=observability.ConversationEvents.OVERLORD_AGENT_SELECTION_STARTED,
@@ -6350,6 +6318,10 @@ Make it conversational and friendly while keeping accuracy."""
                 description=f"Agent selection completed: {agent_name}",
             )
 
+            # Emit streaming event for agent selection completion (user-friendly)
+            if agent_name and agent_name != "None":
+                streaming.stream("progress", f"I'll use my {agent_name} capabilities to help you with this.")
+
         # Check if overlord is accepting new requests
         if not await self.active_agent_tracker.can_accept_new_requests():
             raise OverlordShuttingDownError(
@@ -6363,6 +6335,9 @@ Make it conversational and friendly while keeping accuracy."""
         await self.active_agent_tracker.mark_agent_busy(agent_name)
 
         try:
+            # Emit streaming event for agent processing
+            streaming.stream("progress", "Processing your request...")
+
             # Process the message using the agent
             result = await agent.process_message(
                 message,
@@ -6604,6 +6579,9 @@ Make it conversational and friendly while keeping accuracy."""
                 agent_clarification, result, message, agent_name, user_id
             )
 
+        # Emit streaming event for response preparation
+        streaming.stream("progress", "Preparing response...")
+
         # Apply persona to format the response (except for clarifications)
         if result and hasattr(result, "content"):
             if isinstance(result.content, str):
@@ -6658,6 +6636,16 @@ Make it conversational and friendly while keeping accuracy."""
                 # Apply persona to the extracted text
                 formatted_content = await self._apply_persona(extracted_text, message)
                 result.content = formatted_content
+        
+        # Emit the actual response content
+        if result and hasattr(result, "content") and result.content:
+            streaming.stream("content", result.content)
+
+        # Emit final completion event
+        streaming.stream("completed", {"status": "success"})
+
+        # Cleanup streaming when done
+        streaming.disable_streaming(request_id)
 
         return result
 
@@ -6722,6 +6710,9 @@ Make it conversational and friendly while keeping accuracy."""
         self._validate_workflow_analysis(analysis)
 
         try:
+            # Emit streaming event for workflow planning
+            streaming.stream("planning", "This is a complex request. Let me break it down into steps...")
+
             # Emit workflow orchestration started event
             observability.observe(
                 event_type=observability.ConversationEvents.OVERLORD_WORKFLOW_STARTED,
@@ -7490,7 +7481,7 @@ Make it conversational and friendly while keeping accuracy."""
                     "status": status,
                     "workflow_id": workflow_id,
                 },
-                description=f"Webhook notification failed after all retries",
+                description="Webhook notification failed after all retries",
             )
 
     async def get_request_status(self, request_id: str) -> Dict[str, Any]:

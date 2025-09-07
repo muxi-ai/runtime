@@ -206,6 +206,10 @@ class TaskDecomposer:
         print("=" * 80)
 
         try:
+            # Emit streaming event for decomposition
+            from ...services import streaming
+            streaming.stream("planning", "Analyzing how to break down this complex request...")
+            
             response = await self.llm.generate_text(decomposition_prompt, max_tokens=2000)
 
             # DEBUG: Print LLM response for debugging
@@ -222,6 +226,9 @@ class TaskDecomposer:
                 print(f"  - {task_id}: {task.description}")
                 print(f"    Capabilities: {task.required_capabilities}")
             print()
+            
+            # Emit streaming event with task count
+            streaming.stream("planning", f"I've broken this down into {len(workflow.tasks)} tasks to complete.")
 
             return workflow
 
@@ -229,6 +236,10 @@ class TaskDecomposer:
             #  Decomposer warning - TODO: add observability
             print(f"\n❌ LLM DECOMPOSITION FAILED: {type(e).__name__}: {e}")
             print("🔄 Falling back to heuristic decomposition")
+            
+            # Emit streaming event for fallback
+            streaming.stream("planning", "Using alternative approach to break down the request...")
+            
             return self._heuristic_decompose_request(workflow_id, request, analysis)
 
     def _create_decomposition_prompt(

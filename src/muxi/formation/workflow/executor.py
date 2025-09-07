@@ -514,6 +514,9 @@ class WorkflowExecutor:
             # Store in results cache
             if result:
                 self.task_results[task.id] = result
+            
+            # Emit streaming event for task completion
+            streaming.stream("progress", f"Completed task: {task.description}")
 
             # Notify task completed
             if progress_callback:
@@ -676,6 +679,10 @@ class WorkflowExecutor:
         # Apply state changes back to SubTask for compatibility
         task.status = state.status
         task.start_time = state.start_time
+        
+        # Emit streaming event for task start
+        from ...services import streaming
+        streaming.stream("progress", f"Starting task: {task.description}")
 
         try:
             # Collect inputs from dependencies

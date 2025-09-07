@@ -3251,6 +3251,10 @@ class Agent:
         Force agent to plan before executing any tools.
         Returns a structured plan for multi-step requests.
         """
+        # Emit streaming event for agent planning
+        from ...services import streaming
+        streaming.stream("planning", "Planning approach to handle your request...")
+
         # Log available tools for debugging
         tool_names = [t.get("function", {}).get("name", "") for t in (available_tools or [])]
 
