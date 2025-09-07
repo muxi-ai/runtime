@@ -5185,7 +5185,14 @@ Make it conversational and friendly while keeping accuracy."""
         start_time = time.time()
 
         # Emit streaming event for processing start
-        streaming.stream("thinking", "Understanding the request...")
+        streaming.stream(
+            "thinking",
+            "Understanding the request...",
+            stage="process_sync_start",
+            message_preview=message[:500],
+            agent_name=agent_name,
+            skip_clarification=skip_clarification
+        )
 
         # Debug: Entry point
         observability.observe(
@@ -5845,12 +5852,17 @@ Make it conversational and friendly while keeping accuracy."""
         # INITIAL ANALYSIS
         # ===================================================================
         # Emit initial thinking event
-        streaming.stream("thinking", f"Understanding your request: {message[:100]}...")
+        streaming.stream(
+            "thinking",
+            f"Understanding your request: {message[:100]}...",
+            original_message=message,
+            agent_requested=agent_name,
+            user_id=str(user_id) if user_id else None
+        )
 
         # ===================================================================
         # CLARIFICATION CHECK - MUST HAPPEN BEFORE ANY AGENT SELECTION
         # ===================================================================
-        streaming.stream("thinking", "Checking if I need any clarification...")
 
         # Determine if clarification should be skipped for this message
         # Honor the skip_clarification parameter if explicitly set
@@ -5943,7 +5955,6 @@ Make it conversational and friendly while keeping accuracy."""
                     # BUT skip if this is a workflow approval response
                     credential_detection = None
                     if not is_workflow_approval_response:
-                        streaming.stream("planning", "Checking if I need any credentials...")
                         credential_detection = await self.credential_handler.detect_credential_need(
                             message, user_id
                         )
@@ -5954,7 +5965,10 @@ Make it conversational and friendly while keeping accuracy."""
                             service = credential_detection.get('service', 'service')
                             streaming.stream(
                                 "planning",
-                                f"I need your {service} credentials. Let me help you with that..."
+                                f"I need your {service} credentials. Let me help you with that...",
+                                stage="credential_request",
+                                service=service,
+                                credential_type=credential_detection.get('type')
                             )
                             # Direct credential request - handle immediately
                             result = await self.credential_handler.handle_credential_request(
@@ -5980,7 +5994,12 @@ Make it conversational and friendly while keeping accuracy."""
                     )
 
                 if clarification_result.action == "clarify":
-                    streaming.stream("thinking", "I need to clarify something with you...")
+                    streaming.stream(
+                        "thinking",
+                        "I need to clarify something with you...",
+                        stage="clarification_needed",
+                        clarification_question=clarification_result.question if clarification_result else None
+                    )
                     # Store minimal info - just request_id for reuse
                     if session_id:
                         self._set_pending_clarification(
@@ -6297,7 +6316,13 @@ Make it conversational and friendly while keeping accuracy."""
             )
 
             # Emit streaming event for agent selection planning
-            streaming.stream("planning", "Determining the best agent to handle this request...")
+            streaming.stream(
+                "planning",
+                "Determining the best agent to handle this request...",
+                stage="agent_selection",
+                message_preview=message[:500],
+                agent_requested=agent_name
+            )
 
             # Emit agent selection started event
             observability.observe(
@@ -6319,7 +6344,12 @@ Make it conversational and friendly while keeping accuracy."""
 
             # Emit streaming event for agent selection completion (user-friendly)
             if agent_name and agent_name != "None":
-                streaming.stream("progress", f"I'll use my {agent_name} capabilities to help you with this.")
+                streaming.stream(
+                    "progress",
+                    f"I'll use my {agent_name} capabilities to help you with this.",
+                    stage="agent_selected",
+                    selected_agent=agent_name
+                )
 
         # Check if overlord is accepting new requests
         if not await self.active_agent_tracker.can_accept_new_requests():
@@ -6335,7 +6365,12 @@ Make it conversational and friendly while keeping accuracy."""
 
         try:
             # Emit streaming event for agent processing
-            streaming.stream("progress", "Processing your request...")
+            streaming.stream(
+                "progress",
+                "Processing request...",
+                stage="agent_processing",
+                agent_name=agent_name
+            )
 
             # Process the message using the agent
             result = await agent.process_message(
@@ -6579,7 +6614,13 @@ Make it conversational and friendly while keeping accuracy."""
             )
 
         # Emit streaming event for response preparation
-        streaming.stream("progress", "Preparing response...")
+        streaming.stream(
+            "progress",
+            "Preparing response...",
+            stage="response_preparation",
+            has_persona=bool(self.persona),
+            response_format=self.response_format
+        )
 
         # Apply persona to format the response (except for clarifications)
         if result and hasattr(result, "content"):
@@ -6638,10 +6679,23 @@ Make it conversational and friendly while keeping accuracy."""
 
         # Emit the actual response content
         if result and hasattr(result, "content") and result.content:
-            streaming.stream("content", result.content)
+            streaming.stream(
+                "content",
+                result.content,
+                stage="response_content",
+                content_length=len(result.content),
+                has_artifacts=bool(getattr(result, 'artifacts', None)),
+                has_metadata=bool(getattr(result, 'metadata', None))
+            )
 
         # Emit final completion event
-        streaming.stream("completed", {"status": "success"})
+        streaming.stream(
+            "completed",
+            "Request completed successfully",
+            status="success",
+            processing_time_ms=int((time.time() - start_time) * 1000),
+            agent_used=agent_name
+        )
 
         # Cleanup streaming when done
         streaming.disable_streaming(request_id)
@@ -6710,7 +6764,13 @@ Make it conversational and friendly while keeping accuracy."""
 
         try:
             # Emit streaming event for workflow planning
-            streaming.stream("planning", "This is a complex request. Let me break it down into steps...")
+            streaming.stream(
+                "planning",
+                "This is a complex request. Let me break it down into steps...",
+                stage="workflow_decomposition",
+                complexity_score=analysis.complexity_score if analysis else None,
+                message_preview=message[:100]
+            )
 
             # Emit workflow orchestration started event
             observability.observe(

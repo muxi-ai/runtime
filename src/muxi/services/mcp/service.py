@@ -615,7 +615,14 @@ class MCPService:
             # Emit streaming event for tool execution (abstract tool names)
             # Extract service name from server_id (e.g., "github" from "github_123")
             service_name = server_id.split('_')[0] if '_' in server_id else server_id
-            streaming.stream("tool_call", f"Using {service_name} tool to complete this task...")
+            streaming.stream(
+                "tool_call",
+                f"Using {service_name} tool to complete this task...",
+                stage="tool_execution",
+                service=service_name,
+                tool_name=tool_name,
+                has_params=bool(parameters)
+            )
 
             # Execute tool using ephemeral connection
             result = await self._execute_tool_ephemeral(

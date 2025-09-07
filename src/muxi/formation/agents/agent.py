@@ -3252,7 +3252,15 @@ class Agent:
         Returns a structured plan for multi-step requests.
         """
         # Emit streaming event for agent planning
-        streaming.stream("planning", "Planning approach to handle your request...")
+        streaming.stream(
+            "planning",
+            "Planning approach to handle your request...",
+            stage="agent_planning",
+            agent_name=self.id,
+            message_preview=user_message[:500],
+            has_tools=bool(available_tools),
+            tool_count=len(available_tools) if available_tools else 0
+        )
 
         # Log available tools for debugging
         tool_names = [t.get("function", {}).get("name", "") for t in (available_tools or [])]

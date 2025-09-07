@@ -516,7 +516,13 @@ class WorkflowExecutor:
                 self.task_results[task.id] = result
 
             # Emit streaming event for task completion
-            streaming.stream("progress", f"Completed task: {task.description}")
+            streaming.stream(
+                "progress",
+                f"Completed task: {task.description}",
+                stage="task_complete",
+                task_id=task.id,
+                task_type=task.task_type if hasattr(task, 'task_type') else None
+            )
 
             # Notify task completed
             if progress_callback:
@@ -681,7 +687,14 @@ class WorkflowExecutor:
         task.start_time = state.start_time
 
         # Emit streaming event for task start
-        streaming.stream("progress", f"Starting task: {task.description}")
+        streaming.stream(
+            "progress",
+            f"Starting task: {task.description}",
+            stage="task_start",
+            task_id=task.id,
+            task_type=task.task_type if hasattr(task, 'task_type') else None,
+            required_capabilities=task.required_capabilities if hasattr(task, 'required_capabilities') else None
+        )
 
         try:
             # Collect inputs from dependencies

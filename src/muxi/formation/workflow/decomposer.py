@@ -208,7 +208,13 @@ class TaskDecomposer:
         try:
             # Emit streaming event for decomposition
             from ...services import streaming
-            streaming.stream("planning", "Analyzing how to break down this complex request...")
+            streaming.stream(
+                "planning",
+                "Analyzing how to break down this complex request...",
+                stage="decomposition_start",
+                complexity_score=analysis.complexity_score if analysis else None,
+                request_type=analysis.request_type if analysis and hasattr(analysis, 'request_type') else None
+            )
 
             response = await self.llm.generate_text(decomposition_prompt, max_tokens=2000)
 
@@ -227,9 +233,16 @@ class TaskDecomposer:
             #     print(f"    Capabilities: {task.required_capabilities}")
             # print()
 
-            # Emit streaming event with task count
-            streaming.stream("planning", f"I've broken this down into {len(workflow.tasks)} tasks to complete.")
-            streaming.stream("planning", response)
+            # Emit streaming event with decomposition results
+            streaming.stream(
+                "planning",
+                f"I've broken this down into {len(workflow.tasks)} tasks to complete.",
+                stage="decomposition_complete",
+                task_count=len(workflow.tasks),
+                workflow_id=workflow.id if workflow else None,
+                decomposition_details=response,
+                is_llm_response=True
+            )
 
             return workflow
 
@@ -239,7 +252,12 @@ class TaskDecomposer:
             print("🔄 Falling back to heuristic decomposition")
 
             # Emit streaming event for fallback
-            streaming.stream("planning", "Using alternative approach to break down the request...")
+            streaming.stream(
+                "planning",
+                "Using alternative approach to break down the request...",
+                stage="decomposition_fallback",
+                error_reason=str(e) if 'e' in locals() else "LLM decomposition failed"
+            )
 
             return self._heuristic_decompose_request(workflow_id, request, analysis)
 
