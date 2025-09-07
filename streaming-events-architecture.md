@@ -44,11 +44,7 @@ Any Module → streaming.stream() → StreamingManager (Event Storage) → Subsc
 ```python
 import asyncio
 import time
-import multitasking
 from typing import Dict, Tuple, List, Optional
-
-# Configure multitasking like observability
-multitasking.set_engine("thread")
 
 class StreamingManager:
     """Pure event storage with owner-based security"""
@@ -65,8 +61,8 @@ class StreamingManager:
                 "events": []
             }
     
-    async def emit_event(self, request_id: str, event_type: str, content: str, **metadata):
-        """Simple event storage - no subscriber management"""
+    def emit_event(self, request_id: str, event_type: str, content: str, **metadata):
+        """Simple event storage - just in-memory dict/list operations"""
         if request_id not in self.event_streams:
             return  # Not streaming-enabled
             
@@ -83,7 +79,7 @@ class StreamingManager:
             **metadata
         }
         
-        # Just append to events list
+        # Just append to events list (fast in-memory operation)
         stream_data["events"].append(event)
     
     async def subscribe(self, request_id: str, user_id: str, session_id: str):
@@ -121,17 +117,14 @@ class StreamingManager:
 # Global instance
 streaming_manager = StreamingManager()
 
-# Fire-and-forget streaming (matches observability pattern)
-@multitasking.task
+# Simple synchronous streaming emission (no multitasking needed)
 def stream(request_id: str, event_type: str, content: str, **metadata):
     """
-    Fire-and-forget streaming emission using multitasking.
+    Simple streaming emission - just in-memory operations.
     Call from anywhere, just like observability.observe()
     """
     try:
-        asyncio.create_task(
-            streaming_manager.emit_event(request_id, event_type, content, **metadata)
-        )
+        streaming_manager.emit_event(request_id, event_type, content, **metadata)
     except Exception:
         # Silent failure like observability
         pass
@@ -180,57 +173,79 @@ async def sse_stream(user_id: str, session_id: str, request_id: str):
     )
 ```
 
-### 3. Integration in Overlord (Embedded Streaming)
+### 3. Integration in ChatOrchestrator (Modify Existing Logic)
 
 ```python
-# Unified chat interface - adapts based on stream parameter
-async def chat(self, message: str, user_id: str, session_id: str, stream=False, **kwargs):
+# In ChatOrchestrator.chat() - modify existing streaming branch
+async def chat(self, message: str, agent_name=None, user_id=None, session_id=None, 
+               stream=None, **kwargs):
     """
-    Unified chat interface:
-    - stream=False: Normal awaitable, returns MuxiResponse
-    - stream=True: Fire-and-forget + streaming, returns async generator
+    Existing chat method - modify the streaming branch only.
+    Uses existing request ID generation and all current logic.
     """
-    request_id = kwargs.get('request_id', generate_nanoid())
+    # ... existing code for request_id generation, clarification handling, etc.
     
-    # Always enable streaming for every request (debugging/monitoring)
+    # Always enable streaming for every request (debugging/monitoring)  
     streaming.enable_streaming(request_id, user_id, session_id)
     
-    if not stream:
-        # Normal mode - process and return response
-        streaming.stream(request_id, "thinking", "Understanding the request...")
-        
-        # Normal processing with embedded streaming calls  
-        analysis = await self.request_analyzer.analyze_request(message, user_id)
-        streaming.stream(request_id, "analysis", f"Complexity: {analysis.complexity_score}")
-        
-        # Continue with normal flow
-        if analysis.requires_workflow:
-            result = await self._process_with_workflow(message, request_id, user_id, session_id, **kwargs)
-        else:
-            result = await self._handle_simple_request(message, request_id, user_id, session_id, **kwargs)
-        
-        # Final completion event
-        streaming.stream(request_id, "completed", {"status": "success"})
-        
-        # Always cleanup when done
-        streaming.disable_streaming(request_id)
-        
-        return result
+    # Modify existing streaming branch
+    use_streaming = stream if stream is not None else getattr(self.overlord, "streaming", False)
     
-    else:
-        # Streaming mode - fire-and-forget + return generator
+    if use_streaming:
+        # NEW: Fire-and-forget + return generator (replaces _process_streaming_chat)
         asyncio.create_task(
-            self.chat(message, user_id, session_id, stream=False, request_id=request_id, **kwargs)
+            self._process_sync_chat(  # Same method, just fire-and-forget!
+                message=enhanced_message,
+                agent_name=agent_name, 
+                user_id=user_id,
+                session_id=session_id,
+                request_id=request_id,
+                **kwargs
+            )
         )
         
         # Return the stream generator
         async for event in self._stream_request(request_id, user_id, session_id):
             yield event
+    else:
+        # Normal mode - await the same processing method
+        return await self._process_sync_chat(
+            message=enhanced_message,
+            agent_name=agent_name,
+            user_id=user_id, 
+            session_id=session_id,
+            request_id=request_id,
+            **kwargs
+        )
 
 async def _stream_request(self, request_id: str, user_id: str, session_id: str):
     """Internal streaming subscription (private method)"""
     async for event in streaming_manager.subscribe(request_id, user_id, session_id):
         yield event
+
+# _process_sync_chat gets embedded streaming calls
+async def _process_sync_chat(self, message, agent_name, user_id, session_id, request_id, **kwargs):
+    """Single processing method with embedded streaming calls"""
+    
+    # Emit events throughout processing
+    streaming.stream(request_id, "thinking", "Understanding the request...")
+    
+    # Normal processing logic with streaming calls embedded
+    analysis = await self.analyze_request(message, user_id)
+    streaming.stream(request_id, "analysis", f"Complexity: {analysis.complexity_score}")
+    
+    # ... existing processing logic with streaming.stream() calls throughout ...
+    
+    # Final completion event
+    streaming.stream(request_id, "completed", {"status": "success"})
+    
+    # Cleanup when done
+    streaming.disable_streaming(request_id)
+    
+    return result
+
+# DELETE: _process_streaming_chat method entirely removed
+# DELETE: All other *_streaming methods removed
 ```
 
 ## Event Types
@@ -275,11 +290,11 @@ return MuxiResponse(...)  # Still return for compatibility, but SDK uses events
 
 ```python
 # Normal mode - await for final response
-response = await overlord.chat("Explain quantum computing", user_id, session_id)
+response = await overlord.chat("Explain quantum computing", user_id=user_id, session_id=session_id)
 print(f"Final response: {response.content}")
 
 # Streaming mode - async for real-time events  
-async for event in overlord.chat("Explain quantum computing", user_id, session_id, stream=True):
+async for event in overlord.chat("Explain quantum computing", user_id=user_id, session_id=session_id, stream=True):
     if event['type'] == 'thinking':
         print(f"💭 {event['content']}")
     elif event['type'] == 'content':
@@ -288,6 +303,20 @@ async for event in overlord.chat("Explain quantum computing", user_id, session_i
         print(f"\n✅ Done!")
         break
 ```
+
+### Implementation Details
+
+**overlord.chat() delegates to ChatOrchestrator.chat()** where the streaming logic is implemented:
+
+```python
+# In Overlord class
+async def chat(self, message: str, **kwargs):
+    return await self.chat_orchestrator.chat(message=message, **kwargs)
+```
+
+**Client perspective**: Unified interface - same method signature, `stream` parameter controls behavior.
+
+**Implementation perspective**: ChatOrchestrator handles the fire-and-forget complexity internally.
 
 ### Why This is Much Cleaner
 
@@ -301,9 +330,9 @@ async for event in overlord.stream_request(request_id, user_id, session_id):
 ```
 
 **After (Simple)**:
-```python
+```python  
 # Single method call - stream parameter controls behavior
-async for event in overlord.chat("Hello", user_id, session_id, stream=True):
+async for event in overlord.chat("Hello", user_id=user_id, session_id=session_id, stream=True):
     # handle events
 ```
 
@@ -363,26 +392,30 @@ class MuxiSDK:
 9. **Generator simplicity**: No queues, just simple `async for` yielding
 10. **Multiple transports**: SSE, WebSocket, Direct API can all consume same event stream
 11. **Automatic cleanup**: Event streams deleted when request completes
-12. **Consistent pattern**: Matches proven multitasking approach from observability
+12. **No multitasking overhead**: Simple in-memory dict/list operations, no async task spawning
 
 ## Migration Path
 
-1. Add `streaming.py` module with StreamingManager (owner-based event storage)
-2. Add `streaming.stream()` calls throughout existing processing methods
-3. Add secure SSE endpoint `/stream/{user_id}/{session_id}/{request_id}`
-4. Update SDK to consume SSE endpoint for remote streaming
-5. Remove all `_process_*_streaming` methods (optional cleanup)
+1. Add `streaming.py` module with StreamingManager (owner-based event storage, no multitasking)
+2. Modify existing `ChatOrchestrator.chat()` streaming branch (fire-and-forget pattern)
+3. Add `streaming.stream()` calls throughout `_process_sync_chat` method 
+4. Add `_stream_request()` helper method to ChatOrchestrator
+5. Add secure SSE endpoint `/stream/{user_id}/{session_id}/{request_id}`
+6. **DELETE all `_process_*_streaming` methods entirely** (eliminates code duplication)
+7. Update SDK to consume SSE endpoint for remote streaming
 
 ## Success Criteria
 
-- [ ] Unified `overlord.chat()` interface with `stream=True/False` parameter
+- [ ] Unified `overlord.chat()` interface with `stream=True/False` parameter (delegates to ChatOrchestrator)
 - [ ] `stream=False` returns MuxiResponse, `stream=True` returns AsyncGenerator
-- [ ] Streaming mode handles fire-and-forget complexity internally
-- [ ] `streaming.stream()` function works from any module like `observability.observe()`
+- [ ] ChatOrchestrator handles fire-and-forget complexity internally 
+- [ ] Uses existing request ID generation from ChatOrchestrator (no duplication)
+- [ ] `streaming.stream()` function works from any module with simple synchronous calls
 - [ ] Owner-based security prevents unauthorized access to streams
-- [ ] Single code path handles both streaming and non-streaming requests
+- [ ] Single `_process_sync_chat` method handles both streaming and non-streaming requests
+- [ ] All `_process_*_streaming` methods deleted entirely
 - [ ] Real-time streaming with no replay of existing events  
-- [ ] Zero overhead when streaming not enabled for request
+- [ ] Zero overhead - simple in-memory dict/list operations, no multitasking
 - [ ] SSE endpoint provides secure multi-user streaming
 - [ ] Generator-based subscription without complex queue management
 - [ ] Automatic cleanup when requests complete
