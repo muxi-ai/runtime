@@ -2288,7 +2288,7 @@ Make it conversational and friendly while keeping accuracy."""
             response_config = overlord_config.get("response", {})
             self.response_format = response_config.get("format", "markdown")
             self.use_interactive_elements = response_config.get("interactive_elements", True)
-            self.streaming = response_config.get("streaming", True)
+            self.streaming = response_config.get("streaming", False)
 
             # Resilience is handled by the resilient workflow executor
 

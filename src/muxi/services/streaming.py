@@ -7,7 +7,22 @@ between event storage and subscription/transport mechanisms.
 
 import asyncio
 import time
-from typing import Dict
+import threading
+import signal
+from typing import Dict, Optional, Any
+import multitasking
+
+# Set multitasking to thread mode for shared memory access
+multitasking.set_engine("thread")
+
+# Kill all tasks on ctrl-c for clean shutdown
+# Only register signal handlers in main thread to avoid errors in tests
+try:
+    signal.signal(signal.SIGINT, multitasking.killall)
+except ValueError:
+    # Signal handlers can only be registered in main thread
+    # This is expected in tests or when imported from threads
+    pass
 
 
 class StreamingManager:
@@ -78,26 +93,95 @@ class StreamingManager:
         if request_id in self.event_streams:
             del self.event_streams[request_id]
 
+    def is_streaming_enabled(self, request_id: str) -> bool:
+        """Check if streaming is enabled for a request"""
+        return request_id in self.event_streams
+
+
+# ===================================================================
+# GLOBAL STREAMING CONFIGURATION
+# ===================================================================
 
 # Global instance
 streaming_manager = StreamingManager()
 
+# Global runtime variable to store LLM configuration for streaming
+_streaming_llm_config: Optional[Dict[str, Any]] = None
+_streaming_llm_config_lock = threading.Lock()
 
-# Simple synchronous streaming emission (no multitasking needed)
+
+def set_streaming_llm_config(config: Dict[str, Any]) -> None:
+    """Set the streaming LLM configuration for global access."""
+    global _streaming_llm_config
+    with _streaming_llm_config_lock:
+        _streaming_llm_config = config
+
+
+def get_streaming_llm_config() -> Optional[Dict[str, Any]]:
+    """Get the streaming LLM configuration."""
+    with _streaming_llm_config_lock:
+        return _streaming_llm_config
+
+
+# ===================================================================
+# STREAMING API
+# ===================================================================
+
 def stream(event_type: str, content: str, **metadata):
     """
-    Simple streaming emission - just in-memory operations.
-    Call from anywhere, just like observability.observe()
-    Automatically gets request_id from context.
+    Emit a streaming event (non-blocking).
+
+    This function captures the request context before spawning a background
+    thread to ensure context is properly passed to the thread.
+
+    Args:
+        event_type: Type of event (thinking, planning, progress, etc.)
+        content: Event content/message
+        **metadata: Additional event metadata
     """
     try:
-        # Get request_id from context
+        # Get request context
         from ..observability.context import get_current_request_context
-        context = get_current_request_context()
+        request_context = get_current_request_context()
 
         # Only emit if we have a request_id in context
-        if context and hasattr(context, 'request_id'):
-            streaming_manager.emit_event(context.request_id, event_type, content, **metadata)
+        if not (request_context and hasattr(request_context, 'request_id')):
+            return
+
+        # Check if streaming is enabled for this request
+        # This prevents unnecessary LLM calls and event emissions
+        if not streaming_manager.is_streaming_enabled(request_context.request_id):
+            return
+
+        # Get the streaming configuration (for future LLM rephrasing)
+        llm_config = get_streaming_llm_config()
+
+        @multitasking.task
+        def _emit_in_background(manager, req_id, evt_type, evt_content, evt_metadata, config):
+            try:
+                # Phase 1: Direct emission (current implementation)
+                # Use all parameters passed explicitly - no closure dependencies
+                manager.emit_event(req_id, evt_type, evt_content, **evt_metadata)
+
+                # Phase 2: LLM rephrasing will go here
+                # if config and config.get('enabled'):
+                #     rephrased = await rephrase_with_llm(evt_content, config)
+                #     manager.emit_event(req_id, evt_type, rephrased, **evt_metadata)
+
+            except Exception:
+                # Silent failure like observability
+                pass
+
+        # Start the background task with all parameters explicit
+        _emit_in_background(
+            streaming_manager,
+            request_context.request_id,
+            event_type,
+            content,
+            metadata,
+            llm_config
+        )
+
     except Exception:
         # Silent failure like observability
         pass

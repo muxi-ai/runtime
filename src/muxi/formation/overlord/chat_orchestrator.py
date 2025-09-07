@@ -274,13 +274,14 @@ class ChatOrchestrator:
                     timestamp=timestamp,
                 )
 
-            # Always enable streaming for every request (debugging/monitoring)
-            streaming.enable_streaming(request_id, user_id, session_id)
-
             # Determine streaming behavior
             use_streaming = (
                 stream if stream is not None else getattr(self.overlord, "streaming", False)
             )
+
+            # Only enable streaming if actually needed
+            if use_streaming:
+                streaming.enable_streaming(request_id, user_id, session_id)
 
             # Execute sync request
             if use_streaming:

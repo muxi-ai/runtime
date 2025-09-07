@@ -162,7 +162,7 @@ def initialize_llm_config(formation) -> None:
     text_model_config = formation._capability_models["text"]
 
     # Define common capabilities that should default to text model if not configured
-    common_capabilities = ["vision", "audio", "documents", "embedding"]
+    common_capabilities = ["vision", "audio", "documents", "embedding", "streaming"]
     capabilities_using_text_fallback = []
 
     # Apply text model as default for unconfigured common capabilities
@@ -174,6 +174,16 @@ def initialize_llm_config(formation) -> None:
                 "settings": text_model_config.get("settings", {}),
             }
             capabilities_using_text_fallback.append(capability)
+
+    # Configure streaming service with LLM configuration
+    from ..services.streaming import set_streaming_llm_config
+    streaming_config = formation._capability_models.get("streaming", text_model_config)
+    set_streaming_llm_config({
+        "model": streaming_config["model"],
+        "api_key": streaming_config.get("api_key"),
+        "settings": streaming_config.get("settings", {}),
+        "enabled": False  # Will be enabled in Phase 2
+    })
 
     capabilities = list(formation._capability_models.keys())
 
