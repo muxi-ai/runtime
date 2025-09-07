@@ -48,11 +48,11 @@ from typing import Dict, Tuple, List, Optional
 
 class StreamingManager:
     """Pure event storage with owner-based security"""
-    
+
     def __init__(self):
         # Key: request_id, Value: owner + events
         self.event_streams: Dict[str, Dict] = {}
-        
+
     def enable_streaming(self, request_id: str, user_id: str, session_id: str):
         """Enable streaming with ownership tracking"""
         if request_id not in self.event_streams:
@@ -60,15 +60,15 @@ class StreamingManager:
                 "owner": (user_id, session_id),
                 "events": []
             }
-    
+
     def emit_event(self, request_id: str, event_type: str, content: str, **metadata):
         """Simple event storage - just in-memory dict/list operations"""
         if request_id not in self.event_streams:
             return  # Not streaming-enabled
-            
+
         stream_data = self.event_streams[request_id]
         user_id, session_id = stream_data["owner"]
-        
+
         event = {
             "request_id": request_id,
             "user_id": user_id,
@@ -78,10 +78,10 @@ class StreamingManager:
             "timestamp": time.time(),
             **metadata
         }
-        
+
         # Just append to events list (fast in-memory operation)
         stream_data["events"].append(event)
-    
+
     async def subscribe(self, request_id: str, user_id: str, session_id: str):
         """
         Generator that yields NEW events only.
@@ -90,14 +90,14 @@ class StreamingManager:
         # Validate access
         if request_id not in self.event_streams:
             return
-        
+
         stream_data = self.event_streams[request_id]
         if stream_data["owner"] != (user_id, session_id):
             return  # Unauthorized
-        
+
         # Start watching from NOW (ignore existing events)
         last_seen = len(stream_data["events"])
-        
+
         # Yield only NEW events as they arrive
         while request_id in self.event_streams:
             current_events = self.event_streams[request_id]["events"]
@@ -106,9 +106,9 @@ class StreamingManager:
                 for event in current_events[last_seen:]:
                     yield event
                 last_seen = len(current_events)
-            
+
             await asyncio.sleep(0.1)  # Brief polling
-    
+
     def disable_streaming(self, request_id: str):
         """Cleanup when request completes"""
         if request_id in self.event_streams:
@@ -150,19 +150,19 @@ async def subscribe(request_id: str, user_id: str, session_id: str):
 @app.get("/stream/{user_id}/{session_id}/{request_id}")
 async def sse_stream(user_id: str, session_id: str, request_id: str):
     """Server-Sent Events endpoint for real-time streaming with security"""
-    
+
     async def event_generator():
         # Subscribe via overlord private method
         try:
             # Stream events in real-time
             async for event in overlord._stream_request(request_id, user_id, session_id):
                 yield f"data: {json.dumps(event)}\n\n"
-            
+
             # Stream completed (request_id deleted)
             yield f"data: {json.dumps({'type': 'stream_completed'})}\n\n"
         except:
             yield f"data: {json.dumps({'error': 'Unauthorized or request not streaming'})}\n\n"
-    
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
@@ -177,33 +177,33 @@ async def sse_stream(user_id: str, session_id: str, request_id: str):
 
 ```python
 # In ChatOrchestrator.chat() - modify existing streaming branch
-async def chat(self, message: str, agent_name=None, user_id=None, session_id=None, 
+async def chat(self, message: str, agent_name=None, user_id=None, session_id=None,
                stream=None, **kwargs):
     """
     Existing chat method - modify the streaming branch only.
     Uses existing request ID generation and all current logic.
     """
     # ... existing code for request_id generation, clarification handling, etc.
-    
-    # Always enable streaming for every request (debugging/monitoring)  
+
+    # Always enable streaming for every request (debugging/monitoring)
     streaming.enable_streaming(request_id, user_id, session_id)
-    
+
     # Modify existing streaming branch
     use_streaming = stream if stream is not None else getattr(self.overlord, "streaming", False)
-    
+
     if use_streaming:
         # NEW: Fire-and-forget + return generator (replaces _process_streaming_chat)
         asyncio.create_task(
             self._process_sync_chat(  # Same method, just fire-and-forget!
                 message=enhanced_message,
-                agent_name=agent_name, 
+                agent_name=agent_name,
                 user_id=user_id,
                 session_id=session_id,
                 request_id=request_id,
                 **kwargs
             )
         )
-        
+
         # Return the stream generator
         async for event in self._stream_request(request_id, user_id, session_id):
             yield event
@@ -212,7 +212,7 @@ async def chat(self, message: str, agent_name=None, user_id=None, session_id=Non
         return await self._process_sync_chat(
             message=enhanced_message,
             agent_name=agent_name,
-            user_id=user_id, 
+            user_id=user_id,
             session_id=session_id,
             request_id=request_id,
             **kwargs
@@ -226,43 +226,92 @@ async def _stream_request(self, request_id: str, user_id: str, session_id: str):
 # _process_sync_chat gets embedded streaming calls
 async def _process_sync_chat(self, message, agent_name, user_id, session_id, request_id, **kwargs):
     """Single processing method with embedded streaming calls"""
-    
+
     # Emit events throughout processing
     streaming.stream(request_id, "thinking", "Understanding the request...")
-    
+
     # Normal processing logic with streaming calls embedded
     analysis = await self.analyze_request(message, user_id)
     streaming.stream(request_id, "analysis", f"Complexity: {analysis.complexity_score}")
-    
+
     # ... existing processing logic with streaming.stream() calls throughout ...
-    
+
     # Final completion event
     streaming.stream(request_id, "completed", {"status": "success"})
-    
+
     # Cleanup when done
     streaming.disable_streaming(request_id)
-    
+
     return result
 
 # DELETE: _process_streaming_chat method entirely removed
 # DELETE: All other *_streaming methods removed
 ```
 
-## Event Types
+## Event Types & Emission Strategy
 
-| Event Type | Description | Example Content |
-|------------|-------------|-----------------|
-| `thinking` | AI's understanding/reasoning | "Understanding the request..." |
-| `analysis` | Request analysis results | "Complexity: 7.5" |
-| `planning` | Task decomposition | "Breaking into 3 tasks..." |
-| `executing` | Current action | "Running web search..." |
-| `tool_call` | Tool usage | "Calling sys_info tool" |
-| `clarification` | Questions for user | "Which database do you mean?" |
-| `content` | Main response content | "Here's the solution..." |
-| `artifacts` | File/data artifacts | `{"type": "file", "name": "report.pdf", "data": "..."}` |
-| `metadata` | Response metadata | `{"tokens": 1234, "model": "gpt-4"}` |
-| `error` | Error information | "Failed to connect to database" |
-| `completed` | Stream ended with final status | `{"status": "success", "duration_ms": 2500}` |
+### Core Event Types
+
+| Event Type | Description | Example Content | Emission Points |
+|------------|-------------|-----------------|-----------------|
+| `thinking` | AI's initial analysis | "The user wants me to..." | Request entry, clarification detection |
+| `planning` | Strategy formulation | "I need to check credentials..." | Credential check, workflow decomposition, agent planning |
+| `progress` | Current action updates | "Searching the web..." | During execution, tool calls, sub-task progress |
+| `tool_call` | Tool usage (abstracted) | "Using GitHub tool to fetch repository..." | Tool wrapper (hide internal tool names) |
+| `clarification` | Questions for user | "Which database do you mean?" | Clarification system |
+| `content` | Main response content | "Here's the solution..." | Final response assembly |
+| `artifacts` | File/data artifacts | `{"type": "file", "name": "report.pdf"}` | When artifacts are created |
+| `metadata` | Response metadata | `{"tokens": 1234, "model": "gpt-4"}` | Response completion |
+| `error` | Error information | "Failed to connect to database" | Error handlers |
+| `completed` | Stream ended | `{"status": "success"}` | Request cleanup |
+
+### Comprehensive Event Flow
+
+```
+Request Entry:
+├─ thinking: "The user wants me to..."
+│
+├─ Credential Check (if needed):
+│  └─ planning: "I need credentials for GitHub. Let me check..."
+│
+├─ Clarification (if needed):
+│  └─ thinking: "I need to clarify which database..."
+│
+├─ Workflow Decomposition (if complex):
+│  ├─ planning: "I will break this into 3 tasks..."
+│  ├─ progress: "Task 1: Searching for information..."
+│  ├─ progress: "Task 2: Analyzing the data..."
+│  └─ progress: "Task 3: Generating the report..."
+│
+├─ Agent Selection (if single agent):
+│  ├─ planning: "I'll use the code generator..."
+│  └─ progress: "Generating Python code..."
+│
+├─ Tool Calls:
+│  └─ tool_call: "Using GitHub tool to list repositories..."
+│
+└─ Response:
+   ├─ progress: "Preparing response..."
+   ├─ content: "Here's what I found..."
+   └─ completed: {"status": "success"}
+```
+
+### Event Emission Guidelines
+
+1. **User-Friendly Language**: Events should be conversational, not technical
+   - ✅ "Checking if I have your GitHub credentials..."
+   - ❌ "Executing credential_handler.detect_credential_need()"
+
+2. **Tool Abstraction**: Never expose internal tool names
+   - ✅ "Using GitHub tool to fetch repository information..."
+   - ❌ "Calling github.whoami tool..."
+
+3. **Progress Granularity**: Balance between too many and too few updates
+   - Emit progress for operations taking >1 second
+   - Group rapid operations into single progress event
+
+4. **Natural Flow**: Events should tell a coherent story
+   - thinking → planning → progress → content → completed
 
 ## MuxiResponse Streaming
 
@@ -293,7 +342,7 @@ return MuxiResponse(...)  # Still return for compatibility, but SDK uses events
 response = await overlord.chat("Explain quantum computing", user_id=user_id, session_id=session_id)
 print(f"Final response: {response.content}")
 
-# Streaming mode - async for real-time events  
+# Streaming mode - async for real-time events
 async for event in overlord.chat("Explain quantum computing", user_id=user_id, session_id=session_id, stream=True):
     if event['type'] == 'thinking':
         print(f"💭 {event['content']}")
@@ -330,7 +379,7 @@ async for event in overlord.stream_request(request_id, user_id, session_id):
 ```
 
 **After (Simple)**:
-```python  
+```python
 # Single method call - stream parameter controls behavior
 async for event in overlord.chat("Hello", user_id=user_id, session_id=session_id, stream=True):
     # handle events
@@ -350,11 +399,11 @@ class MuxiSDK:
         """
         # Generate request_id
         request_id = f"req_{generate_nanoid()}"
-        
+
         # Start SSE subscription (before making the call to avoid race condition)
         event_stream_url = f"{self.base_url}/stream/{user_id}/{session_id}/{request_id}"
         event_stream = self._create_sse_stream(event_stream_url)
-        
+
         # Call runtime with streaming enabled
         asyncio.create_task(
             self._make_chat_request(
@@ -365,10 +414,10 @@ class MuxiSDK:
                 stream=False  # SDK handles streaming via SSE, runtime just processes
             )
         )
-        
+
         # Return event stream for consumption
         return event_stream
-    
+
     async def _create_sse_stream(self, url: str):
         """Create SSE stream connection"""
         async with httpx.AsyncClient() as client:
@@ -394,11 +443,93 @@ class MuxiSDK:
 11. **Automatic cleanup**: Event streams deleted when request completes
 12. **No multitasking overhead**: Simple in-memory dict/list operations, no async task spawning
 
+---
+
+# Enhancement to Original Plan
+
+**Note**: The original plan focused on the core streaming infrastructure. These phases extend it by adding comprehensive event emission throughout the request lifecycle to create a narrative experience.
+
+The goal is to create a narrative experience for the user. For example:
+
+```text
+- <thinking>The user wants me to ...</thinking>
+- if credentials:
+  - <planning>looks like i need the user credentials for SERVICE. let me check if I have them on file...</planning>
+- if clarification:
+  - <thinking>I need to clarify with the user xyz...</thinking>
+- <thinking>show actual analysis "though process"</thinking>
+- if workflow:
+  - <planning>I will ...</planning>
+  - <progress>performing web search..</progress>
+  - <progress>sumarizing the findings...</progress>
+  - <progress>doing xyz with the data...</progress>
+- if agent selection:
+  - <planning>I will...</planning>
+  - <progress>doing xyz (no need to expose internals)</progress>
+- if tool call:
+  - <tool_call>using the SERVICE tool to do xyz...</tool_call>
+- <progress>preparing response</progress>
+- <response>response</response>
+```
+
+- Don't expose specific tools like "whoami" from github; just say "github tool"
+- Don't expose internal agent names; just say "agent"
+
+## Implementation Phases
+
+### Phase 1: Raw Event Emission (Immediate)
+**Builds on**: Original streaming infrastructure from sections above
+**Adds**: Streaming events at key decision points without rephrasing:
+- Request entry analysis
+- Credential detection
+- Clarification needs
+- Workflow decomposition
+- Agent selection
+- Tool execution
+- Response preparation
+
+```python
+# Simple, direct emissions
+streaming.stream(request_id, "thinking", "Analyzing request...")
+streaming.stream(request_id, "planning", "Checking credentials for GitHub...")
+streaming.stream(request_id, "progress", "Executing web search...")
+streaming.stream(request_id, "tool_call", "GitHub: fetching repository data...")
+```
+
+### Phase 2: LLM Rephrasing with @multitasking (Future Enhancement)
+**Builds on**: Phase 1 raw events
+**Adds**: Conversational rephrasing using fast LLM model:
+
+```python
+@multitasking.task
+async def stream_event(request_id: str, event_type: str, content: str, rephrase: bool = True):
+    """Fire-and-forget streaming with optional LLM rephrasing"""
+    if rephrase and event_type in ["thinking", "planning", "progress"]:
+        # Use fast model to make conversational
+        prompt = f"Rephrase this technical message conversationally: {content}"
+        content = await fast_llm.complete(prompt, max_tokens=50)
+
+    streaming_manager.emit_event(request_id, event_type, content)
+```
+
+### Phase 3: Optimization (Future Enhancement)
+**Builds on**: Phase 2 rephrasing
+**Adds**: Performance optimizations:
+- Event batching and coalescing
+- Caching common rephrases
+- Rate limiting for high-frequency events
+- Event filtering subscriptions
+
 ## Migration Path
 
 1. Add `streaming.py` module with StreamingManager (owner-based event storage, no multitasking)
 2. Modify existing `ChatOrchestrator.chat()` streaming branch (fire-and-forget pattern)
-3. Add `streaming.stream()` calls throughout `_process_sync_chat` method 
+3. Add `streaming.stream()` calls throughout:
+   - `_process_sync_chat` in overlord.py (main flow)
+   - Clarification detection and handling
+   - Workflow decomposition in workflow_manager
+   - Agent `_plan()` methods
+   - Tool execution wrappers
 4. Add `_stream_request()` helper method to ChatOrchestrator
 5. Add secure SSE endpoint `/stream/{user_id}/{session_id}/{request_id}`
 6. **DELETE all `_process_*_streaming` methods entirely** (eliminates code duplication)
@@ -408,13 +539,13 @@ class MuxiSDK:
 
 - [ ] Unified `overlord.chat()` interface with `stream=True/False` parameter (delegates to ChatOrchestrator)
 - [ ] `stream=False` returns MuxiResponse, `stream=True` returns AsyncGenerator
-- [ ] ChatOrchestrator handles fire-and-forget complexity internally 
+- [ ] ChatOrchestrator handles fire-and-forget complexity internally
 - [ ] Uses existing request ID generation from ChatOrchestrator (no duplication)
 - [ ] `streaming.stream()` function works from any module with simple synchronous calls
 - [ ] Owner-based security prevents unauthorized access to streams
 - [ ] Single `_process_sync_chat` method handles both streaming and non-streaming requests
 - [ ] All `_process_*_streaming` methods deleted entirely
-- [ ] Real-time streaming with no replay of existing events  
+- [ ] Real-time streaming with no replay of existing events
 - [ ] Zero overhead - simple in-memory dict/list operations, no multitasking
 - [ ] SSE endpoint provides secure multi-user streaming
 - [ ] Generator-based subscription without complex queue management
@@ -443,11 +574,11 @@ class MuxiSDK:
         """
         # Step 1: Generate request_id
         request_id = f"req_{generate_nanoid()}"
-        
+
         # Step 2: Subscribe to SSE endpoint
         # This establishes the subscription BEFORE calling runtime
         event_stream = self._subscribe_sse(f"/subscribe/{request_id}")
-        
+
         # Step 3: Send chat message WITHOUT await
         # Fire and forget - we don't wait for response
         asyncio.create_task(
@@ -459,7 +590,7 @@ class MuxiSDK:
                 stream=True
             )
         )
-        
+
         # Return the event stream immediately
         # The client will receive events as they're emitted
         return event_stream
@@ -502,17 +633,17 @@ async for event in await sdk.chat_streaming(
 async def chat_streaming_with_retry(self, message: str, **kwargs):
     """Enhanced streaming with error recovery."""
     max_retries = 3
-    
+
     for attempt in range(max_retries):
         try:
             request_id = f"req_{generate_nanoid()}"
-            
+
             # Subscribe with timeout
             event_stream = await asyncio.wait_for(
                 self._subscribe_sse(f"/subscribe/{request_id}"),
                 timeout=5.0
             )
-            
+
             # Fire runtime call
             asyncio.create_task(
                 self.runtime.chat(
@@ -522,9 +653,9 @@ async def chat_streaming_with_retry(self, message: str, **kwargs):
                     **kwargs
                 )
             )
-            
+
             return event_stream
-            
+
         except asyncio.TimeoutError:
             if attempt < max_retries - 1:
                 await asyncio.sleep(1)  # Brief delay before retry
