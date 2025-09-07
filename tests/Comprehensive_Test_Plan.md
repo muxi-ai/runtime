@@ -245,17 +245,16 @@ memory:
 | 7 | Orchestration & SOPs | ✅ COMPLETE (All tests) | [7a-7d.md](tests/reports/) |
 | 8 | Clarification System | ✅ COMPLETE (10+ tests) | [8a-8f.md](tests/reports/) |
 | 9 | Async Operations | 🔄 READY | Specification complete |
-| 10 | Streaming Responses | 🔄 READY | Specification complete |
+| 10 | Streaming & Thinking Visibility | 🔄 IN PROGRESS | Streaming events with LLM rephrasing |
 | 11 | Response Formats | 🔄 READY | Specification complete |
-| 12 | Thinking Visibility | 🔄 READY | Specification complete |
-| 13 | Task Scheduler | 🔄 READY | Specification complete |
+| 12 | Task Scheduler | 🔄 READY | Specification complete |
 
-### **✅ Completed: 8/13 areas (Core functionality fully tested)**
-### **🔄 Ready for Implementation: 5/13 areas (Advanced features specified)**
+### **✅ Completed: 8/12 areas (Core functionality fully tested)**
+### **🔄 Ready for Implementation: 4/12 areas (Advanced features specified)**
 
 ---
 
-## 13 Test Areas Implementation Details
+## 12 Test Areas Implementation Details
 
 ### **Phase 1: Foundation & Core Systems (Areas 1-3)**
 
@@ -712,7 +711,7 @@ response = await overlord.chat(
 
 </details>
 
-### **Phase 3: Advanced Coordination & Enterprise Features (Areas 7-12)**
+### **Phase 3: Advanced Coordination & Enterprise Features (Areas 7-13)**
 
 <details>
 <summary>✅ Area 7 (Orchestration): Multi-Agent Coordination & SOP Enhancement</summary>
@@ -1052,172 +1051,187 @@ overlord:
 </details>
 
 <details>
-<summary>Area 10 (Streaming): Streaming & Real-time Features</summary>
+<summary>Area 10 (Streaming & Thinking): Streaming Events & Thinking Visibility</summary>
 
-#### Goal: Validate streaming responses and real-time features
+#### Goal: Validate streaming events with LLM rephrasing and thinking visibility
 
-### Test Group 10A: Basic Streaming
+### Test Group 10A: Streaming with LLM Rephrasing
 ```python
-# Test 10A1: Simple Streaming Response
-formation = Formation.load("formations/streaming.yaml")
+# Test 10A1: Streaming with LLM Rephrasing
+formation = Formation.load("formations/formation-streaming.yaml")
 overlord = await formation.start()
 
+# Simple request with streaming enabled
 response_stream = await overlord.chat(
-    "Write a story about a robot",
+    "What are the key principles of quantum computing?",
     stream=True
 )
 
-# Collect chunks
-chunks = []
-async for chunk in response_stream:
-    chunks.append(chunk)
-    # Verify chunks are strings
-    assert isinstance(chunk, str)
+# Collect streaming events
+stream_events = []
+if hasattr(response_stream, '__aiter__'):
+    async for chunk in response_stream:
+        stream_events.append(chunk)
+        print(f"Stream chunk: {chunk[:100]}...")
 
-# Verify complete response
-full_response = "".join(chunks)
-assert len(full_response) > 100
-assert "robot" in full_response.lower()
+assert len(stream_events) > 0
+# Events should contain rephrased internal monologue
+# e.g., "Let me think about quantum computing principles..."
 
-# Test 10A2: Streaming with Files
-audio_file = load_test_file("test-files/speech.m4a")
+# Test 10A2: Complex Task with Workflow Decomposition
 response_stream = await overlord.chat(
-    "Transcribe this audio",
-    files=[{"filename": "speech.m4a", "content": audio_file, "content_type": "audio/m4a"}],
+    "Research the latest AI breakthroughs, analyze their impact, "
+    "and create a comprehensive report with timeline and predictions",
     stream=True
 )
 
-chunks = []
+complex_events = []
+has_planning = False
+has_decomposition = False
+
 async for chunk in response_stream:
-    chunks.append(chunk)
+    complex_events.append(chunk)
+    # Check for planning/decomposition events
+    if "planning" in chunk.lower() or "breaking down" in chunk.lower():
+        has_planning = True
+    if "tasks" in chunk.lower() or "steps" in chunk.lower():
+        has_decomposition = True
 
-full_response = "".join(chunks)
-assert len(full_response) > 50
+assert len(complex_events) > 0
+assert has_planning or has_decomposition
 
-# Test 10A3: Non-Streaming Mode
+# Test 10A3: Streaming Control (disable when stream=False)
 response = await overlord.chat(
-    "What's the capital of France?",
-    stream=False  # Explicit non-streaming
+    "Simple test",
+    stream=False  # Disable streaming
 )
-assert isinstance(response, str)
-assert "Paris" in response
+# Should get regular response, not a generator
+assert not hasattr(response, '__aiter__')
 ```
 
-### Test Group 10B: Streaming Complex Operations
+### Test Group 10B: Thinking Visibility in Streaming
 ```python
-# Test 10B1: Streaming Task Decomposition
-formation = Formation.load("formations/streaming-workflow.yaml")
+# Test 10B1: Thinking Events During Planning
+formation = Formation.load("formations/formation-streaming.yaml")
 overlord = await formation.start()
 
-# Complex request that triggers workflow
+# Complex request that triggers thinking
 response_stream = await overlord.chat(
     "Research renewable energy trends, analyze the data, create visualizations, and write a report",
     stream=True
 )
 
-# Should stream progress updates
-chunks = []
+# Collect thinking events
+thinking_events = []
+planning_events = []
 async for chunk in response_stream:
-    chunks.append(chunk)
-    # May include progress indicators
+    if "thinking" in str(chunk).lower():
+        thinking_events.append(chunk)
+    if "planning" in str(chunk).lower():
+        planning_events.append(chunk)
 
-full_response = "".join(chunks)
-assert "research" in full_response.lower()
-assert "visualization" in full_response.lower()
+# Should expose thinking process
+assert len(thinking_events) > 0 or len(planning_events) > 0
 
-# Test 10B2: Streaming with Multi-Agent
+# Test 10B2: Agent Selection Thinking
 response_stream = await overlord.chat(
     "I need help with Python code optimization and database design",
-    stream=True
+    stream=True  
 )
 
-chunks = []
-agent_switches = 0
+agent_thinking = []
 async for chunk in response_stream:
-    chunks.append(chunk)
-    # Could detect agent switches in stream
-    if "agent:" in chunk.lower() or "specialist" in chunk.lower():
-        agent_switches += 1
+    if "agent" in str(chunk).lower() or "selecting" in str(chunk).lower():
+        agent_thinking.append(chunk)
 
-full_response = "".join(chunks)
-assert len(full_response) > 200
+# Should show agent selection reasoning
+assert len(agent_thinking) > 0
 
-# Test 10B3: Streaming File Generation
+# Test 10B3: Clarification Thinking
 response_stream = await overlord.chat(
-    "Create a bar chart showing monthly sales data",
+    "Create a report",  # Ambiguous request
     stream=True
 )
 
-chunks = []
-artifact_seen = False
+clarification_thinking = []
 async for chunk in response_stream:
-    chunks.append(chunk)
-    if "artifact" in chunk.lower() or "file" in chunk.lower():
-        artifact_seen = True
+    if "clarif" in str(chunk).lower() or "unclear" in str(chunk).lower():
+        clarification_thinking.append(chunk)
 
-assert artifact_seen or "chart" in "".join(chunks).lower()
+# Should show thinking about need for clarification
+assert len(clarification_thinking) > 0
 ```
 
-### Test Group 10C: Streaming Error Handling
+### Test Group 10C: Streaming Configuration & Control
 ```python
-# Test 10C1: Stream Interruption Handling
-formation = Formation.load("formations/streaming.yaml")
+# Test 10C1: Streaming Model Configuration
+from muxi.services.streaming import get_streaming_llm_config
+
+formation = Formation.load("formations/formation-streaming.yaml")
 overlord = await formation.start()
 
+# Check streaming configuration
+streaming_config = get_streaming_llm_config()
+assert streaming_config is not None
+assert 'model' in streaming_config
+assert 'enabled' in streaming_config
+
+# Test 10C2: Rephrasing Quality Check
 response_stream = await overlord.chat(
-    "Write a very long essay about space exploration",
+    "Analyze the stock market trends",
     stream=True
 )
 
-# Simulate early termination
-chunks_received = 0
-try:
-    async for chunk in response_stream:
-        chunks_received += 1
-        if chunks_received > 5:
-            break  # Early termination
-except Exception as e:
-    # Should handle gracefully
-    pass
+rephrasing_indicators = [
+    "let me", "i need to", "i'll", "i'm", "i should",
+    "thinking", "checking", "analyzing", "working on"
+]
 
-assert chunks_received > 5
-
-# Test 10C2: Stream with Errors
-response_stream = await overlord.chat(
-    "This will cause an error: divide by zero",
-    stream=True
-)
-
-error_seen = False
-chunks = []
+has_rephrasing = False
+events = []
 async for chunk in response_stream:
-    chunks.append(chunk)
-    if "error" in chunk.lower():
-        error_seen = True
+    events.append(chunk)
+    chunk_lower = str(chunk).lower()
+    if any(indicator in chunk_lower for indicator in rephrasing_indicators):
+        has_rephrasing = True
+        break
 
-# Should stream error message properly
-assert error_seen or len("".join(chunks)) > 0
+assert has_rephrasing  # Should have rephrased content
 
-# Test 10C3: Empty Stream Handling
+# Test 10C3: Language Detection in Rephrasing
 response_stream = await overlord.chat(
-    "",  # Empty request
+    "Expliquez-moi la mécanique quantique",  # French request
     stream=True
 )
 
-chunks = []
-async for chunk in response_stream:
-    chunks.append(chunk)
+french_indicators = ["je", "nous", "laissez-moi", "permettez-moi"]
+has_french = False
 
-# Should handle empty request gracefully
-assert len(chunks) >= 0  # May return error or empty
+async for chunk in response_stream:
+    chunk_lower = str(chunk).lower()
+    if any(indicator in chunk_lower for indicator in french_indicators):
+        has_french = True
+        break
+
+# Should maintain user's language in rephrasing
+assert has_french or "quantum" in str(events).lower()
 ```
 
 **Formations Required:**
-- `formations/streaming.yaml` - Basic streaming configuration
-- `formations/streaming-workflow.yaml` - Workflow with streaming
+- `formations/formation-streaming.yaml` - Streaming configuration with LLM rephrasing
+- Formation includes streaming model configuration for rephrasing
 
-**Test Implementation:** AsyncGenerator validation, chunk collection
-**Success Criteria:** All streaming tests pass, proper chunk handling
+**Test Implementation:** 
+- Streaming event collection and validation
+- LLM rephrasing quality checks
+- Thinking visibility verification
+- Language detection in rephrasing
+
+**Success Criteria:** 
+- Streaming events properly emitted and rephrased
+- Thinking process exposed during streaming
+- User language maintained in rephrasing
+- Proper configuration handling
 
 
 </details>
@@ -1349,185 +1363,13 @@ assert isinstance(response, dict)
 </details>
 
 <details>
-<summary>Area 12 (Thinking): Thinking Visibility</summary>
-
-#### Goal: Expose thinking process during streaming for transparency
-
-### Test Group 12A: Thinking in Stream
-```python
-# Test 12A1: Workflow Decomposition Thinking
-formation = Formation.load("formations/streaming.yaml")
-overlord = await formation.start()
-
-response_stream = await overlord.chat(
-    "Research AI trends, analyze data, create report with visualizations",
-    stream=True
-)
-
-thinking_seen = False
-chunks = []
-async for chunk in response_stream:
-    chunks.append(chunk)
-    if "<thinking>" in chunk:
-        thinking_seen = True
-        # Should expose decision process
-        # e.g., "<thinking>Analyzing complexity: This requires multiple steps...</thinking>"
-
-full_response = "".join(chunks)
-# When streaming, thinking process should be visible
-assert thinking_seen or "<thinking>" in full_response
-
-# Test 12A2: Agent Selection Thinking
-response_stream = await overlord.chat(
-    "I need help with database optimization and Python code review",
-    stream=True
-)
-
-chunks = []
-agent_thinking_seen = False
-async for chunk in response_stream:
-    chunks.append(chunk)
-    if "<thinking>" in chunk and "agent" in chunk.lower():
-        agent_thinking_seen = True
-        # Should show agent selection reasoning
-
-# Should expose which agents are being selected and why
-assert agent_thinking_seen or "selecting" in "".join(chunks).lower()
-
-# Test 12A3: Clarification Thinking
-response_stream = await overlord.chat(
-    "Create a report",  # Ambiguous
-    stream=True
-)
-
-chunks = []
-clarification_thinking = False
-async for chunk in response_stream:
-    chunks.append(chunk)
-    if "<thinking>" in chunk and ("clarify" in chunk.lower() or "ambiguous" in chunk.lower()):
-        clarification_thinking = True
-
-# Should show thinking about need for clarification
-assert clarification_thinking or "unclear" in "".join(chunks).lower()
-```
-
-### Test Group 12B: Thinking Control
-```python
-# Test 12B1: Disable Thinking in Non-Streaming
-formation = Formation.load("formations/no-thinking.yaml")
-overlord = await formation.start()
-
-# Non-streaming shouldn't show thinking by default
-response = await overlord.chat(
-    "Complex task requiring decomposition",
-    stream=False
-)
-# Should not include thinking tags
-assert "<thinking>" not in response
-
-# Test 12B2: Enable Thinking Explicitly
-response_stream = await overlord.chat(
-    "Analyze this problem step by step",
-    stream=True,
-    show_thinking=True  # Explicit control
-)
-
-thinking_shown = False
-async for chunk in response_stream:
-    if "<thinking>" in chunk:
-        thinking_shown = True
-        break
-
-assert thinking_shown
-
-# Test 12B3: Thinking for Errors
-response_stream = await overlord.chat(
-    "This will cause an error in processing",
-    stream=True
-)
-
-error_thinking = False
-chunks = []
-async for chunk in response_stream:
-    chunks.append(chunk)
-    if "<thinking>" in chunk and "error" in chunk.lower():
-        error_thinking = True
-
-# Should show thinking about error handling
-assert error_thinking or "error" in "".join(chunks).lower()
-```
-
-### Test Group 12C: Thinking Content Quality
-```python
-# Test 12C1: Thinking Should Be Informative
-formation = Formation.load("formations/streaming.yaml")
-overlord = await formation.start()
-
-response_stream = await overlord.chat(
-    "Build a REST API for a blog with authentication",
-    stream=True
-)
-
-thinking_chunks = []
-chunks = []
-async for chunk in response_stream:
-    chunks.append(chunk)
-    if "<thinking>" in chunk:
-        thinking_chunks.append(chunk)
-
-# Thinking should contain useful information
-thinking_content = "".join(thinking_chunks)
-useful_keywords = ["decompos", "step", "agent", "task", "workflow", "complex", "require"]
-assert any(keyword in thinking_content.lower() for keyword in useful_keywords)
-
-# Test 12C2: Thinking Should Not Leak Sensitive Info
-response_stream = await overlord.chat(
-    "Connect to database with password abc123",
-    stream=True
-)
-
-thinking_chunks = []
-async for chunk in response_stream:
-    if "<thinking>" in chunk:
-        thinking_chunks.append(chunk)
-
-# Should not expose passwords in thinking
-thinking_content = "".join(thinking_chunks)
-assert "abc123" not in thinking_content
-
-# Test 12C3: Thinking Formatting
-response_stream = await overlord.chat(
-    "Complex multi-step task",
-    stream=True
-)
-
-chunks = []
-async for chunk in response_stream:
-    chunks.append(chunk)
-
-full_response = "".join(chunks)
-# Thinking tags should be properly closed
-thinking_count = full_response.count("<thinking>")
-closing_count = full_response.count("</thinking>")
-assert thinking_count == closing_count
-```
-
-**Formations Required:**
-- Standard formations with streaming enabled
-- No special thinking configuration needed
-
-**Success Criteria:** Thinking exposed during streaming for transparency, properly formatted
-
-</details>
-
-<details>
-<summary>Area 13 (Scheduler): Task Scheduling & Job Management</summary>
+<summary>Area 12 (Scheduler): Task Scheduling & Job Management</summary>
 
 #### Goal: Validate scheduled task execution and job management
 
-### Test Group 13A: One-time Scheduled Tasks
+### Test Group 12A: One-time Scheduled Tasks
 ```python
-# Test 13A1: Schedule Future Task
+# Test 12A1: Schedule Future Task
 formation = Formation.load("formations/scheduler.yaml")
 overlord = await formation.start()
 
@@ -1546,14 +1388,14 @@ history = await overlord.scheduler.get_job_history(job_id)
 assert len(history) > 0
 assert history[0]["status"] == "success"
 
-# Test 13A2: Natural Language Scheduling
+# Test 12A2: Natural Language Scheduling
 response = await overlord.chat(
     "In 5 minutes, generate a status report"
 )
 # Should parse natural language time
 assert "scheduled" in response.lower() or "will" in response.lower()
 
-# Test 13A3: Schedule with Context
+# Test 12A3: Schedule with Context
 response = await overlord.chat(
     "Every day at 9am, check for new pull requests and summarize them"
 )
@@ -1561,9 +1403,9 @@ assert "scheduled" in response.lower()
 assert "daily" in response.lower() or "every day" in response.lower()
 ```
 
-### Test Group 13B: Recurring Jobs
+### Test Group 12B: Recurring Jobs
 ```python
-# Test 13B1: Cron-based Scheduling
+# Test 12B1: Cron-based Scheduling
 formation = Formation.load("formations/scheduler.yaml")
 overlord = await formation.start()
 
@@ -1580,14 +1422,14 @@ job = next((j for j in jobs if j["id"] == job_id), None)
 assert job is not None
 assert job["cron"] == "0 8 * * MON"
 
-# Test 13B2: Update Recurring Job
+# Test 12B2: Update Recurring Job
 success = await overlord.scheduler.update_job(
     job_id,
     cron="0 9 * * MON"  # Change to 9am
 )
 assert success == True
 
-# Test 13B3: Cancel Job
+# Test 12B3: Cancel Job
 success = await overlord.scheduler.cancel_job(job_id)
 assert success == True
 
@@ -1596,9 +1438,9 @@ jobs = await overlord.scheduler.get_active_jobs()
 assert not any(j["id"] == job_id for j in jobs)
 ```
 
-### Test Group 13C: Job Management & History
+### Test Group 12C: Job Management & History
 ```python
-# Test 13C1: List All Jobs
+# Test 12C1: List All Jobs
 formation = Formation.load("formations/scheduler.yaml")
 overlord = await formation.start()
 
@@ -1610,7 +1452,7 @@ for i in range(3):
 jobs = await overlord.scheduler.get_active_jobs()
 assert len(jobs) >= 3
 
-# Test 13C2: Job Execution History
+# Test 12C2: Job Execution History
 # Wait for a job to execute
 job_id = jobs[0]["id"]
 await asyncio.sleep(3700)  # Wait for first job
@@ -1620,7 +1462,7 @@ assert len(history) > 0
 assert "result" in history[0]
 assert "executed_at" in history[0]
 
-# Test 13C3: Failed Job Handling
+# Test 12C3: Failed Job Handling
 response = await overlord.chat(
     "This will fail: divide by zero",
     schedule={"run_at": (datetime.now() + timedelta(seconds=5)).isoformat()}
@@ -1633,9 +1475,9 @@ assert history[0]["status"] == "failed"
 assert "error" in history[0]
 ```
 
-### Test Group 13D: Complex Scheduling Scenarios
+### Test Group 12D: Complex Scheduling Scenarios
 ```python
-# Test 13D1: Multi-User Job Isolation
+# Test 12D1: Multi-User Job Isolation
 formation = Formation.load("formations/scheduler-multiuser.yaml")
 overlord = await formation.start()
 
@@ -1660,7 +1502,7 @@ jobs = await overlord.scheduler.get_user_jobs("user1")
 assert any(j["id"] == job1_id for j in jobs)
 assert not any(j["id"] == job2_id for j in jobs)
 
-# Test 13D2: Scheduled Workflow
+# Test 12D2: Scheduled Workflow
 response = await overlord.chat(
     "Every Friday: research news, analyze trends, create report, send to team",
     schedule={"cron": "0 10 * * FRI"}
@@ -1669,7 +1511,7 @@ response = await overlord.chat(
 assert "scheduled" in response.lower()
 assert "workflow" in response.lower() or "tasks" in response.lower()
 
-# Test 13D3: Conditional Scheduling
+# Test 12D3: Conditional Scheduling
 response = await overlord.chat(
     "If stock price drops below $100, alert me immediately",
     schedule={"condition": "stock_price < 100", "check_interval": 300}
@@ -1701,10 +1543,9 @@ assert "monitor" in response.lower() or "watch" in response.lower()
 - **Area 7 (Orchestration):** ✅ 7A: Workflow orchestration (9 tests pass) | ✅ 7B: A2A Communication (all tests pass) | ✅ 7C-7D: SOP System (6 tests pass, 72% code reduction)
 - **Area 8 (Clarification):** Base: 10 clarification tests pass ✅ | Enhanced: Multiple clarification sequences implemented ✅
 - **Area 9 (Async):** ✅ Advanced async operations with webhook delivery, conflict resolution (all tests pass)
-- **Area 10 (Streaming):** Streaming responses with AsyncGenerator support
+- **Area 10 (Streaming & Thinking):** Streaming events with LLM rephrasing and thinking visibility
 - **Area 11 (Response Format):** JSON/Markdown/Text formats + interactive UI elements
-- **Area 12 (Thinking):** 🔄 READY FOR IMPLEMENTATION - Thinking visibility in streaming
-- **Area 13 (Scheduler):** 🔄 READY FOR IMPLEMENTATION - Task scheduling & jobs
+- **Area 12 (Scheduler):** 🔄 READY FOR IMPLEMENTATION - Task scheduling & jobs
 
 ### **Final Validation Checklist**
 - [ ] All 22 feature dimensions tested in combination (including SOPs and multi-clarification)
