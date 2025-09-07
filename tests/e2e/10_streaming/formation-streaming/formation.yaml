@@ -41,6 +41,7 @@ overlord:
   response:
     format: "markdown" # Default format if not specified (options are markdown, json, text, etc)
     interactive_elements: true # Enable interactive UI elements like buttons, forms, charts (default: true)
+    streaming: true # Enable streaming for all synchronous responses (default: true)
 
   # Workflow configuration (Task decomposition and orchestration)
   workflow:
