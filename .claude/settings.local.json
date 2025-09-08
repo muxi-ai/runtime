@@ -8,8 +8,11 @@
       "Bash(pkill:*)",
       "Bash(sed:*)",
       "Bash(find:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
       "WebSearch",
-      "Read(/Users/ran/Desktop/**)"
+      "Read(**)",
+      "Bash(ruff check:*)"
     ],
     "deny": [],
     "ask": []
