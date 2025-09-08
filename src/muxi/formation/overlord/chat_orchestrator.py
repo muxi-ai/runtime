@@ -60,12 +60,23 @@ class ChatOrchestrator:
 
         # Fire-and-forget the processing with a delay to ensure subscription is ready
         async def delayed_process():
+            # Set the request context for this background task
+            from ...services.observability.context import set_request_context, RequestContext
+            request_context = RequestContext(
+                id=request_id,
+                user_id=user_id,
+                session_id=session_id,
+                formation_id=getattr(self.overlord, 'formation_id', 'unknown')
+            )
+            set_request_context(request_context)
+
             await asyncio.sleep(1.0)  # Give time for subscription to be established
 
             # Emit a test event to verify streaming
             from ...services.streaming import streaming_manager
             streaming_manager.emit_event(request_id, "progress", "Starting request processing", stage="init")
 
+            # Process the request - overlord._process_sync_chat will handle all streaming events
             result = await self._process_sync_chat(
                 message=enhanced_message,
                 agent_name=agent_name,
@@ -77,19 +88,11 @@ class ChatOrchestrator:
                 webhook_url=webhook_url,
             )
 
-            # Emit content event with actual agent response
-            if result and hasattr(result, "content") and result.content:
-                content_for_streaming = result.content if isinstance(result.content, str) else str(result.content)
-                streaming_manager.emit_event(request_id, "content", content_for_streaming, stage="response")
-
-            # Emit completion event
-            streaming_manager.emit_event(request_id, "complete", "Request processing complete", stage="done")
-
-            # Brief delay to ensure the complete event is captured
-            await asyncio.sleep(0.1)
-
-            # Disable streaming to close the subscription
-            streaming_manager.disable_streaming(request_id)
+            # Note: The overlord._process_sync_chat method handles all streaming events:
+            # - It emits "content" events with the actual response
+            # - It emits "completed" event when done
+            # - It disables streaming when finished
+            # We don't need to duplicate that here.
 
             return result
 

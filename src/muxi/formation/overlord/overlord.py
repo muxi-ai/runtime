@@ -2094,7 +2094,8 @@ Type: Acknowledgment
 Response: "You're welcome! Let me know if you need anything else."
 """
                 messages = [{"role": "user", "content": prompt}]
-                response = await llm.chat(messages, max_tokens=300, temperature=0.7)
+                # Force non-streaming for persona application
+                response = await llm.chat(messages, max_tokens=300, temperature=0.7, stream=False)
 
                 if hasattr(response, "content"):
                     return response.content
@@ -2113,7 +2114,8 @@ Reformat the agent's response to match your persona while preserving all technic
 Make it conversational and friendly while keeping accuracy."""
 
                 messages = [{"role": "user", "content": prompt}]
-                response = await llm.chat(messages, max_tokens=2000, temperature=0.7)
+                # Force non-streaming for persona application
+                response = await llm.chat(messages, max_tokens=2000, temperature=0.7, stream=False)
 
                 if hasattr(response, "content"):
                     return response.content
@@ -6701,8 +6703,9 @@ Make it conversational and friendly while keeping accuracy."""
             agent_used=agent_name
         )
 
-        # Cleanup streaming when done
-        streaming.disable_streaming(request_id)
+        # Note: We don't disable streaming here - let the client/test handle cleanup
+        # This ensures all events can be consumed before the stream is closed
+        # streaming.disable_streaming(request_id)
 
         return result
 

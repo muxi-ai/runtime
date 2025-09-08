@@ -84,6 +84,11 @@ class StreamingManager:
                 # New events since last check
                 for event in current_events[last_seen:]:
                     yield event
+                    # Stop iteration when we see a "completed" event
+                    if event.get("type") == "completed":
+                        # Clean up the stream after yielding the completed event
+                        self.disable_streaming(request_id)
+                        return
                 last_seen = len(current_events)
 
             await asyncio.sleep(0.1)  # Brief polling
