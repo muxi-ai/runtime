@@ -54,10 +54,8 @@ async def test_knowledge_vs_basic():
 
         if "$29" in response_text or "29" in response_text:
             print("✅ Test 1 PASSED: Specific pricing from knowledge base retrieved")
-            knowledge_response = response_text
         else:
             print("⚠ Test 1: Response may not include specific pricing")
-            knowledge_response = response_text
 
         # Test 2: Query about something NOT in knowledge base
         print("\n\n--- Test 2: Response Without Knowledge ---")

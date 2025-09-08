@@ -7,16 +7,14 @@ error messages when MCP tools fail.
 
 import pytest
 import asyncio
-from typing import Dict, Any, Optional
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../src')))
 
 from muxi.runtime.formation import Formation
-from muxi.runtime.datatypes.muxi import MuxiRequest, MuxiResponse
-from muxi.runtime.datatypes.workflow import Workflow, TaskStatus
+from muxi.runtime.datatypes.workflow import TaskStatus
 
 
 class TestWorkflowResilienceIntegration:
@@ -247,7 +245,6 @@ class TestWorkflowResilienceIntegration:
         overlord = await formation.start_overlord()
         
         # Create a mock that makes agent-1 succeed but agent-2 fail
-        original_execute = overlord.workflow_executor._execute_task_with_agent
         
         async def mock_execute(task, agent, context):
             if agent.agent_id == "agent-1":
@@ -350,14 +347,14 @@ class TestWorkflowResilienceIntegration:
             side_effect=mock_failing_agent
         ):
             # First request should try and fail
-            response1 = await overlord.chat(
+            await overlord.chat(
                 "Do the flaky task",
                 user_id="test-user"
             )
             assert failure_count >= 1
             
             # Second request should also try and fail
-            response2 = await overlord.chat(
+            await overlord.chat(
                 "Do the flaky task again",
                 user_id="test-user"
             )

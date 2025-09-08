@@ -51,9 +51,9 @@ async def test_api_key_redirect_mode():
                 message="Get my GitHub repositories",
                 user_id=user_id,
                 session_id=ctx.session_id,
-                stream=False
+                stream=False,
             ),
-            timeout=120.0  # 2 minute timeout
+            timeout=120.0,  # 2 minute timeout
         )
 
         print(f"   Response: {response1.content}")
@@ -61,20 +61,23 @@ async def test_api_key_redirect_mode():
         # Should ask which account to use (since user1 has existing accounts)
         response_lower = response1.content.lower()
         account_selection = ["which", "ranaroussi", "lilyautomaze", "account"]
-        assert any(indicator in response_lower for indicator in account_selection), \
-            f"Should ask which account to use. Got: {response1.content}"
+        assert any(
+            indicator in response_lower for indicator in account_selection
+        ), f"Should ask which account to use. Got: {response1.content}"
         print("   ✅ System asks which account to use")
 
         # Step 2: User wants to add a new account - be explicit
-        print("\n2. User requests new account: 'I need to add a new GitHub account with different credentials'")
+        print(
+            "\n2. User requests new account: 'I need to add a new GitHub account with different credentials'"
+        )
         response2 = await asyncio.wait_for(
             overlord.chat(
                 message="I need to add a new GitHub account with different credentials",
                 user_id=user_id,
                 session_id=ctx.session_id,
-                stream=False
+                stream=False,
             ),
-            timeout=120.0
+            timeout=120.0,
         )
 
         print(f"   Response: {response2.content}")
@@ -83,25 +86,35 @@ async def test_api_key_redirect_mode():
         response_lower = response2.content.lower()
 
         # If it asks for details, provide them to trigger redirect
-        if "username" in response_lower or "details" in response_lower or "provide" in response_lower:
+        if (
+            "username" in response_lower
+            or "details" in response_lower
+            or "provide" in response_lower
+        ):
             print("\n2b. Providing new account details: 'My new account is newuser123'")
             response2b = await asyncio.wait_for(
                 overlord.chat(
                     message="My new account is newuser123",
                     user_id=user_id,
                     session_id=ctx.session_id,
-                    stream=False
+                    stream=False,
                 ),
-                timeout=120.0
+                timeout=120.0,
             )
             print(f"    Response: {response2b.content}")
             response_lower = response2b.content.lower()
 
         # Should show the redirect message or a variation of it
-        redirect_message = "Please configure your API credentials in the external credential manager."
+        redirect_message = (
+            "Please configure your API credentials in the external credential manager."
+        )
         redirect_indicators = [
-            "external", "configure", "credential manager", "api credentials",
-            "external credential", "configure your"
+            "external",
+            "configure",
+            "credential manager",
+            "api credentials",
+            "external credential",
+            "configure your",
         ]
 
         # Check if the redirect message (or variation) is shown
@@ -111,18 +124,26 @@ async def test_api_key_redirect_mode():
             # Check if it's incorrectly telling user to go to GitHub website
             github_redirect = ["github website", "github.com", "sign up", "create a new account"]
             if any(indicator in response_lower for indicator in github_redirect):
-                print(f"   ⚠️  System is redirecting to GitHub website instead of showing redirect message")
+                print(
+                    "   ⚠️  System is redirecting to GitHub website instead of showing redirect message"
+                )
                 print(f"   Expected: '{redirect_message}' or similar")
                 print(f"   Got: {response2.content[:200]}...")
                 # This is wrong - should show the configured redirect message
-                assert False, f"Should show redirect message, not tell user to go to GitHub website"
+                assert False, "Should show redirect message, not tell user to go to GitHub website"
 
             # Check if it's asking for credentials inline (definitely wrong in redirect mode)
-            if "token" in response_lower or "api key" in response_lower or "personal access" in response_lower:
+            if (
+                "token" in response_lower
+                or "api key" in response_lower
+                or "personal access" in response_lower
+            ):
                 print("   ⚠️  System is asking for credentials - redirect mode should prevent this")
-                assert False, f"In redirect mode, should not ask for credentials inline. Got: {response_lower}"
+                assert (
+                    False
+                ), f"In redirect mode, should not ask for credentials inline. Got: {response_lower}"
         else:
-            print(f"   ✅ Shows redirect message (or variation)")
+            print("   ✅ Shows redirect message (or variation)")
 
         print("   ✅ Credential request handled according to redirect mode")
 
@@ -130,12 +151,9 @@ async def test_api_key_redirect_mode():
         print("\n3. Testing simple request: 'tell me a joke'")
         response3 = await asyncio.wait_for(
             overlord.chat(
-                message="tell me a joke",
-                user_id=user_id,
-                session_id=ctx.session_id,
-                stream=False
+                message="tell me a joke", user_id=user_id, session_id=ctx.session_id, stream=False
             ),
-            timeout=120.0
+            timeout=120.0,
         )
 
         print(f"   Response: {response3.content}")
@@ -143,8 +161,9 @@ async def test_api_key_redirect_mode():
         # Should work normally (no credentials needed)
         response_lower = response3.content.lower()
         # Check if it provided a response (any response is fine)
-        assert response3.content and len(response3.content.strip()) > 0, \
-            "Should provide a response to simple request"
+        assert (
+            response3.content and len(response3.content.strip()) > 0
+        ), "Should provide a response to simple request"
         print("   ✅ Simple request handled")
 
         # Step 4: Generic API service
@@ -154,9 +173,9 @@ async def test_api_key_redirect_mode():
                 message="Access the REST API",
                 user_id=user_id,
                 session_id=ctx.session_id,
-                stream=False
+                stream=False,
             ),
-            timeout=120.0
+            timeout=120.0,
         )
 
         print(f"   Response: {response4.content}")
@@ -165,7 +184,7 @@ async def test_api_key_redirect_mode():
         assert response4.content, "Should provide some response"
         print("   ✅ Generic API request handled appropriately")
 
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
         print("\n### Test Result:")
         print("🎉 SUCCESS: API key redirect mode working correctly")
         print("✓ System asks which existing account to use")
@@ -173,21 +192,21 @@ async def test_api_key_redirect_mode():
         print("✓ No inline credential prompting occurred")
         print("✓ Simple request handled appropriately")
         print("✓ Generic API requests handled appropriately")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
         print("\n### Chat transcript:")
         print("\nUser: Get my GitHub repositories")
         print(f"System: {response1.content}")
         print("\nUser: I need to add a new GitHub account with different credentials")
         print(f"System: {response2.content}")
-        if 'response2b' in locals():
+        if "response2b" in locals():
             print("\nUser: My new account is newuser123")
             print(f"System: {response2b.content}")
         print("\nUser: tell me a joke")
         print(f"System: {response3.content}")
         print("\nUser: Access the REST API")
         print(f"System: {response4.content}")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
         # Properly shut down
         await formation.stop_overlord()
@@ -197,35 +216,36 @@ async def test_api_key_redirect_mode():
     except Exception as e:
         print(f"\n❌ Test 8E1a: API Key Redirect Mode FAILED: {e}")
         import traceback
+
         traceback.print_exc()
 
         # Try to print partial transcript even on failure
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
         print("\n### Test Result:")
         print("❌ FAILED: API key redirect mode test failed")
         print(f"✗ Error: {e}")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
         print("\n### Partial Chat transcript (before failure):")
-        if 'response1' in locals():
+        if "response1" in locals():
             print("\nUser: Get my GitHub repositories")
             print(f"System: {response1.content}")
-        if 'response2' in locals():
+        if "response2" in locals():
             print("\nUser: I need to add a new GitHub account with different credentials")
             print(f"System: {response2.content}")
-        if 'response2b' in locals():
+        if "response2b" in locals():
             print("\nUser: My new account is newuser123")
             print(f"System: {response2b.content}")
-        if 'response3' in locals():
+        if "response3" in locals():
             print("\nUser: tell me a joke")
             print(f"System: {response3.content}")
-        if 'response4' in locals():
+        if "response4" in locals():
             print("\nUser: Access the REST API")
             print(f"System: {response4.content}")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
         # Try to shut down even on failure
-        if 'formation' in locals():
+        if "formation" in locals():
             try:
                 await formation.stop_overlord()
                 formation.shutdown()
@@ -255,9 +275,9 @@ async def test_api_key_security_enforcement():
                 message="My GitHub token is ghp_123456",
                 user_id=user_id,
                 session_id=ctx.session_id,
-                stream=False
+                stream=False,
             ),
-            timeout=120.0
+            timeout=120.0,
         )
 
         print(f"   Response: {response1.content}")
@@ -270,23 +290,23 @@ async def test_api_key_security_enforcement():
         # Should still redirect
         redirect_indicators = ["external", "configure", "security"]
         token_acceptance = ["stored", "saved", "received", "thank you"]
-        assert any(indicator in response_lower for indicator in redirect_indicators) or \
-               not any(indicator in response_lower for indicator in token_acceptance), \
-               "Should redirect or not acknowledge token storage"
+        assert any(indicator in response_lower for indicator in redirect_indicators) or not any(
+            indicator in response_lower for indicator in token_acceptance
+        ), "Should redirect or not acknowledge token storage"
         print("   ✅ Security maintained - no token acknowledgment")
 
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
         print("\n### Test Result:")
         print("🎉 SUCCESS: API key security enforcement working")
         print("✓ Direct token provision not acknowledged")
         print("✓ Token not echoed in system response")
         print("✓ Security redirect policy maintained")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
         print("\n### Chat transcript:")
         print("\nUser: My GitHub token is ghp_123456")
         print(f"System: {response1.content}")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
         await formation.stop_overlord()
         formation.shutdown()
@@ -295,21 +315,22 @@ async def test_api_key_security_enforcement():
     except Exception as e:
         print(f"\n❌ Test 8E1a-b FAILED: {e}")
         import traceback
+
         traceback.print_exc()
 
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
         print("\n### Test Result:")
         print("❌ FAILED: API key security enforcement test failed")
         print(f"✗ Error: {e}")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
         print("\n### Partial Chat transcript (before failure):")
-        if 'response1' in locals():
+        if "response1" in locals():
             print("\nUser: My GitHub token is ghp_123456")
             print(f"System: {response1.content}")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
-        if 'formation' in locals():
+        if "formation" in locals():
             try:
                 await formation.stop_overlord()
                 formation.shutdown()
@@ -319,6 +340,7 @@ async def test_api_key_security_enforcement():
 
 
 if __name__ == "__main__":
+
     async def run_tests():
         """Run all API key redirect mode tests."""
         results = []
@@ -332,9 +354,9 @@ if __name__ == "__main__":
         results.append(("8E1a-b: API Key Security Enforcement", result))
 
         # Print summary
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print("TEST SUMMARY")
-        print("="*50)
+        print("=" * 50)
         for test_name, passed in results:
             status = "✅ PASSED" if passed else "❌ FAILED"
             print(f"{test_name}: {status}")

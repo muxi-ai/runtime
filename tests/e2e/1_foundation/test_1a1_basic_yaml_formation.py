@@ -4,21 +4,14 @@ Day 1 - Test Group 1A: Formation Loading Tests
 Tests basic formation loading from YAML files and directory structures,
 including comprehensive validation error testing.
 """
+
 import pytest
-import os
-import yaml
-import asyncio
-import threading
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-from muxi.formation import Formation
-from muxi.datatypes.exceptions import (
-    ConfigurationNotFoundError,
-    ConfigurationValidationError,
-    ConfigurationLoadError
-)
+from muxi.formation import Formation  # noqa: E402
+from muxi.datatypes.exceptions import ConfigurationNotFoundError, ConfigurationValidationError  # noqa: E402
 
 
 class TestFormationLoading:
@@ -66,31 +59,66 @@ class TestFormationLoading:
         # Test 1: Not a YAML file
         formation = Formation()
         with pytest.raises(Exception):  # Could be yaml.YAMLError or other
-            await formation.load(str(Path(__file__).parent / "formations" / "invalid-formations" / "invalid-not-yaml.txt")
+            await formation.load(
+                str(
+                    Path(__file__).parent
+                    / "formations"
+                    / "invalid-formations"
+                    / "invalid-not-yaml.txt"
+                )
+            )
 
         # Test 2: Invalid YAML syntax
         formation = Formation()
         with pytest.raises(Exception):  # yaml.YAMLError expected
-            await formation.load(str(Path(__file__).parent / "formations" / "invalid-formations" / "invalid-syntax.yaml")
+            await formation.load(
+                str(
+                    Path(__file__).parent
+                    / "formations"
+                    / "invalid-formations"
+                    / "invalid-syntax.yaml"
+                )
+            )
 
         # Test 3: Missing required keys
         formation = Formation()
         with pytest.raises(ConfigurationValidationError) as exc_info:
-            await formation.load(str(Path(__file__).parent / "formations" / "invalid-formations" / "invalid-missing-keys.yaml")
+            await formation.load(
+                str(
+                    Path(__file__).parent
+                    / "formations"
+                    / "invalid-formations"
+                    / "invalid-missing-keys.yaml"
+                )
+            )
         # Verify it's about missing required fields
         assert "required" in str(exc_info.value).lower() or "missing" in str(exc_info.value).lower()
 
         # Test 4: Invalid schema version
         formation = Formation()
         with pytest.raises(ConfigurationValidationError) as exc_info:
-            await formation.load(str(Path(__file__).parent / "formations" / "invalid-formations" / "invalid-schema.yaml")
+            await formation.load(
+                str(
+                    Path(__file__).parent
+                    / "formations"
+                    / "invalid-formations"
+                    / "invalid-schema.yaml"
+                )
+            )
         # Should complain about schema version
         assert "schema" in str(exc_info.value).lower()
 
         # Test 5: Invalid values (e.g., negative memory size)
         formation = Formation()
         with pytest.raises(ConfigurationValidationError) as exc_info:
-            await formation.load(str(Path(__file__).parent / "formations" / "invalid-formations" / "invalid-values.yaml")
+            await formation.load(
+                str(
+                    Path(__file__).parent
+                    / "formations"
+                    / "invalid-formations"
+                    / "invalid-values.yaml"
+                )
+            )
         # Should complain about invalid values
 
         # Test 6: Non-existent formation path
@@ -104,18 +132,39 @@ class TestFormationLoading:
         # Test: Empty YAML file
         formation = Formation()
         with pytest.raises(ConfigurationValidationError):
-            await formation.load(str(Path(__file__).parent / "formations" / "invalid-formations" / "invalid-empty.yaml")
+            await formation.load(
+                str(
+                    Path(__file__).parent
+                    / "formations"
+                    / "invalid-formations"
+                    / "invalid-empty.yaml"
+                )
+            )
 
         # Test: Missing agents directory in directory-based formation
         formation = Formation()
         with pytest.raises(Exception):  # Could be FileNotFoundError or ValidationError
-            await formation.load(str(Path(__file__).parent / "formations" / "invalid-formations" / "invalid-no-agents/")
+            await formation.load(
+                str(
+                    Path(__file__).parent
+                    / "formations"
+                    / "invalid-formations"
+                    / "invalid-no-agents/"
+                )
+            )
 
     async def test_1a4_flattened_formation_loading(self):
         """Test 1A4: Load flattened formation with agents defined in main file"""
         # Load flattened formation (agents defined in formation.yaml)
         formation = Formation()
-        await formation.load(str(Path(__file__).parent / "formations" / "formation-basic" / "formation-flattened.yaml"))
+        await formation.load(
+            str(
+                Path(__file__).parent
+                / "formations"
+                / "formation-basic"
+                / "formation-flattened.yaml"
+            )
+        )
         assert formation is not None
         assert formation.formation_id == "basic-test-formation"
 
@@ -131,6 +180,6 @@ class TestFormationLoading:
         assert len(mcp_servers) > 0
         assert mcp_servers[0]["id"] == "filesystem-mcp"
 
-        print(f"✅ Flattened formation loaded successfully!")
+        print("✅ Flattened formation loaded successfully!")
         print(f"   Loaded {len(formation._agents_config)} agent(s)")
         print(f"   Loaded {len(mcp_servers)} MCP server(s)")

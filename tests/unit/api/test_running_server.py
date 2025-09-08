@@ -15,7 +15,7 @@ import os
 import httpx
 import json
 import asyncio
-from typing import Dict, Any
+from typing import Dict
 
 
 # Configuration from environment or defaults
@@ -47,12 +47,12 @@ async def test_endpoint(client: httpx.AsyncClient, endpoint: str, headers: Dict[
             assert "type" in data, "Missing 'type' field"
             assert "object" in data, "Missing 'object' field"
             
-            print(f"✓ Response structure valid")
+            print("✓ Response structure valid")
             print(f"✓ Type: {data['type']}")
             print(f"✓ Object: {data['object']}")
             
             # Print the actual data returned
-            print(f"\nData returned:")
+            print("\nData returned:")
             data_str = json.dumps(data['data'], indent=2)
             # Truncate if too long
             if len(data_str) > 500:

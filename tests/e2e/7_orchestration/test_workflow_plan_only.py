@@ -11,7 +11,7 @@ from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def main():
@@ -32,14 +32,14 @@ async def main():
         await formation.load(str(formation_path))
         overlord = await formation.start_overlord()
         print("   ✅ Formation loaded successfully")
-        
+
         # Debug: Check what agents are actually loaded
         print(f"\n🔍 DEBUG: Found {len(overlord.agents)} agents:")
         for agent_id, agent in overlord.agents.items():
             specialties = getattr(agent, 'specialties', []) or getattr(agent, 'specialization', [])
             agent_name = getattr(agent, 'name', agent_id)
             print(f"   - {agent_name} ({agent_id}): specialties = {specialties}")
-        
+
         # Debug: Check MCP service
         if hasattr(overlord, 'mcp_service') and overlord.mcp_service:
             servers = getattr(overlord.mcp_service, 'servers', {})
@@ -48,11 +48,11 @@ async def main():
                 print(f"   - {server_id}")
         else:
             print("\n🔍 DEBUG: No MCP service found")
-            
+
         # Debug: Check TaskDecomposer setup
         if hasattr(overlord, 'task_decomposer'):
             decomposer = overlord.task_decomposer
-            print(f"\n🔍 DEBUG: TaskDecomposer:")
+            print("\n🔍 DEBUG: TaskDecomposer:")
             print(f"   - Has LLM: {decomposer.llm is not None}")
             print(f"   - Agent registry size: {len(decomposer.agent_registry) if decomposer.agent_registry else 0}")
             print(f"   - Has MCP service: {decomposer.mcp_service is not None}")
@@ -93,7 +93,7 @@ async def main():
             print("="*60)
 
             print("\n4️⃣ 🚫 Auto-declining plan (test mode)")
-            
+
             # Send decline
             decline_response = await overlord.chat(
                 message="No, cancel this workflow",
@@ -101,7 +101,7 @@ async def main():
                 session_id="plan_test",
                 stream=False
             )
-            
+
             decline_content = decline_response.content if hasattr(decline_response, 'content') else str(decline_response)
             print(f"\n✅ Decline processed: {decline_content[:100]}...")
 
@@ -118,9 +118,9 @@ async def main():
         print("📊 SUMMARY:")
         print(f"{'='*60}")
         print(f"⏱️  Total time: {total_time:.1f}s")
-        print(f"🔍 Plan generation: Tested")
-        print(f"🚫 Workflow execution: Skipped (auto-declined)")
-        print(f"\n💡 Check the logs above for TaskDecomposer debug info!")
+        print("🔍 Plan generation: Tested")
+        print("🚫 Workflow execution: Skipped (auto-declined)")
+        print("\n💡 Check the logs above for TaskDecomposer debug info!")
 
         # Cleanup
         print("\n5️⃣ Cleaning up...")

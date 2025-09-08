@@ -10,8 +10,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-import pytest
-from muxi.formation.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_3i2_main():
@@ -44,7 +43,8 @@ async def test_3i2_main():
     print("\n📊 Testing content consistency check...")
     response = await overlord.chat(
         user_id="test_user",
-        message="Analyze this file and provide insights",files=files,
+        message="Analyze this file and provide insights",
+        files=files,
         use_async=False,
         stream=False,
     )

@@ -1,6 +1,5 @@
 """Test MCP server authentication via environment variables with user credentials - simplified."""
 import pytest
-import asyncio
 from pathlib import Path
 
 from muxi import Formation
@@ -17,7 +16,7 @@ async def test_mcp_env_auth_user_credentials_simple():
     await formation.load(str(test_dir / "formation.yaml"))
     
     # Start overlord
-    overlord = await formation.start_overlord()
+    await formation.start_overlord()
     
     # Don't try to chat - just check MCP connection
     # Access MCP service directly

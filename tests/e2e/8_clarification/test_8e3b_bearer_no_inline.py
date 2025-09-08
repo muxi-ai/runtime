@@ -18,19 +18,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from muxi.formation import Formation
-from test_utils import TestContext
+from muxi.formation import Formation  # noqa: E402
+from test_utils import TestContext  # noqa: E402
 
 
 async def test_bearer_no_inline():
     """Test Bearer with allow_inline=false redirects."""
     try:
         print("\n=== Test 8E3b: Bearer with allow_inline=false ===")
-        
+
         formation_path = Path(__file__).parent / "formations" / "formation-clarification"
         formation = Formation()
         await formation.load(str(formation_path))
-        
+
         formation.config["user_credentials"] = {
             "mode": "dynamic",
             "service_overrides": {
@@ -40,10 +40,10 @@ async def test_bearer_no_inline():
                 }
             }
         }
-        
+
         overlord = await formation.start_overlord()
         ctx = TestContext("test_8e3b")
-        
+
         print("\n1. Testing secure Bearer API: 'Access secure enterprise API'")
         response1 = await asyncio.wait_for(
             overlord.chat(
@@ -54,21 +54,21 @@ async def test_bearer_no_inline():
             ),
             timeout=120.0
         )
-        
+
         print(f"   Response: {response1.content}")
-        
+
         # Should redirect or not offer inline
         response_lower = response1.content.lower()
         redirect_indicators = ["external", "configure", "portal", "redirect"]
         inline_indicators = ["provide", "enter", "paste", "token here"]
-        
+
         should_redirect = any(indicator in response_lower for indicator in redirect_indicators)
         should_not_inline = not any(indicator in response_lower for indicator in inline_indicators)
-        
+
         assert should_redirect or should_not_inline, \
             "Should redirect or not offer inline for Bearer with allow_inline=false"
         print("   ✅ Bearer with allow_inline=false handled securely")
-        
+
         print("\n" + "="*40)
         print("\n### Test Result:")
         print("🎉 SUCCESS: Bearer allow_inline=false working correctly")
@@ -84,7 +84,7 @@ async def test_bearer_no_inline():
         await formation.stop_overlord()
         formation.shutdown()
         return True
-        
+
     except Exception as e:
         print(f"\n❌ Test 8E3b FAILED: {e}")
         return False

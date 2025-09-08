@@ -188,7 +188,7 @@ This is a valid knowledge document that should be loaded successfully.
         print("\n--- Test 5: System Stability ---")
 
         for i in range(3):
-            response = await overlord.chat(
+            await overlord.chat(
                 f"Question {i+1}: Can you help me with a task?",
                 agent_name="test-missing",
                 user_id="test_user_6e4",
@@ -221,7 +221,7 @@ This is a valid knowledge document that should be loaded successfully.
         # Cleanup
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
-            print(f"\n✓ Cleaned up temporary directory")
+            print("\n✓ Cleaned up temporary directory")
 
 
 def main():

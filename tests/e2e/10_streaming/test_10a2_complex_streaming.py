@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation.formation import Formation  # noqa: E402
+from muxi.formation import Formation  # noqa: E402
 
 
 async def main():
@@ -79,7 +79,7 @@ async def main():
         # Results
         print("\n📊 Results:")
         print(f"   Total events: {len(complex_events)}")
-        
+
         if event_types:
             print(f"   Event types seen: {event_types}")
         else:
@@ -88,14 +88,14 @@ async def main():
         # Check for planning/decomposition indicators
         full_response = "".join(complex_events)
         response_lower = full_response.lower()
-        
+
         planning_indicators = [
             "breaking", "tasks", "steps", "plan", "decompos",
             "analyzing", "thinking", "let me", "i'll"
         ]
-        
+
         has_indicators = any(ind in response_lower for ind in planning_indicators)
-        
+
         if has_planning or has_decomposition or has_indicators:
             print("   ✅ Found planning/decomposition activity")
         else:
@@ -104,11 +104,11 @@ async def main():
         # Validate response quality
         if len(complex_events) > 0:
             print(f"   ✅ Generated {len(complex_events)} streaming events")
-            
+
             # Check for relevant content
             expected_terms = ["ai", "breakthrough", "research", "report", "timeline"]
             found_terms = [term for term in expected_terms if term in response_lower]
-            
+
             if found_terms:
                 print(f"   ✅ Response contains relevant terms: {found_terms}")
             else:

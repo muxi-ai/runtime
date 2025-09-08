@@ -5,7 +5,6 @@ This test captures and displays the routing decisions
 import asyncio
 import sys
 from pathlib import Path
-import re
 
 sys.path.insert(0, '../../..')
 

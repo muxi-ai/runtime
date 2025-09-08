@@ -3,13 +3,13 @@
 
 import sys
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-import asyncio  # noqa: E402
-import shutil  # noqa: E402
-from pathlib import Path  # noqa: E402
-from concurrent.futures import ThreadPoolExecutor  # noqa: E402
+import asyncio
+import shutil
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
-from muxi.formation.formation import Formation  # noqa: E402
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+from muxi.formation import Formation  # noqa: E402
 
 
 def test_file_system_coordination():

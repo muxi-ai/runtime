@@ -12,12 +12,12 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from muxi.formation.formation import Formation  # noqa: E402
+from muxi.formation import Formation  # noqa: E402
 
 
 async def run_provider():
     formation = Formation()
-    await formation.load(str(Path(__file__).parent / "formations" / "formation-a2a")formation2/formation.yaml")
+    await formation.load(str(Path(__file__).parent / "formations" / "formation-a2a/formation2/formation.yaml"))
     overlord = await formation.start_overlord()
 
     print("Formation 2 running and ready to accept A2A requests...")

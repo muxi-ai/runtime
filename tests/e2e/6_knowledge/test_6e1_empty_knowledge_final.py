@@ -51,7 +51,7 @@ knowledge:
             f.write(agent_yaml)
 
         print(f"Created empty knowledge directory at: {empty_knowledge_dir}")
-        print(f"Created agent config with empty knowledge source")
+        print("Created agent config with empty knowledge source")
 
         # Copy the test formation to temp location and modify it
         test_formation_dir = os.path.join(temp_dir, "formation-test")
@@ -223,7 +223,7 @@ knowledge:
         # Cleanup
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
-            print(f"\n✓ Cleaned up temporary directory")
+            print("\n✓ Cleaned up temporary directory")
 
 
 def main():

@@ -53,10 +53,10 @@ async def test_agent_knowledge_isolation():
     keywords_found = [kw for kw in muxi_pricing_keywords if kw.lower() in content.lower()]
 
     if keywords_found:
-        print(f"\n❌ FAILURE: Automaze has access to MUXI pricing knowledge!")
+        print("\n❌ FAILURE: Automaze has access to MUXI pricing knowledge!")
         print(f"   Found keywords: {keywords_found}")
     else:
-        print(f"\n✅ PASS: Automaze does NOT have access to MUXI pricing knowledge")
+        print("\n✅ PASS: Automaze does NOT have access to MUXI pricing knowledge")
         print("   Response is generic or refers user elsewhere")
 
     # Test 2: Ask MUXI about Automaze architecture (should NOT have this knowledge)
@@ -86,10 +86,10 @@ async def test_agent_knowledge_isolation():
     keywords_found = [kw for kw in automaze_arch_keywords if kw.lower() in content.lower()]
 
     if keywords_found:
-        print(f"\n❌ FAILURE: MUXI has access to Automaze architecture knowledge!")
+        print("\n❌ FAILURE: MUXI has access to Automaze architecture knowledge!")
         print(f"   Found keywords: {keywords_found}")
     else:
-        print(f"\n✅ PASS: MUXI does NOT have access to Automaze architecture knowledge")
+        print("\n✅ PASS: MUXI does NOT have access to Automaze architecture knowledge")
         print("   Response is generic or refers user elsewhere")
 
     # Test 3: Verify each agent CAN access their own knowledge

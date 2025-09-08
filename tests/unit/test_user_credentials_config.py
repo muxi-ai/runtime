@@ -2,7 +2,6 @@
 Tests for user credentials configuration in formations.
 """
 
-import pytest
 from pathlib import Path
 import tempfile
 import yaml

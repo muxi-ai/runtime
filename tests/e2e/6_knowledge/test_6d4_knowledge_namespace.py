@@ -31,7 +31,7 @@ async def test_knowledge_namespace():
 
         # Query Automaze to load its knowledge
         print("👤 User: @automaze What services do you offer?")
-        response1 = await overlord.chat(
+        await overlord.chat(
             "@automaze What services do you offer?",
             user_id="test_user_6d4",
             session_id="test_6d4_session_1",
@@ -41,7 +41,7 @@ async def test_knowledge_namespace():
 
         # Query MUXI to load its knowledge
         print("👤 User: @muxi What are your pricing tiers?")
-        response2 = await overlord.chat(
+        await overlord.chat(
             "@muxi What are your pricing tiers?",
             user_id="test_user_6d4",
             session_id="test_6d4_session_2",

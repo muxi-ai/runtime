@@ -13,7 +13,7 @@ import json
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from muxi.formation.formation import Formation  # noqa: E402
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_external_a2a_with_filtering():
@@ -31,7 +31,7 @@ async def test_external_a2a_with_filtering():
 
     try:
         # Load the formation configuration
-        await formation.load(str(Path(__file__).parent / "formations" / "formation-a2a")formation1/formation.yaml")
+        await formation.load(str(Path(__file__).parent / "formations" / "formation-a2a/formation1/formation.yaml"))
 
         # Start the overlord
         overlord = await formation.start_overlord()

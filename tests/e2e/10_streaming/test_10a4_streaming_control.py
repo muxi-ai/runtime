@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation.formation import Formation  # noqa: E402
+from muxi.formation import Formation  # noqa: E402
 
 
 async def main():
@@ -34,7 +34,7 @@ async def main():
 
         # Test 1: Streaming disabled (stream=False)
         print("\n1️⃣ Testing with stream=False")
-        
+
         response_no_stream = await overlord.chat(
             message="What is the capital of France?",
             user_id=user_id,
@@ -49,25 +49,25 @@ async def main():
         else:
             print("   ✅ Got non-streaming response when stream=False")
             test1_passed = True
-            
+
             # Show response content
             if hasattr(response_no_stream, "content"):
                 content = response_no_stream.content
-                print(f"   Response type: Object with 'content' attribute")
+                print("   Response type: Object with 'content' attribute")
             else:
                 content = str(response_no_stream)
-                print(f"   Response type: String")
-            
+                print("   Response type: String")
+
             preview = content[:100] if len(content) > 100 else content
             print(f"   Content: {preview}...")
-            
+
             # Verify it contains the answer
             if "paris" in content.lower():
                 print("   ✅ Response contains correct answer")
 
         # Test 2: Streaming enabled (stream=True)
         print("\n2️⃣ Testing with stream=True")
-        
+
         response_stream = await overlord.chat(
             message="What is the capital of Germany?",
             user_id=user_id,
@@ -79,19 +79,19 @@ async def main():
         if hasattr(response_stream, "__aiter__"):
             print("   ✅ Got streaming response when stream=True")
             test2_passed = True
-            
+
             # Consume the stream
             chunks = []
             async for chunk in response_stream:
                 chunks.append(chunk)
-            
+
             print(f"   Received {len(chunks)} chunks")
-            
+
             # Verify content
             full_response = "".join(chunks)
             if "berlin" in full_response.lower():
                 print("   ✅ Streamed response contains correct answer")
-            
+
             # Show first chunk as sample
             if chunks:
                 preview = chunks[0][:100] if len(chunks[0]) > 100 else chunks[0]
@@ -102,7 +102,7 @@ async def main():
 
         # Test 3: Default behavior (no stream parameter)
         print("\n3️⃣ Testing default behavior (no stream parameter)")
-        
+
         response_default = await overlord.chat(
             message="What is the capital of Spain?",
             user_id=user_id,
@@ -123,13 +123,13 @@ async def main():
                 full_response = response_default.content
             else:
                 full_response = str(response_default)
-        
+
         if "madrid" in full_response.lower():
             print("   ✅ Default response contains correct answer")
 
         # Results summary
         print("\n" + "=" * 60)
-        
+
         if test1_passed and test2_passed:
             print("✅ Test 10A4 PASSED: Streaming control works correctly")
             print("   • stream=False produces non-streaming response")

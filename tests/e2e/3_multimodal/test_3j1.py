@@ -10,8 +10,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-import pytest
-from muxi.formation.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_3j1_main():

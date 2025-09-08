@@ -5,13 +5,12 @@ to ensure multi-turn clarification works correctly.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import Mock, AsyncMock
 from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.muxi.formation.overlord.overlord import Overlord
 from src.muxi.formation.overlord.clarification import UnifiedClarificationSystem, ClarificationResult
 from src.muxi.datatypes.response import MuxiResponse
 
@@ -225,7 +224,7 @@ async def test_clarification_stores_minimal_state(mock_overlord):
     )
     
     # Process message
-    response = await overlord._process_sync_chat_simplified(
+    await overlord._process_sync_chat_simplified(
         message="Do something complex",
         agent_name=None,
         user_id="test_user",
@@ -308,7 +307,7 @@ async def test_credential_token_detection_still_works(mock_overlord):
     overlord.credential_resolver.set_credential = AsyncMock()
     
     # Process message with token
-    response = await overlord._process_sync_chat_simplified(
+    await overlord._process_sync_chat_simplified(
         message="Here is my token: ghp_secrettoken123",
         agent_name=None,
         user_id="test_user",

@@ -19,20 +19,20 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent))  # For test_utils
 
-from muxi.formation import Formation
-from test_utils import TestContext
+from muxi.formation import Formation  # noqa: E402
+from test_utils import TestContext  # noqa: E402
 
 
 async def test_api_key_dynamic_mode():
     """Test API key requests are accepted inline in dynamic mode."""
     try:
         print("\n=== Test 8E2a: API Key in Dynamic Mode ===")
-        
+
         # Load formation with dynamic mode enabled
         formation_path = Path(__file__).parent / "formations" / "formation-clarification"
         formation = Formation()
         await formation.load(str(formation_path))
-        
+
         # Override formation config for dynamic mode
         formation.config["user_credentials"] = {
             "mode": "dynamic",
@@ -43,14 +43,14 @@ async def test_api_key_dynamic_mode():
                 "oauth": False
             }
         }
-        
+
         print("Starting overlord...")
         overlord = await formation.start_overlord()
-        
+
         # Create unique test context
         ctx = TestContext("test_8e2a")
         print(f"Using unique IDs - User: {ctx.user_id}, Session: {ctx.session_id}")
-        
+
         # Step 1: Request that would need GitHub API key
         print("\n1. Testing GitHub API key request: 'Get my GitHub repositories'")
         response1 = await asyncio.wait_for(
@@ -62,22 +62,22 @@ async def test_api_key_dynamic_mode():
             ),
             timeout=120.0  # 2 minute timeout
         )
-        
+
         print(f"   Response: {response1.content}")
-        
+
         # Should prompt for inline credential entry
         response_lower = response1.content.lower()
         inline_indicators = ["provide", "enter", "api key", "token", "github", "credential"]
         assert any(indicator in response_lower for indicator in inline_indicators), \
             "Should prompt for inline API key entry in dynamic mode"
         print("   ✅ Prompted for inline API key entry")
-        
+
         # Should NOT redirect to external management
         redirect_indicators = ["external", "outside", "portal", "configure externally"]
         assert not any(indicator in response_lower for indicator in redirect_indicators), \
             "Should not redirect to external management in dynamic mode"
         print("   ✅ No external redirect (dynamic mode behavior)")
-        
+
         # Step 2: Provide the API key
         print("\n2. Providing GitHub API key: 'ghp_1234567890abcdef1234567890123456'")
         response2 = await asyncio.wait_for(
@@ -89,21 +89,21 @@ async def test_api_key_dynamic_mode():
             ),
             timeout=120.0
         )
-        
+
         print(f"   Response: {response2.content}")
-        
+
         # Should acknowledge credential storage
         response_lower = response2.content.lower()
         storage_indicators = ["stored", "saved", "securely", "thank", "received"]
         assert any(indicator in response_lower for indicator in storage_indicators), \
             "Should acknowledge credential storage"
         print("   ✅ Credential storage acknowledged")
-        
+
         # Should NOT echo the actual token back
         assert "ghp_1234567890abcdef1234567890123456" not in response2.content, \
             "Should not echo the actual token back"
         print("   ✅ Token not echoed back (security)")
-        
+
         # Step 3: Different API key service (OpenAI)
         print("\n3. Testing OpenAI API key request: 'Generate some text with AI'")
         response3 = await asyncio.wait_for(
@@ -115,15 +115,15 @@ async def test_api_key_dynamic_mode():
             ),
             timeout=120.0
         )
-        
+
         print(f"   Response: {response3.content}")
-        
+
         # Should also prompt for inline entry (consistent behavior)
         response_lower = response3.content.lower()
         assert any(indicator in response_lower for indicator in inline_indicators), \
             "Should prompt for OpenAI API key in dynamic mode"
         print("   ✅ OpenAI request also prompted for inline entry")
-        
+
         # Step 4: Provide OpenAI key
         print("\n4. Providing OpenAI key: 'sk-proj-abcdefghijklmnop1234567890'")
         response4 = await asyncio.wait_for(
@@ -135,9 +135,9 @@ async def test_api_key_dynamic_mode():
             ),
             timeout=120.0
         )
-        
+
         print(f"   Response: {response4.content}")
-        
+
         # Should handle credential appropriately
         response_lower = response4.content.lower()
         # Either stored or processed for generation
@@ -145,7 +145,7 @@ async def test_api_key_dynamic_mode():
         assert any(indicator in response_lower for indicator in processing_indicators), \
             "Should handle OpenAI credential appropriately"
         print("   ✅ OpenAI credential handled appropriately")
-        
+
         print("\n" + "="*40)
         print("\n### Test Result:")
         print("🎉 SUCCESS: API key dynamic mode working correctly")
@@ -172,7 +172,7 @@ async def test_api_key_dynamic_mode():
         await formation.stop_overlord()
         formation.shutdown()
         return True
-        
+
     except Exception as e:
         print(f"\n❌ Test 8E2a: API Key Dynamic Mode FAILED: {e}")
         import traceback
@@ -214,11 +214,11 @@ async def test_api_key_validation():
     """Test API key format validation in dynamic mode."""
     try:
         print("\n=== Test 8E2a-b: API Key Validation ===")
-        
+
         formation_path = Path(__file__).parent / "formations" / "formation-clarification"
         formation = Formation()
         await formation.load(str(formation_path))
-        
+
         # Configure dynamic mode with validation
         formation.config["user_credentials"] = {
             "mode": "dynamic",
@@ -227,10 +227,10 @@ async def test_api_key_validation():
                 "openai": r"^sk-[a-zA-Z0-9-]{20,}$"
             }
         }
-        
+
         overlord = await formation.start_overlord()
         ctx = TestContext("test_8e2a_b")
-        
+
         # Step 1: Request GitHub API key
         print("\n1. Testing GitHub API key request")
         response1 = await asyncio.wait_for(
@@ -242,9 +242,9 @@ async def test_api_key_validation():
             ),
             timeout=120.0
         )
-        
+
         print(f"   Initial response: {response1.content[:200]}...")
-        
+
         # Step 2: Provide invalid format
         print("\n2. Providing invalid GitHub token format: 'invalid-token-123'")
         response2 = await asyncio.wait_for(
@@ -256,9 +256,9 @@ async def test_api_key_validation():
             ),
             timeout=120.0
         )
-        
+
         print(f"   Response: {response2.content}")
-        
+
         # Should handle invalid format appropriately
         response_lower = response2.content.lower()
         # Either validation error or generic handling
@@ -267,7 +267,7 @@ async def test_api_key_validation():
                "repositories" not in response_lower, \
                "Should handle invalid format appropriately"
         print("   ✅ Invalid format handled appropriately")
-        
+
         # Step 3: Provide valid format
         print("\n3. Providing valid GitHub token: 'ghp_abcdefghijklmnopqrstuvwxyz1234567890'")
         response3 = await asyncio.wait_for(
@@ -279,16 +279,16 @@ async def test_api_key_validation():
             ),
             timeout=120.0
         )
-        
+
         print(f"   Response: {response3.content}")
-        
+
         # Should accept valid format
         response_lower = response3.content.lower()
         acceptance_indicators = ["stored", "saved", "thank", "received", "repositories"]
         assert any(indicator in response_lower for indicator in acceptance_indicators), \
             "Should accept valid token format"
         print("   ✅ Valid format accepted")
-        
+
         print("\n" + "="*40)
         print("\n### Test Result:")
         print("🎉 SUCCESS: API key validation working correctly")
@@ -309,7 +309,7 @@ async def test_api_key_validation():
         await formation.stop_overlord()
         formation.shutdown()
         return True
-        
+
     except Exception as e:
         print(f"\n❌ Test 8E2a-b FAILED: {e}")
         import traceback
@@ -346,15 +346,15 @@ if __name__ == "__main__":
     async def run_tests():
         """Run all API key dynamic mode tests."""
         results = []
-        
+
         # Run main dynamic mode test
         result = await test_api_key_dynamic_mode()
         results.append(("8E2a: API Key Dynamic Mode", result))
-        
+
         # Run validation test
         result = await test_api_key_validation()
         results.append(("8E2a-b: API Key Validation", result))
-        
+
         # Print summary
         print("\n" + "="*50)
         print("TEST SUMMARY")
@@ -362,16 +362,16 @@ if __name__ == "__main__":
         for test_name, passed in results:
             status = "✅ PASSED" if passed else "❌ FAILED"
             print(f"{test_name}: {status}")
-        
+
         all_passed = all(result for _, result in results)
         if all_passed:
             print(f"\n🎉 All {len(results)} tests PASSED!")
         else:
             failed = sum(1 for _, result in results if not result)
             print(f"\n⚠️ {failed}/{len(results)} tests FAILED")
-        
+
         return all_passed
-    
+
     try:
         success = asyncio.run(run_tests())
         sys.exit(0 if success else 1)

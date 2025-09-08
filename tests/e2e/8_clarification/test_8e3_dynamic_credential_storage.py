@@ -9,8 +9,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent / "tests/e2e/8_clarification"))
 
-from muxi.formation import Formation
-from test_utils import TestContext
+from muxi.formation import Formation  # noqa: E402
+from test_utils import TestContext  # noqa: E402
 
 
 async def test_user3_simple():

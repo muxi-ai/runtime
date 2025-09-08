@@ -5,7 +5,7 @@ Integration tests for user isolation in credential handling.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from muxi.formation.credentials import EncryptedCredentialResolver
-from muxi.formation.credentials.resolver import CredentialResolver, User, Credential
+from muxi.formation.credentials.resolver import CredentialResolver
 
 
 @pytest.fixture
@@ -150,11 +150,11 @@ class TestUserIsolation:
         )
         
         # User in test-formation can get their credential
-        result1 = await resolver1.resolve("alice", "service")
+        await resolver1.resolve("alice", "service")
         # Would return alice's credential in real implementation
         
         # User in other-formation cannot get alice's credential
-        result2 = await resolver2.resolve("alice", "service")
+        await resolver2.resolve("alice", "service")
         # Would return None in real implementation due to formation_id filter
     
     def test_encryption_provides_user_isolation(self):

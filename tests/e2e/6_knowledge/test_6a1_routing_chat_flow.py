@@ -32,7 +32,7 @@ async def test_knowledge_with_routing():
         stream=False
     )
 
-    print(f"\n👤 User: What services does Automaze offer?")
+    print("\n👤 User: What services does Automaze offer?")
 
     if isinstance(response1, dict):
         agent_used = response1.get('agent_id', 'unknown')
@@ -62,7 +62,7 @@ async def test_knowledge_with_routing():
         stream=False
     )
 
-    print(f"\n👤 User: What pricing plans does MUXI offer?")
+    print("\n👤 User: What pricing plans does MUXI offer?")
 
     if isinstance(response2, dict):
         agent_used = response2.get('agent_id', 'unknown')
@@ -96,7 +96,7 @@ async def test_knowledge_with_routing():
         stream=False
     )
 
-    print(f"\n👤 User: What is the Automaze platform architecture?")
+    print("\n👤 User: What is the Automaze platform architecture?")
 
     if isinstance(response3, dict):
         agent_used = response3.get('agent_id', 'unknown')

@@ -6,10 +6,11 @@ Test extraction of multiple facts from a single complex message
 import sys
 from pathlib import Path
 import os
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 import asyncio
 import psycopg2
-from muxi.formation.formation import Formation
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_complex_extraction():
@@ -27,24 +28,30 @@ async def test_complex_extraction():
     conn.commit()
 
     formation = Formation()
-    await formation.load(str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres.yaml")
+    await formation.load(
+        str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres.yaml")
+    )
     overlord = await formation.start_overlord()
 
     # Test 1: CEO and company information
     print("1. Testing complex sentence with multiple facts...")
     await overlord.chat(
         "I'm the CEO of TechStart, a company that builds AI tools for healthcare",
-        user_id=test_user
-    , use_async=False)
+        user_id=test_user,
+        use_async=False,
+    )
     await asyncio.sleep(5)  # Wait for extraction
 
     # Check extracted memories
-    cur.execute("""
+    cur.execute(
+        """
         SELECT text, collection
         FROM memories
         WHERE meta_data->>'user_id' = %s
         ORDER BY created_at ASC
-    """, (test_user,))
+    """,
+        (test_user,),
+    )
 
     memories = cur.fetchall()
     memory_texts = [mem[0] for mem in memories]
@@ -55,7 +62,7 @@ async def test_complex_extraction():
         ("CEO", "job title"),
         ("TechStart", "company name"),
         ("AI tools", "product/service"),
-        ("healthcare", "industry")
+        ("healthcare", "industry"),
     ]
 
     for fact, description in facts_to_verify:
@@ -66,17 +73,21 @@ async def test_complex_extraction():
     print("\n2. Testing multiple domain extraction...")
     await overlord.chat(
         "I live in San Francisco, have two kids, and enjoy playing chess in my free time",
-        user_id=test_user
-    , use_async=False)
+        user_id=test_user,
+        use_async=False,
+    )
     await asyncio.sleep(5)
 
     # Get all memories for this user to see what was extracted
-    cur.execute("""
+    cur.execute(
+        """
         SELECT text, collection
         FROM memories
         WHERE meta_data->>'user_id' = %s
         ORDER BY created_at ASC
-    """, (test_user,))
+    """,
+        (test_user,),
+    )
 
     all_memories_now = cur.fetchall()
     new_memories = all_memories_now[len(memories):]  # Get only the new ones
@@ -89,7 +100,9 @@ async def test_complex_extraction():
 
     # Verify location, family, and hobby extraction
     assert "San Francisco" in all_new_text, f"Missing location in: {new_texts}"
-    assert "two kids" in all_new_text or "2 kids" in all_new_text, f"Missing family info in: {new_texts}"
+    assert (
+        "two kids" in all_new_text or "2 kids" in all_new_text
+    ), f"Missing family info in: {new_texts}"
     assert "chess" in all_new_text, f"Missing hobby in: {new_texts}"
 
     print("✓ Extracted location: San Francisco")
@@ -103,8 +116,9 @@ async def test_complex_extraction():
     expected_collections = {"user_identity", "relationships", "activities", "preferences"}
     found_collections = collections_used.intersection(expected_collections)
 
-    assert len(found_collections) >= 2, \
-        f"Expected multiple collection types, found: {collections_used}"
+    assert (
+        len(found_collections) >= 2
+    ), f"Expected multiple collection types, found: {collections_used}"
 
     print(f"✓ Facts distributed across collections: {collections_used}")
 

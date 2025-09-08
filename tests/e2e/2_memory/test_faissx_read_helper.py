@@ -58,7 +58,7 @@ def test_faissx_read_write_cycle():
         got_best_match = indices[0][0] if len(indices[0]) > 0 else -1
         best_distance = distances[0][0] if len(distances[0]) > 0 else float('inf')
 
-        print(f"5. Verifying results...")
+        print("5. Verifying results...")
         print(f"   Expected best match index: {expected_best_match}")
         print(f"   Got best match index: {got_best_match}")
         print(f"   Best match distance: {best_distance}")
@@ -225,7 +225,7 @@ async def main():
         workingemory_result.get("python_correct", False)
     )
 
-    print(f"\n🎯 FINAL VERDICT:")
+    print("\n🎯 FINAL VERDICT:")
     if both_working and reads_working:
         print("✅ FAISSx READ OPERATIONS CONFIRMED!")
         print("✅ We successfully write TO and read FROM remote FAISSx")
@@ -236,7 +236,7 @@ async def main():
     else:
         print("❌ FAISSx read operations have issues")
 
-    print(f"\n📊 During this test, check FAISSx logs for:")
+    print("\n📊 During this test, check FAISSx logs for:")
     print("- Index creation messages")
     print("- add_vectors requests")
     print("- search requests")

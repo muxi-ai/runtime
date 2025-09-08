@@ -16,7 +16,6 @@ import time
 sys.path.insert(0, '../../..')
 
 from muxi.formation import Formation
-from muxi.utils.user_dirs import get_knowledge_dir
 
 
 class KnowledgeChangeDetectionTest:
@@ -26,7 +25,7 @@ class KnowledgeChangeDetectionTest:
         self.formation = None
         self.overlord = None
         self.test_file = "muxi-pricing.md"  # File we'll move/modify
-        self.knowledge_dir = Path(str(Path(__file__).parent / "formations" / "formation-knowledge")knowledge")
+        self.knowledge_dir = Path(__file__).parent / "formations" / "formation-knowledge/knowledge"
         self.temp_dir = Path("../../assets/formations/temp-knowledge")
         self.test_file_path = self.knowledge_dir / self.test_file
         self.temp_file_path = self.temp_dir / self.test_file
@@ -103,7 +102,7 @@ class KnowledgeChangeDetectionTest:
         # Get initial state
         info = self.get_cache_info(agent)
 
-        print(f"\nInitial state:")
+        print("\nInitial state:")
         print(f"  Cache files: {len(info['cache_files'])}")
         for f in info['cache_files']:
             print(f"    - {f}")
@@ -152,7 +151,7 @@ class KnowledgeChangeDetectionTest:
         # Get state after removal
         info = self.get_cache_info(agent)
 
-        print(f"\nState after file removal:")
+        print("\nState after file removal:")
         print(f"  Cache files: {len(info['cache_files'])}")
         print(f"  Buffer items: {len(set(info['buffer_items']))} unique sources")
         print(f"  Knowledge sources: {len(info['knowledge_sources'])}")
@@ -174,9 +173,9 @@ class KnowledgeChangeDetectionTest:
 
         # Cache might still exist (stale) but won't be loaded
         if test_file_in_cache:
-            print(f"⚠ Cache file still exists (will be cleaned up later)")
+            print("⚠ Cache file still exists (will be cleaned up later)")
         else:
-            print(f"✓ Cache file removed")
+            print("✓ Cache file removed")
 
         await self.stop_formation()
         print("\n✓ Phase 2 complete")
@@ -203,7 +202,7 @@ class KnowledgeChangeDetectionTest:
         # Get state after re-addition
         info = self.get_cache_info(agent)
 
-        print(f"\nState after file re-addition:")
+        print("\nState after file re-addition:")
         print(f"  Cache files: {len(info['cache_files'])}")
         print(f"  Buffer items: {len(set(info['buffer_items']))} unique sources")
         print(f"  Knowledge sources: {len(info['knowledge_sources'])}")
@@ -224,9 +223,9 @@ class KnowledgeChangeDetectionTest:
             print(f"❌ Test file '{self.test_file}' NOT re-added to buffer")
 
         if test_file_in_cache:
-            print(f"✓ Cache file re-created")
+            print("✓ Cache file re-created")
         else:
-            print(f"❌ Cache file NOT re-created")
+            print("❌ Cache file NOT re-created")
 
         await self.stop_formation()
         print("\n✓ Phase 3 complete")
@@ -262,7 +261,7 @@ class KnowledgeChangeDetectionTest:
         # Get state after modification
         info = self.get_cache_info(agent)
 
-        print(f"\nState after file modification:")
+        print("\nState after file modification:")
         print(f"  Cache files: {len(info['cache_files'])}")
         print(f"  Buffer items: {len(set(info['buffer_items']))} unique sources")
         print(f"  Knowledge sources: {len(info['knowledge_sources'])}")
@@ -277,7 +276,7 @@ class KnowledgeChangeDetectionTest:
             print(f"\n✓ Modified file '{self.test_file}' reloaded with new content")
             print("✓ Cache invalidated and regenerated")
         else:
-            print(f"\n❌ Modified file not properly reloaded")
+            print("\n❌ Modified file not properly reloaded")
 
         # Restore original content
         print("\nRestoring original file content...")

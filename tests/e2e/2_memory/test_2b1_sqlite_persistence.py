@@ -118,7 +118,7 @@ async def main():
     for r in recent:
         print(f"  - {r['text'][:50]}...")
 
-    print(f"\n✅ SQLite database verification completed!")
+    print("\n✅ SQLite database verification completed!")
     print(f"Database file: {os.path.abspath(db_path)}")
 
 if __name__ == "__main__":

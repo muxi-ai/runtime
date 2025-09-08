@@ -57,7 +57,7 @@ def test_core_knowledge_mechanics():
                 stream=False
             )
 
-            print(f"\n👤 User: What are the pricing tiers for MUXI?")
+            print("\n👤 User: What are the pricing tiers for MUXI?")
             if isinstance(response1, dict):
                 response_text = response1.get('response', str(response1))
             else:
@@ -107,7 +107,7 @@ def test_core_knowledge_mechanics():
                 stream=False
             )
 
-            print(f"\n👤 User: Tell me about MUXI's business model")
+            print("\n👤 User: Tell me about MUXI's business model")
             if isinstance(response2, dict):
                 response_text = response2.get('response', str(response2))
             else:
@@ -127,7 +127,7 @@ def test_core_knowledge_mechanics():
                 stream=False
             )
 
-            print(f"\n👤 User: What services does Automaze provide?")
+            print("\n👤 User: What services does Automaze provide?")
             if isinstance(response3, dict):
                 response_text = response3.get('response', str(response3))
             else:

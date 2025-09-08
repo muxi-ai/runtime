@@ -11,7 +11,7 @@ import json
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src")))
 
-from muxi.formation.formation import Formation  # noqa: E402
+from muxi.formation import Formation  # noqa: E402
 
 
 async def main():

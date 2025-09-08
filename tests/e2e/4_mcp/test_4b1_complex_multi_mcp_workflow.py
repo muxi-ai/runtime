@@ -3,11 +3,12 @@
 
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-from muxi.formation.formation import Formation
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+from muxi.formation import Formation  # noqa: E402
+
 
 def test_complex_multi_mcp_workflow():
     """Test complex multi-MCP orchestration workflow"""
@@ -38,7 +39,7 @@ def test_complex_multi_mcp_workflow():
                     "The issue should request creating a GitHub gist with the current CPU stats. "
                     "After creating the gist, update the Linear issue as completed with a link to the gist.",
                     user_id="user1",
-                    use_async=False
+                    use_async=False,
                 )
 
                 # Collect streaming response
@@ -52,29 +53,33 @@ def test_complex_multi_mcp_workflow():
                 response_lower = response.lower()
 
                 # Should mention issue creation
-                assert any(term in response_lower for term in ["issue", "linear", "created", "ticket"]), \
-                    "Response should mention Linear issue creation"
+                assert any(
+                    term in response_lower for term in ["issue", "linear", "created", "ticket"]
+                ), "Response should mention Linear issue creation"
 
                 # Should mention CPU stats
-                assert any(term in response_lower for term in ["cpu", "processor", "usage", "stats"]), \
-                    "Response should mention CPU statistics"
+                assert any(
+                    term in response_lower for term in ["cpu", "processor", "usage", "stats"]
+                ), "Response should mention CPU statistics"
 
                 # Should mention gist creation
-                assert any(term in response_lower for term in ["gist", "github", "created"]), \
-                    "Response should mention GitHub gist creation"
+                assert any(
+                    term in response_lower for term in ["gist", "github", "created"]
+                ), "Response should mention GitHub gist creation"
 
                 # Should mention completion/update
-                assert any(term in response_lower for term in ["completed", "updated", "done", "finished"]), \
-                    "Response should mention issue completion/update"
+                assert any(
+                    term in response_lower for term in ["completed", "updated", "done", "finished"]
+                ), "Response should mention issue completion/update"
 
                 print("✓ Complex multi-MCP workflow executed successfully")
 
                 print("\n2. Testing workflow error handling...")
                 # Test partial workflow failure handling
                 response_gen = await overlord.chat(
-                    "Create a Linear issue to document disk usage, then try to create a gist in a non-existent repository",
+                    "Create a Linear issue to document disk usage, then try to create a gist in a non-existent repository",  # noqa: E501
                     user_id="user1",
-                    use_async=False
+                    use_async=False,
                 )
 
                 # Collect streaming response
@@ -85,15 +90,17 @@ def test_complex_multi_mcp_workflow():
                 print(f"\nError Handling Response: {response}")
 
                 # Should handle the error gracefully
-                assert any(term in response_lower for term in ["error", "failed", "unable", "issue"]) or \
-                       "linear" in response_lower, \
-                    "Response should handle partial workflow failure"
+                assert (
+                    any(term in response_lower for term in ["error", "failed", "unable", "issue"])
+                    or "linear" in response_lower
+                ), "Response should handle partial workflow failure"
                 print("✓ Workflow error handling successful")
 
                 print("\n✅ Test 4B1 PASSED: Complex multi-MCP workflow successful")
 
                 # Force immediate exit - bypasses all cleanup
                 import os
+
                 os._exit(0)
 
             # Run the async test
@@ -114,8 +121,10 @@ def test_complex_multi_mcp_workflow():
     except Exception as e:
         print(f"\n❌ Test 4B1 FAILED with error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 if __name__ == "__main__":
     success = test_complex_multi_mcp_workflow()

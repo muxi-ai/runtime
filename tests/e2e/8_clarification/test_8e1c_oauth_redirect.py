@@ -19,8 +19,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent))  # For test_utils
 
-from muxi.formation import Formation
-from test_utils import TestContext
+from muxi.formation import Formation  # noqa: E402
+from test_utils import TestContext  # noqa: E402
 
 
 async def test_oauth_redirect_mode():
@@ -36,7 +36,7 @@ async def test_oauth_redirect_mode():
         # Override formation config for redirect mode
         formation.config["user_credentials"] = {
             "mode": "redirect",
-            "redirect_message": "Please complete OAuth authorization in your browser."
+            "redirect_message": "Please complete OAuth authorization in your browser.",
         }
 
         print("Starting overlord...")
@@ -53,9 +53,9 @@ async def test_oauth_redirect_mode():
                 message="Access my Google Calendar",
                 user_id=ctx.user_id,
                 session_id=ctx.session_id,
-                stream=False
+                stream=False,
             ),
-            timeout=120.0  # 2 minute timeout
+            timeout=120.0,  # 2 minute timeout
         )
 
         print(f"   Response: {response1.content}")
@@ -64,14 +64,16 @@ async def test_oauth_redirect_mode():
         response_lower = response1.content.lower()
         oauth_indicators = ["oauth", "authorize", "browser", "redirect", "consent", "permission"]
         redirect_indicators = ["external", "configure", "outside", "portal"]
-        assert any(indicator in response_lower for indicator in oauth_indicators + redirect_indicators), \
-            "Should redirect to OAuth authorization flow"
+        assert any(
+            indicator in response_lower for indicator in oauth_indicators + redirect_indicators
+        ), "Should redirect to OAuth authorization flow"
         print("   ✅ Redirected to OAuth authorization flow")
 
         # Should NOT ask for inline credential entry
         inline_indicators = ["provide", "enter", "token", "paste", "credential"]
-        assert not any(indicator in response_lower for indicator in inline_indicators), \
-            "Should not prompt for inline credential entry"
+        assert not any(
+            indicator in response_lower for indicator in inline_indicators
+        ), "Should not prompt for inline credential entry"
         print("   ✅ No inline credential prompting")
 
         # Step 2: GitHub OAuth request
@@ -81,17 +83,18 @@ async def test_oauth_redirect_mode():
                 message="Create a GitHub issue",
                 user_id=ctx.user_id,
                 session_id=ctx.session_id,
-                stream=False
+                stream=False,
             ),
-            timeout=120.0
+            timeout=120.0,
         )
 
         print(f"   Response: {response2.content}")
 
         # Should also redirect (consistent behavior)
         response_lower = response2.content.lower()
-        assert any(indicator in response_lower for indicator in oauth_indicators + redirect_indicators), \
-            "Should redirect GitHub OAuth requests"
+        assert any(
+            indicator in response_lower for indicator in oauth_indicators + redirect_indicators
+        ), "Should redirect GitHub OAuth requests"
         print("   ✅ GitHub OAuth request also redirected")
 
         # Step 3: Microsoft OAuth (Office 365)
@@ -101,17 +104,18 @@ async def test_oauth_redirect_mode():
                 message="Access my OneDrive files",
                 user_id=ctx.user_id,
                 session_id=ctx.session_id,
-                stream=False
+                stream=False,
             ),
-            timeout=120.0
+            timeout=120.0,
         )
 
         print(f"   Response: {response3.content}")
 
         # Should handle appropriately (redirect for OAuth)
         response_lower = response3.content.lower()
-        assert any(indicator in response_lower for indicator in oauth_indicators + redirect_indicators), \
-            "Should redirect Microsoft OAuth requests"
+        assert any(
+            indicator in response_lower for indicator in oauth_indicators + redirect_indicators
+        ), "Should redirect Microsoft OAuth requests"
         print("   ✅ Microsoft OAuth request redirected appropriately")
 
         # Step 4: Generic OAuth service
@@ -121,9 +125,9 @@ async def test_oauth_redirect_mode():
                 message="Connect to the social media API",
                 user_id=ctx.user_id,
                 session_id=ctx.session_id,
-                stream=False
+                stream=False,
             ),
-            timeout=120.0
+            timeout=120.0,
         )
 
         print(f"   Response: {response4.content}")
@@ -132,7 +136,7 @@ async def test_oauth_redirect_mode():
         assert response4.content, "Should provide some response"
         print("   ✅ Generic OAuth service handled appropriately")
 
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
         print("\n### Test Result:")
         print("🎉 SUCCESS: OAuth redirect mode working correctly")
         print("✓ Google OAuth request redirected to authorization flow")
@@ -140,7 +144,7 @@ async def test_oauth_redirect_mode():
         print("✓ GitHub OAuth request also redirected consistently")
         print("✓ Microsoft OAuth requests handled with proper redirect")
         print("✓ Generic OAuth services handled appropriately")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
         print("\n### Chat transcript:")
         print("\nUser: Access my Google Calendar")
@@ -151,7 +155,7 @@ async def test_oauth_redirect_mode():
         print(f"System: {response3.content}")
         print("\nUser: Connect to the social media API")
         print(f"System: {response4.content}")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
         # Properly shut down
         await formation.stop_overlord()
@@ -161,32 +165,33 @@ async def test_oauth_redirect_mode():
     except Exception as e:
         print(f"\n❌ Test 8E1c: OAuth Redirect Mode FAILED: {e}")
         import traceback
+
         traceback.print_exc()
 
         # Try to print partial transcript even on failure
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
         print("\n### Test Result:")
         print("❌ FAILED: OAuth redirect mode test failed")
         print(f"✗ Error: {e}")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
         print("\n### Partial Chat transcript (before failure):")
-        if 'response1' in locals():
+        if "response1" in locals():
             print("\nUser: Access my Google Calendar")
             print(f"System: {response1.content}")
-        if 'response2' in locals():
+        if "response2" in locals():
             print("\nUser: Create a GitHub issue")
             print(f"System: {response2.content}")
-        if 'response3' in locals():
+        if "response3" in locals():
             print("\nUser: Access my OneDrive files")
             print(f"System: {response3.content}")
-        if 'response4' in locals():
+        if "response4" in locals():
             print("\nUser: Connect to the social media API")
             print(f"System: {response4.content}")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
         # Try to shut down even on failure
-        if 'formation' in locals():
+        if "formation" in locals():
             try:
                 await formation.stop_overlord()
                 formation.shutdown()
@@ -207,7 +212,7 @@ async def test_oauth_flow_consistency():
         # Configure redirect mode with OAuth-specific message
         formation.config["user_credentials"] = {
             "mode": "redirect",
-            "redirect_message": "Please authorize the application in your browser to continue."
+            "redirect_message": "Please authorize the application in your browser to continue.",
         }
 
         overlord = await formation.start_overlord()
@@ -218,7 +223,7 @@ async def test_oauth_flow_consistency():
             ("Twitter API", "Post a tweet to my Twitter account"),
             ("Facebook API", "Get my Facebook page insights"),
             ("LinkedIn API", "Share a post on LinkedIn"),
-            ("Slack OAuth", "Join a Slack workspace")
+            ("Slack OAuth", "Join a Slack workspace"),
         ]
 
         responses = []
@@ -227,12 +232,9 @@ async def test_oauth_flow_consistency():
             print(f"\n{len(responses) + 1}. Testing {provider}: '{request}'")
             response = await asyncio.wait_for(
                 overlord.chat(
-                    message=request,
-                    user_id=ctx.user_id,
-                    session_id=ctx.session_id,
-                    stream=False
+                    message=request, user_id=ctx.user_id, session_id=ctx.session_id, stream=False
                 ),
-                timeout=120.0
+                timeout=120.0,
             )
 
             print(f"   Response: {response.content[:200]}...")
@@ -240,30 +242,43 @@ async def test_oauth_flow_consistency():
 
             # Check for OAuth redirect indicators
             response_lower = response.content.lower()
-            oauth_indicators = ["oauth", "authorize", "browser", "redirect", "consent", "permission"]
+            oauth_indicators = [
+                "oauth",
+                "authorize",
+                "browser",
+                "redirect",
+                "consent",
+                "permission",
+            ]
             redirect_indicators = ["external", "configure", "outside"]
 
-            has_oauth_flow = any(indicator in response_lower for indicator in oauth_indicators + redirect_indicators)
-            print(f"   ✅ {provider} handled appropriately ({'OAuth flow' if has_oauth_flow else 'Alternative approach'})")
+            has_oauth_flow = any(
+                indicator in response_lower for indicator in oauth_indicators + redirect_indicators
+            )
+            print(
+                f"   ✅ {provider} handled appropriately ({'OAuth flow' if has_oauth_flow else 'Alternative approach'})"
+            )
 
         # Verify consistent handling
         print(f"\n   ✅ All {len(oauth_requests)} OAuth providers handled consistently")
 
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
         print("\n### Test Result:")
         print("🎉 SUCCESS: OAuth flow consistency maintained")
         print(f"✓ {len(oauth_requests)} different OAuth providers tested")
         print("✓ Consistent redirect behavior across providers")
         print("✓ No inline credential prompting for any provider")
         print("✓ Proper OAuth flow or alternative handling")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
         print("\n### Chat transcript:")
         for i, (provider, response) in enumerate(responses, 1):
-            request_text = oauth_requests[i-1][1]
+            request_text = oauth_requests[i - 1][1]
             print(f"\nUser: {request_text}")
-            print(f"System: {response.content[:300] + '...' if len(response.content) > 300 else response.content}")
-        print("\n" + "="*40)
+            print(
+                f"System: {response.content[:300] + '...' if len(response.content) > 300 else response.content}"
+            )
+        print("\n" + "=" * 40)
 
         await formation.stop_overlord()
         formation.shutdown()
@@ -272,24 +287,27 @@ async def test_oauth_flow_consistency():
     except Exception as e:
         print(f"\n❌ Test 8E1c-b FAILED: {e}")
         import traceback
+
         traceback.print_exc()
 
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
         print("\n### Test Result:")
         print("❌ FAILED: OAuth flow consistency test failed")
         print(f"✗ Error: {e}")
-        print("\n" + "="*40)
+        print("\n" + "=" * 40)
 
         print("\n### Partial Chat transcript (before failure):")
-        if 'responses' in locals():
+        if "responses" in locals():
             for i, (provider, response) in enumerate(responses, 1):
                 if i <= len(oauth_requests):
-                    request_text = oauth_requests[i-1][1]
+                    request_text = oauth_requests[i - 1][1]
                     print(f"\nUser: {request_text}")
-                    print(f"System: {response.content[:300] + '...' if len(response.content) > 300 else response.content}")
-        print("\n" + "="*40)
+                    print(
+                        f"System: {response.content[:300] + '...' if len(response.content) > 300 else response.content}"
+                    )
+        print("\n" + "=" * 40)
 
-        if 'formation' in locals():
+        if "formation" in locals():
             try:
                 await formation.stop_overlord()
                 formation.shutdown()
@@ -299,6 +317,7 @@ async def test_oauth_flow_consistency():
 
 
 if __name__ == "__main__":
+
     async def run_tests():
         """Run all OAuth redirect mode tests."""
         results = []
@@ -312,9 +331,9 @@ if __name__ == "__main__":
         results.append(("8E1c-b: OAuth Flow Consistency", result))
 
         # Print summary
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print("TEST SUMMARY")
-        print("="*50)
+        print("=" * 50)
         for test_name, passed in results:
             status = "✅ PASSED" if passed else "❌ FAILED"
             print(f"{test_name}: {status}")

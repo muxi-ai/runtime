@@ -2,10 +2,8 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Dict, Any, Optional
 
 from muxi.formation.clarification.analyzer import InformationAnalyzer
-from muxi.datatypes.clarification import InformationAnalysis
 
 
 class TestExecutionContextHandling:

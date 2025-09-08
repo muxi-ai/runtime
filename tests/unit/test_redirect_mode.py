@@ -6,7 +6,7 @@ are never accepted inline and users are redirected to external systems.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from dataclasses import dataclass
 
 from muxi.formation.overlord.clarification import UnifiedClarificationSystem, ClarificationResult
@@ -192,7 +192,7 @@ class TestRedirectMode:
                     user_id=e.user_id,
                     request_id=request_id
                 )
-                
+
                 if result.action == "message" and result.mode == "redirect":
                     return MockResponse(
                         role="assistant",
@@ -218,7 +218,7 @@ class TestRedirectMode:
         """Test that multiline redirect messages are properly handled."""
         multiline_message = """Welcome to SecureCorp AI Assistant
 
-For your security, authentication credentials must be configured 
+For your security, authentication credentials must be configured
 through our centralized identity management system.
 
 Please visit: https://identity.securecorp.com/ai-credentials

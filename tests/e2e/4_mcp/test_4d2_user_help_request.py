@@ -8,7 +8,7 @@ import json
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation.formation import Formation  # noqa: E402
+from muxi.formation import Formation  # noqa: E402
 
 
 async def run_async_test():
@@ -236,12 +236,12 @@ async def run_async_test():
         print("Summary:")
         print(summary)
         print("\nFull Flow Results:")
-        print(f"1. Asked for repositories: ✓")
+        print("1. Asked for repositories: ✓")
         print(f"2. System requested credentials: {'✓' if asked_for_credentials else '✗'}")
-        print(f"3. User asked for help: ✓")
+        print("3. User asked for help: ✓")
         print(f"4. System provided instructions: {'✓' if is_helpful else '✗'}")
         if is_helpful:
-            print(f"5. User provided token: ✓")
+            print("5. User provided token: ✓")
             print(f"6. System listed repositories: {'✓' if found_repos and not has_error else '✗'}")
         print("="*80 + "\n")
 
@@ -256,7 +256,7 @@ async def run_async_test():
         # Clean up
         try:
             await formation.stop_overlord(5.0)
-        except:
+        except Exception:
             formation.kill_overlord()
 
 

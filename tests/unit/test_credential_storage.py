@@ -3,7 +3,7 @@ Tests for credential storage pipeline functionality.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, AsyncMock
 
 from muxi.formation.overlord.clarification import UnifiedClarificationSystem
 
@@ -299,13 +299,13 @@ async def test_handle_response_non_credential_clarification(clarification_system
     # Mock state operations
     clarification_system._get_state = AsyncMock(return_value=state)
     clarification_system._store_state = AsyncMock()
-    
+
     # Mock LLM to return "answering" (not a context switch)
     clarification_system.llm = AsyncMock()
     clarification_system.llm.chat = AsyncMock(return_value="answering")
 
     # Handle response
-    result = await clarification_system.handle_response("req123", "with React")
+    await clarification_system.handle_response("req123", "with React")
 
     # Verify state was updated (not credential flow)
     assert state["collected_info"] == ["with React"]
@@ -352,7 +352,7 @@ async def test_handle_mcp_credential_request_check_existing(clarification_system
     clarification_system._get_service_accept_inline = AsyncMock(return_value=True)
 
     # Request credential for service that already has one
-    result = await clarification_system.handle_mcp_credential_request(
+    await clarification_system.handle_mcp_credential_request(
         service_id="github",
         user_id="user123",
         request_id="req456"

@@ -3,8 +3,7 @@
 
 import asyncio
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
-from typing import Dict, Any, Optional
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import the Overlord class
 import sys

@@ -3,7 +3,6 @@ Test 6B1: Knowledge Caching Validation (Chat Flow)
 Test that knowledge is cached on first load and reused on subsequent loads
 """
 import asyncio
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -74,7 +73,7 @@ def test_knowledge_caching_validation():
             initial_load_time = time.time() - start_time
             print(f"\nInitial load time: {initial_load_time:.2f} seconds")
 
-            print(f"\n👤 User: What are the pricing tiers for MUXI?")
+            print("\n👤 User: What are the pricing tiers for MUXI?")
             if isinstance(response1, dict):
                 response_text = response1.get('response', str(response1))
             else:
@@ -127,7 +126,7 @@ def test_knowledge_caching_validation():
             cached_load_time = time.time() - start_time
             print(f"\nCached load time: {cached_load_time:.2f} seconds")
 
-            print(f"\n👤 User: Tell me about MUXI's business model")
+            print("\n👤 User: Tell me about MUXI's business model")
             if isinstance(response2, dict):
                 response_text = response2.get('response', str(response2))
             else:
@@ -146,7 +145,7 @@ def test_knowledge_caching_validation():
             if cached_load_time < initial_load_time:
                 print(f"✓ Cached load was faster ({cached_load_time:.2f}s vs {initial_load_time:.2f}s)")
             else:
-                print(f"⚠ Cached load not faster, but knowledge still works")
+                print("⚠ Cached load not faster, but knowledge still works")
                 # This is OK - the important thing is that knowledge is available
 
             # Skip testing automaze to save time

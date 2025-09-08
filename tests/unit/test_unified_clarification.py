@@ -6,12 +6,11 @@ Tests the complete replacement of 15+ clarification components with one unified 
 import pytest
 import asyncio
 import time
-from unittest.mock import Mock, AsyncMock, MagicMock, patch
+from unittest.mock import Mock, AsyncMock
 from typing import Dict, Optional
 
 from src.muxi.formation.overlord.clarification import (
-    UnifiedClarificationSystem,
-    ClarificationResult
+    UnifiedClarificationSystem
 )
 
 
@@ -19,13 +18,13 @@ class MockBufferMemory:
     """Mock buffer memory for testing"""
     def __init__(self):
         self._data = {}
-    
+
     async def set(self, key: str, value: Dict, **kwargs):
         self._data[key] = value
-    
+
     async def get(self, key: str) -> Optional[Dict]:
         return self._data.get(key)
-    
+
     async def delete(self, key: str):
         if key in self._data:
             del self._data[key]
@@ -36,14 +35,14 @@ class MockLLM:
     def __init__(self):
         self.responses = []
         self.call_count = 0
-    
+
     async def chat(self, messages, temperature=0, max_tokens=200):
         self.call_count += 1
         response = Mock()
-        
+
         # Determine response based on prompt content
         prompt = messages[0]["content"] if messages else ""
-        
+
         if "Analyze this request to determine if clarification is needed" in prompt:
             # Initial clarification check
             response.content = '''{
@@ -70,7 +69,7 @@ class MockLLM:
             response.content = "Which GitHub account would you like to use?"
         else:
             response.content = "Default response"
-        
+
         return response
 
 
@@ -79,7 +78,7 @@ class MockOverlord:
     def __init__(self):
         self.buffer_memory = MockBufferMemory()
         self.default_llm_model = MockLLM()
-        
+
         # Mock clarification config object (new structure)
         self.clarification_config = Mock()
         self.clarification_config.max_questions = 3  # Old format for backward compatibility
@@ -87,7 +86,7 @@ class MockOverlord:
         self.clarification_config.timeout_seconds = 300
         self.clarification_config.style = Mock()
         self.clarification_config.style.value = 'conversational'
-        
+
         self.formation = Mock()
         self.formation.mcp_servers = {"github": {}, "gitlab": {}}
         self.formation.agents = []
@@ -125,7 +124,7 @@ async def test_no_clarification_needed(unified_system):
         session_id="session-456",
         context={"user_id": "user-789"}
     )
-    
+
     assert result.action == "execute"
     assert result.request == "List files in the current directory"
     assert result.mode == "direct"
@@ -142,17 +141,17 @@ async def test_clarification_needed(unified_system):
         "question": "What type of files are you looking for?",
         "confidence": 0.7
     }'''))
-    
+
     result = await unified_system.needs_clarification(
         message="Find something",
         request_id="test-124",
         session_id="session-457"
     )
-    
+
     assert result.action == "clarify"
     assert result.question == "What type of files are you looking for?"
     assert result.mode == "direct"
-    
+
     # Check state was stored
     state = await unified_system.get_state("test-124")
     assert state is not None
@@ -171,19 +170,19 @@ async def test_handle_response_continue_clarification(unified_system):
         mode="direct",
         session_id="session-458"
     )
-    
+
     # Mock LLM to need more clarification
     unified_system.llm.chat = AsyncMock(side_effect=[
         Mock(content="answering"),  # Context switch check
         Mock(content="false"),  # Stop intent check
         Mock(content='{"needs_more": true, "question": "Can you be more specific?"}')  # Need more check
     ])
-    
+
     result = await unified_system.handle_response("test-125", "I need help")
-    
+
     assert result.action == "clarify"
     assert result.question == "Can you be more specific?"
-    
+
     # Check state was updated
     state = await unified_system.get_state("test-125")
     assert state["depth"] == 1
@@ -200,20 +199,20 @@ async def test_handle_response_complete_clarification(unified_system):
         mode="direct",
         session_id="session-459"
     )
-    
+
     # Mock LLM to complete clarification
     unified_system.llm.chat = AsyncMock(side_effect=[
         Mock(content="answering"),  # Context switch check
         Mock(content="false"),  # Stop intent check
         Mock(content='{"needs_more": false, "question": null}')  # Complete
     ])
-    
+
     result = await unified_system.handle_response("test-126", "I need to parse JSON")
-    
+
     assert result.action == "execute"
     assert "Help me with Python" in result.request
     assert "parse JSON" in result.request
-    
+
     # Check state was cleaned up
     state = await unified_system.get_state("test-126")
     assert state is None
@@ -235,12 +234,12 @@ async def test_max_depth_circuit_breaker(unified_system):
         "session_id": "session-460"
     }
     await unified_system._store_state("test-127", state)
-    
+
     result = await unified_system.handle_response("test-127", "more info")
-    
+
     assert result.action == "execute"
     assert "Complex request" in result.request
-    
+
     # Check state was cleaned up
     state = await unified_system.get_state("test-127")
     assert state is None
@@ -262,12 +261,12 @@ async def test_timeout_handling(unified_system):
         "session_id": "session-461"
     }
     await unified_system._store_state("test-128", state)
-    
+
     result = await unified_system.handle_response("test-128", "late response")
-    
+
     assert result.action == "execute"
     assert result.context.get("timeout") is True
-    
+
     # Check state was cleaned up
     state = await unified_system.get_state("test-128")
     assert state is None
@@ -283,17 +282,17 @@ async def test_context_switch_detection(unified_system):
         mode="direct",
         session_id="session-462"
     )
-    
+
     # Mock LLM to detect context switch
     unified_system.llm.chat = AsyncMock(return_value=Mock(content="different"))
-    
+
     result = await unified_system.handle_response("test-129", "tell me a joke")
-    
+
     assert result.action == "execute"
     assert result.request == "tell me a joke"  # Process new request
     assert result.context.get("clarification_cancelled") is True
     assert result.context.get("reason") == "context_switch"
-    
+
     # Check state was cleaned up
     state = await unified_system.get_state("test-129")
     assert state is None
@@ -309,19 +308,19 @@ async def test_stop_intent_detection(unified_system):
         mode="direct",
         session_id="session-463"
     )
-    
+
     # Mock LLM to detect stop intent
     unified_system.llm.chat = AsyncMock(side_effect=[
         Mock(content="answering"),  # No context switch
         Mock(content="true")  # Stop intent detected
     ])
-    
+
     result = await unified_system.handle_response("test-130", "never mind, just do it")
-    
+
     assert result.action == "execute"
     assert "Help with something" in result.request
     assert result.context.get("user_stopped") is True
-    
+
     # Check state was cleaned up
     state = await unified_system.get_state("test-130")
     assert state is None
@@ -338,16 +337,16 @@ async def test_credential_clarification(unified_system):
         {"name": "work-account"}
     ]
     mock_error.original_request = "List my repos"
-    
+
     result = await unified_system.handle_credential_error(
         error=mock_error,
         request_id="test-131"
     )
-    
+
     assert result.action == "clarify"
     assert "GitHub" in result.question or "github" in result.question.lower()
     assert result.mode == "credential"
-    
+
     # Check state was stored
     state = await unified_system.get_state("test-131")
     assert state is not None
@@ -366,15 +365,15 @@ async def test_mode_detection(unified_system):
         "question": "What kind of app are you thinking about?",
         "confidence": 0.8
     }'''))
-    
+
     result = await unified_system.needs_clarification(
         message="Help me design an app",
         request_id="test-132",
         session_id="session-464"
     )
-    
+
     assert result.mode == "brainstorm"
-    
+
     # Check max depth for brainstorm mode
     state = await unified_system.get_state("test-132")
     assert state["max_depth"] == 10  # Brainstorm gets more rounds
@@ -390,15 +389,15 @@ async def test_planning_mode(unified_system):
         "question": "What are the main requirements?",
         "confidence": 0.9
     }'''))
-    
+
     result = await unified_system.needs_clarification(
         message="Help me plan a project",
         request_id="test-133",
         session_id="session-465"
     )
-    
+
     assert result.mode == "planning"
-    
+
     state = await unified_system.get_state("test-133")
     assert state["max_depth"] == 7  # Planning gets 7 rounds
 
@@ -416,7 +415,7 @@ async def test_enhanced_request_building(unified_system):
     assert "Find files" in enhanced
     assert "src directory" in enhanced
     assert ".py extension" in enhanced
-    
+
     # Brainstorm mode
     state = {
         "mode": "brainstorm",
@@ -427,7 +426,7 @@ async def test_enhanced_request_building(unified_system):
     assert "Goal: Design an app" in enhanced
     assert "Discussion:" in enhanced
     assert "task management" in enhanced
-    
+
     # Credential mode
     state = {
         "mode": "credential",
@@ -451,20 +450,20 @@ async def test_concurrent_requests(unified_system):
             session_id=f"session-{i}"
         )
         tasks.append(task)
-    
+
     await asyncio.gather(*tasks)
-    
+
     # Verify all states were created
     for i in range(5):
         state = await unified_system.get_state(f"concurrent-{i}")
         assert state is not None
         assert state["original_request"] == f"Request {i}"
-    
+
     # Clean up one
     await unified_system.cancel_clarification("concurrent-2")
     state = await unified_system.get_state("concurrent-2")
     assert state is None
-    
+
     # Others should still exist
     state = await unified_system.get_state("concurrent-1")
     assert state is not None
@@ -473,21 +472,21 @@ async def test_concurrent_requests(unified_system):
 @pytest.mark.asyncio
 async def test_request_id_vs_session_id(unified_system):
     """Test that request_id is used for state, session_id only for stats"""
-    result = await unified_system.needs_clarification(
+    await unified_system.needs_clarification(
         message="Test message",
         request_id="req-001",
         session_id="sess-001",
         context={"user_id": "user-001"}
     )
-    
+
     # State should be keyed by request_id
     state = await unified_system.get_state("req-001")
     if state:  # Only if clarification was needed
         assert state["request_id"] == "req-001"
         assert state["session_id"] == "sess-001"
-        
+
         # Verify storage key uses request_id
-        key = f"clarification:req-001"
+        key = "clarification:req-001"
         stored = await unified_system.buffer_memory.get(key)
         assert stored is not None
 
@@ -497,13 +496,13 @@ async def test_style_configuration(unified_system):
     """Test that style configuration is used in question generation"""
     # Test conversational style (default)
     assert unified_system.style == "conversational"
-    
+
     # Create system with technical style
     mock_overlord = MockOverlord()
     mock_overlord.config['clarification']['style'] = 'technical'
     tech_system = UnifiedClarificationSystem(mock_overlord)
     assert tech_system.style == 'technical'
-    
+
     # Create system with brief style
     mock_overlord.config['clarification']['style'] = 'brief'
     brief_system = UnifiedClarificationSystem(mock_overlord)
@@ -520,15 +519,15 @@ async def test_execution_mode(unified_system):
         "question": "Should I include hidden files?",
         "confidence": 0.8
     }'''))
-    
+
     result = await unified_system.needs_clarification(
         message="List all files",
         request_id="test-134",
         session_id="session-466"
     )
-    
+
     assert result.mode == "execution"
-    
+
     state = await unified_system.get_state("test-134")
     assert state["max_depth"] == 2  # Execution gets 2 rounds
 
@@ -542,15 +541,15 @@ async def test_cleanup_on_completion(unified_system):
         message="Test request",
         mode="direct"
     )
-    
+
     # Verify it exists
     state = await unified_system.get_state("test-cleanup")
     assert state is not None
     assert "test-cleanup" in unified_system.active_requests
-    
+
     # Clean it up
     await unified_system._cleanup_state("test-cleanup")
-    
+
     # Verify it's gone
     state = await unified_system.get_state("test-cleanup")
     assert state is None
@@ -563,21 +562,21 @@ async def test_no_pattern_matching(unified_system):
     # Check that the system doesn't have any regex patterns
     import inspect
     source = inspect.getsource(UnifiedClarificationSystem)
-    
+
     # These would indicate pattern matching
     assert "re.match" not in source
     assert "re.search" not in source
     assert "regex" not in source.lower()
-    
+
     # Verify LLM is called for decisions
     call_count_before = unified_system.llm.call_count
-    
+
     await unified_system.needs_clarification(
         message="Test",
         request_id="test-no-pattern",
         session_id="test-session"
     )
-    
+
     # LLM should have been called
     assert unified_system.llm.call_count > call_count_before
 
@@ -589,7 +588,7 @@ async def test_max_rounds_configuration():
     overlord = Mock()
     overlord.buffer_memory = MockBufferMemory()
     overlord.default_llm_model = MockLLM()
-    
+
     # Mock clarification config with max_rounds
     config = Mock()
     config.max_questions = 5  # Backward compatibility
@@ -603,12 +602,12 @@ async def test_max_rounds_configuration():
     config.timeout_seconds = 300
     config.style = Mock()
     config.style.value = "conversational"
-    
+
     overlord.clarification_config = config
-    
+
     # Create system
     system = UnifiedClarificationSystem(overlord)
-    
+
     # Test mode-specific limits
     assert system._get_max_depth("direct") == 2
     assert system._get_max_depth("brainstorm") == 15
@@ -624,7 +623,7 @@ async def test_backward_compatibility_max_questions():
     overlord = Mock()
     overlord.buffer_memory = MockBufferMemory()
     overlord.default_llm_model = MockLLM()
-    
+
     # Mock clarification config with only max_questions (old format)
     config = Mock()
     config.max_questions = 7  # Old configuration
@@ -632,12 +631,12 @@ async def test_backward_compatibility_max_questions():
     config.timeout_seconds = 300
     config.style = Mock()
     config.style.value = "formal"
-    
+
     overlord.clarification_config = config
-    
+
     # Create system
     system = UnifiedClarificationSystem(overlord)
-    
+
     # All modes should use max_questions as fallback
     assert system._get_max_depth("direct") == 7
     assert system._get_max_depth("brainstorm") == 7
@@ -652,7 +651,7 @@ async def test_configuration_hierarchy_priority():
     overlord = Mock()
     overlord.buffer_memory = MockBufferMemory()
     overlord.default_llm_model = MockLLM()
-    
+
     # Test 1: max_rounds takes priority over max_questions
     config = Mock()
     config.max_questions = 10  # Should be ignored
@@ -660,17 +659,17 @@ async def test_configuration_hierarchy_priority():
     config.timeout_seconds = 300
     config.style = Mock()
     config.style.value = "brief"
-    
+
     overlord.clarification_config = config
     system = UnifiedClarificationSystem(overlord)
-    
+
     assert system._get_max_depth("direct") == 3  # Uses max_rounds.direct
     assert system._get_max_depth("brainstorm") == 5  # Uses max_rounds.other
-    
+
     # Test 2: max_questions used when max_rounds missing
     config.max_rounds = None
     system = UnifiedClarificationSystem(overlord)
-    
+
     assert system._get_max_depth("direct") == 10  # Uses max_questions
     assert system._get_max_depth("brainstorm") == 10  # Uses max_questions
 
@@ -683,10 +682,10 @@ async def test_sensible_defaults_fallback():
     overlord.buffer_memory = MockBufferMemory()
     overlord.default_llm_model = MockLLM()
     overlord.clarification_config = None  # No configuration
-    
+
     # Create system
     system = UnifiedClarificationSystem(overlord)
-    
+
     # Should use sensible defaults
     assert system._get_max_depth("direct") == 3
     assert system._get_max_depth("brainstorm") == 10
@@ -703,12 +702,12 @@ async def test_credential_mode_updated_to_2_rounds():
     overlord.buffer_memory = MockBufferMemory()
     overlord.default_llm_model = MockLLM()
     overlord.clarification_config = None  # Use defaults
-    
+
     system = UnifiedClarificationSystem(overlord)
-    
+
     # Credential mode should now use 2 rounds instead of 1
     assert system._get_max_depth("credential") == 2
-    
+
     # Test with configuration that doesn't specify credential mode
     config = Mock()
     config.max_questions = 5
@@ -716,13 +715,13 @@ async def test_credential_mode_updated_to_2_rounds():
     config.timeout_seconds = 300
     config.style = Mock()
     config.style.value = "conversational"
-    
+
     overlord.clarification_config = config
     system = UnifiedClarificationSystem(overlord)
-    
+
     # Should still use default of 2 for credential mode
     assert system._get_max_depth("credential") == 5  # Uses max_questions fallback
-    
+
     # But if we remove max_questions, should use sensible default
     config.max_questions = None
     system = UnifiedClarificationSystem(overlord)
@@ -735,7 +734,7 @@ async def test_partial_max_rounds_configuration():
     overlord = Mock()
     overlord.buffer_memory = MockBufferMemory()
     overlord.default_llm_model = MockLLM()
-    
+
     # Config with partial max_rounds and max_questions fallback
     config = Mock()
     config.max_questions = 6  # Fallback for unspecified modes
@@ -747,14 +746,14 @@ async def test_partial_max_rounds_configuration():
     config.timeout_seconds = 300
     config.style = Mock()
     config.style.value = "conversational"
-    
+
     overlord.clarification_config = config
     system = UnifiedClarificationSystem(overlord)
-    
+
     # Specified modes use max_rounds
     assert system._get_max_depth("direct") == 2
     assert system._get_max_depth("planning") == 8
-    
+
     # Unspecified modes fall back to max_questions
     assert system._get_max_depth("brainstorm") == 6
     assert system._get_max_depth("execution") == 6
@@ -766,7 +765,7 @@ async def test_max_rounds_limit_validation():
     """Test that max_rounds values are limited to prevent abuse"""
     from src.muxi.formation.initialization import initialize_clarification_config, MAX_CLARIFICATION_ROUNDS
     from src.muxi.formation.formation import Formation
-    
+
     # Test valid configuration within limit
     formation = Formation()
     formation.config = {
@@ -778,11 +777,11 @@ async def test_max_rounds_limit_validation():
         }
     }
     formation._setup_clarification_config()
-    
+
     # Should not raise an error
     initialize_clarification_config(formation)
     assert formation._clarification_config_obj.max_rounds['direct'] == MAX_CLARIFICATION_ROUNDS
-    
+
     # Test invalid configuration exceeding limit
     formation_invalid = Formation()
     formation_invalid.config = {
@@ -794,11 +793,11 @@ async def test_max_rounds_limit_validation():
         }
     }
     formation_invalid._setup_clarification_config()
-    
+
     # Should raise ValueError
     with pytest.raises(ValueError, match=f"max_rounds.direct must be integer 1-{MAX_CLARIFICATION_ROUNDS}"):
         initialize_clarification_config(formation_invalid)
-    
+
     # Test ridiculously high value
     formation_abuse = Formation()
     formation_abuse.config = {
@@ -809,7 +808,7 @@ async def test_max_rounds_limit_validation():
         }
     }
     formation_abuse._setup_clarification_config()
-    
+
     with pytest.raises(ValueError, match=f"max_rounds.brainstorm must be integer 1-{MAX_CLARIFICATION_ROUNDS}"):
         initialize_clarification_config(formation_abuse)
 

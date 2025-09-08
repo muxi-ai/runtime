@@ -1,6 +1,5 @@
 """Test MCP server authentication via environment variables with user credentials."""
 import pytest
-import asyncio
 from pathlib import Path
 
 from muxi import Formation

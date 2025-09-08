@@ -32,7 +32,7 @@ memory:
         formation_path = Path(tmpdir) / "formation.yaml"
         formation_path.write_text(formation_yaml)
 
-        from muxi.formation.formation import Formation
+        from muxi.formation import Formation  # noqa: E402
 
         formation = Formation()
 
@@ -65,7 +65,7 @@ memory:
         formation_path = Path(tmpdir) / "formation.yaml"
         formation_path.write_text(formation_yaml)
 
-        from muxi.formation.formation import Formation
+        from muxi.formation import Formation  # noqa: E402
 
         formation = Formation()
 
@@ -98,7 +98,7 @@ memory:
         formation_path = Path(tmpdir) / "formation.yaml"
         formation_path.write_text(formation_yaml)
 
-        from muxi.formation.formation import Formation
+        from muxi.formation import Formation  # noqa: E402
 
         formation = Formation()
 
@@ -136,7 +136,7 @@ memory:
         formation_path = Path(tmpdir) / "formation.yaml"
         formation_path.write_text(formation_yaml)
 
-        from muxi.formation.formation import Formation
+        from muxi.formation import Formation  # noqa: E402
 
         formation = Formation()
 
@@ -175,7 +175,7 @@ memory:
         formation_path = Path(tmpdir) / "formation.yaml"
         formation_path.write_text(formation_yaml)
 
-        from muxi.formation.formation import Formation
+        from muxi.formation import Formation  # noqa: E402
 
         formation = Formation()
 
@@ -216,7 +216,7 @@ memory:
         formation_path = Path(tmpdir) / "formation.yaml"
         formation_path.write_text(formation_yaml)
 
-        from muxi.formation.formation import Formation
+        from muxi.formation import Formation  # noqa: E402
 
         formation = Formation()
 

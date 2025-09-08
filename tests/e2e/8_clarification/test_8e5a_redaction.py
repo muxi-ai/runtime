@@ -11,22 +11,22 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from muxi.formation import Formation
-from test_utils import TestContext
+from muxi.formation import Formation  # noqa: E402
+from test_utils import TestContext  # noqa: E402
 
 
 async def test_credential_redaction():
     """Test credential redaction in logs and responses."""
     try:
         print("\n=== Test 8E5a: Credential Redaction ===")
-        
+
         formation_path = Path(__file__).parent / "formations" / "formation-clarification"
         formation = Formation()
         await formation.load(str(formation_path))
-        
+
         overlord = await formation.start_overlord()
         ctx = TestContext("test_8e5a")
-        
+
         print("\n1. Testing credential redaction: 'My token is sk-secret123'")
         response1 = await asyncio.wait_for(
             overlord.chat(
@@ -37,14 +37,14 @@ async def test_credential_redaction():
             ),
             timeout=120.0
         )
-        
+
         print(f"   Response: {response1.content}")
-        
+
         # Should not echo credential back
         assert "sk-secret123" not in response1.content, \
             "Should not echo credential back in response"
         print("   ✅ Credential not echoed in response")
-        
+
         # Should handle appropriately
         response_lower = response1.content.lower()
         security_indicators = ["secure", "redacted", "stored", "not display"]
@@ -52,7 +52,7 @@ async def test_credential_redaction():
                len(response1.content) > 10, \
                "Should handle credential appropriately"
         print("   ✅ Credential handled securely")
-        
+
         print("\n" + "="*40)
         print("\n### Test Result:")
         print("🎉 SUCCESS: Credential redaction working")
@@ -68,7 +68,7 @@ async def test_credential_redaction():
         await formation.stop_overlord()
         formation.shutdown()
         return True
-        
+
     except Exception as e:
         print(f"\n❌ Test 8E5a FAILED: {e}")
         return False

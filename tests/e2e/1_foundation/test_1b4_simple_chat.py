@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_simple_chat():

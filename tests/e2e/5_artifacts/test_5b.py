@@ -10,7 +10,6 @@ Status: ✅ COMPLETED (3/3 PASSED)
 
 import asyncio
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -75,7 +74,7 @@ async def test_5b1_word_document_creation():
         output_file = Path(__file__).parent.parent / "outputs" / "5b1.json"
         output_file.parent.mkdir(exist_ok=True)
 
-        with open(output_file, 'w') as f:
+        with open(output_file, 'w'):
             json.dump({
                 "test": "5B1",
                 "status": "PASSED" if response.artifacts else "FAILED",
@@ -155,7 +154,7 @@ async def test_5b2_pdf_report_generation():
         output_file = Path(__file__).parent.parent / "outputs" / "5b2.json"
         output_file.parent.mkdir(exist_ok=True)
 
-        with open(output_file, 'w') as f:
+        with open(output_file, 'w'):
             json.dump({
                 "test": "5B2",
                 "status": "PASSED" if response.artifacts else "FAILED",
@@ -237,7 +236,7 @@ async def test_5b3_multi_section_documents():
         output_file = Path(__file__).parent.parent / "outputs" / "5b3.json"
         output_file.parent.mkdir(exist_ok=True)
 
-        with open(output_file, 'w') as f:
+        with open(output_file, 'w'):
             json.dump({
                 "test": "5B3",
                 "status": "PASSED" if response.artifacts else "FAILED",
@@ -280,7 +279,7 @@ async def run_test_group_5b():
     total = len(results)
 
     print("\n" + "="*50)
-    print(f"TEST GROUP 5B SUMMARY")
+    print("TEST GROUP 5B SUMMARY")
     print("="*50)
     print(f"Tests passed: {passed}/{total}")
 

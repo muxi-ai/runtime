@@ -3,7 +3,6 @@
 
 import sys
 from pathlib import Path
-import asyncio
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 import time
 import numpy as np
@@ -27,7 +26,7 @@ async def test_workingemory_exact_pattern():
 
         # Configure FAISS for remote mode (exact WorkingMemory code)
         if mode == "remote" and remote:
-            print(f"   Calling faiss.configure() with:")
+            print("   Calling faiss.configure() with:")
             print(f"   - server: {remote.get('url')}")
             print(f"   - api_key: {remote.get('api_key')}")
             print(f"   - tenant_id: {remote.get('tenant')}")
@@ -134,7 +133,7 @@ async def test_with_actual_workingemory():
             remote={"url": "tcp://localhost:45678"}
         )
 
-        print(f"✓ WorkingMemory created")
+        print("✓ WorkingMemory created")
         print(f"  Mode: {buffer.mode}")
         print(f"  Remote config: {buffer.remote}")
         print(f"  Index type: {type(buffer.index)}")
@@ -213,7 +212,7 @@ def main():
         workingemory_result.get("status") == "success"
     ])
 
-    print(f"\n🎯 CONCLUSIONS:")
+    print("\n🎯 CONCLUSIONS:")
     if all_passed:
         remote_class = workingemory_result.get('is_remote_class', False)
         if remote_class:
@@ -226,7 +225,7 @@ def main():
     else:
         print("❌ Pattern replication failed - configuration issues detected")
 
-    print(f"\n💡 NEXT STEPS:")
+    print("\n💡 NEXT STEPS:")
     print("1. Check FAISSx server logs during this test")
     print("2. If logs appear, remote operations are working")
     print("3. If no logs, investigate FAISSx server configuration")

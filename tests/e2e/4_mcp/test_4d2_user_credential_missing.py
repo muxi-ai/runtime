@@ -8,7 +8,7 @@ import json
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation.formation import Formation  # noqa: E402
+from muxi.formation import Formation  # noqa: E402
 
 
 async def run_async_test():
@@ -85,7 +85,7 @@ async def run_async_test():
                         event = json.loads(text.strip())
                         if 'event' in event:
                             captured_events.append(event)
-                    except:
+                    except Exception:
                         pass
 
             def flush(self):
@@ -197,7 +197,7 @@ async def run_async_test():
         # Clean up
         try:
             await formation.stop_overlord(5.0)
-        except:
+        except Exception:
             formation.kill_overlord()
 
 

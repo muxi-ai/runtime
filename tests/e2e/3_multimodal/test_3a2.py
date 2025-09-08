@@ -10,8 +10,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-import pytest
-from muxi.formation.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_image_ocr():
@@ -32,12 +31,14 @@ async def test_image_ocr():
         image_content = f.read()
 
     # Prepare files
-    files = [{
-        "filename": "slide.png",
-        "content": image_content,
-        "content_type": "image/png",
-        "size": len(image_content)
-    }]
+    files = [
+        {
+            "filename": "slide.png",
+            "content": image_content,
+            "content_type": "image/png",
+            "size": len(image_content),
+        }
+    ]
 
     # Test OCR
     test_cases = [
@@ -55,7 +56,7 @@ async def test_image_ocr():
             "name": "Summarize content",
             "message": "Summarize the content shown in this image",
             "expected": ["summary", "content", "image"],
-        }
+        },
     ]
 
     for test in test_cases:
@@ -65,24 +66,25 @@ async def test_image_ocr():
         # Send request with sync forced
         response = await overlord.chat(
             user_id="test_user",
-            message=test['message'],
+            message=test["message"],
             files=files,
             use_async=False,  # Force sync for immediate response
             stream=False,  # Disable streaming for direct response
         )
 
         # Extract response content
-        result = response.content if hasattr(response, 'content') else str(response)
+        result = response.content if hasattr(response, "content") else str(response)
 
         print(f"   Response length: {len(result)} chars")
         print(f"   Response preview: {result[:150]}...")
 
         # Verify response
         result_lower = result.lower()
-        found_keywords = [kw for kw in test['expected'] if kw in result_lower]
+        found_keywords = [kw for kw in test["expected"] if kw in result_lower]
 
-        assert len(found_keywords) >= 2, \
-            f"Expected at least 2 keywords from {test['expected']}, found: {found_keywords}"
+        assert (
+            len(found_keywords) >= 2
+        ), f"Expected at least 2 keywords from {test['expected']}, found: {found_keywords}"
 
         print(f"   ✅ Found keywords: {found_keywords}")
 
@@ -109,12 +111,14 @@ async def test_visual_analysis():
         image_content = f.read()
 
     # Prepare files
-    files = [{
-        "filename": "chart.png",
-        "content": image_content,
-        "content_type": "image/png",
-        "size": len(image_content)
-    }]
+    files = [
+        {
+            "filename": "chart.png",
+            "content": image_content,
+            "content_type": "image/png",
+            "size": len(image_content),
+        }
+    ]
 
     # Test visual analysis
     test_cases = [
@@ -132,7 +136,7 @@ async def test_visual_analysis():
             "name": "Extract key elements",
             "message": "What are the key elements and components in this visual?",
             "expected": ["element", "component", "key"],
-        }
+        },
     ]
 
     for test in test_cases:
@@ -142,23 +146,24 @@ async def test_visual_analysis():
         # Send request with sync forced
         response = await overlord.chat(
             user_id="test_user",
-            message=test['message'],
+            message=test["message"],
             files=files,
             use_async=False,  # Force sync
             stream=False,  # Disable streaming
         )
 
-        result = response.content if hasattr(response, 'content') else str(response)
+        result = response.content if hasattr(response, "content") else str(response)
 
         print(f"   Response length: {len(result)} chars")
         print(f"   Response preview: {result[:150]}...")
 
         # Verify response
         result_lower = result.lower()
-        found_keywords = [kw for kw in test['expected'] if kw in result_lower]
+        found_keywords = [kw for kw in test["expected"] if kw in result_lower]
 
-        assert len(found_keywords) >= 2, \
-            f"Expected at least 2 keywords from {test['expected']}, found: {found_keywords}"
+        assert (
+            len(found_keywords) >= 2
+        ), f"Expected at least 2 keywords from {test['expected']}, found: {found_keywords}"
 
         print(f"   ✅ Found keywords: {found_keywords}")
 
@@ -193,14 +198,14 @@ async def test_multiple_images():
             "filename": "chart.png",
             "content": image1_content,
             "content_type": "image/png",
-            "size": len(image1_content)
+            "size": len(image1_content),
         },
         {
             "filename": "photo.jpg",
             "content": image2_content,
             "content_type": "image/jpeg",
-            "size": len(image2_content)
-        }
+            "size": len(image2_content),
+        },
     ]
 
     print(f"📁 Testing with {len(files)} images")
@@ -214,14 +219,15 @@ async def test_multiple_images():
         stream=False,
     )
 
-    result = response.content if hasattr(response, 'content') else str(response)
+    result = response.content if hasattr(response, "content") else str(response)
     print(f"\n📄 Response length: {len(result)} chars")
     print(f"📄 Response preview: {result[:200]}...")
 
     # Verify response mentions multiple images
     result_lower = result.lower()
-    assert any(word in result_lower for word in ["first", "second", "both", "image", "comparison"]), \
-        "Should discuss multiple images"
+    assert any(
+        word in result_lower for word in ["first", "second", "both", "image", "comparison"]
+    ), "Should discuss multiple images"
 
     print("✅ Multiple image processing successful!")
 
@@ -235,10 +241,10 @@ if __name__ == "__main__":
 
     # Run tests sequentially
     asyncio.run(test_image_ocr())
-    print("\n" + "="*60 + "\n")
+    print("\n" + "=" * 60 + "\n")
 
     asyncio.run(test_visual_analysis())
-    print("\n" + "="*60 + "\n")
+    print("\n" + "=" * 60 + "\n")
 
     asyncio.run(test_multiple_images())
 

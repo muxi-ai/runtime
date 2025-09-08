@@ -5,7 +5,6 @@ Test that overlord correctly routes queries to appropriate agents and uses their
 import asyncio
 import sys
 from pathlib import Path
-import json
 
 sys.path.insert(0, '../../..')
 
@@ -53,7 +52,7 @@ async def test_overlord_routing_with_knowledge():
     print(f"✓ Routing correct: {'YES' if agent_used == 'muxi' else 'NO'}")
 
     # Check if response uses knowledge
-    print(f"\n📄 Response (first 400 chars):")
+    print("\n📄 Response (first 400 chars):")
     print(f"{response_text[:400]}...")
 
     # Verify pricing information is included
@@ -88,7 +87,7 @@ async def test_overlord_routing_with_knowledge():
     print(f"✓ Routing correct: {'YES' if agent_used == 'automaze' else 'NO'}")
 
     # Check if response uses knowledge
-    print(f"\n📄 Response (first 400 chars):")
+    print("\n📄 Response (first 400 chars):")
     print(f"{response_text[:400]}...")
 
     # Verify service information is included

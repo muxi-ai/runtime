@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """Unit tests for Dead Code Detector"""
 
-import ast
 import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import sys
-import os
 
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'dead-code'))

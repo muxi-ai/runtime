@@ -10,7 +10,7 @@ import asyncio
 from muxi.services.db import get_database_manager
 from muxi.services.memory.long_term import LongTermMemory, User, Memory
 from muxi.services.secrets.secrets_manager import SecretsManager
-from sqlalchemy import select, func
+from sqlalchemy import func
 
 # Create mock LLM for embedding
 class MockLLM:
@@ -23,7 +23,7 @@ async def main():
     secrets = SecretsManager(str(Path(__file__).parent / "formations" / "formation-memory"))
     postgres_uri = await secrets.get_secret("POSTGRES_URI")
 
-    print(f"Connecting to database...")
+    print("Connecting to database...")
 
     # Create database manager
     db_manager = get_database_manager(postgres_uri)

@@ -7,7 +7,7 @@ import os
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 import asyncio  # noqa: E402
-from muxi.formation.formation import Formation  # noqa: E402
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_formation_buffer_config():
@@ -18,13 +18,27 @@ async def test_formation_buffer_config():
     try:
         # Test loading local buffer formation
         formation_local = Formation()
-        await formation_local.load(str(Path(__file__).parent / "formations" / "formation-memory" / "formation-buffer-local.yaml"))
+        await formation_local.load(
+            str(
+                Path(__file__).parent
+                / "formations"
+                / "formation-memory"
+                / "formation-buffer-local.yaml"
+            )
+        )
         formations.append(formation_local)
         print("✓ Local buffer formation loaded successfully")
 
         # Test loading remote buffer formation
         formation_remote = Formation()
-        await formation_remote.load(str(Path(__file__).parent / "formations" / "formation-memory" / "formation-buffer-remote.yaml"))
+        await formation_remote.load(
+            str(
+                Path(__file__).parent
+                / "formations"
+                / "formation-memory"
+                / "formation-buffer-remote.yaml"
+            )
+        )
         formations.append(formation_remote)
         print("✓ Remote buffer formation loaded successfully")
 
@@ -82,7 +96,14 @@ async def test_buffer_memory_functionality():
     try:
         # Load formation with local buffer
         formation = Formation()
-        await formation.load(str(Path(__file__).parent / "formations" / "formation-memory" / "formation-buffer-local.yaml"))
+        await formation.load(
+            str(
+                Path(__file__).parent
+                / "formations"
+                / "formation-memory"
+                / "formation-buffer-local.yaml"
+            )
+        )
         overlord = await formation.start_overlord()
         print("✓ Overlord started with local buffer memory")
 
@@ -90,11 +111,11 @@ async def test_buffer_memory_functionality():
         print("\nTesting conversation context retention...")
 
         # First message
-        response1 = await overlord.chat(
+        await overlord.chat(
             "My name is Alice and I work at TechCorp.",
             user_id="test_user",
             use_async=False,
-            stream=False  # Explicitly disable streaming
+            stream=False,  # Explicitly disable streaming
         )
         print("  - First message processed")
 
@@ -107,23 +128,21 @@ async def test_buffer_memory_functionality():
             "What did I just say?",
             user_id="test_user",
             use_async=False,
-            stream=False  # Explicitly disable streaming
+            stream=False,  # Explicitly disable streaming
         )
         # Handle response properly
-        if hasattr(response2, '__aiter__'):  # It's an async generator
+        if hasattr(response2, "__aiter__"):  # It's an async generator
             response2_text = ""
             async for chunk in response2:
                 response2_text += chunk
         else:
-            response2_text = response2.content if hasattr(response2, 'content') else str(response2)
+            response2_text = response2.content if hasattr(response2, "content") else str(response2)
 
         print("  - Second message processed")
         print(f"  - Response: {response2_text}")
 
         # Check if context was retained - should mention Alice or TechCorp
-        context_retained = (
-            "alice" in response2_text.lower() or "techcorp" in response2_text.lower()
-        )
+        context_retained = "alice" in response2_text.lower() or "techcorp" in response2_text.lower()
         print(f"  - Context retained: {'✅' if context_retained else '❌'}")
 
         return {"functionality": "success", "context_retained": context_retained}

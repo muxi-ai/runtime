@@ -34,7 +34,7 @@ async def test_multi_user_faissx():
         api_key=openai_api_key
     )
 
-    print(f"Using real embeddings: openai/text-embedding-3-large (optimized for similarity)")
+    print("Using real embeddings: openai/text-embedding-3-large (optimized for similarity)")
 
     # Create multiple users with same tenant (they should share vector space)
     users = [
@@ -58,8 +58,8 @@ async def test_multi_user_faissx():
             }
         )
 
-        print(f"✓ Buffer created for multi-user FAISSx")
-        print(f"  - Server URL: tcp://localhost:45678")
+        print("✓ Buffer created for multi-user FAISSx")
+        print("  - Server URL: tcp://localhost:45678")
         print(f"  - Tenant ID: {tenant_id}")
         print(f"  - Buffer capacity: {buffer.buffer_size}")
 
@@ -112,7 +112,7 @@ async def test_multi_user_faissx():
         bob_found = any(r.get('metadata', {}).get('user_id') == 'bob' for r in web_results)
         charlie_found = any(r.get('metadata', {}).get('user_id') == 'charlie' for r in rust_results)
 
-        print(f"\n✓ User data retrieval:")
+        print("\n✓ User data retrieval:")
         print(f"  - Alice's Python data found: {'✅' if alice_found else '❌'}")
         print(f"  - Bob's JavaScript data found: {'✅' if bob_found else '❌'}")
         print(f"  - Charlie's Rust data found: {'✅' if charlie_found else '❌'}")
@@ -187,9 +187,9 @@ async def test_tenant_isolation():
             }
         )
 
-        print(f"✓ Created buffers for two different tenants")
-        print(f"  - Tenant 1: tenant-alpha")
-        print(f"  - Tenant 2: tenant-beta")
+        print("✓ Created buffers for two different tenants")
+        print("  - Tenant 1: tenant-alpha")
+        print("  - Tenant 2: tenant-beta")
 
         # Add different data to each tenant
         print("\nAdding tenant-specific data...")
@@ -244,7 +244,7 @@ async def test_tenant_isolation():
         isolation_working = tenant1_has_quantum and tenant1_no_blockchain and \
                           tenant2_has_blockchain and tenant2_no_quantum
 
-        print(f"\n✓ Tenant isolation results:")
+        print("\n✓ Tenant isolation results:")
         print(f"  - Tenant Alpha has quantum data: {'✅' if tenant1_has_quantum else '❌'}")
         print(f"  - Tenant Alpha isolated from blockchain: {'✅' if tenant1_no_blockchain else '❌'}")
         print(f"  - Tenant Beta has blockchain data: {'✅' if tenant2_has_blockchain else '❌'}")
@@ -292,7 +292,7 @@ async def test_user_search_relevance():
         api_key=openai_api_key
     )
 
-    print(f"Using real embeddings for relevance testing")
+    print("Using real embeddings for relevance testing")
 
     try:
         # Create buffer for relevance testing
@@ -309,7 +309,7 @@ async def test_user_search_relevance():
             }
         )
 
-        print(f"✓ Created buffer for relevance testing")
+        print("✓ Created buffer for relevance testing")
         print(f"  - Tenant: {tenant_id}")
 
         # Add diverse user data
@@ -371,7 +371,7 @@ async def test_user_search_relevance():
         charlie_relevance = charlie_count / max(len(ml_results), 1) * 100
         avg_relevance = (alice_relevance + bob_relevance + charlie_relevance) / 3
 
-        print(f"\n✓ Relevance scores (with real embeddings):")
+        print("\n✓ Relevance scores (with real embeddings):")
         print(f"  - Alice's content relevance: {alice_relevance:.0f}%")
         print(f"  - Bob's content relevance: {bob_relevance:.0f}%")
         print(f"  - Charlie's content relevance: {charlie_relevance:.0f}%")

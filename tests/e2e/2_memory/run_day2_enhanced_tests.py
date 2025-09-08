@@ -5,7 +5,6 @@ Run all enhanced Day 2 memory tests
 import sys
 import asyncio
 import subprocess
-from pathlib import Path
 
 # Test groups with descriptions
 TEST_GROUPS = {

@@ -1,9 +1,7 @@
 """Unit tests for KV store FIFO cleanup functionality in WorkingMemory."""
 
-import asyncio
 import time
 import unittest
-from unittest.mock import MagicMock, AsyncMock
 import sys
 from pathlib import Path
 

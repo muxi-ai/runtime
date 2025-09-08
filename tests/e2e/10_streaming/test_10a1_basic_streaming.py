@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation.formation import Formation  # noqa: E402
+from muxi.formation import Formation  # noqa: E402
 from muxi.services.streaming import get_streaming_llm_config  # noqa: E402
 
 
@@ -67,14 +67,14 @@ async def main():
         print("\n📊 Results:")
         if stream_events:
             print(f"   ✅ Received {len(stream_events)} streaming chunks")
-            
+
             # Check content quality
             full_response = "".join(stream_events)
             if "quantum" in full_response.lower():
                 print("   ✅ Response contains relevant content about quantum computing")
             else:
                 print("   ⚠️ Response may not contain expected content")
-                
+
             print(f"   Total response length: {len(full_response)} characters")
         else:
             print("   ❌ No streaming chunks received")

@@ -1,7 +1,5 @@
 """Test MCP server authentication via environment variables."""
 import pytest
-import os
-import asyncio
 from pathlib import Path
 
 from muxi import Formation
@@ -140,7 +138,7 @@ async def test_mcp_env_auth_user_credentials():
         from muxi.services.secrets import UserCredentialStore
         
         # Get user directory
-        user_dir = get_user_dir(f"users/test_user")
+        user_dir = get_user_dir("users/test_user")
         
         # Initialize credential store
         cred_store = UserCredentialStore(str(user_dir))

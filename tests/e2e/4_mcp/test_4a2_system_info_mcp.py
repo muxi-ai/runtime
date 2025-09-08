@@ -3,10 +3,11 @@
 
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 import asyncio
 
-from muxi.formation.formation import Formation
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+from muxi.formation import Formation  # noqa: E402
+
 
 async def test_system_info_mcp():
     """Test system info MCP operations"""
@@ -27,20 +28,23 @@ async def test_system_info_mcp():
             "What is the current CPU usage and available memory on this system?",
             user_id="user1",
             use_async=False,
-            stream=False
+            stream=False,
         )
 
         print(f"Response: {response}")
 
         # Verify response contains system stats
-        response_text = response.content if hasattr(response, 'content') else str(response)
+        response_text = response.content if hasattr(response, "content") else str(response)
         response_lower = response_text.lower()
-        assert any(term in response_lower for term in ["cpu", "processor"]), \
-            "Response should mention CPU"
-        assert any(term in response_lower for term in ["memory", "ram", "gb", "mb"]), \
-            "Response should mention memory"
-        assert any(char in response_text for char in ["%", "percent"]) or "usage" in response_lower, \
-            "Response should include usage statistics"
+        assert any(
+            term in response_lower for term in ["cpu", "processor"]
+        ), "Response should mention CPU"
+        assert any(
+            term in response_lower for term in ["memory", "ram", "gb", "mb"]
+        ), "Response should mention memory"
+        assert (
+            any(char in response_text for char in ["%", "percent"]) or "usage" in response_lower
+        ), "Response should include usage statistics"
         print("✓ CPU and memory stats retrieved successfully")
 
         print("\n2. Testing detailed system information...")
@@ -48,16 +52,17 @@ async def test_system_info_mcp():
             "Give me detailed system information including CPU cores, total memory, and disk usage",
             user_id="user1",
             use_async=False,
-            stream=False
+            stream=False,
         )
 
         print(f"Response: {response}")
 
         # Should have more detailed information
-        response_text = response.content if hasattr(response, 'content') else str(response)
+        response_text = response.content if hasattr(response, "content") else str(response)
         response_lower = response_text.lower()
-        assert any(term in response_lower for term in ["core", "thread", "processor"]), \
-            "Response should mention CPU cores/threads"
+        assert any(
+            term in response_lower for term in ["core", "thread", "processor"]
+        ), "Response should mention CPU cores/threads"
         assert len(response_text) > 100, "Detailed response should be substantial"
         print("✓ Detailed system information retrieved successfully")
 
@@ -66,17 +71,17 @@ async def test_system_info_mcp():
             "What percentage of memory is currently being used?",
             user_id="user1",
             use_async=False,
-            stream=False
+            stream=False,
         )
 
         print(f"Response: {response}")
 
         # Should have memory percentage
-        response_text = response.content if hasattr(response, 'content') else str(response)
+        response_text = response.content if hasattr(response, "content") else str(response)
         response_lower = response_text.lower()
-        assert any(char in response_text for char in ["%", "percent"]) or \
-               any(term in response_lower for term in ["memory", "ram"]), \
-            "Response should include memory percentage"
+        assert any(char in response_text for char in ["%", "percent"]) or any(
+            term in response_lower for term in ["memory", "ram"]
+        ), "Response should include memory percentage"
         print("✓ Specific metric query successful")
 
         print("\n4. Testing system uptime information...")
@@ -84,17 +89,18 @@ async def test_system_info_mcp():
             "How long has this system been running (uptime)?",
             user_id="user1",
             use_async=False,
-            stream=False
+            stream=False,
         )
 
         print(f"Response: {response}")
 
         # Should have uptime information
-        response_text = response.content if hasattr(response, 'content') else str(response)
+        response_text = response.content if hasattr(response, "content") else str(response)
         response_lower = response_text.lower()
-        assert any(term in response_lower for term in
-                  ["uptime", "running", "hours", "days", "minutes", "boot", "started"]), \
-            "Response should include uptime information"
+        assert any(
+            term in response_lower
+            for term in ["uptime", "running", "hours", "days", "minutes", "boot", "started"]
+        ), "Response should include uptime information"
         print("✓ System uptime query successful")
 
         print("\n5. Testing disk space information...")
@@ -102,17 +108,18 @@ async def test_system_info_mcp():
             "Show me the available disk space on the main drive",
             user_id="user1",
             use_async=False,
-            stream=False
+            stream=False,
         )
 
         print(f"Response: {response}")
 
         # Should have disk space information
-        response_text = response.content if hasattr(response, 'content') else str(response)
+        response_text = response.content if hasattr(response, "content") else str(response)
         response_lower = response_text.lower()
-        assert any(term in response_lower for term in
-                  ["disk", "space", "storage", "gb", "tb", "available", "free"]), \
-            "Response should include disk space information"
+        assert any(
+            term in response_lower
+            for term in ["disk", "space", "storage", "gb", "tb", "available", "free"]
+        ), "Response should include disk space information"
         print("✓ Disk space query successful")
 
         # Stop the overlord
@@ -124,8 +131,10 @@ async def test_system_info_mcp():
     except Exception as e:
         print(f"\n❌ Test 4A2 FAILED with error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 if __name__ == "__main__":
     success = asyncio.run(test_system_info_mcp())

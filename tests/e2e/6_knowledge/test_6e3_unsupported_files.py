@@ -243,7 +243,7 @@ knowledge:
         # Cleanup
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
-            print(f"\n✓ Cleaned up temporary directory")
+            print("\n✓ Cleaned up temporary directory")
 
 
 def main():

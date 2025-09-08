@@ -6,10 +6,9 @@ simple credentials inline while redirecting complex authentication flows.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from dataclasses import dataclass
+from unittest.mock import AsyncMock, MagicMock
 
-from muxi.formation.overlord.clarification import UnifiedClarificationSystem, ClarificationResult
+from muxi.formation.overlord.clarification import UnifiedClarificationSystem
 
 
 class TestDynamicMode:

@@ -57,7 +57,7 @@ async def run_test():
             print(f"   Response: {response}")
             # Check for artifacts in the response
             if hasattr(response, 'artifacts'):
-                print(f"✅ Response has artifacts attribute")
+                print("✅ Response has artifacts attribute")
 
                 if response.artifacts and len(response.artifacts) > 0:
                     print(f"✅ Found {len(response.artifacts)} artifact(s) in response!")
@@ -79,9 +79,9 @@ async def run_test():
                         # Check for data URL
                         if hasattr(artifact, 'data_url') and artifact.data_url:
                             if artifact.data_url.startswith("data:"):
-                                print(f"   ✅ Valid base64 data URL present")
+                                print("   ✅ Valid base64 data URL present")
                             else:
-                                print(f"   ⚠️ Data URL present but unexpected format")
+                                print("   ⚠️ Data URL present but unexpected format")
 
                     if pdf_found:
                         print("\n" + "="*60)
@@ -134,7 +134,7 @@ async def run_test():
                 print("\nShutting down...")
                 await formation.kill_overlord()
                 formation.shutdown()
-            except:
+            except Exception:
                 pass
 
 

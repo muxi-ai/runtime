@@ -4,13 +4,10 @@ Simple Formation Loading Test - Day 1 Foundation
 This test verifies basic formation loading without starting the overlord.
 """
 import pytest
-import os
-import asyncio
 from pathlib import Path
 from muxi.formation import Formation
 from muxi.datatypes.exceptions import (
     ConfigurationNotFoundError,
-    ConfigurationValidationError,
 )
 
 
@@ -69,12 +66,10 @@ class TestSimpleFormationLoading:
 
         # First load
         await formation.load(str(Path(__file__).parent / "formations" / "formation-basic"))
-        first_id = formation.formation_id
 
         # Cannot load while running (if we started overlord)
         # But since we haven't started, we should be able to load again
         await formation.load(str(Path(__file__).parent / "formations" / "formation-multi-agent"))
-        second_id = formation.formation_id
 
         # Formation ID might change based on config
         assert formation.config is not None

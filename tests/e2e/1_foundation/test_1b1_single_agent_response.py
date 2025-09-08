@@ -3,13 +3,12 @@ Day 1 - Test Group 1B: Basic Agent Communication Tests
 
 Tests basic agent responses and multi-agent routing functionality.
 """
-import pytest
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 class TestBasicCommunication:
@@ -23,10 +22,12 @@ class TestBasicCommunication:
         overlord = await formation.start_overlord()
 
         # Test basic helpfulness query
-        response = await overlord.chat("What can you help me with?", user_id="test_user", stream=False)
+        response = await overlord.chat(
+            "What can you help me with?", user_id="test_user", stream=False
+        )
         assert response is not None
         # Response is MuxiResponse object, extract content
-        response_text = response.content if hasattr(response, 'content') else str(response)
+        response_text = response.content if hasattr(response, "content") else str(response)
         assert len(response_text) > 0
 
         # Verify response mentions helping (case-insensitive)
@@ -36,7 +37,7 @@ class TestBasicCommunication:
         # Test another simple interaction
         response2 = await overlord.chat("Tell me a fun fact", user_id="test_user", stream=False)
         assert response2 is not None
-        response2_text = response2.content if hasattr(response2, 'content') else str(response2)
+        response2_text = response2.content if hasattr(response2, "content") else str(response2)
         assert len(response2_text) > 0
 
         await formation.stop_overlord()
@@ -51,18 +52,26 @@ class TestBasicCommunication:
         # Test 1: Math query should route to appropriate agent
         response = await overlord.chat("Calculate 2+2", stream=False, user_id="test_user")
         assert response is not None
-        response_text = response.content if hasattr(response, 'content') else str(response)
+        response_text = response.content if hasattr(response, "content") else str(response)
         assert "4" in response_text
 
         # Test 2: Different types of queries for routing
         # Research query
-        research_response = await overlord.chat("What are the latest trends in renewable energy?", stream=False, user_id="test_user")
+        research_response = await overlord.chat(
+            "What are the latest trends in renewable energy?", stream=False, user_id="test_user"
+        )
         assert research_response is not None
-        research_text = research_response.content if hasattr(research_response, 'content') else str(research_response)
+        research_text = (
+            research_response.content
+            if hasattr(research_response, "content")
+            else str(research_response)
+        )
         assert len(research_text) > 50  # Should be substantive
 
         # General query
-        general_response = await overlord.chat("How are you today?", stream=False, user_id="test_user")
+        general_response = await overlord.chat(
+            "How are you today?", stream=False, user_id="test_user"
+        )
         assert general_response is not None
 
         await formation.stop_overlord()
@@ -79,14 +88,14 @@ class TestBasicCommunication:
             "Hello",
             "What's the weather like?",
             "Can you help me learn Python?",
-            "What's 10 divided by 2?"
+            "What's 10 divided by 2?",
         ]
 
         responses = []
         for query in queries:
             response = await overlord.chat(query, stream=False, user_id="test_user")
             assert response is not None
-            response_text = response.content if hasattr(response, 'content') else str(response)
+            response_text = response.content if hasattr(response, "content") else str(response)
             assert len(response_text) > 0
             assert not response_text.isspace()  # Not just whitespace
             responses.append(response_text)

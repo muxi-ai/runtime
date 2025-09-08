@@ -16,7 +16,7 @@ def test_minimal_yaml_loading():
     with open(formation_path, 'r') as f:
         config = yaml.safe_load(f)
 
-    print(f"✓ YAML loaded successfully!")
+    print("✓ YAML loaded successfully!")
     print(f"Config keys: {list(config.keys())}")
     print(f"Schema: {config.get('schema')}")
     print(f"ID: {config.get('id')}")

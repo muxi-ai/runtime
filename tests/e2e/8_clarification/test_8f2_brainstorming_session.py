@@ -164,10 +164,8 @@ async def test_brainstorming_session():
         print(f"✓ Brainstorming elements explored: {', '.join(brainstorm_elements)}")
 
         # Check if system built on previous answers
-        building_on_answers = False
         if 'gamification' in response4.content.lower() or 'game' in response4.content.lower():
             if 'challenge' in response5.content.lower() or 'badge' in response5.content.lower():
-                building_on_answers = True
                 print("✓ System built upon previous answers (gamification → specific game features)")
 
         # Check final synthesis (already set in approval handling above)

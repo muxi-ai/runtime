@@ -9,7 +9,7 @@ import yaml
 import json
 from fastapi.testclient import TestClient
 
-from muxi.formation.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 from muxi.formation.server.server import FormationServer
 from muxi.services.secrets.secrets_manager import SecretsManager
 

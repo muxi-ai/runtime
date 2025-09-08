@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_basic_formation():
@@ -73,7 +73,7 @@ async def test_basic_formation():
     print("\n4. Testing chat structure...")
     try:
         # This will fail due to no API key, but we're testing the structure
-        response = await overlord.chat(
+        await overlord.chat(
             message="Hello, this is a test",
             user_id="test_user"
         )

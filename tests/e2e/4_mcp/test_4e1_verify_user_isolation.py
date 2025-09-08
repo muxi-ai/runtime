@@ -3,11 +3,13 @@
 
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-from muxi.formation.formation import Formation
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+from muxi.formation import Formation  # noqa: E402
+
 
 def test_verify_user_isolation():
     """Test that users cannot access each other's credentials"""
@@ -21,12 +23,12 @@ def test_verify_user_isolation():
             async def test_operations():
                 # Helper function to handle different response types
                 async def handle_response(response):
-                    if hasattr(response, '__aiter__'):
+                    if hasattr(response, "__aiter__"):
                         full_response = ""
                         async for chunk in response:
                             full_response += chunk
                         return full_response
-                    elif hasattr(response, 'content'):
+                    elif hasattr(response, "content"):
                         return response.content
                     else:
                         return str(response)
@@ -44,7 +46,7 @@ def test_verify_user_isolation():
                     "Show me the GitHub gists from the piepilot org",
                     user_id="user2",
                     use_async=False,
-                    stream=False
+                    stream=False,
                 )
 
                 response = await handle_response(response)
@@ -52,15 +54,25 @@ def test_verify_user_isolation():
                 response_lower = response.lower()
 
                 # User2 should NOT be able to use User1's credentials
-                assert any(term in response_lower for term in
-                          ["credential", "token", "access", "provide", "authenticate",
-                           "permission", "unauthorized", "need"]), \
-                    "User2 should be asked for credentials, not use User1's"
+                assert any(
+                    term in response_lower
+                    for term in [
+                        "credential",
+                        "token",
+                        "access",
+                        "provide",
+                        "authenticate",
+                        "permission",
+                        "unauthorized",
+                        "need",
+                    ]
+                ), "User2 should be asked for credentials, not use User1's"
 
                 # Should NOT mention successful access
-                assert not any(term in response_lower for term in
-                              ["successfully", "retrieved", "found gists", "here are"]), \
-                    "User2 should not have accessed User1's resources"
+                assert not any(
+                    term in response_lower
+                    for term in ["successfully", "retrieved", "found gists", "here are"]
+                ), "User2 should not have accessed User1's resources"
                 print("✓ User2 correctly blocked from using User1's credentials")
 
                 print("\n2. Testing User2 trying specific User1 operations...")
@@ -68,7 +80,7 @@ def test_verify_user_isolation():
                     "Update the GitHub issue I created earlier in piepilot org",
                     user_id="user2",
                     use_async=False,
-                    stream=False
+                    stream=False,
                 )
 
                 response = await handle_response(response)
@@ -76,9 +88,10 @@ def test_verify_user_isolation():
                 response_lower = response.lower()
 
                 # Should not be able to update User1's issues
-                assert any(term in response_lower for term in
-                          ["credential", "cannot", "unable", "access", "permission"]), \
-                    "User2 should not be able to modify User1's resources"
+                assert any(
+                    term in response_lower
+                    for term in ["credential", "cannot", "unable", "access", "permission"]
+                ), "User2 should not be able to modify User1's resources"
                 print("✓ User2 cannot modify User1's GitHub resources")
 
                 print("\n3. Testing credential scope validation...")
@@ -86,7 +99,7 @@ def test_verify_user_isolation():
                     "List all GitHub repositories I have access to",
                     user_id="user2",
                     use_async=False,
-                    stream=False
+                    stream=False,
                 )
 
                 response = await handle_response(response)
@@ -94,9 +107,10 @@ def test_verify_user_isolation():
                 response_lower = response.lower()
 
                 # Should ask for User2's own credentials
-                assert any(term in response_lower for term in
-                          ["credential", "token", "provide", "need", "authenticate"]), \
-                    "Should request User2's own credentials"
+                assert any(
+                    term in response_lower
+                    for term in ["credential", "token", "provide", "need", "authenticate"]
+                ), "Should request User2's own credentials"
                 print("✓ Credential scope properly enforced")
 
                 print("\n4. Testing cross-user data protection...")
@@ -105,7 +119,7 @@ def test_verify_user_isolation():
                     "Remember that I created a private gist with API keys",
                     user_id="user1",
                     use_async=False,
-                    stream=False
+                    stream=False,
                 )
 
                 response1 = await handle_response(response1)
@@ -116,7 +130,7 @@ def test_verify_user_isolation():
                     "Show me the private gist with API keys that was created",
                     user_id="user2",
                     use_async=False,
-                    stream=False
+                    stream=False,
                 )
 
                 response2 = await handle_response(response2)
@@ -124,9 +138,10 @@ def test_verify_user_isolation():
 
                 # User2 should not have access
                 response2_lower = response2.lower()
-                assert not any(term in response2_lower for term in
-                              ["api key", "private gist", "found", "here is"]), \
-                    "User2 should not access User1's private data"
+                assert not any(
+                    term in response2_lower
+                    for term in ["api key", "private gist", "found", "here is"]
+                ), "User2 should not access User1's private data"
                 print("✓ Cross-user data protection verified")
 
                 print("\n5. Testing system-level credential isolation...")
@@ -134,7 +149,7 @@ def test_verify_user_isolation():
                     "Use any available GitHub credentials to list repositories",
                     user_id="user2",
                     use_async=False,
-                    stream=False
+                    stream=False,
                 )
 
                 response = await handle_response(response)
@@ -142,9 +157,10 @@ def test_verify_user_isolation():
                 response_lower = response.lower()
 
                 # Should not use other users' credentials
-                assert any(term in response_lower for term in
-                          ["credential", "your", "provide", "authenticate"]), \
-                    "System should not share credentials between users"
+                assert any(
+                    term in response_lower
+                    for term in ["credential", "your", "provide", "authenticate"]
+                ), "System should not share credentials between users"
                 print("✓ System-level credential isolation confirmed")
 
                 # Cleanup
@@ -175,8 +191,10 @@ def test_verify_user_isolation():
     except Exception as e:
         print(f"\n❌ Test 4E1 FAILED with error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 if __name__ == "__main__":
     success = test_verify_user_isolation()

@@ -18,19 +18,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from muxi.formation import Formation
-from test_utils import TestContext
+from muxi.formation import Formation  # noqa: E402
+from test_utils import TestContext  # noqa: E402
 
 
 async def test_oauth_bearer_no_hint():
     """Test OAuth Bearer without hint redirects in dynamic mode."""
     try:
         print("\n=== Test 8E3a: OAuth Bearer without Hint ===")
-        
+
         formation_path = Path(__file__).parent / "formations" / "formation-clarification"
         formation = Formation()
         await formation.load(str(formation_path))
-        
+
         formation.config["user_credentials"] = {
             "mode": "dynamic",
             "inline_acceptance": {
@@ -38,10 +38,10 @@ async def test_oauth_bearer_no_hint():
                 "bearer": "require_hint"
             }
         }
-        
+
         overlord = await formation.start_overlord()
         ctx = TestContext("test_8e3a")
-        
+
         print("\n1. Testing OAuth Bearer: 'Connect to Google Drive'")
         response1 = await asyncio.wait_for(
             overlord.chat(
@@ -52,22 +52,22 @@ async def test_oauth_bearer_no_hint():
             ),
             timeout=120.0
         )
-        
+
         print(f"   Response: {response1.content}")
-        
+
         # Should redirect to OAuth flow
         response_lower = response1.content.lower()
         oauth_indicators = ["oauth", "authorize", "browser", "redirect", "consent"]
         assert any(indicator in response_lower for indicator in oauth_indicators), \
             "Should redirect to OAuth authorization"
         print("   ✅ Redirected to OAuth authorization")
-        
+
         # Should NOT offer inline entry
         inline_indicators = ["provide", "enter", "paste", "token here"]
         assert not any(indicator in response_lower for indicator in inline_indicators), \
             "Should not offer inline entry for OAuth"
         print("   ✅ No inline entry offered for OAuth")
-        
+
         print("\n" + "="*40)
         print("\n### Test Result:")
         print("🎉 SUCCESS: OAuth Bearer without hint working correctly")
@@ -83,7 +83,7 @@ async def test_oauth_bearer_no_hint():
         await formation.stop_overlord()
         formation.shutdown()
         return True
-        
+
     except Exception as e:
         print(f"\n❌ Test 8E3a FAILED: {e}")
         print("\n" + "="*40)

@@ -17,21 +17,21 @@ from muxi import Formation  # noqa: E402
 async def test_no_credentials_flow():
     """Test flow when user has no stored credentials."""
     print("=== Test 8A4: No Credentials Flow ===\n")
-    
+
     try:
         # Load the same formation with clarification config
         formation_path = Path(__file__).parent / "formations" / "formation-clarification"
         formation = Formation()
         await formation.load(str(formation_path))
-        
+
         print("Starting overlord...")
         overlord = await formation.start_overlord()
-        
+
         # Use a random user that won't have any credentials
         user_id = f"test_user_{uuid.uuid4().hex[:8]}"
         session_id = f"test_8a4_session_{uuid.uuid4().hex[:8]}"
         print(f"Using User: {user_id} (no credentials), Session: {session_id}")
-        
+
         # Test: Request that would need credentials
         print("\n1. Testing with: 'List my GitHub repositories'")
         response = await overlord.chat(
@@ -40,15 +40,15 @@ async def test_no_credentials_flow():
             session_id=session_id,
             stream=False,
         )
-        
+
         # Handle both string and MuxiResponse object
         if isinstance(response, str):
             response_content = response
         else:
             response_content = response.content
-        
+
         print(f"   Response: {response_content}")
-        
+
         # Should inform about missing credentials
         response_lower = response_content.lower()
         has_no_creds_message = any(phrase in response_lower for phrase in [
@@ -61,10 +61,10 @@ async def test_no_credentials_flow():
             "authenticate",
             "provide your github"
         ])
-        
+
         if has_no_creds_message:
             print("   ✅ System correctly identified missing credentials")
-            
+
             # Test 2: User provides credentials
             print("\n2. User provides GitHub token")
             response2 = await overlord.chat(
@@ -73,14 +73,14 @@ async def test_no_credentials_flow():
                 session_id=session_id,
                 stream=False,
             )
-            
+
             if isinstance(response2, str):
                 response2_content = response2
             else:
                 response2_content = response2.content
-            
+
             print(f"   Response: {response2_content}")
-            
+
             # Check if credentials were acknowledged
             response2_lower = response2_content.lower()
             creds_stored = any(phrase in response2_lower for phrase in [
@@ -90,12 +90,12 @@ async def test_no_credentials_flow():
                 "added",
                 "authenticated"
             ])
-            
+
             if creds_stored:
                 print("   ✅ Credentials appear to be stored")
             else:
                 print("   ⚠️ Unclear if credentials were stored")
-            
+
             # Test 3: Try the original request again
             print("\n3. Retry: 'List my GitHub repositories'")
             response3 = await overlord.chat(
@@ -104,14 +104,14 @@ async def test_no_credentials_flow():
                 session_id=session_id,
                 stream=False,
             )
-            
+
             if isinstance(response3, str):
                 response3_content = response3
             else:
                 response3_content = response3.content
-            
+
             print(f"   Response: {response3_content}")
-            
+
             # Check if it now attempts to use the credentials
             response3_lower = response3_content.lower()
             attempts_github = any(phrase in response3_lower for phrase in [
@@ -122,7 +122,7 @@ async def test_no_credentials_flow():
                 "error",  # Even an error shows it tried
                 "access"
             ])
-            
+
             if attempts_github:
                 print("   ✅ System attempted to use credentials")
             else:
@@ -130,10 +130,10 @@ async def test_no_credentials_flow():
         else:
             print("   ❌ System didn't identify missing credentials")
             print("   Expected message about missing credentials")
-        
+
         print("\n" + "=" * 40)
         print("\n### Test Result:")
-        
+
         if has_no_creds_message:
             print("  🎉 SUCCESS: No credentials flow handled correctly")
             print("  ✓ System identified missing credentials")
@@ -145,17 +145,17 @@ async def test_no_credentials_flow():
         else:
             print("  ❌ FAILED: No credentials flow not working")
             print("  ✗ System didn't handle missing credentials properly")
-        
+
         print("\n" + "=" * 40)
         print("\n### Chat transcript:")
-        print(f"\nUser: List my GitHub repositories")
+        print("\nUser: List my GitHub repositories")
         print(f"System: {response_content}")
         if has_no_creds_message:
-            print(f"\nUser: My GitHub token is ghp_exampletoken123")
+            print("\nUser: My GitHub token is ghp_exampletoken123")
             print(f"System: {response2_content}")
-            print(f"\nUser: List my GitHub repositories")
+            print("\nUser: List my GitHub repositories")
             print(f"System: {response3_content}")
-        
+
     except Exception as e:
         print(f"\n❌ Test 8A4 FAILED: {e}")
         import traceback
@@ -167,7 +167,7 @@ async def test_no_credentials_flow():
             await formation.stop()
         except Exception as e:
             print(f"   ❌ Error during cleanup: {e}")
-    
+
     return has_no_creds_message
 
 

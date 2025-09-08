@@ -13,7 +13,7 @@ async def test_faissx_auth_connection():
     api_key = os.getenv("FAISSX_API_KEY", "test-api-key")
     tenant_id = os.getenv("FAISSX_TENANT_ID", "test-tenant")
 
-    print(f"Testing FAISSx connection with auth...")
+    print("Testing FAISSx connection with auth...")
     print(f"API Key: {'*' * len(api_key) if api_key else 'None'}")
     print(f"Tenant ID: {tenant_id}")
 

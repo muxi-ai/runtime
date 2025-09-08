@@ -216,7 +216,7 @@ knowledge:
         # Make several more queries to ensure stability
         for i in range(3):
             query_start = time.time()
-            response = await overlord.chat(
+            await overlord.chat(
                 f"What can you tell me about topic {i * 3}?",
                 agent_name="test-large",
                 user_id="test_user_6e2",
@@ -231,12 +231,12 @@ knowledge:
         await formation.stop_overlord()
 
         # Summary
-        print(f"\n\n=== Test 6E2 Summary ===")
+        print("\n\n=== Test 6E2 Summary ===")
         print(f"✅ Successfully loaded formation with {num_files} knowledge files")
         print(f"✅ Formation loading completed in {load_time:.2f}s")
-        print(f"✅ Queries performed within acceptable time limits")
-        print(f"✅ System remained stable under load")
-        print(f"\n✅ Test 6E2 PASSED: Large knowledge base handled efficiently")
+        print("✅ Queries performed within acceptable time limits")
+        print("✅ System remained stable under load")
+        print("\n✅ Test 6E2 PASSED: Large knowledge base handled efficiently")
 
         return True
 
@@ -249,7 +249,7 @@ knowledge:
         # Cleanup
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
-            print(f"\n✓ Cleaned up temporary directory")
+            print("\n✓ Cleaned up temporary directory")
 
 
 def main():

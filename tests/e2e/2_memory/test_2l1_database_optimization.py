@@ -6,11 +6,12 @@ Verify that GIN indexes and optimizations are working correctly
 import sys
 from pathlib import Path
 import os
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 import asyncio
 import psycopg2
 import json
-from muxi.formation.formation import Formation
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_database_optimization():
@@ -24,12 +25,14 @@ async def test_database_optimization():
     # Test 1: Verify GIN index on memories.text
     print("1. Checking GIN index on memories.text...")
 
-    cur.execute("""
+    cur.execute(
+        """
         SELECT indexname, indexdef
         FROM pg_indexes
         WHERE tablename = 'memories'
         AND indexname LIKE '%gin%'
-    """)
+    """
+    )
 
     gin_indexes = cur.fetchall()
     assert len(gin_indexes) > 0, "No GIN indexes found on memories table"
@@ -50,7 +53,9 @@ async def test_database_optimization():
     conn.commit()
 
     formation = Formation()
-    await formation.load(str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres.yaml")
+    await formation.load(
+        str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres.yaml")
+    )
     overlord = await formation.start_overlord()
 
     # Add test data
@@ -58,11 +63,13 @@ async def test_database_optimization():
     await asyncio.sleep(3)
 
     # Check query plan for text search
-    cur.execute("""
+    cur.execute(
+        """
         EXPLAIN (FORMAT JSON, ANALYZE, BUFFERS)
         SELECT * FROM memories
         WHERE to_tsvector('english', text) @@ to_tsquery('english', 'python')
-    """)
+    """
+    )
 
     plan = cur.fetchone()[0][0]
     plan_str = json.dumps(plan, indent=2)
@@ -76,30 +83,36 @@ async def test_database_optimization():
     # Test 3: Verify collection index
     print("\n3. Checking collection column index...")
 
-    cur.execute("""
+    cur.execute(
+        """
         SELECT indexname
         FROM pg_indexes
         WHERE tablename = 'memories'
         AND indexdef LIKE '%collection%'
-    """)
+    """
+    )
 
     collection_indexes = [row[0] for row in cur.fetchall()]
     assert len(collection_indexes) > 0, "No index found on collection column"
     print(f"  ✓ Collection indexed: {collection_indexes}")
 
     # Test query plan for collection filter
-    cur.execute("""
+    cur.execute(
+        """
         EXPLAIN (FORMAT JSON)
         SELECT * FROM memories
         WHERE collection = 'user_identity'
-    """)
+    """
+    )
 
     plan = cur.fetchone()[0][0]
     plan_str = json.dumps(plan, indent=2)
 
     # Should use index for collection filtering (or sequential scan for small tables)
     # PostgreSQL may choose sequential scan for small tables even with indexes
-    collection_index_used = ("Index" in plan_str and "collection" in plan_str) or ("Seq Scan" in plan_str)
+    collection_index_used = ("Index" in plan_str and "collection" in plan_str) or (
+        "Seq Scan" in plan_str
+    )
     assert collection_index_used, f"Query plan issue. Plan: {plan_str}"
 
     print("  ✓ Collection index is used for filtering")
@@ -107,12 +120,14 @@ async def test_database_optimization():
     # Test 4: Verify no collections table
     print("\n4. Confirming collections table removal...")
 
-    cur.execute("""
+    cur.execute(
+        """
         SELECT COUNT(*)
         FROM information_schema.tables
         WHERE table_schema = 'public'
         AND table_name = 'collections'
-    """)
+    """
+    )
 
     collections_exists = cur.fetchone()[0]
     assert collections_exists == 0, "Collections table still exists!"
@@ -121,22 +136,32 @@ async def test_database_optimization():
     # Test 5: Verify credentials table optimization
     print("\n5. Checking credentials table indexes...")
 
-    cur.execute("""
+    cur.execute(
+        """
         SELECT indexname
         FROM pg_indexes
         WHERE tablename = 'credentials'
         ORDER BY indexname
-    """)
+    """
+    )
 
     cred_indexes = [row[0] for row in cur.fetchall()]
 
     # Should have only essential indexes
-    essential = ["credentials_pkey", "credentials_credential_id_key",
-                 "idx_credentials_service", "idx_credentials_user_id"]
+    essential = [
+        "credentials_pkey",
+        "credentials_credential_id_key",
+        "idx_credentials_service",
+        "idx_credentials_user_id",
+    ]
 
     # Should NOT have these removed indexes
-    removed = ["idx_credentials_json", "idx_credentials_updated_at",
-               "idx_credentials_created_at", "idx_credentials_service_lower"]
+    removed = [
+        "idx_credentials_json",
+        "idx_credentials_updated_at",
+        "idx_credentials_created_at",
+        "idx_credentials_service_lower",
+    ]
 
     for idx in essential:
         assert idx in cred_indexes, f"Missing essential index: {idx}"
@@ -156,7 +181,7 @@ async def test_database_optimization():
         "Machine learning with Python",
         "I enjoy Python web development",
         "JavaScript is good for frontend",
-        "Java is used for enterprise"
+        "Java is used for enterprise",
     ]
 
     for msg in messages:
@@ -165,16 +190,19 @@ async def test_database_optimization():
 
     # Time a search query
     import time
+
     start = time.time()
 
-    cur.execute("""
+    cur.execute(
+        """
         SELECT text, ts_rank(to_tsvector('english', text), query) as rank
         FROM memories,
              to_tsquery('english', 'python') query
         WHERE to_tsvector('english', text) @@ query
         ORDER BY rank DESC
         LIMIT 5
-    """)
+    """
+    )
 
     results = cur.fetchall()
     search_time = time.time() - start

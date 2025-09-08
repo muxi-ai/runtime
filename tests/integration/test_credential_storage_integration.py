@@ -3,12 +3,10 @@ Integration tests for credential storage and encryption pipeline.
 """
 
 import pytest
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
-from cryptography.fernet import Fernet
+from unittest.mock import AsyncMock, MagicMock
 
 from muxi.formation.credentials import EncryptedCredentialResolver
-from muxi.formation.credentials.resolver import CredentialResolver, User, Credential
+from muxi.formation.credentials.resolver import CredentialResolver
 from muxi.formation.overlord.clarification import UnifiedClarificationSystem
 
 
@@ -154,7 +152,7 @@ class TestStoragePipeline:
         session.execute = mock_execute
         
         # Retrieve credential (should update last_used)
-        result = await plain_resolver.resolve("user123", "github")
+        await plain_resolver.resolve("user123", "github")
         
         # Note: The current implementation doesn't update last_used in resolve()
         # This test documents the expected behavior

@@ -6,7 +6,7 @@ in API responses for security.
 """
 
 import pytest
-from muxi.formation.server.secrets import restore_secret_placeholders, mask_hardcoded_secrets
+from muxi.formation.server.secrets import restore_secret_placeholders
 
 
 def test_hardcoded_secret_masking_in_api_response():

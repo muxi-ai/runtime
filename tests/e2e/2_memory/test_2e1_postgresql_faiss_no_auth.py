@@ -3,7 +3,6 @@
 
 import sys
 from pathlib import Path
-import os
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 import time
 import numpy as np
@@ -43,7 +42,7 @@ def test_faissx_auth_connection():
         import faissx.client as faiss
 
         print("1. Configuring authenticated FAISSx connection...")
-        print(f"   Server: tcp://localhost:65432")
+        print("   Server: tcp://localhost:65432")
         print(f"   API Key: {api_key}")
 
         # Configure with authentication
@@ -138,7 +137,7 @@ def test_faissx_auth_operations():
         correct_match = got_best == expected_best
         perfect_match = abs(best_distance) < 1e-6
 
-        print(f"5. Verifying authenticated search results...")
+        print("5. Verifying authenticated search results...")
         print(f"   Expected best match: {expected_best}")
         print(f"   Got best match: {got_best}")
         print(f"   Correct match: {correct_match}")
@@ -191,7 +190,7 @@ async def test_workingemory_with_auth():
             }
         )
 
-        print(f"✓ WorkingMemory created with auth")
+        print("✓ WorkingMemory created with auth")
         print(f"  Mode: {buffer.mode}")
         print(f"  Remote config: {buffer.remote}")
 
@@ -200,7 +199,7 @@ async def test_workingemory_with_auth():
         await buffer.add("Authenticated test message about AI", {"auth": "test"})
         await buffer.add("Another authenticated message", {"auth": "test"})
 
-        print(f"✓ Added 2 messages to authenticated buffer")
+        print("✓ Added 2 messages to authenticated buffer")
 
         # Test search through WorkingMemory
         print("3. Searching authenticated buffer...")
@@ -280,7 +279,7 @@ async def main():
         print("✅ WorkingMemory integrates with authenticated FAISSx")
         print("✅ Complete authenticated remote memory operations confirmed")
 
-    print(f"\n📊 Check FAISSx auth server logs (port 65432) for:")
+    print("\n📊 Check FAISSx auth server logs (port 65432) for:")
     print("- Authentication success messages")
     print("- Index creation with auth")
     print("- add_vectors with auth")

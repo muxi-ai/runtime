@@ -3,7 +3,6 @@
 
 import sys
 from pathlib import Path
-import asyncio
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 import time
 import traceback
@@ -13,7 +12,7 @@ async def test_faissx_import():
     print("=== Testing FAISSx Import ===")
     try:
         import faissx.client as faiss
-        print(f"✓ faissx imported successfully")
+        print("✓ faissx imported successfully")
         print(f"  Version: {getattr(faiss, '__version__', 'unknown')}")
         print(f"  Available methods: {len(dir(faiss))} methods")
         return True
@@ -140,7 +139,7 @@ async def test_faissx_local_vs_remote():
         distances, indices = remote_index.search(test_vector, k=1)
         search_end = time.time()
 
-        print(f"✓ Remote operations:")
+        print("✓ Remote operations:")
         print(f"  Add time: {add_end - add_start:.3f}s")
         print(f"  Search time: {search_end - search_start:.3f}s")
         print(f"  Index count: {remote_index.ntotal}")
@@ -198,7 +197,7 @@ def main():
 
     print(f"\n🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if all_passed else '❌ SOME TESTS FAILED'}")
 
-    print(f"\n💡 KEY INSIGHTS:")
+    print("\n💡 KEY INSIGHTS:")
     if all_passed:
         print("✅ FAISSx configuration is working")
         print("✅ Remote operations are successful")
@@ -208,7 +207,7 @@ def main():
         print("❌ FAISSx configuration has issues")
         print("💡 This explains why WorkingMemory falls back to local FAISS")
 
-    print(f"\n🔍 DEBUGGING STEPS:")
+    print("\n🔍 DEBUGGING STEPS:")
     print("1. Monitor FAISSx server logs at tcp://localhost:45678 during this test")
     print("2. Check if server receives add/search operations")
     print("3. If no activity, investigate faissx client configuration")

@@ -4,11 +4,10 @@ Tests for the encrypted credential resolver.
 
 import pytest
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from cryptography.fernet import Fernet
 
 from muxi.formation.credentials import EncryptedCredentialResolver
-from muxi.formation.credentials.resolver import User, Credential
 
 
 @pytest.fixture
@@ -264,7 +263,7 @@ class TestEncryptedCredentialResolver:
         assert len(resolver._fernet_cache) == 1
         
         # Different user adds to cache
-        fernet2 = resolver.derive_user_key("user2")
+        resolver.derive_user_key("user2")
         assert len(resolver._fernet_cache) == 2
 
 
@@ -294,7 +293,7 @@ class TestEncryptionPerformance:
         # Measure decryption time
         start = time.time()
         for _ in range(100):
-            decrypted = resolver._decrypt_credentials(user_id, encrypted)
+            resolver._decrypt_credentials(user_id, encrypted)
         decryption_time = time.time() - start
         
         # Should be fast (< 1 second for 100 operations)

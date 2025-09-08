@@ -10,7 +10,6 @@ from pathlib import Path
 import tempfile
 import yaml
 import json
-import os
 
 from muxi.formation import Formation
 from muxi.formation.server import FormationServer

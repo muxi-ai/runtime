@@ -37,7 +37,7 @@ def test_relative_path_knowledge_loading():
                 stream=False  # Disable streaming for testing
             )
 
-            print(f"\n👤 User: What services does Automaze offer?")
+            print("\n👤 User: What services does Automaze offer?")
             if isinstance(response1, dict):
                 print(f"🤖 Automaze: {response1.get('response', response1)}")
                 response_text = response1.get('response', str(response1))
@@ -64,7 +64,7 @@ def test_relative_path_knowledge_loading():
                 stream=False  # Disable streaming for testing
             )
 
-            print(f"\n👤 User: What is MUXI's pricing model?")
+            print("\n👤 User: What is MUXI's pricing model?")
             if isinstance(response2, dict):
                 print(f"🤖 MUXI: {response2.get('response', response2)}")
                 response_text = response2.get('response', str(response2))
@@ -89,7 +89,7 @@ def test_relative_path_knowledge_loading():
                 stream=False  # Disable streaming for testing
             )
 
-            print(f"\n👤 User: Tell me about Ran Aroussi")
+            print("\n👤 User: Tell me about Ran Aroussi")
             if isinstance(response3, dict):
                 print(f"🤖 Automaze: {response3.get('response', response3)}")
                 response_text = response3.get('response', str(response3))

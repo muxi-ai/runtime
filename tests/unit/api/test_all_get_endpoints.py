@@ -9,7 +9,7 @@ discovered from the OpenAPI specification.
 import asyncio
 import httpx
 import json
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any
 from datetime import datetime
 
 
@@ -95,9 +95,9 @@ class EndpointTester:
     
     def print_summary(self):
         """Print test summary."""
-        print(f"\n" + "="*80)
-        print(f"📊 TEST SUMMARY")
-        print(f"="*80)
+        print("\n" + "="*80)
+        print("📊 TEST SUMMARY")
+        print("="*80)
         print(f"Total tests: {self.total_count}")
         print(f"Passed: {self.success_count}")
         print(f"Failed: {self.total_count - self.success_count}")
@@ -246,8 +246,8 @@ async def test_auth_failures(tester: EndpointTester):
     test_cases = [
         ("GET", "/v1/agents", {}, "Admin endpoint with no auth (should fail)", False),
         ("GET", "/v1/agents", {"X-Muxi-Admin-Key": "wrong_key"}, "Admin endpoint with wrong key (should fail)", False),
-        ("GET", f"/v1/jobs/test_user", {"X-Muxi-Client-Key": "wrong_key"}, "Client endpoint with wrong key (should fail)", False),
-        ("GET", f"/v1/jobs/test_user", {"X-Muxi-Admin-Key": ADMIN_KEY}, "Client endpoint with admin key (should fail)", False),
+        ("GET", "/v1/jobs/test_user", {"X-Muxi-Client-Key": "wrong_key"}, "Client endpoint with wrong key (should fail)", False),
+        ("GET", "/v1/jobs/test_user", {"X-Muxi-Admin-Key": ADMIN_KEY}, "Client endpoint with admin key (should fail)", False),
     ]
     
     async with httpx.AsyncClient(timeout=10.0) as client:
@@ -264,7 +264,7 @@ async def test_auth_failures(tester: EndpointTester):
 
 async def main():
     """Run comprehensive GET endpoint tests."""
-    print(f"\n🚀 COMPREHENSIVE GET ENDPOINT TESTING")
+    print("\n🚀 COMPREHENSIVE GET ENDPOINT TESTING")
     print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"🌐 Server: {BASE_URL}")
     

@@ -9,7 +9,6 @@ from pathlib import Path
 import os
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 import asyncio
-import time
 import numpy as np
 from muxi.services.memory.working import WorkingMemory
 
@@ -35,10 +34,10 @@ async def test_faissx_no_auth_with_tenant():
         await secrets_manager.initialize_encryption()
         tenant_id = await secrets_manager.get_secret("FAISSX_TENANT_ID")
 
-        print(f"1. Configuring FAISSx (no auth, with tenant)...")
-        print(f"   Server: tcp://localhost:45678")
+        print("1. Configuring FAISSx (no auth, with tenant)...")
+        print("   Server: tcp://localhost:45678")
         print(f"   Tenant: {tenant_id}")
-        print(f"   API Key: None")
+        print("   API Key: None")
 
         # Configure with tenant but no auth
         faiss.configure(
@@ -64,7 +63,7 @@ async def test_faissx_no_auth_with_tenant():
         print("\n4. Searching vectors...")
         query = np.random.rand(1, 128).astype('float32')
         distances, indices = index.search(query, k=2)
-        print(f"✓ Search completed")
+        print("✓ Search completed")
         print(f"  Results: {len(indices[0])} matches found")
 
         # Test with WorkingMemory
@@ -86,7 +85,7 @@ async def test_faissx_no_auth_with_tenant():
         await buffer.add("Test message for tenant", {"source": "no-auth"})
         results = await buffer.search("test", limit=1)
 
-        print(f"✓ WorkingMemory working with tenant ID")
+        print("✓ WorkingMemory working with tenant ID")
         print(f"  Buffer items: {len(buffer)}")
         print(f"  Search results: {len(results)}")
 
@@ -123,8 +122,8 @@ async def test_faissx_with_full_auth():
         api_key = await secrets_manager.get_secret("FAISSX_API_KEY")
         tenant_id = await secrets_manager.get_secret("FAISSX_TENANT_ID")
 
-        print(f"1. Configuring FAISSx (full auth)...")
-        print(f"   Server: tcp://localhost:65432")
+        print("1. Configuring FAISSx (full auth)...")
+        print("   Server: tcp://localhost:65432")
         print(f"   Tenant: {tenant_id}")
         print(f"   API Key: {api_key[:10]}...")
 
@@ -140,7 +139,7 @@ async def test_faissx_with_full_auth():
         # Test index operations
         print("\n2. Creating authenticated index...")
         index = faiss.IndexFlatL2(128)
-        print(f"✓ Index created with authentication")
+        print("✓ Index created with authentication")
 
         # Add vectors
         print("\n3. Adding vectors with auth...")
@@ -153,7 +152,7 @@ async def test_faissx_with_full_auth():
         print("\n4. Searching with auth...")
         query = np.random.rand(1, 128).astype('float32')
         distances, indices = index.search(query, k=2)
-        print(f"✓ Search completed")
+        print("✓ Search completed")
         print(f"  Results: {len(indices[0])} matches found")
 
         # Test with WorkingMemory
@@ -175,7 +174,7 @@ async def test_faissx_with_full_auth():
         await buffer.add("Authenticated message", {"source": "full-auth"})
         results = await buffer.search("authenticated", limit=1)
 
-        print(f"✓ WorkingMemory working with full auth")
+        print("✓ WorkingMemory working with full auth")
         print(f"  Buffer items: {len(buffer)}")
         print(f"  Search results: {len(results)}")
 
@@ -211,18 +210,17 @@ async def test_formation_configurations():
     print("📄 TEST 3: Formation Configurations")
     print("=" * 70)
 
-    from muxi.formation.formation import Formation
-    from concurrent.futures import ThreadPoolExecutor
+    from muxi.formation import Formation  # noqa: E402
 
     formations_to_test = [
         {
-            "path": str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres-and-faissx.yaml",
+            "path": str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres-and-faissx.yaml"),
             "name": "No Auth + Tenant",
             "expected_port": "45678",
             "has_auth": False
         },
         {
-            "path": str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres-and-faissx-with-auth.yaml",
+            "path": str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres-and-faissx-with-auth.yaml"),
             "name": "Full Auth",
             "expected_port": "65432",
             "has_auth": True
@@ -262,7 +260,7 @@ async def test_formation_configurations():
         result = await load_formation(formation_config["path"])
 
         if result["loaded"]:
-            print(f"✓ Formation loaded successfully")
+            print("✓ Formation loaded successfully")
             print(f"  Mode: {result['mode']}")
             print(f"  URL: {result['url']}")
             print(f"  Has API key: {result['has_api_key']}")
@@ -272,12 +270,12 @@ async def test_formation_configurations():
             if formation_config["expected_port"] in result.get("url", ""):
                 print(f"  ✓ Correct port: {formation_config['expected_port']}")
             else:
-                print(f"  ❌ Wrong port in URL")
+                print("  ❌ Wrong port in URL")
 
             if result["has_api_key"] == formation_config["has_auth"]:
                 print(f"  ✓ Auth config correct: {formation_config['has_auth']}")
             else:
-                print(f"  ❌ Auth config mismatch")
+                print("  ❌ Auth config mismatch")
         else:
             print(f"❌ Failed to load: {result.get('error', 'Unknown error')}")
 
@@ -308,18 +306,18 @@ async def main():
     print("=" * 70)
 
     # Test 1 Summary
-    print(f"\n1. FAISSx Port 45678 (No Auth + Tenant):")
+    print("\n1. FAISSx Port 45678 (No Auth + Tenant):")
     if test1_result["status"] == "success":
-        print(f"   ✅ SUCCESS - All operations working")
+        print("   ✅ SUCCESS - All operations working")
         print(f"   - Tenant ID: {test1_result['tenant_id']}")
         print(f"   - Operations: {', '.join(test1_result['operations'])}")
     else:
         print(f"   ❌ FAILED - {test1_result.get('error', 'Unknown error')}")
 
     # Test 2 Summary
-    print(f"\n2. FAISSx Port 65432 (Full Auth):")
+    print("\n2. FAISSx Port 65432 (Full Auth):")
     if test2_result["status"] == "success":
-        print(f"   ✅ SUCCESS - All operations working")
+        print("   ✅ SUCCESS - All operations working")
         print(f"   - API Key: {test2_result['api_key']}")
         print(f"   - Tenant ID: {test2_result['tenant_id']}")
         print(f"   - Operations: {', '.join(test2_result['operations'])}")
@@ -327,7 +325,7 @@ async def main():
         print(f"   ❌ FAILED - {test2_result.get('error', 'Unknown error')}")
 
     # Formation Summary
-    print(f"\n3. Formation Configurations:")
+    print("\n3. Formation Configurations:")
     for formation_result in formation_results:
         name = formation_result["name"]
         result = formation_result["result"]

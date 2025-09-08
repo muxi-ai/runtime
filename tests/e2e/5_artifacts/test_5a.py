@@ -10,7 +10,6 @@ Status: ✅ COMPLETED (3/3 PASSED)
 
 import asyncio
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -73,7 +72,7 @@ async def test_5a1_basic_chart_creation():
         output_file = Path(__file__).parent.parent / "outputs" / "5a1.json"
         output_file.parent.mkdir(exist_ok=True)
 
-        with open(output_file, 'w') as f:
+        with open(output_file, 'w'):
             json.dump({
                 "test": "5A1",
                 "status": "PASSED" if response.artifacts else "FAILED",
@@ -128,7 +127,7 @@ async def test_5a2_advanced_data_visualization():
         output_file = Path(__file__).parent.parent / "outputs" / "5a2.json"
         output_file.parent.mkdir(exist_ok=True)
 
-        with open(output_file, 'w') as f:
+        with open(output_file, 'w'):
             json.dump({
                 "test": "5A2",
                 "status": "PASSED" if response.artifacts else "FAILED",
@@ -191,7 +190,7 @@ async def test_5a3_multiple_chart_types():
         output_file = Path(__file__).parent.parent / "outputs" / "5a3.json"
         output_file.parent.mkdir(exist_ok=True)
 
-        with open(output_file, 'w') as f:
+        with open(output_file, 'w'):
             json.dump({
                 "test": "5A3",
                 "status": "PASSED" if len(response.artifacts) >= 2 else "FAILED",
@@ -233,7 +232,7 @@ async def run_test_group_5a():
     total = len(results)
 
     print("\n" + "="*50)
-    print(f"TEST GROUP 5A SUMMARY")
+    print("TEST GROUP 5A SUMMARY")
     print("="*50)
     print(f"Tests passed: {passed}/{total}")
 

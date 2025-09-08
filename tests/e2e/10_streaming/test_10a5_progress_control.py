@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation.formation import Formation  # noqa: E402
+from muxi.formation import Formation  # noqa: E402
 from muxi.services.streaming import get_streaming_llm_config  # noqa: E402
 
 
@@ -32,14 +32,14 @@ async def main():
 
         # Verify configuration
         streaming_config = get_streaming_llm_config()
-        
+
         if streaming_config:
             progress_enabled = streaming_config.get("progress", True)
             print("\n📋 Streaming configuration:")
             print(f"   Model: {streaming_config.get('model')}")
             print(f"   Rephrasing: {streaming_config.get('enabled')}")
             print(f"   Progress: {'ENABLED' if progress_enabled else 'DISABLED'}")
-            
+
             if progress_enabled:
                 print("\n⚠️ WARNING: Progress is enabled, but test expects it disabled")
                 print("   Check formation-without-progress.yaml has progress: false")
@@ -54,7 +54,7 @@ async def main():
 
         # Make a complex request that would normally generate progress events
         print("\n🔍 Testing complex task (should normally emit progress events)...")
-        
+
         response_stream = await overlord.chat(
             message=(
                 "Analyze the current economic situation, research market trends, "
@@ -69,7 +69,7 @@ async def main():
         all_events = []
         progress_events = []
         content_events = []
-        
+
         # Progress indicators to look for
         progress_indicators = [
             "thinking", "planning", "analyzing", "checking",
@@ -79,14 +79,14 @@ async def main():
 
         if hasattr(response_stream, "__aiter__"):
             print("\n📝 Analyzing streamed events...")
-            
+
             async for chunk in response_stream:
                 all_events.append(chunk)
                 chunk_lower = str(chunk).lower()
-                
+
                 # Categorize the event
                 is_progress = any(ind in chunk_lower for ind in progress_indicators)
-                
+
                 if is_progress:
                     progress_events.append(chunk)
                     # Show first progress event found
@@ -95,7 +95,7 @@ async def main():
                         print(f"\n   ⚠️ Found progress event: {preview}")
                 else:
                     content_events.append(chunk)
-                
+
                 # Show first few events
                 if len(all_events) <= 3:
                     preview = chunk[:100] if len(chunk) > 100 else chunk
@@ -111,18 +111,18 @@ async def main():
         if not streaming_config or streaming_config.get("progress", True):
             # Progress is enabled - we expect progress events
             print("\n📋 Expected behavior: Progress ENABLED")
-            
+
             if progress_events:
                 print("   ✅ Progress events found (as expected)")
             else:
                 print("   ⚠️ No progress events found (might be a simple response)")
-            
+
             test_passed = True  # Either way is fine when progress is enabled
-            
+
         else:
             # Progress is disabled - we should NOT see progress events
             print("\n📋 Expected behavior: Progress DISABLED (content only)")
-            
+
             if len(progress_events) == 0:
                 print("   ✅ No progress events emitted (as expected)")
                 print("   ✅ Only content streamed to save LLM costs")
@@ -130,24 +130,24 @@ async def main():
             else:
                 print(f"   ❌ Found {len(progress_events)} progress events (should be 0)")
                 print("   These events should have been filtered when progress=false")
-                
+
                 # Show some examples of leaked progress events
                 print("\n   Examples of unexpected progress events:")
                 for event in progress_events[:3]:
                     preview = event[:150] if len(event) > 150 else event
                     print(f"      • {preview}")
-                
+
                 test_passed = False
 
         # Check that we still got actual content
         if len(content_events) > 0 or len(all_events) > 0:
             print(f"   ✅ Received {'content' if content_events else 'response'} events")
-            
+
             # Verify response quality
             full_response = "".join(all_events)
             expected_terms = ["economic", "market", "investment", "strategy", "trend"]
             found_terms = [t for t in expected_terms if t in full_response.lower()]
-            
+
             if found_terms:
                 print(f"   ✅ Response addresses the request: {found_terms[:3]}")
         else:
@@ -156,7 +156,7 @@ async def main():
 
         # Summary
         print("\n" + "=" * 60)
-        
+
         if test_passed:
             if not streaming_config or streaming_config.get("progress", True):
                 print("✅ Test 10A5 PASSED: Progress control working (progress enabled)")
@@ -165,7 +165,7 @@ async def main():
                 print("   This configuration saves on LLM rephrasing costs")
         else:
             print("❌ Test 10A5 FAILED: Progress control not working as expected")
-        
+
         return test_passed
 
     except Exception as e:

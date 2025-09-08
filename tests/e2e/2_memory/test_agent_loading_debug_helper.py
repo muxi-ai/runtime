@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Debug agent loading for memory formation."""
-import asyncio
 from pathlib import Path
 
 import logging
@@ -18,7 +17,7 @@ async def test_agent_loading():
 
     async def run_test():
         formation_path = (
-            str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres-and-faissx-with-auth.yaml"
+            str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres-and-faissx-with-auth.yaml")
         )
         logger.info(f"Loading formation from: {formation_path}")
 

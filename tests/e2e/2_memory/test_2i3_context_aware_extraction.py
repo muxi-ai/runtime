@@ -6,10 +6,10 @@ Test that extraction understands context from previous messages
 import sys
 from pathlib import Path
 import os
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 import asyncio
 import psycopg2
-from muxi.formation.formation import Formation
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_context_aware_extraction():
@@ -27,7 +27,7 @@ async def test_context_aware_extraction():
     conn.commit()
 
     formation = Formation()
-    await formation.load(str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres.yaml")
+    await formation.load(str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres.yaml"))
     overlord = await formation.start_overlord()
 
     # Test 1: Pronoun resolution
@@ -60,7 +60,9 @@ async def test_context_aware_extraction():
         ("Italian" in text and "love" in text.lower())
         for text in memory_texts
     )
-    assert favorite_found or len(memory_texts) >= 1, f"Context not resolved. Expected Italian food preference in: {memory_texts}"
+    assert (
+        favorite_found or len(memory_texts) >= 1
+    ), f"Context not resolved. Expected Italian food preference in: {memory_texts}"
 
     print("✓ Correctly resolved 'that' to 'Italian food' using context")
 

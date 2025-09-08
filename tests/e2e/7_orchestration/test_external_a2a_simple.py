@@ -11,7 +11,7 @@ import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from muxi.formation.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_simple_a2a():
@@ -20,28 +20,28 @@ async def test_simple_a2a():
     print("=" * 60)
     print("This test assumes Formation 2 is already running on port 8181")
     print("=" * 60)
-    
+
     formation = Formation()
-    
+
     try:
         # Load Formation 1
-        await formation.load(str(Path(__file__).parent / "formations" / "formation-a2a")formation1/formation.yaml")
+        await formation.load(str(Path(__file__).parent / "formations" / "formation-a2a/formation1/formation.yaml"))
         overlord = await formation.start_overlord()
-        
+
         # Simple test message
         print("\nSending simple A2A request...")
         response = await overlord.chat(
             "Ask the agent at localhost:8181 to say hello",
             user_id="test_user"
         )
-        
+
         print(f"\nResponse: {response}")
-        
+
         assert response is not None
         assert len(response) > 0
-        
+
         print("\n✅ Simple A2A test passed!")
-        
+
     finally:
         await formation.stop_overlord()
 

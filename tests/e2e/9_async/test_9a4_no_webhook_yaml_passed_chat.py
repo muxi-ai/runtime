@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation.formation import Formation  # noqa: E402
+from muxi.formation import Formation  # noqa: E402
 
 
 async def main():
@@ -54,25 +54,25 @@ async def main():
 
         # With use_async=True and webhook_url provided, we should get async processing
         if isinstance(response, dict) and 'request_id' in response:
-            print(f"✅ Got async processing response")
+            print("✅ Got async processing response")
             print(f"   Request ID: {response.get('request_id')}")
             print(f"   Status: {response.get('status')}")
             print(f"   Message: {response.get('message')}")
             print(f"   Webhook URL: {response.get('webhook_url')}")
-            
+
             request_id = response.get('request_id')
-            
+
             # Wait for webhook to be delivered
             print("\n⏳ Waiting for webhook delivery...")
             max_wait = 30  # Maximum wait time in seconds
             check_interval = 1  # Check every second
             waited = 0
             webhook_found = False
-            
+
             while waited < max_wait:
                 await asyncio.sleep(check_interval)
                 waited += check_interval
-                
+
                 # Check if webhook has been received
                 if webhook_log_path.exists():
                     try:
@@ -82,7 +82,7 @@ async def main():
                                 line = line.strip()
                                 if not line:
                                     continue
-                                    
+
                                 webhook_entry = json.loads(line)
                                 # The webhook entry contains the full HTTP request details
                                 # The actual webhook payload is in the 'body' field
@@ -94,11 +94,11 @@ async def main():
                                         print(f"   Status: {webhook.get('status')}")
                                         print(f"   Processing time: {webhook.get('processing_time', 'N/A')}s")
                                         print(f"   Webhook URL used: {webhook.get('webhook_url')}")
-                                        
+
                                         # Verify the webhook URL is the one we passed
                                         if webhook.get('webhook_url') == "http://localhost:8765":
                                             print("   ✅ Webhook URL matches what we passed to chat()")
-                                        
+
                                         # Get the response content
                                         response_data = webhook.get('response', [])
                                         if response_data and isinstance(response_data, list):
@@ -106,23 +106,23 @@ async def main():
                                                 if item.get('type') == 'text':
                                                     content = item.get('text', '')
                                                     print(f"   Content preview: {content[:100]}...")
-                                                    
+
                                                     # Verify the content is correct
                                                     if '4' in content.lower() or 'four' in content.lower():
                                                         print("   ✅ Result contains correct answer (4)")
-                                        
+
                                         webhook_found = True
                                         break
                     except (json.JSONDecodeError, FileNotFoundError):
                         # File might not be ready yet, continue waiting
                         pass
-                
+
                 if webhook_found:
                     break
-                    
+
                 if waited % 5 == 0:  # Progress update every 5 seconds
                     print(f"   Still waiting... ({waited}s)")
-            
+
             if webhook_found:
                 print("\n" + "="*60)
                 print("✅ Test 9A4 PASSED: Webhook passed to chat() works without YAML config")
@@ -154,7 +154,7 @@ async def main():
                 print("\nShutting down...")
                 await formation.kill_overlord()
                 formation.shutdown()
-            except:
+            except Exception:
                 pass
 
     return True

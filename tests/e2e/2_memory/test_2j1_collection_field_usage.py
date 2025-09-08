@@ -6,10 +6,10 @@ Test that memories are properly tagged with collection values (no collections ta
 import sys
 from pathlib import Path
 import os
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 import asyncio
 import psycopg2
-from muxi.formation.formation import Formation
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_collection_field_usage():
@@ -36,7 +36,7 @@ async def test_collection_field_usage():
     conn.commit()
 
     formation = Formation()
-    await formation.load(str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres.yaml")
+    await formation.load(str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres.yaml"))
     overlord = await formation.start_overlord()
 
     # Test different types of information
@@ -81,7 +81,6 @@ async def test_collection_field_usage():
             print(f"    - {text}")
 
     # Verify expected collections are used
-    expected_collections = {"user_identity", "activities", "preferences", "relationships"}
     actual_collections = set(collections_found.keys())
 
     assert "user_identity" in actual_collections, f"Missing user_identity in: {actual_collections}"

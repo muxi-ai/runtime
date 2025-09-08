@@ -66,7 +66,7 @@ async def test_auth_error_formats():
                 # Parse response body
                 try:
                     body = response.json()
-                    print(f"Response Type: JSON")
+                    print("Response Type: JSON")
                     
                     # Check envelope structure
                     has_envelope = all(key in body for key in ["object", "timestamp", "type", "request", "success", "error"])
@@ -91,9 +91,9 @@ async def test_auth_error_formats():
                                 print(f"  ❌ Error code mismatch! Expected: {test['expected_error_code']}, Got: {error.get('code')}")
                             
                             if error.get('message') == test['expected_message']:
-                                print(f"  ✅ Error message matches expected")
+                                print("  ✅ Error message matches expected")
                             else:
-                                print(f"  ❌ Error message mismatch!")
+                                print("  ❌ Error message mismatch!")
                                 print(f"     Expected: {test['expected_message']}")
                                 print(f"     Got: {error.get('message')}")
                     else:
@@ -145,8 +145,8 @@ async def main():
     # Check server connectivity
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{BASE_URL}/v1/health")
-            print(f"✅ Server is reachable")
+            await client.get(f"{BASE_URL}/v1/health")
+            print("✅ Server is reachable")
     except Exception as e:
         print(f"❌ Cannot reach server: {e}")
         print("Make sure the server is running on http://localhost:8271")

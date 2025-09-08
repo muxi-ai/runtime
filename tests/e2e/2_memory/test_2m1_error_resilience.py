@@ -6,24 +6,25 @@ Test that chat continues working even when memory operations fail
 import sys
 from pathlib import Path
 import os
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 import asyncio
 import psycopg2
-from unittest.mock import patch, MagicMock
-from muxi.formation.formation import Formation
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+from muxi.formation import Formation  # noqa: E402
+
 
 async def get_response_text(response):
     """Helper function to extract text from different response types."""
-    if hasattr(response, '__aiter__'):
+    if hasattr(response, "__aiter__"):
         # Async generator response
         full_response = ""
         async for chunk in response:
-            if hasattr(chunk, 'content') and chunk.content:
+            if hasattr(chunk, "content") and chunk.content:
                 full_response += chunk.content
             elif isinstance(chunk, str):
                 full_response += chunk
         return full_response
-    elif hasattr(response, 'content'):
+    elif hasattr(response, "content"):
         return response.content
     else:
         return str(response)
@@ -35,7 +36,9 @@ async def test_error_resilience():
 
     # Setup
     formation = Formation()
-    await formation.load(str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres.yaml")
+    await formation.load(
+        str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres.yaml")
+    )
     overlord = await formation.start_overlord()
 
     test_user = "resilience_test_user"
@@ -55,7 +58,9 @@ async def test_error_resilience():
     overlord.extract_user_information = failing_extract
 
     # Chat should still work
-    response = await overlord.chat("My name is TestUser and I love Python", user_id=test_user, use_async=False)
+    response = await overlord.chat(
+        "My name is TestUser and I love Python", user_id=test_user, use_async=False
+    )
     response_text = await get_response_text(response)
 
     assert len(response_text) > 0, "Chat failed when extraction failed"
@@ -81,7 +86,9 @@ async def test_error_resilience():
     overlord.add_message_to_memory = failing_add_message
 
     # Chat should still work
-    response = await overlord.chat("Tell me about machine learning", user_id=test_user, use_async=False)
+    response = await overlord.chat(
+        "Tell me about machine learning", user_id=test_user, use_async=False
+    )
     response_text = await get_response_text(response)
     assert len(response_text) > 0, "Chat failed when buffer storage failed"
     assert storage_attempted, "Buffer storage was not attempted"
@@ -106,7 +113,9 @@ async def test_error_resilience():
         overlord.long_term_memory.add = failing_add
 
         # Trigger extraction which will try to store in long-term memory
-        response = await overlord.chat("I work at SpaceX as an engineer", user_id=test_user, use_async=False)
+        response = await overlord.chat(
+            "I work at SpaceX as an engineer", user_id=test_user, use_async=False
+        )
         response_text = await get_response_text(response)
         assert len(response_text) > 0, "Chat failed when long-term memory failed"
 
@@ -128,7 +137,7 @@ async def test_error_resilience():
     await asyncio.sleep(2)
 
     # Break vector search in buffer memory
-    if hasattr(overlord.buffer_memory_manager, 'search_buffer_memory'):
+    if hasattr(overlord.buffer_memory_manager, "search_buffer_memory"):
         original_search = overlord.buffer_memory_manager.search_buffer_memory
 
         async def failing_search(query, k=10, filter_metadata=None):
@@ -185,11 +194,12 @@ async def test_error_resilience():
     response = await overlord.chat("What was my last message?", user_id=test_user, use_async=False)
     response_text = await get_response_text(response)
     # Check if system can recall recent messages (might mention "final", "test", "hello", or "how are you")
-    assert len(response_text) > 0 and ("final" in response_text.lower() or
-                                       "test" in response_text.lower() or
-                                       "hello" in response_text.lower() or
-                                       "message" in response_text.lower()), \
-        f"Memory system not working after recovery. Response: {response_text}"
+    assert len(response_text) > 0 and (
+        "final" in response_text.lower()
+        or "test" in response_text.lower()
+        or "hello" in response_text.lower()
+        or "message" in response_text.lower()
+    ), f"Memory system not working after recovery. Response: {response_text}"
 
     print("✓ System fully operational after error recovery")
 
