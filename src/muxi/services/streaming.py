@@ -219,10 +219,9 @@ async def rephrase_with_llm(
 
         return rephrased
 
-    except Exception as e:
+    except Exception:
         # On any error, return original content
         # This ensures streaming continues even if LLM fails
-        print(f"Streaming rephrase failed: {e}")
         return content
 
 
@@ -244,16 +243,16 @@ def stream(event_type: str, content: str, **metadata):
     """
     try:
         # Get request context
-        from ..observability.context import get_current_request_context
+        from .observability.context import get_current_request_context
         request_context = get_current_request_context()
 
         # Only emit if we have a request_id in context
-        if not (request_context and hasattr(request_context, 'request_id')):
+        if not (request_context and hasattr(request_context, 'id')):
             return
 
         # Check if streaming is enabled for this request
         # This prevents unnecessary LLM calls and event emissions
-        if not streaming_manager.is_streaming_enabled(request_context.request_id):
+        if not streaming_manager.is_streaming_enabled(request_context.id):
             return
 
         # Get the streaming configuration (for future LLM rephrasing)
@@ -265,7 +264,7 @@ def stream(event_type: str, content: str, **metadata):
             if event_type != "content":
                 return  # Skip all non-content events to save on LLM costs
 
-        @multitasking.task
+        # @multitasking.task  # COMMENTED OUT FOR DEBUGGING
         def _emit_in_background(manager, req_id, evt_type, evt_content, evt_metadata, config):
             try:
                 # Check if LLM rephrasing is enabled
@@ -283,9 +282,8 @@ def stream(event_type: str, content: str, **metadata):
                             )
                         finally:
                             loop.close()
-                    except Exception as e:
+                    except Exception:
                         # Fallback to original content if rephrasing fails
-                        print(f"LLM rephrase failed: {e}")
                         rephrased = evt_content
 
                     # Emit rephrased content
@@ -298,18 +296,21 @@ def stream(event_type: str, content: str, **metadata):
                 # Silent failure like observability
                 pass
 
-        # Start the background task with all parameters explicit
+        # Start the background task with all parameters explicit (NOW SYNCHRONOUS)
         _emit_in_background(
             streaming_manager,
-            request_context.request_id,
+            request_context.id,
             event_type,
             content,
             metadata,
             llm_config
         )
 
-    except Exception:
-        # Silent failure like observability
+    except Exception:  # as e:
+        # Show the actual exception for debugging
+        # print(f"[STREAM ERROR DEBUG] Exception in stream(): {e}")
+        # import traceback
+        # print(f"[STREAM ERROR DEBUG] Traceback: {traceback.format_exc()}")
         pass
 
 
