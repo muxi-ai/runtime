@@ -1,7 +1,7 @@
 ---
 created: 2025-08-21T17:31:00Z
-last_updated: 2025-09-06T12:43:05Z
-version: 1.6
+last_updated: 2025-09-08T22:51:59Z
+version: 1.7
 author: Claude Code PM System
 ---
 
@@ -33,14 +33,38 @@ The foundational runtime engine that powers AI agent formations is now complete 
 | **Async Operations** | ✅ Complete | 100% | Webhooks, background processing, streaming |
 | **Observability** | ✅ Complete | 100% | 10 formatters, 4 transports, distributed tracing |
 | **Task Scheduling** | ✅ Complete | 100% | Natural language scheduling, recurring/one-time |
-| **Streaming Responses** | ✅ Complete | 100% | Real-time AsyncGenerator support |
+| **Streaming Responses** | ✅ Complete | 100% | Fire-and-forget pattern with event subscription |
 | **Workflow Orchestration** | ✅ Complete | 100% | Task decomposition, multi-agent coordination, resilience integration |
 | **Resilience Layer** | ✅ Complete | 100% | Error recovery, retry logic, graceful degradation |
 | **Deferred Async** | ✅ Complete | 100% | Approval-aware async execution |
 | **Formation API** | ✅ Complete | 100% | OpenAPI specification alignment, enhanced error handling |
-| **Test Coverage** | ✅ Complete | 100% | 7 days of comprehensive testing, all passing |
+| **Test Coverage** | ✅ Complete | 100% | 10 days of comprehensive testing, all passing |
 
 ## 🎉 Major Achievements
+
+### September 2025: Streaming Events Architecture Implementation ✅
+
+**Status**: Complete - Fire-and-forget streaming pattern with LLM rephrasing support
+
+**Implementation Details**:
+- ✅ **Fire-and-Forget Pattern**: Clean separation of request processing and event streaming
+- ✅ **Context Propagation Fix**: Fixed critical issues with RequestContext in background tasks
+- ✅ **Generator Separation**: Split yield logic from regular async functions for clean architecture
+- ✅ **Event Subscription**: Real-time event delivery with proper timing coordination
+- ✅ **9 Event Types**: thinking, planning, progress, content, completed events all working
+- ✅ **LLM Rephrasing Support**: Architecture ready for Phase 2 rephrasing implementation
+
+**Critical Fixes Applied**:
+- ✅ **Import Path Errors**: Fixed incorrect relative imports in 4+ files
+- ✅ **Attribute References**: Fixed request_context.request_id → request_context.id throughout
+- ✅ **Persona LLM Hanging**: Added stream=False to prevent async generator issues
+- ✅ **Stream Termination**: Proper cleanup with disable_streaming() on completion
+
+**Test Results**:
+- ✅ **Test Group 10A**: All 5 streaming tests passing (100% success rate)
+- ✅ **Event Flow**: Events successfully flow through fire-and-forget pattern
+- ✅ **Complex Tasks**: Workflow decomposition events properly captured
+- ✅ **Stream Control**: stream=True/False parameter working correctly
 
 ### September 2025: Test Plan Reorganization & Production Readiness
 
@@ -93,7 +117,7 @@ The foundational runtime engine that powers AI agent formations is now complete 
 
 **Group 9C - Advanced Async Scenarios**:
 - ✅ **Webhook Failure Handling**: Retry logic with unreachable endpoints, graceful degradation
-- ✅ **Timeout Management**: Threshold-based async routing (30-second configuration) 
+- ✅ **Timeout Management**: Threshold-based async routing (30-second configuration)
 - ✅ **Conflict Resolution**: Async mode properly overrides streaming directives
 - ✅ **Resilience**: Request completion independent of webhook delivery status
 

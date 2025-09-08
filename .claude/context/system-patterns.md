@@ -184,7 +184,7 @@ MUXI Runtime follows a formation-based architecture where declarative YAML confi
        existing = await self.search(content, limit=1, collection=collection)
        if existing and existing[0]["distance"] < 0.1:  # >90% similar
            return  # Skip duplicate
-       
+
        # Store new memory
        await self.add(content, collection=collection)
    ```
@@ -198,7 +198,7 @@ MUXI Runtime follows a formation-based architecture where declarative YAML confi
        def __init__(self):
            self.tool_registry = {}  # Global registry (legacy)
            self.agent_tool_registry = {"_shared": {}}  # New agent-isolated registry
-           
+
        def get_tool_registry(self, agent_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
            """Get tools available to specific agent or global registry."""
            if agent_id is None:
@@ -208,7 +208,7 @@ MUXI Runtime follows a formation-based architecture where declarative YAML confi
            if agent_id in self.agent_tool_registry:
                result.update(self.agent_tool_registry[agent_id])
            return result
-           
+
        async def execute_tool(self, server_id: str, tool: str, args: dict, agent_id: str = None):
            # Verify agent has access to this tool
            available_tools = self.get_tool_registry(agent_id)
@@ -244,7 +244,7 @@ MUXI Runtime follows a formation-based architecture where declarative YAML confi
                prompt = "Follow this SOP EXACTLY. Do not skip steps."
            else:  # guide mode
                prompt = "Use this SOP as guidance while optimizing."
-           
+
            # Pass directly to decomposer - it handles everything
            workflow = await self.task_decomposer.decompose(
                user_request + "\n\n" + prompt + "\n\n" + sop_content
@@ -259,7 +259,7 @@ MUXI Runtime follows a formation-based architecture where declarative YAML confi
        def __init__(self):
            self.index = FAISSIndex()  # Semantic search
            self.sops = {}  # SOP storage
-       
+
        async def find_relevant_sops(self, user_request: str):
            # Semantic similarity search
            embedding = await self.embed(user_request)
@@ -277,7 +277,7 @@ MUXI Runtime follows a formation-based architecture where declarative YAML confi
    ```python
    # Before: 104 seconds for 3-step SOP (each step = LLM call)
    # After: 10 seconds (1 decomposition + optimized execution)
-   
+
    # Why it's faster:
    # 1. Single decomposition call vs N step calls
    # 2. Trivial operations combined with complex tasks
@@ -316,7 +316,7 @@ MUXI Runtime follows a formation-based architecture where declarative YAML confi
        for req_param in tool_schema.get("required", []):
            if req_param not in parameters:
                return False, f"Missing required parameter: {req_param}"
-       
+
        # Validate types, enums, min/max values
        for param_name, param_value in parameters.items():
            param_def = tool_schema["properties"].get(param_name, {})
@@ -353,11 +353,11 @@ class ChatOrchestrator:
         # Explicit override takes precedence
         if use_async is not None:
             return use_async
-            
+
         # Check if approval needed - force sync if so
         if await self.overlord.would_need_workflow_approval(message, agent_name):
             return False  # Stay synchronous for interactive approval
-            
+
         # Normal async decision based on time estimation
         return await self._estimate_time(message) > threshold
 ```
@@ -379,22 +379,22 @@ class Overlord:
                 "status": request_state.status.value,
                 "progress": request_state.progress
             }
-        
+
         # 2. Check completed requests (Buffer Memory with 48h TTL)
         completed_status = await self.buffer_memory.kv_get(request_id, namespace="request_status")
         if completed_status:
             return completed_status
-            
+
         return {"error": "Request not found"}
-    
+
     async def cancel_request(self, request_id: str) -> Dict[str, Any]:
         """Cancel request via stored asyncio.Task reference."""
         request_state = await self.request_tracker.get_request(request_id)
-        
+
         if request_state and request_state.task_ref and not request_state.task_ref.done():
             # Cancel the asyncio task
             request_state.task_ref.cancel()
-            
+
             # Store cancelled status in buffer memory
             final_status = {
                 "status": "cancelled",
@@ -404,17 +404,76 @@ class Overlord:
             }
             await self.buffer_memory.kv_set(request_id, final_status, ttl=172800, namespace="request_status")
             await self.request_tracker.remove_request(request_id)
-            
+
             return {"success": True, "message": "Request cancelled"}
-        
+
         return {"success": False, "message": "Cannot cancel (not found or already completed)"}
 ```
 
 **Memory Management Pattern:**
 - **Active Requests**: Stay in RequestTracker dictionary for fast access
-- **Completed Requests**: Moved to buffer memory with 48h TTL for automatic cleanup  
+- **Completed Requests**: Moved to buffer memory with 48h TTL for automatic cleanup
 - **Ultra-Simplified**: Only 2 code locations modified, leveraging existing TTL infrastructure
 - **No Memory Leaks**: Completed requests auto-expire, preventing indefinite accumulation
+
+### Streaming Events Architecture (September 2025)
+
+Fire-and-forget pattern with subscription-based event delivery:
+
+```python
+# Fire-and-Forget Pattern with Clean Separation
+class ChatOrchestrator:
+    async def _create_stream_generator(self, request_id, message, ...):
+        """Separate generator function for yielding events."""
+        # Fire off processing in background
+        async def delayed_process():
+            # Set context for background task (contextvars don't auto-propagate)
+            from ...services.observability.context import set_request_context, RequestContext
+            request_context = RequestContext(
+                id=request_id,  # Note: 'id' not 'request_id'
+                user_id=user_id,
+                session_id=session_id
+            )
+            set_request_context(request_context)
+
+            # Delay ensures subscription ready before events
+            await asyncio.sleep(1.0)
+
+            # Process request - emits streaming events
+            result = await self._process_sync_chat(message, ...)
+
+            # Emit completion event
+            streaming.stream("completed", "Processing complete")
+            streaming.disable_streaming(request_id)
+
+        # Start background processing
+        asyncio.create_task(delayed_process())
+
+        # Subscribe and yield events
+        async for event in self._stream_request(request_id, user_id, session_id):
+            yield event
+```
+
+**Event Format:**
+```python
+{
+    'request_id': 'req_xxx',
+    'user_id': 'test_user',
+    'session_id': 'test_session',
+    'type': 'progress',  # thinking, planning, progress, content, completed
+    'content': 'Event message',
+    'timestamp': 1234567890.123,
+    'stage': 'init',  # Optional metadata
+}
+```
+
+**Critical Implementation Details:**
+- **Context Propagation**: Must explicitly set RequestContext in background tasks
+- **Import Paths**: Use `.observability.context` not `..observability.context`
+- **Attribute Names**: RequestContext has `id` not `request_id`
+- **Stream Termination**: Clean up with `disable_streaming()` on completion
+- **Persona Calls**: Must use `stream=False` to prevent hanging
+- **Subscription Timing**: 1-second delay ensures subscription before event emission
 
 ### Advanced Async Scenarios (Group 9C - September 2025)
 
@@ -438,7 +497,7 @@ async def chat(self, message: str, use_async: bool = None, stream: bool = False,
             description="Async mode requested with streaming - ignoring streaming to prevent conflict",
         )
         stream = False  # Disable streaming when async is active
-    
+
     # Continue with processing
     return await self.chat_orchestrator.chat(
         message=message,
@@ -453,19 +512,19 @@ async def process_with_webhook(self, request_data: Dict) -> None:
     try:
         # 1. Process request completely
         result = await self.complete_processing(request_data)
-        
+
         # 2. Store successful result
         await self.store_result(request_data["request_id"], result)
-        
+
         # 3. Attempt webhook delivery (independent of core processing)
         await self.deliver_webhook(request_data["webhook_url"], result)
-        
+
     except Exception as e:
         # Core processing failure
         await self.store_error_result(request_data["request_id"], e)
-        
+
     # Note: Webhook delivery failures don't affect request processing status
-    
+
 async def deliver_webhook(self, webhook_url: str, result: Dict, retries: int = 3) -> None:
     """Deliver webhook with retry logic, independent of core processing."""
     for attempt in range(retries):
@@ -483,7 +542,7 @@ async def deliver_webhook(self, webhook_url: str, result: Dict, retries: int = 3
 
 **Key Patterns:**
 - **Clear Precedence**: When parameters conflict, choose the more restrictive option
-- **Transparent Logging**: Always log conflict resolution decisions  
+- **Transparent Logging**: Always log conflict resolution decisions
 - **Separation of Concerns**: Core processing independent of webhook delivery
 - **Graceful Degradation**: Webhook failures don't affect request completion
 - **No Error States**: Conflicting parameters don't cause system failures
@@ -683,15 +742,15 @@ async def _detect_credential_need(self, message: str, user_id: str) -> Optional[
     # Get available services from registry
     for server_id, info in self._mcp_servers_with_user_credentials.items():
         available_services.append(info["service"])
-    
+
     # Use LLM to detect intent
     prompt = f"""Analyze if this message relates to any credential service.
     Available services: {available_services}
     Message: {message}
-    
+
     Respond with: SERVICE_USE:<service>, CREDENTIAL_REQUEST:<service>, or NONE
     """
-    
+
     # Return detection with type and service info
     return {
         "type": "SERVICE_USE|CREDENTIAL_REQUEST|NONE",
@@ -728,21 +787,21 @@ class UnifiedClarificationSystem:
         self.buffer_memory = overlord.buffer_memory  # State storage
         self.llm = overlord.default_llm_model       # LLM for all decisions
         self.active_requests = set()                # Track active clarifications
-        
-    async def needs_clarification(self, message: str, request_id: str, 
+
+    async def needs_clarification(self, message: str, request_id: str,
                                  session_id: str, context: dict) -> ClarificationResult:
         """Main entry point - determines if clarification is needed."""
         # Check for existing clarification
         if await self.has_active_clarification(request_id):
             return await self.handle_response(request_id, message)
-        
+
         # Analyze new request via LLM (no pattern matching!)
         analysis = await self._analyze_request(message, context)
-        
+
         if analysis["needs_clarification"]:
             await self._create_state(request_id, message, analysis["mode"], session_id)
             return ClarificationResult(action="clarify", question=analysis["question"])
-        
+
         return ClarificationResult(action="execute", request=message)
 ```
 
@@ -786,7 +845,7 @@ CLARIFICATION_MODES = {
         "use_cases": ["file operations", "basic commands", "simple queries"]
     },
     "brainstorm": {
-        "max_depth": 10, 
+        "max_depth": 10,
         "purpose": "Creative exploration and idea development",
         "use_cases": ["design discussions", "feature planning", "creative projects"]
     },
@@ -802,7 +861,7 @@ CLARIFICATION_MODES = {
     },
     "execution": {
         "max_depth": 2,
-        "purpose": "Clarifying execution details and parameters", 
+        "purpose": "Clarifying execution details and parameters",
         "use_cases": ["command parameters", "output formats", "execution options"]
     }
 }
@@ -826,7 +885,7 @@ async def _create_state(self, request_id: str, message: str, mode: str, session_
         "collected_info": [],
         "started_at": time.time()
     }
-    
+
     # Store using request_id as key
     key = f"clarification:{request_id}"
     await self.buffer_memory.set(key, state, ttl=300)  # 5-minute TTL
@@ -848,7 +907,7 @@ async def _process_sync_chat(self, message, request_id, session_id, ...):
             session_id=session_id,
             context={"user_id": user_id}
         )
-        
+
         if result.action == "clarify":
             # Store minimal state for request_id reuse
             self._pending_clarifications[session_id] = {
@@ -856,7 +915,7 @@ async def _process_sync_chat(self, message, request_id, session_id, ...):
                 "type": result.mode
             }
             return MuxiResponse(content=result.question, ...)
-            
+
         elif result.action == "execute":
             # Clean up and use enhanced request
             if session_id in self._pending_clarifications:
@@ -880,12 +939,12 @@ async def _detect_context_switch(self, state: dict, message: str) -> bool:
     Original request: {state['original_request']}
     Current clarification mode: {state['mode']}
     User response: {message}
-    
+
     Is this response related to the original request? Answer with:
     - "answering" if responding to clarification
     - "different" if switching to unrelated topic
     """
-    
+
     response = await self.llm.chat([{"role": "user", "content": prompt}])
     return response.content.strip().lower() == "different"
 
@@ -908,16 +967,16 @@ All decisions are made via LLM calls, no pattern matching for true multilingual 
 # Old approach: Regex patterns and hardcoded logic
 if re.match(r'^(help|assist)', message, re.IGNORECASE):
     # Only works in English
-    
+
 # New approach: LLM-based understanding
 async def _analyze_request(self, message: str, context: dict) -> dict:
     """Use LLM to determine if clarification is needed."""
     prompt = f"""
     Analyze this request to determine if clarification is needed.
-    
+
     Request: {message}
     Context: {context}
-    
+
     Return JSON:
     {{
         "needs_clarification": boolean,
@@ -927,7 +986,7 @@ async def _analyze_request(self, message: str, context: dict) -> dict:
         "confidence": 0.0-1.0
     }}
     """
-    
+
     response = await self.llm.chat([{"role": "user", "content": prompt}])
     return json.loads(response.content)
 ```
@@ -943,7 +1002,7 @@ async def _check_circuit_breaker(self, state: dict) -> Optional[ClarificationRes
         # Force completion with collected info
         enhanced_request = self._build_enhanced_request(state)
         await self._cleanup_state(state["request_id"])
-        
+
         return ClarificationResult(
             action="execute",
             request=enhanced_request,
@@ -957,9 +1016,9 @@ async def _check_timeout(self, state: dict) -> Optional[ClarificationResult]:
     if elapsed > self.timeout:  # 5 minutes default
         enhanced_request = self._build_enhanced_request(state)
         await self._cleanup_state(state["request_id"])
-        
+
         return ClarificationResult(
-            action="execute", 
+            action="execute",
             request=enhanced_request,
             context={"timeout": True}
         )
@@ -972,17 +1031,17 @@ async def _check_timeout(self, state: dict) -> Optional[ClarificationResult]:
 
 ```python
 # LLM-based parameter inference for ANY tool
-async def _infer_tool_parameters(self, tool_name, required_params, 
+async def _infer_tool_parameters(self, tool_name, required_params,
                                  param_properties, action_description, user_request):
     # Build prompt with parameter schema
-    prompt = f"""Based on the user's request and tool requirements, 
+    prompt = f"""Based on the user's request and tool requirements,
     determine the appropriate parameter values.
-    
+
     User Request: {user_request}
     Tool Name: {tool_name}
     Required Parameters:
     """
-    
+
     for param in required_params:
         param_def = param_properties.get(param, {})
         prompt += f"""
@@ -991,11 +1050,11 @@ async def _infer_tool_parameters(self, tool_name, required_params,
           Description: {param_def.get('description')}
           Enum values: {param_def.get('enum', [])}
         """
-    
+
     # Use LLM to infer parameters
     response = await self.model.chat([{"role": "user", "content": prompt}])
     parameters = json.loads(response)
-    
+
     # No hardcoded tool-specific logic!
     return parameters
 ```
@@ -1011,16 +1070,16 @@ class InternalA2AService:
     def __init__(self, overlord):
         self.overlord = overlord
         self.agent_tool_registry = {"_shared": {}}  # Agent-specific tool isolation
-        
+
     async def handle_internal_request(self, message: str, requesting_agent_id: str, target_agent_id: str):
         # Verify target agent exists in same formation
         if target_agent_id not in self.overlord.agents:
             raise ValueError(f"Target agent {target_agent_id} not found in formation")
-        
+
         # Check tool requirements and agent capabilities
         required_tools = await self.analyze_tool_requirements(message)
         target_agent_tools = self.get_agent_tools(target_agent_id)
-        
+
         if all(tool in target_agent_tools for tool in required_tools):
             # Direct communication within formation
             return await self.route_to_internal_agent(message, target_agent_id)
@@ -1036,26 +1095,26 @@ class ExternalA2AService:
     def __init__(self, registry_client, auth_config):
         self.registry = registry_client
         self.auth = auth_config
-        
+
     async def discover_external_agent(self, service_id: str, capability: str = None):
         """Discover agents in other formations with service ID precedence."""
         # Try exact service_id match first
         agents = await self.registry.discover_agents(service_id=service_id)
-        
+
         if not agents:
             # Fallback to formation_id matching
             agents = await self.registry.discover_agents(formation_id=service_id)
-        
+
         # Filter by capability if specified
         if capability:
             agents = [a for a in agents if capability in a.get('capabilities', [])]
-            
+
         return agents
-        
+
     async def send_external_message(self, target_url: str, message: str, auth_token: str):
         """Send message to external agent with authentication."""
         headers = {"Authorization": f"Bearer {auth_token}"}
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{target_url}/a2a/message",
@@ -1072,7 +1131,7 @@ class A2ARegistry:
     def __init__(self, registry_url: str, auth_config: dict):
         self.registry_url = registry_url
         self.auth_config = auth_config
-        
+
     async def register_formation(self, formation_id: str, service_id: str, agents: List[dict]):
         """Register formation and its agents with the registry."""
         registration_data = {
@@ -1082,7 +1141,7 @@ class A2ARegistry:
             "auth": self.auth_config,
             "timestamp": datetime.utcnow().isoformat()
         }
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.registry_url}/register",
@@ -1090,18 +1149,18 @@ class A2ARegistry:
                 headers=self._get_auth_headers()
             )
             return response.json()
-            
-    async def discover_agents(self, service_id: str = None, formation_id: str = None, 
+
+    async def discover_agents(self, service_id: str = None, formation_id: str = None,
                             capability: str = None):
         """Discover agents with service ID precedence."""
         params = {}
         if service_id:
             params["service_id"] = service_id
         if formation_id:
-            params["formation_id"] = formation_id  
+            params["formation_id"] = formation_id
         if capability:
             params["capability"] = capability
-            
+
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{self.registry_url}/discover",
@@ -1117,12 +1176,12 @@ class A2ARegistry:
 class A2AAuthHandler:
     def __init__(self, formation_config: dict):
         self.auth_config = formation_config.get("a2a", {}).get("auth", {})
-        
+
     def get_auth_headers(self) -> dict:
         """Generate authentication headers based on auth.type configuration."""
         auth_type = self.auth_config.get("type", "bearer")
         auth_token = self.auth_config.get("token")
-        
+
         if auth_type == "bearer":
             return {"Authorization": f"Bearer {auth_token}"}
         elif auth_type == "api_key":
@@ -1132,11 +1191,11 @@ class A2AAuthHandler:
             return {"Authorization": f"Basic {auth_token}"}
         else:
             raise ValueError(f"Unsupported auth type: {auth_type}")
-            
+
     def validate_incoming_auth(self, headers: dict) -> bool:
         """Validate incoming authentication based on configuration."""
         expected_headers = self.get_auth_headers()
-        
+
         for header, expected_value in expected_headers.items():
             if headers.get(header) != expected_value:
                 return False
@@ -1163,7 +1222,7 @@ def validate_user_credentials_requirements(config: Dict[str, Any]) -> None:
     # Get MCP servers for validation
     mcp_config = config.get("mcp", {})
     servers = list(mcp_config.get("servers", []))  # Create copy for validation
-    
+
     # Add agent-specific servers to validation copy only
     agents = config.get("agents", [])
     for agent in agents:
@@ -1171,7 +1230,7 @@ def validate_user_credentials_requirements(config: Dict[str, Any]) -> None:
             agent_servers = agent["mcp_servers"]
             if isinstance(agent_servers, list):
                 servers.extend(agent_servers)  # Only extend validation copy
-    
+
     # Validate credentials without modifying global config
     validate_credentials_in_servers(servers)
 ```

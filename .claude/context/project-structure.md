@@ -1,7 +1,7 @@
 ---
 created: 2025-08-21T17:31:00Z
-last_updated: 2025-09-06T10:51:42Z
-version: 1.2
+last_updated: 2025-09-08T22:51:59Z
+version: 1.3
 author: Claude Code PM System
 ---
 
@@ -71,6 +71,7 @@ Unified service architecture:
 - `memory/` - Three-tier memory implementation
 - `multimodal/` - Image/audio/video processing (cleaned Dec 2025: removed MultiModalWorkflowIntegrator)
 - `observability/` - Event streaming (10 formatters, 4 transports)
+- `streaming.py` - Streaming events system with fire-and-forget pattern
 - `scheduler/` - Natural language task scheduling (cleaned Dec 2025: removed MultiLLMCircuitBreaker)
 - `secrets/` - Encrypted credential management
 
@@ -105,6 +106,7 @@ Comprehensive test coverage organized by feature:
 - `7_orchestration/` - Workflow orchestration and A2A communication
 - `8_clarification/` - Intelligent clarification flows
 - `9_async/` - Async decision logic and request lifecycle management (Group 9A & 9B)
+- `10_streaming/` - Streaming events with fire-and-forget pattern (Group 10A)
 
 ### Feature Tests
 - `a2a/` - Agent communication tests
