@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def quick_isolation_test():

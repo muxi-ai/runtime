@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_knowledge_vs_basic():
@@ -31,7 +31,7 @@ async def test_knowledge_vs_basic():
         print("👤 User: What is the exact price of MUXI's Professional tier?")
 
         response1 = await overlord.chat(
-            "What is the exact price of MUXI's Professional tier?",
+            message="What is the exact price of MUXI's Professional tier?",
             agent_name="muxi",
             user_id="test_user_6c3",
             session_id="test_6c3_session_1",

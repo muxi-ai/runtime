@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_absolute_path_knowledge():
@@ -51,7 +51,7 @@ async def test_absolute_path_knowledge():
         print("👤 User: Tell me about Ran's background or bio")
 
         response = await overlord.chat(
-            "Tell me about Ran's background or bio",
+            message="Tell me about Ran's background or bio",
             agent_name="automaze",
             user_id="test_user_6c2",
             session_id="test_6c2_session_1",
@@ -79,7 +79,7 @@ async def test_absolute_path_knowledge():
         print("👤 User: What services does Automaze offer?")
 
         response2 = await overlord.chat(
-            "What services does Automaze offer?",
+            message="What services does Automaze offer?",
             agent_name="automaze",
             user_id="test_user_6c2",
             session_id="test_6c2_session_2",

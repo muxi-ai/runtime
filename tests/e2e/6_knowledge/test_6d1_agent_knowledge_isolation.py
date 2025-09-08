@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_agent_knowledge_isolation():
@@ -33,7 +33,7 @@ async def test_agent_knowledge_isolation():
     print("Expected: Should NOT have access to MUXI pricing knowledge")
 
     response1 = await overlord.chat(
-        "What are the pricing tiers for MUXI?",
+        message="What are the pricing tiers for MUXI?",
         agent_name="automaze",  # Explicitly route to automaze
         user_id="test_user",
         session_id="isolation_test_1",

@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_overlord_routing_with_knowledge():
@@ -32,7 +32,7 @@ async def test_overlord_routing_with_knowledge():
     print("Expected: Should route to 'muxi' agent")
 
     response1 = await overlord.chat(
-        "What are the pricing tiers for MUXI?",
+        message="What are the pricing tiers for MUXI?",
         user_id="test_user",
         session_id="test_routing_1",
         stream=False  # Disable streaming for easier testing

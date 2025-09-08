@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_domain_knowledge_search():
@@ -30,7 +30,7 @@ async def test_domain_knowledge_search():
     print("👤 User: What services does Automaze offer?")
 
     response1 = await overlord.chat(
-        "What services does Automaze offer?",
+        message="What services does Automaze offer?",
         user_id="test_user_6c1",
         session_id="test_6c1_session_1",
         stream=False

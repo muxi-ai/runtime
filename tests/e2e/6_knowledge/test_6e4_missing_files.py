@@ -11,7 +11,7 @@ import shutil
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_missing_files():
@@ -106,7 +106,7 @@ This is a valid knowledge document that should be loaded successfully.
         print("👤 User: What knowledge do you have available?")
 
         response1 = await overlord.chat(
-            "What knowledge do you have available?",
+            message="What knowledge do you have available?",
             agent_name="test-missing",
             user_id="test_user_6e4",
             session_id="test_6e4_session_1",

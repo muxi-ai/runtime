@@ -11,7 +11,7 @@ import shutil
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_empty_knowledge_directory():
@@ -100,7 +100,7 @@ knowledge:
 
         # Check response indicates no knowledge
         no_knowledge_indicators = ["don't have", "no specific", "no information",
-                                  "empty", "not have any", "no pre-loaded", "without any"]
+                                   "empty", "not have any", "no pre-loaded", "without any"]
         has_indicator = any(ind in response_text.lower() for ind in no_knowledge_indicators)
 
         if has_indicator:

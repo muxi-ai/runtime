@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_cross_agent_knowledge():
@@ -32,7 +32,7 @@ async def test_cross_agent_knowledge():
         print("   (No agent specified - overlord should coordinate)")
 
         response1 = await overlord.chat(
-            "Compare Automaze services with MUXI pricing",
+            message="Compare Automaze services with MUXI pricing",
             user_id="test_user_6d3",
             session_id="test_6d3_session_1",
             stream=False
@@ -121,7 +121,7 @@ async def test_cross_agent_knowledge():
         automaze_mentioned = "automaze" in response_text.lower()
         muxi_mentioned = "muxi" in response_text.lower()
         has_comparison = any(term in response_text.lower() for term in
-                           ["difference", "while", "whereas", "on the other hand", "however", "but"])
+                             ["difference", "while", "whereas", "on the other hand", "however", "but"])
 
         print(f"\n✓ Mentions Automaze: {automaze_mentioned}")
         print(f"✓ Mentions MUXI: {muxi_mentioned}")

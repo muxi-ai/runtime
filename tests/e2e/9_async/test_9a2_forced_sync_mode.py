@@ -19,7 +19,7 @@ from muxi.formation import Formation  # noqa: E402
 async def main():
     """Test forced sync mode."""
     print("🚀 MUXI Runtime - Test 9A2: Forced Sync Mode")
-    print("="*60)
+    print("=" * 60)
 
     formation_path = Path(__file__).parent / "formation-async"
     webhook_log_path = Path.cwd() / "webhook_log.json"
@@ -40,11 +40,14 @@ async def main():
         # Note: Using a moderately complex task to avoid actual timeout
         start_time = time.time()
         response = await overlord.chat(
-            message="Research the top 3 programming languages in 2024 and provide a brief summary of each one's strengths",
+            message=(
+                "Research the top 3 programming languages in 2024 and ",
+                "provide a brief summary of each one's strengths",
+            ),
             user_id="test_user",
             session_id="sync_test_9a2",
             use_async=False,  # Force sync mode
-            stream=False
+            stream=False,
         )
         elapsed_time = time.time() - start_time
 
@@ -63,7 +66,7 @@ async def main():
         if hasattr(response, "request_id"):
             print(f"\n❌ Got async response with request_id: {response.request_id}")
             print("   Should have been synchronous!")
-            print("\n" + "="*60)
+            print("\n" + "=" * 60)
             print("❌ Test 9A2 FAILED: Should have returned sync response")
             return False
         else:
@@ -88,13 +91,14 @@ async def main():
             else:
                 print("✅ No webhook log created (expected for sync mode)")
 
-            print("\n" + "="*60)
+            print("\n" + "=" * 60)
             print("✅ Test 9A2 PASSED: Forced sync mode working correctly")
             return True
 
     except Exception as e:
         print(f"\n❌ Test failed with error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     finally:

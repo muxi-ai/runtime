@@ -13,8 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation
-from muxi.utils.user_dirs import get_knowledge_dir
+from muxi.formation import Formation  # noqa: E402
+from muxi.utils.user_dirs import get_knowledge_dir  # noqa: E402
 
 
 def test_core_knowledge_mechanics():
@@ -50,7 +50,7 @@ def test_core_knowledge_mechanics():
 
             # Ask MUXI agent about pricing (should use knowledge)
             response1 = await overlord1.chat(
-                "What are the pricing tiers for MUXI?",
+                message="What are the pricing tiers for MUXI?",
                 agent_name="muxi",
                 user_id="test_user",
                 session_id="test_session_1",

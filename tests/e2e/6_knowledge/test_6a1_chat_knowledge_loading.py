@@ -6,7 +6,7 @@ import asyncio
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 def test_relative_path_knowledge_loading():
@@ -111,7 +111,7 @@ def test_relative_path_knowledge_loading():
             # Clean shutdown
             await formation.stop_overlord()
 
-            print("\n✅ Test 6A1 passed: Agents successfully loaded and used knowledge from both relative and absolute paths")
+            print("\n✅ Test 6A1 passed: Agents successfully loaded and used knowledge from both relative and absolute paths")  # noqa: E501
             return True
 
         except Exception as e:

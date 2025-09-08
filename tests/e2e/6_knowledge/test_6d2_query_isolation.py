@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 
 async def test_knowledge_query_isolation():
@@ -31,7 +31,7 @@ async def test_knowledge_query_isolation():
         print("👤 User: @automaze What are MUXI's pricing plans?")
 
         response1 = await overlord.chat(
-            "@automaze What are MUXI's pricing plans?",
+            message="@automaze What are MUXI's pricing plans?",
             user_id="test_user_6d2",
             session_id="test_6d2_session_1",
             stream=False
@@ -47,7 +47,7 @@ async def test_knowledge_query_isolation():
 
         # Check that Automaze doesn't have MUXI pricing details
         isolation_indicators = ["don't have", "not have access", "unable to provide", "can't provide",
-                               "no information", "not sure", "don't know", "cannot access"]
+                                "no information", "not sure", "don't know", "cannot access"]
         indicators_found = [ind for ind in isolation_indicators if ind.lower() in response_text.lower()]
 
         # Should NOT contain specific MUXI pricing
@@ -87,7 +87,7 @@ async def test_knowledge_query_isolation():
 
         # Should NOT contain specific Automaze services from FAQ
         automaze_specific = ["workflow automation", "robotic process automation", "rpa",
-                            "business process optimization", "custom automation solutions"]
+                             "business process optimization", "custom automation solutions"]
         leaks_found = [term for term in automaze_specific if term.lower() in response_text.lower()]
 
         print(f"\n✓ Isolation indicators found: {indicators_found}")
