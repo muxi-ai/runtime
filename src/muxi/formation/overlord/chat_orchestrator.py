@@ -75,6 +75,9 @@ class ChatOrchestrator:
 
             # Emit completion event
             streaming_manager.emit_event(request_id, "complete", "Request processing complete", stage="done")
+            
+            # Brief delay to ensure the complete event is captured
+            await asyncio.sleep(0.1)
 
             # Disable streaming to close the subscription
             streaming_manager.disable_streaming(request_id)
