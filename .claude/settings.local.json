@@ -13,7 +13,11 @@
       "WebSearch",
       "Read(**)",
       "Bash(ruff check:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(for:*)",
+      "Bash(tail:*)",
+      "Bash(done)",
+      "WebFetch(domain:)"
     ],
     "deny": [],
     "ask": []
