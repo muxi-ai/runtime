@@ -82,7 +82,7 @@ async def main():
 
             async for chunk in response_stream:
                 all_events.append(chunk)
-                
+
                 # Extract content from dict events
                 if isinstance(chunk, dict):
                     chunk_text = chunk.get('content', '')
@@ -93,7 +93,7 @@ async def main():
                 else:
                     chunk_text = str(chunk)
                     event_type = ''
-                
+
                 chunk_lower = chunk_text.lower()
 
                 # Categorize the event by content
@@ -113,7 +113,10 @@ async def main():
 
                 # Show first few events
                 if len(all_events) <= 3:
-                    preview = chunk[:100] if len(chunk) > 100 else chunk
+                    if isinstance(chunk, dict):
+                        preview = f"{event_type} - {chunk_text[:100]}"
+                    else:
+                        preview = chunk[:100] if len(chunk) > 100 else chunk
                     print(f"   Event {len(all_events)}: {preview}")
 
         # Results analysis
@@ -159,7 +162,14 @@ async def main():
             print(f"   ✅ Received {'content' if content_events else 'response'} events")
 
             # Verify response quality
-            full_response = "".join(all_events)
+            # Extract text from dict events for joining
+            text_events = []
+            for event in all_events:
+                if isinstance(event, dict):
+                    text_events.append(event.get('content', ''))
+                else:
+                    text_events.append(str(event))
+            full_response = "".join(text_events)
             expected_terms = ["economic", "market", "investment", "strategy", "trend"]
             found_terms = [t for t in expected_terms if t in full_response.lower()]
 
@@ -180,6 +190,32 @@ async def main():
                 print("   This configuration saves on LLM rephrasing costs")
         else:
             print("❌ Test 10A5 FAILED: Progress control not working as expected")
+
+        # Print full transcript
+        print("\n" + "=" * 60)
+        print("📜 STREAMING TRANSCRIPT:")
+        print("=" * 60)
+        for i, event in enumerate(all_events, 1):
+            if isinstance(event, dict):
+                event_type = event.get('type', 'unknown')
+                content = event.get('content', '')
+                print(f"\n[Event {i}] Type: {event_type}")
+                print(f"  Content: {content}")
+                if 'stage' in event:
+                    print(f"  Stage: {event['stage']}")
+                # Mark progress events
+                if event in progress_events:
+                    print("  ** PROGRESS EVENT **")
+                if event in content_events:
+                    print("  ** CONTENT EVENT **")
+            else:
+                print(f"\n[Event {i}] Raw: {event}")
+
+        print("\n" + "=" * 60)
+        print(f"Summary: {len(all_events)} total events")
+        print(f"  - Progress events: {len(progress_events)}")
+        print(f"  - Content events: {len(content_events)}")
+        print("=" * 60)
 
         return test_passed
 

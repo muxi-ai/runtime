@@ -97,7 +97,7 @@ async def main():
                 event_text = event.get('content', '')
             else:
                 event_text = str(event)
-            
+
             event_lower = event_text.lower()
             for indicator in rephrasing_indicators:
                 if indicator in event_lower and indicator not in found_indicators:
@@ -115,7 +115,10 @@ async def main():
                 print(f"   '{sample_rephrased}...'")
 
             # Check for internal monologue style
-            full_text = " ".join(events)
+            full_text = " ".join([
+                event.get('content', '') if isinstance(event, dict) else str(event)
+                for event in events
+            ])
             if any(
                 phrase in full_text.lower()
                 for phrase in ["let me think", "i need to", "i'm going to"]
@@ -132,7 +135,10 @@ async def main():
         # All events should maintain consistent tone
         has_technical = any("api" in str(e).lower() or "json" in str(e).lower() for e in events[:5])
         has_natural = any(
-            ind in " ".join(str(e) for e in events[:5]).lower()
+            ind in " ".join([
+                event.get('content', '') if isinstance(event, dict) else str(event)
+                for event in events[:5]
+            ]).lower()
             for ind in ["let me", "i'll", "thinking"]
         )
 
@@ -152,6 +158,27 @@ async def main():
             else:
                 print("⚠️ Test 10A3 WARNING: Rephrasing enabled but indicators not found")
                 print("   This may be due to the specific prompt or model behavior")
+
+            # Print full transcript
+            print("\n" + "=" * 60)
+            print("📜 STREAMING TRANSCRIPT:")
+            print("=" * 60)
+            for i, event in enumerate(events, 1):
+                if isinstance(event, dict):
+                    print(f"\n[Event {i}] Type: {event.get('type', 'unknown')}")
+                    content = event.get('content', '')
+                    print(f"  Content: {content}")
+                    if 'stage' in event:
+                        print(f"  Stage: {event['stage']}")
+                    # Highlight rephrasing indicators found
+                    event_lower = content.lower()
+                    found_in_this = [ind for ind in rephrasing_indicators if ind in event_lower]
+                    if found_in_this:
+                        print(f"  ** REPHRASING INDICATORS: {found_in_this} **")
+                else:
+                    print(f"\n[Event {i}] Raw: {event}")
+            print("\n" + "=" * 60)
+
             return True
         else:
             print("❌ Test 10A3 FAILED: No streaming events received")

@@ -5,7 +5,6 @@ Tests streaming with workflow decomposition for complex tasks.
 """
 
 import asyncio
-import json
 import sys
 from pathlib import Path
 
@@ -65,7 +64,7 @@ async def main():
                             has_decomposition = True
                             content = chunk.get('content', '')[:200]
                             print(f"   📝 Decomposition event: {content}...")
-                    
+
                     # Print first few events
                     if len(complex_events) <= 3:
                         content = chunk.get('content', '')[:150]
@@ -93,7 +92,7 @@ async def main():
                 contents.append(event.get('content', ''))
             else:
                 contents.append(str(event))
-        
+
         full_response = " ".join(contents)
         response_lower = full_response.lower()
 
@@ -127,6 +126,28 @@ async def main():
 
         print("\n" + "=" * 60)
         print("✅ Test 10A2 PASSED: Complex task streaming works correctly")
+
+        # Print full transcript
+        print("\n" + "=" * 60)
+        print("📜 STREAMING TRANSCRIPT:")
+        print("=" * 60)
+        for i, event in enumerate(complex_events, 1):
+            if isinstance(event, dict):
+                print(f"\n[Event {i}] Type: {event.get('type', 'unknown')}")
+                print(f"  Content: {event.get('content', '')}")
+                if 'stage' in event:
+                    print(f"  Stage: {event['stage']}")
+                if 'timestamp' in event:
+                    print(f"  Timestamp: {event['timestamp']}")
+                # Show if this was a planning/decomposition event
+                if event.get('type') == 'planning':
+                    print("  ** PLANNING EVENT **")
+                if 'decomposition' in str(event.get('stage', '')).lower():
+                    print("  ** DECOMPOSITION EVENT **")
+            else:
+                print(f"\n[Event {i}] Raw: {event}")
+        print("\n" + "=" * 60)
+
         return True
 
     except Exception as e:

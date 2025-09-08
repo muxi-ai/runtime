@@ -94,7 +94,7 @@ async def main():
                     contents.append(chunk.get('content', ''))
                 else:
                     contents.append(str(chunk))
-            
+
             # Verify content
             full_response = " ".join(contents)
             if "berlin" in full_response.lower():
@@ -152,6 +152,22 @@ async def main():
             print("✅ Test 10A4 PASSED: Streaming control works correctly")
             print("   • stream=False produces non-streaming response")
             print("   • stream=True produces streaming response")
+
+            # Print streaming transcript (only if we got streaming chunks)
+            if 'chunks' in locals() and chunks:
+                print("\n" + "=" * 60)
+                print("📜 STREAMING TRANSCRIPT (stream=True test):")
+                print("=" * 60)
+                for i, event in enumerate(chunks, 1):
+                    if isinstance(event, dict):
+                        print(f"\n[Event {i}] Type: {event.get('type', 'unknown')}")
+                        print(f"  Content: {event.get('content', '')}")
+                        if 'stage' in event:
+                            print(f"  Stage: {event['stage']}")
+                    else:
+                        print(f"\n[Event {i}] Raw: {event}")
+                print("\n" + "=" * 60)
+
             return True
         else:
             print("❌ Test 10A4 FAILED: Issues with streaming control")

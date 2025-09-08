@@ -94,6 +94,23 @@ async def main():
 
         print("\n" + "=" * 60)
         print("✅ Test 10A1 PASSED: Basic streaming works correctly")
+
+        # Print full transcript
+        print("\n" + "=" * 60)
+        print("📜 STREAMING TRANSCRIPT:")
+        print("=" * 60)
+        for i, event in enumerate(stream_events, 1):
+            if isinstance(event, dict):
+                print(f"\n[Event {i}] Type: {event.get('type', 'unknown')}")
+                print(f"  Content: {event.get('content', '')}")
+                if 'stage' in event:
+                    print(f"  Stage: {event['stage']}")
+                if 'timestamp' in event:
+                    print(f"  Timestamp: {event['timestamp']}")
+            else:
+                print(f"\n[Event {i}] Raw: {event}")
+        print("\n" + "=" * 60)
+
         return True
 
     except Exception as e:
