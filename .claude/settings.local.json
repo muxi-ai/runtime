@@ -12,7 +12,8 @@
       "Bash(gh:*)",
       "WebSearch",
       "Read(**)",
-      "Bash(ruff check:*)"
+      "Bash(ruff check:*)",
+      "Bash(bash:*)"
     ],
     "deny": [],
     "ask": []
