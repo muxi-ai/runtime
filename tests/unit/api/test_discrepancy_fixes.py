@@ -21,9 +21,9 @@ async def test_health_endpoint_envelope_format():
     async with httpx.AsyncClient() as client:
         response = await client.get("http://0.0.0.0:8271/v1/health")
         assert response.status_code == 200
-        
+
         data = response.json()
-        
+
         # Check envelope format is present
         assert "object" in data
         assert "timestamp" in data
@@ -32,7 +32,7 @@ async def test_health_endpoint_envelope_format():
         assert "success" in data
         assert "error" in data
         assert "data" in data
-        
+
         # Check specific values
         assert data["object"] == "status"
         assert data["success"] is True
@@ -52,14 +52,14 @@ async def test_authentication_returns_401():
         # Test missing admin key
         response = await client.get("http://0.0.0.0:8271/v1/agents")
         assert response.status_code == 401  # Should be 401, not 403
-        
+
         # Test invalid admin key
         response = await client.get(
             "http://0.0.0.0:8271/v1/agents",
             headers={"X-Muxi-Admin-Key": "invalid-key"}
         )
         assert response.status_code == 401  # Should be 401, not 403
-        
+
         # Test missing client key
         response = await client.post(
             "http://0.0.0.0:8271/v1/chat",
@@ -71,38 +71,38 @@ async def test_authentication_returns_401():
 @pytest.mark.asyncio
 async def test_secrets_endpoint_returns_array():
     """Test that /secrets returns array of objects instead of dictionary."""
-    # Wait for server to be ready  
+    # Wait for server to be ready
     if not await wait_for_server(verbose=False):
         pytest.fail("Server failed to start")
 
     # We need a valid admin key - this test might fail if no admin key is configured
     # For now, we'll test the structure assuming some admin key exists
     # In a real test environment, you'd configure a test admin key
-    
+
     async with httpx.AsyncClient() as client:
         # First try to get the endpoint (might fail with 401 if no admin key)
         response = await client.get(
             "http://0.0.0.0:8271/v1/secrets",
             headers={"X-Muxi-Admin-Key": "test-admin-key"}
         )
-        
+
         # If we get 401, that's expected in test environment
         if response.status_code == 401:
             pytest.skip("No admin key configured for testing")
-            
+
         # If we get a successful response, validate the format
         if response.status_code == 200:
             data = response.json()
-            
+
             # Check envelope format
             assert "object" in data
             assert "success" in data
             assert "data" in data
-            
+
             # Check that data is an array, not a dictionary with "secrets" key
             assert data["object"] == "list"  # Should be "list" not "secret_list"
             assert isinstance(data["data"], list)  # Should be array directly
-            
+
             # If there are secrets, each should be an object with key, value, masked
             if data["data"]:
                 secret = data["data"][0]
@@ -122,30 +122,30 @@ async def test_config_endpoint_returns_full_config():
 
     async with httpx.AsyncClient() as client:
         response = await client.get(
-            "http://0.0.0.0:8271/v1/config", 
+            "http://0.0.0.0:8271/v1/config",
             headers={"X-Muxi-Admin-Key": "test-admin-key"}
         )
-        
+
         # If we get 401, that's expected in test environment
         if response.status_code == 401:
             pytest.skip("No admin key configured for testing")
-            
+
         if response.status_code == 200:
             data = response.json()
-            
-            # Check envelope format 
+
+            # Check envelope format
             assert "object" in data
             assert "success" in data
             assert "data" in data
             assert data["object"] == "config"
-            
+
             # Check that we get full config, not navigation structure
             # Full config should have formation-level keys like "schema", "id", etc.
             config_data = data["data"]
-            
+
             # Should NOT have navigation structure (resource links)
             assert "resource" not in str(config_data)  # No resource links
-            
+
             # Should have formation-level configuration
             # (exact structure depends on test formation, but should be configuration, not links)
             assert isinstance(config_data, dict)
@@ -162,9 +162,9 @@ async def test_404_errors_use_envelope_format():
         # Test a non-existent endpoint
         response = await client.get("http://0.0.0.0:8271/v1/nonexistent")
         assert response.status_code == 404
-        
+
         data = response.json()
-        
+
         # Check envelope format is present
         assert "object" in data
         assert "timestamp" in data
@@ -173,7 +173,7 @@ async def test_404_errors_use_envelope_format():
         assert "success" in data
         assert "error" in data
         assert "data" in data
-        
+
         # Check specific values for 404
         assert data["object"] == "error"
         assert data["success"] is False
@@ -195,7 +195,7 @@ async def test_root_endpoints_return_html():
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/html")
         assert "Up" in response.text or "Down" in response.text
-        
+
         # Test /v1 endpoint
         response = await client.get("http://0.0.0.0:8271/v1")
         assert response.status_code == 200

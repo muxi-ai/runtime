@@ -4,7 +4,7 @@ Test GET endpoints against a running Formation API Server.
 
 This script assumes the server is already running (e.g., via utils/start_test_server.py).
 You can specify the server URL and admin key via environment variables:
-    API_SERVER_URL=http://localhost:3000 
+    API_SERVER_URL=http://localhost:3000
     ADMIN_API_KEY=your_admin_key
 
 Usage:
@@ -29,14 +29,14 @@ async def test_endpoint(client: httpx.AsyncClient, endpoint: str, headers: Dict[
     print(f"\n{'='*60}")
     print(f"Testing GET {endpoint}")
     print(f"{'='*60}")
-    
+
     try:
         response = await client.get(url, headers=headers)
         print(f"Status: {response.status_code}")
-        
+
         if response.status_code == 200:
             data = response.json()
-            
+
             # Verify response structure
             assert "success" in data, "Missing 'success' field"
             assert data["success"] is True, "Request was not successful"
@@ -46,11 +46,11 @@ async def test_endpoint(client: httpx.AsyncClient, endpoint: str, headers: Dict[
             assert "timestamp" in data, "Missing 'timestamp' field"
             assert "type" in data, "Missing 'type' field"
             assert "object" in data, "Missing 'object' field"
-            
+
             print("✓ Response structure valid")
             print(f"✓ Type: {data['type']}")
             print(f"✓ Object: {data['object']}")
-            
+
             # Print the actual data returned
             print("\nData returned:")
             data_str = json.dumps(data['data'], indent=2)
@@ -59,19 +59,19 @@ async def test_endpoint(client: httpx.AsyncClient, endpoint: str, headers: Dict[
                 print(data_str[:500] + "\n... (truncated)")
             else:
                 print(data_str)
-            
+
             # Specific checks for certain endpoints
             if endpoint == "/overlord/persona":
                 assert "persona" in data['data'], "Missing persona in response"
                 persona = data['data']['persona']
                 print(f"✓ Persona: {persona[:50]}..." if len(persona) > 50 else f"✓ Persona: {persona}")
-            
+
             return True
         else:
             print(f"✗ Failed with status {response.status_code}")
             print(f"Response: {response.text}")
             return False
-            
+
     except Exception as e:
         print(f"✗ Error: {e}")
         return False
@@ -80,15 +80,15 @@ async def test_endpoint(client: httpx.AsyncClient, endpoint: str, headers: Dict[
 async def main():
     """Run all endpoint tests."""
     print(f"Testing Formation API Server at: {SERVER_URL}")
-    
+
     # If no admin key provided, try to get it from the server's health endpoint
     if not ADMIN_KEY:
         print("\nNo ADMIN_API_KEY provided. Please set it as an environment variable.")
         print("You can find it in the server startup logs.")
         return
-    
+
     headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
-    
+
     # First test if server is reachable
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
         try:
@@ -100,7 +100,7 @@ async def main():
         except Exception as e:
             print(f"✗ Cannot connect to server at {SERVER_URL}: {e}")
             return
-        
+
         # Test all GET endpoints
         endpoints = [
             "/overlord",
@@ -117,13 +117,13 @@ async def main():
             "/config",
             "/status",
         ]
-        
+
         success_count = 0
         for endpoint in endpoints:
             result = await test_endpoint(client, endpoint, headers)
             if result:
                 success_count += 1
-        
+
         print(f"\n{'='*60}")
         print(f"Test Summary: {success_count}/{len(endpoints)} endpoints passed")
         print(f"{'='*60}")

@@ -23,11 +23,7 @@ WRONG_KEY = "sk_muxi_wrong_key_12345"
 
 
 async def test_endpoint(
-    client: httpx.AsyncClient,
-    method: str,
-    url: str,
-    headers: Dict[str, str],
-    test_name: str
+    client: httpx.AsyncClient, method: str, url: str, headers: Dict[str, str], test_name: str
 ) -> Dict[str, Any]:
     """Test a single endpoint and return results."""
     try:
@@ -49,20 +45,14 @@ async def test_endpoint(
         return result
 
     except Exception as e:
-        return {
-            "test": test_name,
-            "url": url,
-            "status": "ERROR",
-            "success": False,
-            "error": str(e)
-        }
+        return {"test": test_name, "url": url, "status": "ERROR", "success": False, "error": str(e)}
 
 
 async def test_admin_endpoints():
     """Test admin endpoints with different auth scenarios."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("🔐 TESTING ADMIN ENDPOINTS")
-    print("="*60)
+    print("=" * 60)
 
     # Admin endpoints to test
     admin_endpoints = [
@@ -81,26 +71,32 @@ async def test_admin_endpoints():
             # Test 1: Correct API key
             headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
             result = await test_endpoint(client, method, url, headers, "Correct admin key")
-            print(f"✅ Correct key: {result['status']} - {'SUCCESS' if result['success'] else 'FAILED'}")
-            if result['success'] and 'body' in result:
+            print(
+                f"✅ Correct key: {result['status']} - {'SUCCESS' if result['success'] else 'FAILED'}"
+            )
+            if result["success"] and "body" in result:
                 print(f"   Response preview: {json.dumps(result['body'], indent=2)[:200]}...")
 
             # Test 2: Wrong API key
             headers = {"X-Muxi-Admin-Key": WRONG_KEY}
             result = await test_endpoint(client, method, url, headers, "Wrong admin key")
-            print(f"❌ Wrong key: {result['status']} - {'FAILED as expected' if result['status'] == 401 else 'UNEXPECTED'}")
+            print(
+                f"❌ Wrong key: {result['status']} - {'FAILED as expected' if result['status'] == 401 else 'UNEXPECTED'}"
+            )
 
             # Test 3: No API key
             headers = {}
             result = await test_endpoint(client, method, url, headers, "No admin key")
-            print(f"🚫 No key: {result['status']} - {'FAILED as expected' if result['status'] == 403 else 'UNEXPECTED'}")
+            print(
+                f"🚫 No key: {result['status']} - {'FAILED as expected' if result['status'] == 403 else 'UNEXPECTED'}"
+            )
 
 
 async def test_client_endpoints():
     """Test client endpoints with different auth scenarios."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("👤 TESTING CLIENT ENDPOINTS")
-    print("="*60)
+    print("=" * 60)
 
     # Client endpoints to test (these need user_id in path)
     client_endpoints = [
@@ -118,31 +114,41 @@ async def test_client_endpoints():
             # Test 1: Correct API key
             headers = {"X-Muxi-Client-Key": CLIENT_KEY}
             result = await test_endpoint(client, method, url, headers, "Correct client key")
-            print(f"✅ Correct key: {result['status']} - {'SUCCESS' if result['success'] else 'FAILED'}")
-            if result['success'] and 'body' in result:
+            print(
+                f"✅ Correct key: {result['status']} - {'SUCCESS' if result['success'] else 'FAILED'}"
+            )
+            if result["success"] and "body" in result:
                 print(f"   Response preview: {json.dumps(result['body'], indent=2)[:200]}...")
 
             # Test 2: Wrong API key
             headers = {"X-Muxi-Client-Key": WRONG_KEY}
             result = await test_endpoint(client, method, url, headers, "Wrong client key")
-            print(f"❌ Wrong key: {result['status']} - {'FAILED as expected' if result['status'] == 401 else 'UNEXPECTED'}")
+            print(
+                f"❌ Wrong key: {result['status']} - {'FAILED as expected' if result['status'] == 401 else 'UNEXPECTED'}"
+            )
 
             # Test 3: No API key
             headers = {}
             result = await test_endpoint(client, method, url, headers, "No client key")
-            print(f"🚫 No key: {result['status']} - {'FAILED as expected' if result['status'] == 403 else 'UNEXPECTED'}")
+            print(
+                f"🚫 No key: {result['status']} - {'FAILED as expected' if result['status'] == 403 else 'UNEXPECTED'}"
+            )
 
             # Test 4: Using admin key on client endpoint (should fail)
             headers = {"X-Muxi-Client-Key": ADMIN_KEY}
-            result = await test_endpoint(client, method, url, headers, "Admin key on client endpoint")
-            print(f"🔑 Admin key: {result['status']} - {'FAILED as expected' if result['status'] == 401 else 'UNEXPECTED'}")
+            result = await test_endpoint(
+                client, method, url, headers, "Admin key on client endpoint"
+            )
+            print(
+                f"🔑 Admin key: {result['status']} - {'FAILED as expected' if result['status'] == 401 else 'UNEXPECTED'}"
+            )
 
 
 async def test_public_endpoints():
     """Test public endpoints that don't require authentication."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("🌐 TESTING PUBLIC ENDPOINTS")
-    print("="*60)
+    print("=" * 60)
 
     # Public endpoints (no auth required)
     public_endpoints = [
@@ -160,7 +166,7 @@ async def test_public_endpoints():
             headers = {}
             result = await test_endpoint(client, method, url, headers, "No key (public)")
             print(f"🆓 No key: {result['status']} - {'SUCCESS' if result['success'] else 'FAILED'}")
-            if result['success'] and 'body' in result:
+            if result["success"] and "body" in result:
                 print(f"   Response: {json.dumps(result['body'], indent=2)}")
 
 
@@ -191,9 +197,9 @@ async def main():
     await test_admin_endpoints()
     await test_client_endpoints()
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("✅ All authentication tests completed!")
-    print("="*60)
+    print("=" * 60)
 
 
 if __name__ == "__main__":

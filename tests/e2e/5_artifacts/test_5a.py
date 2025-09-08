@@ -16,7 +16,7 @@ from pathlib import Path
 # Add the src directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation.overlord.overlord import MuxiOverlord
+from muxi.formation.overlord.overlord import MuxiOverlord  # noqa: E402
 
 
 async def test_5a1_basic_chart_creation():

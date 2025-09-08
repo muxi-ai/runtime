@@ -41,28 +41,28 @@ class TestGetEndpoints:
                 f"{BASE_URL}{path}",
                 headers=headers or {}
             )
-            
+
             print(f"GET {path} -> {response.status_code}")
-            
+
             # Check status code
             assert response.status_code == expected_status, \
                 f"Expected {expected_status}, got {response.status_code}: {response.text}"
-            
+
             # Parse JSON response
             data = response.json()
-            
+
             # Validate response envelope structure
             assert "object" in data, "Response missing 'object' field"
             assert "timestamp" in data, "Response missing 'timestamp' field"
             assert "success" in data, "Response missing 'success' field"
             assert "data" in data, "Response missing 'data' field"
             assert "error" in data, "Response missing 'error' field"
-            
+
             # For successful responses
             if expected_status == 200:
                 assert data["success"] is True, "Success should be True for 200 responses"
                 assert data["error"] is None, "Error should be None for successful responses"
-            
+
             return data
 
     # Health & Status Tests
@@ -70,7 +70,7 @@ class TestGetEndpoints:
     async def test_health_endpoint(self):
         """Test GET /v1/health - No auth required."""
         data = await self._make_get_request("/v1/health")
-        
+
         # Validate health response
         assert data["object"] == "health"
         assert data["data"]["status"] == "healthy"
@@ -83,7 +83,7 @@ class TestGetEndpoints:
         """Test GET /v1/status - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/status", headers)
-        
+
         # Validate status response
         assert data["object"] == "formation_status"
         status_data = data["data"]
@@ -98,7 +98,7 @@ class TestGetEndpoints:
         """Test GET /v1/config - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/config", headers)
-        
+
         # Validate config response
         assert data["object"] == "formation_config"
         config_data = data["data"]
@@ -115,7 +115,7 @@ class TestGetEndpoints:
         """Test GET /v1/overlord - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/overlord", headers)
-        
+
         assert data["object"] == "overlord_config"
         overlord_data = data["data"]
         assert "persona" in overlord_data
@@ -127,7 +127,7 @@ class TestGetEndpoints:
         """Test GET /v1/overlord/persona - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/overlord/persona", headers)
-        
+
         assert data["object"] == "overlord_persona"
         assert "persona" in data["data"]
         print("  ✅ Overlord persona endpoint validated")
@@ -138,7 +138,7 @@ class TestGetEndpoints:
         """Test GET /v1/agents - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/agents", headers)
-        
+
         assert data["object"] == "list"
         assert data["type"] == "agent"
         assert isinstance(data["data"], list)
@@ -157,7 +157,7 @@ class TestGetEndpoints:
         """Test GET /v1/secrets - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/secrets", headers)
-        
+
         assert data["object"] == "list"
         assert data["type"] == "secret"
         assert isinstance(data["data"], list)
@@ -175,7 +175,7 @@ class TestGetEndpoints:
         """Test GET /v1/llm/settings - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/llm/settings", headers)
-        
+
         assert data["object"] == "llm_settings"
         settings = data["data"]
         assert "temperature" in settings
@@ -189,7 +189,7 @@ class TestGetEndpoints:
         """Test GET /v1/logging - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/logging", headers)
-        
+
         assert data["object"] == "logging_config"
         assert "enabled" in data["data"]
         assert "streams" in data["data"]
@@ -201,7 +201,7 @@ class TestGetEndpoints:
         """Test GET /v1/memory - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/memory", headers)
-        
+
         assert data["object"] == "memory_config"
         memory_data = data["data"]
         assert "working" in memory_data
@@ -214,7 +214,7 @@ class TestGetEndpoints:
         """Test GET /v1/async - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/async", headers)
-        
+
         assert data["object"] == "async_settings"
         async_data = data["data"]
         assert "threshold_seconds" in async_data
@@ -227,7 +227,7 @@ class TestGetEndpoints:
         """Test GET /v1/scheduler - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/scheduler", headers)
-        
+
         assert data["object"] == "scheduler_settings"
         scheduler_data = data["data"]
         assert "enabled" in scheduler_data
@@ -240,7 +240,7 @@ class TestGetEndpoints:
         """Test GET /v1/a2a - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/a2a", headers)
-        
+
         assert data["object"] == "a2a_settings"
         a2a_data = data["data"]
         assert "enabled" in a2a_data
@@ -254,7 +254,7 @@ class TestGetEndpoints:
         """Test GET /v1/mcp - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/mcp", headers)
-        
+
         assert data["object"] == "mcp_defaults"
         mcp_data = data["data"]
         assert "default_retry_attempts" in mcp_data
@@ -266,7 +266,7 @@ class TestGetEndpoints:
         """Test GET /v1/mcp/servers - Admin auth required."""
         headers = {"X-Muxi-Admin-Key": ADMIN_KEY}
         data = await self._make_get_request("/v1/mcp/servers", headers)
-        
+
         assert data["object"] == "list"
         assert data["type"] == "mcp_server"
         assert isinstance(data["data"], list)
@@ -281,7 +281,7 @@ class TestGetEndpoints:
             "X-Muxi-User-Id": TEST_USER_ID
         }
         data = await self._make_get_request(f"/v1/jobs/{TEST_USER_ID}", headers)
-        
+
         assert data["object"] == "list"
         assert data["type"] == "job"
         assert isinstance(data["data"], list)
@@ -295,7 +295,7 @@ class TestGetEndpoints:
             "X-Muxi-User-Id": TEST_USER_ID
         }
         data = await self._make_get_request(f"/v1/memories/{TEST_USER_ID}", headers)
-        
+
         assert data["object"] == "list"
         assert data["type"] == "memory"
         assert isinstance(data["data"], list)

@@ -19,8 +19,9 @@ from concurrent.futures import ThreadPoolExecutor
 runtime_root = Path(__file__).parent.parent.parent.absolute()
 sys.path.insert(0, str(runtime_root))
 
-from muxi import Formation
-from test_utils import format_response
+from muxi import Formation  # noqa: E402
+from test_utils import format_response  # noqa: E402
+
 
 def run_single_test(test_id, test_name, prompt):
     """Run a single test"""
@@ -43,11 +44,9 @@ def run_single_test(test_id, test_name, prompt):
             print(f"Prompt: {prompt}")
 
             # Run the test
-            response = asyncio.run(overlord.chat(
-                prompt,
-                session_id=f"test_{test_id}",
-                stream=False
-            ))
+            response = asyncio.run(
+                overlord.chat(prompt, session_id=f"test_{test_id}", stream=False)
+            )
 
             # Save response
             response_data = format_response(response)
@@ -58,17 +57,21 @@ def run_single_test(test_id, test_name, prompt):
             print(f"Artifacts found: {len(response_data['artifacts'])}")
 
             # List artifact types and formats
-            if response_data['artifacts']:
+            if response_data["artifacts"]:
                 print("Artifact details:")
-                for i, artifact in enumerate(response_data['artifacts']):
-                    print(f"  {i+1}. {artifact['filename']} ({artifact['type']}/{artifact['format']})")
-                    if 'size_bytes' in artifact.get('metadata', {}):
-                        size = artifact['metadata']['size_bytes']
+                for i, artifact in enumerate(response_data["artifacts"]):
+                    print(
+                        f"  {i+1}. {artifact['filename']} ({artifact['type']}/{artifact['format']})"
+                    )
+                    if "size_bytes" in artifact.get("metadata", {}):
+                        size = artifact["metadata"]["size_bytes"]
                         print(f"     Size: {size:,} bytes")
 
             # Check for error handling in 5e4
-            content_lower = response_data['content'].lower()
-            has_error_handling = any(term in content_lower for term in ['error', 'failed', 'invalid', 'syntax'])
+            content_lower = response_data["content"].lower()
+            has_error_handling = any(
+                term in content_lower for term in ["error", "failed", "invalid", "syntax"]
+            )
 
             return response_data, has_error_handling
 
@@ -81,21 +84,31 @@ def run_single_test(test_id, test_name, prompt):
         future = executor.submit(run_test)
         return future.result()
 
+
 def main():
     """Run all tests in group 5E"""
 
     tests = [
-        ("5e1", "Test 5E1: Integrated Report Generation",
-         "Create a complete quarterly report with Excel data analysis, PowerPoint presentation, and PDF executive summary"),
-
-        ("5e2", "Test 5E2: Data Pipeline Creation",
-         "Create a sample CSV with sales data, process the CSV data, create visualization charts, and generate a Word report with findings"),
-
-        ("5e3", "Test 5E3: Interactive Dashboard Creation",
-         "Create an interactive dashboard with multiple chart types and data filters"),
-
-        ("5e4", "Test 5E4: Error Handling & Recovery",
-         "Create a chart with invalid syntax in the code")
+        (
+            "5e1",
+            "Test 5E1: Integrated Report Generation",
+            "Create a complete quarterly report with Excel data analysis, PowerPoint presentation, and PDF executive summary",  # noqa: E501
+        ),
+        (
+            "5e2",
+            "Test 5E2: Data Pipeline Creation",
+            "Create a sample CSV with sales data, process the CSV data, create visualization charts, and generate a Word report with findings",  # noqa: E501
+        ),
+        (
+            "5e3",
+            "Test 5E3: Interactive Dashboard Creation",
+            "Create an interactive dashboard with multiple chart types and data filters",
+        ),
+        (
+            "5e4",
+            "Test 5E4: Error Handling & Recovery",
+            "Create a chart with invalid syntax in the code",
+        ),
     ]
 
     results = []
@@ -109,56 +122,60 @@ def main():
             # Determine test outcome
             if test_id == "5e4":
                 # Special case for error handling test
-                success = has_error_handling or len(result['artifacts']) == 0
-                test_outcomes.append({
-                    "test_id": test_id,
-                    "test_name": test_name,
-                    "success": success,
-                    "artifacts_created": len(result['artifacts']),
-                    "error_handling": has_error_handling
-                })
+                success = has_error_handling or len(result["artifacts"]) == 0
+                test_outcomes.append(
+                    {
+                        "test_id": test_id,
+                        "test_name": test_name,
+                        "success": success,
+                        "artifacts_created": len(result["artifacts"]),
+                        "error_handling": has_error_handling,
+                    }
+                )
             else:
                 # Regular tests - success if artifacts were created
-                success = len(result['artifacts']) > 0
-                test_outcomes.append({
-                    "test_id": test_id,
-                    "test_name": test_name,
-                    "success": success,
-                    "artifacts_created": len(result['artifacts'])
-                })
+                success = len(result["artifacts"]) > 0
+                test_outcomes.append(
+                    {
+                        "test_id": test_id,
+                        "test_name": test_name,
+                        "success": success,
+                        "artifacts_created": len(result["artifacts"]),
+                    }
+                )
 
             # Brief pause between tests
             time.sleep(2)
 
         except Exception as e:
             print(f"Error in {test_name}: {e}")
-            test_outcomes.append({
-                "test_id": test_id,
-                "test_name": test_name,
-                "success": False,
-                "error": str(e)
-            })
+            test_outcomes.append(
+                {"test_id": test_id, "test_name": test_name, "success": False, "error": str(e)}
+            )
 
     # Summary
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("SUMMARY")
-    print("="*60)
+    print("=" * 60)
 
-    total_success = sum(1 for t in test_outcomes if t.get('success', False))
+    total_success = sum(1 for t in test_outcomes if t.get("success", False))
 
     for outcome in test_outcomes:
-        status = "✅ PASS" if outcome.get('success') else "❌ FAIL"
+        status = "✅ PASS" if outcome.get("success") else "❌ FAIL"
         print(f"{outcome['test_name']}: {status}")
-        if 'error' in outcome:
+        if "error" in outcome:
             print(f"  Error: {outcome['error']}")
         else:
             print(f"  Artifacts: {outcome['artifacts_created']}")
-            if 'error_handling' in outcome:
+            if "error_handling" in outcome:
                 print(f"  Error Handling: {'Yes' if outcome['error_handling'] else 'No'}")
 
-    print(f"\nSuccess Rate: {total_success}/{len(test_outcomes)} ({total_success/len(test_outcomes)*100:.0f}%)")
+    print(
+        f"\nSuccess Rate: {total_success}/{len(test_outcomes)} ({total_success/len(test_outcomes)*100:.0f}%)"
+    )
 
     return results, test_outcomes
+
 
 if __name__ == "__main__":
     main()

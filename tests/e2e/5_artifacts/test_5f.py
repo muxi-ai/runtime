@@ -16,8 +16,9 @@ from concurrent.futures import ThreadPoolExecutor
 runtime_root = Path(__file__).parent.parent.parent.absolute()
 sys.path.insert(0, str(runtime_root))
 
-from muxi import Formation
-from test_utils import format_response
+from muxi import Formation  # noqa: E402
+from test_utils import format_response  # noqa: E402
+
 
 def run_single_test(test_id, test_name, prompt):
     """Run a single test"""
@@ -81,6 +82,7 @@ def run_single_test(test_id, test_name, prompt):
     with ThreadPoolExecutor() as executor:
         future = executor.submit(run_test)
         return future.result()
+
 
 def main():
     """Run all tests in group 5F"""
@@ -154,9 +156,10 @@ def main():
             print(f"  Implicit Generation: {'Yes' if outcome['implicit_generation'] else 'No'}")
 
     print(f"\nSuccess Rate: {total_success}/{len(test_outcomes)} ({total_success/len(test_outcomes)*100:.0f}%)")
-    print(f"Implicit Generation Rate: {implicit_generation}/{len(test_outcomes)} ({implicit_generation/len(test_outcomes)*100:.0f}%)")
+    print(f"Implicit Generation Rate: {implicit_generation}/{len(test_outcomes)} ({implicit_generation/len(test_outcomes)*100:.0f}%)")  # noqa: E501
 
     return results, test_outcomes
+
 
 if __name__ == "__main__":
     main()

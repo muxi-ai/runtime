@@ -14,8 +14,9 @@ from concurrent.futures import ThreadPoolExecutor
 runtime_root = Path(__file__).parent.parent.parent.absolute()
 sys.path.insert(0, str(runtime_root))
 
-from muxi import Formation
-from test_utils import format_response
+from muxi import Formation  # noqa: E402
+from test_utils import format_response  # noqa: E402
+
 
 def run_single_test(test_id, test_name, prompt):
     """Run a single test"""
@@ -38,11 +39,9 @@ def run_single_test(test_id, test_name, prompt):
             print(f"Prompt: {prompt}")
 
             # Run the test
-            response = asyncio.run(overlord.chat(
-                prompt,
-                session_id=f"test_{test_id}",
-                stream=False
-            ))
+            response = asyncio.run(
+                overlord.chat(prompt, session_id=f"test_{test_id}", stream=False)
+            )
 
             # Save response
             response_data = format_response(response)
@@ -63,18 +62,26 @@ def run_single_test(test_id, test_name, prompt):
         future = executor.submit(run_test)
         return future.result()
 
+
 def main():
     """Run all tests in group 5C"""
 
     tests = [
-        ("5c1", "Test 5C1: Excel File Creation",
-         "Create an Excel file with sales data: Product A: 100 units, Product B: 150 units, Product C: 75 units"),
-
-        ("5c2", "Test 5C2: Complex Data Analysis",
-         "Generate a spreadsheet with pivot tables and charts for quarterly sales analysis"),
-
-        ("5c3", "Test 5C3: Financial Models",
-         "Create a financial model spreadsheet with revenue projections and cost analysis")
+        (
+            "5c1",
+            "Test 5C1: Excel File Creation",
+            "Create an Excel file with sales data: Product A: 100 units, Product B: 150 units, Product C: 75 units",
+        ),
+        (
+            "5c2",
+            "Test 5C2: Complex Data Analysis",
+            "Generate a spreadsheet with pivot tables and charts for quarterly sales analysis",
+        ),
+        (
+            "5c3",
+            "Test 5C3: Financial Models",
+            "Create a financial model spreadsheet with revenue projections and cost analysis",
+        ),
     ]
 
     results = []
@@ -91,15 +98,16 @@ def main():
             print(f"Error in {test_name}: {e}")
 
     # Summary
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("SUMMARY")
-    print("="*60)
+    print("=" * 60)
 
     for i, (test_id, test_name, _) in enumerate(tests):
         if i < len(results):
             print(f"{test_name}: {len(results[i]['artifacts'])} artifacts")
 
     return results
+
 
 if __name__ == "__main__":
     main()
