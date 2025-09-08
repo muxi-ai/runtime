@@ -11,7 +11,7 @@ from PIL import Image
 from pdf2image import convert_from_path
 
 from ...datatypes.artifacts import MuxiArtifact, ArtifactMetadata, ArtifactPreview
-from ...services.observability import observability
+from ...services import observability
 
 # Define file type extensions
 TEXT_EXTENSIONS = {
