@@ -54,6 +54,10 @@ class ChatOrchestrator:
         Create a streaming generator that fires off processing and yields events.
         This function contains yield, making it a generator.
         """
+        # Capture the current context to propagate to background task
+        import contextvars
+        current_context = contextvars.copy_context()
+
         # Fire-and-forget the processing with a delay to ensure subscription is ready
         async def delayed_process():
             await asyncio.sleep(1.0)  # Give time for subscription to be established
@@ -73,6 +77,11 @@ class ChatOrchestrator:
                 webhook_url=webhook_url,
             )
 
+            # Emit content event with actual agent response
+            if result and hasattr(result, "content") and result.content:
+                content_for_streaming = result.content if isinstance(result.content, str) else str(result.content)
+                streaming_manager.emit_event(request_id, "content", content_for_streaming, stage="response")
+
             # Emit completion event
             streaming_manager.emit_event(request_id, "complete", "Request processing complete", stage="done")
 
@@ -84,7 +93,11 @@ class ChatOrchestrator:
 
             return result
 
-        asyncio.create_task(delayed_process())
+        # Create task with context propagation (Python 3.10 compatible)
+        def create_task_with_context():
+            return asyncio.create_task(delayed_process())
+
+        current_context.run(create_task_with_context)
 
         # Yield events from the stream
         async for event in self._stream_request(request_id, user_id, session_id):
