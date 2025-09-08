@@ -54,9 +54,15 @@ class ChatOrchestrator:
         Create a streaming generator that fires off processing and yields events.
         This function contains yield, making it a generator.
         """
-        # Fire-and-forget the processing
-        asyncio.create_task(
-            self._process_sync_chat(
+        # Fire-and-forget the processing with a delay to ensure subscription is ready
+        async def delayed_process():
+            await asyncio.sleep(1.0)  # Give time for subscription to be established
+
+            # Emit a test event to verify streaming
+            from ...services.streaming import streaming_manager
+            streaming_manager.emit_event(request_id, "progress", "Starting request processing", stage="init")
+
+            result = await self._process_sync_chat(
                 message=enhanced_message,
                 agent_name=agent_name,
                 user_id=user_id,
@@ -66,7 +72,16 @@ class ChatOrchestrator:
                 use_async=use_async,
                 webhook_url=webhook_url,
             )
-        )
+
+            # Emit completion event
+            streaming_manager.emit_event(request_id, "complete", "Request processing complete", stage="done")
+
+            # Disable streaming to close the subscription
+            streaming_manager.disable_streaming(request_id)
+
+            return result
+
+        asyncio.create_task(delayed_process())
 
         # Yield events from the stream
         async for event in self._stream_request(request_id, user_id, session_id):

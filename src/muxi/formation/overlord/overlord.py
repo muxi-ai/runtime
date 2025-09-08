@@ -6618,8 +6618,12 @@ Make it conversational and friendly while keeping accuracy."""
             "progress",
             "Preparing response...",
             stage="response_preparation",
-            has_persona=bool(self.persona),
-            response_format=self.response_format
+            has_persona=bool(getattr(self, '_default_persona', None)),
+            response_format=(
+                getattr(self.response_formatter, 'format', 'markdown')
+                if hasattr(self, 'response_formatter')
+                else 'markdown'
+            )
         )
 
         # Apply persona to format the response (except for clarifications)
