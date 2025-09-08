@@ -61,8 +61,13 @@ async def main():
                 events.append(chunk)
                 # Show first few events for debugging
                 if len(events) <= 3:
-                    preview = chunk[:150] if len(chunk) > 150 else chunk
-                    print(f"   Event {len(events)}: {preview}")
+                    if isinstance(chunk, dict):
+                        event_type = chunk.get('type', 'unknown')
+                        content = chunk.get('content', '')[:150]
+                        print(f"   Event {len(events)}: {event_type} - {content}")
+                    else:
+                        preview = str(chunk)[:150]
+                        print(f"   Event {len(events)}: {preview}")
 
         # Check for rephrasing indicators
         print("\n📊 Rephrasing Analysis:")
@@ -87,12 +92,18 @@ async def main():
         sample_rephrased = None
 
         for event in events[:10]:  # Check first 10 events
-            event_lower = str(event).lower()
+            # Extract content from dict events
+            if isinstance(event, dict):
+                event_text = event.get('content', '')
+            else:
+                event_text = str(event)
+            
+            event_lower = event_text.lower()
             for indicator in rephrasing_indicators:
                 if indicator in event_lower and indicator not in found_indicators:
                     found_indicators.append(indicator)
                     if not sample_rephrased:
-                        sample_rephrased = event[:200]
+                        sample_rephrased = event_text[:200]
 
         if found_indicators:
             print(f"   ✅ Found {len(found_indicators)} rephrasing indicators:")

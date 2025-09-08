@@ -54,27 +54,27 @@ async def main():
             async for chunk in response_gen:
                 complex_events.append(chunk)
 
-                # Try to parse if it's a structured event (for debugging)
-                try:
-                    if isinstance(chunk, str) and chunk.startswith("{"):
-                        event = json.loads(chunk)
-                        event_type = event.get("type", "")
-                        event_types.add(event_type)
+                # Handle dict events (new streaming format)
+                if isinstance(chunk, dict):
+                    event_type = chunk.get("type", "")
+                    event_types.add(event_type)
 
-                        if event_type == "planning":
-                            has_planning = True
-                            if "decomposition" in event.get("stage", ""):
-                                has_decomposition = True
-                                content = event.get('content', '')[:200]
-                                print(f"   📝 Decomposition event: {content}...")
-                except Exception:
-                    # Not JSON, just regular content
-                    pass
-
-                # Print first few events
-                if len(complex_events) <= 3:
-                    preview = chunk[:150] if len(chunk) > 150 else chunk
-                    print(f"   Event {len(complex_events)}: {preview}")
+                    if event_type == "planning":
+                        has_planning = True
+                        if "decomposition" in chunk.get("stage", ""):
+                            has_decomposition = True
+                            content = chunk.get('content', '')[:200]
+                            print(f"   📝 Decomposition event: {content}...")
+                    
+                    # Print first few events
+                    if len(complex_events) <= 3:
+                        content = chunk.get('content', '')[:150]
+                        print(f"   Event {len(complex_events)}: {event_type} - {content}")
+                else:
+                    # Legacy string format
+                    if len(complex_events) <= 3:
+                        preview = str(chunk)[:150]
+                        print(f"   Event {len(complex_events)}: {preview}")
 
         # Results
         print("\n📊 Results:")
@@ -86,7 +86,15 @@ async def main():
             print("   Event format: Plain text stream")
 
         # Check for planning/decomposition indicators
-        full_response = "".join(complex_events)
+        # Extract content from dict events
+        contents = []
+        for event in complex_events:
+            if isinstance(event, dict):
+                contents.append(event.get('content', ''))
+            else:
+                contents.append(str(event))
+        
+        full_response = " ".join(contents)
         response_lower = full_response.lower()
 
         planning_indicators = [

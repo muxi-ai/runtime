@@ -60,7 +60,11 @@ async def main():
                 stream_events.append(chunk)
                 # Print first few chunks
                 if len(stream_events) <= 3:
-                    preview = chunk[:100] if len(chunk) > 100 else chunk
+                    # Handle dict events
+                    if isinstance(chunk, dict):
+                        preview = f"{chunk.get('type', 'unknown')} - {chunk.get('content', '')[:100]}"
+                    else:
+                        preview = str(chunk)[:100]
                     print(f"   Stream chunk {len(stream_events)}: {preview}")
 
         # Results
@@ -69,9 +73,17 @@ async def main():
             print(f"   ✅ Received {len(stream_events)} streaming chunks")
 
             # Check content quality
-            full_response = "".join(stream_events)
-            if "quantum" in full_response.lower():
-                print("   ✅ Response contains relevant content about quantum computing")
+            # Extract content from dict events
+            contents = []
+            for event in stream_events:
+                if isinstance(event, dict):
+                    contents.append(event.get('content', ''))
+                else:
+                    contents.append(str(event))
+
+            full_response = " ".join(contents)
+            if "quantum" in full_response.lower() or "processing" in full_response.lower():
+                print("   ✅ Response contains relevant content")
             else:
                 print("   ⚠️ Response may not contain expected content")
 

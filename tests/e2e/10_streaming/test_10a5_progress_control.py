@@ -82,16 +82,31 @@ async def main():
 
             async for chunk in response_stream:
                 all_events.append(chunk)
-                chunk_lower = str(chunk).lower()
+                
+                # Extract content from dict events
+                if isinstance(chunk, dict):
+                    chunk_text = chunk.get('content', '')
+                    event_type = chunk.get('type', '')
+                    # Progress events might be marked in type
+                    if event_type == 'progress':
+                        progress_events.append(chunk)
+                else:
+                    chunk_text = str(chunk)
+                    event_type = ''
+                
+                chunk_lower = chunk_text.lower()
 
-                # Categorize the event
+                # Categorize the event by content
                 is_progress = any(ind in chunk_lower for ind in progress_indicators)
 
-                if is_progress:
+                if is_progress and chunk not in progress_events:
                     progress_events.append(chunk)
                     # Show first progress event found
                     if len(progress_events) == 1:
-                        preview = chunk[:150] if len(chunk) > 150 else chunk
+                        if isinstance(chunk, dict):
+                            preview = f"{event_type} - {chunk_text[:150]}"
+                        else:
+                            preview = chunk_text[:150]
                         print(f"\n   ⚠️ Found progress event: {preview}")
                 else:
                     content_events.append(chunk)

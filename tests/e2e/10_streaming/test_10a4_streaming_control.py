@@ -87,14 +87,25 @@ async def main():
 
             print(f"   Received {len(chunks)} chunks")
 
+            # Extract content from dict events
+            contents = []
+            for chunk in chunks:
+                if isinstance(chunk, dict):
+                    contents.append(chunk.get('content', ''))
+                else:
+                    contents.append(str(chunk))
+            
             # Verify content
-            full_response = "".join(chunks)
+            full_response = " ".join(contents)
             if "berlin" in full_response.lower():
                 print("   ✅ Streamed response contains correct answer")
 
             # Show first chunk as sample
             if chunks:
-                preview = chunks[0][:100] if len(chunks[0]) > 100 else chunks[0]
+                if isinstance(chunks[0], dict):
+                    preview = f"{chunks[0].get('type', 'unknown')} - {chunks[0].get('content', '')[:100]}"
+                else:
+                    preview = str(chunks[0])[:100]
                 print(f"   First chunk: {preview}")
         else:
             print("   ❌ Got non-streaming response when stream=True")
@@ -116,7 +127,14 @@ async def main():
             chunks = []
             async for chunk in response_default:
                 chunks.append(chunk)
-            full_response = "".join(chunks)
+            # Extract content from dict events
+            contents = []
+            for chunk in chunks:
+                if isinstance(chunk, dict):
+                    contents.append(chunk.get('content', ''))
+                else:
+                    contents.append(str(chunk))
+            full_response = " ".join(contents)
         else:
             print("   ℹ️ Default behavior: Streaming disabled")
             if hasattr(response_default, "content"):
