@@ -39,6 +39,39 @@ class ChatOrchestrator:
         """
         self.overlord = overlord
 
+    async def _create_stream_generator(
+        self,
+        enhanced_message: str,
+        original_message: str,
+        agent_name: Optional[str],
+        user_id: str,
+        session_id: str,
+        request_id: str,
+        use_async: Optional[bool],
+        webhook_url: Optional[str],
+    ) -> AsyncGenerator[str, None]:
+        """
+        Create a streaming generator that fires off processing and yields events.
+        This function contains yield, making it a generator.
+        """
+        # Fire-and-forget the processing
+        asyncio.create_task(
+            self._process_sync_chat(
+                message=enhanced_message,
+                agent_name=agent_name,
+                user_id=user_id,
+                session_id=session_id,
+                request_id=request_id,
+                original_message=original_message,
+                use_async=use_async,
+                webhook_url=webhook_url,
+            )
+        )
+
+        # Yield events from the stream
+        async for event in self._stream_request(request_id, user_id, session_id):
+            yield event
+
     async def chat(
         self,
         message: str,
@@ -285,34 +318,29 @@ class ChatOrchestrator:
 
             # Execute sync request
             if use_streaming:
-                # NEW: Fire-and-forget + return generator (replaces _process_streaming_chat)
-                asyncio.create_task(
-                    self._process_sync_chat(  # Same method, just fire-and-forget!
-                        message=enhanced_message,
-                        agent_name=agent_name,
-                        user_id=user_id,
-                        session_id=session_id,
-                        request_id=request_id,
-                        original_message=message,  # Pass original for extraction
-                        use_async=use_async,
-                        webhook_url=webhook_url,
-                    )
-                )
-
-                # Return the stream generator
-                async for event in self._stream_request(request_id, user_id, session_id):
-                    yield event
-            else:
-                return await self._process_sync_chat(
-                    message=enhanced_message,
+                # Return the streaming generator (delegates to separate function with yield)
+                return self._create_stream_generator(
+                    enhanced_message=enhanced_message,
+                    original_message=message,
                     agent_name=agent_name,
                     user_id=user_id,
                     session_id=session_id,
                     request_id=request_id,
-                    original_message=message,  # Pass original for extraction
                     use_async=use_async,
                     webhook_url=webhook_url,
                 )
+
+            # else...
+            return await self._process_sync_chat(
+                message=enhanced_message,
+                agent_name=agent_name,
+                user_id=user_id,
+                session_id=session_id,
+                request_id=request_id,
+                original_message=message,  # Pass original for extraction
+                use_async=use_async,
+                webhook_url=webhook_url,
+            )
 
     async def _determine_async_mode(
         self,
