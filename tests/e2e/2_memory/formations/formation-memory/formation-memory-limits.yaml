@@ -12,13 +12,13 @@ llm:
   api_keys:
     openai: "${{ secrets.OPENAI_API_KEY }}"
   models:
-    - text: "openai/gpt-4o-mini"
+    - text: "openai/gpt-5-nano"
 
 agents:
   - id: "memory-test-agent"
     name: "Memory Test Agent"
     description: "Agent for testing memory limits and FIFO cleanup"
-    model: "openai/gpt-4o-mini"
+    model: "openai/gpt-5-nano"
     specialty: "general"
     system_message: |
       You are a helpful assistant designed for memory testing.
