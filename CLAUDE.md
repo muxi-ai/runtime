@@ -410,3 +410,4 @@ Claude: "Would you like me to reflect on our interaction and suggest potential i
 User: "Yes"
 Claude: "I will now review our interaction and suggest potential improvements to the active CLAUDE.md file."
 </example>
+- always run e2e tests using  bash .claude/scripts/test-and-log.sh tests/e2e/path/to/test.py
