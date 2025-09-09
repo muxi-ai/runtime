@@ -1933,7 +1933,7 @@ Response:""".format(
 
                 # Use cached model if available
                 text_model_config = self._capability_models["text"]
-                model_name = text_model_config.get("model", "openai/gpt-4o-mini")
+                model_name = text_model_config.get("model", "openai/gpt-5-mini")
                 cache_key = f"workflow_check_{model_name}"
 
                 if cache_key in self._model_cache:
@@ -1998,7 +1998,7 @@ Response:""".format(
 
                 # Use cached model if available
                 text_model_config = self._capability_models["text"]
-                model_name = text_model_config.get("model", "openai/gpt-4o-mini")
+                model_name = text_model_config.get("model", "openai/gpt-5-mini")
                 cache_key = f"question_check_{model_name}"
 
                 if cache_key in self._model_cache:
@@ -2270,7 +2270,7 @@ Make it conversational and friendly while keeping accuracy."""
             # Get overlord.llm config structure
             llm_config = overlord_config.get("llm", {})
             self.routing_model = await self.create_model(
-                model=llm_config.get("model", "openai/gpt-4o-mini"),
+                model=llm_config.get("model", "openai/gpt-5-mini"),
                 temperature=llm_config.get("settings", {}).get("temperature", 0.2),
                 max_tokens=llm_config.get("settings", {}).get("max_tokens", 2000),
                 api_key=llm_config.get("api_key"),
@@ -4300,7 +4300,7 @@ Make it conversational and friendly while keeping accuracy."""
 
                 # If no specific API key, try to get from global keys
                 if not api_key and hasattr(self, "_global_api_keys"):
-                    # Extract provider from model name (e.g., "openai/gpt-4o-mini" -> "openai")
+                    # Extract provider from model name (e.g., "openai/gpt-5-mini" -> "openai")
                     provider = model_name.split("/")[0] if "/" in model_name else "openai"
                     api_key = self._global_api_keys.get(provider)
 
