@@ -617,7 +617,7 @@ class MCPService:
             service_name = server_id.split('_')[0] if '_' in server_id else server_id
             streaming.stream(
                 "tool_call",
-                f"Using {service_name} tool to complete this task...",
+                f"Using {service_name} to complete this task...",
                 stage="tool_execution",
                 service=service_name,
                 tool_name=tool_name,

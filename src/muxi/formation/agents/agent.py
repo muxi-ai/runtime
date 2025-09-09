@@ -3254,7 +3254,7 @@ class Agent:
         # Emit streaming event for agent planning
         streaming.stream(
             "planning",
-            "Planning approach to handle your request...",
+            "Planning approach to handle the user's request...",
             stage="agent_planning",
             agent_name=self.id,
             message_preview=user_message[:500],

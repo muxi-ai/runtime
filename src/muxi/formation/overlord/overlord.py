@@ -5189,7 +5189,7 @@ Make it conversational and friendly while keeping accuracy."""
         # Emit streaming event for processing start
         streaming.stream(
             "thinking",
-            "Understanding the request...",
+            "Understanding the user's request...",
             stage="process_sync_start",
             message_preview=message[:500],
             agent_name=agent_name,
@@ -5853,10 +5853,36 @@ Make it conversational and friendly while keeping accuracy."""
         # ===================================================================
         # INITIAL ANALYSIS
         # ===================================================================
-        # Emit initial thinking event
+        # Extract the actual user message from formatted context if needed
+        display_message = message
+        if "=== CURRENT REQUEST ===" in message and "User:" in message:
+            # Extract the user's actual message from the formatted context
+            lines = message.split("\n")
+            for i, line in enumerate(lines):
+                if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    if next_line.startswith("User:"):
+                        # Handle multi-line messages
+                        content_lines = []
+                        first_line_content = next_line[5:].strip()
+                        if first_line_content:
+                            content_lines.append(first_line_content)
+
+                        # Collect subsequent lines until we hit another section
+                        for j in range(i + 2, len(lines)):
+                            line_content = lines[j].strip()
+                            if line_content.startswith("===") or (not line_content and len(content_lines) > 0):
+                                break
+                            if line_content:
+                                content_lines.append(line_content)
+
+                        display_message = " ".join(content_lines)
+                        break
+
+        # Emit initial thinking event with the clean user message
         streaming.stream(
             "thinking",
-            f"Understanding your request: {message[:100]}...",
+            f"Understanding the user's request: {display_message[:500]}...",
             original_message=message,
             agent_requested=agent_name,
             user_id=str(user_id) if user_id else None
@@ -5967,7 +5993,7 @@ Make it conversational and friendly while keeping accuracy."""
                             service = credential_detection.get('service', 'service')
                             streaming.stream(
                                 "planning",
-                                f"I need your {service} credentials. Let me help you with that...",
+                                f"I need user credentials to access {service}. Let me sort it out...",
                                 stage="credential_request",
                                 service=service,
                                 credential_type=credential_detection.get('type')
@@ -5998,7 +6024,7 @@ Make it conversational and friendly while keeping accuracy."""
                 if clarification_result.action == "clarify":
                     streaming.stream(
                         "thinking",
-                        "I need to clarify something with you...",
+                        "I need to clarify something with the user...",
                         stage="clarification_needed",
                         clarification_question=clarification_result.question if clarification_result else None
                     )
@@ -6348,7 +6374,7 @@ Make it conversational and friendly while keeping accuracy."""
             if agent_name and agent_name != "None":
                 streaming.stream(
                     "progress",
-                    f"I'll use my {agent_name} capabilities to help you with this.",
+                    f"I'll use the agent with the right capabilities to help the user with their request.",
                     stage="agent_selected",
                     selected_agent=agent_name
                 )
@@ -6779,7 +6805,7 @@ Make it conversational and friendly while keeping accuracy."""
                 "This is a complex request. Let me break it down into steps...",
                 stage="workflow_decomposition",
                 complexity_score=analysis.complexity_score if analysis else None,
-                message_preview=message[:100]
+                message_preview=message[:500]
             )
 
             # Emit workflow orchestration started event
