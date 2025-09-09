@@ -206,15 +206,15 @@ class TaskDecomposer:
         # print("=" * 80)
 
         try:
-            # Emit streaming event for decomposition
-            from ...services import streaming
-            streaming.stream(
-                "planning",
-                "Analyzing how to break down this complex request...",
-                stage="decomposition_start",
-                complexity_score=analysis.complexity_score if analysis else None,
-                request_type=analysis.request_type if analysis and hasattr(analysis, 'request_type') else None
-            )
+            # Event 5: COMMENTED OUT - duplicate planning event
+            from ...services import streaming  # Still need import for other uses
+            # streaming.stream(
+            #     "planning",
+            #     "Analyzing how to break down this complex request...",
+            #     stage="decomposition_start",
+            #     complexity_score=analysis.complexity_score if analysis else None,
+            #     request_type=analysis.request_type if analysis and hasattr(analysis, 'request_type') else None
+            # )
 
             response = await self.llm.generate_text(decomposition_prompt, max_tokens=2000)
 

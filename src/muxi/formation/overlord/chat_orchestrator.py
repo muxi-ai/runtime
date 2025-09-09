@@ -73,8 +73,30 @@ class ChatOrchestrator:
             await asyncio.sleep(1.0)  # Give time for subscription to be established
 
             # Emit a test event to verify streaming
+            import random
             from ...services.streaming import streaming_manager
-            streaming_manager.emit_event(request_id, "progress", "Starting request processing", stage="init")
+
+            # Randomize the initial acknowledgment message
+            initial_messages = [
+                "One moment...",
+                "Processing...",
+                "Working on it...",
+                "Got it, processing...",
+                "Request received...",
+                "On it...",
+                "Let me check that for you...",
+                "Looking into this...",
+                "Let me see...",
+                "One second..."
+            ]
+
+            streaming_manager.emit_event(
+                request_id,
+                "progress",
+                random.choice(initial_messages),
+                stage="init",
+                skip_rephrase=True
+            )
 
             # Process the request - overlord._process_sync_chat will handle all streaming events
             result = await self._process_sync_chat(

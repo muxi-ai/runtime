@@ -686,15 +686,16 @@ class WorkflowExecutor:
         task.status = state.status
         task.start_time = state.start_time
 
-        # Emit streaming event for task start
-        streaming.stream(
-            "progress",
-            f"Starting task: {task.description}",
-            stage="task_start",
-            task_id=task.id,
-            task_type=task.task_type if hasattr(task, 'task_type') else None,
-            required_capabilities=task.required_capabilities if hasattr(task, 'required_capabilities') else None
-        )
+        # Event 7: COMMENTED OUT - too granular task start event
+        # # Emit streaming event for task start
+        # streaming.stream(
+        #     "progress",
+        #     f"Starting task: {task.description}",
+        #     stage="task_start",
+        #     task_id=task.id,
+        #     task_type=task.task_type if hasattr(task, 'task_type') else None,
+        #     required_capabilities=task.required_capabilities if hasattr(task, 'required_capabilities') else None
+        # )
 
         try:
             # Collect inputs from dependencies

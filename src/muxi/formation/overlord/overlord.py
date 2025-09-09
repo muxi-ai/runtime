@@ -5881,39 +5881,40 @@ Make it conversational and friendly while keeping accuracy."""
         # INITIAL ANALYSIS
         # ===================================================================
         # Extract the actual user message from formatted context if needed
-        display_message = message
-        if "=== CURRENT REQUEST ===" in message and "User:" in message:
-            # Extract the user's actual message from the formatted context
-            lines = message.split("\n")
-            for i, line in enumerate(lines):
-                if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                    next_line = lines[i + 1].strip()
-                    if next_line.startswith("User:"):
-                        # Handle multi-line messages
-                        content_lines = []
-                        first_line_content = next_line[5:].strip()
-                        if first_line_content:
-                            content_lines.append(first_line_content)
-
-                        # Collect subsequent lines until we hit another section
-                        for j in range(i + 2, len(lines)):
-                            line_content = lines[j].strip()
-                            if line_content.startswith("===") or (not line_content and len(content_lines) > 0):
-                                break
-                            if line_content:
-                                content_lines.append(line_content)
-
-                        display_message = " ".join(content_lines)
-                        break
-
-        # Emit initial thinking event with the clean user message
-        streaming.stream(
-            "thinking",
-            f"Understanding the user's request: {display_message[:500]}...",
-            original_message=display_message,
-            agent_requested=agent_name,
-            user_id=str(user_id) if user_id else None
-        )
+        # display_message = message
+        # if "=== CURRENT REQUEST ===" in message and "User:" in message:
+        #     # Extract the user's actual message from the formatted context
+        #     lines = message.split("\n")
+        #     for i, line in enumerate(lines):
+        #         if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+        #             next_line = lines[i + 1].strip()
+        #             if next_line.startswith("User:"):
+        #                 # Handle multi-line messages
+        #                 content_lines = []
+        #                 first_line_content = next_line[5:].strip()
+        #                 if first_line_content:
+        #                     content_lines.append(first_line_content)
+        #
+        #                 # Collect subsequent lines until we hit another section
+        #                 for j in range(i + 2, len(lines)):
+        #                     line_content = lines[j].strip()
+        #                     if line_content.startswith("===") or (not line_content and len(content_lines) > 0):
+        #                         break
+        #                     if line_content:
+        #                         content_lines.append(line_content)
+        #
+        #                 display_message = " ".join(content_lines)
+        #                 break
+        #
+        # Event 3: COMMENTED OUT - duplicate thinking event
+        # # Emit initial thinking event with the clean user message
+        # streaming.stream(
+        #     "thinking",
+        #     f"Understanding the user's request: {display_message[:500]}...",
+        #     original_message=display_message,
+        #     agent_requested=agent_name,
+        #     user_id=str(user_id) if user_id else None
+        # )
 
         # ===================================================================
         # CLARIFICATION CHECK - MUST HAPPEN BEFORE ANY AGENT SELECTION
@@ -6736,16 +6737,17 @@ Make it conversational and friendly while keeping accuracy."""
                 formatted_content = await self._apply_persona(extracted_text, message)
                 result.content = formatted_content
 
-        # Emit finalizing event
-        if result and hasattr(result, "content") and result.content:
-            streaming.stream(
-                "finalizing",
-                "Preparing final response...",
-                stage="response_content",
-                content_length=len(result.content),
-                has_artifacts=bool(getattr(result, 'artifacts', None)),
-                has_metadata=bool(getattr(result, 'metadata', None))
-            )
+        # Event 10: COMMENTED OUT - not informative finalizing event (non-workflow path)
+        # # Emit finalizing event
+        # if result and hasattr(result, "content") and result.content:
+        #     streaming.stream(
+        #         "finalizing",
+        #         "Preparing final response...",
+        #         stage="response_content",
+        #         content_length=len(result.content),
+        #         has_artifacts=bool(getattr(result, 'artifacts', None)),
+        #         has_metadata=bool(getattr(result, 'metadata', None))
+        #     )
 
         # Emit final completion event with the actual content
         final_content = result.content if (result and hasattr(result, "content")) else "Request completed successfully"
@@ -7944,12 +7946,13 @@ Make it conversational and friendly while keeping accuracy."""
 
             # Emit streaming completion event if streaming is enabled
             if is_streaming:
-                streaming.stream(
-                    "finalizing",
-                    "Preparing final response...",
-                    stage="workflow_complete",
-                    workflow_id=workflow_id
-                )
+                # Event 10: COMMENTED OUT - not informative finalizing event
+                # streaming.stream(
+                #     "finalizing",
+                #     "Preparing final response...",
+                #     stage="workflow_complete",
+                #     workflow_id=workflow_id
+                # )
                 # Emit the completed event with the actual final content
                 streaming.stream(
                     "completed",
