@@ -276,22 +276,45 @@ def stream(event_type: str, content: str, **metadata):
                 if config and config.get('enabled', False):
                     # Phase 2: LLM rephrasing
                     # Run async function in sync context
-                    try:
-                        # Create new event loop for this thread
-                        import asyncio
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            rephrased = loop.run_until_complete(
-                                rephrase_with_llm(evt_type, evt_content, evt_metadata, config)
-                            )
-                        finally:
-                            loop.close()
-                    except Exception:
-                        # Fallback to original content if rephrasing fails
-                        rephrased = evt_content
+                    rephrased = evt_content  # Default to original content
 
-                    # Emit rephrased content
+                    try:
+                        import asyncio
+
+                        # Check if there's already an event loop running
+                        try:
+                            loop = asyncio.get_running_loop()
+                            # If we're in an async context, this shouldn't happen in our thread
+                            # but handle it gracefully
+                            rephrased = evt_content
+                        except RuntimeError:
+                            # No event loop running, create one for this thread
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+
+                            try:
+                                # Run the coroutine in the new event loop
+                                # Directly pass the coroutine to run_until_complete
+                                result = loop.run_until_complete(
+                                    rephrase_with_llm(evt_type, evt_content, evt_metadata, config)
+                                )
+
+                                if result:  # Only use result if it's not None/empty
+                                    rephrased = result
+
+                            except Exception:
+                                # Rephrasing failed, keep default
+                                pass
+                            finally:
+                                # Clean up the event loop
+                                loop.close()
+                                asyncio.set_event_loop(None)
+
+                    except Exception:
+                        # Any other exception, use default
+                        pass
+
+                    # Emit rephrased content (either rephrased or original)
                     manager.emit_event(req_id, evt_type, rephrased, **evt_metadata)
                 else:
                     # Phase 1: Direct emission (no rephrasing)
