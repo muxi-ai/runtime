@@ -20,6 +20,7 @@ async def main():
     print("=" * 60)
 
     formation_path = Path(__file__).parent / "formation-streaming"
+    formation = None  # Initialize to None for finally block
 
     try:
         formation = Formation()
@@ -50,22 +51,29 @@ async def main():
             message="What are the key principles of quantum computing?",
             user_id=user_id,
             session_id=session_id,
+            use_async=False,
             stream=True,  # Enable streaming
         )
 
         # Consume the stream
         stream_events = []
+        print(f"\n   Response type: {type(response)}")
+        print(f"   Has __aiter__: {hasattr(response, '__aiter__')}")
+
         if hasattr(response, "__aiter__"):
+            print("   Starting to consume stream...")
             async for chunk in response:
                 stream_events.append(chunk)
                 # Print first few chunks
                 if len(stream_events) <= 3:
                     # Handle dict events
                     if isinstance(chunk, dict):
-                        preview = f"{chunk.get('type', 'unknown')} - {chunk.get('content', '')[:100]}"
+                        preview = f"{chunk.get('type', 'unknown')} - {chunk.get('content', '')}"
                     else:
-                        preview = str(chunk)[:100]
+                        preview = str(chunk)
                     print(f"   Stream chunk {len(stream_events)}: {preview}")
+        else:
+            print(f"   Response is not async iterable: {response}")
 
         # Results
         print("\n📊 Results:")
@@ -119,7 +127,7 @@ async def main():
         traceback.print_exc()
         return False
     finally:
-        if "formation" in locals():
+        if formation:
             try:
                 print("\nShutting down...")
                 await formation.kill_overlord()
@@ -129,5 +137,12 @@ async def main():
 
 
 if __name__ == "__main__":
-    success = asyncio.run(main())
-    sys.exit(0 if success else 1)
+    import os
+    try:
+        success = asyncio.run(main())
+        exit_code = 0 if success else 1
+    except Exception:
+        exit_code = 1
+    finally:
+        # Force exit to prevent hanging
+        os._exit(exit_code)

@@ -19,6 +19,7 @@ async def main():
     print("=" * 60)
 
     formation_path = Path(__file__).parent / "formation-streaming"
+    formation = None  # Initialize to None for finally block
 
     try:
         formation = Formation()
@@ -183,7 +184,7 @@ async def main():
         traceback.print_exc()
         return False
     finally:
-        if "formation" in locals():
+        if formation:
             try:
                 print("\nShutting down...")
                 await formation.kill_overlord()
@@ -193,5 +194,12 @@ async def main():
 
 
 if __name__ == "__main__":
-    success = asyncio.run(main())
-    sys.exit(0 if success else 1)
+    import os
+    try:
+        success = asyncio.run(main())
+        exit_code = 0 if success else 1
+    except Exception:
+        exit_code = 1
+    finally:
+        # Force exit to prevent hanging
+        os._exit(exit_code)
