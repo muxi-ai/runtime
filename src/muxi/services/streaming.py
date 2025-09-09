@@ -84,9 +84,10 @@ class StreamingManager:
                 # New events since last check
                 for event in current_events[last_seen:]:
                     yield event
-                    # Stop iteration when we see a "completed" event
-                    if event.get("type") == "completed":
-                        # Clean up the stream after yielding the completed event
+                    # Stop iteration when we see terminal events
+                    event_type = event.get("type")
+                    if event_type in ("completed", "failed", "cancelled"):
+                        # Clean up the stream after yielding the terminal event
                         self.disable_streaming(request_id)
                         return
                 last_seen = len(current_events)
@@ -269,12 +270,13 @@ def stream(event_type: str, content: str, **metadata):
             if event_type != "content":
                 return  # Skip all non-content events to save on LLM costs
 
-        # @multitasking.task  # COMMENTED OUT FOR DEBUGGING
+        @multitasking.task
         def _emit_in_background(manager, req_id, evt_type, evt_content, evt_metadata, config):
             try:
                 # Check if LLM rephrasing is enabled
-                if config and config.get('enabled', False):
-                    # Phase 2: LLM rephrasing
+                # NEVER rephrase final content events - these should be passed through unchanged
+                if config and config.get('enabled', False) and evt_type not in ('completed', 'content', 'finalizing'):
+                    # Phase 2: LLM rephrasing for progress/thinking events only
                     # Run async function in sync context
                     rephrased = evt_content  # Default to original content
 

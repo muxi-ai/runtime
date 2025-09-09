@@ -5186,12 +5186,39 @@ Make it conversational and friendly while keeping accuracy."""
         # Track processing time
         start_time = time.time()
 
+        # Check if streaming is enabled for this request
+        from ...services.streaming import streaming_manager
+        is_streaming = streaming_manager.is_streaming_enabled(request_id) if request_id else False
+
+        # Extract clean message for streaming display (only if streaming is enabled)
+        display_msg = message
+        if is_streaming and "=== CURRENT REQUEST ===" in message and "User:" in message:
+            lines = message.split("\n")
+            for i, line in enumerate(lines):
+                if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    if next_line.startswith("User:"):
+                        # Handle multi-line messages
+                        content_lines = []
+                        first_line_content = next_line[5:].strip()
+                        if first_line_content:
+                            content_lines.append(first_line_content)
+                        # Collect subsequent lines until we hit another section
+                        for j in range(i + 2, len(lines)):
+                            line_content = lines[j].strip()
+                            if line_content.startswith("===") or (not line_content and len(content_lines) > 0):
+                                break
+                            if line_content:
+                                content_lines.append(line_content)
+                        display_msg = " ".join(content_lines)
+                        break
+
         # Emit streaming event for processing start
         streaming.stream(
             "thinking",
             "Understanding the user's request...",
             stage="process_sync_start",
-            message_preview=message[:500],
+            original_message=display_msg[:500],  # Changed from message_preview to original_message for rephrasing
             agent_name=agent_name,
             skip_clarification=skip_clarification
         )
@@ -5883,7 +5910,7 @@ Make it conversational and friendly while keeping accuracy."""
         streaming.stream(
             "thinking",
             f"Understanding the user's request: {display_message[:500]}...",
-            original_message=message,
+            original_message=display_message,
             agent_requested=agent_name,
             user_id=str(user_id) if user_id else None
         )
@@ -6709,21 +6736,22 @@ Make it conversational and friendly while keeping accuracy."""
                 formatted_content = await self._apply_persona(extracted_text, message)
                 result.content = formatted_content
 
-        # Emit the actual response content
+        # Emit finalizing event
         if result and hasattr(result, "content") and result.content:
             streaming.stream(
-                "content",
-                result.content,
+                "finalizing",
+                "Preparing final response...",
                 stage="response_content",
                 content_length=len(result.content),
                 has_artifacts=bool(getattr(result, 'artifacts', None)),
                 has_metadata=bool(getattr(result, 'metadata', None))
             )
 
-        # Emit final completion event
+        # Emit final completion event with the actual content
+        final_content = result.content if (result and hasattr(result, "content")) else "Request completed successfully"
         streaming.stream(
             "completed",
-            "Request completed successfully",
+            final_content,
             status="success",
             processing_time_ms=int((time.time() - start_time) * 1000),
             agent_used=agent_name
@@ -7093,6 +7121,15 @@ Make it conversational and friendly while keeping accuracy."""
                     data={"service": "execute_workflow_complete", "workflow_id": workflow_id},
                     description="_execute_workflow completed successfully",
                 )
+
+                # Emit the final response content as a streaming event
+                if result and hasattr(result, 'content'):
+                    streaming.stream(
+                        "content",
+                        result.content if isinstance(result.content, str) else str(result.content),
+                        stage="final_response",
+                        workflow_id=workflow_id
+                    )
 
                 return result
 
@@ -7908,15 +7945,15 @@ Make it conversational and friendly while keeping accuracy."""
             # Emit streaming completion event if streaming is enabled
             if is_streaming:
                 streaming.stream(
-                    "content",
-                    final_response.content,
+                    "finalizing",
+                    "Preparing final response...",
                     stage="workflow_complete",
                     workflow_id=workflow_id
                 )
-                # Emit the final completed event to terminate the stream
+                # Emit the completed event with the actual final content
                 streaming.stream(
                     "completed",
-                    "Workflow execution completed",
+                    final_response.content,
                     stage="final",
                     workflow_id=workflow_id
                 )
