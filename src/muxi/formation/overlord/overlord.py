@@ -6740,11 +6740,10 @@ Make it conversational and friendly while keeping accuracy."""
         user_id: str,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
-        stream: bool = False,
         relevant_sop: Optional[Dict] = None,
         use_async: Optional[bool] = None,
         webhook_url: Optional[str] = None,
-    ) -> Union[MuxiResponse, AsyncGenerator[str, None]]:
+    ) -> MuxiResponse:
         """
         Process a complex request using workflow orchestration.
 
@@ -6753,17 +6752,21 @@ Make it conversational and friendly while keeping accuracy."""
         2. Decomposing the request into a multi-agent workflow
         3. Either executing immediately or routing through approval flow
 
+        When streaming is enabled via the streaming_manager, this method will
+        emit events during workflow execution for real-time progress updates.
+
         Args:
             message: The user's original message
             analysis: RequestAnalysis object containing complexity score and decomposition hints
             user_id: User identifier
             session_id: Optional session identifier
             request_id: Optional request identifier
-            stream: If True, stream workflow execution progress
+            relevant_sop: Optional SOP to use for workflow
+            use_async: Optional async execution preference
+            webhook_url: Optional webhook URL for async results
 
         Returns:
-            If stream=False: MuxiResponse containing either workflow results or approval request
-            If stream=True: AsyncGenerator yielding progress updates
+            MuxiResponse containing either workflow results or approval request
         """
         # Validate inputs
         self._validate_workflow_inputs(message, user_id, session_id, request_id)
@@ -6873,7 +6876,6 @@ Make it conversational and friendly while keeping accuracy."""
                         user_id=user_id,
                         session_id=session_id,
                         request_id=request_id,
-                        stream=stream,
                         relevant_sop=fallback_sop,
                     )
 
@@ -7047,13 +7049,15 @@ Make it conversational and friendly while keeping accuracy."""
                         description="About to call _execute_workflow",
                     )
 
+                    # Never use stream=True for _execute_workflow when using streaming manager
+                    # The streaming manager handles streaming via events, not generators
                     result = await self._execute_workflow(
                         workflow=workflow,
                         message=message,
                         user_id=user_id,
                         session_id=session_id,
                         request_id=request_id,
-                        stream=stream,
+                        stream=False,  # Always False - streaming happens via events
                     )
 
                 # Debug: _execute_workflow completed
@@ -7682,6 +7686,10 @@ Make it conversational and friendly while keeping accuracy."""
         # Track workflow in active workflows
         self.workflow_manager.track_workflow(workflow, user_id)
 
+        # Check if streaming is enabled for this request
+        from ...services.streaming import streaming_manager
+        is_streaming = streaming_manager.is_streaming_enabled(request_id) if request_id else False
+
         try:
             # Setup progress tracking callback
             def progress_callback(wf_id: str, wf: Any):
@@ -7689,6 +7697,23 @@ Make it conversational and friendly while keeping accuracy."""
                 if wf_id == workflow_id:
                     # Update our tracked workflow
                     self.workflow_manager.update_workflow_status(workflow_id, wf)
+
+                    # Emit streaming event if streaming is enabled
+                    if is_streaming:
+                        progress = self.workflow_executor.get_workflow_progress(workflow_id)
+                        if progress:
+                            # Calculate percentage
+                            total_tasks = progress.get('total_tasks', 0)
+                            completed_tasks = progress.get('completed_tasks', 0)
+                            if total_tasks > 0:
+                                percentage = int((completed_tasks / total_tasks) * 100)
+                                streaming.stream(
+                                    "progress",
+                                    f"Processing workflow tasks... ({completed_tasks}/{total_tasks} - {percentage}%)",
+                                    stage="workflow_execution",
+                                    workflow_id=workflow_id,
+                                    progress=progress
+                                )
 
                     # Log progress
                     observability.observe(
@@ -7759,6 +7784,16 @@ Make it conversational and friendly while keeping accuracy."""
                 description=f"Starting execution of workflow {workflow_id}",
             )
 
+            # Emit streaming event if streaming is enabled
+            if is_streaming:
+                streaming.stream(
+                    "progress",
+                    f"Executing workflow with {len(workflow.tasks)} tasks...",
+                    stage="workflow_start",
+                    workflow_id=workflow_id,
+                    task_count=len(workflow.tasks)
+                )
+
             # Use the ResilientWorkflowExecutor directly (which has our capability fixes)
             # The resilient_workflow_manager has architectural issues with workflow execution
             completed_workflow = await self.workflow_executor.execute_workflow(
@@ -7786,6 +7821,15 @@ Make it conversational and friendly while keeping accuracy."""
                         "status": "failed",
                     }
                     task_results.append(task_result)
+
+            # Emit streaming event for synthesis if streaming is enabled
+            if is_streaming:
+                streaming.stream(
+                    "thinking",
+                    "Synthesizing results from all completed tasks...",
+                    stage="workflow_synthesis",
+                    workflow_id=workflow_id
+                )
 
             # Synthesize final response from task results
             final_response = await self._synthesize_workflow_results(
@@ -7834,6 +7878,22 @@ Make it conversational and friendly while keeping accuracy."""
                     ),
                 }
             )
+
+            # Emit streaming completion event if streaming is enabled
+            if is_streaming:
+                streaming.stream(
+                    "content",
+                    final_response.content,
+                    stage="workflow_complete",
+                    workflow_id=workflow_id
+                )
+                # Emit the final completed event to terminate the stream
+                streaming.stream(
+                    "completed",
+                    "Workflow execution completed",
+                    stage="final",
+                    workflow_id=workflow_id
+                )
 
             observability.observe(
                 event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
