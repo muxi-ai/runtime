@@ -1053,75 +1053,51 @@ overlord:
 <details>
 <summary>✅ Area 10 (Streaming): Streaming Events Implementation</summary>
 
-#### Goal: Validate streaming events architecture with fire-and-forget pattern
+#### Goal: Validate streaming events architecture with workflow support
 
 **Implementation Status: COMPLETED ✅**
 - **Test Groups Completed**: 1 group (10A Streaming Functionality)
-- **Tests Passing**: 9/9 (100% success rate) 
-- **Test Report**: [reports/10a.md](reports/10a.md)
+- **Tests Implemented**: 6 comprehensive tests
+- **Success Rate**: 100% (all tests passing)
 - **Formation Used**: `tests/e2e/10_streaming/formation-streaming/`
 
-### Test Group Summary
+### Test Group Results Summary
 
-| Test | Focus Area | Status | Key Achievement |
-|------|------------|--------|-----------------|
-| **10A1** | Basic Streaming | ✅ PASSED | Events flow through fire-and-forget pattern |
-| **10A2** | Complex Streaming | ✅ PASSED | Workflow decomposition events captured |
-| **10A3** | Rephrasing Quality | ✅ PASSED | LLM rephrasing with internal monologue |
-| **10A4** | Streaming Control | ✅ PASSED | stream=True/False parameter control |
-| **10A5** | Progress Control | ✅ PASSED | Progress event filtering works |
+| Group | Focus Area | Status | Report |
+|-------|------------|--------|--------|
+| **10A** | Streaming Events & Control | ✅ PASSED | [reports/10a.md](reports/10a.md) |
 
-### Key Technical Achievements
+### Tests Implemented
 
-**✅ Core Streaming Features:**
-- Fire-and-forget pattern with `asyncio.create_task()`
-- Clean separation of generator and regular async functions
-- Event subscription with proper timing coordination
-- Automatic stream termination on completion
-- Dict-based event format with metadata
+| Test | Description | Status |
+|------|-------------|--------|
+| **10A1** | Basic streaming with simple requests | ✅ PASSED |
+| **10A2** | Complex streaming with workflow decomposition | ✅ PASSED |
+| **10A3** | LLM rephrasing quality validation | ✅ PASSED |
+| **10A4** | stream=True/False parameter control | ✅ PASSED |
+| **10A5** | Progress event filtering (progress: false) | ✅ PASSED |
+| **10A6** | Streaming during clarification flow | ✅ PASSED |
 
-**✅ Event Types Supported:**
-- `thinking`: Model's internal reasoning
-- `planning`: Task decomposition planning
-- `progress`: Step-by-step progress updates
-- `content`: Final response content
-- `completed`: Stream termination signal
+### Key Achievements
 
-**✅ Architecture Patterns:**
-- Request context propagation to background tasks
-- 1-second delay for subscription readiness
-- Clean stream lifecycle management
-- LLM rephrasing for user-friendly events
+**✅ Workflow Streaming Fixed:**
+- Streaming events now emitted during workflow execution
+- Final response content included in "completed" event
+- Message extraction prevents internal format exposure
 
-### Critical Fixes Applied
+**✅ Optimized Event Flow:**
+- Reduced from 11-12 to 6-7 meaningful events
+- Removed redundant events (3, 5, 7, 10)
+- Randomized acknowledgment messages for variety
+- skip_rephrase flag for instant events
 
-1. **Context Propagation** - Fixed import paths and attribute references
-2. **Generator Separation** - Split yield logic from regular async functions
-3. **Persona LLM Hanging** - Added `stream=False` to persona calls
-4. **Event Format** - Standardized dict-based events with metadata
-5. **Stream Termination** - Proper cleanup with disable_streaming()
+**✅ Technical Improvements:**
+- Terminal events: "completed", "failed", "cancelled"
+- Proper test shutdown with os._exit() pattern
+- Fixed import issues and linting warnings
+- Extended timeout support for slower models
 
-### Test Formation Configuration
-
-```yaml
-# tests/e2e/10_streaming/formation-streaming/
-overlord:
-  response:
-    streaming: true
-    progress: true
-llm:
-  models:
-    - streaming: "openai/gpt-5-nano"
-      settings:
-        temperature: 0.7
-        max_tokens: 100
-```
-
-# Test 10A3: Streaming Control (disable when stream=False)
-response = await overlord.chat(
-    "Simple test",
-    stream=False  # Disable streaming
-)
+*For detailed implementation and all test results, see [reports/10a.md](reports/10a.md)*
 # Should get regular response, not a generator
 assert not hasattr(response, '__aiter__')
 ```
@@ -1460,7 +1436,7 @@ assert "monitor" in response.lower() or "watch" in response.lower()
 - **Area 7 (Orchestration):** ✅ 7A: Workflow orchestration (9 tests pass) | ✅ 7B: A2A Communication (all tests pass) | ✅ 7C-7D: SOP System (6 tests pass, 72% code reduction)
 - **Area 8 (Clarification):** Base: 10 clarification tests pass ✅ | Enhanced: Multiple clarification sequences implemented ✅
 - **Area 9 (Async):** ✅ Advanced async operations with webhook delivery, conflict resolution (all tests pass)
-- **Area 10 (Streaming):** ✅ Streaming events with fire-and-forget pattern (5 tests pass)
+- **Area 10 (Streaming):** ✅ Streaming events with workflow support (6 tests pass, 100% success rate)
 - **Area 11 (Response Format):** JSON/Markdown/Text formats + interactive UI elements
 - **Area 12 (Scheduler):** 🔄 READY FOR IMPLEMENTATION - Task scheduling & jobs
 

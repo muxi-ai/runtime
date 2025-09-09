@@ -1,7 +1,7 @@
 ---
 created: 2025-08-21T17:31:00Z
-last_updated: 2025-09-08T22:51:59Z
-version: 1.7
+last_updated: 2025-09-09T22:21:33Z
+version: 1.8
 author: Claude Code PM System
 ---
 
@@ -42,29 +42,40 @@ The foundational runtime engine that powers AI agent formations is now complete 
 
 ## 🎉 Major Achievements
 
+### January 2025: Streaming Events with Workflow Support ✅
+
+**Status**: Complete - Full streaming support including workflow decomposition
+
+**Phase 2 Implementation (Jan 9)**:
+- ✅ **Workflow Streaming**: Fixed streaming events during workflow execution
+- ✅ **Final Response Delivery**: Content now included in "completed" event
+- ✅ **Message Extraction**: Clean user messages without internal formatting
+- ✅ **Event Optimization**: Reduced from 11-12 to 6-7 meaningful events
+- ✅ **Randomized Acknowledgments**: 10 different initial messages for variety
+- ✅ **skip_rephrase Flag**: Instant events bypass LLM rephrasing to save tokens
+
+**Critical Fixes Applied**:
+- ✅ **Workflow Gap**: `_process_with_workflow` now emits streaming events
+- ✅ **Terminal Events**: Stream properly disconnects on completed/failed/cancelled
+- ✅ **Test Hanging**: Fixed with os._exit() pattern in finally blocks
+- ✅ **Import Issues**: Fixed decomposer.py and executor.py streaming imports
+
+**Test Results**:
+- ✅ **Test Group 10A**: All 6 streaming tests passing (100% success rate)
+- ✅ **10A1-10A5**: Basic, complex, rephrasing, control, progress tests all pass
+- ✅ **10A6**: New clarification streaming test validates multi-turn flow
+- ✅ **Documentation**: STREAMING_WORKFLOW_INVESTIGATION.md fully updated
+
 ### September 2025: Streaming Events Architecture Implementation ✅
 
-**Status**: Complete - Fire-and-forget streaming pattern with LLM rephrasing support
+**Status**: Phase 1 Complete - Fire-and-forget streaming pattern established
 
-**Implementation Details**:
+**Phase 1 Implementation**:
 - ✅ **Fire-and-Forget Pattern**: Clean separation of request processing and event streaming
 - ✅ **Context Propagation Fix**: Fixed critical issues with RequestContext in background tasks
 - ✅ **Generator Separation**: Split yield logic from regular async functions for clean architecture
 - ✅ **Event Subscription**: Real-time event delivery with proper timing coordination
 - ✅ **9 Event Types**: thinking, planning, progress, content, completed events all working
-- ✅ **LLM Rephrasing Support**: Architecture ready for Phase 2 rephrasing implementation
-
-**Critical Fixes Applied**:
-- ✅ **Import Path Errors**: Fixed incorrect relative imports in 4+ files
-- ✅ **Attribute References**: Fixed request_context.request_id → request_context.id throughout
-- ✅ **Persona LLM Hanging**: Added stream=False to prevent async generator issues
-- ✅ **Stream Termination**: Proper cleanup with disable_streaming() on completion
-
-**Test Results**:
-- ✅ **Test Group 10A**: All 5 streaming tests passing (100% success rate)
-- ✅ **Event Flow**: Events successfully flow through fire-and-forget pattern
-- ✅ **Complex Tasks**: Workflow decomposition events properly captured
-- ✅ **Stream Control**: stream=True/False parameter working correctly
 
 ### September 2025: Test Plan Reorganization & Production Readiness
 

@@ -416,9 +416,9 @@ class Overlord:
 - **Ultra-Simplified**: Only 2 code locations modified, leveraging existing TTL infrastructure
 - **No Memory Leaks**: Completed requests auto-expire, preventing indefinite accumulation
 
-### Streaming Events Architecture (September 2025)
+### Streaming Events Architecture (January 2025 - Updated)
 
-Fire-and-forget pattern with subscription-based event delivery:
+Fire-and-forget pattern with full workflow support and optimized event flow:
 
 ```python
 # Fire-and-Forget Pattern with Clean Separation
@@ -453,6 +453,14 @@ class ChatOrchestrator:
         async for event in self._stream_request(request_id, user_id, session_id):
             yield event
 ```
+
+**Key Improvements (January 2025)**:
+- **Workflow Streaming**: Events now emitted during workflow decomposition
+- **Clean Messages**: User messages extracted without internal formatting
+- **Final Content**: Actual response included in "completed" event
+- **Optimized Flow**: Reduced from 11-12 to 6-7 meaningful events
+- **skip_rephrase**: Instant events bypass LLM rephrasing to save tokens
+- **Terminal Events**: Stream disconnects on completed/failed/cancelled
 
 **Event Format:**
 ```python

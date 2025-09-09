@@ -2,9 +2,51 @@
 
 ## Day 10: Streaming Events Implementation
 
-### Date: 2025-09-08
+### Date: 2025-01-09 (Updated)
 
 ### Test Area: Streaming & Thinking Visibility
+
+#### Phase 2: Workflow Streaming Integration
+
+1. **Workflow Streaming Gaps**
+   - **Problem**: Streaming events stopped when workflow decomposition triggered
+   - **Root Cause**: `_process_with_workflow` returned final result directly without streaming
+   - **Solution**: Check if streaming enabled and emit events during workflow execution
+   - **Impact**: Full streaming support for complex requests with task decomposition
+
+2. **Message Format Exposure**
+   - **Problem**: Event 3 showed raw message format "=== CURRENT REQUEST ==="
+   - **Solution**: Extract actual user message before emitting streaming events
+   ```python
+   if "=== CURRENT REQUEST ===" in message:
+       _, _, user_message = message.partition("\n")
+       user_message = user_message.strip()
+   ```
+   - **Lesson**: Always sanitize internal formats before user-facing emissions
+
+3. **Final Response Missing**
+   - **Problem**: Stream ended without showing actual answer to user's question
+   - **Root Cause**: "completed" event terminated stream before content delivered
+   - **Solution**: Include actual response content in "completed" event
+   - **Impact**: Users now see the final answer, not just progress updates
+
+4. **Event Verbosity Reduction**
+   - **Problem**: 11-12 events too verbose for simple requests
+   - **Solution**: Commented out redundant events (3, 5, 7, 10)
+   - **Current Flow**: 6-7 meaningful events (acknowledgment → thinking → planning → workflow → synthesis → completed)
+   - **Optimization**: skip_rephrase flag for instant events saves LLM tokens
+
+5. **Test Hanging Issues**
+   - **Problem**: Tests wouldn't shut down properly after completion
+   - **Solution**: Use `os._exit()` in finally block of main
+   ```python
+   finally:
+       if formation:
+           await formation.kill_overlord()
+           formation.shutdown()
+       os._exit(0 if success else 1)
+   ```
+   - **Impact**: All 6 tests now exit cleanly without hanging
 
 #### Critical Debugging Lessons
 
@@ -86,12 +128,21 @@
 - ✅ Persona application no longer hangs
 - ✅ All 5 tests in 10A group passing
 
+#### Key Improvements Implemented
+
+- ✅ Workflow streaming integration complete
+- ✅ LLM rephrasing with skip_rephrase optimization
+- ✅ Message extraction for clean event content
+- ✅ Randomized acknowledgment messages (10 variations)
+- ✅ Terminal event handling (completed/failed/cancelled)
+- ✅ Test suite with 6 comprehensive tests including clarification flow
+
 #### Remaining Work
 
-- Integration with actual processing pipeline events
-- LLM rephrasing implementation (Phase 2)
-- Thinking visibility from agent processing
-- Progress indicators from workflow decomposition
+- Async request streaming support (webhooks)
+- Streaming token-by-token for rephrasing (currently waits for full response)
+- Model-specific complexity thresholds for workflow triggers
+- Adaptive timeouts based on model response times
 
 ---
 
