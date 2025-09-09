@@ -6374,7 +6374,7 @@ Make it conversational and friendly while keeping accuracy."""
             if agent_name and agent_name != "None":
                 streaming.stream(
                     "progress",
-                    f"I'll use the agent with the right capabilities to help the user with their request.",
+                    "I'll use an agent with the right capabilities to help the user with their request.",
                     stage="agent_selected",
                     selected_agent=agent_name
                 )
