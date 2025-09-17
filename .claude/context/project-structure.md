@@ -174,7 +174,7 @@ Ready-to-use formation examples:
 ### Documentation
 - `README.md` - Project overview and quickstart
 - `tests/Comprehensive_Test_Plan.md` - Testing strategy
-- `tests/Lessons_Learned.md` - Testing best practices
+- `tests/Lessons-Learned.md` - Testing best practices
 
 ## Key Architectural Patterns
 
