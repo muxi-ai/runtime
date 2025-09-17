@@ -19,7 +19,7 @@ from typing import Optional, Any, Dict
 from urllib.parse import urlparse
 
 from contextlib import asynccontextmanager
-from sqlalchemy import create_engine, MetaData
+from sqlalchemy import create_engine, MetaData, text
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
@@ -241,7 +241,7 @@ class DatabaseManager:
             # Enable pgvector extension for PostgreSQL
             try:
                 with engine.connect() as conn:
-                    conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+                    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
                     conn.commit()
             except Exception as e:
                 observability.observe(
@@ -343,7 +343,7 @@ class DatabaseManager:
         """
         try:
             async with self.async_engine.connect() as conn:
-                await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
                 await conn.commit()
         except Exception as e:
             observability.observe(
