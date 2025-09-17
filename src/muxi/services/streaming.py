@@ -181,6 +181,7 @@ async def rephrase_with_llm(
 
         # Extract context from metadata
         stage = metadata.get('stage', '')
+        original_message = metadata.get('original_message', '')
 
         # Build context-aware prompt
         # For planning events (especially decomposition), we want full detail
