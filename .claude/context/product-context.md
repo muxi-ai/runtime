@@ -84,11 +84,13 @@ MUXI Runtime exists as the execution engine that transforms declarative AI syste
 
 4. **Multi-Modal Support**: Users should be able to interact using text, images, audio, and documents.
 
-5. **Responsiveness**: The system should respond quickly to user requests.
+5. **Response Format Flexibility**: Users should receive responses in their preferred format (JSON, Markdown, Plain Text, HTML) based on their use case and integration needs.
 
-6. **Error Handling**: The system should gracefully handle errors and provide helpful feedback.
+6. **Responsiveness**: The system should respond quickly to user requests.
 
-7. **Privacy**: User data should be handled securely and with appropriate privacy controls.
+7. **Error Handling**: The system should gracefully handle errors and provide helpful feedback.
+
+8. **Privacy**: User data should be handled securely and with appropriate privacy controls.
 
 ## Target Audience
 

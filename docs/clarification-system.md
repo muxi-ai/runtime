@@ -509,12 +509,17 @@ overlord:
     max_rounds:                    # Mode-specific limits (1-32 each)
       direct: 3                    # Quick disambiguation
       brainstorm: 10               # Creative exploration
-      planning: 7                  # Requirements gathering  
+      planning: 7                  # Requirements gathering
       execution: 3                 # Parameter clarification
       other: 3                     # Fallback for unlisted modes
-    
+
     # Legacy format (still supported for backward compatibility)
     # max_questions: 5             # Global limit for all modes
+
+  response:
+    format: "markdown"             # Response format: "json", "text", "markdown", "html"
+    streaming: false               # Enable streaming responses
+    interactive_elements: true     # Reserved for future widgets feature
 ```
 
 ### Configuration Hierarchy
@@ -710,6 +715,10 @@ overlord:
       planning: 7
       execution: 3
       other: 3            # Fallback for new modes
+
+  response:
+    format: "markdown"    # Response format: "json", "text", "markdown", "html"
+    streaming: false      # Enable streaming responses
 ```
 
 **Migration is optional** - existing configurations continue working unchanged. The new format provides better control over user experience by tailoring interaction depth to each clarification type.
@@ -906,6 +915,10 @@ overlord:
       planning: 7
       credential: 2
       execution: 3
+
+  response:
+    format: "markdown"    # Response format: "json", "text", "markdown", "html"
+    streaming: false      # Enable streaming responses
 ```
 
 ## Conclusion

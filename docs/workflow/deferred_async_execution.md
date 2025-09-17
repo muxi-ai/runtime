@@ -87,6 +87,10 @@ overlord:
     auto_decomposition: true
     complexity_threshold: 5.0
     plan_approval_threshold: 7.0
+
+  response:
+    format: "markdown"       # Response format: "json", "text", "markdown", "html"
+    streaming: false         # Enable streaming responses
 ```
 
 ## User Experience Flow

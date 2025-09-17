@@ -126,6 +126,47 @@ When an error occurs (`success` is false), the `error` field contains:
 - `RESOURCE_NOT_FOUND` - Requested resource doesn't exist
 - `INTERNAL_ERROR` - Server error occurred
 
+## 🎨 Content Response Formats
+
+MUXI Runtime supports multiple content formats within API responses. The formation configuration determines how response content is formatted.
+
+### Supported Formats
+
+| Format | Description | Use Case | Example |
+|--------|-------------|----------|---------|
+| `markdown` | Rich text with headers, lists, code blocks | Documentation, default usage | `# Title\n\n**Bold text**` |
+| `json` | Structured JSON data | Programmatic processing | `{"content": "...", "type": "response"}` |
+| `text` | Plain text without formatting | Simple integrations, logs | `Clean text output` |
+| `html` | Semantic HTML markup | Web integration, rich UI | `<h1>Title</h1><p>Content</p>` |
+
+### Configuration
+
+Set the response format in your formation YAML:
+
+```yaml
+overlord:
+  response:
+    format: "markdown"  # Options: "json", "text", "markdown", "html"
+```
+
+### API Usage
+
+The content format affects the `data.content` field in chat responses:
+
+```json
+{
+  "object": "chat.completion",
+  "success": true,
+  "data": {
+    "content": "# Cloud Computing Benefits\n\n**Cost Efficiency**: Reduces infrastructure costs...",
+    "format": "markdown",
+    "artifacts": []
+  }
+}
+```
+
+For more details, see [Response Formats Documentation](../features/response-formats.md).
+
 ## 🔄 Recent Updates
 
 ### 2025-01-31: Error Response Format Improvements ✅

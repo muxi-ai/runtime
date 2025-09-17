@@ -32,6 +32,14 @@ This document outlines the technical context of the MUXI Runtime, including tech
 - **Language Agnostic**: No keyword matching, pure LLM understanding
 - **Context-Appropriate**: Natural responses for greetings, confirmations for tasks
 
+### Response Formats Implementation (September 2025)
+- **Multi-Format Support**: JSON, Markdown, Plain Text, and HTML response formats
+- **LLM-Based Formatting**: Persona-level format instructions for natural language understanding
+- **HTML Validation**: BeautifulSoup4 integration for tag validation and structure fixing
+- **Post-Processing Pipeline**: JSON wrapping and format-specific enhancements
+- **Streaming Compatible**: All formats work seamlessly with existing streaming architecture
+- **Configuration Driven**: Format selection via `overlord.response.format` in formation YAML
+
 ### MCP Warning Suppression
 - **Clean Logs**: Suppressed third-party MCP server warnings
 - **Better UX**: Cleaner output without verbose validation warnings
@@ -389,6 +397,7 @@ stream = EventStream(
 - MarkItDown 0.1.0+
 - Sentence-transformers 2.2.0+
 - spaCy 3.8.0+
+- BeautifulSoup4 4.12.0+ (HTML parsing and validation)
 
 ### Communication
 - MCP 1.9.0+

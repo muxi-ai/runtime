@@ -1033,6 +1033,11 @@ overlord:
       explain_reasoning: false
       include_confidence: false
       max_verbosity: "balanced"
+
+  response:
+    format: "markdown"       # Response format: "json", "text", "markdown", "html"
+    streaming: false         # Enable streaming responses
+    interactive_elements: true  # Reserved for future widgets feature
 ```
 
 **Persona Application Process:**
@@ -1667,6 +1672,7 @@ workflow:
   retry_attempts: 3
 
 response:
+  format: "markdown"         # Response format: "json", "text", "markdown", "html"
   default_mode: sync
   stream_chunk_size: 1024
   async_callback_timeout: 3600

@@ -77,6 +77,7 @@ Unified services for all runtime features:
 
 ### 6. Built-in Features
 Production-ready capabilities out of the box:
+- **Response Formats**: JSON, Markdown, Plain Text, HTML with validation
 - **File Generation MCP**: Secure artifact creation
 - **Knowledge System**: Domain knowledge with MD5 caching
 - **User Credentials**: Encrypted per-user storage
