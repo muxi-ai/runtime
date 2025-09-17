@@ -2281,28 +2281,48 @@ class Formation:
                 successful_servers.append(server_id)
 
             except (MCPConnectionError, MCPTimeoutError, MCPCancelledError) as e:
-                # MCP registration failures are fatal - fail fast
+                # MCP registration failures - continue with graceful degradation
                 server_id = server_config.get("id", "unknown")
+                error_msg = str(e)
+
+                # Check for authentication errors to provide better messaging
+                is_auth_error = (
+                    "401" in error_msg
+                    or "unauthorized" in error_msg.lower()
+                    or "authentication" in error_msg.lower()
+                )
+
+                # Log the failure but don't crash the formation
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
-                    level=observability.EventLevel.ERROR,
+                    level=observability.EventLevel.WARNING,  # Changed from ERROR to WARNING
                     data={
                         "server_id": server_id,
-                        "error": str(e),
+                        "error": error_msg,
                         "error_type": type(e).__name__,
+                        "is_authentication_failure": is_auth_error,
                     },
-                    description=f"Failed to register MCP server: {str(e)}",
+                    description=f"MCP server '{server_id}' unavailable: {error_msg}",
                 )
-                # Re-raise to fail the formation
-                raise ConfigurationLoadError(
-                    f"Failed to register MCP server '{server_id}': {str(e)}"
-                ) from e
+
+                # Print user-friendly error message
+                if is_auth_error:
+                    print(f"⚠️  MCP server '{server_id}' authentication failed")
+                    print("   💡 Check credentials or API keys for this service")
+                    print("   🚀 Formation will continue without this server")
+                else:
+                    print(f"⚠️  MCP server '{server_id}' connection failed: {error_msg}")
+                    print("   🚀 Formation will continue without this server")
+
+                failed_servers.append(server_id)
+                continue  # Continue with other servers instead of crashing
+
             except MCPRequestError as e:
-                # Configuration errors are also fatal
+                # Configuration errors - continue with graceful degradation
                 server_id = server_config.get("id", "unknown")
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
-                    level=observability.EventLevel.ERROR,
+                    level=observability.EventLevel.WARNING,  # Changed from ERROR to WARNING
                     data={
                         "server_id": server_id,
                         "error": str(e),
@@ -2311,13 +2331,51 @@ class Formation:
                     },
                     description=f"Invalid MCP server configuration: {str(e)}",
                 )
-                # Re-raise to fail the formation
-                raise ConfigurationLoadError(
-                    f"Invalid MCP server configuration for '{server_id}': {str(e)}"
-                ) from e
 
-        # Add summary event for failed registrations
+                # Print user-friendly error message
+                print(f"⚠️  MCP server '{server_id}' configuration invalid: {str(e)}")
+                print("   💡 Check the server configuration in your formation")
+                print("   🚀 Formation will continue without this server")
+
+                failed_servers.append(server_id)
+                continue  # Continue with other servers instead of crashing
+
+            except Exception as e:
+                # Catch any other unexpected errors during MCP registration
+                server_id = server_config.get("id", "unknown")
+                error_msg = str(e)
+
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "server_id": server_id,
+                        "error": error_msg,
+                        "error_type": type(e).__name__,
+                        "is_unexpected_error": True,
+                    },
+                    description=f"Unexpected error registering MCP server '{server_id}': {error_msg}",
+                )
+
+                # Print user-friendly error message
+                print(f"⚠️  MCP server '{server_id}' registration failed unexpectedly")
+                print(f"   Error: {error_msg}")
+                print("   🚀 Formation will continue without this server")
+
+                failed_servers.append(server_id)
+                continue  # Continue with other servers instead of crashing
+
+        # Print user-friendly summary and add observability event
+        if successful_servers:
+            print(f"✅ {len(successful_servers)} MCP servers connected successfully")
+
         if failed_servers or skipped_servers:
+            if failed_servers:
+                print(f"⚠️  {len(failed_servers)} MCP servers failed to connect")
+                print(f"   Failed servers: {', '.join(failed_servers)}")
+            if skipped_servers:
+                print(f"ℹ️  {len(skipped_servers)} MCP servers were skipped (inactive)")
+
             observability.observe(
                 event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
                 level=(
@@ -2339,6 +2397,11 @@ class Formation:
                     f"{len(failed_servers)} failed, {len(skipped_servers)} skipped"
                 ),
             )
+
+        # Only show additional guidance if there were failures
+        if failed_servers:
+            print("💡 Formation is ready to use with available MCP servers")
+            print("   To fix failed servers, check credentials and try again")
 
     async def start_overlord(self):
         """
@@ -2416,16 +2479,14 @@ class Formation:
 
             # MCP servers are already registered during _initialize_services()
 
-            # Note if we have MCP servers that may cause exit errors
+            # Automatically suppress MCP exit errors if we have MCP servers
             if self._has_any_mcp_servers():
+                self.suppress_mcp_errors_on_exit()
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
                     level=observability.EventLevel.INFO,
-                    data={"has_mcp_servers": True},
-                    description=(
-                        "Formation has MCP servers - call suppress_mcp_errors_on_exit() "
-                        "to avoid async cleanup errors"
-                    ),
+                    data={"has_mcp_servers": True, "exit_error_suppression": True},
+                    description="Formation has MCP servers - automatically enabled exit error suppression",
                 )
 
             # Register built-in MCP servers if enabled

@@ -516,6 +516,10 @@ async def initialize_mcp_services(formation) -> None:
         # Store the servers in formation for later access by overlord
         formation._mcp_servers = servers
 
+        # Enable error suppression early if we have MCP servers to avoid async generator cleanup errors
+        if servers:
+            formation.suppress_mcp_errors_on_exit()
+
         # Log MCP server configuration
         observability.observe(
             event_type=observability.SystemEvents.INITIALIZING,
@@ -529,7 +533,24 @@ async def initialize_mcp_services(formation) -> None:
         )
 
         # Register MCP servers immediately so agents can see which use user credentials
-        await formation._register_mcp_servers()
+        try:
+            await formation._register_mcp_servers()
+        except Exception as mcp_error:
+            # Handle any unhandled MCP registration errors gracefully
+            print("⚠️  MCP server registration encountered errors")
+            print("   Some servers may be unavailable due to connectivity or authentication issues")
+            print("   🚀 Formation will continue with available servers")
+
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error": str(mcp_error),
+                    "error_type": type(mcp_error).__name__,
+                    "handled_gracefully": True,
+                },
+                description=f"MCP registration partially failed but formation continues: {str(mcp_error)}",
+            )
 
     except Exception as e:
         observability.observe(
