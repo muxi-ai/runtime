@@ -176,7 +176,7 @@ from ...services.multimodal import MultiModalFusionEngine, WorkflowMultiModalPro
 from ..workflow.synthesis import AdvancedResponseSynthesizer, ResponseQualityAssessor
 
 # Import interactive elements and enhanced multimodal integration
-from ..workflow.interactive import InteractiveElementGenerator, ResponseFormatter, MediaIntegrator
+from ..workflow.interactive import InteractiveElementGenerator, MediaIntegrator
 from ...services.multimodal import (
     TaskInputProcessor,
     TaskOutputProcessor,
@@ -656,7 +656,6 @@ class Overlord:
 
         # Initialize interactive elements and enhanced multimodal integration (intelligence concerns)
         self.interactive_generator = InteractiveElementGenerator()
-        self.response_formatter = ResponseFormatter(self.interactive_generator)
         self.media_integrator = MediaIntegrator()
 
         # Enhanced multimodal processors (intelligence concerns)
@@ -2112,13 +2111,36 @@ Response: "You're welcome! Let me know if you need anything else."
                     return str(response)
             else:
                 # ACTIONABLE PATH: Format agent's response with persona
+
+                # Add format-specific instructions based on response_format setting
+                format_instruction = ""
+                if hasattr(self, 'response_format'):
+                    if self.response_format == "markdown":
+                        format_instruction = (
+                            "\n\nFormat your response using proper markdown with headers (# ## ###), "
+                            "bullet points, bold/italic text, and code blocks where appropriate."
+                        )
+                    elif self.response_format == "text":
+                        format_instruction = (
+                            "\n\nFormat your response as plain text with no markdown formatting, "
+                            "special characters, or HTML. Use simple text formatting like line breaks and spacing."
+                        )
+                    elif self.response_format == "html":
+                        format_instruction = (
+                            "\n\nFormat your response as valid HTML with proper semantic tags like "
+                            "<h1>, <h2>, <p>, <ul>, <li>, <strong>, <em>, and <code>. "
+                            "Ensure proper structure and ensure all tags are properly closed. "
+                            "Use clean, readable HTML."
+                        )
+                    # Note: JSON format will be handled by post-processing wrapper
+
                 prompt = f"""{self._default_persona}
 
 User request: {user_message}
 Agent response: {raw_response}
 
 Reformat the agent's response to match your persona while preserving all technical details and information.
-Make it conversational and friendly while keeping accuracy."""
+Make it conversational and friendly while keeping accuracy.{format_instruction}"""
 
                 messages = [{"role": "user", "content": prompt}]
                 # Force non-streaming for persona application
@@ -6738,6 +6760,29 @@ Make it conversational and friendly while keeping accuracy."""
                 # Apply persona to the extracted text
                 formatted_content = await self._apply_persona(extracted_text, message)
                 result.content = formatted_content
+
+        # Apply response format wrapping (for JSON format) and HTML fixing
+        if result and hasattr(result, "content") and hasattr(self, 'response_format'):
+            if self.response_format == "json" and result.content:
+                # Wrap the content in JSON format
+                import json as json_lib
+                result.content = json_lib.dumps({
+                    "content": result.content,
+                    "type": "response",
+                    "format": "json"
+                }, indent=2)
+            elif self.response_format == "html" and result.content:
+                # Fix and validate HTML content
+                try:
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(result.content, 'html.parser')
+                    result.content = soup.prettify()
+                except ImportError:
+                    # BeautifulSoup not available, leave content as-is
+                    pass
+                except Exception:
+                    # HTML parsing failed, leave content as-is
+                    pass
 
         # Event 10: COMMENTED OUT - not informative finalizing event (non-workflow path)
         # # Emit finalizing event

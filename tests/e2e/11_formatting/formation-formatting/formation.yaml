@@ -48,7 +48,7 @@ overlord:
   workflow:
     auto_decomposition: true # Enable automatic task decomposition (default: true)
     plan_approval_threshold: 10 # Set high to avoid approval prompts during tests
-    complexity_threshold: 4.0 # Lowered to trigger workflows for complexity 5.0
+    complexity_threshold: 8.0 # Raised to avoid workflow triggering for simple responses
     routing_strategy: "capability_based"
     parallel_execution: true
     max_parallel_tasks: 5
