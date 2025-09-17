@@ -1,6 +1,6 @@
-# Area 11: Response Formats and Interactive Elements - Test Mapping
+# Area 11: Response Formats - Test Mapping
 
-**Overall Status:** 50% Complete (Area 11A: Complete ✅ | Area 11B: Pending ⏳)
+**Overall Status:** 100% Complete ✅
 
 ## Test Coverage Summary
 
@@ -11,12 +11,7 @@
 | 11A2 | Markdown Response Format | ✅ PASS | `test_11a1_json_format.py` | Rich text formatting |
 | 11A3 | Plain Text Response Format | ✅ PASS | `test_11a1_json_format.py` | Simple text output |
 | 11A4 | HTML Response Format | ✅ PASS | `test_11a1_json_format.py` | Semantic HTML with validation |
-| **11B** | **Interactive Elements** | ⏳ **PENDING** | | **Awaiting implementation** |
-| 11B1 | Interactive Buttons | ❌ NOT IMPLEMENTED | TBD | Action buttons in responses |
-| 11B2 | Form Elements | ❌ NOT IMPLEMENTED | TBD | Input forms, dropdowns, etc. |
-| 11B3 | Data Tables | ❌ NOT IMPLEMENTED | TBD | Structured data presentation |
-| 11B4 | Charts and Graphs | ❌ NOT IMPLEMENTED | TBD | Visual data representation |
-| 11B5 | Media Integration | ❌ NOT IMPLEMENTED | TBD | Images, videos, audio |
+| **Interactive Elements** | **DEFERRED** | 📋 **PLANNED** | [`contexts/prds/interactive_elements.md`](../../../contexts/prds/interactive_elements.md) | **Moved to separate PRD** |
 
 ## Detailed Test Implementation
 
@@ -83,43 +78,20 @@ async def test_html_format():
 - ✅ BeautifulSoup validation integration
 - ✅ Non-JSON response format
 
-### Area 11B: Interactive Elements ⏳
+## Interactive Elements (Deferred)
 
-**Implementation Status:** Not Started
-**Infrastructure:** Preserved (`InteractiveElementGenerator`, `MediaIntegrator`)
-**Dependencies:** Area 11A foundation complete
+**Implementation Status:** Moved to separate PRD
+**PRD Location:** [`contexts/prds/interactive_elements.md`](../../../contexts/prds/interactive_elements.md)
+**Infrastructure:** Preserved for future implementation
 
-#### Planned Test Coverage
+**Deferred Scope:**
+- Workflow approval buttons
+- Clarification option buttons
+- Secure credential collection forms
+- Link previews and source references
+- Artifact positioning enhancements
 
-**Test 11B1: Interactive Buttons**
-- Action buttons with callbacks
-- Button styling and states
-- Event handling integration
-- Accessibility compliance
-
-**Test 11B2: Form Elements**
-- Input fields (text, number, date)
-- Dropdown selections
-- Checkboxes and radio buttons
-- Form validation and submission
-
-**Test 11B3: Data Tables**
-- Structured data presentation
-- Sortable columns
-- Filtering and search
-- Pagination support
-
-**Test 11B4: Charts and Graphs**
-- Data visualization components
-- Chart types (bar, line, pie, scatter)
-- Interactive chart features
-- Data binding and updates
-
-**Test 11B5: Media Integration**
-- Image embedding and display
-- Video player integration
-- Audio playback controls
-- File upload and management
+**Rationale:** Interactive elements require tight SDK integration for optimal UX. Will be implemented as separate feature after core runtime is stable.
 
 ## Technical Architecture
 
@@ -136,17 +108,18 @@ async def test_html_format():
 User Request → Agent Processing → Persona Application (+ Format Instructions) → Post-Processing (JSON/HTML) → Response
 ```
 
-### Area 11B Infrastructure
+### Preserved Interactive Infrastructure
 
-**Preserved Components:**
-- `InteractiveElementGenerator`: Ready for button/form generation
-- `MediaIntegrator`: Prepared for media embedding
-- Configuration system: Extensible for interactive flags
+**Components Maintained for Future Use:**
+- `InteractiveElementGenerator`: Complete implementation ready
+- `MediaIntegrator`: Media embedding functionality available
+- `overlord.response.interactive_elements` configuration preserved
 
-**Integration Points:**
-- Format instructions can include interactive element descriptions
-- LLM can generate element metadata for embedding
-- Response pipeline ready for rich content injection
+**Future Integration Points:**
+- SDK-first design with placeholder system
+- Deterministic triggers (not LLM-driven)
+- Security-focused credential collection
+- Cross-platform compatibility focus
 
 ## Formation Configuration
 
@@ -155,7 +128,7 @@ User Request → Agent Processing → Persona Application (+ Format Instructions
 overlord:
   response:
     format: "markdown"  # "json", "text", "markdown", "html"
-    interactive_elements: true  # For Area 11B (currently preserved)
+    interactive_elements: true  # Reserved for future interactive features
 ```
 
 ## Test Execution
@@ -191,31 +164,35 @@ beautifulsoup4 = ">=4.12.0"  # HTML validation and formatting
 - Database connection for memory systems
 - MCP server infrastructure (optional)
 
-## Future Roadmap
+## Future Development
 
-### Immediate Next Steps (Area 11B)
-1. **Design interactive element schema**
-2. **Implement button generation and callbacks**
-3. **Add form element support**
-4. **Create data table components**
-5. **Integrate charts and visualization**
+### Interactive Elements (Separate Initiative)
+**See:** [`contexts/prds/interactive_elements.md`](../../../contexts/prds/interactive_elements.md)
 
-### Long-term Enhancements
-1. **Advanced HTML templates**
-2. **Custom CSS styling support**
-3. **Real-time interactive updates**
-4. **Multi-media rich responses**
-5. **Accessibility improvements**
+**Key Features:**
+1. **Workflow Approval:** "Approve Plan" / "Modify Plan" buttons
+2. **Enhanced Clarifications:** Multiple choice buttons for ambiguous requests
+3. **Secure Credentials:** Protected forms for API tokens/passwords
+4. **Link Previews:** Rich preview cards for external URLs
+5. **Source References:** Expandable citation sections
+6. **Artifact Positioning:** Enhanced SDK placement controls
+
+### Area 11 Extensions
+1. **Additional Response Formats:** XML, YAML, CSV support
+2. **Format Validation:** Schema-based response validation
+3. **Custom Templates:** User-defined format templates
+4. **Advanced HTML:** CSS styling and semantic improvements
 
 ## Conclusion
 
-Area 11A (Response Formats) is **production-ready** with 100% test coverage and comprehensive format support. The infrastructure for Area 11B (Interactive Elements) is preserved and ready for implementation when needed.
+Area 11 (Response Formats) is **production-ready** with 100% test coverage and comprehensive format support. Interactive Elements have been deferred to a separate initiative with detailed PRD.
 
 **Key Achievements:**
-- ✅ 4 response formats fully implemented and tested
-- ✅ Clean, maintainable architecture
-- ✅ Streaming compatibility maintained
-- ✅ Production performance characteristics
-- ✅ Foundation ready for interactive elements
+- ✅ 4 response formats fully implemented and tested (JSON, Markdown, Text, HTML)
+- ✅ Clean, maintainable architecture with LLM persona instructions
+- ✅ BeautifulSoup HTML validation integration
+- ✅ Streaming compatibility maintained across all formats
+- ✅ Production performance characteristics (avg 24.75s per test)
+- ✅ Interactive infrastructure preserved for future development
 
-**Next Phase:** Area 11B implementation can proceed with confidence, building on the solid foundation established in Area 11A.
+**Next Phase:** Area 11 is complete. Interactive Elements will be implemented as separate feature when SDK integration is prioritized.
