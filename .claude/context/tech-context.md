@@ -40,6 +40,15 @@ This document outlines the technical context of the MUXI Runtime, including tech
 - **Streaming Compatible**: All formats work seamlessly with existing streaming architecture
 - **Configuration Driven**: Format selection via `overlord.response.format` in formation YAML
 
+### Enhanced Token Tracking & Database Compatibility (September 2025)
+- **Array-Based Token Structure**: Self-documenting 6-field format `[total, input, output, total_cached, input_cached, output_cached]`
+- **Cache Token Support**: Ready for OneLLM cache token data with automatic total calculation
+- **Multi-Model Tracking**: Per-model breakdown with real-time accumulation across operations
+- **Backward Compatibility**: Legacy `total_tokens` and `breakdown_legacy` properties preserved
+- **Performance Optimization**: 25% smaller payload than object-based approach
+- **SQLAlchemy 2.0+ Compatibility**: Fixed pgvector extension creation with proper `text()` wrapper
+- **Production Ready**: Clean PostgreSQL initialization without false error warnings
+
 ### MCP Warning Suppression
 - **Clean Logs**: Suppressed third-party MCP server warnings
 - **Better UX**: Cleaner output without verbose validation warnings

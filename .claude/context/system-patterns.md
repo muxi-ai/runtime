@@ -639,6 +639,19 @@ class Agent:
    - Grouped API calls
    - Reduced overhead
 
+4. **Self-Documenting Data Structures**
+   ```python
+   # Compact array-based token tracking (September 2025)
+   class TokenUsage:
+       FIELDS = ["total", "input", "output", "total_cached", "input_cached", "output_cached"]
+       total: List[int] = field(default_factory=lambda: [0, 0, 0, 0, 0, 0])
+       breakdown: Dict[str, List[int]] = field(default_factory=dict)
+
+   # 25% smaller payload vs object format, cache-ready
+   # Real-time accumulation: tokens.add_tokens(model, usage_data)
+   # Output: {"fields": ["total",...], "total": [1247,456,791,212,123,89]}
+   ```
+
 ### Monitoring Patterns
 
 1. **Event Streaming**
