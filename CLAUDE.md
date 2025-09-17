@@ -1,12 +1,6 @@
-# CLAUDE.md - MUXI Runtime Development Guide
+# MUXI Runtime Development Guide
 
 Critical development context for the MUXI Runtime execution engine.
-
-> Think carefully and implement the most concise solution that changes as little code as possible.
-
-> Always remove whitespaces from blank lines
-
-> Always use ast-grep instead of regex/text search when possible.
 
 ## Core Architecture Principles
 
@@ -47,6 +41,24 @@ runtime/
 
 You can find more information about the project structure in the `context/project-structure.md` file.
 
+## Coding Standards
+
+- Target Python 3.10+ and favor async I/O when it improves throughput.
+- Format with Black (line length 100) and isort (`profile=black`); lint with Ruff and Flake8 (line length 120).
+- Keep naming consistent: modules `snake_case`, classes `PascalCase`, functions and variables `snake_case`.
+
+## Testing Expectations
+
+- Map quick logic to `tests/unit`, service boundaries to `tests/integration`, and end-to-end flows to `tests/e2e`.
+- Prefer deterministic data and real integrations when feasible; fall back to fixtures in `tests/fixtures`.
+- Design tests with a single assertion focus and clear arrange/act/assert structure.
+
+## Workflow Discipline
+
+- Write descriptive commit messages and use branches such as `feature/<topic>` or `fix/<issue>`.
+- Keep PRs small with a concise rationale, relevant logs or screenshots, links to issues, and test evidence (`pytest ...`).
+- Avoid bundling unrelated changes; ship focused increments whenever possible.
+
 ## USE SUB-AGENTS FOR CONTEXT OPTIMIZATION
 
 ### 1. Always use the file-analyzer sub-agent when asked to read files.
@@ -67,6 +79,7 @@ Using the test-runner agent ensures:
 - No approval dialogs interrupt the workflow
 
 **Important**: When using the test-runner agent, instruct it to use:
+
 ```bash
 bash .claude/scripts/test-and-log.sh path/to/test.py
 ```
@@ -96,6 +109,30 @@ System: ...
 User: ...
 System: ...
 ```
+
+## IMPORTANT RULES
+
+1. Think hard when planning and aim to implement the most concise solution that changes as little code as possible.
+2. Review your plans and identify ways to simplify and/or improve them, without losing sight of the statedgoal. Aim to leverage existing functionality whenever possible, rather than creating new code. DO NOT make changes for the sake of making changes.
+3. Always remove whitespaces from blank lines when creating or editing files.
+4. Always use ast-grep instead of regex/text search when possible.
+5. Always use `trash` to delete files and directories instead of `rm`.
+
+## Code Review
+
+When working on code changes, use CodeRabbit CLI for continuous code review:
+1. **Start CodeRabbit in the background** when beginning any code work:
+
+```bash
+coderabbit --prompt-only
+```
+
+2. **Check CodeRabbit output periodically** during development and especially after completing features or fixes
+3. **Fix all identified issues** immediately before moving to the next task
+4. **Repeat the review cycle** until CodeRabbit reports no issues
+
+This ensures code quality is maintained throughout development rather than as an afterthought.
+
 
 ## Recent Architectural Changes
 
