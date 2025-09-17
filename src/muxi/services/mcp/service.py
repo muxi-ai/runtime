@@ -80,6 +80,35 @@ class CredentialSelectionNeededError(Exception):
 USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
 
 
+def extract_service_name(server_id: str) -> str:
+    """
+    Extract the base service name from a server ID using robust regex pattern.
+
+    Handles various formats:
+    - "github_123" -> "github"
+    - "github-prod" -> "github"
+    - "github.com" -> "github"
+    - "api-gateway-v2" -> "api"
+    - None or empty -> "unknown"
+
+    Args:
+        server_id: The server identifier string
+
+    Returns:
+        The extracted service name or fallback
+    """
+    if not server_id:
+        return "unknown"
+
+    # First try to extract leading alphanumeric token
+    match = re.match(r'^([A-Za-z0-9]+)', server_id)
+    if match:
+        return match.group(1).lower()
+
+    # Fallback to full server_id if no match
+    return server_id.lower()
+
+
 class MCPService:
     """
     Service for interacting with MCP servers.
@@ -538,7 +567,7 @@ class MCPService:
 
                     if not service_name:
                         # Fallback: try to extract from server_id
-                        service_name = server_id.replace("-mcp", "").replace("_mcp", "").lower()
+                        service_name = extract_service_name(server_id)
 
                     # Resolve credentials from database
                     credentials = await credential_resolver.resolve(user_id, service_name)
@@ -613,8 +642,9 @@ class MCPService:
 
         try:
             # Emit streaming event for tool execution (abstract tool names)
-            # Extract service name from server_id (e.g., "github" from "github_123")
-            service_name = server_id.split('_')[0] if '_' in server_id else server_id
+            # Extract service name from server_id
+            service_name = extract_service_name(server_id)
+
             streaming.stream(
                 "tool_call",
                 f"Using {service_name} to complete this task...",

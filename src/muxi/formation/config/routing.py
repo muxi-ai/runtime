@@ -31,7 +31,7 @@
 #
 #   # Created from formation YAML data in Overlord
 #   routing_config = RoutingConfig(
-#       model=yaml_data.get('model', 'openai/gpt-5-mini'),
+#       model=yaml_data.get('model', 'openai/gpt-4o-mini'),
 #       temperature=yaml_data.get('settings', {}).get('temperature', 0.2)
 #   )
 # =============================================================================
@@ -52,7 +52,7 @@ class RoutingConfig(BaseModel):
     """
 
     model: str = Field(
-        default="openai/gpt-5-mini",
+        default="openai/gpt-4o-mini",
         description="The model to use for routing decisions in OneLLM format (provider/model)",
     )
 

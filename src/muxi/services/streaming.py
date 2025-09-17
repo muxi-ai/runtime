@@ -31,77 +31,102 @@ class StreamingManager:
     def __init__(self):
         # Key: request_id, Value: owner + events
         self.event_streams: Dict[str, Dict] = {}
+        # Thread safety lock for event_streams access
+        self._lock = threading.Lock()
 
     def enable_streaming(self, request_id: str, user_id: str, session_id: str):
         """Enable streaming with ownership tracking"""
-        if request_id not in self.event_streams:
-            self.event_streams[request_id] = {
-                "owner": (user_id, session_id),
-                "events": []
-            }
+        with self._lock:
+            if request_id not in self.event_streams:
+                self.event_streams[request_id] = {
+                    "owner": (user_id, session_id),
+                    "events": []
+                }
 
     def emit_event(self, request_id: str, event_type: str, content: str, **metadata):
         """Simple event storage - just in-memory dict/list operations"""
-        if request_id not in self.event_streams:
-            return  # Not streaming-enabled
+        with self._lock:
+            if request_id not in self.event_streams:
+                return  # Not streaming-enabled
 
-        stream_data = self.event_streams[request_id]
-        user_id, session_id = stream_data["owner"]
+            stream_data = self.event_streams[request_id]
+            user_id, session_id = stream_data["owner"]
 
-        event = {
-            "request_id": request_id,
-            "user_id": user_id,
-            "session_id": session_id,
-            "type": event_type,
-            "content": content,
-            "timestamp": time.time(),
-            **metadata
-        }
+            event = {
+                "request_id": request_id,
+                "user_id": user_id,
+                "session_id": session_id,
+                "type": event_type,
+                "content": content,
+                "timestamp": time.time(),
+                **metadata
+            }
 
-        # Just append to events list (fast in-memory operation)
-        stream_data["events"].append(event)
+            # Just append to events list (fast in-memory operation)
+            stream_data["events"].append(event)
 
     async def subscribe(self, request_id: str, user_id: str, session_id: str):
         """
         Generator that yields NEW events only.
         Real-time streaming - no replay of existing events.
         """
-        # Validate access
-        if request_id not in self.event_streams:
-            return
+        # Validate access and get initial state under lock
+        with self._lock:
+            if request_id not in self.event_streams:
+                return
 
-        stream_data = self.event_streams[request_id]
-        if stream_data["owner"] != (user_id, session_id):
-            return  # Unauthorized
+            stream_data = self.event_streams[request_id]
+            if stream_data["owner"] != (user_id, session_id):
+                return  # Unauthorized
 
-        # Start watching from NOW (ignore existing events)
-        last_seen = len(stream_data["events"])
+            # Start watching from NOW (ignore existing events)
+            last_seen = len(stream_data["events"])
 
         # Yield only NEW events as they arrive
-        while request_id in self.event_streams:
-            current_events = self.event_streams[request_id]["events"]
-            if len(current_events) > last_seen:
-                # New events since last check
-                for event in current_events[last_seen:]:
-                    yield event
-                    # Stop iteration when we see terminal events
-                    event_type = event.get("type")
-                    if event_type in ("completed", "failed", "cancelled"):
-                        # Clean up the stream after yielding the terminal event
-                        self.disable_streaming(request_id)
-                        return
-                last_seen = len(current_events)
+        while True:
+            # Copy new events to local list under lock
+            new_events_to_yield = []
+            terminal_event_seen = False
+
+            with self._lock:
+                # Check if stream still exists
+                if request_id not in self.event_streams:
+                    return
+
+                current_events = self.event_streams[request_id]["events"]
+                if len(current_events) > last_seen:
+                    # Copy new events to local list
+                    new_events_to_yield = current_events[last_seen:].copy()
+                    last_seen = len(current_events)
+
+                    # Check for terminal events
+                    for event in new_events_to_yield:
+                        event_type = event.get("type")
+                        if event_type in ("completed", "failed", "cancelled"):
+                            terminal_event_seen = True
+                            break
+
+            # Yield events outside the lock to avoid blocking
+            for event in new_events_to_yield:
+                yield event
+
+            # Clean up after terminal event
+            if terminal_event_seen:
+                self.disable_streaming(request_id)
+                return
 
             await asyncio.sleep(0.1)  # Brief polling
 
     def disable_streaming(self, request_id: str):
         """Cleanup when request completes"""
-        if request_id in self.event_streams:
-            del self.event_streams[request_id]
+        with self._lock:
+            if request_id in self.event_streams:
+                del self.event_streams[request_id]
 
     def is_streaming_enabled(self, request_id: str) -> bool:
         """Check if streaming is enabled for a request"""
-        return request_id in self.event_streams
+        with self._lock:
+            return request_id in self.event_streams
 
 
 # ===================================================================
@@ -143,9 +168,9 @@ async def rephrase_with_llm(
     Rephrase streaming events using LLM for better user experience.
 
     Returns rephrased content as internal monologue in user's language.
-    
-    TODO: Future enhancement - stream LLM tokens as they arrive instead of 
-    waiting for complete response. This would make the system feel more 
+
+    TODO: Future enhancement - stream LLM tokens as they arrive instead of
+    waiting for complete response. This would make the system feel more
     responsive, especially for longer rephrased messages. Would require:
     - Switching to streaming LLM generation
     - Emitting incremental events for each token chunk
@@ -156,7 +181,6 @@ async def rephrase_with_llm(
 
         # Extract context from metadata
         stage = metadata.get('stage', '')
-        original_message = metadata.get('original_message', '')
 
         # Build context-aware prompt
         # For planning events (especially decomposition), we want full detail
@@ -291,8 +315,6 @@ def stream(event_type: str, content: str, **metadata):
                     rephrased = evt_content  # Default to original content
 
                     try:
-                        import asyncio
-
                         # Check if there's already an event loop running
                         try:
                             loop = asyncio.get_running_loop()

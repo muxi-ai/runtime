@@ -56,6 +56,7 @@ from ...services.mcp.service import MCPService
 from ...services.llm import LLM
 from ...services.intent import IntentDetectionService
 from ...services import observability, streaming
+from ...utils.security import sanitize_message_preview
 
 
 class Agent:
@@ -3256,8 +3257,9 @@ class Agent:
             "planning",
             "Planning approach to handle the user's request...",
             stage="agent_planning",
-            agent_name=self.id,
-            message_preview=user_message[:500],
+            agent_name=self.name,
+            agent_id=getattr(self, "agent_id", None),
+            message_preview=sanitize_message_preview(user_message),
             has_tools=bool(available_tools),
             tool_count=len(available_tools) if available_tools else 0
         )

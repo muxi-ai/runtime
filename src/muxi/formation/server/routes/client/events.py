@@ -5,6 +5,7 @@ These endpoints provide SSE streams for async updates,
 requiring client API key authentication.
 """
 
+import asyncio
 import json
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -66,6 +67,9 @@ async def stream_request(
                 yield f"data: {json.dumps({'error': 'Unauthorized or request not streaming'})}\n\n"
                 return
 
+            # Notify client that stream is successfully opened
+            yield f"data: {json.dumps({'type': 'stream_open'})}\n\n"
+
             # Stream events in real-time
             async for event in subscription:
                 yield f"data: {json.dumps(event)}\n\n"
@@ -73,8 +77,16 @@ async def stream_request(
             # Stream completed (request_id deleted from streaming_manager)
             yield f"data: {json.dumps({'type': 'stream_completed'})}\n\n"
 
+        except asyncio.CancelledError:
+            # Client disconnected - clean shutdown, no error message
+            pass
         except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            # Real error - notify client (sanitize and truncate)
+            error_msg = str(e).strip() if e else "Stream error"
+            if error_msg:
+                # Remove newlines and limit length for SSE safety
+                error_msg = error_msg.replace('\n', ' ').replace('\r', '')[:200]
+            yield f"data: {json.dumps({'error': error_msg})}\n\n"
 
     return StreamingResponse(
         event_generator(),

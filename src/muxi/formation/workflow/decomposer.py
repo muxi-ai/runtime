@@ -252,11 +252,19 @@ class TaskDecomposer:
             print("🔄 Falling back to heuristic decomposition")
 
             # Emit streaming event for fallback
+            # Sanitize and truncate error message for streaming
+            error_msg = str(e).strip() if e else ""
+            if error_msg:
+                # Remove newlines and limit length
+                error_msg = error_msg.replace('\n', ' ').replace('\r', '')[:200]
+            else:
+                error_msg = "LLM decomposition failed"
+
             streaming.stream(
                 "planning",
                 "Using alternative approach to break down the request...",
                 stage="decomposition_fallback",
-                error_reason=str(e) if 'e' in locals() else "LLM decomposition failed"
+                error_reason=error_msg
             )
 
             return self._heuristic_decompose_request(workflow_id, request, analysis)

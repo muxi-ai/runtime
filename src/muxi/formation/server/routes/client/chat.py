@@ -6,6 +6,7 @@ requiring client API key authentication.
 """
 
 from typing import Optional, List, Dict, Any
+import asyncio
 import json
 
 from fastapi import APIRouter, HTTPException, Request
@@ -99,6 +100,9 @@ async def chat(request: Request, chat_request: ChatRequest) -> StreamingResponse
             # Send completion event
             yield f"event: done\ndata: {json.dumps({'finished': True})}\n\n"
 
+        except asyncio.CancelledError:
+            # Client disconnected - clean shutdown, no error message
+            pass
         except Exception as e:
             # Log error
             observability.observe(
@@ -117,8 +121,13 @@ async def chat(request: Request, chat_request: ChatRequest) -> StreamingResponse
                 description=f"Chat request failed: {e}",
             )
 
-            # Send error event
-            error_data = json.dumps({"error": str(e), "type": type(e).__name__})
+            # Send error event (sanitize and truncate error message)
+            error_msg = str(e).strip() if e else "Request failed"
+            if error_msg:
+                # Remove newlines and limit length for SSE safety
+                error_msg = error_msg.replace('\n', ' ').replace('\r', '')[:200]
+
+            error_data = json.dumps({"error": error_msg, "type": type(e).__name__})
             yield f"event: error\ndata: {error_data}\n\n"
 
     # Return streaming response

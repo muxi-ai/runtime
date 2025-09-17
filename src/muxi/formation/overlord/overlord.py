@@ -150,6 +150,7 @@ from ...datatypes.task_status import TaskStatus
 
 # Utility functions
 from ..utils import generate_api_key
+from ...utils.security import redact_message_preview, sanitize_message_preview
 
 # Configuration Management
 from .secrets_manager import SecretsInterpolator
@@ -215,6 +216,8 @@ from ..background import (
 # Unified Response Components
 from ...datatypes.clarification import ClarificationConfig, QuestionStyle, ClarificationResultStatus
 from ...utils.user_dirs import set_formation_id
+
+from ...services.streaming import streaming_manager
 
 # Import MarkItDown - required dependency
 from markitdown import MarkItDown
@@ -1011,7 +1014,7 @@ class Overlord:
                         "sop_name": relevant_sop["name"],
                         "relevance_score": relevant_sop.get("relevance_score", 0),
                         "mode": relevant_sop.get("mode", "template"),
-                        "message_preview": message[:100],
+                        "message_preview": redact_message_preview(message, 100),
                     },
                     description=f"Matched SOP '{relevant_sop['name']}' for request",
                 )
@@ -1026,7 +1029,7 @@ class Overlord:
                 data={
                     "error": str(e),
                     "phase": "sop_detection",
-                    "message_preview": message[:100],
+                    "message_preview": redact_message_preview(message, 100),
                 },
                 description=f"Failed to find relevant SOP: {str(e)}",
             )
@@ -1932,8 +1935,10 @@ Response:""".format(
                 )
 
                 # Use cached model if available
-                text_model_config = self._capability_models["text"]
-                model_name = text_model_config.get("model", "openai/gpt-5-mini")
+                text_model_config = self._capability_models.get("text")
+                if not text_model_config or not text_model_config.get("model"):
+                    raise ValueError("Text model is required in formation configuration")
+                model_name = text_model_config.get("model")
                 cache_key = f"workflow_check_{model_name}"
 
                 if cache_key in self._model_cache:
@@ -1997,8 +2002,10 @@ Response:""".format(
                 )
 
                 # Use cached model if available
-                text_model_config = self._capability_models["text"]
-                model_name = text_model_config.get("model", "openai/gpt-5-mini")
+                text_model_config = self._capability_models.get("text")
+                if not text_model_config or not text_model_config.get("model"):
+                    raise ValueError("Text model is required in formation configuration")
+                model_name = text_model_config.get("model")
                 cache_key = f"question_check_{model_name}"
 
                 if cache_key in self._model_cache:
@@ -2270,7 +2277,7 @@ Make it conversational and friendly while keeping accuracy."""
             # Get overlord.llm config structure
             llm_config = overlord_config.get("llm", {})
             self.routing_model = await self.create_model(
-                model=llm_config.get("model", "openai/gpt-5-mini"),
+                model=llm_config.get("model", "openai/gpt-4o-mini"),
                 temperature=llm_config.get("settings", {}).get("temperature", 0.2),
                 max_tokens=llm_config.get("settings", {}).get("max_tokens", 2000),
                 api_key=llm_config.get("api_key"),
@@ -4300,7 +4307,7 @@ Make it conversational and friendly while keeping accuracy."""
 
                 # If no specific API key, try to get from global keys
                 if not api_key and hasattr(self, "_global_api_keys"):
-                    # Extract provider from model name (e.g., "openai/gpt-5-mini" -> "openai")
+                    # Extract provider from model name (e.g., "openai/gpt-4o-mini" -> "openai")
                     provider = model_name.split("/")[0] if "/" in model_name else "openai"
                     api_key = self._global_api_keys.get(provider)
 
@@ -5187,7 +5194,6 @@ Make it conversational and friendly while keeping accuracy."""
         start_time = time.time()
 
         # Check if streaming is enabled for this request
-        from ...services.streaming import streaming_manager
         is_streaming = streaming_manager.is_streaming_enabled(request_id) if request_id else False
 
         # Extract clean message for streaming display (only if streaming is enabled)
@@ -5218,7 +5224,7 @@ Make it conversational and friendly while keeping accuracy."""
             "thinking",
             "Understanding the user's request...",
             stage="process_sync_start",
-            original_message=display_msg[:500],  # Changed from message_preview to original_message for rephrasing
+            original_message=sanitize_message_preview(display_msg, 500),  # Redact PII before streaming
             agent_name=agent_name,
             skip_clarification=skip_clarification
         )
@@ -5232,7 +5238,7 @@ Make it conversational and friendly while keeping accuracy."""
                 "agent_name": agent_name,
                 "user_id": user_id,
                 "session_id": session_id,
-                "message_preview": message[:50],
+                "message_preview": redact_message_preview(message, 50),
             },
             description=f"_process_sync_chat ENTRY: agent={agent_name}, session={session_id}",
         )
@@ -5266,7 +5272,7 @@ Make it conversational and friendly while keeping accuracy."""
                 data={
                     "session_id": session_id,
                     "contains_token": contains_token,
-                    "message_preview": message[:100],
+                    "message_preview": redact_message_preview(message, 100),
                 },
                 description="Checking for pending clarifications (workflow approval, credentials, etc.)",
             )
@@ -6116,7 +6122,7 @@ Make it conversational and friendly while keeping accuracy."""
                 event_type=observability.ConversationEvents.REQUEST_PROCESSING,
                 level=observability.EventLevel.DEBUG,
                 data={
-                    "message_preview": message[:50],
+                    "message_preview": redact_message_preview(message, 50),
                     "path": "fast_conversational",
                     "message_type": "non_actionable",
                 },
@@ -6203,7 +6209,7 @@ Make it conversational and friendly while keeping accuracy."""
                 "has_pending_clarifications": (
                     bool(await self._get_pending_clarification(session_id)) if session_id else False
                 ),
-                "message_preview": message[:50],
+                "message_preview": redact_message_preview(message, 50),
             },
             description=(
                 f"WORKFLOW DECISION: agent_name={agent_name}, auto_decomp={self.auto_decomposition}, "
@@ -6675,11 +6681,7 @@ Make it conversational and friendly while keeping accuracy."""
             "Preparing response...",
             stage="response_preparation",
             has_persona=bool(getattr(self, '_default_persona', None)),
-            response_format=(
-                getattr(self.response_formatter, 'format', 'markdown')
-                if hasattr(self, 'response_formatter')
-                else 'markdown'
-            )
+            response_format=getattr(self, 'response_format', 'markdown')
         )
 
         # Apply persona to format the response (except for clarifications)
@@ -6861,7 +6863,7 @@ Make it conversational and friendly while keeping accuracy."""
                     "complexity_score": analysis.complexity_score,
                     "plan_approval_threshold": self.plan_approval_threshold,
                     "needs_approval": needs_approval,
-                    "message_preview": message[:100],
+                    "message_preview": redact_message_preview(message, 100),
                 },
                 description=f"Workflow approval decision: {'REQUIRED' if needs_approval else 'NOT REQUIRED'}",
             )
@@ -7752,7 +7754,6 @@ Make it conversational and friendly while keeping accuracy."""
         self.workflow_manager.track_workflow(workflow, user_id)
 
         # Check if streaming is enabled for this request
-        from ...services.streaming import streaming_manager
         is_streaming = streaming_manager.is_streaming_enabled(request_id) if request_id else False
 
         try:
