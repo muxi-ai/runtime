@@ -1003,20 +1003,47 @@ class LLM:
                 return True
         return False
 
-    def _extract_tokens_from_response(self, response: Any) -> int:
-        """Extract total token count from LLM response, regardless of format."""
+    def _extract_tokens_from_response(self, response: Any) -> Dict[str, int]:
+        """Extract comprehensive token usage including cache information from LLM response."""
         try:
+            usage_data = {}
+
             # Handle object with usage attribute
             if hasattr(response, 'usage'):
-                return getattr(response.usage, 'total_tokens', 0)
+                usage = response.usage
+                if isinstance(usage, dict):
+                    usage_data = {
+                        'total_tokens': usage.get('total_tokens', 0),
+                        'prompt_tokens': usage.get('prompt_tokens', 0),
+                        'completion_tokens': usage.get('completion_tokens', 0),
+                        'prompt_tokens_cached': usage.get('prompt_tokens_cached', 0),
+                        'completion_tokens_cached': usage.get('completion_tokens_cached', 0),
+                    }
+                else:
+                    # Handle object-style usage
+                    usage_data = {
+                        'total_tokens': getattr(usage, 'total_tokens', 0),
+                        'prompt_tokens': getattr(usage, 'prompt_tokens', 0),
+                        'completion_tokens': getattr(usage, 'completion_tokens', 0),
+                        'prompt_tokens_cached': getattr(usage, 'prompt_tokens_cached', 0),
+                        'completion_tokens_cached': getattr(usage, 'completion_tokens_cached', 0),
+                    }
 
             # Handle dictionary format
-            if isinstance(response, dict) and 'usage' in response:
-                return response['usage'].get('total_tokens', 0)
+            elif isinstance(response, dict) and 'usage' in response:
+                usage = response['usage']
+                usage_data = {
+                    'total_tokens': usage.get('total_tokens', 0),
+                    'prompt_tokens': usage.get('prompt_tokens', 0),
+                    'completion_tokens': usage.get('completion_tokens', 0),
+                    'prompt_tokens_cached': usage.get('prompt_tokens_cached', 0),
+                    'completion_tokens_cached': usage.get('completion_tokens_cached', 0),
+                }
 
-            return 0
+            return usage_data
+
         except (AttributeError, KeyError, TypeError):
-            return 0
+            return {}
 
     async def _execute_with_resilience(self, func, *args, **kwargs):
         """Execute a function with full resilience patterns including fallback model support."""
@@ -1379,12 +1406,12 @@ Provide a helpful, conversational response that directly addresses what the user
             response = await ChatCompletion.acreate(**params)
 
             # Track token usage
-            token_count = self._extract_tokens_from_response(response)
-            if token_count > 0:
+            usage_data = self._extract_tokens_from_response(response)
+            if usage_data and usage_data.get('total_tokens', 0) > 0:
                 from ...services.observability.context import get_current_request_context
                 context = get_current_request_context()
                 if context:
-                    context.tokens.add_tokens(self.model_name, token_count)
+                    context.tokens.add_tokens(self.model_name, usage_data)
 
             # Extract content from response using helper
             content = self._extract_content_from_response(response)
@@ -1442,12 +1469,12 @@ Provide a helpful, conversational response that directly addresses what the user
             response = await ChatCompletion.acreate(**params)
 
             # Track token usage
-            token_count = self._extract_tokens_from_response(response)
-            if token_count > 0:
+            usage_data = self._extract_tokens_from_response(response)
+            if usage_data and usage_data.get('total_tokens', 0) > 0:
                 from ...services.observability.context import get_current_request_context
                 context = get_current_request_context()
                 if context:
-                    context.tokens.add_tokens(self.model_name, token_count)
+                    context.tokens.add_tokens(self.model_name, usage_data)
 
             # Check if response contains tool calls - if so, return the full response
             if self._has_tool_calls(response):
@@ -1495,12 +1522,12 @@ Provide a helpful, conversational response that directly addresses what the user
             response = await Embedding.acreate(**params)
 
             # Track token usage
-            token_count = self._extract_tokens_from_response(response)
-            if token_count > 0:
+            usage_data = self._extract_tokens_from_response(response)
+            if usage_data:
                 from ...services.observability.context import get_current_request_context
                 context = get_current_request_context()
                 if context:
-                    context.tokens.add_tokens(embedding_model, token_count)
+                    context.tokens.add_tokens(embedding_model, usage_data)
 
             # Extract embedding from response
             if isinstance(response, dict) and "data" in response:
@@ -1567,12 +1594,12 @@ Provide a helpful, conversational response that directly addresses what the user
             response = await AudioTranscription.create(**params)
 
             # Track token usage
-            token_count = self._extract_tokens_from_response(response)
-            if token_count > 0:
+            usage_data = self._extract_tokens_from_response(response)
+            if usage_data:
                 from ...services.observability.context import get_current_request_context
                 context = get_current_request_context()
                 if context:
-                    context.tokens.add_tokens(transcription_model, token_count)
+                    context.tokens.add_tokens(transcription_model, usage_data)
 
             # Extract text from response
             if isinstance(response, dict) and "text" in response:
@@ -1621,12 +1648,12 @@ Provide a helpful, conversational response that directly addresses what the user
             response = await Embedding.acreate(**params)
 
             # Track token usage
-            token_count = self._extract_tokens_from_response(response)
-            if token_count > 0:
+            usage_data = self._extract_tokens_from_response(response)
+            if usage_data:
                 from ...services.observability.context import get_current_request_context
                 context = get_current_request_context()
                 if context:
-                    context.tokens.add_tokens(embedding_model, token_count)
+                    context.tokens.add_tokens(embedding_model, usage_data)
 
             # Extract embeddings from response
             if isinstance(response, dict) and "data" in response:

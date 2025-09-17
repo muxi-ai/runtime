@@ -8,7 +8,7 @@ including event types, levels, and data structures.
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, List, Any
 
 
 class EventLevel(Enum):
@@ -923,15 +923,56 @@ class ErrorEvents(Enum):
 
 @dataclass
 class TokenUsage:
-    """Token usage tracking for LLM operations."""
+    """Enhanced token usage tracking with cache support using self-documenting arrays."""
 
-    total: int = 0
-    breakdown: Dict[str, int] = field(default_factory=dict)
+    # Field definitions (class constant for self-documentation)
+    FIELDS = ["total", "input", "output", "total_cached", "input_cached", "output_cached"]
 
-    def add_tokens(self, model: str, tokens: int) -> None:
-        """Add token usage for a specific model."""
-        self.total += tokens
-        self.breakdown[model] = self.breakdown.get(model, 0) + tokens
+    # Internal storage as arrays matching FIELDS order
+    total: List[int] = field(default_factory=lambda: [0, 0, 0, 0, 0, 0])
+    breakdown: Dict[str, List[int]] = field(default_factory=dict)
+
+    def add_tokens(self, model: str, usage_data: Dict[str, int]) -> None:
+        """Add comprehensive token usage data in array format."""
+        # Extract values in FIELDS order
+        values = [
+            usage_data.get('total_tokens', 0),
+            usage_data.get('prompt_tokens', 0),
+            usage_data.get('completion_tokens', 0),
+            usage_data.get('prompt_tokens_cached', 0) + usage_data.get('completion_tokens_cached', 0),  # total_cached
+            usage_data.get('prompt_tokens_cached', 0),
+            usage_data.get('completion_tokens_cached', 0)
+        ]
+
+        # Update totals (element-wise addition)
+        for i, value in enumerate(values):
+            self.total[i] += value
+
+        # Update model breakdown
+        if model not in self.breakdown:
+            self.breakdown[model] = [0, 0, 0, 0, 0, 0]
+
+        for i, value in enumerate(values):
+            self.breakdown[model][i] += value
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to self-documenting observability log format."""
+        return {
+            "fields": self.FIELDS,
+            "total": self.total,
+            "breakdown": self.breakdown
+        }
+
+    # Backward compatibility methods
+    @property
+    def total_tokens(self) -> int:
+        """Backward compatibility: get total tokens."""
+        return self.total[0]
+
+    @property
+    def breakdown_legacy(self) -> Dict[str, int]:
+        """Backward compatibility: get breakdown as model -> total_tokens dict."""
+        return {model: tokens[0] for model, tokens in self.breakdown.items()}
 
 
 @dataclass
