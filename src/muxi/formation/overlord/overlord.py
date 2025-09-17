@@ -175,8 +175,7 @@ from ...datatypes.exceptions import (
 from ...services.multimodal import MultiModalFusionEngine, WorkflowMultiModalProcessor
 from ..workflow.synthesis import AdvancedResponseSynthesizer, ResponseQualityAssessor
 
-# Import interactive elements and enhanced multimodal integration
-from ..workflow.interactive import InteractiveElementGenerator, MediaIntegrator
+# Import multimodal integration
 from ...services.multimodal import (
     TaskInputProcessor,
     TaskOutputProcessor,
@@ -653,10 +652,6 @@ class Overlord:
         self.response_synthesizer = AdvancedResponseSynthesizer(
             llm=extraction_model, quality_assessor=self.quality_assessor
         )
-
-        # Initialize interactive elements and enhanced multimodal integration (intelligence concerns)
-        self.interactive_generator = InteractiveElementGenerator()
-        self.media_integrator = MediaIntegrator()
 
         # Enhanced multimodal processors (intelligence concerns)
         self.workflow_multimodal_processor = WorkflowMultiModalProcessor(
@@ -2318,7 +2313,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # Response configuration
             response_config = overlord_config.get("response", {})
             self.response_format = response_config.get("format", "markdown")
-            self.use_interactive_elements = response_config.get("interactive_elements", True)
+            self.use_widgets = response_config.get("widgets", True)
             self.streaming = response_config.get("streaming", False)
 
             # Resilience is handled by the resilient workflow executor
@@ -2452,7 +2447,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             #     f"ttl={self.routing_cache_ttl}, "
             #     f"max_extraction_tokens={self.max_extraction_tokens}, "
             #     f"response_format={self.response_format}, "
-            #     f"interactive_elements={self.use_interactive_elements}, "
+            #     f"widgets={self.use_widgets}, "
             #     f"auto_decomposition={self.auto_decomposition}, "
             #     f"plan_approval_threshold={self.plan_approval_threshold}"
             # )

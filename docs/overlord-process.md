@@ -1,26 +1,17 @@
-### Part A: Interactive Response Elements
-```mermaid
-graph LR
-    A["Interactive Response Elements"] --> B["InteractiveElementGenerator"]
-    A --> C["ResponseFormatter"]
-    A --> D["MediaIntegrator"]
+### Part A: Widgets (Deferred)
 
-    B --> B1["Button Generation"]
-    B --> B2["Form Generation"]
-    B --> B3["Menu/Selection Components"]
+**Status:** 📋 **DEFERRED** - Moved to separate PRD
 
-    C --> C1["Markdown Enhancement"]
-    C --> C2["HTML Generation"]
-    C --> C3["Rich Text Formatting"]
+**See:** [`contexts/prds/widgets.md`](../contexts/prds/widgets.md) for detailed planning
 
-    D --> D1["Chart/Graph Embedding"]
-    D --> D2["Image Integration"]
-    D --> D3["File Attachment Support"]
+**Rationale:** Widgets require tight SDK integration for optimal UX. Implementation deferred until core runtime foundation is stable and SDK integration strategy is finalized.
 
-    B1 --> E["Synthesis Integration"]
-    C1 --> E
-    D1 --> E
-```
+**Planned Scope:**
+- Workflow approval buttons ("Approve Plan" / "Modify Plan")
+- Enhanced clarification options (multiple choice buttons)
+- Secure credential collection forms
+- Link previews and source references
+- Artifact positioning enhancements
 
 ### Phase 2: Performance & Scalability Optimization (High Priority)
 

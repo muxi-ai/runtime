@@ -11,7 +11,7 @@
 | 11A2 | Markdown Response Format | ✅ PASS | `test_11a1_json_format.py` | Rich text formatting |
 | 11A3 | Plain Text Response Format | ✅ PASS | `test_11a1_json_format.py` | Simple text output |
 | 11A4 | HTML Response Format | ✅ PASS | `test_11a1_json_format.py` | Semantic HTML with validation |
-| **Interactive Elements** | **DEFERRED** | 📋 **PLANNED** | [`contexts/prds/interactive_elements.md`](../../../contexts/prds/interactive_elements.md) | **Moved to separate PRD** |
+| **Interactive Elements** | **DEFERRED** | 📋 **PLANNED** | [`contexts/prds/widgets.md`](../../../contexts/prds/widgets.md) | **Moved to separate PRD** |
 
 ## Detailed Test Implementation
 
@@ -81,7 +81,7 @@ async def test_html_format():
 ## Interactive Elements (Deferred)
 
 **Implementation Status:** Moved to separate PRD
-**PRD Location:** [`contexts/prds/interactive_elements.md`](../../../contexts/prds/interactive_elements.md)
+**PRD Location:** [`contexts/prds/widgets.md`](../../../contexts/prds/widgets.md)
 **Infrastructure:** Preserved for future implementation
 
 **Deferred Scope:**
@@ -110,11 +110,6 @@ User Request → Agent Processing → Persona Application (+ Format Instructions
 
 ### Preserved Interactive Infrastructure
 
-**Components Maintained for Future Use:**
-- `InteractiveElementGenerator`: Complete implementation ready
-- `MediaIntegrator`: Media embedding functionality available
-- `overlord.response.interactive_elements` configuration preserved
-
 **Future Integration Points:**
 - SDK-first design with placeholder system
 - Deterministic triggers (not LLM-driven)
@@ -128,7 +123,7 @@ User Request → Agent Processing → Persona Application (+ Format Instructions
 overlord:
   response:
     format: "markdown"  # "json", "text", "markdown", "html"
-    interactive_elements: true  # Reserved for future interactive features
+    widgets: true  # Reserved for future interactive features
 ```
 
 ## Test Execution
@@ -167,7 +162,7 @@ beautifulsoup4 = ">=4.12.0"  # HTML validation and formatting
 ## Future Development
 
 ### Interactive Elements (Separate Initiative)
-**See:** [`contexts/prds/interactive_elements.md`](../../../contexts/prds/interactive_elements.md)
+**See:** [`contexts/prds/widgets.md`](../../../contexts/prds/widgets.md)
 
 **Key Features:**
 1. **Workflow Approval:** "Approve Plan" / "Modify Plan" buttons

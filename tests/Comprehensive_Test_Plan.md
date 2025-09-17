@@ -1174,7 +1174,7 @@ assert "**" not in response   # No markdown emphasis
 ```python
 # Test 11B1: Buttons in Response
 formation = Formation.load("formations/interactive.yaml")
-# Formation has: overlord.response.interactive_elements: ["buttons"]
+# Formation has: overlord.response.widgets: ["buttons"]
 overlord = await formation.start()
 
 response = await overlord.chat("Show me options for data visualization")
@@ -1186,7 +1186,7 @@ if isinstance(response, dict):
 
 # Test 11B2: Forms in Response
 formation = Formation.load("formations/forms.yaml")
-# Formation has: overlord.response.interactive_elements: ["forms"]
+# Formation has: overlord.response.widgets: ["forms"]
 overlord = await formation.start()
 
 response = await overlord.chat("I need to collect user information")
@@ -1198,7 +1198,7 @@ if isinstance(response, dict):
 
 # Test 11B3: Tables in Response
 formation = Formation.load("formations/tables.yaml")
-# Formation has: overlord.response.interactive_elements: ["tables"]
+# Formation has: overlord.response.widgets: ["tables"]
 overlord = await formation.start()
 
 response = await overlord.chat("Compare Python, JavaScript, and Go")
@@ -1215,7 +1215,7 @@ if isinstance(response, dict):
 formation = Formation.load("formations/json-interactive.yaml")
 # Formation has:
 #   overlord.response.format: "json"
-#   overlord.response.interactive_elements: ["buttons", "tables"]
+#   overlord.response.widgets: ["buttons", "tables"]
 overlord = await formation.start()
 
 response = await overlord.chat("Show product comparison with purchase options")
@@ -1227,7 +1227,7 @@ assert "buttons" in response or "actions" in response
 formation = Formation.load("formations/markdown-code.yaml")
 # Formation has:
 #   overlord.response.format: "markdown"
-#   overlord.response.interactive_elements: ["code_blocks"]
+#   overlord.response.widgets: ["code_blocks"]
 overlord = await formation.start()
 
 response = await overlord.chat("Show me how to sort a list in Python")

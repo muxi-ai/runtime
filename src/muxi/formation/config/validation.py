@@ -2033,10 +2033,10 @@ class FormationValidator:
                     f"response.format '{format_val}' invalid. Valid: markdown, json, text"
                 )
 
-        # Validate interactive_elements
-        if "interactive_elements" in response_config:
-            if not isinstance(response_config["interactive_elements"], bool):
-                self.result.add_error("response.interactive_elements must be a boolean")
+        # Validate widgets
+        if "widgets" in response_config:
+            if not isinstance(response_config["widgets"], bool):
+                self.result.add_error("response.widgets must be a boolean")
 
         # Validate streaming
         if "streaming" in response_config:
