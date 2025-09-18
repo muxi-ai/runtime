@@ -3351,6 +3351,12 @@ class Agent:
 
             planning_prompt += "---\n"
 
+        # Add explicit warning when no other agents are available for delegation
+        if not internal_agents and not external_agents:
+            planning_prompt += "\n⚠️ CRITICAL: You are the ONLY agent in this formation!\n"
+            planning_prompt += "You MUST handle all requests yourself without delegation.\n"
+            planning_prompt += "Even if you lack specific tools or capabilities, provide your best effort response.\n\n"
+
         template_path = Path(__file__).parent / "planning_prompt.md"
         try:
             with open(template_path, "r", encoding="utf-8") as f:
