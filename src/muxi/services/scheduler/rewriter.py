@@ -108,24 +108,7 @@ class PromptRewriter:
             description="Starting prompt rewriting for scheduled execution"
         )
 
-        # Try pattern-based rewriting first
-        rewritten = await self._try_pattern_rewriting(original_prompt)
-
-        if rewritten != original_prompt:
-            observability.observe(
-                event_type=observability.ConversationEvents.REQUEST_PROCESSING,
-                level=observability.EventLevel.INFO,
-                data={
-                    "original_prompt": original_prompt,
-                    "rewritten_prompt": rewritten,
-                    "method": "pattern_based",
-                    "component": "prompt_rewriter"
-                },
-                description="Prompt rewritten using pattern matching"
-            )
-            return rewritten
-
-        # Fall back to LLM-based rewriting
+        # Use LLM-based rewriting directly (pattern-based removed)
         rewritten = await self._llm_rewrite_prompt(original_prompt, schedule_context)
 
         observability.observe(
@@ -191,37 +174,39 @@ class PromptRewriter:
         llm = await self._get_llm()
 
         if not llm:
-            # Fallback to pattern-based rewriting
+            # Simple fallback when LLM unavailable
             observability.observe(
                 event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.WARNING,
-                description="LLM unavailable for prompt rewriting, using enhanced pattern fallback"
+                description="LLM unavailable for prompt rewriting, using original prompt"
             )
-            return self._enhanced_pattern_rewrite(original_prompt, schedule_context)
+            return original_prompt
 
         context_info = f"\nSchedule Context: {schedule_context}" if schedule_context else ""
 
         prompt = f"""
-Rewrite the following user request into a clear, actionable prompt that works well for scheduled/automated execution.
+Extract and rewrite the core action from this scheduling request, removing all scheduling/timing instructions.
 
 Original Request: "{original_prompt}"{context_info}
 
-Guidelines for rewriting:
-1. Make it self-contained (no ambiguous "this" or "that" references)
-2. Be specific about what action to take
-3. Consider this will run automatically at scheduled times
-4. Transform temporal references appropriately (e.g., "now" → "at this scheduled time")
-5. Add context about expected output or notification
-6. Keep the same intent and language as the original
-7. Make it actionable for an AI assistant
+IMPORTANT: The user has requested a scheduled task. Strip away ALL scheduling patterns
+(like "every minute", "daily at", "every hour", etc.) and return ONLY the action to be performed.
+
+Guidelines:
+1. Remove all scheduling/timing words (every, daily, hourly, minute, at, recurring, etc.)
+2. Keep ONLY the core action/task to be executed
+3. Make it self-contained and clear
+4. If the request is just an action with timing (e.g., "check my email every minute"), return just the action (e.g., "check my email")
+5. Do NOT add words like "update", "reminder", or "notification" unless they were in the original action
 
 Examples:
-- "check my email" → "Check email for new messages and provide a summary of important items"
-- "remind me about the meeting" → "Send reminder: You have a meeting scheduled today"
-- "weather" → "Check current weather conditions and provide forecast summary"
-- "generate report" → "Generate and deliver daily activity report for today's date"
+- "check my email every hour" → "check my email"
+- "tell me a dad joke every minute" → "tell me a dad joke"
+- "send weather report daily at 9am" → "send weather report"
+- "remind me about the meeting every Monday" → "remind me about the meeting"
+- "generate sales report on the first of each month" → "generate sales report"
 
-Return only the rewritten prompt, no explanation.
+Return only the extracted action, no scheduling instructions, no explanation.
 """
 
         try:
