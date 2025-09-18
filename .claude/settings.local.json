@@ -18,7 +18,8 @@
       "Bash(tail:*)",
       "Bash(done)",
       "WebFetch(domain:)",
-      "Bash(trash:*)"
+      "Bash(trash:*)",
+      "Bash(tee:*)"
     ],
     "deny": [],
     "ask": []
