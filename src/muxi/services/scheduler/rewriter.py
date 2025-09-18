@@ -98,11 +98,12 @@ class PromptRewriter:
             Rewritten prompt optimized for execution
         """
         observability.observe(
-            event_type=observability.ConversationEvents.PROMPT_REWRITING_STARTED,
+            event_type=observability.ConversationEvents.REQUEST_PROCESSING,
             level=observability.EventLevel.INFO,
             data={
                 "original_length": len(original_prompt),
-                "has_schedule_context": bool(schedule_context)
+                "has_schedule_context": bool(schedule_context),
+                "component": "prompt_rewriter"
             },
             description="Starting prompt rewriting for scheduled execution"
         )
@@ -112,12 +113,13 @@ class PromptRewriter:
 
         if rewritten != original_prompt:
             observability.observe(
-                event_type=observability.ConversationEvents.PROMPT_REWRITTEN_PATTERN,
+                event_type=observability.ConversationEvents.REQUEST_PROCESSING,
                 level=observability.EventLevel.INFO,
                 data={
                     "original_prompt": original_prompt,
                     "rewritten_prompt": rewritten,
-                    "method": "pattern_based"
+                    "method": "pattern_based",
+                    "component": "prompt_rewriter"
                 },
                 description="Prompt rewritten using pattern matching"
             )
@@ -127,12 +129,13 @@ class PromptRewriter:
         rewritten = await self._llm_rewrite_prompt(original_prompt, schedule_context)
 
         observability.observe(
-            event_type=observability.ConversationEvents.PROMPT_REWRITTEN_LLM,
+            event_type=observability.ConversationEvents.REQUEST_PROCESSING,
             level=observability.EventLevel.INFO,
             data={
                 "original_prompt": original_prompt,
                 "rewritten_prompt": rewritten,
-                "method": "llm_based"
+                "method": "llm_based",
+                "component": "prompt_rewriter"
             },
             description="Prompt rewritten using LLM"
         )

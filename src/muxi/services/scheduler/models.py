@@ -33,7 +33,8 @@ class ScheduledJobAudit(Base, AsyncModelMixin):
 
     # Job and user identification
     job_id = Column(String(255), ForeignKey("scheduled_jobs.id"), nullable=False, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    # Store external_user_id directly as string (not a foreign key)
+    user_id = Column(String(255), nullable=False, index=True)  # external_user_id from request
 
     # Audit information
     action = Column(

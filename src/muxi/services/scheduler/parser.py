@@ -143,7 +143,7 @@ class ScheduleParser:
         schedule_lower = schedule_text.lower().strip()
 
         observability.observe(
-            event_type=observability.ConversationEvents.SCHEDULE_PARSING_STARTED,
+            event_type=observability.SystemEvents.SCHEDULER_PARSER_INITIALIZED,
             level=observability.EventLevel.INFO,
             data={"original_text": schedule_text, "timezone": timezone},
             description="Starting schedule parsing",
@@ -178,7 +178,7 @@ class ScheduleParser:
 
             if cron_expr:
                 observability.observe(
-                    event_type=observability.ConversationEvents.SCHEDULE_PARSED_PATTERN,
+                    event_type=observability.SystemEvents.SCHEDULER_PARSER_INITIALIZED,
                     level=observability.EventLevel.INFO,
                     data={
                         "original_text": schedule_text,

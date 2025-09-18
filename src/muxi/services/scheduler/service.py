@@ -338,11 +338,13 @@ class SchedulerService:
         self._performance_stats["cycles_completed"] += 1
 
         observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_JOB_EXECUTED,
+            event_type=observability.SystemEvents.SERVICE_STATUS_CHANGED,
             level=observability.EventLevel.DEBUG,
             data={
                 "jobs_processed": len(due_jobs),
                 "active_executions": len(self._active_executions),
+                "component": "scheduler_worker",
+                "status": "cycle_completed"
             },
             description="Scheduler cycle completed",
         )
