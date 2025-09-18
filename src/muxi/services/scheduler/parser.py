@@ -118,7 +118,7 @@ class ScheduleParser:
                 self.llm = LLM()
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.LLM_INITIALIZATION_FAILED,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e)},
                     description="Failed to initialize LLM for schedule parsing",
@@ -157,7 +157,7 @@ class ScheduleParser:
             datetime_result = await self._parse_specific_datetime(schedule_text, timezone)
 
             observability.observe(
-                event_type=observability.ConversationEvents.SCHEDULE_PARSED_DATETIME,
+                event_type=observability.SystemEvents.SCHEDULER_PARSER_INITIALIZED,
                 level=observability.EventLevel.INFO,
                 data={
                     "original_text": schedule_text,
@@ -193,7 +193,7 @@ class ScheduleParser:
             cron_expr = await self._llm_parse_schedule(schedule_text, timezone)
 
             observability.observe(
-                event_type=observability.ConversationEvents.SCHEDULE_PARSED_LLM,
+                event_type=observability.SystemEvents.SCHEDULER_PARSER_INITIALIZED,
                 level=observability.EventLevel.INFO,
                 data={
                     "original_text": schedule_text,
@@ -263,7 +263,7 @@ class ScheduleParser:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTENT_DETECTION_ERROR,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={
                     "schedule_text": schedule_text[:100],
@@ -360,7 +360,7 @@ class ScheduleParser:
             sanitized_text = SchedulerInputValidator.sanitize_schedule_text(schedule_text)
         except ValueError as e:
             observability.observe(
-                event_type=observability.ErrorEvents.SCHEDULER_INPUT_VALIDATION_FAILED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={
                     "schedule_text": schedule_text[:100],  # Log only first 100 chars
@@ -431,7 +431,7 @@ Respond with ONLY: "one_time" or "recurring"
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.LLM_JOB_TYPE_DETECTION_FAILED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"schedule_text": schedule_text, "error": str(e)},
                 description=f"LLM job type detection failed: {e}",
@@ -466,7 +466,7 @@ Respond with ONLY: "one_time" or "recurring"
             sanitized_text = SchedulerInputValidator.sanitize_schedule_text(schedule_text)
         except ValueError as e:
             observability.observe(
-                event_type=observability.ErrorEvents.SCHEDULER_INPUT_VALIDATION_FAILED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={
                     "schedule_text": schedule_text[:100],  # Log only first 100 chars
@@ -514,8 +514,21 @@ Return only valid JSON, no explanation.
         try:
             response = await llm.generate_text(prompt)
 
+            # Clean up response - remove markdown code blocks if present
+            clean_response = response.strip()
+            if clean_response.startswith("```"):
+                # Remove markdown code block markers
+                lines = clean_response.split("\n")
+                # Remove first line (```json or ```)
+                if len(lines) > 2:
+                    lines = lines[1:]
+                # Remove last line if it's ```
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                clean_response = "\n".join(lines).strip()
+
             # Parse JSON response
-            datetime_data = json.loads(response.strip())
+            datetime_data = json.loads(clean_response)
 
             # Validate required fields
             required_fields = ["year", "month", "day", "hour", "minute", "timezone"]
@@ -546,12 +559,14 @@ Return only valid JSON, no explanation.
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             observability.observe(
-                event_type=observability.ErrorEvents.DATETIME_PARSING_FAILED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
+                    "service": "scheduler_parser",
                     "schedule_text": schedule_text,
                     "response": response[:200] if response is not None else "No response",
                     "error": str(e),
+                    "error_type": "datetime_parsing_failed",
                 },
                 description=f"Failed to parse specific datetime: {e}",
             )
@@ -774,7 +789,7 @@ Return only valid JSON, no explanation.
         if not llm:
             # Fallback to pattern matching if LLM unavailable
             observability.observe(
-                event_type=observability.ErrorEvents.LLM_UNAVAILABLE,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
                 description="LLM unavailable, using pattern fallback for schedule parsing",
             )
@@ -785,7 +800,7 @@ Return only valid JSON, no explanation.
             sanitized_text = SchedulerInputValidator.sanitize_schedule_text(schedule_text)
         except ValueError as e:
             observability.observe(
-                event_type=observability.ErrorEvents.SCHEDULER_INPUT_VALIDATION_FAILED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"schedule_text": schedule_text[:100], "error": str(e)},
                 description=f"Schedule text sanitization failed: {e}",
@@ -856,7 +871,7 @@ IMPORTANT: Return ONLY the cron expression, no explanation or additional text.
 
                 # Fallback to default if still invalid
                 observability.observe(
-                    event_type=observability.ErrorEvents.SCHEDULE_PARSING_FAILED,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.ERROR,
                     data={"original_text": schedule_text, "invalid_cron": cron_expr},
                     description="LLM generated invalid cron expression",
@@ -865,7 +880,7 @@ IMPORTANT: Return ONLY the cron expression, no explanation or additional text.
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.SCHEDULE_PARSING_FAILED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={"original_text": schedule_text, "error": str(e)},
                 description=f"LLM schedule parsing failed: {e}",
@@ -940,7 +955,7 @@ IMPORTANT: Return ONLY the cron expression, no explanation or additional text.
                         exclusion_rules.append(rule)
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.EXCLUSION_RULE_GENERATION_FAILED,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.ERROR,
                     data={"description": description, "error": str(e)},
                     description=f"Failed to generate exclusion rule: {e}",
@@ -976,7 +991,7 @@ IMPORTANT: Return ONLY the cron expression, no explanation or additional text.
             sanitized_description = SchedulerInputValidator.sanitize_schedule_text(description)
         except ValueError as e:
             observability.observe(
-                event_type=observability.ErrorEvents.SCHEDULER_INPUT_VALIDATION_FAILED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"description": description[:100], "error": str(e)},
                 description=f"Exclusion description sanitization failed: {e}",
@@ -1058,7 +1073,7 @@ Return only valid JSON, no explanation.
 
         except (json.JSONDecodeError, KeyError) as e:
             observability.observe(
-                event_type=observability.ErrorEvents.EXCLUSION_RULE_PARSING_FAILED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "description": description,
@@ -1126,7 +1141,7 @@ Return only valid JSON, no explanation.
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.CRON_TIMEZONE_CONVERSION_FAILED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "cron_expression": cron_expr,
@@ -1239,7 +1254,7 @@ Return only valid JSON, no explanation.
 
         # Ultimate fallback - daily at 9 AM
         observability.observe(
-            event_type=observability.ErrorEvents.SCHEDULE_PARSING_FALLBACK,
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.WARNING,
             data={"original_text": schedule_text},
             description="Using ultimate fallback schedule (daily at 9 AM)",
@@ -1299,7 +1314,7 @@ Return only valid JSON, no explanation.
 
         # If no pattern matched, create a basic rule
         observability.observe(
-            event_type=observability.ErrorEvents.EXCLUSION_RULE_FALLBACK,
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.WARNING,
             data={"description": description},
             description="Using generic exclusion rule for unrecognized description",

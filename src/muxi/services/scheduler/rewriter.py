@@ -193,7 +193,7 @@ class PromptRewriter:
         if not llm:
             # Fallback to pattern-based rewriting
             observability.observe(
-                event_type=observability.ErrorEvents.LLM_UNAVAILABLE,
+                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.WARNING,
                 description="LLM unavailable for prompt rewriting, using enhanced pattern fallback"
             )
@@ -237,7 +237,7 @@ Return only the rewritten prompt, no explanation.
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.PROMPT_REWRITING_FAILED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "original_prompt": original_prompt,
@@ -297,7 +297,7 @@ Return only the rewritten prompt, no explanation.
         if not llm:
             # No enhancement possible without LLM
             observability.observe(
-                event_type=observability.ErrorEvents.LLM_UNAVAILABLE,
+                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.WARNING,
                 description="LLM unavailable for formation enhancement, returning original prompt"
             )
@@ -348,7 +348,7 @@ Return only the enhanced prompt, no explanation.
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.PROMPT_ENHANCEMENT_FAILED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "original_prompt": prompt,

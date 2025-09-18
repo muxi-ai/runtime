@@ -578,7 +578,7 @@ class JobManager:
                 )
             else:
                 observability.observe(
-                    event_type=observability.ErrorEvents.ONETIME_JOB_COMPLETION_FAILED,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"job_id": job_id, "reason": "Job not found or not a one-time job"},
                     description=f"Failed to mark one-time job as completed: {job_id}",
@@ -1322,7 +1322,7 @@ class JobManager:
             llm_service = self.db_manager._services.get("llm")
             if not llm_service:
                 observability.observe(
-                    event_type=observability.ErrorEvents.SERVICE_NOT_AVAILABLE,
+                    event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                     level=observability.EventLevel.WARNING,
                     data={"service": "llm", "fallback": "consider_all_changes_significant"},
                     description="LLM service not available for prompt comparison",

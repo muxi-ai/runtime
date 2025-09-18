@@ -6268,6 +6268,21 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
                 analysis = await self.request_analyzer.analyze_request(actual_message)
 
+                # Debug: Log the complete analysis object
+                observability.observe(
+                    event_type=observability.ServerEvents.REQUEST_RECEIVED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "request_analyzer_result",
+                        "analysis_fields": dir(analysis) if analysis else [],
+                        "is_scheduling_request": getattr(analysis, "is_scheduling_request", None) if analysis else None,
+                        "complexity_score": analysis.complexity_score if analysis else None,
+                        "requires_decomposition": analysis.requires_decomposition if analysis else None,
+                        "message_analyzed": actual_message[:100],
+                    },
+                    description=f"Request analyzer returned: scheduling={getattr(analysis, 'is_scheduling_request', 'N/A')}",  # noqa: E501
+                )
+
                 # Check if complexity exceeds threshold
                 # Use workflow config threshold if available, otherwise fall back to overlord threshold
                 threshold = (
@@ -6363,13 +6378,102 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             )
             except Exception as e:
                 # Log error but continue with normal flow
+                import traceback
                 observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
-                    data={"error": str(e), "phase": "workflow_analysis"},
-                    description=f"Failed to analyze request for workflow: {str(e)}",
+                    data={
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "phase": "workflow_analysis",
+                        "traceback": traceback.format_exc()[-500:],  # Last 500 chars of traceback
+                    },
+                    description=f"Failed to analyze request for workflow: {type(e).__name__}: {str(e)}",
                 )
                 # Fall through to normal agent selection
+
+        # Check for scheduler integration
+        observability.observe(
+            event_type=observability.ServerEvents.REQUEST_RECEIVED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "scheduler_check",
+                "has_analysis": analysis is not None,
+                "is_scheduling_request": getattr(analysis, "is_scheduling_request", False) if analysis else False,
+                "scheduler_service_available": self.scheduler_service is not None,
+                "message_preview": message[:100],
+            },
+            description=f"Checking scheduler routing - analysis: {analysis is not None}, scheduler: {self.scheduler_service is not None}",  # noqa: E501
+        )
+
+        # Route to scheduler if this is a scheduling request
+        if analysis and getattr(analysis, "is_scheduling_request", False) and self.scheduler_service:
+            observability.observe(
+                event_type=observability.ServerEvents.REQUEST_RECEIVED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "service": "scheduler_routing",
+                    "user_id": str(user_id),
+                    "message": message[:100],
+                },
+                description="Routing to scheduler service for scheduling request",
+            )
+
+            try:
+                # Extract the actual user message for scheduler
+                actual_message = message
+                if "=== CURRENT REQUEST ===" in message and "User:" in message:
+                    lines = message.split("\n")
+                    for i, line in enumerate(lines):
+                        if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                            next_line = lines[i + 1].strip()
+                            if next_line.startswith("User:"):
+                                actual_message = next_line[5:].strip()
+                                break
+
+                # Create the scheduled job
+                job_id = await self.scheduler_service.create_job(
+                    user_id=str(user_id),
+                    title=f"Scheduled: {actual_message[:50]}",
+                    original_prompt=actual_message,
+                    schedule=actual_message,
+                    exclusions=[]
+                )
+
+                response_msg = (
+                    f"I've created a scheduled job for you. Your request '{actual_message[:100]}' "
+                    f"has been scheduled successfully. (Job ID: {job_id})"
+                )
+
+                observability.observe(
+                    event_type=observability.ServerEvents.SERVER_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "scheduler",
+                        "job_id": job_id,
+                        "user_id": str(user_id),
+                    },
+                    description="Scheduled job created successfully",
+                )
+
+                return MuxiResponse(
+                    role="assistant",
+                    content=response_msg,
+                    metadata={"job_id": job_id, "handled_by": "scheduler_service"}
+                )
+
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "service": "scheduler",
+                        "error": str(e),
+                        "user_id": str(user_id),
+                    },
+                    description=f"Failed to create scheduled job: {str(e)}",
+                )
+                # Fall through to normal agent handling
 
         # Use existing agent selection logic if no specific agent requested
         if agent_name is None:

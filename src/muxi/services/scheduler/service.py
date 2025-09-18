@@ -821,10 +821,27 @@ class SchedulerService:
         Returns:
             Job ID of created job
         """
-        # Parse schedule into cron expression
-        cron_expression = await self.schedule_parser.parse_schedule(
+        # Parse schedule (returns either cron expression or dict for one-off job)
+        parse_result = await self.schedule_parser.parse_schedule(
             schedule, self.formation_timezone
         )
+
+        # Check if it's a one-off job (dict) or recurring (string cron expression)
+        cron_expression = None
+        scheduled_for = None
+
+        if isinstance(parse_result, dict):
+            # One-off job - extract the scheduled datetime
+            if parse_result.get("job_type") == "one_time":
+                scheduled_for = parse_result.get("scheduled_for")
+                # For one-off jobs, we don't use a cron expression
+                cron_expression = None
+            else:
+                # Unexpected dict format
+                raise ValueError(f"Unexpected parse result format: {parse_result}")
+        else:
+            # Recurring job - parse_result is the cron expression
+            cron_expression = parse_result
 
         # Generate dynamic exclusion rules
         exclusion_rules = []
@@ -834,15 +851,31 @@ class SchedulerService:
         # Rewrite prompt for execution
         execution_prompt = await self.prompt_rewriter.rewrite_for_execution(original_prompt)
 
-        # Create job
-        job_id = await self.job_manager.create_job(
-            user_id=user_id,
-            title=title,
-            original_prompt=original_prompt,
-            execution_prompt=execution_prompt,
-            cron_expression=cron_expression,
-            exclusion_rules=exclusion_rules,
-        )
+        # Create job (handles both one-off and recurring)
+        if scheduled_for:
+            # Create one-off job
+            job_id = await self.job_manager.create_job(
+                user_id=user_id,
+                title=title,
+                original_prompt=original_prompt,
+                execution_prompt=execution_prompt,
+                cron_expression=None,
+                scheduled_for=scheduled_for,
+                is_recurring=False,
+                exclusion_rules=exclusion_rules,
+            )
+        else:
+            # Create recurring job
+            job_id = await self.job_manager.create_job(
+                user_id=user_id,
+                title=title,
+                original_prompt=original_prompt,
+                execution_prompt=execution_prompt,
+                cron_expression=cron_expression,
+                scheduled_for=None,
+                is_recurring=True,
+                exclusion_rules=exclusion_rules,
+            )
 
         observability.observe(
             event_type=observability.ConversationEvents.SCHEDULED_JOB_CREATED,
@@ -852,6 +885,8 @@ class SchedulerService:
                 "user_id": user_id,
                 "title": title,
                 "cron_expression": cron_expression,
+                "scheduled_for": scheduled_for.isoformat() if scheduled_for else None,
+                "is_recurring": cron_expression is not None,
             },
             description=f"Scheduled job created: {title}",
         )

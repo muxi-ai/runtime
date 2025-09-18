@@ -324,6 +324,7 @@ class RequestAnalyzer:
             required_capabilities=required_capabilities,
             acceptance_criteria=acceptance_criteria,
             confidence_score=0.7,  # Heuristic confidence
+            is_scheduling_request=False,  # Heuristic doesn't detect scheduling
         )
 
     async def _llm_analyze_request(
@@ -376,12 +377,13 @@ User Request: "{user_message}" {context_info}
 Please provide analysis in JSON format:
 
 {{
-    "complexity_score": [1-10 scale where 1=simple question, 10=complex multi-step project],
-    "implicit_subtasks": [List the logical steps this request would require],
-    "required_capabilities": [List capabilities needed like research, writing, coding, analysis],
-    "acceptance_criteria": [List what would make this request successfully completed],
-    "confidence_score": [0.0-1.0 how confident you are in this analysis],
-    "reasoning": [Brief explanation of the analysis]
+  "complexity_score": [1-10 scale where 1=simple question, 10=complex multi-step project],
+  "implicit_subtasks": [List the logical steps this request would require],
+  "required_capabilities": [List capabilities needed like research, writing, coding, analysis],
+  "acceptance_criteria": [List what would make this request successfully completed],
+  "confidence_score": [0.0-1.0 how confident you are in this analysis],
+  "is_scheduling_request": [true ONLY if user is ASKING you to CREATE/SET a schedule, reminder, or alert. Examples of TRUE: 'Remind me tomorrow at 3pm', 'Schedule daily standup at 10am', 'Every Monday at 2pm team sync', 'In 2 hours take medicine', 'Set a reminder for next Friday'. Examples of FALSE: 'Tell me about scheduling', 'I always remind myself', 'What time should I schedule?', 'The daily standup is at 10am'. Must be a request to CREATE a schedule, not a statement about schedules],
+  "reasoning": [Brief explanation of the analysis]
 }}
 
 CRITICAL: YOU MUST BE EXTREMELY CONSERVATIVE WITH SCORING!
@@ -447,6 +449,7 @@ START LOW: Begin with 1 and justify ANY increase!
                     required_capabilities=data.get("required_capabilities", ["general"]),
                     acceptance_criteria=data.get("acceptance_criteria", []),
                     confidence_score=float(data.get("confidence_score", 0.8)),
+                    is_scheduling_request=data.get("is_scheduling_request", False),
                 )
             else:
                 raise ValueError("No valid JSON found in response")
