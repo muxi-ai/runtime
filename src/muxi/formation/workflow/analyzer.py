@@ -382,7 +382,7 @@ Please provide analysis in JSON format:
   "required_capabilities": [List capabilities needed like research, writing, coding, analysis],
   "acceptance_criteria": [List what would make this request successfully completed],
   "confidence_score": [0.0-1.0 how confident you are in this analysis],
-  "is_scheduling_request": [true ONLY if user is ASKING you to CREATE/SET a schedule, reminder, or alert. Examples of TRUE: 'Remind me tomorrow at 3pm', 'Schedule daily standup at 10am', 'Every Monday at 2pm team sync', 'In 2 hours take medicine', 'Set a reminder for next Friday'. Examples of FALSE: 'Tell me about scheduling', 'I always remind myself', 'What time should I schedule?', 'The daily standup is at 10am'. Must be a request to CREATE a schedule, not a statement about schedules],
+  "is_scheduling_request": [true ONLY if user is ASKING you to CREATE/SET a schedule, reminder, or alert for future execution. Examples of TRUE: 'Remind me tomorrow at 3pm', 'Schedule daily standup at 10am', 'Every Monday at 2pm team sync', 'In 2 hours take medicine', 'In 5 minutes generate a report', 'In 30 minutes check the logs', 'Set a reminder for next Friday'. Pay special attention to patterns like 'In X minutes/hours/days, do Y' which means schedule Y for X time from now. Examples of FALSE: 'Tell me about scheduling', 'I always remind myself', 'What time should I schedule?', 'The daily standup is at 10am'. Must be a request to CREATE a schedule, not a statement about schedules],
   "reasoning": [Brief explanation of the analysis]
 }}
 
