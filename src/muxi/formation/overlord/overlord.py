@@ -2365,7 +2365,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 # Create enhanced workflow config with nested structure
                 self.workflow_config = WorkflowConfig(
                     complexity=ComplexityConfig(
-                        method=workflow_config_data.get("complexity_method", "heuristic"),
+                        method=workflow_config_data.get("complexity_method", "llm"),
                         threshold=workflow_config_data.get(
                             "complexity_threshold", self.complexity_threshold
                         ),
