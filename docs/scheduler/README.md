@@ -38,6 +38,8 @@ The MUXI Scheduler transforms MUXI from a reactive assistant into a proactive AI
 
 ## Documentation Index
 
+- **[Architecture Documentation](architecture.md)** - Deep dive into scheduler architecture and implementation
+- **[Usage Guide](usage-guide.md)** - Comprehensive guide for using the scheduler system
 - **[Formation API Reference](formation-api.md)** - Complete API reference for accessing scheduler data through Formation
 - **[One-Time Jobs](onetime-jobs.md)** - Guide for scheduling one-time tasks
 - **[Tutorial](tutorial.md)** - Step-by-step tutorial for common use cases
