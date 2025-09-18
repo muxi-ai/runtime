@@ -68,25 +68,25 @@ async def main():
                     print(f"   Stream chunk {len(stream1_events)}: {preview}")
 
         print(f"\n   Total events from first request: {len(stream1_events)}")
-        
+
         # Check if we got a clarification request
         clarification_found = False
         for event in stream1_events:
             if isinstance(event, dict):
                 content = event.get('content', '')
                 # Check for clarification patterns
-                if any(phrase in content.lower() for phrase in ['what would you like', 'help you with what', 'can you be more specific', 'what do you need']):
+                if any(phrase in content.lower() for phrase in ['what would you like', 'help you with what', 'can you be more specific', 'what do you need']):  # noqa: E501
                     clarification_found = True
                     print("   ✅ Clarification request detected")
                     break
-        
+
         if not clarification_found:
             # Check if the final response asks for clarification
             if stream1_events:
                 last_event = stream1_events[-1]
                 if isinstance(last_event, dict):
                     content = last_event.get('content', '')
-                    if any(phrase in content.lower() for phrase in ['what would you like', 'help you with what', 'can you be more specific']):
+                    if any(phrase in content.lower() for phrase in ['what would you like', 'help you with what', 'can you be more specific']):  # noqa: E501
                         clarification_found = True
                         print("   ✅ Clarification in final response")
 
