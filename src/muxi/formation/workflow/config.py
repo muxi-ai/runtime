@@ -74,7 +74,7 @@ class TimeoutConfig(BaseModel):
 class ComplexityConfig(BaseModel):
     """Configuration for complexity calculation"""
     method: str = Field(
-        default="heuristic",
+        default="llm",
         description="Method for calculating request complexity"
     )
     threshold: float = Field(
@@ -209,7 +209,6 @@ class WorkflowConfig(BaseModel):
         description="Configuration for retry logic"
     )
 
-    # Backward compatibility properties
     @property
     def complexity_method(self) -> str:
         """Backward compatibility for complexity_method"""
