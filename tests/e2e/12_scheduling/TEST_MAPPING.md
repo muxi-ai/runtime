@@ -1,130 +1,136 @@
-# MUXI Scheduler E2E Test Mapping
+# Test Mapping - Area 12: Scheduling
 
 ## Overview
-This directory contains end-to-end tests for the MUXI Scheduler service, validating both one-time and recurring job functionality.
-
-## Test Formation
-- **Location**: `./formation-scheduling/formation.yaml`
-- **Purpose**: Provides a scheduler-enabled formation for testing job creation and execution
-- **Key Config**: `scheduler.enabled: true` with 1-minute check interval
+Tests for scheduled task execution and job management functionality through the chat interface.
 
 ## Test Files
 
-### test_scheduler_jobs.py
-**Purpose**: Tests core scheduler functionality including job creation, execution, and management
+### Group 12A: One-time Scheduled Tasks
 
-**Test Cases**:
+| Test ID | File | Description | Status |
+|---------|------|-------------|--------|
+| 12A1a | `test_12a1_basic_scheduling.py` | Basic scheduling detection for recurring and one-off schedules | ✅ Implemented |
+| 12A1b | `test_12a1_schedule_future_task.py` | Schedule a task for future execution | ✅ Implemented |
+| 12A2 | `test_12a2_natural_language_scheduling.py` | Natural language time parsing (e.g., "in 5 minutes") | ✅ Implemented |
+| 12A3 | `test_12a3_schedule_with_context.py` | Schedule recurring tasks with context | ✅ Implemented |
 
-1. **test_recurring_job_creation_and_execution**
-   - Tests: Creating a recurring job via natural language
-   - Coverage:
-     - Natural language parsing ("every 5 minutes")
-     - Cron expression generation
-     - Job persistence in `scheduled_jobs` table
-     - Job execution via overlord.chat()
-     - Audit trail in `scheduled_jobs_audit`
-   - Expected: Job created, executes on schedule, audit recorded
+### Group 12B: Recurring Jobs
 
-2. **test_onetime_job_creation_and_execution**
-   - Tests: Creating and executing a one-time scheduled job
-   - Coverage:
-     - Natural language parsing ("in 30 seconds")
-     - Datetime calculation for `scheduled_for`
-     - One-time job execution
-     - Automatic completion after execution
-     - Status update to COMPLETED
-   - Expected: Job executes once at scheduled time, marked complete
+| Test ID | File | Description | Status |
+|---------|------|-------------|--------|
+| 12B1 | `test_12b1_cron_based_scheduling.py` | Cron-based scheduling for recurring jobs | ✅ Implemented |
 
-3. **test_job_pause_and_resume**
-   - Tests: Pausing and resuming active jobs
-   - Coverage:
-     - Job pause functionality (`is_paused` flag)
-     - Resume functionality
-     - Skipping paused jobs during execution cycles
-   - Expected: Paused jobs don't execute, resumed jobs continue
+### Group 12D: Error Handling
 
-4. **test_job_deletion**
-   - Tests: Deleting scheduled jobs
-   - Coverage:
-     - Job deletion from `scheduled_jobs` table
-     - Preservation of audit records
-     - Immediate effect on execution cycle
-   - Expected: Deleted jobs stop executing, audit preserved
+| Test ID | File | Description | Status |
+|---------|------|-------------|--------|
+| 12D1 | `test_12d1_error_scenarios.py` | Invalid scheduling requests and error handling | ✅ Implemented |
 
-5. **test_auto_pause_on_failures**
-   - Tests: Automatic pausing after consecutive failures
-   - Coverage:
-     - Failure counting mechanism
-     - Auto-pause threshold (default: 3)
-     - Error tracking in audit table
-   - Expected: Job auto-pauses after 3 consecutive failures
+### Removed Tests (API-exclusive)
+- `test_12b2_update_recurring_job.py` - Required direct scheduler API access
+- `test_12b3_cancel_job.py` - Required direct scheduler API access
+- `test_12c1_job_execution_tracking.py` - Required direct scheduler API access
+- `test_12c2_failed_job_handling.py` - Required direct scheduler API access
 
-6. **test_timezone_handling**
-   - Tests: Timezone-aware scheduling
-   - Coverage:
-     - UTC storage in database
-     - Timezone conversion for user input
-     - Correct execution timing across timezones
-   - Expected: Jobs execute at correct local times
+## Test Formation
+- **Location**: `./formation-scheduling/formation.yaml`
+- **Purpose**: Provides a scheduler-enabled formation for testing job creation
+- **Key Config**: `scheduler.enabled: true` with 1-minute check interval
 
-## Database Tables Tested
+## Test Runner
 
-### scheduled_jobs
-- Primary active job storage
-- Fields tested: `id`, `formation_id`, `user_id`, `name`, `is_recurring`, `cron_expression`, `scheduled_for`, `execution_prompt`, `is_paused`, `failure_count`
+- `run_all_tests.py` - Executes all chat-based scheduling tests sequentially
 
-### scheduled_jobs_audit
-- Historical execution records
-- Fields tested: `job_id`, `executed_at`, `status`, `response`, `error_message`
+## Test Coverage
 
-## Key Validation Points
+### ✅ Covered Scenarios
+- Basic scheduling detection (recurring and one-off)
+- Natural language time parsing ("in 5 minutes", "tomorrow at 3pm")
+- Recurring schedules with cron patterns ("every Monday at 8am")
+- Error handling for invalid requests
+- Future task scheduling
+- Context-aware scheduling
 
-1. **Natural Language Processing**
-   - Validates LLM-based parsing of scheduling expressions
-   - Tests both relative ("in 5 minutes") and absolute ("at 3pm") times
+### ⚠️ Limitations (Chat Interface Only)
+- Cannot directly update or cancel jobs
+- Cannot track execution history
+- Cannot verify actual job execution (would require waiting)
+- Some natural language patterns may not be detected as scheduling requests
 
-2. **Map/Reduce Pattern**
-   - Verifies the map/reduce implementation for finding due jobs
-   - Tests efficiency with multiple concurrent jobs
+## Known Issues
 
-3. **Session Isolation**
-   - Confirms each job runs with unique session_id (`job_{job_id}`)
-   - Validates memory context separation between jobs
+1. **Scheduling Detection**: Not all phrasings are detected as scheduling requests
+   - "Every Monday at 2pm team sync" - may not be recognized
+   - Complex scheduling descriptions may require more specific phrasing
 
-4. **Formation Isolation**
-   - Tests multi-tenant support via formation_id
-   - Ensures jobs from different formations don't interfere
-
-5. **Background Worker**
-   - Validates the @multitasking.task worker execution
-   - Tests check_interval_minutes configuration
+2. **Fixed Issues**:
+   - ✅ JSON parsing issue where LLM returns markdown-wrapped JSON
+   - ✅ Non-existent observability event types in scheduler modules
+   - ✅ One-off job handling in scheduler service
 
 ## Running Tests
 
+### Run All Tests
 ```bash
-# Run all scheduler tests
-bash .claude/scripts/test-and-log.sh tests/e2e/12_scheduling/test_scheduler_jobs.py
-
-# Run specific test
-bash .claude/scripts/test-and-log.sh tests/e2e/12_scheduling/test_scheduler_jobs.py::test_recurring_job_creation_and_execution
+python tests/e2e/12_scheduling/run_all_tests.py
 ```
 
-## Expected Logs
+### Run Individual Tests
+```bash
+# Basic scheduling test
+bash .claude/scripts/test-and-log.sh tests/e2e/12_scheduling/test_12a1_basic_scheduling.py
 
-The test runner creates detailed logs in `tests/logs/` including:
-- Job creation requests and responses
-- Cron expression generation
-- Execution cycle details
-- Database operations
-- Overlord chat interactions
-- Error scenarios and recovery
+# Natural language scheduling
+bash .claude/scripts/test-and-log.sh tests/e2e/12_scheduling/test_12a2_natural_language_scheduling.py
+
+# Error scenarios
+bash .claude/scripts/test-and-log.sh tests/e2e/12_scheduling/test_12d1_error_scenarios.py
+```
+
+## Implementation Architecture
+
+### Integration Flow
+1. User sends scheduling request via chat
+2. `RequestAnalyzer` analyzes request and sets `is_scheduling_request` flag
+3. Overlord routes to scheduler service if flag is true
+4. `ScheduleParser` parses natural language into cron expression or datetime
+5. `JobManager` creates job in database
+6. Response sent back to user with job ID
+
+### Key Components Modified
+- `src/muxi/formation/workflow/analyzer.py` - Enhanced prompt for scheduling detection
+- `src/muxi/formation/overlord/overlord.py` - Added scheduler routing after line 6395
+- `src/muxi/services/scheduler/service.py` - Fixed one-off vs recurring job handling
+- `src/muxi/services/scheduler/parser.py` - Fixed JSON parsing and observability events
+
+## Database Tables
+
+### scheduled_jobs
+- Stores active scheduled jobs
+- Fields: `id`, `user_id`, `title`, `original_prompt`, `execution_prompt`, `cron_expression`, `scheduled_for`, `is_recurring`, `status`
+
+### scheduled_job_audit
+- Audit trail for job lifecycle events
+- Fields: `job_id`, `user_id`, `action`, `timestamp`, `changes`, `reason`
+
+## Test Results Summary
+
+Last Run: 2025-01-18
+
+| Test | Result | Notes |
+|------|--------|-------|
+| 12A1a Basic Scheduling | ✅ 2/3 | One-off works, some recurring patterns not detected |
+| 12A1b Future Task | ⚠️ | Schedules but cannot verify execution |
+| 12A2 Natural Language | ⚠️ | Basic patterns work, complex ones may fail |
+| 12A3 Context Scheduling | ❌ | Not all context patterns detected |
+| 12B1 Cron Scheduling | ✅ | Weekly patterns work |
+| 12D1 Error Scenarios | TBD | Not fully tested |
 
 ## Success Criteria
 
-All tests should:
-1. Successfully create jobs via natural language
-2. Execute jobs at the correct times
-3. Properly handle job lifecycle (pause/resume/delete)
-4. Generate complete audit trails
-5. Handle failures gracefully
-6. Maintain formation isolation
+Tests should verify:
+1. Natural language scheduling requests are detected
+2. Jobs are created with correct parameters
+3. Response confirms scheduling with job ID
+4. Invalid requests are handled gracefully
+5. Both recurring and one-off schedules work

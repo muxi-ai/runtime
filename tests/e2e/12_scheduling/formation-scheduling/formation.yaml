@@ -30,6 +30,7 @@ llm:
 
 # Overlord behavior configuration
 overlord:
+  extraction_model: "openai/gpt-4o-mini"  # Required for LLM-based request analysis
   persona: |
     You are Fynn, a friendly, helpful, and professional assistant.
 
@@ -91,7 +92,7 @@ memory:
     vector_search: true
 
   persistent:
-    connection_string: "${{ secrets.POSTGRES_URI }}"
+    connection_string: "postgresql://ran@127.0.0.1/muxi_framework"
     embedding_model: "openai/text-embedding-3-small"
 
 logging:
