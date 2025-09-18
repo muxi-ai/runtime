@@ -338,7 +338,7 @@ class SchedulerService:
         self._performance_stats["cycles_completed"] += 1
 
         observability.observe(
-            event_type=observability.SystemEvents.SERVICE_STATUS_CHANGED,
+            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
             level=observability.EventLevel.DEBUG,
             data={
                 "jobs_processed": len(due_jobs),
@@ -543,7 +543,7 @@ class SchedulerService:
 
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.SCHEDULER_EXCLUSION_EVALUATION_FAILED,
+                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     data={"job_id": job["id"], "exclusion_rule": rule, "error": str(e)},
                     description=f"Failed to evaluate exclusion rule for job {job['id']}: {e}",
@@ -600,7 +600,7 @@ class SchedulerService:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.COMPLEX_DATE_EVALUATION_FAILED,
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={"pattern": pattern, "error": str(e)},
                 description=f"Failed to evaluate complex date pattern: {e}",
@@ -679,7 +679,7 @@ class SchedulerService:
             # Check concurrency limit
             if len(self._active_executions) >= self.max_concurrent_jobs:
                 observability.observe(
-                    event_type=observability.SystemEvents.SCHEDULER_CONCURRENCY_LIMIT_REACHED,
+                    event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "active_executions": len(self._active_executions),
@@ -762,7 +762,7 @@ class SchedulerService:
                 await self.job_manager.pause_job(job_id)
 
                 observability.observe(
-                    event_type=observability.ErrorEvents.SCHEDULED_JOB_AUTO_PAUSED,
+                    event_type=observability.SystemEvents.SCHEDULED_JOB_PAUSED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "job_id": job_id,
@@ -951,7 +951,7 @@ class SchedulerService:
                 await self.job_manager.pause_job(job_id)
 
                 observability.observe(
-                    event_type=observability.ErrorEvents.SCHEDULED_JOB_AUTO_PAUSED,
+                    event_type=observability.SystemEvents.SCHEDULED_JOB_PAUSED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "job_id": job_id,
@@ -1119,7 +1119,7 @@ class SchedulerService:
         jobs_cleaned = await self.batch_processor.cleanup_old_jobs(retention_days)
 
         observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_CLEANUP_COMPLETED,
+            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
             level=observability.EventLevel.INFO,
             data={"cache_entries_removed": cache_cleaned, "old_jobs_removed": jobs_cleaned},
             description=f"Scheduler cleanup completed: {cache_cleaned} cache entries, {jobs_cleaned} old jobs",
@@ -1136,7 +1136,7 @@ class SchedulerService:
         if self.llm_circuit_breaker:
             self.llm_circuit_breaker.reset()
             observability.observe(
-                event_type=observability.SystemEvents.SCHEDULER_CIRCUIT_BREAKER_RESET,
+                event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
                 level=observability.EventLevel.INFO,
                 description="LLM circuit breaker manually reset",
             )
