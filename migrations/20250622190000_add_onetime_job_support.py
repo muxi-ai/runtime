@@ -25,7 +25,7 @@ def up() -> str:
         -- This migration extends the scheduler to support both recurring and one-time jobs
 
         -- Add new columns for one-time job support
-        ALTER TABLE scheduled_jobs 
+        ALTER TABLE scheduled_jobs
         ADD COLUMN is_recurring BOOLEAN NOT NULL DEFAULT TRUE,
         ADD COLUMN scheduled_for TIMESTAMP WITH TIME ZONE NULL;
 
@@ -34,23 +34,23 @@ def up() -> str:
 
         -- Update status constraint to include 'COMPLETED' for one-time jobs
         ALTER TABLE scheduled_jobs DROP CONSTRAINT IF EXISTS scheduled_jobs_status_check;
-        ALTER TABLE scheduled_jobs ADD CONSTRAINT scheduled_jobs_status_check 
+        ALTER TABLE scheduled_jobs ADD CONSTRAINT scheduled_jobs_status_check
         CHECK (status IN ('ACTIVE', 'PAUSED', 'COMPLETED'));
 
         -- Create indexes for efficient one-time job queries
         CREATE INDEX idx_scheduled_jobs_is_recurring ON scheduled_jobs(is_recurring);
         CREATE INDEX idx_scheduled_jobs_scheduled_for ON scheduled_jobs(scheduled_for);
-        
+
         -- Composite indexes for performance
-        CREATE INDEX idx_scheduled_jobs_onetime_due 
-        ON scheduled_jobs(is_recurring, scheduled_for, status) 
+        CREATE INDEX idx_scheduled_jobs_onetime_due
+        ON scheduled_jobs(is_recurring, scheduled_for, status)
         WHERE is_recurring = FALSE;
-        
-        CREATE INDEX idx_scheduled_jobs_type_status 
+
+        CREATE INDEX idx_scheduled_jobs_type_status
         ON scheduled_jobs(is_recurring, status);
-        
-        CREATE INDEX idx_scheduled_jobs_recurring_active 
-        ON scheduled_jobs(is_recurring, status, cron_expression) 
+
+        CREATE INDEX idx_scheduled_jobs_recurring_active
+        ON scheduled_jobs(is_recurring, status, cron_expression)
         WHERE is_recurring = TRUE AND status = 'ACTIVE';
 
         -- Update existing jobs to be marked as recurring (backwards compatibility)
@@ -69,7 +69,7 @@ def up() -> str:
             -- Test that we can query both job types
             PERFORM 1 FROM scheduled_jobs WHERE is_recurring = TRUE LIMIT 0;
             PERFORM 1 FROM scheduled_jobs WHERE is_recurring = FALSE LIMIT 0;
-            
+
             -- Log success
             RAISE NOTICE 'One-time job support successfully added to scheduled_jobs table';
         END
@@ -86,36 +86,36 @@ def down() -> str:
     """
     return """
         -- Rollback: Remove one-time job support from scheduled_jobs table
-        
+
         -- Drop new indexes
         DROP INDEX IF EXISTS idx_scheduled_jobs_recurring_active;
         DROP INDEX IF EXISTS idx_scheduled_jobs_type_status;
         DROP INDEX IF EXISTS idx_scheduled_jobs_onetime_due;
         DROP INDEX IF EXISTS idx_scheduled_jobs_scheduled_for;
         DROP INDEX IF EXISTS idx_scheduled_jobs_is_recurring;
-        
+
         -- Drop new constraints
         ALTER TABLE scheduled_jobs DROP CONSTRAINT IF EXISTS scheduled_jobs_scheduling_check;
-        
+
         -- Restore original status constraint
         ALTER TABLE scheduled_jobs DROP CONSTRAINT IF EXISTS scheduled_jobs_status_check;
-        ALTER TABLE scheduled_jobs ADD CONSTRAINT scheduled_jobs_status_check 
+        ALTER TABLE scheduled_jobs ADD CONSTRAINT scheduled_jobs_status_check
         CHECK (status IN ('ACTIVE', 'PAUSED'));
-        
+
         -- Make cron_expression required again
         ALTER TABLE scheduled_jobs ALTER COLUMN cron_expression SET NOT NULL;
-        
+
         -- Drop new columns
-        ALTER TABLE scheduled_jobs 
+        ALTER TABLE scheduled_jobs
         DROP COLUMN IF EXISTS scheduled_for,
         DROP COLUMN IF EXISTS is_recurring;
-        
+
         -- Verify rollback success
         DO $$
         BEGIN
             -- Test that table structure is restored
             PERFORM 1 FROM scheduled_jobs LIMIT 0;
-            
+
             -- Log success
             RAISE NOTICE 'One-time job support successfully removed from scheduled_jobs table';
         END
@@ -130,20 +130,17 @@ def up_sqlite() -> str:
     SQLite doesn't support adding constraints in ALTER TABLE, so we use a different approach.
     """
     return """
-        -- SQLite migration: Add one-time job support
-        
-        -- Add new columns
-        ALTER TABLE scheduled_jobs ADD COLUMN is_recurring INTEGER NOT NULL DEFAULT 1;
-        ALTER TABLE scheduled_jobs ADD COLUMN scheduled_for TEXT NULL;
-        
-        -- Update existing jobs to be recurring
-        UPDATE scheduled_jobs SET is_recurring = 1;
-        
-        -- Create indexes for performance
-        CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_is_recurring ON scheduled_jobs(is_recurring);
-        CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_scheduled_for ON scheduled_jobs(scheduled_for);
-        CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_onetime_due ON scheduled_jobs(is_recurring, scheduled_for, status);
-        CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_type_status ON scheduled_jobs(is_recurring, status);
+      -- SQLite migration: Add one-time job support
+      -- Add new columns
+      ALTER TABLE scheduled_jobs ADD COLUMN is_recurring INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE scheduled_jobs ADD COLUMN scheduled_for TEXT NULL;
+      -- Update existing jobs to be recurring
+      UPDATE scheduled_jobs SET is_recurring = 1;
+      -- Create indexes for performance
+      CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_is_recurring ON scheduled_jobs(is_recurring);
+      CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_scheduled_for ON scheduled_jobs(scheduled_for);
+      CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_onetime_due ON scheduled_jobs(is_recurring, scheduled_for, status);
+      CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_type_status ON scheduled_jobs(is_recurring, status);
     """
 
 
@@ -153,13 +150,13 @@ def down_sqlite() -> str:
     """
     return """
         -- SQLite rollback: Remove one-time job support
-        
+
         -- Drop indexes
         DROP INDEX IF EXISTS idx_scheduled_jobs_type_status;
         DROP INDEX IF EXISTS idx_scheduled_jobs_onetime_due;
         DROP INDEX IF EXISTS idx_scheduled_jobs_scheduled_for;
         DROP INDEX IF EXISTS idx_scheduled_jobs_is_recurring;
-        
+
         -- SQLite doesn't support DROP COLUMN, so we'd need to recreate the table
         -- For now, just mark migration as rolled back
     """

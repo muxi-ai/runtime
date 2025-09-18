@@ -300,17 +300,17 @@ class DatabaseMigration:
 
             # For scheduled_jobs - need special handling due to user_id type change
             logger.info("Recreating scheduled_jobs table...")
-            
+
             # First, backup existing scheduled_jobs data before dropping
             logger.info("Backing up scheduled_jobs data...")
             try:
                 # Query all existing scheduled jobs
                 result = await session.execute(text("SELECT * FROM scheduled_jobs"))
                 jobs_data = []
-                
+
                 # Get column names
                 columns = result.keys()
-                
+
                 # Convert each row to a dictionary
                 for row in result:
                     job_dict = {}
@@ -321,16 +321,16 @@ class DatabaseMigration:
                             value = value.isoformat()
                         job_dict[col] = value
                     jobs_data.append(job_dict)
-                
+
                 if jobs_data:
                     # Create backup directory if it doesn't exist
                     backup_dir = Path("migration_backups")
                     backup_dir.mkdir(exist_ok=True)
-                    
+
                     # Generate backup filename with timestamp
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     backup_file = backup_dir / f"scheduled_jobs_backup_{timestamp}.json"
-                    
+
                     # Save to JSON file
                     with open(backup_file, 'w') as f:
                         json.dump({
@@ -339,14 +339,14 @@ class DatabaseMigration:
                             "row_count": len(jobs_data),
                             "data": jobs_data
                         }, f, indent=2)
-                    
+
                     logger.info(f"Backed up {len(jobs_data)} scheduled jobs to {backup_file}")
                 else:
                     logger.info("No scheduled jobs to backup")
-                    
+
             except Exception as e:
                 logger.warning(f"Could not backup scheduled_jobs: {e}")
-            
+
             await session.execute(
                 text(
                     """

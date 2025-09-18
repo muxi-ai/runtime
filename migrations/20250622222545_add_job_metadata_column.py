@@ -17,10 +17,11 @@ def up() -> str:
     return """
         -- Add job_metadata column to scheduled_jobs table
         ALTER TABLE scheduled_jobs ADD COLUMN job_metadata TEXT DEFAULT '{}';
-        
+
         -- Create index for job_metadata if needed for performance (PostgreSQL only)
         CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_job_metadata ON scheduled_jobs USING gin ((job_metadata::jsonb));
     """
+
 
 def down() -> str:
     """
