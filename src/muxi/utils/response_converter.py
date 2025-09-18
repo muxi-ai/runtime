@@ -315,10 +315,15 @@ def create_error_response(exception: Exception, include_trace: bool = False) -> 
         error_code = classify_error_code(exception)
         error_info = get_error_info(error_code)
 
+        # Handle traceback safely to avoid scoping issues
+        trace_info = None
+        if include_trace:
+            trace_info = traceback.format_exc()
+
         error_details = {
             "code": error_code,
             "message": error_info.message if error_info else str(exception),
-            "trace": traceback.format_exc() if include_trace else None,
+            "trace": trace_info,
         }
 
         observability.observe(

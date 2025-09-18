@@ -5080,7 +5080,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     "request_id": request_id,
                     "error_type": type(e).__name__,
                     "error_message": str(e),
-                    "traceback": traceback.format_exc(),
+                    "traceback": self._safe_format_traceback(),
                     "error_line": last_frame.lineno if last_frame else None,
                     "error_file": last_frame.filename if last_frame else None,
                     "processing_mode": "async",
@@ -6168,7 +6168,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
-                    data={"error": str(e), "traceback": traceback.format_exc()},
+                    data={"error": str(e), "traceback": self._safe_format_traceback()},
                     description=f"Clarification analysis failed: {e}",
                 )
 

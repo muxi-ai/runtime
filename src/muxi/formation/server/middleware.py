@@ -72,11 +72,16 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                 # For other exceptions, try to infer from the exception type
                 message = str(e)
 
+            # Handle traceback safely to avoid scoping issues
+            trace_info = None
+            if getattr(request.app, "debug", False):
+                trace_info = traceback.format_exc()
+
             # Create structured error response
             error_response = create_error_response(
                 error_code=error_code,
                 message=message,
-                trace=traceback.format_exc() if getattr(request.app, "debug", False) else None,
+                trace=trace_info,
                 request_id=request_id,
             )
 
