@@ -2032,7 +2032,7 @@ Response:""".format(
         try:
             import traceback
             return traceback.format_exc()
-        except:
+        except Exception:
             return ""
 
     async def _apply_persona(self, raw_response: Optional[str], user_message: str) -> str:
