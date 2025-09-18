@@ -33,7 +33,12 @@ class JobBatchProcessor:
         self.config = config or SchedulerServiceSchema()
 
         # Batch size should be tuned based on available memory and job complexity
-        self.batch_size = min(100, self.config.max_concurrent_jobs * 10)
+        # Handle both dict and object config
+        if isinstance(self.config, dict):
+            max_concurrent = self.config.get('max_concurrent_jobs', 10)
+        else:
+            max_concurrent = getattr(self.config, 'max_concurrent_jobs', 10)
+        self.batch_size = min(100, max_concurrent * 10)
 
     async def get_active_jobs_count(self) -> int:
         """
@@ -94,10 +99,12 @@ class JobBatchProcessor:
             total_processed += len(batch)
 
             # Respect concurrent job limits
-            if len(due_jobs) >= self.config.max_concurrent_jobs:
+            max_concurrent = self.config.get('max_concurrent_jobs', 10) if isinstance(self.config, dict) else getattr(self.config, 'max_concurrent_jobs', 10)
+            if len(due_jobs) >= max_concurrent:
                 break
 
-        return due_jobs[: self.config.max_concurrent_jobs]
+        max_concurrent = self.config.get('max_concurrent_jobs', 10) if isinstance(self.config, dict) else getattr(self.config, 'max_concurrent_jobs', 10)
+        return due_jobs[:max_concurrent]
 
     async def _process_batch(
         self,

@@ -182,7 +182,6 @@ class JobManager:
                 job = ScheduledJob(
                     id=job_id,
                     user_id=user.id,  # Use internal user ID
-                    external_user_id=user_id,  # Store external user ID for reference
                     title=title,
                     original_prompt=original_prompt,
                     execution_prompt=execution_prompt,
@@ -240,8 +239,8 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                jobs = (
-                    session.query(ScheduledJob)
+                jobs_with_users = (
+                    session.query(ScheduledJob, User.external_user_id)
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.status == "ACTIVE",
@@ -251,7 +250,14 @@ class JobManager:
                     .all()
                 )
 
-                return [job.to_dict() for job in jobs]
+                # Build result with external_user_id from User table
+                result = []
+                for job, external_user_id in jobs_with_users:
+                    job_dict = job.to_dict()
+                    job_dict['external_user_id'] = external_user_id
+                    result.append(job_dict)
+
+                return result
 
         except SQLAlchemyError as e:
             observability.observe(
@@ -274,7 +280,7 @@ class JobManager:
                 user = self._get_or_create_user(session, user_id)
 
                 query = (
-                    session.query(ScheduledJob)
+                    session.query(ScheduledJob, User.external_user_id)
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.user_id == user.id,
@@ -285,8 +291,16 @@ class JobManager:
                 if status:
                     query = query.filter(ScheduledJob.status == status)
 
-                jobs = query.order_by(ScheduledJob.created_at.desc()).all()
-                return [job.to_dict() for job in jobs]
+                jobs_with_users = query.order_by(ScheduledJob.created_at.desc()).all()
+
+                # Build result with external_user_id from User table
+                result = []
+                for job, external_user_id in jobs_with_users:
+                    job_dict = job.to_dict()
+                    job_dict['external_user_id'] = external_user_id
+                    result.append(job_dict)
+
+                return result
 
         except SQLAlchemyError as e:
             observability.observe(
@@ -311,7 +325,7 @@ class JobManager:
         try:
             with self.db_manager.get_session() as session:
                 query = (
-                    session.query(ScheduledJob)
+                    session.query(ScheduledJob, User.external_user_id)
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(User.formation_id == self.formation_id)
                 )
@@ -335,8 +349,16 @@ class JobManager:
                 if limit:
                     query = query.limit(limit)
 
-                jobs = query.all()
-                return [job.to_dict() for job in jobs]
+                jobs_with_users = query.all()
+
+                # Build result with external_user_id from User table
+                result = []
+                for job, external_user_id in jobs_with_users:
+                    job_dict = job.to_dict()
+                    job_dict['external_user_id'] = external_user_id
+                    result.append(job_dict)
+
+                return result
 
         except SQLAlchemyError as e:
             observability.observe(
@@ -1022,8 +1044,10 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                jobs = (
-                    session.query(ScheduledJob)
+                # Join with User table to get external_user_id
+                jobs_with_users = (
+                    session.query(ScheduledJob, User.external_user_id)
+                    .join(User, ScheduledJob.user_id == User.id)
                     .filter(ScheduledJob.status == "ACTIVE")
                     .order_by(ScheduledJob.created_at)
                     .offset(offset)
@@ -1031,7 +1055,14 @@ class JobManager:
                     .all()
                 )
 
-                return [job.to_dict() for job in jobs]
+                # Build result with external_user_id from User table
+                result = []
+                for job, external_user_id in jobs_with_users:
+                    job_dict = job.to_dict()
+                    job_dict['external_user_id'] = external_user_id
+                    result.append(job_dict)
+
+                return result
 
         except SQLAlchemyError as e:
             observability.observe(

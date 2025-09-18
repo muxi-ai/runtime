@@ -94,7 +94,6 @@ class ScheduledJob(Base, AsyncModelMixin):
     # Primary key and identification
     id = Column(String(255), primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    external_user_id = Column(String(255), nullable=True)  # Store original user ID string
 
     # Job content
     title = Column(String(500), nullable=False)
@@ -145,7 +144,6 @@ class ScheduledJob(Base, AsyncModelMixin):
         return {
             "id": self.id,
             "user_id": self.user_id,
-            "external_user_id": self.external_user_id,
             "title": self.title,
             "original_prompt": self.original_prompt,
             "execution_prompt": self.execution_prompt,

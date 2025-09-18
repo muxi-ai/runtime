@@ -142,7 +142,7 @@ class SchedulerService:
         }
 
         observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_SERVICE_STARTED,
+            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
             level=observability.EventLevel.INFO,
             data={
                 "service": "SchedulerService",
@@ -158,7 +158,7 @@ class SchedulerService:
         """Initialize service components."""
         await self.job_manager.initialize()
         observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_SERVICE_STARTED,
+            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
             level=observability.EventLevel.INFO,
             description="Scheduler service components initialized",
         )
@@ -187,7 +187,7 @@ class SchedulerService:
         # Check if scheduler is enabled in formation config
         if not self._config.get("enabled", False):
             observability.observe(
-                event_type=observability.SystemEvents.SCHEDULER_SERVICE_STARTED,
+                event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
                 level=observability.EventLevel.INFO,
                 description="Scheduler service disabled in formation config",
             )
@@ -201,7 +201,7 @@ class SchedulerService:
         active_jobs_count = await self.job_manager.count_active_jobs()
 
         observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_SERVICE_STARTED,
+            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
             level=observability.EventLevel.INFO,
             data={
                 "service": "SchedulerService",
@@ -237,7 +237,7 @@ class SchedulerService:
             await asyncio.sleep(1)
 
         observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_SERVICE_STOPPED,
+            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
             level=observability.EventLevel.INFO,
             data={
                 "service": "SchedulerService",
@@ -281,7 +281,7 @@ class SchedulerService:
         the formation's overlord. Uses map/reduce pattern without next_run_at calculations.
         """
         observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_WORKER_STARTED,
+            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
             level=observability.EventLevel.INFO,
             description="Scheduler background worker started",
         )
@@ -338,7 +338,7 @@ class SchedulerService:
         self._performance_stats["cycles_completed"] += 1
 
         observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_CYCLE_COMPLETED,
+            event_type=observability.SystemEvents.SCHEDULER_JOB_EXECUTED,
             level=observability.EventLevel.DEBUG,
             data={
                 "jobs_processed": len(due_jobs),
@@ -387,7 +387,7 @@ class SchedulerService:
         self._performance_stats["jobs_processed"] += len(due_jobs)
 
         observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_BATCH_PROCESSING_COMPLETED,
+            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
             level=observability.EventLevel.DEBUG,
             data={
                 "due_jobs_count": len(due_jobs),

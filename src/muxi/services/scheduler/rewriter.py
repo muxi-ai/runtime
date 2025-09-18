@@ -65,7 +65,7 @@ class PromptRewriter:
         }
 
         observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_REWRITER_INITIALIZED,
+            event_type=observability.SystemEvents.SCHEDULER_PARSER_INITIALIZED,
             level=observability.EventLevel.INFO,
             description="Prompt rewriter initialized"
         )
