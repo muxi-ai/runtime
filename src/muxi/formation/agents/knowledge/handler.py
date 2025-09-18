@@ -100,6 +100,7 @@
 import os
 import hashlib
 import time
+import traceback
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import pickle
@@ -428,7 +429,6 @@ class KnowledgeHandler:
                             })
 
                         except Exception as e:
-                            import traceback
                             observability.observe(
                                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                                 level=observability.EventLevel.WARNING,

@@ -5,6 +5,7 @@ Moved from overlord.py to proper separation of concerns.
 
 from typing import Dict, Optional, Any
 import logging
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -452,8 +453,6 @@ Respond in JSON format:
                         print(f"Stored new credential for {pending['service']}")
                 except Exception as store_error:
                     print(f"ERROR storing credential: {store_error}")
-                    import traceback
-
                     traceback.print_exc()
                     raise  # Re-raise to be caught by outer exception handler
 
@@ -510,8 +509,6 @@ Respond in JSON format:
         except Exception as e:
             # FAILED - keep state for retry, user stays in loop
             print(f"ERROR in handle_credential_response: {e}")
-            import traceback
-
             traceback.print_exc()
             return await self._generate_validation_failure_message(pending["service"])
 

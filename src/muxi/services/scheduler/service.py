@@ -701,14 +701,14 @@ class SchedulerService:
             job: Job data dict
         """
         job_id = job["id"]
-        self._active_executions.add(job_id)
+        session_id = f"job_{job_id}"
+        self._active_executions.add(session_id)  # Track by session_id, not job_id
 
         try:
             # Update job execution tracking (start)
             await self.job_manager.mark_job_execution_start(job_id)
 
             # Execute job through overlord with session_id
-            session_id = f"job_{job_id}"
             execution_prompt = job["execution_prompt"]
 
             observability.observe(
@@ -733,40 +733,26 @@ class SchedulerService:
                     stream=False     # No streaming needed for scheduled jobs
                 )
 
-                # Mark job as successful
-                await self.job_manager.mark_job_execution_success(job_id, str(response))
+                # Log that async execution has been initiated
+                observability.observe(
+                    event_type=observability.ConversationEvents.SCHEDULED_JOB_ASYNC_INITIATED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "job_id": job_id,
+                        "session_id": session_id,
+                        "response_id": response.id if hasattr(response, 'id') else str(response)[:50],
+                    },
+                    description=f"Async execution initiated for job: {job['title']}",
+                )
 
-                # For one-time jobs, mark as completed after successful execution
-                if not job.get("is_recurring", True):
-                    await self.job_manager.complete_onetime_job(job_id)
-
-                    observability.observe(
-                        event_type=observability.ConversationEvents.ONETIME_JOB_COMPLETED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "job_id": job_id,
-                            "user_id": job["user_id"],
-                            "session_id": session_id,
-                            "response_length": len(str(response)),
-                        },
-                        description=f"One-time job completed and marked as finished: {job['title']}",
-                    )
-                else:
-                    observability.observe(
-                        event_type=observability.ConversationEvents.SCHEDULED_JOB_COMPLETED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "job_id": job_id,
-                            "user_id": job["user_id"],
-                            "session_id": session_id,
-                            "response_length": len(str(response)),
-                        },
-                        description=f"Recurring job completed successfully: {job['title']}",
-                    )
+                # DO NOT mark as complete here - wait for webhook
+                # The completion will be handled by complete_job_from_webhook
             else:
                 raise Exception("No overlord available for job execution")
 
         except Exception as e:
+            # Immediate failure - never made it to async
+            self._active_executions.discard(session_id)
             # Mark job as failed
             await self.job_manager.mark_job_execution_failure(job_id, str(e))
 
@@ -800,7 +786,8 @@ class SchedulerService:
             )
 
         finally:
-            self._active_executions.discard(job_id)
+            # Don't discard from active_executions here - wait for webhook
+            pass
 
     # API Methods for job management
 
@@ -896,6 +883,109 @@ class SchedulerService:
         )
 
         return job_id
+
+    async def complete_job_from_webhook(
+        self, session_id: str, success: bool, result: str = None, error: str = None
+    ) -> bool:
+        """
+        Called by webhook handler to complete a job execution.
+
+        Args:
+            session_id: Session ID (format: "job_{job_id}")
+            success: Whether the execution was successful
+            result: Result text if successful
+            error: Error message if failed
+
+        Returns:
+            bool: True if this was a scheduled job, False otherwise
+        """
+        if session_id not in self._active_executions:
+            return False
+
+        # Extract job_id from session_id (format: "job_{job_id}")
+        if not session_id.startswith("job_"):
+            return False
+
+        job_id = session_id[4:]  # Remove "job_" prefix
+        self._active_executions.discard(session_id)
+
+        # Get job details for logging
+        job = await self.job_manager.get_job(job_id)
+        if not job:
+            return False
+
+        if success:
+            await self.job_manager.mark_job_execution_success(job_id, result[:1000] if result else "")
+
+            # For one-time jobs, mark as completed
+            if not job.get("is_recurring", True):
+                await self.job_manager.complete_onetime_job(job_id)
+
+                observability.observe(
+                    event_type=observability.ConversationEvents.ONETIME_JOB_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "job_id": job_id,
+                        "session_id": session_id,
+                        "result_length": len(result) if result else 0,
+                    },
+                    description=f"One-time job completed via webhook: {job['title']}",
+                )
+            else:
+                observability.observe(
+                    event_type=observability.ConversationEvents.SCHEDULED_JOB_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "job_id": job_id,
+                        "session_id": session_id,
+                        "result_length": len(result) if result else 0,
+                    },
+                    description=f"Recurring job completed via webhook: {job['title']}",
+                )
+        else:
+            await self.job_manager.mark_job_execution_failure(job_id, error[:1000] if error else "Unknown error")
+
+            # Check if job should be auto-paused
+            consecutive_failures = await self.job_manager.get_consecutive_failures(job_id)
+            if consecutive_failures >= self.max_failures_before_pause:
+                await self.job_manager.pause_job(job_id)
+
+                observability.observe(
+                    event_type=observability.ErrorEvents.SCHEDULED_JOB_AUTO_PAUSED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "job_id": job_id,
+                        "consecutive_failures": consecutive_failures,
+                        "max_failures": self.max_failures_before_pause,
+                    },
+                    description=f"Job auto-paused after {consecutive_failures} consecutive failures",
+                )
+
+            observability.observe(
+                event_type=observability.ErrorEvents.SCHEDULED_JOB_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "job_id": job_id,
+                    "session_id": session_id,
+                    "error": error[:500] if error else "Unknown error",
+                    "consecutive_failures": consecutive_failures,
+                },
+                description=f"Job failed via webhook: {job['title']}",
+            )
+
+        # Log webhook received
+        observability.observe(
+            event_type=observability.ConversationEvents.SCHEDULED_JOB_WEBHOOK_RECEIVED,
+            level=observability.EventLevel.INFO,
+            data={
+                "job_id": job_id,
+                "session_id": session_id,
+                "success": success,
+            },
+            description=f"Webhook received for scheduled job: {job_id}",
+        )
+
+        return True
 
     async def pause_job(self, job_id: str) -> bool:
         """

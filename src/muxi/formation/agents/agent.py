@@ -41,6 +41,7 @@
 # =============================================================================
 
 import datetime
+import traceback
 import json
 import re
 import time
@@ -1853,8 +1854,6 @@ class Agent:
                     elif isinstance(e, MissingCredentialError):
                         # Re-raise to let overlord handle the clarification
                         raise
-
-                    import traceback
 
                     error_trace = traceback.format_exc()
                     observability.observe(

@@ -2024,6 +2024,17 @@ Response:""".format(
         # Default to complex if we can't determine
         return False
 
+    def _safe_format_traceback(self) -> str:
+        """
+        Safely format the current exception traceback.
+        Returns empty string if traceback module is not accessible.
+        """
+        try:
+            import traceback
+            return traceback.format_exc()
+        except:
+            return ""
+
     async def _apply_persona(self, raw_response: Optional[str], user_message: str) -> str:
         """
         Apply the overlord persona to format a response.
@@ -4987,6 +4998,22 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             )
 
             # Send webhook notification if URL is configured
+            # Check if this is a scheduled job completion (wrap in try-except to prevent errors)
+            try:
+                if hasattr(self, '_scheduler') and self._scheduler and session_id and session_id.startswith("job_"):
+                    # This is a scheduled job - handle completion through scheduler
+                    handled = await self._scheduler.complete_job_from_webhook(
+                        session_id,
+                        success=True,
+                        result=result_content,
+                        error=None
+                    )
+                    if handled:
+                        return  # Don't send normal webhook for scheduled jobs
+            except Exception:
+                # If scheduler handling fails, continue with normal webhook
+                pass
+
             webhook_url = await self._get_webhook_url_for_request(request_id)
             if webhook_url:
                 observability.observe(
@@ -5064,6 +5091,23 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             await self.request_tracker.update_request(
                 request_id, RequestStatus.FAILED, error=str(e)
             )
+
+            # Check if this is a scheduled job failure (wrap in try-except to prevent secondary errors)
+            try:
+                if hasattr(self, '_scheduler') and self._scheduler and session_id and session_id.startswith("job_"):
+                    # This is a scheduled job - handle failure through scheduler
+                    formatted_error = await self._apply_persona(f"An error occurred: {str(e)}", message)
+                    handled = await self._scheduler.complete_job_from_webhook(
+                        session_id,
+                        success=False,
+                        result=None,
+                        error=formatted_error
+                    )
+                    if handled:
+                        return  # Don't send normal webhook for scheduled jobs
+            except Exception:
+                # If scheduler handling fails, continue with normal webhook
+                pass
 
             # Send failure webhook if URL is configured
             # NOTE: Must get webhook URL BEFORE removing request from tracker
@@ -6378,7 +6422,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             )
             except Exception as e:
                 # Log error but continue with normal flow
-                import traceback
                 observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
@@ -6386,7 +6429,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         "error": str(e),
                         "error_type": type(e).__name__,
                         "phase": "workflow_analysis",
-                        "traceback": traceback.format_exc()[-500:],  # Last 500 chars of traceback
+                        "traceback": self._safe_format_traceback()[-500:],
                     },
                     description=f"Failed to analyze request for workflow: {type(e).__name__}: {str(e)}",
                 )

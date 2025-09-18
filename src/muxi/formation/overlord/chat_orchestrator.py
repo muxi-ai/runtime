@@ -7,6 +7,7 @@ streaming support, and workflow coordination.
 
 import asyncio
 import time
+import traceback
 from typing import Optional, Any, Union, Dict, AsyncGenerator, List
 from ..background.request_tracker import RequestStatus, RequestState
 from ...utils.id_generator import generate_nanoid
@@ -922,8 +923,6 @@ class ChatOrchestrator:
             )
             # User information extraction completed
         except Exception as e:
-            import traceback
-
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,

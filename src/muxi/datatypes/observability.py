@@ -797,6 +797,12 @@ class ConversationEvents(Enum):
     ONETIME_JOB_MARKED_COMPLETED = "onetime.job.marked.completed"
     # When a one-time job is marked as completed
 
+    SCHEDULED_JOB_ASYNC_INITIATED = "scheduled.job.async.initiated"
+    # When async execution is initiated for a scheduled job
+
+    SCHEDULED_JOB_WEBHOOK_RECEIVED = "scheduled.job.webhook.received"
+    # When webhook response is received for a scheduled job
+
 
 class ServerEvents(Enum):
     """Server event types for MUXI observability"""
