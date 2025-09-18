@@ -726,7 +726,11 @@ class SchedulerService:
             # Execute through overlord
             if self.overlord:
                 response = await self.overlord.chat(
-                    message=execution_prompt, user_id=job["user_id"], session_id=session_id
+                    message=execution_prompt,
+                    user_id=job["user_id"],
+                    session_id=session_id,
+                    use_async=True,  # CRITICAL: Must be async since user is not waiting
+                    stream=False     # No streaming needed for scheduled jobs
                 )
 
                 # Mark job as successful

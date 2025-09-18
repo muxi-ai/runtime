@@ -773,6 +773,27 @@ class ConversationEvents(Enum):
     SCHEDULED_JOB_EXECUTION_TRACKED = "scheduled.job.execution.tracked"
     # When a scheduled job execution is tracked
 
+    SCHEDULED_JOBS_FOUND = "scheduled.jobs.found"
+    # When scheduled jobs are found due for execution
+
+    SCHEDULED_JOB_EXCLUDED = "scheduled.job.excluded"
+    # When a scheduled job is excluded from execution
+
+    SCHEDULED_JOB_STARTED = "scheduled.job.started"
+    # When a scheduled job execution starts
+
+    ONETIME_JOB_COMPLETED = "scheduled.onetime.completed"
+    # When a one-time job completes and is marked done
+
+    SCHEDULED_JOB_PAUSED = "scheduled.job.paused"
+    # When a scheduled job is paused
+
+    SCHEDULED_JOB_RESUMED = "scheduled.job.resumed"
+    # When a scheduled job is resumed
+
+    SCHEDULED_JOB_DELETED = "scheduled.job.deleted"
+    # When a scheduled job is deleted
+
     ONETIME_JOB_MARKED_COMPLETED = "onetime.job.marked.completed"
     # When a one-time job is marked as completed
 
