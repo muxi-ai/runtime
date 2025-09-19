@@ -8,7 +8,7 @@ llm:
     anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
     google: "${{ secrets.GEMINI_API_KEY }}"
   models:
-    - text: "openai/gpt-5-nano"
+    - text: "openai/gpt-4o-minii"
     - vision: "google/gemini-2.0-flash"
     - video: "google/gemini-2.0-flash"
     - audio: "openai/whisper-1"
@@ -20,7 +20,7 @@ llm:
           overlap: 100
           strategy: "adaptive"
     - embedding: "openai/text-embedding-3-small"
-    - streaming: "openai/gpt-5-nano"
+    - streaming: "openai/gpt-4o-minii"
       settings:
         temperature: 0.7
         max_tokens: 100

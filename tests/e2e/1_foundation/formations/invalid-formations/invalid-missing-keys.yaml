@@ -3,7 +3,7 @@ description: "This formation is missing required keys"
 
 agents:
   - id: "assistant"
-    model: "openai/gpt-5-nano"
+    model: "openai/gpt-4o-minii"
 
 memory:
   buffer:
