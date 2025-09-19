@@ -233,10 +233,14 @@ Non-critical tasks can be skipped if they fail, allowing the workflow to continu
 
 ### 3. Workflow Approval System
 
-For high-complexity requests, the system can request user approval:
+The system requests user approval in two scenarios:
+
+1. **High-complexity requests** - When complexity exceeds the configured threshold
+2. **Explicit approval requests** - When users ask to see the plan in any language (e.g., "Show me your plan", "Muéstrame tu enfoque")
 
 ```python
-if complexity_score >= plan_approval_threshold:
+# Approval is triggered by either condition
+if analysis.is_explicit_approval_request or complexity_score >= plan_approval_threshold:
     plan = await task_decomposer.decompose_request(request)
     approval = await request_user_approval(plan)
     if approval.approved:
@@ -244,6 +248,8 @@ if complexity_score >= plan_approval_threshold:
     else:
         return approval.response
 ```
+
+The `is_explicit_approval_request` field uses LLM-based intent detection, making it work seamlessly in any language without pattern matching.
 
 #### Approval-Aware Async Execution 🆕
 

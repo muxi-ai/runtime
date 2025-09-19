@@ -628,11 +628,14 @@ complexity_score = analyze_request_complexity(message)
 
 **Plan Confirmation Flow:**
 
-When a complex workflow requires user approval (configured via `requires_approval`):
+Workflow approval is triggered in two scenarios:
+1. **Explicit approval requests**: User asks to see the plan in any language (detected via `is_explicit_approval_request`)
+2. **High complexity**: Request complexity exceeds the configured threshold
 
 ```python
-async def handle_workflow_approval(workflow_plan):
-    if workflow.requires_approval:
+async def handle_workflow_approval(workflow_plan, analysis):
+    # Approval needed if explicitly requested OR complexity exceeds threshold
+    if analysis.is_explicit_approval_request or analysis.complexity_score >= approval_threshold:
         # Generate human-readable plan
         plan_preview = format_workflow_plan(workflow_plan)
 
