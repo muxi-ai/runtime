@@ -144,11 +144,11 @@ async def main():
         user_id="user123"
     )
     print(response)
-    
+
     # Process audio/video files
     with open("audio.m4a", "rb") as f:
         audio_content = f.read()
-    
+
     response = await overlord.avchat(
         files=[{
             "filename": "audio.m4a",
@@ -236,9 +236,11 @@ async def test_multi_agent_routing():
 - Comprehensive A2A communication (internal/external with registry and documentation)
 - Async operations and webhooks
 - Comprehensive observability
-- Natural language scheduling
+- Natural language scheduling with cron support
 - Streaming response support
+- Response formats (JSON, Markdown, Text, HTML)
 - Formation API server with OpenAPI compliance
+- **All 12 test areas complete** (100% core functionality tested)
 
 ### 🎉 Recent Major Achievements (July-August 2025)
 
