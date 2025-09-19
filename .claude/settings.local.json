@@ -20,7 +20,9 @@
       "WebFetch(domain:)",
       "Bash(trash:*)",
       "Bash(tee:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(psql:*)",
+      "Bash(touch:*)"
     ],
     "deny": [],
     "ask": []
