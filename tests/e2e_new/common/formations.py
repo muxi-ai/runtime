@@ -44,7 +44,7 @@ class FormationManager:
     """Manages formation configurations for E2E tests."""
 
     # Base path for common formations
-    BASE_PATH = Path(__file__).parent / "formations"
+    BASE_PATH = Path(__file__).parent / "formation_templates"
 
     # Template types
     TEMPLATES = {
