@@ -5,6 +5,8 @@ secrets_file: secrets.enc
 
 # LLM Configuration (REQUIRED)
 llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
   models:
     - text: "openai/gpt-4o-mini"
   settings:

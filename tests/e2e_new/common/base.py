@@ -79,7 +79,7 @@ class BaseE2ETest:
             template: Template to use if creating new formation
 
         Returns:
-            Success boolean
+            Formation object
         """
         try:
             self.formatter.print_setup("Initializing formation...")
@@ -105,29 +105,26 @@ class BaseE2ETest:
             # Initialize formation
             self.formation = Formation()
 
-            # Load formation with optional overrides
-            if runtime_overrides:
-                await self.formation.load(str(path), overrides=runtime_overrides)
-            else:
-                await self.formation.load(str(path))
+            # Load formation (runtime overrides would need to be applied to the YAML directly)
+            # TODO: Implement runtime override mechanism if needed
+            await self.formation.load(str(path))
 
             # Start overlord
             self.overlord = await self.formation.start_overlord()
 
             self.formatter.print_setup(f"Formation ready (pattern: {self.pattern})")
-            return True
+            return self.formation
 
         except Exception as e:
             self.formatter.print_error(f"Formation setup failed: {e}")
-            return False
+            raise
 
     async def cleanup_formation(self):
         """Clean up formation resources."""
         if self.formation and self.overlord:
             try:
                 self.formatter.print_teardown("Cleaning up formation...")
-                await self.formation.kill_overlord()
-                # Note: formation.shutdown() is not async
+                await self.formation.stop_overlord()
                 self.formatter.print_teardown("Formation cleaned up")
             except Exception as e:
                 self.formatter.print_warning(f"Cleanup error: {e}")

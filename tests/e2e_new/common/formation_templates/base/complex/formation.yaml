@@ -5,6 +5,8 @@ secrets_file: secrets.enc
 
 # LLM Configuration with multiple models
 llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
   models:
     - text: "openai/gpt-4o-mini"
     - vision: "openai/gpt-4-vision-preview"
