@@ -51,7 +51,7 @@ async def test_natural_language_scheduling():
 
         # Cleanup
         await formation.kill_overlord()
-        # formation.shutdown()  # Not async, commented out to avoid issues
+        # # formation.shutdown() removed - not async  # Not async, commented out to avoid issues
 
         print("\n✅ TEST PASSED: Natural language scheduling works")
         return 0

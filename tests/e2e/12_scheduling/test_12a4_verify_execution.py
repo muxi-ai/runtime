@@ -6,7 +6,6 @@ Tests that scheduled jobs actually execute at the scheduled time.
 
 import asyncio
 import sys
-import json
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -119,7 +118,7 @@ async def test_verify_job_execution():
 
         # Cleanup
         await formation.kill_overlord()
-        # formation.shutdown()  # Not async, commented out to avoid issues
+        # # formation.shutdown() removed - not async  # Not async, commented out to avoid issues
 
         if success:
             print("\n✅ TEST PASSED: Job execution verified")

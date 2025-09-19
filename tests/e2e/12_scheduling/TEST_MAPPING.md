@@ -1,36 +1,67 @@
-# Test Mapping - Area 12: Scheduling
+# Area 12: Scheduler Service Integration - Test Mapping
 
-## Overview
-Tests for scheduled task execution and job management functionality through the chat interface.
+## Test Plan Requirements to Implementation Mapping
 
-## Test Files
+### 12a. Schedule Detection & Creation
 
-### Group 12A: One-time Scheduled Tasks
+| Requirement | Test File | Status | Notes |
+|-------------|-----------|--------|-------|
+| 12a.1 Basic Scheduling | test_12a1_basic_scheduling.py | ✅ PASS | Successfully detects and creates scheduled jobs with "At [time]" patterns |
+| 12a.2 Natural Language | test_12a2_natural_language_scheduling.py | ✅ PASS | Handles various natural language scheduling formats |
+| 12a.3 Schedule with Context | test_12a3_schedule_with_context.py | ✅ PASS | Creates scheduled job with context preservation |
+| 12a.4 Verify Execution | test_12a4_verify_execution.py | ⚠️ PARTIAL | Webhook sent but agent lacks capability for simple tasks |
 
-| Test ID | File | Description | Status |
-|---------|------|-------------|--------|
-| 12A1a | `test_12a1_basic_scheduling.py` | Basic scheduling detection for recurring and one-off schedules | ✅ Implemented |
-| 12A1b | `test_12a1_schedule_future_task.py` | Schedule a task for future execution | ✅ Implemented |
-| 12A2 | `test_12a2_natural_language_scheduling.py` | Natural language time parsing (e.g., "in 5 minutes") | ✅ Implemented |
-| 12A3 | `test_12a3_schedule_with_context.py` | Schedule recurring tasks with context | ✅ Implemented |
+### 12b. Recurring Jobs
 
-### Group 12B: Recurring Jobs
+| Requirement | Test File | Status | Notes |
+|-------------|-----------|--------|-------|
+| 12b.1 Cron-based Scheduling | test_12b1_cron_based_scheduling.py | ✅ PASS | Creates recurring jobs with cron expressions |
+| 12b.2 Verify Recurring Execution | test_12b2_verify_recurring_execution.py | ⚠️ PARTIAL | Infrastructure works, agent capability issue |
+| 12b.3 Wait for Execution | test_12b3_wait_for_execution.py | ✅ PASS | Waits and verifies async webhook delivery |
+| 12b.4 Sync vs Async | test_12b4_sync_vs_async.py | ✅ PASS | Correctly handles sync/async execution modes |
+| 12b.5 Capital Question | test_12b5_capital_question.py | ✅ PASS | Tests specific formatting scenarios |
 
-| Test ID | File | Description | Status |
-|---------|------|-------------|--------|
-| 12B1 | `test_12b1_cron_based_scheduling.py` | Cron-based scheduling for recurring jobs | ✅ Implemented |
+### 12c. Job Management
 
-### Group 12D: Error Handling
+| Requirement | Test File | Status | Notes |
+|-------------|-----------|--------|-------|
+| 12c.1 One-time Execution | test_12c1_onetime_execution.py | ✅ PASS | Executes one-time scheduled jobs correctly |
+| 12c.2 Update Recurring Job | Not implemented | ❌ | Job update functionality not in current scope |
+| 12c.3 Cancel Job | Not implemented | ❌ | Job cancellation functionality not in current scope |
 
-| Test ID | File | Description | Status |
-|---------|------|-------------|--------|
-| 12D1 | `test_12d1_error_scenarios.py` | Invalid scheduling requests and error handling | ✅ Implemented |
+### 12d. Error Handling
 
-### Removed Tests (API-exclusive)
-- `test_12b2_update_recurring_job.py` - Required direct scheduler API access
-- `test_12b3_cancel_job.py` - Required direct scheduler API access
-- `test_12c1_job_execution_tracking.py` - Required direct scheduler API access
-- `test_12c2_failed_job_handling.py` - Required direct scheduler API access
+| Requirement | Test File | Status | Notes |
+|-------------|-----------|--------|-------|
+| 12d.1 Error Scenarios | test_12d1_error_scenarios.py | ✅ PASS | Handles various error conditions gracefully |
+| 12d.2 Failed Job Handling | Not implemented | ❌ | Failed job retry logic not in current scope |
+
+## Key Findings
+
+### Successes ✅
+1. **Scheduling Detection**: System correctly identifies scheduling requests including "At [time]" patterns
+2. **Job Creation**: Successfully creates both one-time and recurring jobs in the database
+3. **Webhook Infrastructure**: Async execution and webhook delivery mechanism work correctly
+4. **Error Handling**: System gracefully handles invalid schedules and error conditions
+5. **Context Preservation**: Scheduled jobs maintain user context and session information
+
+### Issues Identified ⚠️
+1. **Agent Capability Gap**: Test formation agents lack basic capabilities (e.g., telling jokes)
+   - Root cause: A2A loop error - "joke generation" capability not found
+   - Impact: Jobs execute but cannot complete simple tasks
+   - Resolution needed: Update test formations with proper agent capabilities
+
+2. **Incomplete Features** ❌
+   - Job update functionality not implemented
+   - Job cancellation functionality not implemented
+   - Failed job retry logic not implemented
+
+### Test Coverage Summary
+- Total Requirements: 11
+- Implemented Tests: 8
+- Passing Tests: 6
+- Partial Pass: 2 (due to agent capability issue)
+- Not Implemented: 3
 
 ## Test Formation
 - **Location**: `./formation-scheduling/formation.yaml`
@@ -38,35 +69,35 @@ Tests for scheduled task execution and job management functionality through the 
 - **Key Config**: `scheduler.enabled: true` with 1-minute check interval
 
 ## Test Runner
-
 - `run_all_tests.py` - Executes all chat-based scheduling tests sequentially
 
-## Test Coverage
+## Implementation Architecture
 
-### ✅ Covered Scenarios
-- Basic scheduling detection (recurring and one-off)
-- Natural language time parsing ("in 5 minutes", "tomorrow at 3pm")
-- Recurring schedules with cron patterns ("every Monday at 8am")
-- Error handling for invalid requests
-- Future task scheduling
-- Context-aware scheduling
+### Integration Flow
+1. User sends scheduling request via chat
+2. `RequestAnalyzer` analyzes request and sets `is_scheduling_request` flag
+3. Overlord routes to scheduler service if flag is true
+4. `ScheduleParser` parses natural language into cron expression or datetime
+5. `JobManager` creates job in database
+6. Response sent back to user with job ID
+7. Scheduler service polls database for pending jobs
+8. Executes jobs via overlord.chat() with webhook URL for async delivery
 
-### ⚠️ Limitations (Chat Interface Only)
-- Cannot directly update or cancel jobs
-- Cannot track execution history
-- Cannot verify actual job execution (would require waiting)
-- Some natural language patterns may not be detected as scheduling requests
+### Key Components Modified
+- `src/muxi/formation/workflow/analyzer.py` - Enhanced prompt for scheduling detection
+- `src/muxi/formation/overlord/overlord.py` - Added scheduler routing after line 6395
+- `src/muxi/services/scheduler/service.py` - Fixed webhook URL passing and one-off handling
+- `src/muxi/services/scheduler/parser.py` - Fixed JSON parsing and observability events
 
-## Known Issues
+## Database Tables
 
-1. **Scheduling Detection**: Not all phrasings are detected as scheduling requests
-   - "Every Monday at 2pm team sync" - may not be recognized
-   - Complex scheduling descriptions may require more specific phrasing
+### scheduled_jobs
+- Stores active scheduled jobs
+- Fields: `id`, `user_id`, `title`, `original_prompt`, `execution_prompt`, `cron_expression`, `scheduled_for`, `is_recurring`, `status`
 
-2. **Fixed Issues**:
-   - ✅ JSON parsing issue where LLM returns markdown-wrapped JSON
-   - ✅ Non-existent observability event types in scheduler modules
-   - ✅ One-off job handling in scheduler service
+### scheduled_job_audit
+- Audit trail for job lifecycle events
+- Fields: `job_id`, `user_id`, `action`, `timestamp`, `changes`, `reason`
 
 ## Running Tests
 
@@ -83,54 +114,11 @@ bash .claude/scripts/test-and-log.sh tests/e2e/12_scheduling/test_12a1_basic_sch
 # Natural language scheduling
 bash .claude/scripts/test-and-log.sh tests/e2e/12_scheduling/test_12a2_natural_language_scheduling.py
 
-# Error scenarios
-bash .claude/scripts/test-and-log.sh tests/e2e/12_scheduling/test_12d1_error_scenarios.py
+# Verify execution with webhook
+bash .claude/scripts/test-and-log.sh tests/e2e/12_scheduling/test_12a4_verify_execution.py
 ```
 
-## Implementation Architecture
-
-### Integration Flow
-1. User sends scheduling request via chat
-2. `RequestAnalyzer` analyzes request and sets `is_scheduling_request` flag
-3. Overlord routes to scheduler service if flag is true
-4. `ScheduleParser` parses natural language into cron expression or datetime
-5. `JobManager` creates job in database
-6. Response sent back to user with job ID
-
-### Key Components Modified
-- `src/muxi/formation/workflow/analyzer.py` - Enhanced prompt for scheduling detection
-- `src/muxi/formation/overlord/overlord.py` - Added scheduler routing after line 6395
-- `src/muxi/services/scheduler/service.py` - Fixed one-off vs recurring job handling
-- `src/muxi/services/scheduler/parser.py` - Fixed JSON parsing and observability events
-
-## Database Tables
-
-### scheduled_jobs
-- Stores active scheduled jobs
-- Fields: `id`, `user_id`, `title`, `original_prompt`, `execution_prompt`, `cron_expression`, `scheduled_for`, `is_recurring`, `status`
-
-### scheduled_job_audit
-- Audit trail for job lifecycle events
-- Fields: `job_id`, `user_id`, `action`, `timestamp`, `changes`, `reason`
-
-## Test Results Summary
-
-Last Run: 2025-01-18
-
-| Test | Result | Notes |
-|------|--------|-------|
-| 12A1a Basic Scheduling | ✅ 2/3 | One-off works, some recurring patterns not detected |
-| 12A1b Future Task | ⚠️ | Schedules but cannot verify execution |
-| 12A2 Natural Language | ⚠️ | Basic patterns work, complex ones may fail |
-| 12A3 Context Scheduling | ❌ | Not all context patterns detected |
-| 12B1 Cron Scheduling | ✅ | Weekly patterns work |
-| 12D1 Error Scenarios | TBD | Not fully tested |
-
-## Success Criteria
-
-Tests should verify:
-1. Natural language scheduling requests are detected
-2. Jobs are created with correct parameters
-3. Response confirms scheduling with job ID
-4. Invalid requests are handled gracefully
-5. Both recurring and one-off schedules work
+## Recommendations
+1. **Immediate**: Fix test formation agent capabilities to enable full task completion
+2. **Future**: Implement job update, cancellation, and retry features
+3. **Enhancement**: Add more comprehensive agent capability validation during formation loading

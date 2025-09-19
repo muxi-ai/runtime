@@ -106,7 +106,7 @@ async def test_basic_scheduling():
 
         # Cleanup
         await formation.kill_overlord()
-        # formation.shutdown()  # Not async, commented out to avoid issues
+        # # formation.shutdown() removed - not async  # Not async, commented out to avoid issues
 
         return 0 if all(results) else 1
 

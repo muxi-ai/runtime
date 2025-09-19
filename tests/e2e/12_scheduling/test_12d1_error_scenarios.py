@@ -105,7 +105,7 @@ async def test_error_scenarios():
             if overlord:
                 await formation.kill_overlord()
             # Note: shutdown() may cause issues, skip it for now
-            # formation.shutdown()
+            # # formation.shutdown() removed - not async
         except Exception as cleanup_error:
             print(f"Warning: Cleanup error: {cleanup_error}")
 

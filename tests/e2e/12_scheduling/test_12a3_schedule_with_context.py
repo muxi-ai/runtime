@@ -52,7 +52,7 @@ async def test_schedule_with_context():
 
         # Cleanup
         await formation.kill_overlord()
-        # formation.shutdown()  # Not async, commented out to avoid issues
+        # # formation.shutdown() removed - not async  # Not async, commented out to avoid issues
 
         print("\n✅ TEST PASSED: Schedule with context works")
         return 0
