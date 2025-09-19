@@ -1,0 +1,21 @@
+id: minimal-test-formation
+name: Minimal Test Formation
+description: Minimal formation template for simple tests
+
+# Secrets (auto-loaded from secrets.enc with .key)
+secrets_file: secrets.enc
+
+# LLM Configuration (REQUIRED)
+llm:
+  models:
+    - text: "openai/gpt-4o-mini"
+
+# Single agent configuration
+agents:
+  - id: assistant
+    name: Simple Assistant
+    description: Minimal test assistant
+    model: "openai/gpt-4o-mini"
+    prompt: |
+      You are a simple AI assistant for basic testing.
+      Provide direct answers to test queries.

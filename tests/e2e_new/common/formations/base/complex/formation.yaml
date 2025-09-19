@@ -1,0 +1,108 @@
+id: complex-test-formation
+name: Complex Test Formation
+description: Complex formation template for advanced multi-agent tests
+
+# Secrets (auto-loaded from secrets.enc with .key)
+secrets_file: secrets.enc
+
+# LLM Configuration with multiple models
+llm:
+  models:
+    - text: "openai/gpt-4o-mini"
+    - vision: "openai/gpt-4-vision-preview"
+  temperature: 0.7
+  max_tokens: 4096
+  auto_decomposition: true
+  complexity_threshold: 5.0
+
+# Advanced Memory Configuration
+memory:
+  type: persistent
+  persistent:
+    type: sqlite
+    path: "./test_memory.db"
+  buffer_size: 20
+  vector:
+    enabled: true
+    provider: "faissx"
+    url: "http://localhost:45678"
+  auto_extract: true
+
+# Multiple Agents
+agents:
+  - id: orchestrator
+    name: Test Orchestrator
+    description: Coordinates multi-agent test scenarios
+    model: "openai/gpt-4o-mini"
+    prompt: |
+      You are the orchestrator for complex test scenarios.
+      Coordinate between agents to accomplish test objectives.
+      Delegate tasks based on agent specializations.
+    capabilities:
+      - orchestration
+      - planning
+      - delegation
+
+  - id: researcher
+    name: Test Researcher
+    description: Handles research and knowledge queries
+    model: "openai/gpt-4o-mini"
+    prompt: |
+      You are a research specialist for testing.
+      Find and provide accurate information for test queries.
+    capabilities:
+      - research
+      - knowledge
+      - search
+
+  - id: writer
+    name: Test Writer
+    description: Handles content generation tests
+    model: "openai/gpt-4o-mini"
+    prompt: |
+      You are a content writer for testing purposes.
+      Generate requested content accurately and concisely.
+    capabilities:
+      - writing
+      - generation
+      - formatting
+
+# MCP Server Configuration
+mcp:
+  servers:
+    - id: filesystem
+      type: filesystem
+      config:
+        root_dir: "./test_files"
+        allowed_operations: ["read", "write", "list"]
+
+# Advanced Features
+clarification:
+  enabled: true
+  max_turns: 5
+  style: "conversational"
+  require_confirmation: true
+
+async:
+  enabled: true
+  webhook_url: "http://localhost:8080/webhook"
+  timeout: 60
+  retry_attempts: 3
+
+workflow:
+  enabled: true
+  auto_decompose: true
+  max_parallel_tasks: 3
+
+# A2A Configuration
+a2a:
+  enabled: false
+  registry_url: "http://localhost:8090"
+
+# Observability
+observability:
+  log_level: DEBUG
+  capture_events: true
+  metrics:
+    enabled: true
+    export_interval: 10
