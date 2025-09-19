@@ -43,6 +43,30 @@ The foundational runtime engine that powers AI agent formations is now complete 
 
 ## 🎉 Major Achievements
 
+### September 2025: Multilingual Explicit Approval Detection (Issue #72) ✅
+
+**Status**: Complete - LLM-based intent detection replaces English-only pattern matching
+
+**Implementation Details (Sep 19)**:
+- ✅ **Field Addition**: Added `is_explicit_approval_request` to RequestAnalysis dataclass
+- ✅ **LLM Intent Detection**: Detects approval requests in ANY language the LLM understands
+- ✅ **Clean Architecture**: Follows existing `is_scheduling_request` pattern
+- ✅ **Dead Code Removal**: Eliminated 42 lines of pattern-matching code
+- ✅ **Workflow Integration**: Explicit requests always trigger workflow regardless of complexity
+
+**Technical Changes**:
+- ✅ **RequestAnalysis Field**: Added boolean field with clear description (workflow.py:148)
+- ✅ **LLM Prompt Update**: Enhanced analyzer prompt to detect explicit approval intent
+- ✅ **Parsing Logic**: Extracts field from LLM response with proper defaults
+- ✅ **Approval Logic**: Set `requires_approval = is_explicit_approval_request`
+- ✅ **Overlord Integration**: Check both explicit request OR complexity threshold
+
+**Benefits Achieved**:
+- ✅ **True Multilingual**: Works in Spanish, French, Chinese, etc.
+- ✅ **No Maintenance**: No phrase lists to maintain for new languages
+- ✅ **User Control**: Users get plan preview when they ask for it
+- ✅ **Backward Compatible**: Existing workflows continue working
+
 ### September 2025: Scheduler Service Integration (Area 12) ✅
 
 **Status**: Complete - Natural language scheduling fully integrated with async webhook execution
@@ -723,6 +747,7 @@ MUXI Runtime is now **production-ready** with all core features implemented, tes
 The journey from concept to production has been completed successfully, with comprehensive testing validating every component. The runtime is ready for real-world deployment and can handle enterprise-scale AI agent formations with confidence.
 
 ## Update History
+- 2025-09-19: Added multilingual explicit approval detection (Issue #72)
 - 2025-09-19: Added Area 12 scheduler service completion, updated test area status to 12/12 complete
 - 2025-09-17: Added response formats implementation and architecture cleanup
 - 2025-09-17: Added enhanced token tracking and code cleanup
