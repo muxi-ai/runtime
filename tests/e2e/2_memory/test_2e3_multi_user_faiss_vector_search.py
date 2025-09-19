@@ -415,7 +415,7 @@ async def main():
 
     # Summary
     print("\n" + "=" * 60)
-    print("📋 MULTI-USER FAISSX TEST SUMMARY")
+    print("📋 MULTI-USER FAISSx TEST SUMMARY")
     print("=" * 60)
 
     print(f"\nMulti-User Search: {'✅ PASS' if multi_user_result.get('status') == 'success' else '❌ FAIL'}")

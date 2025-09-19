@@ -170,7 +170,7 @@ def main():
 
     # Summary
     print("\n" + "=" * 70)
-    print("🔧 FAISSX CONFIGURATION TEST SUMMARY")
+    print("🔧 FAISSx CONFIGURATION TEST SUMMARY")
     print("=" * 70)
 
     print(f"Import Test: {'✅ PASS' if import_result else '❌ FAIL'}")

@@ -178,7 +178,7 @@ async def test_with_actual_workingemory():
 
 def main():
     """Run all pattern tests"""
-    print("🔍 TESTING WORKING MEMORY FAISSX PATTERN")
+    print("🔍 TESTING WORKING MEMORY FAISSx PATTERN")
     print("=" * 60)
     print("Goal: Replicate exact WorkingMemory usage and find the issue")
 
