@@ -1,0 +1,62 @@
+schema: "1.0.0"
+id: "workflow-test-formation"
+description: "Test formation for workflow consistency testing without external dependencies"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+
+  models:
+    - text: "openai/gpt-5-nano"
+      settings:
+        temperature: 0.3  # Lower temperature for consistency
+        max_tokens: 2000
+        timeout_seconds: 30
+
+memory:
+  working:
+    max_memory_mb: 256
+    fifo_interval_min: 30  # Longer interval to avoid cleanup during tests
+    mode: "local"
+
+  buffer:
+    size: 5  # Smaller buffer for tests
+    multiplier: 5
+
+overlord:
+  workflow:
+    auto_decomposition: true
+    plan_approval_threshold: 10  # Higher to avoid approval prompts
+    complexity_method: "heuristic"
+    complexity_threshold: 7.0
+    routing_strategy: "capability_based"
+    error_recovery: "retry_with_backoff"
+
+    retry:
+      max_attempts: 2  # Fewer retries for faster tests
+      initial_delay: 1.0
+      max_delay: 5.0
+      backoff_factor: 2.0
+
+    timeouts:
+      task_timeout: 60  # Shorter timeout for tests
+      workflow_timeout: 180
+      enable_adaptive_timeout: false  # Disable for consistency
+
+    parallel_execution: false  # Sequential for consistency
+    max_parallel_tasks: 1
+
+# Minimal MCP configuration for testing
+mcp:
+  max_tool_iterations: 3  # Limit iterations
+  max_tool_calls: 10  # Limit total calls
+  max_timeout_in_seconds: 60  # Overall timeout
+  enhance_user_prompts: false  # Disable for consistency
+
+# No runtime MCPs to avoid file generation complexity
+runtime:
+  built_in_mcps: false
+
+# Agents configuration remains in agents/ directory
+agents: []

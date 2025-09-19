@@ -1,0 +1,46 @@
+schema: "1.0.0"
+id: "memory-limits-test"
+description: "Formation for testing memory size limits and FIFO cleanup"
+
+runtime:
+  built_in_mcps: false
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 500
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-5-nano"
+
+agents:
+  - id: "memory-test-agent"
+    name: "Memory Test Agent"
+    description: "Agent for testing memory limits and FIFO cleanup"
+    model: "openai/gpt-5-nano"
+    specialty: "general"
+    system_message: |
+      You are a helpful assistant designed for memory testing.
+      Remember everything the user tells you.
+
+memory:
+  buffer:
+    enabled: true
+    size: 10  # Small buffer for testing overflow
+  working:
+    enabled: true
+    max_memory_mb: 1  # 1MB limit for testing FIFO cleanup
+  persistent:
+    enabled: true
+    provider: "sqlite"
+    config:
+      database_url: "sqlite:///test-formations/formation-memory/memory_limits_test.db"
+
+overlord:
+  agent_assignment:
+    strategy: "simple"
+  config:
+    response:
+      timeout: 30
+      async_threshold: 50000

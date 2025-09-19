@@ -1,0 +1,20 @@
+schema: "1.0.0"
+id: "muxi"
+name: "muxi Agent"
+description: "AI assistant specialized answering questions about muxi business and revenue model"
+
+system_message: |
+  You are an AI assistant with knowledge about muxi.
+
+role: "assistant"
+specialties:
+  - "muxi"
+  - "muxi_pricing"
+
+knowledge:
+  enabled: true
+  sources:
+  - path: "muxi-business-plan.md"
+    description: "muxi business plan"
+  - path: "muxi-pricing.md"
+    description: "muxi pricing"

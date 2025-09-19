@@ -1,0 +1,23 @@
+schema: "1.0.0"
+id: "automaze"
+name: "Automaze Agent"
+description: "AI assistant specialized answering questions about Automaze"
+
+system_message: |
+  You are an AI assistant with knowledge about Automaze.
+
+role: "support"
+specialties:
+  - "automaze"
+  - "automaze_services"
+  - "automaze_products"
+  - "automaze_pricing"
+  - "automaze_contact"
+
+knowledge:
+  enabled: true
+  sources:
+  - path: "faq/"
+    description: "Frequently asked questions about Automaze"
+  - path: "/Users/ran/Projects/muxi/ran-bio.pdf"
+    description: "Ran Aroussi's bio"

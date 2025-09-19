@@ -1,0 +1,24 @@
+description: Single agent formation with minimal memory for clarification testing
+id: clarification-test
+llm:
+  api_keys:
+    openai: ${{ secrets.OPENAI_API_KEY }}
+  models:
+  - text: openai/gpt-5-nano
+  settings:
+    max_tokens: 2000
+    temperature: 0.7
+logging:
+  streams:
+  - format: jsonl
+    level: info
+    transport: stdout
+memory:
+  buffer:
+    multiplier: 5
+    size: 10
+    vector_search: false
+overlord:
+  clarification:
+    style: conversational
+schema: 1.0.0

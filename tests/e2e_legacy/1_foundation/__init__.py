@@ -1,0 +1,1 @@
+"""Day 1 Foundation Tests - Formation Loading and Basic Communication"""

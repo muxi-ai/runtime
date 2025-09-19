@@ -1,0 +1,50 @@
+schema: "1.0.0"
+id: "auto-extract-test"
+description: "Formation for testing automatic extraction of user information"
+
+runtime:
+  built_in_mcps: false
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 500
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-5-nano"
+
+agents:
+  - id: "extract-agent"
+    name: "Information Extraction Agent"
+    description: "Agent that auto-extracts user information"
+    model: "openai/gpt-5-nano"
+    specialty: "general"
+    system_message: |
+      You are a helpful assistant that automatically extracts and remembers
+      important information about users including names, locations, work details,
+      and preferences. Always use this information when responding.
+
+memory:
+  buffer:
+    enabled: true
+    size: 20
+  working:
+    enabled: true
+    auto_extract:
+      enabled: true
+      extract_user_info: true
+      extract_entities: true
+  persistent:
+    enabled: true
+    provider: "sqlite"
+    config:
+      database_url: "sqlite:///test-formations/formation-memory/auto_extract_test.db"
+
+overlord:
+  agent_assignment:
+    strategy: "simple"
+  config:
+    response:
+      timeout: 30
+      async_threshold: 50000

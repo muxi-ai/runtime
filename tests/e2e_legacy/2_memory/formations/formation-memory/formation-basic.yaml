@@ -1,0 +1,39 @@
+schema: "1.0.0"
+id: "basic-memory-test"
+description: "Simple formation for testing basic buffer memory functionality"
+
+runtime:
+  built_in_mcps: false
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 500  # Smaller for testing
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-5-nano"
+
+agents:
+  - id: "basic-agent"
+    name: "Basic Memory Agent"
+    description: "Agent for testing buffer memory"
+    model: "openai/gpt-5-nano"
+    specialty: "general"
+    system_message: |
+      You are a helpful assistant with memory capabilities.
+      Remember what users tell you and use that information in responses.
+
+memory:
+  buffer:
+    size: 10  # Small buffer for testing overflow
+  working:
+    max_memory_mb: 10
+
+overlord:
+  agent_assignment:
+    strategy: "simple"
+  config:
+    response:
+      timeout: 30
+      async_threshold: 50000

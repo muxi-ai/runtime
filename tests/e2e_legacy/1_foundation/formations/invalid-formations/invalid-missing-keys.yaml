@@ -1,0 +1,10 @@
+# Missing required fields like schema and id
+description: "This formation is missing required keys"
+
+agents:
+  - id: "assistant"
+    model: "openai/gpt-5-nano"
+
+memory:
+  buffer:
+    size: 10
