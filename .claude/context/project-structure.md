@@ -1,7 +1,7 @@
 ---
 created: 2025-08-21T17:31:00Z
-last_updated: 2025-09-08T22:51:59Z
-version: 1.3
+last_updated: 2025-09-19T14:03:46Z
+version: 1.4
 author: Claude Code PM System
 ---
 
@@ -58,6 +58,7 @@ Core formation orchestration and lifecycle:
 - `documents/` - Document processing and chunking
 - `memory/` - Memory coordination and user context
 - `overlord/` - Central orchestration with SOP guidance (includes unified clarification system)
+- `prompts/` - Centralized prompt management (16 markdown files + PromptLoader utility)
 - `resilience/` - Circuit breakers and recovery
 - `workflow/` - Task decomposition and synthesis (includes SOPs)
 
@@ -194,3 +195,6 @@ Ready-to-use formation examples:
 6. **Memory Management**: Automatic context handling
 
 This structure supports the "container runtime for AI agents" vision with clear separation of concerns and production-ready features.
+
+## Update History
+- 2025-09-19: Added prompts/ directory with 16 externalized prompts and PromptLoader utility
