@@ -1146,25 +1146,51 @@ class Formation:
         # This ensures all subsequent events go to the configured file
         initialize_observability(self)
 
-        # 2. Initialize LLM configuration
+        # 2. Initialize PromptLoader (fail fast if prompts missing)
+        from .prompts.loader import PromptLoader
+        try:
+            PromptLoader.initialize()
+            observability.observe(
+                event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
+                level=observability.EventLevel.INFO,
+                description="PromptLoader initialized successfully",
+            )
+        except FileNotFoundError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={"error": str(e)},
+                description=f"Formation initialization failed: {e}",
+            )
+            raise RuntimeError(f"Cannot start formation: {e}")
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={"error": str(e)},
+                description=f"Unexpected error loading prompts: {e}",
+            )
+            raise
+
+        # 3. Initialize LLM configuration
         initialize_llm_config(self)
 
-        # 3. Initialize memory systems
+        # 4. Initialize memory systems
         initialize_memory_systems(self)
 
-        # 4. Initialize document processing configuration
+        # 5. Initialize document processing configuration
         initialize_document_processing_config(self)
 
-        # 5. Initialize background services
+        # 6. Initialize background services
         initialize_background_services(self)
 
-        # 6. Initialize MCP services (now async to register servers immediately)
+        # 7. Initialize MCP services (now async to register servers immediately)
         await initialize_mcp_services(self)
 
-        # 7. Initialize clarification configuration
+        # 8. Initialize clarification configuration
         initialize_clarification_config(self)
 
-        # 8. Load agents configuration
+        # 9. Load agents configuration
         load_agents_from_configuration(self)
 
         # Update configured services with initialized instances

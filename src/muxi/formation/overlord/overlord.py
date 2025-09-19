@@ -1792,17 +1792,15 @@ class Overlord:
             if configured_persona:
                 self._default_persona = configured_persona
             else:
-                # Load from the correct path (no utils/ subdirectory)
-                persona_path = Path(__file__).parent.parent / "prompts" / "system_persona.md"
-
-                if os.path.exists(persona_path):
-                    with open(persona_path, "r", encoding="utf-8") as f:
-                        self._default_persona = f.read().strip()
-                else:
+                # Load from PromptLoader
+                from ..prompts.loader import PromptLoader
+                try:
+                    self._default_persona = PromptLoader.get('system_persona.md').strip()
+                except KeyError:
                     # Fallback if file doesn't exist
                     fallback = "You are a friendly and helpful assistant."
                     self._default_persona = fallback
-                    msg = f"Persona file not found at {persona_path}, using fallback"
+                    msg = "Persona file not found: system_persona.md, using fallback"
                     #  Warning - TODO: add observability
                     # SystemEvents.FAILED_INITIALIZATION (persona)
                     _ = msg  # remove this after implementing observability
@@ -7067,13 +7065,13 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
                 # Create enhanced message with SOP content
                 sop_file = "sop_template_mode.md" if mode == "template" else "sop_guide_mode.md"
-                sop_instructions_path = Path(__file__).parent.parent / "prompts" / sop_file
+                from ..prompts.loader import PromptLoader
                 try:
-                    with open(sop_instructions_path, "r", encoding="utf-8") as f:
-                        sop_instructions = (
-                            f"<sop_execution_mode>\n{f.read()}\n</sop_execution_mode>"
-                        )
-                except FileNotFoundError:
+                    sop_content = PromptLoader.get(sop_file)
+                    sop_instructions = (
+                        f"<sop_execution_mode>\n{sop_content}\n</sop_execution_mode>"
+                    )
+                except KeyError:
                     sop_instructions = ""
 
                 enhanced_message = (

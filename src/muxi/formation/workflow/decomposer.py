@@ -1,6 +1,5 @@
 from typing import Optional, Dict, Any, Tuple
 import re
-from pathlib import Path
 
 from ...datatypes.workflow import (
     Workflow,
@@ -286,12 +285,11 @@ class TaskDecomposer:
         Returns:
             Decomposition prompt for LLM
         """
-        # Read the prompt template from file
-        template_path = Path(__file__).parent.parent / "prompts" / "decomposition_prompt.md"
+        # Read the prompt template from PromptLoader
+        from ..prompts.loader import PromptLoader
         try:
-            with open(template_path, "r", encoding="utf-8") as f:
-                template = f.read()
-        except FileNotFoundError:
+            template = PromptLoader.get('decomposition_prompt.md')
+        except KeyError:
             # Fallback to basic template if file not found
             template = (
                 "<user_request>{{request}}</user_request>\n"

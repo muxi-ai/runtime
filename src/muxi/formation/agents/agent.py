@@ -46,7 +46,6 @@ import json
 import re
 import time
 from typing import Any, Dict, List, Optional, Union
-from pathlib import Path
 
 from ..artifacts.extractor import extract_artifacts_from_tool_results
 from ..credentials import MissingCredentialError, AmbiguousCredentialError
@@ -3390,24 +3389,23 @@ class Agent:
             planning_prompt += "You MUST handle all requests yourself without delegation.\n"
             planning_prompt += "Even if you lack specific tools or capabilities, provide your best effort response.\n\n"
 
-        template_path = Path(__file__).parent / "planning_prompt.md"
+        from ..prompts.loader import PromptLoader
         try:
-            with open(template_path, "r", encoding="utf-8") as f:
-                planning_prompt += f.read()
-        except FileNotFoundError as e:
+            planning_prompt += PromptLoader.get('agent_planning.md')
+        except KeyError as e:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "agent_id": self.agent_id,
-                    "template_path": str(template_path),
+                    "template_file": "agent_planning.md",
                     "error": str(e),
                 },
-                description=f"Planning template file not found: {template_path}",
+                description="Planning template file not found: agent_planning.md",
             )
             # Raise exception to prevent silent failure
             raise FileNotFoundError(
-                f"Required planning template file is missing: {template_path}. "
+                "Required planning template file is missing: agent_planning.md. "
                 "This file is essential for the planning system to function properly."
             ) from e
 
