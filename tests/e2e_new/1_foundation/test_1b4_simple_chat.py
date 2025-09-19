@@ -24,7 +24,7 @@ class TestSimpleChat(BaseE2ETest):
             test_area="1_foundation"
         )
 
-    def test_1b4_simple_chat(self):
+    async def test_1b4_simple_chat(self):
         """Test simple chat with minimal formation."""
         formatter = TestOutputFormatter()
         start_time = time.time()
@@ -39,9 +39,7 @@ class TestSimpleChat(BaseE2ETest):
         try:
             # Setup formation using Pattern 1 (minimal template)
             print("\n1. Setting up formation and starting overlord...")
-            formation = asyncio.run(self.setup_formation(
-                template="minimal"
-            ))
+            formation = await self.setup_formation(template="minimal")
             overlord = self.overlord  # Overlord is already started by setup_formation
             print("✅ Formation and overlord ready")
 
@@ -63,11 +61,9 @@ class TestSimpleChat(BaseE2ETest):
             # Test simple chat
             print("\n4. Testing simple chat...")
             timeout = TestTimeouts.get_timeout("simple_chat")
-            response = asyncio.run(
-                asyncio.wait_for(
-                    overlord.chat("Hello, how are you?", user_id="test_user"),
-                    timeout=timeout
-                )
+            response = await asyncio.wait_for(
+                overlord.chat("Hello, how are you?", user_id="test_user"),
+                timeout=timeout
             )
 
             # Verify response
@@ -83,7 +79,7 @@ class TestSimpleChat(BaseE2ETest):
 
             # Stop overlord
             print("\n5. Stopping overlord...")
-            asyncio.run(self.cleanup_formation())
+            await self.cleanup_formation()
             print("✅ Overlord stopped successfully")
 
             # Print results
@@ -117,7 +113,11 @@ class TestSimpleChat(BaseE2ETest):
         finally:
             return 0 if success else 1
 
+    def run_test(self):
+        """Run the test with proper async handling."""
+        return asyncio.run(self.test_1b4_simple_chat())
+
 
 if __name__ == "__main__":
     test = TestSimpleChat()
-    sys.exit(test.test_1b4_simple_chat())
+    sys.exit(test.run_test())

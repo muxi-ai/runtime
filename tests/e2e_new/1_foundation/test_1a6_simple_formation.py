@@ -24,7 +24,7 @@ class TestSimpleFormation(BaseE2ETest):
             test_area="1_foundation"
         )
 
-    def test_1a6_simple_formation(self):
+    async def test_1a6_simple_formation(self):
         """Test loading and basic functionality of minimal formation."""
         formatter = TestOutputFormatter()
         start_time = time.time()
@@ -39,7 +39,7 @@ class TestSimpleFormation(BaseE2ETest):
         try:
             # Setup formation using minimal template
             print("\n1. Loading formation and starting overlord...")
-            formation = asyncio.run(self.setup_formation(template="minimal"))
+            formation = await self.setup_formation(template="minimal")
             overlord = self.overlord  # Overlord is already started by setup_formation
             print("✅ Formation and overlord ready")
 
@@ -84,12 +84,7 @@ class TestSimpleFormation(BaseE2ETest):
             # Test basic chat
             print("\n5. Testing basic chat...")
             timeout = TestTimeouts.get_timeout("simple_chat")
-            response = asyncio.run(
-                asyncio.wait_for(
-                    overlord.chat("Hello", user_id="test_user"),
-                    timeout=timeout
-                )
-            )
+            response = await asyncio.wait_for(overlord.chat("Hello", user_id="test_user"), timeout=timeout)
             assert response is not None
             response_text = response.content if hasattr(response, "content") else str(response)
             print(f"   Response: {response_text[:100]}...")
@@ -97,7 +92,7 @@ class TestSimpleFormation(BaseE2ETest):
 
             # Stop overlord
             print("\n6. Stopping overlord...")
-            asyncio.run(self.cleanup_formation())
+            await self.cleanup_formation()
             print("✅ Overlord stopped successfully")
 
             # Print results
@@ -133,6 +128,11 @@ class TestSimpleFormation(BaseE2ETest):
             return 0 if success else 1
 
 
+
+    def run_test(self):
+        """Run the test with proper async handling."""
+        return asyncio.run(self.test_1a6_simple_formation())
+
 if __name__ == "__main__":
     test = TestSimpleFormation()
-    sys.exit(test.test_1a6_simple_formation())
+    sys.exit(test.run_test())
