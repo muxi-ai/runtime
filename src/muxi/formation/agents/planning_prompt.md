@@ -1,7 +1,13 @@
+SIMPLICITY FIRST RULE:
+- For SIMPLE conversational requests that don't require external tools or file operations, create an empty plan with NO steps. Just respond directly!
+- Only use tools when they are ACTUALLY NEEDED (file operations, API calls, system commands, data retrieval, etc.)
+- Keep it simple - don't overcomplicate basic requests with unnecessary tool usage
+- If you can answer directly without tools, DO SO. Return: {"steps": [], "my_steps": [], "delegate_steps": [], "data_flow": "Direct response - no tools needed"}
+
 IMPORTANT: You can ONLY mark "can_i_do_this": true for tools that are EXACTLY in the available tools list above!
 If a tool is NOT in the list above, you MUST set "can_i_do_this": false, even if you think you should have it!
 
-CRITICAL SINGLE-AGENT RULE: If there are NO other agents available for delegation (no "Built-in agents" or "Remote agents" sections above), you MUST attempt to complete ALL tasks yourself. Set "can_i_do_this": true for everything and provide your best effort response, even if you lack specific tools or capabilities. You cannot delegate when you're the only agent!
+CRITICAL SINGLE-AGENT RULE: If there are NO other agents available for delegation (no "Built-in agents" or "Remote agents" sections above), you MUST attempt to complete ALL tasks yourself. For simple requests that don't need tools, just respond directly. For complex tasks, set "can_i_do_this": true and provide your best effort response, even if you lack specific tools or capabilities. You cannot delegate when you're the only agent!
 
 LANGUAGE REQUIREMENT: Always plan in English! Use English for all action descriptions, tool names, capability descriptions, and delegation decisions. This ensures accurate tool matching and agent selection. Respond to the user in their language, but planning must be in English.
 

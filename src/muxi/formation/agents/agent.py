@@ -1317,6 +1317,39 @@ class Agent:
                                     "Please check back in a moment."
                                 )
 
+                # Check if this is a simple direct response (no steps needed)
+                if execution_plan and not execution_plan.get("my_steps") and not execution_plan.get("delegate_steps"):
+                    # Empty plan - handle simple requests directly
+                    data_flow = execution_plan.get("data_flow", "")
+                    if "direct response" in data_flow.lower() or "no tools needed" in data_flow.lower():
+                        # Generate a direct response for simple conversational requests
+                        simple_messages = [
+                            {"role": "system", "content": "You are a helpful assistant. Provide direct, natural responses without using any tools or files."},
+                            {"role": "user", "content": message}
+                        ]
+
+                        response_obj = await self.model.chat(simple_messages)
+                        response_text = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+
+                        response = MuxiResponse(
+                            role="assistant",
+                            content=response_text.strip()
+                        )
+
+                        observability.observe(
+                            event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "agent_id": self.agent_id,
+                                "response_type": "direct_simple_response",
+                                "plan_type": "empty_plan",
+                            },
+                            description=f"Agent {self.agent_id} provided direct response for simple request",
+                        )
+
+                        self._messages.append({"role": "assistant", "content": response.content})
+                        return response
+
                 # If we handled everything through planning, skip the regular flow
                 if execution_plan and (
                     execution_plan.get("my_steps") or execution_plan.get("delegate_steps")
