@@ -14,7 +14,7 @@ import time
 # Add the src directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../src")))
 
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 # Test configuration
 USE_ASYNC = True

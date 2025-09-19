@@ -19,7 +19,7 @@ from muxi.formation import Formation  # noqa: E402
 async def main():
     """Test automatic async selection for complex tasks."""
     print("🚀 MUXI Runtime - Test 9A3b: Auto-Async for Complex Tasks")
-    print("="*60)
+    print("=" * 60)
 
     formation_path = Path(__file__).parent / "formation-async"
     webhook_log_path = Path.cwd() / "webhook_log.json"
@@ -41,11 +41,11 @@ async def main():
         # Similar to test_7a1_workflow_with_approval.py prompt
         start_time = time.time()
         response = await overlord.chat(
-            message="Research the latest developments in quantum computing, analyze the key players and breakthroughs, then create a comprehensive Linear issue with findings, timeline, and future predictions",
+            message="Research the latest developments in quantum computing, analyze the key players and breakthroughs, then create a comprehensive Linear issue with findings, timeline, and future predictions",  # noqa: E501
             user_id="test_user",
             session_id="auto_async_test_9a3b",
             # use_async not specified - let system decide
-            stream=False
+            stream=False,
         )
         elapsed_time = time.time() - start_time
 
@@ -71,7 +71,7 @@ async def main():
                     # Find our webhook (might not be the last if multiple tests ran)
                     our_webhook = None
                     for webhook in reversed(webhook_data):
-                        if webhook.get('request_id') == response.request_id:
+                        if webhook.get("request_id") == response.request_id:
                             our_webhook = webhook
                             break
 
@@ -81,10 +81,12 @@ async def main():
                         print(f"   Status: {our_webhook.get('status')}")
 
                         # Check if it contains expected content
-                        result = str(our_webhook.get('result', ''))
+                        result = str(our_webhook.get("result", ""))
                         content_lower = result.lower()
-                        has_quantum_info = any(keyword in content_lower for keyword in
-                                              ['quantum', 'computing', 'research', 'linear', 'issue'])
+                        has_quantum_info = any(
+                            keyword in content_lower
+                            for keyword in ["quantum", "computing", "research", "linear", "issue"]
+                        )
 
                         if has_quantum_info:
                             print("   ✅ Content appears relevant to quantum computing research")
@@ -93,8 +95,10 @@ async def main():
 
                         print(f"   Content preview: {result[:150]}...")
 
-                        print("\n" + "="*60)
-                        print("✅ Test 9A3b PASSED: System correctly chose async mode for complex task")
+                        print("\n" + "=" * 60)
+                        print(
+                            "✅ Test 9A3b PASSED: System correctly chose async mode for complex task"
+                        )
                         return True
                     else:
                         print(f"\n⚠️ No webhook found for request_id: {response.request_id}")
@@ -126,24 +130,27 @@ async def main():
 
             # Check if response actually contains the research
             content_lower = content.lower()
-            has_research = any(keyword in content_lower for keyword in
-                              ['quantum', 'computing', 'research', 'linear'])
+            has_research = any(
+                keyword in content_lower
+                for keyword in ["quantum", "computing", "research", "linear"]
+            )
 
             if has_research and elapsed_time > 5:
                 print("\n⚠️ System processed complex task synchronously")
                 print(f"   Task took {elapsed_time:.2f}s but didn't trigger async")
                 print("   This might indicate high async threshold setting")
-                print("\n" + "="*60)
+                print("\n" + "=" * 60)
                 print("⚠️ Test 9A3b WARNING: Complex task processed synchronously")
                 return True  # Not failing as config might be different
             else:
-                print("\n" + "="*60)
+                print("\n" + "=" * 60)
                 print("❌ Test 9A3b FAILED: System should have chosen async for complex task")
                 return False
 
     except Exception as e:
         print(f"\n❌ Test failed with error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     finally:

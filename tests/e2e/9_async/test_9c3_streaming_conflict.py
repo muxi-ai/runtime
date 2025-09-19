@@ -13,7 +13,7 @@ import sys
 # Add the src directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../src")))
 
-from muxi.formation import Formation
+from muxi.formation import Formation  # noqa: E402
 
 # Test configuration
 TEST_REQUEST = "Count from 1 to 5 slowly, showing each number."
