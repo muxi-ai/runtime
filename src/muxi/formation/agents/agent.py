@@ -1324,7 +1324,7 @@ class Agent:
                     if "direct response" in data_flow.lower() or "no tools needed" in data_flow.lower():
                         # Generate a direct response for simple conversational requests
                         simple_messages = [
-                            {"role": "system", "content": "You are a helpful assistant. Provide direct, natural responses without using any tools or files."},
+                            {"role": "system", "content": "You are a helpful assistant. Provide direct, natural responses without using any tools or files."},  # noqa: E501
                             {"role": "user", "content": message}
                         ]
 
