@@ -23,6 +23,7 @@ Architecture:
 import asyncio
 import signal
 import time
+import traceback
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -314,12 +315,35 @@ class SchedulerService:
         Process one cycle of job checking and execution.
         This method contains all the async logic.
         """
-        # Get current time in formation timezone
-        formation_tz = pytz.timezone(self.formation_timezone)
-        current_time = datetime.now(formation_tz)
+        try:
+            # Get current time in formation timezone
+            formation_tz = pytz.timezone(self.formation_timezone)
+            current_time = datetime.now(formation_tz)
 
-        # MAP/REDUCE: Get jobs due for execution
-        due_jobs = await self.get_due_jobs_map_reduce(current_time)
+            observability.observe(
+                event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "current_time": current_time.isoformat(),
+                    "timezone": self.formation_timezone,
+                },
+                description="Scheduler checking for due jobs",
+            )
+
+            # MAP/REDUCE: Get jobs due for execution
+            due_jobs = await self.get_due_jobs_map_reduce(current_time)
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "traceback": traceback.format_exc(),
+                },
+                description=f"Error in scheduler cycle: {e}",
+            )
+            due_jobs = []
 
         if due_jobs:
             observability.observe(
@@ -725,11 +749,34 @@ class SchedulerService:
 
             # Execute through overlord
             if self.overlord:
+                # Get webhook URL from formation configuration
+                webhook_url = None
+                if hasattr(self.overlord, 'formation_config'):
+                    webhook_url = self.overlord.formation_config.get('async', {}).get('webhook_url')
+
+                # Fallback to overlord's attribute if not in config
+                if not webhook_url:
+                    webhook_url = getattr(self.overlord, 'async_webhook_url', None)
+
+                # Log webhook availability
+                observability.observe(
+                    event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "job_id": job_id,
+                        "has_webhook": webhook_url is not None,
+                        "webhook_url": webhook_url[:50] if webhook_url else None,
+                        "will_run_async": webhook_url is not None,
+                    },
+                    description=f"Scheduler execution mode: {'async' if webhook_url else 'sync (no webhook)'}",
+                )
+
                 response = await self.overlord.chat(
                     message=execution_prompt,
                     user_id=job["user_id"],
                     session_id=session_id,
                     use_async=True,  # CRITICAL: Must be async since user is not waiting
+                    webhook_url=webhook_url,  # Required for async execution
                     stream=False     # No streaming needed for scheduled jobs
                 )
 
