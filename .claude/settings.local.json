@@ -24,7 +24,11 @@
       "Bash(psql:*)",
       "Bash(touch:*)",
       "Bash(tree:*)",
-      "Bash(flake8:*)"
+      "Bash(flake8:*)",
+      "Bash(do echo \"Running $test...\")",
+      "Bash(xargs:*)",
+      "Bash(do echo \"=== $test ===\")",
+      "Bash(do echo -n \"$test: \")"
     ],
     "deny": [],
     "ask": []
