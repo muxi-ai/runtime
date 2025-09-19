@@ -22,7 +22,7 @@ llm:
     anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
     google: "${{ secrets.GEMINI_API_KEY }}"
   models:
-    - text: "openai/gpt-5-nano"
+    - text: "openai/gpt-4o-mini"
     - vision: "google/gemini-2.0-flash"
     - video: "google/gemini-2.0-flash"
     - audio: "openai/whisper-1"
@@ -45,7 +45,7 @@ overlord:
 
   # Routing model configuration
   llm:  # Overlord-specific routing functionality
-    model: "openai/gpt-5-nano" # Model for task management and delegation
+    model: "openai/gpt-4o-mini" # Model for task management and delegation
 
   config:
     # Content is processed intelligently by default:
