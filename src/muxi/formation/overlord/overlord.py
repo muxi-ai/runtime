@@ -150,6 +150,7 @@ from ...datatypes.task_status import TaskStatus
 # Utility functions
 from ..utils import generate_api_key
 from ...utils.security import redact_message_preview, sanitize_message_preview
+from ...utils.text_cleaner import clean_response_text
 
 # Configuration Management
 from .secrets_manager import SecretsInterpolator
@@ -2109,11 +2110,11 @@ Response: "You're welcome! Let me know if you need anything else."
                 response = await llm.chat(messages, max_tokens=300, temperature=0.7, stream=False)
 
                 if hasattr(response, "content"):
-                    return response.content
+                    return clean_response_text(response.content)
                 elif isinstance(response, str):
-                    return response
+                    return clean_response_text(response)
                 else:
-                    return str(response)
+                    return clean_response_text(str(response))
             else:
                 # ACTIONABLE PATH: Format agent's response with persona
 
@@ -2152,11 +2153,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 response = await llm.chat(messages, max_tokens=2000, temperature=0.7, stream=False)
 
                 if hasattr(response, "content"):
-                    return response.content
+                    return clean_response_text(response.content)
                 elif isinstance(response, str):
-                    return response
+                    return clean_response_text(response)
                 else:
-                    return str(response) if response else raw_response
+                    return clean_response_text(str(response)) if response else clean_response_text(raw_response)
 
         except Exception as e:
             # Log error and return appropriate fallback
@@ -2164,8 +2165,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # TODO: Add observability logging
             _ = msg
             if raw_response is None:
-                return "I understand. How can I help you?"
-            return raw_response
+                return clean_response_text("I understand. How can I help you?")
+            return clean_response_text(raw_response) if raw_response else "I understand. How can I help you?"
 
     async def _initialize_buffer_memory(self, buffer_config: Dict[str, Any]) -> None:
         """Initialize buffer memory from configuration."""
