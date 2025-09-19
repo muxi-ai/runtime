@@ -7040,8 +7040,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 description=f"Starting workflow orchestration (complexity: {analysis.complexity_score})",
             )
 
-            # Determine if approval is needed
-            needs_approval = analysis.complexity_score >= self.plan_approval_threshold
+            # Determine if approval is needed - ALWAYS if explicitly requested
+            needs_approval = (
+                analysis.is_explicit_approval_request or  # User explicitly wants to see plan
+                analysis.complexity_score >= self.plan_approval_threshold  # Or complexity threshold met
+            )
 
             observability.observe(
                 event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,

@@ -145,6 +145,10 @@ class RequestAnalysis(BaseModel):
         default=0.0, ge=0.0, le=1.0, description="Analysis confidence (0-1 scale)"
     )
     is_scheduling_request: bool = Field(default=False, description="Whether this is a scheduling request")
+    is_explicit_approval_request: bool = Field(
+        default=False,
+        description="Whether user explicitly wants to see the plan/approach before execution"
+    )
 
     @field_validator("implicit_subtasks", "required_capabilities", "acceptance_criteria")
     @classmethod

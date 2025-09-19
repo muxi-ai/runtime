@@ -75,9 +75,6 @@ class RequestAnalyzer:
             RequestAnalysis with complexity scoring and requirements
         """
         try:
-            # Check for approval requirement first
-            requires_approval = await self.requires_user_approval(user_message)
-
             # Use configured complexity method
             if self.complexity_method == ComplexityMethod.CUSTOM and self.custom_complexity_fn:
                 # Custom complexity function
@@ -93,8 +90,8 @@ class RequestAnalyzer:
                 # Default to heuristic analysis
                 analysis = self._heuristic_analyze_request(user_message)
 
-            # Override approval requirement if detected
-            analysis.requires_approval = requires_approval
+            # Set approval based on explicit request (complexity threshold checked later in overlord)
+            analysis.requires_approval = analysis.is_explicit_approval_request
 
             # Determine if decomposition is needed
             analysis.requires_decomposition = await self.should_decompose(analysis)
@@ -108,11 +105,13 @@ class RequestAnalyzer:
             return RequestAnalysis(
                 complexity_score=5.0,
                 requires_decomposition=False,
-                requires_approval=requires_approval if "requires_approval" in locals() else False,
+                requires_approval=False,
                 implicit_subtasks=[],
                 required_capabilities=["general"],
                 acceptance_criteria=["Request completed successfully"],
                 confidence_score=0.3,
+                is_scheduling_request=False,
+                is_explicit_approval_request=False,
             )
 
     async def should_decompose(self, analysis: RequestAnalysis) -> bool:
@@ -135,49 +134,6 @@ class RequestAnalyzer:
             or len(analysis.implicit_subtasks) > 2
             or len(analysis.required_capabilities) > 1
         )
-
-    async def requires_user_approval(
-        self, user_message: str, analysis: Optional[RequestAnalysis] = None
-    ) -> bool:
-        """
-        Detect if user wants to review plan before execution.
-
-        Approval triggers:
-        - "Please let me know how you're going to do this"
-        - "Show me your plan first"
-        - "What's your approach?"
-        - "Let me approve the plan before you start"
-        - "How would you handle this?"
-        - "Walk me through your process"
-
-        Args:
-            user_message: User's message to analyze
-            analysis: Optional analysis results for additional context
-
-        Returns:
-            True if user wants plan approval workflow
-        """
-        approval_phrases = [
-            "let me know how you're going to",
-            "show me your plan",
-            "what's your approach",
-            "let me approve",
-            "how would you handle",
-            "walk me through",
-            "what's your process",
-            "how are you going to",
-            "show me how you'll",
-            "explain your method",
-            "outline your strategy",
-            "describe your approach",
-            "what steps will you take",
-            "how do you plan to",
-            "what's your methodology",
-            "break down your process",
-        ]
-
-        message_lower = user_message.lower()
-        return any(phrase in message_lower for phrase in approval_phrases)
 
     def _heuristic_analyze_request(self, user_message: str) -> RequestAnalysis:
         """
@@ -325,6 +281,7 @@ class RequestAnalyzer:
             acceptance_criteria=acceptance_criteria,
             confidence_score=0.7,  # Heuristic confidence
             is_scheduling_request=False,  # Heuristic doesn't detect scheduling
+            is_explicit_approval_request=False,  # Heuristic doesn't detect approval requests
         )
 
     async def _llm_analyze_request(
@@ -383,6 +340,7 @@ Please provide analysis in JSON format:
   "acceptance_criteria": [List what would make this request successfully completed],
   "confidence_score": [0.0-1.0 how confident you are in this analysis],
   "is_scheduling_request": [true ONLY if user is ASKING you to CREATE/SET a schedule, reminder, or alert for future execution. Examples of TRUE: 'Remind me tomorrow at 3pm', 'At 3pm tell me a joke', 'At 15:30 today send the report', 'Schedule daily standup at 10am', 'Every Monday at 2pm team sync', 'In 2 hours take medicine', 'In 5 minutes generate a report', 'In 30 minutes check the logs', 'Set a reminder for next Friday', 'Send status update every hour', 'Run backup every night', 'Check metrics every 5 minutes', 'Generate summary every week', 'Tomorrow at 9am check emails', 'At noon send lunch reminder', 'At 5pm today log off reminder'. IMPORTANT: Any request with 'At [time]' followed by an action is a scheduling request. Recurring patterns with 'every [time unit]' are scheduling requests when followed by an action/request. The pattern is: [action/verb] + 'every' + [time period]. Common time units: minute, hour, day, week, month, morning, evening, night. Pay special attention to patterns like 'In X minutes/hours/days, do Y' which means schedule Y for X time from now. Also 'At [specific time] [action]' means schedule that action for that time. Examples of FALSE: 'Tell me about scheduling', 'I always remind myself', 'What time should I schedule?', 'The daily standup is at 10am' (statement, not request), 'What happened at 3pm?' (asking about past). Must be a request to CREATE a schedule, not a statement about schedules],
+  "is_explicit_approval_request": [true ONLY if user is explicitly asking to see/review your plan or approach BEFORE you execute. This detects if they want to PREVIEW the approach, regardless of task complexity. Examples of TRUE: 'Show me your plan first', 'How would you approach this?', 'Walk me through your process', 'Let me see your strategy', 'Explain your method before starting', 'What steps would you take?', 'How are you going to handle this?'. Examples of FALSE: 'Create a report' (direct command), 'Fix this bug' (wants action), 'Help me understand Python' (wants information, not execution plan)],
   "reasoning": [Brief explanation of the analysis]
 }}
 
@@ -450,6 +408,7 @@ START LOW: Begin with 1 and justify ANY increase!
                     acceptance_criteria=data.get("acceptance_criteria", []),
                     confidence_score=float(data.get("confidence_score", 0.8)),
                     is_scheduling_request=data.get("is_scheduling_request", False),
+                    is_explicit_approval_request=data.get("is_explicit_approval_request", False),
                 )
             else:
                 raise ValueError("No valid JSON found in response")
@@ -466,12 +425,11 @@ START LOW: Begin with 1 and justify ANY increase!
                 required_capabilities=["general"],
                 acceptance_criteria=[],
                 confidence_score=0.3,
+                is_scheduling_request=False,
+                is_explicit_approval_request=False,
             )
 
     # Helper methods for testing
-    async def _detect_approval_request(self, user_message: str) -> bool:
-        """Helper method for testing approval detection."""
-        return await self.requires_user_approval(user_message)
 
     def _calculate_heuristic_complexity(self, user_message: str) -> float:
         """Helper method for testing complexity calculation."""
