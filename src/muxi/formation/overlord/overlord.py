@@ -1845,26 +1845,10 @@ class Overlord:
         if self._capability_models.get("text"):
             try:
                 # Quick LLM check with formation's text model
-                prompt = """Is this message requesting action or just providing information/greeting?
-
-Message: "{}"
-
-Examples of ACTIONABLE messages (questions, requests, commands):
-- "What database should I use?" → ACTIONABLE (question needing answer)
-- "How do I implement authentication?" → ACTIONABLE (question needing help)
-- "Create a file" → ACTIONABLE (command to execute)
-- "Fix the bug" → ACTIONABLE (request for action)
-
-Examples of NON_ACTIONABLE messages (information, context, greetings):
-- "I'm working on an e-commerce platform" → NON_ACTIONABLE (just context)
-- "My budget is $5000" → NON_ACTIONABLE (just information)
-- "Hi" → NON_ACTIONABLE (greeting)
-- "Thanks" → NON_ACTIONABLE (acknowledgment)
-
-Reply with only:
-ACTIONABLE - if the user wants something done or answered
-NON_ACTIONABLE - if it's just information, greeting, or acknowledgment""".format(
-                    message
+                from ..prompts.loader import PromptLoader
+                prompt = PromptLoader.get(
+                    'overlord_actionability_check.md',
+                    message=message
                 )
 
                 # Use formation's text model for this quick check
@@ -1970,27 +1954,10 @@ Response:""".format(
         # Use LLM to determine if this is a simple question
         if self._capability_models.get("text"):
             try:
-                prompt = """Determine if this is a simple question that can be answered directly.
-
-Message: "{}"
-
-A simple question is one that:
-- Asks for a recommendation or suggestion
-- Seeks basic information or clarification
-- Can be answered in a few sentences
-- Doesn't require multiple steps or complex analysis
-- Is asking "what", "how", "why", "when", "where", "who" about something specific
-
-Complex questions that need workflows:
-- Multi-part requests requiring several steps
-- Requests to build, create, or implement something
-- Tasks requiring research AND analysis AND action
-
-If this is a simple question that can be answered directly, respond with: SIMPLE
-If this requires complex multi-step work, respond with: COMPLEX
-
-Response:""".format(
-                    message_lower
+                from ..prompts.loader import PromptLoader
+                prompt = PromptLoader.get(
+                    'overlord_simple_question.md',
+                    message=message_lower
                 )
 
                 # Use cached model if available
@@ -2068,41 +2035,12 @@ Response:""".format(
         try:
             if raw_response is None:
                 # NON-ACTIONABLE PATH: Direct conversational response
-                prompt = f"""{self._default_persona}
-
-The user said: "{user_message}"
-
-This is a greeting, acknowledgment, or informational statement that doesn't require any action.
-Respond naturally and conversationally. Be warm, encouraging, and maintain conversation flow.
-
-Guidelines:
-- For greetings: Respond warmly and ask how you can help
-- For information or statements: Simply acknowledge the information positively WITHOUT asking clarifying questions
-- For thanks: Respond graciously
-- Keep responses concise but friendly
-- IMPORTANT: When users provide context/information, just acknowledge it - don't ask follow-up with clarifying questions
-
-Examples:
-User: "Hi"
-Type: Greeting
-Response: "Hello! How can I assist you today?"
-
-User: "I'm a software developer"
-Type: Informational statement about themselves
-Response: "Great to know! I'm here if you need any assistance with your development work."
-
-User: "I'm working on an e-commerce platform using React and Node.js"
-Type: Informational statement about their work
-Response: "That sounds like an exciting project! React and Node.js are excellent choices for an e-commerce platform."
-
-User: "My budget is $5000"
-Type: Informational statement about constraints
-Response: "Understood - I'll keep the $5000 budget in mind."
-
-User: "Thanks"
-Type: Acknowledgment
-Response: "You're welcome! Let me know if you need anything else."
-"""
+                from ..prompts.loader import PromptLoader
+                prompt = PromptLoader.get(
+                    'overlord_greeting_response.md',
+                    default_persona=self._default_persona,
+                    user_message=user_message
+                )
                 messages = [{"role": "user", "content": prompt}]
                 # Force non-streaming for persona application
                 response = await llm.chat(messages, max_tokens=300, temperature=0.7, stream=False)

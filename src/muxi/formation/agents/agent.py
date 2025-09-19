@@ -4325,43 +4325,32 @@ class Agent:
 
         try:
             # Build a prompt for the LLM to infer parameters
-            prompt = f"""Based on the user's request and tool requirements, determine the appropriate parameter values.
-
-User Request: {user_request}
-Tool Name: {tool_name}
-Action Description: {action_description}
-
-Required Parameters:
-"""
-
-            # Add details about each parameter
+            # Build parameters section
+            parameters_section = ""
             for param in required_params:
                 param_def = param_properties.get(param, {})
                 param_type = param_def.get("type", "string")
                 param_desc = param_def.get("description", "No description available")
                 param_enum = param_def.get("enum", [])
 
-                prompt += f"\n- {param}:"
-                prompt += f"\n  Type: {param_type}"
-                prompt += f"\n  Description: {param_desc}"
+                parameters_section += f"\n- {param}:"
+                parameters_section += f"\n  Type: {param_type}"
+                parameters_section += f"\n  Description: {param_desc}"
                 if param_enum:
-                    prompt += f"\n  Allowed values: {param_enum}"
+                    parameters_section += f"\n  Allowed values: {param_enum}"
                 if param_def.get("minimum") is not None:
-                    prompt += f"\n  Minimum: {param_def['minimum']}"
+                    parameters_section += f"\n  Minimum: {param_def['minimum']}"
                 if param_def.get("maximum") is not None:
-                    prompt += f"\n  Maximum: {param_def['maximum']}"
+                    parameters_section += f"\n  Maximum: {param_def['maximum']}"
 
-            prompt += """\n\nAnalyze the user's request and provide appropriate parameter values.
-Respond with ONLY a valid JSON object containing the parameter values.
-Example: {"param1": "value1", "param2": 123}
-
-If you cannot determine a value from context:
-- For enums: use the first available option
-- For booleans: use false (safer default)
-- For strings: use an empty string
-- For numbers: use 0
-
-JSON Response:"""
+            from ..prompts.loader import PromptLoader
+            prompt = PromptLoader.get(
+                'tool_parameter_inference.md',
+                user_request=user_request,
+                tool_name=tool_name,
+                action_description=action_description,
+                parameters_section=parameters_section
+            )
 
             # Use LLM to infer parameters
             messages = [{"role": "user", "content": prompt}]

@@ -424,29 +424,14 @@ class UnifiedClarificationSystem:
             # Fallback when no LLM available
             return {"needs_more": False, "question": None}
 
-        prompt = f"""
-        Determine if we need more clarification.
-
-        Original request: {state['original_request']}
-        Information collected so far: {state['collected_info']}
-        Mode: {state['mode']}
-
-        Do we have enough to proceed? If not, what should we ask next?
-
-        Question Style: {self.style}
-        Style Guidelines:
-        - conversational: Natural, friendly, like a helpful colleague
-        - technical: Precise, specific, professional
-        - brief: Very concise, minimal words
-
-        Return JSON:
-        {{
-            "needs_more": boolean,
-            "question": "next question in the specified style or null"
-        }}
-
-        Be practical - if we have enough to make progress, don't over-clarify.
-        """
+        from ..prompts.loader import PromptLoader
+        prompt = PromptLoader.get(
+            'clarification_need_more.md',
+            original_request=state['original_request'],
+            collected_info=state['collected_info'],
+            mode=state['mode'],
+            style=self.style
+        )
 
         messages = [{"role": "user", "content": prompt}]
         response = await self.llm.chat(messages, temperature=0, max_tokens=150)
@@ -469,31 +454,13 @@ class UnifiedClarificationSystem:
         # Get the last question we asked
         last_question = state.get("last_question", "a clarification question")
 
-        prompt = f"""
-        We're in a clarification dialog about: {state['original_request']}
-        We asked: "{last_question}"
-        The user responded: "{response}"
-
-        Determine if the user is:
-        1. Answering our specific question (even if briefly)
-        2. Asking for something completely different/unrelated
-
-        Examples of context switches:
-        - We ask "Which account?" → User says "tell me a joke"
-        - We ask "What language?" → User says "what's the weather?"
-        - We ask "Which file?" → User says "create a new project"
-
-        Examples of NOT context switches (these ARE answers):
-        - We ask "What is the second source?" → User says "REST API endpoint"
-        - We ask "Which account?" → User says "the first one"
-        - We ask "What language?" → User says "Python"
-        - We ask "Which file?" → User says "never mind"
-
-        IMPORTANT: Short answers like "REST API endpoint" or "PostgreSQL database" are
-        typically ANSWERS to our question, not context switches.
-
-        Return "answering" if related to our question, "different" if unrelated.
-        """
+        from ..prompts.loader import PromptLoader
+        prompt = PromptLoader.get(
+            'clarification_context_switch.md',
+            original_request=state['original_request'],
+            last_question=last_question,
+            response=response
+        )
 
         messages = [{"role": "user", "content": prompt}]
         result = await self.llm.chat(messages, temperature=0, max_tokens=20)

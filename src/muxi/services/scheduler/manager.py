@@ -1331,28 +1331,12 @@ class JobManager:
 
             llm = LLM(service=llm_service)
 
-            prompt = """
-Compare these two scheduling task descriptions and determine if they represent fundamentally different tasks:
-
-Task 1: {old_prompt}
-Task 2: {new_prompt}
-
-Return JSON: {{"different_task": true/false, "reason": "brief explanation"}}
-
-Consider them DIFFERENT tasks if:
-- The main action changes (e.g., "send email" vs "backup files")
-- The target/object changes significantly (e.g., "email boss" vs "email team")
-- The core purpose changes (e.g., "notify" vs "analyze")
-
-Consider them the SAME task if:
-- Only minor wording changes
-- Same intent expressed in different languages
-- Grammatical variations or synonyms
-- Added/removed articles or small words
-
-Be language-agnostic - same task in different languages should be considered the same.""".trim().format(
-                old_prompt=old_prompt, new_prompt=new_prompt
-            )
+            from ...formation.prompts.loader import PromptLoader
+            prompt = PromptLoader.get(
+                'scheduler_task_comparison.md',
+                old_prompt=old_prompt,
+                new_prompt=new_prompt
+            ).strip()
 
             response = await llm.generate_json(prompt)
             result = response.get("different_task", True)
