@@ -16,7 +16,7 @@ memory:
 
 agents:
   - id: ""  # Invalid - empty ID
-    model: "openai/gpt-5-nano"
+    model: "openai/gpt-4o-mini"
 
 logging:
   streams:

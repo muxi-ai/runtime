@@ -5,7 +5,7 @@ description: "This YAML has syntax errors"
 # Invalid YAML syntax below
 agents:
   - id: "agent1"
-    model: "openai/gpt-5-nano
+    model: "openai/gpt-4o-mini
     system_message: "Missing closing quote above
   - id: "agent2"
     model: [this should not be a list]

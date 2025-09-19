@@ -12,13 +12,13 @@ llm:
   api_keys:
     openai: "${{ secrets.OPENAI_API_KEY }}"
   models:
-    - text: "openai/gpt-5-nano"
+    - text: "openai/gpt-4o-mini"
 
 agents:
   - id: "basic-agent"
     name: "Basic Memory Agent"
     description: "Agent for testing buffer memory"
-    model: "openai/gpt-5-nano"
+    model: "openai/gpt-4o-mini"
     specialty: "general"
     system_message: |
       You are a helpful assistant with memory capabilities.
