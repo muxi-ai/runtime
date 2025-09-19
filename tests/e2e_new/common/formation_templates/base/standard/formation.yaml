@@ -1,47 +1,56 @@
+schema: "1.0.0"
 id: standard-test-formation
-name: Standard Test Formation
 description: Standard formation template for most E2E tests
-
-# Secrets (auto-loaded from secrets.enc with .key)
 secrets_file: secrets.enc
 
 # LLM Configuration (REQUIRED)
 llm:
   models:
     - text: "openai/gpt-4o-mini"
-  temperature: 0.7
-  max_tokens: 4096
+  settings:
+    temperature: 0.7
+    max_tokens: 4096
 
 # Memory Configuration
 memory:
-  type: buffer
-  buffer_size: 10
-  ttl: 172800  # 48 hours
-  auto_extract: false
+  buffer:
+    size: 10
+    multiplier: 10
+    vector_search: true
+
+# Runtime configuration
+runtime:
+  built_in_mcps: false  # Disable for faster test startup
 
 # Agent Configuration
 agents:
   - id: assistant
     name: Test Assistant
     description: General-purpose test assistant
-    model: "openai/gpt-4o-mini"
-    prompt: |
+    system_message: |
       You are a helpful AI assistant for testing purposes.
       Respond concisely and accurately to test queries.
       Your responses will be validated by automated tests.
 
-# Optional Features (can be overridden at runtime)
-clarification:
-  enabled: false
-  max_turns: 3
-  style: "brief"
+# Optional Overlord configuration
+overlord:
+  clarification:
+    style: "brief"
+    max_rounds:
+      direct: 3
+      brainstorm: 5
+      planning: 5
+      execution: 3
 
+# Async configuration
 async:
-  enabled: false
-  webhook_url: null
-  timeout: 30
+  threshold_seconds: 30
+  enable_estimation: false
 
-# Observability
-observability:
-  log_level: INFO
-  capture_events: true
+# Logging configuration
+logging:
+  enabled: true
+  streams:
+    - transport: "stdout"
+      level: "info"
+      format: "jsonl"
