@@ -12,7 +12,7 @@ class TestRemoveInvisibleCharacters:
     def test_empty_string(self):
         """Test that empty strings are handled correctly."""
         assert remove_invisible_characters("") == ""
-        assert remove_invisible_characters(None) == None
+        assert remove_invisible_characters(None) is None
 
     def test_normal_text(self):
         """Test that normal text is preserved."""
@@ -103,8 +103,8 @@ class TestRemoveInvisibleCharacters:
 
     def test_real_world_llm_response(self):
         """Test cleaning a real-world LLM response."""
-        text = "# Dad Joke Time!\u200b\n\nHey there!\u200c I'm glad you're in the mood\u00a0for humor.\n\n## Why did the scarecrow win?\n\nBecause **he was outstanding\u2003in his field!** 🌾😄"
-        expected = "# Dad Joke Time!\n\nHey there! I'm glad you're in the moodfor humor.\n\n## Why did the scarecrow win?\n\nBecause **he was outstandingin his field!** 🌾😄"
+        text = "# Dad Joke Time!\u200b\n\nHey there!\u200c I'm glad you're in the mood\u00a0for humor.\n\n## Why did the scarecrow win?\n\nBecause **he was outstanding\u2003in his field!** 🌾😄"  # noqa: E501
+        expected = "# Dad Joke Time!\n\nHey there! I'm glad you're in the moodfor humor.\n\n## Why did the scarecrow win?\n\nBecause **he was outstandingin his field!** 🌾😄"  # noqa: E501
         assert remove_invisible_characters(text) == expected
 
     def test_unicode_control_characters(self):
