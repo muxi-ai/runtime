@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter, TestTimeouts  # noqa: E402
+
+
 class TestBasicFormation(BaseE2ETest):
     """Test basic formation functionality."""
 
@@ -18,7 +20,7 @@ class TestBasicFormation(BaseE2ETest):
         super().__init__(
             test_name="test_1b3_basic_formation",
             test_description="Test basic formation functionality",
-            test_area="1_foundation"
+            test_area="1_foundation",
         )
 
     async def test_1b3_basic_formation(self):
@@ -30,8 +32,7 @@ class TestBasicFormation(BaseE2ETest):
 
         # Print header
         formatter.print_test_header(
-            test_name="test_1b3_basic_formation",
-            description="Test basic formation functionality"
+            test_name="test_1b3_basic_formation", description="Test basic formation functionality"
         )
 
         try:
@@ -51,19 +52,17 @@ class TestBasicFormation(BaseE2ETest):
 
             # Test multiple interactions
             print("\n3. Testing multiple chat interactions...")
-            test_messages = [
-                "Hello",
-                "What is Python?",
-                "Thank you"
-            ]
+            test_messages = ["Hello", "What is Python?", "Thank you"]
 
             timeout = TestTimeouts.get_timeout("simple_chat")
             for i, message in enumerate(test_messages, 1):
                 print(f"   Message {i}: {message}")
-                response = await asyncio.wait_for(overlord.chat(message, user_id="test_user"), timeout=timeout)
+                response = await asyncio.wait_for(
+                    overlord.chat(message, user_id="test_user"), timeout=timeout
+                )
 
                 assert response is not None
-                response_text = response.content if hasattr(response, 'content') else str(response)
+                response_text = response.content if hasattr(response, "content") else str(response)
                 assert len(response_text) > 0
                 transcript.append((message, response_text))
                 print(f"   Response: {response_text[:80]}...")
@@ -72,8 +71,14 @@ class TestBasicFormation(BaseE2ETest):
 
             # Test memory persistence (messages should be in context)
             print("\n4. Testing context retention...")
-            final_response = await asyncio.wait_for(overlord.chat("What did I ask about?", user_id="test_user"), timeout=timeout)
-            final_text = final_response.content if hasattr(final_response, 'content') else str(final_response)
+            final_response = await asyncio.wait_for(
+                overlord.chat("What did I ask about?", user_id="test_user"), timeout=timeout
+            )
+            final_text = (
+                final_response.content
+                if hasattr(final_response, "content")
+                else str(final_response)
+            )
             transcript.append(("What did I ask about?", final_text))
             print(f"   Context response: {final_text[:100]}...")
             print("✅ Context retention verified")
@@ -93,10 +98,10 @@ class TestBasicFormation(BaseE2ETest):
                     "Properties verified",
                     "Multiple interactions successful",
                     "Context retention works",
-                    "Clean shutdown"
+                    "Clean shutdown",
                 ],
                 transcript=transcript,
-                duration=duration
+                duration=duration,
             )
             success = True
 
@@ -107,14 +112,16 @@ class TestBasicFormation(BaseE2ETest):
                 success=False,
                 checks=[f"Failed: {str(e)}"],
                 transcript=transcript,
-                duration=duration
+                duration=duration,
             )
             raise
         finally:
             return 0 if success else 1
+
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1b3_basic_formation())
+
 
 if __name__ == "__main__":
     test = TestBasicFormation()

@@ -10,12 +10,14 @@ import json
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # Add tests directory
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from muxi.formation import Formation  # noqa: E402
 
 # Import from common module
-from e2e_new.common import TestOutputFormatter  # noqa: E402
+from .common import TestOutputFormatter  # noqa: E402
+
+
 class BaseArtifactsTest:
     """Base class for Artifacts (File Generation) tests."""
 
@@ -142,11 +144,7 @@ class BaseArtifactsTest:
             )
 
         # Check file extension
-        if (
-            expected_type in self.FILE_TYPES
-            and hasattr(artifact, "filename")
-            and artifact.filename
-        ):
+        if expected_type in self.FILE_TYPES and hasattr(artifact, "filename") and artifact.filename:
             expected_extensions = self.FILE_TYPES[expected_type]["extensions"]
             validation["has_correct_extension"] = any(
                 artifact.filename.lower().endswith(ext) for ext in expected_extensions
@@ -157,18 +155,16 @@ class BaseArtifactsTest:
             validation["has_thumbnail"] = artifact.thumbnail.startswith("data:image/")
 
         # Check filename pattern
-        if (
-            expected_filename_pattern
-            and hasattr(artifact, "filename")
-            and artifact.filename
-        ):
+        if expected_filename_pattern and hasattr(artifact, "filename") and artifact.filename:
             validation["filename_matches_pattern"] = (
                 expected_filename_pattern.lower() in artifact.filename.lower()
             )
 
         return validation
 
-    async def test_chart_generation(self, chart_type: str, data_description: str) -> Tuple[bool, str]:
+    async def test_chart_generation(
+        self, chart_type: str, data_description: str
+    ) -> Tuple[bool, str]:
         """Test generation of charts/visualizations.
 
         Args:
@@ -224,9 +220,7 @@ class BaseArtifactsTest:
         else:
             return False, f"Invalid {doc_type} document artifact"
 
-    async def test_code_generation(
-        self, language: str, code_description: str
-    ) -> Tuple[bool, str]:
+    async def test_code_generation(self, language: str, code_description: str) -> Tuple[bool, str]:
         """Test generation of code files.
 
         Args:
@@ -321,9 +315,7 @@ class BaseArtifactsTest:
             "test": test_name,
             "status": "PASSED" if success else "FAILED",
             "timestamp": time.time(),
-            "artifacts_count": (
-                len(response.artifacts) if hasattr(response, "artifacts") else 0
-            ),
+            "artifacts_count": (len(response.artifacts) if hasattr(response, "artifacts") else 0),
             "response_preview": (
                 response.content[:200] if hasattr(response, "content") else str(response)[:200]
             ),

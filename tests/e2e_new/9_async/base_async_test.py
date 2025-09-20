@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 from ..common.base import BaseE2ETest
+
+
 class BaseAsyncTest(BaseE2ETest):
     """
     Base class for async operations tests.
@@ -35,7 +37,9 @@ class BaseAsyncTest(BaseE2ETest):
             self.webhook_log_path.unlink()
         await asyncio.sleep(0.1)  # Small delay to ensure file is fully deleted
 
-    async def wait_for_webhook(self, request_id: str, max_wait: int = 30, check_interval: int = 1) -> Optional[Dict[str, Any]]:
+    async def wait_for_webhook(
+        self, request_id: str, max_wait: int = 30, check_interval: int = 1
+    ) -> Optional[Dict[str, Any]]:
         """
         Wait for webhook delivery and return the webhook payload.
 
@@ -56,7 +60,7 @@ class BaseAsyncTest(BaseE2ETest):
 
             if self.webhook_log_path.exists():
                 try:
-                    with open(self.webhook_log_path, 'r') as f:
+                    with open(self.webhook_log_path, "r") as f:
                         content = f.read()
                         if not content:
                             continue  # File exists but empty, wait more
@@ -71,11 +75,16 @@ class BaseAsyncTest(BaseE2ETest):
                                 webhook_entry = json.loads(line)
                                 # The webhook entry contains the full HTTP request details
                                 # The actual webhook payload is in the 'body' field
-                                if 'body' in webhook_entry:
-                                    webhook = webhook_entry['body']
+                                if "body" in webhook_entry:
+                                    webhook = webhook_entry["body"]
 
-                                    if isinstance(webhook, dict) and webhook.get('id') == request_id:
-                                        self.formatter.print_success(f"Webhook received after {waited}s!")
+                                    if (
+                                        isinstance(webhook, dict)
+                                        and webhook.get("id") == request_id
+                                    ):
+                                        self.formatter.print_success(
+                                            f"Webhook received after {waited}s!"
+                                        )
                                         self.webhook_events.append(webhook)
                                         return webhook
                             except json.JSONDecodeError:
@@ -91,7 +100,9 @@ class BaseAsyncTest(BaseE2ETest):
         self.formatter.print_warning(f"Webhook not received after {max_wait}s")
         return None
 
-    async def verify_webhook_content(self, webhook: Dict[str, Any], expected_content: str = None) -> bool:
+    async def verify_webhook_content(
+        self, webhook: Dict[str, Any], expected_content: str = None
+    ) -> bool:
         """
         Verify webhook content contains expected information.
 
@@ -111,11 +122,11 @@ class BaseAsyncTest(BaseE2ETest):
         self.formatter.print_debug(f"  Processing time: {webhook.get('processing_time', 'N/A')}s")
 
         # Get the response content
-        response_data = webhook.get('response', [])
+        response_data = webhook.get("response", [])
         if response_data and isinstance(response_data, list):
             for item in response_data:
-                if item.get('type') == 'text':
-                    content = item.get('text', '')
+                if item.get("type") == "text":
+                    content = item.get("text", "")
                     self.formatter.print_debug(f"  Content preview: {content[:100]}...")
 
                     # Verify the content if expected content provided
@@ -134,7 +145,7 @@ class BaseAsyncTest(BaseE2ETest):
         user_id: str = "test_user",
         session_id: str = "test_session",
         expected_content: str = None,
-        should_be_async: bool = True
+        should_be_async: bool = True,
     ) -> Dict[str, Any]:
         """
         Test an async request end-to-end.
@@ -157,11 +168,7 @@ class BaseAsyncTest(BaseE2ETest):
         # Send request with use_async=True
         start_time = time.time()
         response = await self.overlord.chat(
-            message=message,
-            user_id=user_id,
-            session_id=session_id,
-            use_async=True,
-            stream=False
+            message=message, user_id=user_id, session_id=session_id, use_async=True, stream=False
         )
         elapsed_time = time.time() - start_time
 
@@ -175,12 +182,12 @@ class BaseAsyncTest(BaseE2ETest):
             "response": response,
             "request_id": None,
             "webhook": None,
-            "elapsed_time": elapsed_time
+            "elapsed_time": elapsed_time,
         }
 
         # Check if we got an async response
-        if isinstance(response, dict) and 'request_id' in response:
-            request_id = response.get('request_id')
+        if isinstance(response, dict) and "request_id" in response:
+            request_id = response.get("request_id")
             result["request_id"] = request_id
 
             self.formatter.print_success("Got async processing response")
@@ -206,7 +213,7 @@ class BaseAsyncTest(BaseE2ETest):
                 self.formatter.print_failure(f"Expected async response, got: {type(response)}")
             else:
                 # Maybe got sync response, which might be ok depending on configuration
-                content = response.content if hasattr(response, 'content') else str(response)
+                content = response.content if hasattr(response, "content") else str(response)
                 if expected_content and expected_content.lower() in content.lower():
                     result["success"] = True
                 else:
@@ -224,13 +231,11 @@ class BaseAsyncTest(BaseE2ETest):
         Returns:
             Dict with lifecycle test results
         """
-        self.formatter.print_test_case("Request Lifecycle Test", f"Testing lifecycle for {request_id}")
+        self.formatter.print_test_case(
+            "Request Lifecycle Test", f"Testing lifecycle for {request_id}"
+        )
 
-        results = {
-            "status_check": False,
-            "cancel_test": False,
-            "invalid_id_test": False
-        }
+        results = {"status_check": False, "cancel_test": False, "invalid_id_test": False}
 
         # Test 1: Check request status
         try:
@@ -250,7 +255,7 @@ class BaseAsyncTest(BaseE2ETest):
                 "What is 5+3? Show the calculation.",
                 user_id="test_user",
                 session_id="cancel_session",
-                use_async=True
+                use_async=True,
             )
 
             if isinstance(cancel_response, dict):
@@ -260,7 +265,7 @@ class BaseAsyncTest(BaseE2ETest):
                     await asyncio.sleep(1)
                     cancel_result = await self.overlord.cancel_request(cancel_request_id)
 
-                    if cancel_result.get('success'):
+                    if cancel_result.get("success"):
                         self.formatter.print_success("Request cancellation succeeded")
                         results["cancel_test"] = True
                     else:
@@ -276,7 +281,9 @@ class BaseAsyncTest(BaseE2ETest):
                 self.formatter.print_success("Invalid ID handled correctly")
                 results["invalid_id_test"] = True
             else:
-                self.formatter.print_warning(f"Should have returned error for invalid ID: {invalid_status}")
+                self.formatter.print_warning(
+                    f"Should have returned error for invalid ID: {invalid_status}"
+                )
         except Exception as e:
             self.formatter.print_error(f"Invalid ID test error: {e}")
 
@@ -292,4 +299,6 @@ class BaseAsyncTest(BaseE2ETest):
         if self.webhook_events:
             self.formatter.print_info(f"Webhook events captured: {len(self.webhook_events)}")
             for i, webhook in enumerate(self.webhook_events, 1):
-                self.formatter.print_debug(f"  Webhook {i}: ID={webhook.get('id')}, Status={webhook.get('status')}")
+                self.formatter.print_debug(
+                    f"  Webhook {i}: ID={webhook.get('id')}, Status={webhook.get('status')}"
+                )

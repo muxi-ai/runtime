@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter, TestTimeouts  # noqa: E402
+
+
 class TestBasicYamlFormation(BaseE2ETest):
     """Test basic YAML formation loading."""
 
@@ -18,7 +20,7 @@ class TestBasicYamlFormation(BaseE2ETest):
         super().__init__(
             test_name="test_1a1_basic_yaml_formation",
             test_description="Test basic YAML formation loading",
-            test_area="1_foundation"
+            test_area="1_foundation",
         )
 
     async def test_1a1_basic_yaml_formation(self):
@@ -30,7 +32,7 @@ class TestBasicYamlFormation(BaseE2ETest):
         # Print header
         formatter.print_test_header(
             test_name="test_1a1_basic_yaml_formation",
-            description="Test basic YAML formation loading"
+            description="Test basic YAML formation loading",
         )
 
         try:
@@ -46,13 +48,13 @@ class TestBasicYamlFormation(BaseE2ETest):
             print(f"   Formation ID: {overlord.formation_id}")
 
             # Test 3: Verify configuration structure
-            assert hasattr(formation, 'config')
+            assert hasattr(formation, "config")
             config_keys = list(formation.config.keys()) if formation.config else []
             print(f"   Configuration keys: {config_keys}")
 
             # Verify key configuration sections exist
-            assert "llm" in formation.config or hasattr(formation, 'llm_config')
-            assert "memory" in formation.config or hasattr(formation, 'memory_config')
+            assert "llm" in formation.config or hasattr(formation, "llm_config")
+            assert "memory" in formation.config or hasattr(formation, "memory_config")
             print("✅ Configuration structure verified")
 
             # Test 4: Verify agents loaded
@@ -64,10 +66,12 @@ class TestBasicYamlFormation(BaseE2ETest):
             # Test 5: Test basic functionality
             print("\n4. Testing basic chat functionality...")
             timeout = TestTimeouts.get_timeout("simple_chat")
-            response = await asyncio.wait_for(overlord.chat("Hello", user_id="test_user"), timeout=timeout)
+            response = await asyncio.wait_for(
+                overlord.chat("Hello", user_id="test_user"), timeout=timeout
+            )
 
             assert response is not None
-            response_text = response.content if hasattr(response, 'content') else str(response)
+            response_text = response.content if hasattr(response, "content") else str(response)
             assert len(response_text) > 0
             print(f"   Response: {response_text[:100]}...")
             print("✅ Basic functionality verified")
@@ -87,10 +91,10 @@ class TestBasicYamlFormation(BaseE2ETest):
                     "Configuration verified",
                     "Agents loaded",
                     "Basic functionality works",
-                    "Clean shutdown"
+                    "Clean shutdown",
                 ],
                 transcript=[("Hello", response_text)],
-                duration=duration
+                duration=duration,
             )
             success = True
 
@@ -101,7 +105,7 @@ class TestBasicYamlFormation(BaseE2ETest):
                 success=False,
                 checks=[f"Failed: {str(e)}"],
                 transcript=[],
-                duration=duration
+                duration=duration,
             )
             raise
         finally:
@@ -110,6 +114,8 @@ class TestBasicYamlFormation(BaseE2ETest):
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1a1_basic_yaml_formation())
+
+
 if __name__ == "__main__":
     test = TestBasicYamlFormation()
     sys.exit(test.run_test())

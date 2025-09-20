@@ -7,6 +7,8 @@ import time
 from typing import Optional, Dict, Any, List, AsyncIterator
 
 from ..common.base import BaseE2ETest
+
+
 class BaseStreamingTest(BaseE2ETest):
     """
     Base class for streaming tests.
@@ -31,7 +33,7 @@ class BaseStreamingTest(BaseE2ETest):
         self,
         stream: AsyncIterator,
         max_events: Optional[int] = None,
-        timeout: Optional[float] = 30.0
+        timeout: Optional[float] = 30.0,
     ) -> Dict[str, Any]:
         """
         Consume a stream and analyze its events.
@@ -87,13 +89,15 @@ class BaseStreamingTest(BaseE2ETest):
             "timing": timing,
             "duration": duration,
             "event_count": len(events),
-            "errors": self.stream_errors.copy()
+            "errors": self.stream_errors.copy(),
         }
 
         self.formatter.print_success(f"Consumed {len(events)} stream events in {duration:.2f}s")
         return result
 
-    def analyze_stream_content(self, events: List[Any], expected_keywords: List[str] = None) -> Dict[str, Any]:
+    def analyze_stream_content(
+        self, events: List[Any], expected_keywords: List[str] = None
+    ) -> Dict[str, Any]:
         """
         Analyze stream content for quality and completeness.
 
@@ -111,24 +115,24 @@ class BaseStreamingTest(BaseE2ETest):
             "error_events": 0,
             "total_content_length": 0,
             "contains_keywords": False,
-            "event_types": {}
+            "event_types": {},
         }
 
         full_content = ""
 
         for event in events:
             if isinstance(event, dict):
-                event_type = event.get('type', 'unknown')
+                event_type = event.get("type", "unknown")
                 analysis["event_types"][event_type] = analysis["event_types"].get(event_type, 0) + 1
 
-                if event_type == 'content' or event_type == 'text':
+                if event_type == "content" or event_type == "text":
                     analysis["content_events"] += 1
-                    content = event.get('content', '') or event.get('text', '')
+                    content = event.get("content", "") or event.get("text", "")
                     full_content += content
                     analysis["total_content_length"] += len(content)
-                elif event_type == 'progress':
+                elif event_type == "progress":
                     analysis["progress_events"] += 1
-                elif event_type == 'error':
+                elif event_type == "error":
                     analysis["error_events"] += 1
             else:
                 # Non-dict events, treat as content
@@ -162,14 +166,14 @@ class BaseStreamingTest(BaseE2ETest):
         # Calculate intervals between events
         intervals = []
         for i in range(1, len(timing)):
-            intervals.append(timing[i] - timing[i-1])
+            intervals.append(timing[i] - timing[i - 1])
 
         analysis = {
             "intervals": intervals,
             "avg_interval": sum(intervals) / len(intervals) if intervals else 0,
             "max_interval": max(intervals) if intervals else 0,
             "min_interval": min(intervals) if intervals else 0,
-            "total_duration": timing[-1] - timing[0] if len(timing) > 1 else 0
+            "total_duration": timing[-1] - timing[0] if len(timing) > 1 else 0,
         }
 
         return analysis
@@ -180,7 +184,7 @@ class BaseStreamingTest(BaseE2ETest):
         user_id: str = "test_user",
         session_id: str = "test_session",
         expected_keywords: List[str] = None,
-        timeout: float = 30.0
+        timeout: float = 30.0,
     ) -> Dict[str, Any]:
         """
         Test basic streaming functionality.
@@ -211,7 +215,7 @@ class BaseStreamingTest(BaseE2ETest):
             "is_stream": False,
             "content_analysis": {},
             "timing_analysis": {},
-            "response_type": type(response).__name__
+            "response_type": type(response).__name__,
         }
 
         # Check if response is a stream
@@ -249,7 +253,7 @@ class BaseStreamingTest(BaseE2ETest):
         else:
             self.formatter.print_failure(f"Response is not a stream: {type(response)}")
             # Still store transcript if we got a response
-            content = response.content if hasattr(response, 'content') else str(response)
+            content = response.content if hasattr(response, "content") else str(response)
             self.transcript.append((message, content))
 
         return result
@@ -259,7 +263,7 @@ class BaseStreamingTest(BaseE2ETest):
         message: str,
         interrupt_after: float = 2.0,
         user_id: str = "test_user",
-        session_id: str = "test_session"
+        session_id: str = "test_session",
     ) -> Dict[str, Any]:
         """
         Test stream interruption behavior.
@@ -273,7 +277,9 @@ class BaseStreamingTest(BaseE2ETest):
         Returns:
             Dict with interruption test results
         """
-        self.formatter.print_test_case("Stream Interruption Test", f"Interrupt after {interrupt_after}s")
+        self.formatter.print_test_case(
+            "Stream Interruption Test", f"Interrupt after {interrupt_after}s"
+        )
 
         # Send request with streaming enabled
         response = await self.overlord.chat(
@@ -288,7 +294,7 @@ class BaseStreamingTest(BaseE2ETest):
             "success": False,
             "interrupted": False,
             "events_before_interrupt": 0,
-            "graceful_handling": False
+            "graceful_handling": False,
         }
 
         if hasattr(response, "__aiter__"):
@@ -328,7 +334,7 @@ class BaseStreamingTest(BaseE2ETest):
             event_types = {}
             for event in self.stream_events:
                 if isinstance(event, dict):
-                    event_type = event.get('type', 'unknown')
+                    event_type = event.get("type", "unknown")
                     event_types[event_type] = event_types.get(event_type, 0) + 1
 
             if event_types:
@@ -337,7 +343,11 @@ class BaseStreamingTest(BaseE2ETest):
                     self.formatter.print_debug(f"  {event_type}: {count}")
 
         if self.stream_timing:
-            avg_interval = sum(self.stream_timing[1:]) / (len(self.stream_timing) - 1) if len(self.stream_timing) > 1 else 0
+            avg_interval = (
+                sum(self.stream_timing[1:]) / (len(self.stream_timing) - 1)
+                if len(self.stream_timing) > 1
+                else 0
+            )
             self.formatter.print_info(f"Average event interval: {avg_interval:.3f}s")
 
         if self.stream_errors:

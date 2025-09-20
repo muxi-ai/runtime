@@ -18,8 +18,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from .base_memory_test import BaseMemoryTest
-from muxi.services.memory.working import WorkingMemory
+from .base_memory_test import BaseMemoryTest  # noqa: E402
+from muxi.services.memory.working import WorkingMemory  # noqa: E402
+
+
 class Test2fMemoryAdvancedFeatures(BaseMemoryTest):
     """Test advanced memory functionality."""
 
@@ -192,14 +194,16 @@ class Test2fMemoryAdvancedFeatures(BaseMemoryTest):
             print(f"    Response: {response3_text[:200]}...")
 
             # Check if context was remembered
-            context_extracted = ("alice" in response3_text.lower() or "Alice" in response3_text) and (
+            context_extracted = (
+                "alice" in response3_text.lower() or "Alice" in response3_text
+            ) and (
                 "python" in response3_text.lower() or "machine learning" in response3_text.lower()
             )
 
             print(f"\n    ✓ Context extraction: {'SUCCESS' if context_extracted else 'FAILED'}")
             print(f"      Name remembered: {'alice' in response3_text.lower()}")
             print(
-                f"      Project remembered: {'python' in response3_text.lower() or 'machine learning' in response3_text.lower()}"
+                f"      Project remembered: {'python' in response3_text.lower() or 'machine learning' in response3_text.lower()}"  # noqa: E501
             )
 
             return context_extracted
@@ -251,10 +255,12 @@ class Test2fMemoryAdvancedFeatures(BaseMemoryTest):
                 chunks.append(chunk)
             response_text = "".join(chunks)
 
-            preference_used = "vegetarian" in response_text.lower() or "spicy" in response_text.lower()
+            preference_used = (
+                "vegetarian" in response_text.lower() or "spicy" in response_text.lower()
+            )
             print(f"       Preference context used: {'✅ PASS' if preference_used else '❌ FAIL'}")
             print(
-                f"       Response mentions: vegetarian={bool('vegetarian' in response_text.lower())}, spicy={bool('spicy' in response_text.lower())}"
+                f"       Response mentions: vegetarian={bool('vegetarian' in response_text.lower())}, spicy={bool('spicy' in response_text.lower())}"  # noqa: E501
             )
 
             # Test 3: Professional context
@@ -324,10 +330,7 @@ class Test2fMemoryAdvancedFeatures(BaseMemoryTest):
     async def test_2fmemoryadvancedfeatures(self):
         """Main test method."""
         test_name = "2f_memory_advanced_features"
-        self.print_test_header(
-            test_name,
-            "Test advanced memory features"
-        )
+        self.print_test_header(test_name, "Test advanced memory features")
 
         start_time = time.time()
         checks_passed = []
@@ -374,7 +377,12 @@ class Test2fMemoryAdvancedFeatures(BaseMemoryTest):
                 transcript.append(("System", "Context usage test failed"))
 
             # Summary
-            if fifo_result and vector_search_result and context_extraction_result and context_usage_result:
+            if (
+                fifo_result
+                and vector_search_result
+                and context_extraction_result
+                and context_usage_result
+            ):
                 print("  ✅ ALL ADVANCED MEMORY FEATURES WORKING!")
                 print("    ✅ FIFO cleanup automatically manages memory usage")
                 print("    ✅ Vector search enables semantic memory retrieval")
@@ -415,22 +423,26 @@ class Test2fMemoryAdvancedFeatures(BaseMemoryTest):
 
     async def run_test(self):
         """Run all test cases."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("📝 AREA 2F_MEMORY_ADVANCED_FEATURES")
-        print("="*60)
+        print("=" * 60)
 
         # Run test cases
         result = await self.test_2fmemoryadvancedfeatures()
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if result else '❌ SOME TESTS FAILED'}")
-        print("="*60)
+        print("=" * 60)
 
         return result
+
+
 def main():
     """Main entry point."""
     test = Test2fMemoryAdvancedFeatures()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
+
+
 if __name__ == "__main__":
     main()

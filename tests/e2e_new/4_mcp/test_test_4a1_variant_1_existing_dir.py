@@ -5,7 +5,9 @@ import asyncio
 import time
 from pathlib import Path
 
-from base_mcp_test import BaseMCPTest
+from .base_mcp_test import BaseMCPTest
+
+
 class Test4A1VariantExistingDir(BaseMCPTest):
     """Test file creation in existing directory using MCP filesystem tools."""
 
@@ -32,16 +34,13 @@ class Test4A1VariantExistingDir(BaseMCPTest):
             checks.append(f"Created test directory: {test_dir}")
 
             # Test file creation request
-            user_request = f"Create a file called 'success_existing.txt' with content 'Created in existing directory!' in {test_dir}"
+            user_request = f"Create a file called 'success_existing.txt' with content 'Created in existing directory!' in {test_dir}"  # noqa: E501
             print(f"\n  Sending request: {user_request}")
             transcript.append(("User", user_request))
 
             # Execute through overlord
             response = await self.overlord.chat(
-                user_request,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                user_request, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -61,10 +60,12 @@ class Test4A1VariantExistingDir(BaseMCPTest):
                 file_content = file_path.read_text()
                 print(f"  ✓ File created successfully: {file_path}")
                 print(f"  ✓ File content: '{file_content}'")
-                checks.extend([
-                    "File created successfully",
-                    f"File content matches expected: '{file_content}'"
-                ])
+                checks.extend(
+                    [
+                        "File created successfully",
+                        f"File content matches expected: '{file_content}'",
+                    ]
+                )
 
                 # Verify content matches
                 if "Created in existing directory!" in file_content:
@@ -94,11 +95,15 @@ class Test4A1VariantExistingDir(BaseMCPTest):
         self.print_test_result(test_name, success, checks, transcript, duration)
 
         return success
+
+
 async def main():
     """Main test execution."""
     test = Test4A1VariantExistingDir()
     success = await test.run_test()
     return success
+
+
 if __name__ == "__main__":
     success = asyncio.run(main())
     exit(0 if success else 1)

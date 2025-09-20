@@ -15,9 +15,11 @@ from pathlib import Path
 
 # Add path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 sys.path.insert(0, str(Path(__file__).parent))
-from base_multimodal_test import BaseMultimodalTest
+
+from .base_multimodal_test import BaseMultimodalTest  # noqa: E402
+
+
 class TestMultimodal3K1_AVCHAT(BaseMultimodalTest):
     """Test AVChat functionality."""
 
@@ -45,18 +47,20 @@ class TestMultimodal3K1_AVCHAT(BaseMultimodalTest):
             print(f"   Size: {audio_path.stat().st_size / 1024:.1f} KB")
 
             # Read and prepare the audio file
-            with open(audio_path, 'rb') as f:
+            with open(audio_path, "rb") as f:
                 audio_content = f.read()
 
             audio_file = {
-                'content': audio_content,
-                'content_type': 'audio/m4a',
-                'filename': 'short.m4a'
+                "content": audio_content,
+                "content_type": "audio/m4a",
+                "filename": "short.m4a",
             }
 
             # Call avchat with timeout and force synchronous mode
             print("   Calling avchat() with audio file...")
-            print("   Generated prompt: 'Please transcribe this audio and respond to what was said.'")
+            print(
+                "   Generated prompt: 'Please transcribe this audio and respond to what was said.'"
+            )
             print("   Mode: Synchronous (use_async=False)")
 
             transcript.append(("User", "[Uploaded audio file: short.m4a]"))
@@ -68,15 +72,15 @@ class TestMultimodal3K1_AVCHAT(BaseMultimodalTest):
                         user_id="test-user",
                         session_id="test-3k1",
                         use_async=False,  # Force synchronous processing
-                        stream=False  # Force non-streaming response
+                        stream=False,  # Force non-streaming response
                     ),
-                    timeout=120.0  # 120 second timeout for audio transcription
+                    timeout=120.0,  # 120 second timeout for audio transcription
                 )
 
                 # Extract response content
                 if isinstance(response, dict):
-                    content = response.get('content', str(response))
-                elif hasattr(response, 'content'):
+                    content = response.get("content", str(response))
+                elif hasattr(response, "content"):
                     content = response.content
                 else:
                     content = str(response)
@@ -87,7 +91,9 @@ class TestMultimodal3K1_AVCHAT(BaseMultimodalTest):
 
                 # Verify we got a meaningful response
                 if len(content) > 10:  # At least some response
-                    checks_passed.append("AVChat: Successfully processed audio file and generated response")
+                    checks_passed.append(
+                        "AVChat: Successfully processed audio file and generated response"
+                    )
                     print("   ✅ Test completed successfully!")
                 else:
                     print("   ❌ Response too short or empty")
@@ -111,10 +117,7 @@ class TestMultimodal3K1_AVCHAT(BaseMultimodalTest):
     async def test_3k1_avchat(self):
         """Main test method."""
         test_name = "3k1_avchat"
-        self.print_test_header(
-            test_name,
-            "Test AVChat Transcript"
-        )
+        self.print_test_header(test_name, "Test AVChat Transcript")
 
         start_time = time.time()
         all_checks_passed = []
@@ -147,22 +150,26 @@ class TestMultimodal3K1_AVCHAT(BaseMultimodalTest):
 
     async def run_test(self):
         """Run all test cases."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🎤📹 AREA 3K1_AVCHAT: AVCHAT TRANSCRIPT")
-        print("="*60)
+        print("=" * 60)
 
         # Run test cases
         result = await self.test_3k1_avchat()
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if result else '❌ SOME TESTS FAILED'}")
-        print("="*60)
+        print("=" * 60)
 
         return result
+
+
 def main():
     """Main entry point."""
     test = TestMultimodal3K1_AVCHAT()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
+
+
 if __name__ == "__main__":
     main()

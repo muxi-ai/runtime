@@ -9,9 +9,13 @@ including relative dates, complex recurrence patterns, and context-aware schedul
 import sys
 
 from .base_scheduling_test import BaseSchedulingTest
+
+
 def main():
     """Test advanced natural language scheduling."""
-    test = BaseSchedulingTest("12a2_natural_language_scheduling", "Test advanced natural language scheduling")
+    test = BaseSchedulingTest(
+        "12a2_natural_language_scheduling", "Test advanced natural language scheduling"
+    )
 
     async def run_advanced_scheduling_test():
         # Setup formation using the shared scheduling formation
@@ -24,27 +28,22 @@ def main():
             "Remind me in 2 hours to follow up on the proposal",
             "Set up a meeting for the day after tomorrow at 2pm",
             "Schedule a review session for next week Thursday",
-
             # Complex recurrence patterns
             "Remind me every other week on Tuesdays to review metrics",
             "Schedule a monthly team meeting on the first Friday of each month",
             "Set up quarterly reviews every 3 months starting next month",
             "Create a bi-weekly standup every other Monday at 10am",
-
             # Time zone aware (if supported)
             "Schedule a call for 3pm Eastern time tomorrow",
             "Set a reminder for 9am Pacific time next Friday",
-
             # Context-aware scheduling
             "Schedule the product launch meeting for next Tuesday after the design review",
             "Remind me to submit my timesheet every Friday before 5pm",
             "Set up the weekly retrospective every Thursday after the sprint demo",
-
             # Duration-based scheduling
             "Book a 2-hour workshop for next Wednesday afternoon",
             "Schedule a 30-minute check-in call for tomorrow morning",
             "Set aside 1 hour next Friday for code review",
-
             # Conditional scheduling
             "Schedule a backup meeting for next Friday if the original gets cancelled",
             "Remind me to check the weather before the outdoor event on Sunday",
@@ -61,7 +60,7 @@ def main():
             "time_zone": complex_cases[8:10],
             "context_aware": complex_cases[10:13],
             "duration_based": complex_cases[13:16],
-            "conditional": complex_cases[16:]
+            "conditional": complex_cases[16:],
         }
 
         category_results = {}
@@ -76,7 +75,9 @@ def main():
 
             success_rate = successful / len(cases) if cases else 0
             category_results[category] = success_rate
-            test.formatter.print_info(f"{category.replace('_', ' ').title()}: {success_rate:.1%} ({successful}/{len(cases)})")
+            test.formatter.print_info(
+                f"{category.replace('_', ' ').title()}: {success_rate:.1%} ({successful}/{len(cases)})"
+            )
 
         # Test edge cases and error handling
         test.formatter.print_section("Edge Cases and Error Handling")
@@ -94,9 +95,7 @@ def main():
         for i, case in enumerate(edge_cases):
             try:
                 await test.test_schedule_creation(
-                    message=case,
-                    user_id="edge_test_user",
-                    session_id=f"edge_test_{i}"
+                    message=case, user_id="edge_test_user", session_id=f"edge_test_{i}"
                 )
 
                 # For edge cases, we expect graceful handling (either rejection or correction)
@@ -116,7 +115,7 @@ def main():
             "I need to schedule some meetings for next week",
             "The first one should be with the marketing team on Monday at 10am",
             "Then schedule the engineering sync for Wednesday at 2pm",
-            "And finally the client call on Friday at 3pm"
+            "And finally the client call on Friday at 3pm",
         ]
 
         context_success = True
@@ -127,10 +126,10 @@ def main():
                     user_id="context_user",
                     session_id="context_preservation_test",  # Same session
                     use_async=False,
-                    stream=False
+                    stream=False,
                 )
 
-                content = response.content if hasattr(response, 'content') else str(response)
+                content = response.content if hasattr(response, "content") else str(response)
                 test.transcript.append((message, content))
 
                 # For the first message, expect acknowledgment
@@ -143,7 +142,9 @@ def main():
                     schedule_info = test.extract_schedule_info(content)
                     if not schedule_info["created"]:
                         context_success = False
-                        test.formatter.print_warning(f"Context message {i} failed to create schedule")
+                        test.formatter.print_warning(
+                            f"Context message {i} failed to create schedule"
+                        )
 
             except Exception as e:
                 test.formatter.print_error(f"Context preservation error: {e}")
@@ -152,9 +153,10 @@ def main():
         # Overall success criteria
         min_success_rate = 0.6  # 60% minimum success rate for complex cases
         overall_success = (
-            complex_results["successful_parses"] >= (complex_results["total_cases"] * min_success_rate) and
-            edge_success and
-            context_success
+            complex_results["successful_parses"]
+            >= (complex_results["total_cases"] * min_success_rate)
+            and edge_success
+            and context_success
         )
 
         # Record result
@@ -162,9 +164,13 @@ def main():
 
         # Print summary
         test.formatter.print_section("Advanced Scheduling Test Summary")
-        test.formatter.print_info(f"Complex parsing: {complex_results['successful_parses']}/{complex_results['total_cases']} ({complex_results['successful_parses']/complex_results['total_cases']:.1%})")
+        test.formatter.print_info(
+            f"Complex parsing: {complex_results['successful_parses']}/{complex_results['total_cases']} ({complex_results['successful_parses']/complex_results['total_cases']:.1%})"  # noqa: E501
+        )
         test.formatter.print_info(f"Edge case handling: {'PASSED' if edge_success else 'FAILED'}")
-        test.formatter.print_info(f"Context preservation: {'PASSED' if context_success else 'FAILED'}")
+        test.formatter.print_info(
+            f"Context preservation: {'PASSED' if context_success else 'FAILED'}"
+        )
 
         if overall_success:
             test.formatter.print_success("Advanced natural language scheduling tests passed")
@@ -174,8 +180,14 @@ def main():
         # Print category breakdown
         test.formatter.print_section("Category Performance")
         for category, success_rate in category_results.items():
-            status = "GOOD" if success_rate >= 0.7 else "NEEDS_IMPROVEMENT" if success_rate >= 0.5 else "POOR"
-            test.formatter.print_info(f"{category.replace('_', ' ').title()}: {success_rate:.1%} ({status})")
+            status = (
+                "GOOD"
+                if success_rate >= 0.7
+                else "NEEDS_IMPROVEMENT" if success_rate >= 0.5 else "POOR"
+            )
+            test.formatter.print_info(
+                f"{category.replace('_', ' ').title()}: {success_rate:.1%} ({status})"
+            )
 
         # Print scheduling-specific summary
         test.print_scheduling_summary()
@@ -193,6 +205,8 @@ def main():
         None,  # Use pattern-based formation path
         "formation-scheduling.yaml",  # Use shared formation
     )
+
+
 if __name__ == "__main__":
     exit_code = main()
     sys.exit(exit_code)

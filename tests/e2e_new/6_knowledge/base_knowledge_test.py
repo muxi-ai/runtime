@@ -10,13 +10,15 @@ import json
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # Add tests directory
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from muxi.formation import Formation  # noqa: E402
 
 # Import from common module
-from e2e_new.common import BaseE2ETest  # noqa: E402
-from e2e_new.common import TestOutputFormatter  # noqa: E402
+from common import BaseE2ETest  # noqa: E402
+from common import TestOutputFormatter  # noqa: E402
+
+
 class BaseKnowledgeTest(BaseE2ETest):
     """Base class for Knowledge tests."""
 
@@ -276,7 +278,9 @@ class BaseKnowledgeTest(BaseE2ETest):
 
         return True, f"Knowledge isolation maintained between {domain1} and {domain2}"
 
-    async def test_multi_domain_routing(self, queries: List[Tuple[str, str]]) -> Tuple[bool, List[str]]:
+    async def test_multi_domain_routing(
+        self, queries: List[Tuple[str, str]]
+    ) -> Tuple[bool, List[str]]:
         """Test that overlord routes queries to appropriate domain agents.
 
         Args:
@@ -333,7 +337,9 @@ class BaseKnowledgeTest(BaseE2ETest):
                 keyword_ratio = len(found_keywords) / len(expected_keywords)
 
                 if keyword_ratio >= 0.5:  # At least 50% of keywords found
-                    results.append(f"✅ '{question}' found {len(found_keywords)}/{len(expected_keywords)} keywords")
+                    results.append(
+                        f"✅ '{question}' found {len(found_keywords)}/{len(expected_keywords)} keywords"
+                    )
                 else:
                     results.append(
                         f"❌ '{question}' only found {len(found_keywords)}/{len(expected_keywords)} keywords"

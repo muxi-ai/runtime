@@ -7,14 +7,9 @@ This test validates:
 3. Multiple image processing
 """
 
-import sys
 import asyncio
 import time
 import os
-from pathlib import Path
-
-# Add path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from .base_multimodal_test import BaseMultimodalTest
 

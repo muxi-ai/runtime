@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """Test 6_5: Knowledge system tests"""
 
-import sys
 import asyncio
 import time
 import os
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from .base_knowledge_test import BaseKnowledgeTest
 
-from e2e_new.knowledge.base_knowledge_test import BaseKnowledgeTest
+
 class Test65(BaseKnowledgeTest):
     """Test class for 6_5."""
 
@@ -42,21 +40,25 @@ class Test65(BaseKnowledgeTest):
 
     async def run_test(self):
         """Run test."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🧪 AREA 6_5")
-        print("="*60)
+        print("=" * 60)
 
         result = await self.test_main()
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print(f"🎯 RESULT: {'✅ PASSED' if result else '❌ FAILED'}")
-        print("="*60)
+        print("=" * 60)
 
         return result
+
+
 def main():
     """Main entry point."""
     test = Test65()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
+
+
 if __name__ == "__main__":
     main()

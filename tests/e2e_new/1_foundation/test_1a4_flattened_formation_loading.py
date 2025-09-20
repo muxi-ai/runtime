@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter  # noqa: E402
+
+
 class TestFlattenedFormationLoading(BaseE2ETest):
     """Test flattened formation loading (single YAML file)."""
 
@@ -18,7 +20,7 @@ class TestFlattenedFormationLoading(BaseE2ETest):
         super().__init__(
             test_name="test_1a4_flattened_formation_loading",
             test_description="Test flattened formation loading",
-            test_area="1_foundation"
+            test_area="1_foundation",
         )
 
     async def test_1a4_flattened_formation_loading(self):
@@ -30,7 +32,7 @@ class TestFlattenedFormationLoading(BaseE2ETest):
         # Print header
         formatter.print_test_header(
             test_name="test_1a4_flattened_formation_loading",
-            description="Test flattened formation loading"
+            description="Test flattened formation loading",
         )
 
         try:
@@ -50,12 +52,12 @@ class TestFlattenedFormationLoading(BaseE2ETest):
                 checks.append("Agents loaded from flat config")
 
             # Check memory config
-            if hasattr(overlord, 'memory_manager'):
+            if hasattr(overlord, "memory_manager"):
                 print("   ✓ Memory configuration loaded")
                 checks.append("Memory config loaded")
 
             # Check LLM config
-            if hasattr(overlord, 'llm'):
+            if hasattr(overlord, "llm"):
                 print("   ✓ LLM configuration loaded")
                 checks.append("LLM config loaded")
 
@@ -63,10 +65,12 @@ class TestFlattenedFormationLoading(BaseE2ETest):
 
             # Test functionality
             print("\n3. Testing functionality...")
-            response = await asyncio.wait_for(overlord.chat("Hello", user_id="test_user"), timeout=15)
+            response = await asyncio.wait_for(
+                overlord.chat("Hello", user_id="test_user"), timeout=15
+            )
 
             assert response is not None
-            response_text = response.content if hasattr(response, 'content') else str(response)
+            response_text = response.content if hasattr(response, "content") else str(response)
             print(f"   Response: {response_text[:100]}...")
             print("✅ Functionality verified")
 
@@ -80,14 +84,11 @@ class TestFlattenedFormationLoading(BaseE2ETest):
             formatter.print_test_result(
                 test_name="test_1a4_flattened_formation_loading",
                 success=True,
-                checks=[
-                    "Flattened formation loaded"
-                ] + checks + [
-                    "Functionality verified",
-                    "Clean shutdown"
-                ],
+                checks=["Flattened formation loaded"]
+                + checks
+                + ["Functionality verified", "Clean shutdown"],
                 transcript=[("Hello", response_text)],
-                duration=duration
+                duration=duration,
             )
             success = True
 
@@ -98,14 +99,16 @@ class TestFlattenedFormationLoading(BaseE2ETest):
                 success=False,
                 checks=[f"Failed: {str(e)}"],
                 transcript=[],
-                duration=duration
+                duration=duration,
             )
             raise
         finally:
             return 0 if success else 1
+
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1a4_flattened_formation_loading())
+
 
 if __name__ == "__main__":
     test = TestFlattenedFormationLoading()

@@ -4,7 +4,9 @@
 import asyncio
 import time
 
-from base_mcp_test import BaseMCPTest
+from .base_mcp_test import BaseMCPTest
+
+
 class Test4C1CreateLinearIssue(BaseMCPTest):
     """Test Linear issue creation using formation secrets."""
 
@@ -36,10 +38,7 @@ class Test4C1CreateLinearIssue(BaseMCPTest):
             transcript.append(("User", request1))
 
             response1 = await self.overlord.chat(
-                request1,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                request1, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -48,7 +47,9 @@ class Test4C1CreateLinearIssue(BaseMCPTest):
                 async for chunk in response1:
                     response1_text += chunk
             else:
-                response1_text = response1.content if hasattr(response1, "content") else str(response1)
+                response1_text = (
+                    response1.content if hasattr(response1, "content") else str(response1)
+                )
 
             print(f"  Response: {response1_text}")
             transcript.append(("System", response1_text))
@@ -96,10 +97,7 @@ class Test4C1CreateLinearIssue(BaseMCPTest):
             transcript.append(("User", request2))
 
             response2 = await self.overlord.chat(
-                request2,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                request2, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -108,7 +106,9 @@ class Test4C1CreateLinearIssue(BaseMCPTest):
                 async for chunk in response2:
                     response2_text += chunk
             else:
-                response2_text = response2.content if hasattr(response2, "content") else str(response2)
+                response2_text = (
+                    response2.content if hasattr(response2, "content") else str(response2)
+                )
 
             print(f"  Response: {response2_text}")
             transcript.append(("System", response2_text))
@@ -141,10 +141,7 @@ class Test4C1CreateLinearIssue(BaseMCPTest):
             transcript.append(("User", request3))
 
             response3 = await self.overlord.chat(
-                request3,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                request3, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -153,7 +150,9 @@ class Test4C1CreateLinearIssue(BaseMCPTest):
                 async for chunk in response3:
                     response3_text += chunk
             else:
-                response3_text = response3.content if hasattr(response3, "content") else str(response3)
+                response3_text = (
+                    response3.content if hasattr(response3, "content") else str(response3)
+                )
 
             print(f"  Response: {response3_text}")
             transcript.append(("System", response3_text))
@@ -178,10 +177,7 @@ class Test4C1CreateLinearIssue(BaseMCPTest):
             transcript.append(("User", request4))
 
             response4 = await self.overlord.chat(
-                request4,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                request4, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -190,7 +186,9 @@ class Test4C1CreateLinearIssue(BaseMCPTest):
                 async for chunk in response4:
                     response4_text += chunk
             else:
-                response4_text = response4.content if hasattr(response4, "content") else str(response4)
+                response4_text = (
+                    response4.content if hasattr(response4, "content") else str(response4)
+                )
 
             print(f"  Response: {response4_text}")
             transcript.append(("System", response4_text))
@@ -198,9 +196,8 @@ class Test4C1CreateLinearIssue(BaseMCPTest):
             response4_lower = response4_text.lower()
 
             # Check service availability response
-            service_response = (
-                "linear" in response4_lower or
-                any(term in response4_lower for term in ["yes", "available", "access", "can", "tools"])
+            service_response = "linear" in response4_lower or any(
+                term in response4_lower for term in ["yes", "available", "access", "can", "tools"]
             )
 
             if service_response:
@@ -230,11 +227,15 @@ class Test4C1CreateLinearIssue(BaseMCPTest):
         self.print_test_result(test_name, success, checks, transcript, duration)
 
         return success
+
+
 async def main():
     """Main test execution."""
     test = Test4C1CreateLinearIssue()
     success = await test.run_test()
     return success
+
+
 if __name__ == "__main__":
     success = asyncio.run(main())
     exit(0 if success else 1)

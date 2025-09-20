@@ -9,13 +9,15 @@ import json
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # Add tests directory
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from muxi.formation import Formation  # noqa: E402
 
 # Import from common module
-from e2e_new.common import BaseE2ETest  # noqa: E402
-from e2e_new.common import TestOutputFormatter  # noqa: E402
+from .common import BaseE2ETest  # noqa: E402
+from .common import TestOutputFormatter  # noqa: E402
+
+
 class BaseMCPTest(BaseE2ETest):
     """Base class for MCP (Model Context Protocol) tests."""
 
@@ -77,7 +79,7 @@ class BaseMCPTest(BaseE2ETest):
                 "What tools do you have available? List them briefly.",
                 user_id="test_user",
                 use_async=False,
-                stream=False
+                stream=False,
             )
 
             # Handle response
@@ -112,11 +114,19 @@ class BaseMCPTest(BaseE2ETest):
 
         # Common MCP tools to look for
         known_tools = [
-            "weather", "get_weather", "get_forecast",
-            "memory", "store_memory", "recall_memory",
-            "filesystem", "read_file", "write_file",
-            "search", "web_search",
-            "calculator", "calculate"
+            "weather",
+            "get_weather",
+            "get_forecast",
+            "memory",
+            "store_memory",
+            "recall_memory",
+            "filesystem",
+            "read_file",
+            "write_file",
+            "search",
+            "web_search",
+            "calculator",
+            "calculate",
         ]
 
         for tool in known_tools:
@@ -125,8 +135,9 @@ class BaseMCPTest(BaseE2ETest):
 
         return tools
 
-    async def execute_tool(self, tool_name: str, params: Dict[str, Any],
-                          user_id: str = "test_user") -> Tuple[bool, str]:
+    async def execute_tool(
+        self, tool_name: str, params: Dict[str, Any], user_id: str = "test_user"
+    ) -> Tuple[bool, str]:
         """Execute an MCP tool through natural language.
 
         Args:
@@ -154,10 +165,7 @@ class BaseMCPTest(BaseE2ETest):
 
             # Execute through overlord
             response = await self.overlord.chat(
-                request,
-                user_id=user_id,
-                use_async=False,
-                stream=False
+                request, user_id=user_id, use_async=False, stream=False
             )
 
             # Handle response
@@ -190,8 +198,7 @@ class BaseMCPTest(BaseE2ETest):
         except Exception:
             return False, []
 
-    async def test_tool_execution(self, tool_name: str,
-                                 params: Dict[str, Any]) -> Tuple[bool, str]:
+    async def test_tool_execution(self, tool_name: str, params: Dict[str, Any]) -> Tuple[bool, str]:
         """Test execution of a specific tool.
 
         Args:
@@ -203,8 +210,9 @@ class BaseMCPTest(BaseE2ETest):
         """
         return await self.execute_tool(tool_name, params)
 
-    async def test_multi_tool_workflow(self, workflow: List[Tuple[str, Dict]],
-                                      user_id: str = "test_user") -> Tuple[bool, List[str]]:
+    async def test_multi_tool_workflow(
+        self, workflow: List[Tuple[str, Dict]], user_id: str = "test_user"
+    ) -> Tuple[bool, List[str]]:
         """Test a workflow using multiple tools.
 
         Args:
@@ -245,10 +253,7 @@ class BaseMCPTest(BaseE2ETest):
                 request = f"Use the {service} service"
 
             response = await self.overlord.chat(
-                request,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                request, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -285,7 +290,13 @@ class BaseMCPTest(BaseE2ETest):
         """Print standardized test header."""
         self.formatter.print_test_header(test_name, description)
 
-    def print_test_result(self, test_name: str, success: bool, checks: List[str],
-                          transcript: List[Tuple[str, str]], duration: float):
+    def print_test_result(
+        self,
+        test_name: str,
+        success: bool,
+        checks: List[str],
+        transcript: List[Tuple[str, str]],
+        duration: float,
+    ):
         """Print standardized test result."""
         self.formatter.print_test_result(test_name, success, checks, transcript, duration)

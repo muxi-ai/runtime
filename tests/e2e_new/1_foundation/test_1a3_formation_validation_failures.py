@@ -13,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter  # noqa: E402
 from muxi.formation import Formation  # noqa: E402
+
+
 class TestFormationValidationFailures(BaseE2ETest):
     """Test formation validation and error handling."""
 
@@ -20,7 +22,7 @@ class TestFormationValidationFailures(BaseE2ETest):
         super().__init__(
             test_name="test_1a3_formation_validation_failures",
             test_description="Test formation validation failures",
-            test_area="1_foundation"
+            test_area="1_foundation",
         )
 
     async def test_1a3_formation_validation_failures(self):
@@ -34,7 +36,7 @@ class TestFormationValidationFailures(BaseE2ETest):
         # Print header
         formatter.print_test_header(
             test_name="test_1a3_formation_validation_failures",
-            description="Test formation validation failures"
+            description="Test formation validation failures",
         )
 
         try:
@@ -50,7 +52,7 @@ class TestFormationValidationFailures(BaseE2ETest):
 
             # Test 2: Invalid YAML syntax
             print("\n2. Testing invalid YAML syntax...")
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
                 f.write("invalid: yaml: syntax: {{")
                 invalid_yaml_path = f.name
 
@@ -66,7 +68,7 @@ class TestFormationValidationFailures(BaseE2ETest):
 
             # Test 3: Missing required fields
             print("\n3. Testing missing required fields...")
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
                 # Minimal YAML without required fields
                 f.write("id: test\ndescription: test")
                 missing_fields_path = f.name
@@ -83,7 +85,7 @@ class TestFormationValidationFailures(BaseE2ETest):
 
             # Test 4: Empty YAML file
             print("\n4. Testing empty YAML file...")
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
                 f.write("")
                 empty_yaml_path = f.name
 
@@ -99,7 +101,7 @@ class TestFormationValidationFailures(BaseE2ETest):
 
             # Test 5: Not a YAML file
             print("\n5. Testing non-YAML file...")
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
                 f.write("This is not a YAML file")
                 not_yaml_path = f.name
 
@@ -126,7 +128,7 @@ class TestFormationValidationFailures(BaseE2ETest):
                 success=True,
                 checks=tests_passed,
                 transcript=[],
-                duration=duration
+                duration=duration,
             )
             success = True
 
@@ -137,14 +139,16 @@ class TestFormationValidationFailures(BaseE2ETest):
                 success=False,
                 checks=[f"Failed: {str(e)}"] + tests_failed,
                 transcript=[],
-                duration=duration
+                duration=duration,
             )
             raise
         finally:
             return 0 if success else 1
+
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1a3_formation_validation_failures())
+
 
 if __name__ == "__main__":
     test = TestFormationValidationFailures()

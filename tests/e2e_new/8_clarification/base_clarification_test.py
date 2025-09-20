@@ -11,13 +11,15 @@ import uuid
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # Add tests directory
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from muxi.formation import Formation  # noqa: E402
 
 # Import from common module
-from e2e_new.common import BaseE2ETest  # noqa: E402
-from e2e_new.common import TestOutputFormatter  # noqa: E402
+from .common import BaseE2ETest  # noqa: E402
+from .common import TestOutputFormatter  # noqa: E402
+
+
 class BaseClarificationTest(BaseE2ETest):
     """Base class for Clarification tests."""
 
@@ -26,9 +28,19 @@ class BaseClarificationTest(BaseE2ETest):
 
     # Clarification trigger patterns
     CLARIFICATION_INDICATORS = [
-        "what", "which", "how", "clarify", "specific", "more information",
-        "could you", "can you specify", "need more details", "ambiguous",
-        "unclear", "help me understand", "what do you mean"
+        "what",
+        "which",
+        "how",
+        "clarify",
+        "specific",
+        "more information",
+        "could you",
+        "can you specify",
+        "need more details",
+        "ambiguous",
+        "unclear",
+        "help me understand",
+        "what do you mean",
     ]
 
     # Ambiguous request categories for testing
@@ -304,8 +316,16 @@ class BaseClarificationTest(BaseE2ETest):
         # Check for task execution indicators
         content = response.content if hasattr(response, "content") else str(response)
         execution_indicators = [
-            "proceeding", "starting", "implementing", "creating", "building",
-            "I'll", "I will", "let me", "here's", "I've created"
+            "proceeding",
+            "starting",
+            "implementing",
+            "creating",
+            "building",
+            "I'll",
+            "I will",
+            "let me",
+            "here's",
+            "I've created",
         ]
 
         follow_up_details["task_execution"] = any(
@@ -314,8 +334,7 @@ class BaseClarificationTest(BaseE2ETest):
 
         # Success if either clarification continues appropriately or task execution begins
         success_criteria = (
-            follow_up_details["continued_clarification"] or
-            follow_up_details["task_execution"]
+            follow_up_details["continued_clarification"] or follow_up_details["task_execution"]
         )
 
         return success_criteria, follow_up_details
@@ -341,13 +360,15 @@ class BaseClarificationTest(BaseE2ETest):
         )
 
         initial_analysis = self.detect_clarification_request(response) if success else {}
-        turn_results.append({
-            "turn": 0,
-            "message": initial_request,
-            "response_received": success,
-            "clarification_analysis": initial_analysis,
-            "is_clarification": initial_analysis.get("is_clarification", False),
-        })
+        turn_results.append(
+            {
+                "turn": 0,
+                "message": initial_request,
+                "response_received": success,
+                "clarification_analysis": initial_analysis,
+                "is_clarification": initial_analysis.get("is_clarification", False),
+            }
+        )
 
         if not success:
             return False, turn_results
@@ -358,12 +379,14 @@ class BaseClarificationTest(BaseE2ETest):
                 user_id, session_id, clarifying_message
             )
 
-            turn_results.append({
-                "turn": i,
-                "message": clarifying_message,
-                "follow_up_details": follow_up_details,
-                "success": success,
-            })
+            turn_results.append(
+                {
+                    "turn": i,
+                    "message": clarifying_message,
+                    "follow_up_details": follow_up_details,
+                    "success": success,
+                }
+            )
 
             # Short delay between turns
             await asyncio.sleep(0.5)
@@ -415,12 +438,14 @@ class BaseClarificationTest(BaseE2ETest):
                 for word in ["previous", "earlier", "mentioned", "that", "it", "the"]
             )
 
-            context_details["context_tests"].append({
-                "reference": reference,
-                "success": success,
-                "context_understanding": context_understanding,
-                "response_preview": content[:100] + "..." if len(content) > 100 else content,
-            })
+            context_details["context_tests"].append(
+                {
+                    "reference": reference,
+                    "success": success,
+                    "context_understanding": context_understanding,
+                    "response_preview": content[:100] + "..." if len(content) > 100 else content,
+                }
+            )
 
             await asyncio.sleep(0.5)
 
@@ -457,7 +482,9 @@ class BaseClarificationTest(BaseE2ETest):
         """Print standardized test result."""
         self.formatter.print_test_result(test_name, success, checks, transcript, duration)
 
-    def save_test_results(self, test_name: str, success: bool, sessions: List, details: Dict = None):
+    def save_test_results(
+        self, test_name: str, success: bool, sessions: List, details: Dict = None
+    ):
         """Save test results to JSON file for analysis.
 
         Args:

@@ -9,13 +9,15 @@ import json
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # Add tests directory
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from muxi.formation import Formation  # noqa: E402
 
 # Import from common module
-from e2e_new.common import BaseE2ETest  # noqa: E402
-from e2e_new.common import TestOutputFormatter  # noqa: E402
+from .common import BaseE2ETest  # noqa: E402
+from .common import TestOutputFormatter  # noqa: E402
+
+
 class BaseOrchestrationTest(BaseE2ETest):
     """Base class for Orchestration tests."""
 
@@ -24,30 +26,27 @@ class BaseOrchestrationTest(BaseE2ETest):
 
     # Complexity thresholds for workflow triggers
     COMPLEXITY_THRESHOLDS = {
-        "simple": 3.0,      # Simple single-agent requests
-        "moderate": 5.0,    # Multi-step but single-agent
-        "complex": 7.0,     # Multi-agent or multi-step workflows
+        "simple": 3.0,  # Simple single-agent requests
+        "moderate": 5.0,  # Multi-step but single-agent
+        "complex": 7.0,  # Multi-agent or multi-step workflows
         "very_complex": 9.0,  # Advanced orchestration with approval
     }
 
     # Workflow patterns to detect in responses
     WORKFLOW_PATTERNS = {
-        "task_decomposition": [
-            "task", "step", "phase", "breakdown", "decompos", "workflow"
-        ],
-        "agent_coordination": [
-            "coordinating", "routing", "delegating", "agent", "specialist"
-        ],
+        "task_decomposition": ["task", "step", "phase", "breakdown", "decompos", "workflow"],
+        "agent_coordination": ["coordinating", "routing", "delegating", "agent", "specialist"],
         "approval_requested": [
-            "approve", "approval", "confirm", "proceed", "does this approach work",
-            "proposed approach", "plan look good"
+            "approve",
+            "approval",
+            "confirm",
+            "proceed",
+            "does this approach work",
+            "proposed approach",
+            "plan look good",
         ],
-        "sop_execution": [
-            "sop", "standard operating procedure", "following procedure", "protocol"
-        ],
-        "multi_step": [
-            "first", "next", "then", "finally", "step 1", "step 2", "phase"
-        ],
+        "sop_execution": ["sop", "standard operating procedure", "following procedure", "protocol"],
+        "multi_step": ["first", "next", "then", "finally", "step 1", "step 2", "phase"],
     }
 
     # Agent capabilities for orchestration testing
@@ -153,7 +152,16 @@ class BaseOrchestrationTest(BaseE2ETest):
         complexity_score = 1.0
 
         # Multi-verb complexity
-        action_verbs = ["research", "analyze", "create", "write", "build", "develop", "implement", "test"]
+        action_verbs = [
+            "research",
+            "analyze",
+            "create",
+            "write",
+            "build",
+            "develop",
+            "implement",
+            "test",
+        ]
         verb_count = sum(1 for verb in action_verbs if verb in request_lower)
         complexity_score += verb_count * 1.5
 
@@ -177,7 +185,9 @@ class BaseOrchestrationTest(BaseE2ETest):
         analysis["estimated_complexity"] = complexity_score
         analysis["triggers_workflow"] = complexity_score >= self.COMPLEXITY_THRESHOLDS["complex"]
         analysis["multi_step"] = verb_count > 2 or coordination_count > 1
-        analysis["requires_approval"] = complexity_score >= self.COMPLEXITY_THRESHOLDS["very_complex"]
+        analysis["requires_approval"] = (
+            complexity_score >= self.COMPLEXITY_THRESHOLDS["very_complex"]
+        )
 
         # Predict required agents based on keywords
         for capability, keywords in self.AGENT_CAPABILITIES.items():
@@ -215,12 +225,14 @@ class BaseOrchestrationTest(BaseE2ETest):
             patterns[pattern_name] = any(keyword in content_lower for keyword in keywords)
 
         # Workflow triggered if any orchestration pattern is detected
-        patterns["workflow_triggered"] = any([
-            patterns["task_decomposition"],
-            patterns["agent_coordination"],
-            patterns["sop_execution"],
-            patterns["multi_step_execution"],
-        ])
+        patterns["workflow_triggered"] = any(
+            [
+                patterns["task_decomposition"],
+                patterns["agent_coordination"],
+                patterns["sop_execution"],
+                patterns["multi_step_execution"],
+            ]
+        )
 
         return patterns
 
@@ -253,7 +265,9 @@ class BaseOrchestrationTest(BaseE2ETest):
 
         return False, f"Response doesn't indicate {expected_capability} capability"
 
-    async def test_workflow_decomposition(self, complex_request: str) -> Tuple[bool, Dict[str, Any]]:
+    async def test_workflow_decomposition(
+        self, complex_request: str
+    ) -> Tuple[bool, Dict[str, Any]]:
         """Test workflow decomposition for complex requests.
 
         Args:
@@ -382,9 +396,9 @@ class BaseOrchestrationTest(BaseE2ETest):
                 agents_mentioned += 1
 
         coordination_details["agents_mentioned"] = agents_mentioned
-        success_criteria = (
-            len(analysis["expected_agents"]) > 1
-            and (coordination_details["detected_coordination"] or len(coordination_details["workflow_elements"]) > 0)
+        success_criteria = len(analysis["expected_agents"]) > 1 and (
+            coordination_details["detected_coordination"]
+            or len(coordination_details["workflow_elements"]) > 0
         )
 
         return success_criteria, coordination_details
@@ -415,7 +429,9 @@ class BaseOrchestrationTest(BaseE2ETest):
         """Print standardized test result."""
         self.formatter.print_test_result(test_name, success, checks, transcript, duration)
 
-    def save_test_results(self, test_name: str, success: bool, interactions: List, details: Dict = None):
+    def save_test_results(
+        self, test_name: str, success: bool, interactions: List, details: Dict = None
+    ):
         """Save test results to JSON file for analysis.
 
         Args:

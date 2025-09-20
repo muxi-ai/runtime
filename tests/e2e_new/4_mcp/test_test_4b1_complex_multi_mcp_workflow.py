@@ -4,7 +4,9 @@
 import asyncio
 import time
 
-from base_mcp_test import BaseMCPTest
+from .base_mcp_test import BaseMCPTest
+
+
 class Test4B1ComplexMultiMCPWorkflow(BaseMCPTest):
     """Test complex multi-MCP orchestration workflow."""
 
@@ -41,10 +43,7 @@ class Test4B1ComplexMultiMCPWorkflow(BaseMCPTest):
 
             # Execute workflow through overlord
             response = await self.overlord.chat(
-                workflow_request,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                workflow_request, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -76,9 +75,7 @@ class Test4B1ComplexMultiMCPWorkflow(BaseMCPTest):
                 checks.append("CPU statistics mentioned")
 
             # Check for gist creation
-            gist_mentioned = any(
-                term in response_lower for term in ["gist", "github", "created"]
-            )
+            gist_mentioned = any(term in response_lower for term in ["gist", "github", "created"])
             if gist_mentioned:
                 checks.append("GitHub gist creation mentioned")
 
@@ -89,7 +86,9 @@ class Test4B1ComplexMultiMCPWorkflow(BaseMCPTest):
             if completion_mentioned:
                 checks.append("Issue completion/update mentioned")
 
-            workflow_success = issue_mentioned and cpu_mentioned and gist_mentioned and completion_mentioned
+            workflow_success = (
+                issue_mentioned and cpu_mentioned and gist_mentioned and completion_mentioned
+            )
             print(f"  ✓ Complex multi-MCP workflow: {'PASSED' if workflow_success else 'PARTIAL'}")
 
             # Test 2: Workflow error handling
@@ -103,10 +102,7 @@ class Test4B1ComplexMultiMCPWorkflow(BaseMCPTest):
             transcript.append(("User", error_request))
 
             error_response = await self.overlord.chat(
-                error_request,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                error_request, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -115,7 +111,11 @@ class Test4B1ComplexMultiMCPWorkflow(BaseMCPTest):
                 async for chunk in error_response:
                     error_response_text += chunk
             else:
-                error_response_text = error_response.content if hasattr(error_response, "content") else str(error_response)
+                error_response_text = (
+                    error_response.content
+                    if hasattr(error_response, "content")
+                    else str(error_response)
+                )
 
             print(f"  Error Handling Response: {error_response_text}")
             transcript.append(("System", error_response_text))
@@ -135,14 +135,13 @@ class Test4B1ComplexMultiMCPWorkflow(BaseMCPTest):
 
             # Test 3: Tool availability check
             print("\n  3. Testing MCP tool availability...")
-            tools_request = "What MCP tools do you have available for Linear, GitHub, and system monitoring?"
+            tools_request = (
+                "What MCP tools do you have available for Linear, GitHub, and system monitoring?"
+            )
             transcript.append(("User", tools_request))
 
             tools_response = await self.overlord.chat(
-                tools_request,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                tools_request, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -151,7 +150,11 @@ class Test4B1ComplexMultiMCPWorkflow(BaseMCPTest):
                 async for chunk in tools_response:
                     tools_response_text += chunk
             else:
-                tools_response_text = tools_response.content if hasattr(tools_response, "content") else str(tools_response)
+                tools_response_text = (
+                    tools_response.content
+                    if hasattr(tools_response, "content")
+                    else str(tools_response)
+                )
 
             print(f"  Tools Response: {tools_response_text}")
             transcript.append(("System", tools_response_text))
@@ -160,7 +163,9 @@ class Test4B1ComplexMultiMCPWorkflow(BaseMCPTest):
             tools_response_lower = tools_response_text.lower()
             linear_tools = "linear" in tools_response_lower
             github_tools = "github" in tools_response_lower
-            system_tools = any(term in tools_response_lower for term in ["system", "cpu", "memory", "monitoring"])
+            system_tools = any(
+                term in tools_response_lower for term in ["system", "cpu", "memory", "monitoring"]
+            )
 
             if linear_tools:
                 checks.append("Linear tools available")
@@ -193,11 +198,15 @@ class Test4B1ComplexMultiMCPWorkflow(BaseMCPTest):
         self.print_test_result(test_name, success, checks, transcript, duration)
 
         return success
+
+
 async def main():
     """Main test execution."""
     test = Test4B1ComplexMultiMCPWorkflow()
     success = await test.run_test()
     return success
+
+
 if __name__ == "__main__":
     success = asyncio.run(main())
     exit(0 if success else 1)

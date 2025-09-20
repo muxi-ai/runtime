@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter, TestTimeouts  # noqa: E402
+
+
 class TestDirectoryStructureFormation(BaseE2ETest):
     """Test directory structure formation loading."""
 
@@ -18,7 +20,7 @@ class TestDirectoryStructureFormation(BaseE2ETest):
         super().__init__(
             test_name="test_1a2_directory_structure_formation",
             test_description="Test directory structure formation loading",
-            test_area="1_foundation"
+            test_area="1_foundation",
         )
 
     async def test_1a2_directory_structure_formation(self):
@@ -30,7 +32,7 @@ class TestDirectoryStructureFormation(BaseE2ETest):
         # Print header
         formatter.print_test_header(
             test_name="test_1a2_directory_structure_formation",
-            description="Test directory structure formation loading"
+            description="Test directory structure formation loading",
         )
 
         try:
@@ -76,10 +78,12 @@ class TestDirectoryStructureFormation(BaseE2ETest):
             # Test 4: Test basic chat functionality
             print("\n4. Testing chat with loaded formation...")
             timeout = TestTimeouts.get_timeout("simple_chat")
-            response = await asyncio.wait_for(overlord.chat("Hello, how are you?", user_id="test_user"), timeout=timeout)
+            response = await asyncio.wait_for(
+                overlord.chat("Hello, how are you?", user_id="test_user"), timeout=timeout
+            )
 
             assert response is not None
-            response_text = response.content if hasattr(response, 'content') else str(response)
+            response_text = response.content if hasattr(response, "content") else str(response)
             assert len(response_text) > 0
             print(f"   Response: {response_text[:100]}...")
             print("✅ Chat functionality works")
@@ -99,10 +103,10 @@ class TestDirectoryStructureFormation(BaseE2ETest):
                     "Formation loaded from directory",
                     "Agents loaded",
                     "Chat functionality works",
-                    "Clean shutdown"
+                    "Clean shutdown",
                 ],
                 transcript=[("Hello, how are you?", response_text)],
-                duration=duration
+                duration=duration,
             )
             success = True
 
@@ -113,14 +117,16 @@ class TestDirectoryStructureFormation(BaseE2ETest):
                 success=False,
                 checks=[f"Failed: {str(e)}"],
                 transcript=[],
-                duration=duration
+                duration=duration,
             )
             raise
         finally:
             return 0 if success else 1
+
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1a2_directory_structure_formation())
+
 
 if __name__ == "__main__":
     test = TestDirectoryStructureFormation()

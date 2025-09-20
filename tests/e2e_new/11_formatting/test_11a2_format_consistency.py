@@ -9,6 +9,8 @@ and that format switching works properly.
 import sys
 
 from .base_formatting_test import BaseFormattingTest
+
+
 def main():
     """Test format consistency and switching."""
     test = BaseFormattingTest("11a2_format_consistency", "Test format consistency and switching")
@@ -23,7 +25,7 @@ def main():
         json_messages = [
             "Create a JSON object representing a book with title, author, and publication year",
             "Generate JSON data for a simple user profile",
-            "Return a JSON array of programming languages with their types"
+            "Return a JSON array of programming languages with their types",
         ]
 
         json_consistency = True
@@ -32,7 +34,7 @@ def main():
                 message=message,
                 expected_format="json",
                 user_id="test_user",
-                session_id=f"json_consistency_{i}"
+                session_id=f"json_consistency_{i}",
             )
             if not result["success"]:
                 json_consistency = False
@@ -48,7 +50,7 @@ def main():
             ("markdown", "Write a markdown guide for beginners"),
             ("html", "Create an HTML snippet for a contact form"),
             ("text", "Explain photosynthesis in plain text"),
-            ("json", "Return to JSON format with product data")
+            ("json", "Return to JSON format with product data"),
         ]
 
         switching_success = True
@@ -57,13 +59,15 @@ def main():
                 message=message,
                 expected_format=fmt,
                 user_id="test_user",
-                session_id=f"switching_{fmt}"
+                session_id=f"switching_{fmt}",
             )
             if not result["success"]:
                 switching_success = False
                 test.formatter.print_warning(f"Format switching failed at {fmt}")
 
-        test.formatter.print_info(f"Format switching: {'PASSED' if switching_success else 'FAILED'}")
+        test.formatter.print_info(
+            f"Format switching: {'PASSED' if switching_success else 'FAILED'}"
+        )
 
         # Test format persistence - ensure format persists across session
         test.formatter.print_section("Format Persistence Test")
@@ -72,7 +76,7 @@ def main():
         persistence_messages = [
             "Explain machine learning concepts",
             "Create a tutorial for Python functions",
-            "Write about data structures"
+            "Write about data structures",
         ]
 
         persistence_success = True
@@ -83,13 +87,15 @@ def main():
                 message=message,
                 expected_format="markdown",
                 user_id="test_user",
-                session_id=session_id
+                session_id=session_id,
             )
             if not result["success"]:
                 persistence_success = False
                 test.formatter.print_warning(f"Format persistence failed at message {i+1}")
 
-        test.formatter.print_info(f"Format persistence: {'PASSED' if persistence_success else 'FAILED'}")
+        test.formatter.print_info(
+            f"Format persistence: {'PASSED' if persistence_success else 'FAILED'}"
+        )
 
         # Test format error handling - invalid format graceful degradation
         test.formatter.print_section("Format Error Handling")
@@ -98,7 +104,7 @@ def main():
         error_handling_success = True
         try:
             # This should either reject gracefully or fall back to default
-            if hasattr(test.overlord, 'response_format'):
+            if hasattr(test.overlord, "response_format"):
                 test.overlord.response_format = "invalid_format"
 
             response = await test.overlord.chat(
@@ -106,11 +112,11 @@ def main():
                 user_id="test_user",
                 session_id="error_handling_test",
                 use_async=False,
-                stream=False
+                stream=False,
             )
 
             # Should get some response even with invalid format
-            content = response.content if hasattr(response, 'content') else str(response)
+            content = response.content if hasattr(response, "content") else str(response)
             if not content.strip():
                 error_handling_success = False
 
@@ -118,10 +124,14 @@ def main():
             # Exception is okay as long as it's handled gracefully
             test.formatter.print_debug(f"Invalid format handling: {e}")
 
-        test.formatter.print_info(f"Error handling: {'PASSED' if error_handling_success else 'FAILED'}")
+        test.formatter.print_info(
+            f"Error handling: {'PASSED' if error_handling_success else 'FAILED'}"
+        )
 
         # Overall success
-        overall_success = all([json_consistency, switching_success, persistence_success, error_handling_success])
+        overall_success = all(
+            [json_consistency, switching_success, persistence_success, error_handling_success]
+        )
 
         # Record result
         test.results.append(overall_success)
@@ -147,6 +157,8 @@ def main():
         None,  # Use pattern-based formation path
         "formation-formatting.yaml",  # Use shared formation
     )
+
+
 if __name__ == "__main__":
     exit_code = main()
     sys.exit(exit_code)

@@ -9,6 +9,8 @@ when configured appropriately.
 import sys
 
 from .base_formatting_test import BaseFormattingTest
+
+
 def main():
     """Test all response formats."""
     test = BaseFormattingTest("11a1_response_formats", "Test different response formats")
@@ -20,9 +22,7 @@ def main():
         # Test all formats with a single message
         base_message = "List three benefits of cloud computing"
         format_results = await test.test_all_formats(
-            base_message=base_message,
-            user_id="test_user",
-            session_id_prefix="format_test_11a1"
+            base_message=base_message, user_id="test_user", session_id_prefix="format_test_11a1"
         )
 
         # Check individual format results
@@ -43,7 +43,7 @@ def main():
             message="Create a JSON object with user information including name, email, and preferences",
             expected_format="json",
             user_id="test_user",
-            session_id="json_specific_11a1"
+            session_id="json_specific_11a1",
         )
 
         # Test Markdown with documentation request
@@ -51,7 +51,7 @@ def main():
             message="Create a simple README for a Python project with installation and usage instructions",
             expected_format="markdown",
             user_id="test_user",
-            session_id="markdown_specific_11a1"
+            session_id="markdown_specific_11a1",
         )
 
         # Test HTML with webpage content
@@ -59,7 +59,7 @@ def main():
             message="Create a simple HTML page explaining the benefits of renewable energy",
             expected_format="html",
             user_id="test_user",
-            session_id="html_specific_11a1"
+            session_id="html_specific_11a1",
         )
 
         # Test plain text with explanation
@@ -67,10 +67,15 @@ def main():
             message="Explain what machine learning is in simple terms without any formatting",
             expected_format="text",
             user_id="test_user",
-            session_id="text_specific_11a1"
+            session_id="text_specific_11a1",
         )
 
-        specific_results = [json_result["success"], markdown_result["success"], html_result["success"], text_result["success"]]
+        specific_results = [
+            json_result["success"],
+            markdown_result["success"],
+            html_result["success"],
+            text_result["success"],
+        ]
         specific_passed = all(specific_results)
 
         # Overall success
@@ -93,18 +98,34 @@ def main():
 
                 test.formatter.print_info(f"{fmt.upper()} Format Validation:")
                 if fmt == "json":
-                    test.formatter.print_debug(f"  Valid JSON: {validation.get('is_valid_json', False)}")
-                    test.formatter.print_debug(f"  Has required fields: {validation.get('has_required_fields', False)}")
+                    test.formatter.print_debug(
+                        f"  Valid JSON: {validation.get('is_valid_json', False)}"
+                    )
+                    test.formatter.print_debug(
+                        f"  Has required fields: {validation.get('has_required_fields', False)}"
+                    )
                 elif fmt == "markdown":
-                    test.formatter.print_debug(f"  Structure score: {validation.get('structure_score', 0)}/5")
-                    test.formatter.print_debug(f"  Has headers: {validation.get('has_headers', False)}")
-                    test.formatter.print_debug(f"  Has code blocks: {validation.get('has_code_blocks', False)}")
+                    test.formatter.print_debug(
+                        f"  Structure score: {validation.get('structure_score', 0)}/5"
+                    )
+                    test.formatter.print_debug(
+                        f"  Has headers: {validation.get('has_headers', False)}"
+                    )
+                    test.formatter.print_debug(
+                        f"  Has code blocks: {validation.get('has_code_blocks', False)}"
+                    )
                 elif fmt == "html":
-                    test.formatter.print_debug(f"  Has HTML tags: {validation.get('has_html_tags', False)}")
-                    test.formatter.print_debug(f"  Has semantic tags: {validation.get('has_semantic_tags', False)}")
+                    test.formatter.print_debug(
+                        f"  Has HTML tags: {validation.get('has_html_tags', False)}"
+                    )
+                    test.formatter.print_debug(
+                        f"  Has semantic tags: {validation.get('has_semantic_tags', False)}"
+                    )
                     test.formatter.print_debug(f"  Tag count: {validation.get('tag_count', 0)}")
                 elif fmt == "text":
-                    test.formatter.print_debug(f"  Is plain text: {validation.get('is_plain_text', False)}")
+                    test.formatter.print_debug(
+                        f"  Is plain text: {validation.get('is_plain_text', False)}"
+                    )
                     test.formatter.print_debug(f"  Word count: {validation.get('word_count', 0)}")
 
         # Print formatting-specific summary
@@ -123,6 +144,8 @@ def main():
         None,  # Use pattern-based formation path
         "formation-formatting.yaml",  # Use shared formation
     )
+
+
 if __name__ == "__main__":
     exit_code = main()
     sys.exit(exit_code)

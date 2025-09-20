@@ -19,14 +19,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from .base_memory_test import BaseMemoryTest
-from muxi.services.memory.working import WorkingMemory
+from .base_memory_test import BaseMemoryTest  # noqa: E402
+from muxi.services.memory.working import WorkingMemory  # noqa: E402
+
+
 # Mock LLM for testing
 class MockLLM:
     async def embed(self, text):
         # Simple hash-based embedding
         text_hash = hash(text) % 1000
         return [text_hash / 1000.0] + [0.1] * 1535
+
+
 class TestFAISSxBothModes(BaseMemoryTest):
     """Test FAISSx integration with both auth modes."""
 
@@ -48,18 +52,14 @@ class TestFAISSxBothModes(BaseMemoryTest):
             print("    API Key: None")
 
             # Configure with tenant but no auth
-            faiss.configure(
-                server="tcp://localhost:45678",
-                tenant_id=tenant_id,
-                timeout=5.0
-            )
+            faiss.configure(server="tcp://localhost:45678", tenant_id=tenant_id, timeout=5.0)
 
             # Test basic operations
             index = faiss.IndexFlatL2(128)
-            vectors = np.random.rand(3, 128).astype('float32')
+            vectors = np.random.rand(3, 128).astype("float32")
             index.add(vectors)
 
-            query = np.random.rand(1, 128).astype('float32')
+            query = np.random.rand(1, 128).astype("float32")
             distances, indices = index.search(query, k=2)
 
             # Test with WorkingMemory
@@ -70,10 +70,7 @@ class TestFAISSxBothModes(BaseMemoryTest):
                 dimension=1536,
                 model=MockLLM(),
                 mode="remote",
-                remote={
-                    "url": "tcp://localhost:45678",
-                    "tenant": tenant_id
-                }
+                remote={"url": "tcp://localhost:45678", "tenant": tenant_id},
             )
 
             await buffer.add("Test message for tenant", {"source": "no-auth"})
@@ -93,7 +90,7 @@ class TestFAISSxBothModes(BaseMemoryTest):
                 "index_count": index.ntotal,
                 "search_results": len(indices[0]),
                 "buffer_size": len(buffer),
-                "memory_results": len(results)
+                "memory_results": len(results),
             }
 
         except Exception as e:
@@ -120,18 +117,15 @@ class TestFAISSxBothModes(BaseMemoryTest):
 
             # Configure with full auth
             faiss.configure(
-                server="tcp://localhost:65432",
-                api_key=api_key,
-                tenant_id=tenant_id,
-                timeout=5.0
+                server="tcp://localhost:65432", api_key=api_key, tenant_id=tenant_id, timeout=5.0
             )
 
             # Test basic operations
             index = faiss.IndexFlatL2(128)
-            vectors = np.random.rand(3, 128).astype('float32')
+            vectors = np.random.rand(3, 128).astype("float32")
             index.add(vectors)
 
-            query = np.random.rand(1, 128).astype('float32')
+            query = np.random.rand(1, 128).astype("float32")
             distances, indices = index.search(query, k=2)
 
             # Test with WorkingMemory
@@ -142,11 +136,7 @@ class TestFAISSxBothModes(BaseMemoryTest):
                 dimension=1536,
                 model=MockLLM(),
                 mode="remote",
-                remote={
-                    "url": "tcp://localhost:65432",
-                    "api_key": api_key,
-                    "tenant": tenant_id
-                }
+                remote={"url": "tcp://localhost:65432", "api_key": api_key, "tenant": tenant_id},
             )
 
             await buffer.add("Authenticated message", {"source": "full-auth"})
@@ -167,7 +157,7 @@ class TestFAISSxBothModes(BaseMemoryTest):
                 "index_count": index.ntotal,
                 "search_results": len(indices[0]),
                 "buffer_size": len(buffer),
-                "memory_results": len(results)
+                "memory_results": len(results),
             }
 
         except Exception as e:
@@ -185,14 +175,14 @@ class TestFAISSxBothModes(BaseMemoryTest):
                 "config": "postgres_faissx",
                 "name": "No Auth + Tenant",
                 "expected_port": "45678",
-                "has_auth": False
+                "has_auth": False,
             },
             {
                 "config": "postgres_faissx_auth",
                 "name": "Full Auth",
                 "expected_port": "65432",
-                "has_auth": True
-            }
+                "has_auth": True,
+            },
         ]
 
         results = []
@@ -218,7 +208,7 @@ class TestFAISSxBothModes(BaseMemoryTest):
                         "mode": working_config.get("mode"),
                         "url": remote_config.get("url"),
                         "has_api_key": "api_key" in remote_config,
-                        "has_tenant": "tenant" in remote_config
+                        "has_tenant": "tenant" in remote_config,
                     }
 
                     print("      ✓ Formation loaded successfully")
@@ -245,28 +235,21 @@ class TestFAISSxBothModes(BaseMemoryTest):
                     all_passed = False
                     result = {"loaded": False, "error": "Unknown config"}
 
-                results.append({
-                    "name": formation_config["name"],
-                    "result": result
-                })
+                results.append({"name": formation_config["name"], "result": result})
 
             except Exception as e:
                 print(f"      ❌ Failed to load: {str(e)}")
                 all_passed = False
-                results.append({
-                    "name": formation_config["name"],
-                    "result": {"loaded": False, "error": str(e)}
-                })
+                results.append(
+                    {"name": formation_config["name"], "result": {"loaded": False, "error": str(e)}}
+                )
 
         return all_passed, results
 
     async def test_faissx_modes(self):
         """Main test method."""
         test_name = "2e_faissx_both_modes"
-        self.print_test_header(
-            test_name,
-            "Test FAISSx with and without authentication"
-        )
+        self.print_test_header(test_name, "Test FAISSx with and without authentication")
 
         start_time = time.time()
         checks_passed = []
@@ -298,7 +281,9 @@ class TestFAISSxBothModes(BaseMemoryTest):
             formations_success, formations_result = await self.test_formation_configurations()
             if formations_success:
                 checks_passed.append("Formation configurations loaded correctly")
-                transcript.append(("System", f"Formation tests passed: {len(formations_result)} configs tested"))
+                transcript.append(
+                    ("System", f"Formation tests passed: {len(formations_result)} configs tested")
+                )
             else:
                 all_passed = False
                 transcript.append(("System", f"Formation tests failed: {formations_result}"))
@@ -336,22 +321,26 @@ class TestFAISSxBothModes(BaseMemoryTest):
 
     async def run_test(self):
         """Run all test cases."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🔐 AREA 2E: FAISSX BOTH MODES")
-        print("="*60)
+        print("=" * 60)
 
         # Run test cases
         result = await self.test_faissx_modes()
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if result else '❌ SOME TESTS FAILED'}")
-        print("="*60)
+        print("=" * 60)
 
         return result
+
+
 def main():
     """Main entry point."""
     test = TestFAISSxBothModes()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
+
+
 if __name__ == "__main__":
     main()

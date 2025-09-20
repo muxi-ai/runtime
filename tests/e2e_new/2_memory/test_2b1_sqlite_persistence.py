@@ -7,26 +7,20 @@ This test validates:
 3. Memory retrieval after shutdown/restart
 """
 
-import sys
 import asyncio
 import time
 import os
-from pathlib import Path
-
-# Add path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from .base_memory_test import BaseMemoryTest
+
+
 class TestSQLitePersistence(BaseMemoryTest):
     """Test SQLite persistent memory functionality."""
 
     async def test_sqlite_persistence(self):
         """Test data persistence with SQLite backend."""
         test_name = "2b1_sqlite_persistence"
-        self.print_test_header(
-            test_name,
-            "Test SQLite persistent memory across restarts"
-        )
+        self.print_test_header(test_name, "Test SQLite persistent memory across restarts")
 
         start_time = time.time()
         checks_passed = []
@@ -42,10 +36,7 @@ class TestSQLitePersistence(BaseMemoryTest):
             # Store personal information
             user_msg1 = "My favorite color is blue and I have two cats named Whiskers and Shadow."
             response1 = await self.overlord.chat(
-                user_msg1,
-                user_id=user_id,
-                use_async=False,
-                stream=False
+                user_msg1, user_id=user_id, use_async=False, stream=False
             )
 
             # Handle response
@@ -54,7 +45,9 @@ class TestSQLitePersistence(BaseMemoryTest):
                 async for chunk in response1:
                     response1_text += chunk
             else:
-                response1_text = response1.content if hasattr(response1, "content") else str(response1)
+                response1_text = (
+                    response1.content if hasattr(response1, "content") else str(response1)
+                )
 
             transcript.append((user_msg1, response1_text))
             print(f"User: {user_msg1}")
@@ -63,10 +56,7 @@ class TestSQLitePersistence(BaseMemoryTest):
             # Store more information
             user_msg2 = "I'm planning a trip to Japan next summer for two weeks."
             response2 = await self.overlord.chat(
-                user_msg2,
-                user_id=user_id,
-                use_async=False,
-                stream=False
+                user_msg2, user_id=user_id, use_async=False, stream=False
             )
 
             # Handle response
@@ -75,7 +65,9 @@ class TestSQLitePersistence(BaseMemoryTest):
                 async for chunk in response2:
                     response2_text += chunk
             else:
-                response2_text = response2.content if hasattr(response2, "content") else str(response2)
+                response2_text = (
+                    response2.content if hasattr(response2, "content") else str(response2)
+                )
 
             transcript.append((user_msg2, response2_text))
             print(f"User: {user_msg2}")
@@ -102,10 +94,7 @@ class TestSQLitePersistence(BaseMemoryTest):
             # Query for persisted information
             user_msg3 = "What do you remember about my pets and travel plans?"
             response3 = await self.overlord.chat(
-                user_msg3,
-                user_id=user_id,
-                use_async=False,
-                stream=False
+                user_msg3, user_id=user_id, use_async=False, stream=False
             )
 
             # Handle response
@@ -114,7 +103,9 @@ class TestSQLitePersistence(BaseMemoryTest):
                 async for chunk in response3:
                     response3_text += chunk
             else:
-                response3_text = response3.content if hasattr(response3, "content") else str(response3)
+                response3_text = (
+                    response3.content if hasattr(response3, "content") else str(response3)
+                )
 
             transcript.append((user_msg3, response3_text))
             print(f"\nUser: {user_msg3}")
@@ -122,13 +113,12 @@ class TestSQLitePersistence(BaseMemoryTest):
 
             # Check persistence
             pets_remembered = (
-                ("whiskers" in response3_text.lower() or "shadow" in response3_text.lower()) or
-                ("cats" in response3_text.lower() or "two cats" in response3_text.lower())
-            )
+                "whiskers" in response3_text.lower() or "shadow" in response3_text.lower()
+            ) or ("cats" in response3_text.lower() or "two cats" in response3_text.lower())
             travel_remembered = (
-                "japan" in response3_text.lower() or
-                "summer" in response3_text.lower() or
-                "trip" in response3_text.lower()
+                "japan" in response3_text.lower()
+                or "summer" in response3_text.lower()
+                or "trip" in response3_text.lower()
             )
 
             if pets_remembered:
@@ -148,10 +138,7 @@ class TestSQLitePersistence(BaseMemoryTest):
             # Query for specific detail
             user_msg4 = "What is my favorite color?"
             response4 = await self.overlord.chat(
-                user_msg4,
-                user_id=user_id,
-                use_async=False,
-                stream=False
+                user_msg4, user_id=user_id, use_async=False, stream=False
             )
 
             # Handle response
@@ -160,7 +147,9 @@ class TestSQLitePersistence(BaseMemoryTest):
                 async for chunk in response4:
                     response4_text += chunk
             else:
-                response4_text = response4.content if hasattr(response4, "content") else str(response4)
+                response4_text = (
+                    response4.content if hasattr(response4, "content") else str(response4)
+                )
 
             transcript.append((user_msg4, response4_text))
             print(f"\nUser: {user_msg4}")
@@ -190,10 +179,7 @@ class TestSQLitePersistence(BaseMemoryTest):
     async def test_multi_session_persistence(self):
         """Test persistence across multiple sessions with different users."""
         test_name = "2b1_multi_session_persistence"
-        self.print_test_header(
-            test_name,
-            "Test SQLite persistence with multiple users"
-        )
+        self.print_test_header(test_name, "Test SQLite persistence with multiple users")
 
         start_time = time.time()
         checks_passed = []
@@ -207,10 +193,7 @@ class TestSQLitePersistence(BaseMemoryTest):
             # User 1 stores information
             user1_msg = "I'm David, I'm a chef and I love Italian cuisine."
             response1 = await self.overlord.chat(
-                user1_msg,
-                user_id="user_david",
-                use_async=False,
-                stream=False
+                user1_msg, user_id="user_david", use_async=False, stream=False
             )
 
             # Handle response
@@ -219,7 +202,9 @@ class TestSQLitePersistence(BaseMemoryTest):
                 async for chunk in response1:
                     response1_text += chunk
             else:
-                response1_text = response1.content if hasattr(response1, "content") else str(response1)
+                response1_text = (
+                    response1.content if hasattr(response1, "content") else str(response1)
+                )
 
             transcript.append((f"User1: {user1_msg}", response1_text))
             print(f"User 1: {user1_msg}")
@@ -228,10 +213,7 @@ class TestSQLitePersistence(BaseMemoryTest):
             # User 2 stores information
             user2_msg = "I'm Emily, I'm a teacher and I love Japanese food."
             response2 = await self.overlord.chat(
-                user2_msg,
-                user_id="user_emily",
-                use_async=False,
-                stream=False
+                user2_msg, user_id="user_emily", use_async=False, stream=False
             )
 
             # Handle response
@@ -240,7 +222,9 @@ class TestSQLitePersistence(BaseMemoryTest):
                 async for chunk in response2:
                     response2_text += chunk
             else:
-                response2_text = response2.content if hasattr(response2, "content") else str(response2)
+                response2_text = (
+                    response2.content if hasattr(response2, "content") else str(response2)
+                )
 
             transcript.append((f"User2: {user2_msg}", response2_text))
             print(f"\nUser 2: {user2_msg}")
@@ -251,10 +235,7 @@ class TestSQLitePersistence(BaseMemoryTest):
             # Query User 1's information
             query1 = "What is my profession and favorite cuisine?"
             response3 = await self.overlord.chat(
-                query1,
-                user_id="user_david",
-                use_async=False,
-                stream=False
+                query1, user_id="user_david", use_async=False, stream=False
             )
 
             # Handle response
@@ -263,17 +244,16 @@ class TestSQLitePersistence(BaseMemoryTest):
                 async for chunk in response3:
                     response3_text += chunk
             else:
-                response3_text = response3.content if hasattr(response3, "content") else str(response3)
+                response3_text = (
+                    response3.content if hasattr(response3, "content") else str(response3)
+                )
 
             transcript.append((f"User1: {query1}", response3_text))
             print(f"\nUser 1 Query: {query1}")
             print(f"Assistant: {response3_text[:200]}...")
 
             # Check User 1's data
-            user1_correct = (
-                "chef" in response3_text.lower() and
-                "italian" in response3_text.lower()
-            )
+            user1_correct = "chef" in response3_text.lower() and "italian" in response3_text.lower()
 
             if user1_correct:
                 print("  ✓ User 1 data correctly isolated")
@@ -285,10 +265,7 @@ class TestSQLitePersistence(BaseMemoryTest):
             # Query User 2's information
             query2 = "What is my profession and favorite food?"
             response4 = await self.overlord.chat(
-                query2,
-                user_id="user_emily",
-                use_async=False,
-                stream=False
+                query2, user_id="user_emily", use_async=False, stream=False
             )
 
             # Handle response
@@ -297,7 +274,9 @@ class TestSQLitePersistence(BaseMemoryTest):
                 async for chunk in response4:
                     response4_text += chunk
             else:
-                response4_text = response4.content if hasattr(response4, "content") else str(response4)
+                response4_text = (
+                    response4.content if hasattr(response4, "content") else str(response4)
+                )
 
             transcript.append((f"User2: {query2}", response4_text))
             print(f"\nUser 2 Query: {query2}")
@@ -305,8 +284,7 @@ class TestSQLitePersistence(BaseMemoryTest):
 
             # Check User 2's data
             user2_correct = (
-                "teacher" in response4_text.lower() and
-                "japanese" in response4_text.lower()
+                "teacher" in response4_text.lower() and "japanese" in response4_text.lower()
             )
 
             if user2_correct:
@@ -330,9 +308,9 @@ class TestSQLitePersistence(BaseMemoryTest):
 
     async def run_test(self):
         """Run all test cases."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🗄️ AREA 2B1: SQLITE PERSISTENCE")
-        print("="*60)
+        print("=" * 60)
 
         # Run test cases
         persistence_passed = await self.test_sqlite_persistence()
@@ -341,9 +319,11 @@ class TestSQLitePersistence(BaseMemoryTest):
         # Overall result
         all_passed = persistence_passed and multi_session_passed
 
-        print("\n" + "="*60)
-        print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if all_passed else '❌ SOME TESTS FAILED'}")
-        print("="*60)
+        print("\n" + "=" * 60)
+        print(
+            f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if all_passed else '❌ SOME TESTS FAILED'}"
+        )
+        print("=" * 60)
 
         print("\n💡 KEY INSIGHTS:")
         print("- SQLite provides persistent memory storage")
@@ -352,10 +332,14 @@ class TestSQLitePersistence(BaseMemoryTest):
         print("- Suitable for single-instance deployments")
 
         return all_passed
+
+
 def main():
     """Main entry point."""
     test = TestSQLitePersistence()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
+
+
 if __name__ == "__main__":
     main()

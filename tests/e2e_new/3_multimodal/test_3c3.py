@@ -7,26 +7,20 @@ This test validates:
 3. Multiple video formats support
 """
 
-import sys
 import asyncio
 import time
 import os
-from pathlib import Path
-
-# Add path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from .base_multimodal_test import BaseMultimodalTest
+
+
 class TestMultimodal3C3(BaseMultimodalTest):
     """Test Video Processing functionality."""
 
     async def test_3c3(self):
         """Main test method."""
         test_name = "3c3"
-        self.print_test_header(
-            test_name,
-            "Test Video Processing - Video Test 3"
-        )
+        self.print_test_header(test_name, "Test Video Processing - Video Test 3")
 
         start_time = time.time()
         checks_passed = []
@@ -57,22 +51,26 @@ class TestMultimodal3C3(BaseMultimodalTest):
 
     async def run_test(self):
         """Run all test cases."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("📸 AREA 3C3: VIDEO PROCESSING")
-        print("="*60)
+        print("=" * 60)
 
         # Run test cases
         result = await self.test_3c3()
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if result else '❌ SOME TESTS FAILED'}")
-        print("="*60)
+        print("=" * 60)
 
         return result
+
+
 def main():
     """Main entry point."""
     test = TestMultimodal3C3()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
+
+
 if __name__ == "__main__":
     main()

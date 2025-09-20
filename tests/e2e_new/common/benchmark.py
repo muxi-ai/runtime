@@ -5,6 +5,8 @@ Performance benchmarking for E2E tests.
 from typing import Dict, Tuple
 import json
 from pathlib import Path
+
+
 class PerformanceBenchmark:
     """Track and enforce performance baselines for tests."""
 
@@ -36,7 +38,7 @@ class PerformanceBenchmark:
     @classmethod
     def check_regression(cls, test_name: str, actual_time: float) -> Tuple[bool, str]:
         """
-        Check if test has regressed from baseline.
+        Check if test has regressed from .baseline.
 
         Args:
             test_name: Name of the test

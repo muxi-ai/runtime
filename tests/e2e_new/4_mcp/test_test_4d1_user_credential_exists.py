@@ -4,7 +4,9 @@
 import asyncio
 import time
 
-from base_mcp_test import BaseMCPTest
+from .base_mcp_test import BaseMCPTest
+
+
 class Test4D1UserCredentialExists(BaseMCPTest):
     """Test user credential handling when credentials exist in database."""
 
@@ -38,10 +40,10 @@ class Test4D1UserCredentialExists(BaseMCPTest):
 
             # Check available tools first
             print("\n  Checking available MCP tools...")
-            mcp_service = getattr(self.overlord, 'mcp_service', None)
+            mcp_service = getattr(self.overlord, "mcp_service", None)
             if mcp_service:
-                tool_registry = getattr(mcp_service, 'tool_registry', {})
-                github_tools = [tool for tool in tool_registry.keys() if 'github' in tool.lower()]
+                tool_registry = getattr(mcp_service, "tool_registry", {})
+                github_tools = [tool for tool in tool_registry.keys() if "github" in tool.lower()]
                 print(f"  GitHub MCP tools available: {len(github_tools)}")
                 if github_tools:
                     print(f"  Sample tools: {github_tools[:3]}")
@@ -66,7 +68,7 @@ class Test4D1UserCredentialExists(BaseMCPTest):
                 github_request,
                 user_id="user1",  # user1 should have stored credentials
                 use_async=False,
-                stream=False
+                stream=False,
             )
 
             # Handle response
@@ -84,20 +86,31 @@ class Test4D1UserCredentialExists(BaseMCPTest):
             response_lower = response_text.lower()
 
             # Check if system asked for credentials (should NOT happen)
-            asked_for_credentials = any(phrase in response_lower for phrase in [
-                "please provide", "need your", "don't have", "missing credential",
-                "github token", "github credentials", "authentication", "login"
-            ])
+            asked_for_credentials = any(
+                phrase in response_lower
+                for phrase in [
+                    "please provide",
+                    "need your",
+                    "don't have",
+                    "missing credential",
+                    "github token",
+                    "github credentials",
+                    "authentication",
+                    "login",
+                ]
+            )
 
             # Check if system attempted to use stored credentials
-            attempted_action = any(word in response_lower for word in [
-                "created", "issue", "opened", "submitted", "attempting", "trying"
-            ])
+            attempted_action = any(
+                word in response_lower
+                for word in ["created", "issue", "opened", "submitted", "attempting", "trying"]
+            )
 
             # Check for specific errors that indicate credential usage
-            auth_error = any(phrase in response_lower for phrase in [
-                "401", "403", "404", "unauthorized", "forbidden", "not found"
-            ])
+            auth_error = any(
+                phrase in response_lower
+                for phrase in ["401", "403", "404", "unauthorized", "forbidden", "not found"]
+            )
 
             credential_test_success = False
             if asked_for_credentials:
@@ -108,7 +121,9 @@ class Test4D1UserCredentialExists(BaseMCPTest):
                 checks.append("System used stored credentials for GitHub action")
                 credential_test_success = True
             elif auth_error:
-                print("  ✓ System used credentials but got auth error (credential attempt confirmed)")
+                print(
+                    "  ✓ System used credentials but got auth error (credential attempt confirmed)"
+                )
                 checks.append("System attempted credential usage (auth error indicates usage)")
                 credential_test_success = True
             else:
@@ -121,10 +136,7 @@ class Test4D1UserCredentialExists(BaseMCPTest):
             transcript.append(("User", repo_request))
 
             repo_response = await self.overlord.chat(
-                repo_request,
-                user_id="user1",
-                use_async=False,
-                stream=False
+                repo_request, user_id="user1", use_async=False, stream=False
             )
 
             # Handle response
@@ -133,7 +145,11 @@ class Test4D1UserCredentialExists(BaseMCPTest):
                 async for chunk in repo_response:
                     repo_response_text += chunk
             else:
-                repo_response_text = repo_response.content if hasattr(repo_response, "content") else str(repo_response)
+                repo_response_text = (
+                    repo_response.content
+                    if hasattr(repo_response, "content")
+                    else str(repo_response)
+                )
 
             print(f"  Response: {repo_response_text}")
             transcript.append(("System", repo_response_text))
@@ -141,13 +157,15 @@ class Test4D1UserCredentialExists(BaseMCPTest):
             repo_response_lower = repo_response_text.lower()
 
             # Check repo listing behavior
-            repo_asked_credentials = any(phrase in repo_response_lower for phrase in [
-                "please provide", "need your", "don't have", "missing credential"
-            ])
+            repo_asked_credentials = any(
+                phrase in repo_response_lower
+                for phrase in ["please provide", "need your", "don't have", "missing credential"]
+            )
 
-            repo_attempted = any(word in repo_response_lower for word in [
-                "repository", "repositories", "repo", "github", "list"
-            ])
+            repo_attempted = any(
+                word in repo_response_lower
+                for word in ["repository", "repositories", "repo", "github", "list"]
+            )
 
             repo_test_success = not repo_asked_credentials and repo_attempted
 
@@ -160,14 +178,13 @@ class Test4D1UserCredentialExists(BaseMCPTest):
 
             # Test 3: Service availability check
             print("\n  3. Testing GitHub service availability...")
-            service_request = "Do you have access to GitHub for creating issues and managing repositories?"
+            service_request = (
+                "Do you have access to GitHub for creating issues and managing repositories?"
+            )
             transcript.append(("User", service_request))
 
             service_response = await self.overlord.chat(
-                service_request,
-                user_id="user1",
-                use_async=False,
-                stream=False
+                service_request, user_id="user1", use_async=False, stream=False
             )
 
             # Handle response
@@ -176,29 +193,36 @@ class Test4D1UserCredentialExists(BaseMCPTest):
                 async for chunk in service_response:
                     service_response_text += chunk
             else:
-                service_response_text = service_response.content if hasattr(service_response, "content") else str(service_response)
+                service_response_text = (
+                    service_response.content
+                    if hasattr(service_response, "content")
+                    else str(service_response)
+                )
 
             print(f"  Response: {service_response_text}")
             transcript.append(("System", service_response_text))
 
             service_response_lower = service_response_text.lower()
-            service_available = (
-                "github" in service_response_lower or
-                any(term in service_response_lower for term in ["yes", "available", "access", "can"])
+            service_available = "github" in service_response_lower or any(
+                term in service_response_lower for term in ["yes", "available", "access", "can"]
             )
 
             if service_available:
                 checks.append("GitHub service availability confirmed")
 
             service_test_success = service_available
-            print(f"  ✓ Service availability test: {'PASSED' if service_test_success else 'FAILED'}")
+            print(
+                f"  ✓ Service availability test: {'PASSED' if service_test_success else 'FAILED'}"
+            )
 
             # Overall success - primary test is credential handling
             success = credential_test_success
 
             if success:
                 checks.append("User credential existence test successful")
-                print("\n  ✅ SUCCESS: System correctly used stored credentials without asking user")
+                print(
+                    "\n  ✅ SUCCESS: System correctly used stored credentials without asking user"
+                )
             else:
                 checks.append("User credential existence test needs review")
                 print("\n  ⚠️ REVIEW: Credential handling behavior unclear")
@@ -217,17 +241,23 @@ class Test4D1UserCredentialExists(BaseMCPTest):
 
         # Print observability note
         print("\n  📋 Key observability events to look for in logs:")
-        print("  1. 'Transformed user credentials for github-mcp' - Shows credential transformation")
+        print(
+            "  1. 'Transformed user credentials for github-mcp' - Shows credential transformation"
+        )
         print("  2. 'mcp.message.sent' with tool name - Shows GitHub API calls")
         print("  3. 'mcp.message.received' - Shows responses from GitHub")
         print("  4. Any 'credential' or 'auth' related events")
 
         return success
+
+
 async def main():
     """Main test execution."""
     test = Test4D1UserCredentialExists()
     success = await test.run_test()
     return success
+
+
 if __name__ == "__main__":
     success = asyncio.run(main())
     exit(0 if success else 1)

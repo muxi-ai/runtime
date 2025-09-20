@@ -8,6 +8,8 @@ Tests that streaming events are properly emitted for simple requests.
 import sys
 
 from .base_streaming_test import BaseStreamingTest
+
+
 def main():
     """Test basic streaming functionality."""
     test = BaseStreamingTest("10a1_basic_streaming", "Test basic streaming functionality")
@@ -22,7 +24,7 @@ def main():
             user_id="test_user",
             session_id="streaming_test_10a1",
             expected_keywords=["quantum", "computing", "principles"],
-            timeout=30.0
+            timeout=30.0,
         )
 
         # Record result
@@ -36,7 +38,9 @@ def main():
             test.formatter.print_section("Content Analysis")
             test.formatter.print_info(f"Total events: {content_analysis['total_events']}")
             test.formatter.print_info(f"Content events: {content_analysis['content_events']}")
-            test.formatter.print_info(f"Total content length: {content_analysis['total_content_length']} chars")
+            test.formatter.print_info(
+                f"Total content length: {content_analysis['total_content_length']} chars"
+            )
 
             if content_analysis.get("found_keywords"):
                 test.formatter.print_info(f"Found keywords: {content_analysis['found_keywords']}")
@@ -55,7 +59,9 @@ def main():
             else:
                 content_analysis = result.get("content_analysis", {})
                 if content_analysis.get("error_events", 0) > 0:
-                    test.formatter.print_error(f"Stream had {content_analysis['error_events']} error events")
+                    test.formatter.print_error(
+                        f"Stream had {content_analysis['error_events']} error events"
+                    )
 
         # Print streaming-specific summary
         test.print_streaming_summary()
@@ -73,6 +79,8 @@ def main():
         None,  # Use pattern-based formation path
         "formation-streaming.yaml",  # Use shared formation
     )
+
+
 if __name__ == "__main__":
     exit_code = main()
     sys.exit(exit_code)

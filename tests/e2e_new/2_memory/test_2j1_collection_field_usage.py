@@ -5,26 +5,20 @@ This test validates:
 1. TODO: Add validations
 """
 
-import sys
 import asyncio
 import time
 import os
-from pathlib import Path
-
-# Add path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from .base_memory_test import BaseMemoryTest
+
+
 class Test2j1CollectionFieldUsage(BaseMemoryTest):
     """Test memory functionality."""
 
     async def test_2j1collectionfieldusage(self):
         """Main test method."""
         test_name = "2j1_collection_field_usage"
-        self.print_test_header(
-            test_name,
-            "Test memory features"
-        )
+        self.print_test_header(test_name, "Test memory features")
 
         start_time = time.time()
         checks_passed = []
@@ -55,22 +49,26 @@ class Test2j1CollectionFieldUsage(BaseMemoryTest):
 
     async def run_test(self):
         """Run all test cases."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("📝 AREA 2J1_COLLECTION_FIELD_USAGE")
-        print("="*60)
+        print("=" * 60)
 
         # Run test cases
         result = await self.test_2j1collectionfieldusage()
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if result else '❌ SOME TESTS FAILED'}")
-        print("="*60)
+        print("=" * 60)
 
         return result
+
+
 def main():
     """Main entry point."""
     test = Test2j1CollectionFieldUsage()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
+
+
 if __name__ == "__main__":
     main()

@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter, TestTimeouts  # noqa: E402
+
+
 class TestAgentRoutingValidation(BaseE2ETest):
     """Test agent routing validation."""
 
@@ -18,7 +20,7 @@ class TestAgentRoutingValidation(BaseE2ETest):
         super().__init__(
             test_name="test_1b2_agent_routing_validation",
             test_description="Test agent routing validation",
-            test_area="1_foundation"
+            test_area="1_foundation",
         )
 
     async def test_1b2_agent_routing_validation(self):
@@ -30,7 +32,7 @@ class TestAgentRoutingValidation(BaseE2ETest):
         # Print header
         formatter.print_test_header(
             test_name="test_1b2_agent_routing_validation",
-            description="Test agent routing validation"
+            description="Test agent routing validation",
         )
 
         try:
@@ -48,10 +50,12 @@ class TestAgentRoutingValidation(BaseE2ETest):
             # Test 2: Send message to default agent
             print("\n3. Testing message routing to default agent...")
             timeout = TestTimeouts.get_timeout("simple_chat")
-            response = await asyncio.wait_for(overlord.chat("What can you do?", user_id="test_user"), timeout=timeout)
+            response = await asyncio.wait_for(
+                overlord.chat("What can you do?", user_id="test_user"), timeout=timeout
+            )
 
             assert response is not None
-            response_text = response.content if hasattr(response, 'content') else str(response)
+            response_text = response.content if hasattr(response, "content") else str(response)
             assert len(response_text) > 0
             print(f"   Response: {response_text[:100]}...")
             print("   ✅ Message routed successfully")
@@ -59,10 +63,12 @@ class TestAgentRoutingValidation(BaseE2ETest):
             # Test 3: Verify agent selection
             print("\n4. Testing agent selection logic...")
             # When no specific agent is requested, it should use the default
-            response2 = await asyncio.wait_for(overlord.chat("Tell me a joke", user_id="test_user"), timeout=timeout)
+            response2 = await asyncio.wait_for(
+                overlord.chat("Tell me a joke", user_id="test_user"), timeout=timeout
+            )
 
             assert response2 is not None
-            response2_text = response2.content if hasattr(response2, 'content') else str(response2)
+            response2_text = response2.content if hasattr(response2, "content") else str(response2)
             print(f"   Response: {response2_text[:100]}...")
             print("   ✅ Agent selection works")
 
@@ -81,13 +87,13 @@ class TestAgentRoutingValidation(BaseE2ETest):
                     "Default agent found",
                     "Message routing works",
                     "Agent selection works",
-                    "Clean shutdown"
+                    "Clean shutdown",
                 ],
                 transcript=[
                     ("What can you do?", response_text),
-                    ("Tell me a joke", response2_text)
+                    ("Tell me a joke", response2_text),
                 ],
-                duration=duration
+                duration=duration,
             )
             success = True
 
@@ -98,14 +104,16 @@ class TestAgentRoutingValidation(BaseE2ETest):
                 success=False,
                 checks=[f"Failed: {str(e)}"],
                 transcript=[],
-                duration=duration
+                duration=duration,
             )
             raise
         finally:
             return 0 if success else 1
+
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1b2_agent_routing_validation())
+
 
 if __name__ == "__main__":
     test = TestAgentRoutingValidation()

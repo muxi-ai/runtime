@@ -8,13 +8,15 @@ from typing import Tuple, List
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # Add tests directory
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from muxi.formation import Formation  # noqa: E402
 
 # Import from common module
-from e2e_new.common import BaseE2ETest  # noqa: E402
-from e2e_new.common import TestOutputFormatter  # noqa: E402
+from .common import BaseE2ETest  # noqa: E402
+from .common import TestOutputFormatter  # noqa: E402
+
+
 class BaseMemoryTest(BaseE2ETest):
     """Base class for memory system tests with Pattern 2 support."""
 
@@ -31,7 +33,7 @@ class BaseMemoryTest(BaseE2ETest):
         "postgres_faissx_auth": "formation-postgres-and-faissx-with-auth.yaml",
         "auto_extract": "formation-auto-extract.yaml",
         "memory_limits": "formation-memory-limits.yaml",
-        "basic": "formation-basic.yaml"
+        "basic": "formation-basic.yaml",
     }
 
     def __init__(self):
@@ -51,7 +53,9 @@ class BaseMemoryTest(BaseE2ETest):
             Configured Formation instance
         """
         if memory_type not in self.MEMORY_CONFIGS:
-            raise ValueError(f"Unknown memory type: {memory_type}. Use one of {list(self.MEMORY_CONFIGS.keys())}")
+            raise ValueError(
+                f"Unknown memory type: {memory_type}. Use one of {list(self.MEMORY_CONFIGS.keys())}"
+            )
 
         yaml_file = self.MEMORY_CONFIGS[memory_type]
         formation_path = self.FORMATION_DIR / yaml_file
@@ -79,7 +83,7 @@ class BaseMemoryTest(BaseE2ETest):
                 "My name is Alice and I work at TechCorp.",
                 user_id=user_id,
                 use_async=False,
-                stream=False
+                stream=False,
             )
 
             # Wait for memory storage
@@ -90,7 +94,7 @@ class BaseMemoryTest(BaseE2ETest):
                 "What did I just tell you about myself?",
                 user_id=user_id,
                 use_async=False,
-                stream=False
+                stream=False,
             )
 
             # Handle response
@@ -102,10 +106,7 @@ class BaseMemoryTest(BaseE2ETest):
                 response_text = response.content if hasattr(response, "content") else str(response)
 
             # Check retention
-            retained = (
-                "alice" in response_text.lower() or
-                "techcorp" in response_text.lower()
-            )
+            retained = "alice" in response_text.lower() or "techcorp" in response_text.lower()
 
             return retained, response_text[:200]
 
@@ -121,18 +122,12 @@ class BaseMemoryTest(BaseE2ETest):
         try:
             # User 1 stores information
             await self.overlord.chat(
-                "I am Bob and I like pizza.",
-                user_id="user1",
-                use_async=False,
-                stream=False
+                "I am Bob and I like pizza.", user_id="user1", use_async=False, stream=False
             )
 
             # User 2 stores different information
             await self.overlord.chat(
-                "I am Carol and I like sushi.",
-                user_id="user2",
-                use_async=False,
-                stream=False
+                "I am Carol and I like sushi.", user_id="user2", use_async=False, stream=False
             )
 
             await asyncio.sleep(3)
@@ -142,7 +137,7 @@ class BaseMemoryTest(BaseE2ETest):
                 "What is my name and what do I like?",
                 user_id="user1",
                 use_async=False,
-                stream=False
+                stream=False,
             )
 
             # User 2 queries their info
@@ -150,7 +145,7 @@ class BaseMemoryTest(BaseE2ETest):
                 "What is my name and what do I like?",
                 user_id="user2",
                 use_async=False,
-                stream=False
+                stream=False,
             )
 
             # Extract text
@@ -172,14 +167,14 @@ class BaseMemoryTest(BaseE2ETest):
             user1_correct = "bob" in text1.lower() and "pizza" in text1.lower()
             user2_correct = "carol" in text2.lower() and "sushi" in text2.lower()
             no_cross_contamination = (
-                "carol" not in text1.lower() and
-                "sushi" not in text1.lower() and
-                "bob" not in text2.lower() and
-                "pizza" not in text2.lower()
+                "carol" not in text1.lower()
+                and "sushi" not in text1.lower()
+                and "bob" not in text2.lower()
+                and "pizza" not in text2.lower()
             )
 
             success = user1_correct and user2_correct and no_cross_contamination
-            details = f"User1 correct: {user1_correct}, User2 correct: {user2_correct}, No contamination: {no_cross_contamination}"
+            details = f"User1 correct: {user1_correct}, User2 correct: {user2_correct}, No contamination: {no_cross_contamination}"  # noqa: E501
 
             return success, details
 
@@ -200,7 +195,13 @@ class BaseMemoryTest(BaseE2ETest):
         """Print standardized test header."""
         self.formatter.print_test_header(test_name, description)
 
-    def print_test_result(self, test_name: str, success: bool, checks: List[str],
-                          transcript: List[Tuple[str, str]], duration: float):
+    def print_test_result(
+        self,
+        test_name: str,
+        success: bool,
+        checks: List[str],
+        transcript: List[Tuple[str, str]],
+        duration: float,
+    ):
         """Print standardized test result."""
         self.formatter.print_test_result(test_name, success, checks, transcript, duration)

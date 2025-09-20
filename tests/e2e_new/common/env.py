@@ -4,6 +4,8 @@ Environment-specific test configuration.
 
 import os
 from typing import Dict, Any
+
+
 class TestEnvironment:
     """Handle environment-specific test configuration."""
 
@@ -15,10 +17,11 @@ class TestEnvironment:
     @property
     def is_docker(self) -> bool:
         """Check if running in Docker container."""
-        return (
-            os.path.exists("/.dockerenv") or
-            os.getenv("DOCKER_CONTAINER", "").lower() in ["true", "1", "yes"]
-        )
+        return os.path.exists("/.dockerenv") or os.getenv("DOCKER_CONTAINER", "").lower() in [
+            "true",
+            "1",
+            "yes",
+        ]
 
     @property
     def is_local(self) -> bool:
@@ -96,5 +99,7 @@ class TestEnvironment:
                 "cleanup_validation": not self.is_ci,  # Skip in CI for speed
             },
         }
+
+
 # Global instance
 test_env = TestEnvironment()

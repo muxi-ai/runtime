@@ -7,6 +7,8 @@ import re
 from typing import Dict, Any
 
 from ..common.base import BaseE2ETest
+
+
 class BaseFormattingTest(BaseE2ETest):
     """
     Base class for formatting tests.
@@ -39,7 +41,7 @@ class BaseFormattingTest(BaseE2ETest):
             "is_valid_json": False,
             "has_required_fields": False,
             "structure": {},
-            "error": None
+            "error": None,
         }
 
         try:
@@ -81,7 +83,7 @@ class BaseFormattingTest(BaseE2ETest):
             "has_links": False,
             "has_emphasis": False,
             "is_not_json": True,
-            "structure_score": 0
+            "structure_score": 0,
         }
 
         # Check for JSON (should not be JSON)
@@ -92,23 +94,25 @@ class BaseFormattingTest(BaseE2ETest):
             pass  # Good, it's not JSON
 
         # Check for markdown elements
-        if re.search(r'^#{1,6}\s+', content, re.MULTILINE):
+        if re.search(r"^#{1,6}\s+", content, re.MULTILINE):
             result["has_headers"] = True
             result["structure_score"] += 1
 
-        if '```' in content or re.search(r'`[^`]+`', content):
+        if "```" in content or re.search(r"`[^`]+`", content):
             result["has_code_blocks"] = True
             result["structure_score"] += 1
 
-        if re.search(r'^\s*[-*+]\s+', content, re.MULTILINE) or re.search(r'^\s*\d+\.\s+', content, re.MULTILINE):
+        if re.search(r"^\s*[-*+]\s+", content, re.MULTILINE) or re.search(
+            r"^\s*\d+\.\s+", content, re.MULTILINE
+        ):
             result["has_lists"] = True
             result["structure_score"] += 1
 
-        if re.search(r'\[([^\]]+)\]\(([^)]+)\)', content):
+        if re.search(r"\[([^\]]+)\]\(([^)]+)\)", content):
             result["has_links"] = True
             result["structure_score"] += 1
 
-        if re.search(r'\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_', content):
+        if re.search(r"\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_", content):
             result["has_emphasis"] = True
             result["structure_score"] += 1
 
@@ -129,7 +133,7 @@ class BaseFormattingTest(BaseE2ETest):
             "has_semantic_tags": False,
             "has_proper_structure": False,
             "is_not_json": True,
-            "tag_count": 0
+            "tag_count": 0,
         }
 
         # Check for JSON (should not be JSON)
@@ -140,21 +144,38 @@ class BaseFormattingTest(BaseE2ETest):
             pass  # Good, it's not JSON
 
         # Check for HTML tags
-        html_tags = re.findall(r'<[^>]+>', content)
+        html_tags = re.findall(r"<[^>]+>", content)
         result["tag_count"] = len(html_tags)
         result["has_html_tags"] = len(html_tags) > 0
 
         # Check for semantic HTML tags
-        semantic_tags = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "li", "article", "section", "header", "footer"]
-        has_semantic = any(f"<{tag}" in content.lower() or f"</{tag}" in content.lower() for tag in semantic_tags)
+        semantic_tags = [
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+            "p",
+            "ul",
+            "ol",
+            "li",
+            "article",
+            "section",
+            "header",
+            "footer",
+        ]
+        has_semantic = any(
+            f"<{tag}" in content.lower() or f"</{tag}" in content.lower() for tag in semantic_tags
+        )
         result["has_semantic_tags"] = has_semantic
 
         # Check for proper structure (starts with HTML tag or has basic structure)
         stripped = content.strip()
         result["has_proper_structure"] = (
-            stripped.startswith("<") or
-            "<html>" in content.lower() or
-            ("<head>" in content.lower() and "<body>" in content.lower())
+            stripped.startswith("<")
+            or "<html>" in content.lower()
+            or ("<head>" in content.lower() and "<body>" in content.lower())
         )
 
         return result
@@ -175,7 +196,7 @@ class BaseFormattingTest(BaseE2ETest):
             "has_no_html": True,
             "is_not_json": True,
             "line_count": 0,
-            "word_count": 0
+            "word_count": 0,
         }
 
         # Check for JSON (should not be JSON)
@@ -187,12 +208,12 @@ class BaseFormattingTest(BaseE2ETest):
 
         # Check for markdown formatting
         markdown_patterns = [
-            r'^#{1,6}\s+',  # Headers
-            r'\*\*[^*]+\*\*',  # Bold
-            r'\*[^*]+\*',  # Italic
-            r'```[^`]*```',  # Code blocks
-            r'`[^`]+`',  # Inline code
-            r'^\s*[-*+]\s+',  # Lists
+            r"^#{1,6}\s+",  # Headers
+            r"\*\*[^*]+\*\*",  # Bold
+            r"\*[^*]+\*",  # Italic
+            r"```[^`]*```",  # Code blocks
+            r"`[^`]+`",  # Inline code
+            r"^\s*[-*+]\s+",  # Lists
         ]
 
         for pattern in markdown_patterns:
@@ -201,7 +222,7 @@ class BaseFormattingTest(BaseE2ETest):
                 break
 
         # Check for HTML tags
-        if re.search(r'<[^>]+>', content):
+        if re.search(r"<[^>]+>", content):
             result["has_no_html"] = False
 
         # Basic text statistics
@@ -209,7 +230,9 @@ class BaseFormattingTest(BaseE2ETest):
         result["word_count"] = len(content.split())
 
         # Overall plain text check
-        result["is_plain_text"] = result["has_no_markdown"] and result["has_no_html"] and result["is_not_json"]
+        result["is_plain_text"] = (
+            result["has_no_markdown"] and result["has_no_html"] and result["is_not_json"]
+        )
 
         return result
 
@@ -218,7 +241,7 @@ class BaseFormattingTest(BaseE2ETest):
         message: str,
         expected_format: str,
         user_id: str = "test_user",
-        session_id: str = "test_session"
+        session_id: str = "test_session",
     ) -> Dict[str, Any]:
         """
         Test response format for a specific format type.
@@ -235,35 +258,26 @@ class BaseFormattingTest(BaseE2ETest):
         self.formatter.print_test_case(f"{expected_format.upper()} Format Test", message)
 
         # Set the response format on the overlord
-        if hasattr(self.overlord, 'response_format'):
+        if hasattr(self.overlord, "response_format"):
             self.overlord.response_format = expected_format
-        elif hasattr(self.overlord, 'set_response_format'):
+        elif hasattr(self.overlord, "set_response_format"):
             await self.overlord.set_response_format(expected_format)
         else:
             self.formatter.print_warning("Could not set response format on overlord")
 
         # Send the request
         response = await self.overlord.chat(
-            message=message,
-            user_id=user_id,
-            session_id=session_id,
-            use_async=False,
-            stream=False
+            message=message, user_id=user_id, session_id=session_id, use_async=False, stream=False
         )
 
         # Extract content
-        content = response.content if hasattr(response, 'content') else str(response)
+        content = response.content if hasattr(response, "content") else str(response)
 
         # Store transcript
         self.transcript.append((message, content))
 
         # Validate format
-        result = {
-            "format": expected_format,
-            "content": content,
-            "success": False,
-            "validation": {}
-        }
+        result = {"format": expected_format, "content": content, "success": False, "validation": {}}
 
         if expected_format == "json":
             validation = self.validate_json_format(content)
@@ -278,7 +292,11 @@ class BaseFormattingTest(BaseE2ETest):
         elif expected_format == "html":
             validation = self.validate_html_format(content)
             result["validation"] = validation
-            result["success"] = validation["has_html_tags"] and validation["has_semantic_tags"] and validation["is_not_json"]
+            result["success"] = (
+                validation["has_html_tags"]
+                and validation["has_semantic_tags"]
+                and validation["is_not_json"]
+            )
 
         elif expected_format == "text":
             validation = self.validate_text_format(content)
@@ -301,10 +319,7 @@ class BaseFormattingTest(BaseE2ETest):
         return result
 
     async def test_all_formats(
-        self,
-        base_message: str,
-        user_id: str = "test_user",
-        session_id_prefix: str = "format_test"
+        self, base_message: str, user_id: str = "test_user", session_id_prefix: str = "format_test"
     ) -> Dict[str, bool]:
         """
         Test all supported response formats.

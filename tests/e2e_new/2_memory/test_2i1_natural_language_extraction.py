@@ -20,7 +20,9 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from .base_memory_test import BaseMemoryTest
+from .base_memory_test import BaseMemoryTest  # noqa: E402
+
+
 class TestNaturalLanguageExtraction(BaseMemoryTest):
     """Test natural language memory extraction."""
 
@@ -44,7 +46,9 @@ class TestNaturalLanguageExtraction(BaseMemoryTest):
 
         try:
             print("    1. Testing name and age extraction...")
-            await self.overlord.chat("My name is Sarah and I'm 28 years old", user_id=test_user, use_async=False)
+            await self.overlord.chat(
+                "My name is Sarah and I'm 28 years old", user_id=test_user, use_async=False
+            )
             await asyncio.sleep(5)  # Wait for extraction
 
             # Check memories in database
@@ -69,11 +73,16 @@ class TestNaturalLanguageExtraction(BaseMemoryTest):
             name_found = any("The user's name is Sarah" in text for text in memory_texts)
             if not name_found:
                 # Alternative checks for name extraction
-                name_found = any("Sarah" in text and ("name" in text or "called" in text) for text in memory_texts)
+                name_found = any(
+                    "Sarah" in text and ("name" in text or "called" in text)
+                    for text in memory_texts
+                )
 
             # Verify age converted to birth year
             expected_birth_year = current_year - 28
-            birth_year_found = any(f"Was born in {expected_birth_year}" in text for text in memory_texts)
+            birth_year_found = any(
+                f"Was born in {expected_birth_year}" in text for text in memory_texts
+            )
             if not birth_year_found:
                 # Alternative checks for birth year
                 birth_year_found = any(str(expected_birth_year) in text for text in memory_texts)
@@ -85,14 +94,14 @@ class TestNaturalLanguageExtraction(BaseMemoryTest):
                 "memories_extracted": len(memory_texts),
                 "name_found": name_found,
                 "birth_year_found": birth_year_found,
-                "expected_birth_year": expected_birth_year
+                "expected_birth_year": expected_birth_year,
             }
 
         except Exception as e:
             print(f"    ❌ Name and age extraction failed: {e}")
             return False, {"error": str(e)}
         finally:
-            if 'conn' in locals():
+            if "conn" in locals():
                 cur.close()
                 conn.close()
 
@@ -145,14 +154,14 @@ class TestNaturalLanguageExtraction(BaseMemoryTest):
                 "total_memories": len(all_texts),
                 "company_found": datacorp_found,
                 "job_found": job_found,
-                "hobby_found": hobby_found
+                "hobby_found": hobby_found,
             }
 
         except Exception as e:
             print(f"    ❌ Complex extraction failed: {e}")
             return False, {"error": str(e)}
         finally:
-            if 'conn' in locals():
+            if "conn" in locals():
                 cur.close()
                 conn.close()
 
@@ -196,19 +205,21 @@ class TestNaturalLanguageExtraction(BaseMemoryTest):
                     natural_language_count += 1
 
             print(f"    ✓ Natural language memories: {natural_language_count}/{len(all_memories)}")
-            print(f"    ✓ Key-value format avoided: {'SUCCESS' if not key_value_found else 'FAILED'}")
+            print(
+                f"    ✓ Key-value format avoided: {'SUCCESS' if not key_value_found else 'FAILED'}"
+            )
 
             return not key_value_found, {
                 "total_memories": len(all_memories),
                 "natural_language_count": natural_language_count,
-                "key_value_found": key_value_found
+                "key_value_found": key_value_found,
             }
 
         except Exception as e:
             print(f"    ❌ Natural language format check failed: {e}")
             return False, {"error": str(e)}
         finally:
-            if 'conn' in locals():
+            if "conn" in locals():
                 cur.close()
                 conn.close()
 
@@ -242,30 +253,29 @@ class TestNaturalLanguageExtraction(BaseMemoryTest):
             user_identity_found = "user_identity" in collections
             multiple_collections = len(collections) > 1
 
-            print(f"    ✓ User identity collection: {'FOUND' if user_identity_found else 'MISSING'}")
+            print(
+                f"    ✓ User identity collection: {'FOUND' if user_identity_found else 'MISSING'}"
+            )
             print(f"    ✓ Multiple collections: {'YES' if multiple_collections else 'NO'}")
 
             return user_identity_found and len(collections) >= 1, {
                 "collections": list(collections),
                 "user_identity_found": user_identity_found,
-                "collection_count": len(collections)
+                "collection_count": len(collections),
             }
 
         except Exception as e:
             print(f"    ❌ Collection assignment check failed: {e}")
             return False, {"error": str(e)}
         finally:
-            if 'conn' in locals():
+            if "conn" in locals():
                 cur.close()
                 conn.close()
 
     async def test_natural_extraction(self):
         """Main test method."""
         test_name = "2i1_natural_language_extraction"
-        self.print_test_header(
-            test_name,
-            "Test automatic extraction from natural language"
-        )
+        self.print_test_header(test_name, "Test automatic extraction from natural language")
 
         start_time = time.time()
         checks_passed = []
@@ -357,22 +367,26 @@ class TestNaturalLanguageExtraction(BaseMemoryTest):
 
     async def run_test(self):
         """Run all test cases."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🗣️ AREA 2I1: NATURAL LANGUAGE EXTRACTION")
-        print("="*60)
+        print("=" * 60)
 
         # Run test cases
         result = await self.test_natural_extraction()
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if result else '❌ SOME TESTS FAILED'}")
-        print("="*60)
+        print("=" * 60)
 
         return result
+
+
 def main():
     """Main entry point."""
     test = TestNaturalLanguageExtraction()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
+
+
 if __name__ == "__main__":
     main()

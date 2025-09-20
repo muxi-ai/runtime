@@ -7,26 +7,20 @@ This test validates:
 3. Memory functionality across messages
 """
 
-import sys
 import asyncio
 import time
 import os
-from pathlib import Path
-
-# Add path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from .base_memory_test import BaseMemoryTest
+
+
 class TestBasicConversationContext(BaseMemoryTest):
     """Test basic conversation context with buffer memory."""
 
     async def test_buffer_configurations(self):
         """Test loading different buffer configurations."""
         test_name = "2a1_buffer_configurations"
-        self.print_test_header(
-            test_name,
-            "Test local and remote buffer memory configurations"
-        )
+        self.print_test_header(test_name, "Test local and remote buffer memory configurations")
 
         start_time = time.time()
         checks_passed = []
@@ -75,10 +69,7 @@ class TestBasicConversationContext(BaseMemoryTest):
     async def test_conversation_retention(self):
         """Test conversation context retention with buffer memory."""
         test_name = "2a1_conversation_retention"
-        self.print_test_header(
-            test_name,
-            "Test conversation context retention across messages"
-        )
+        self.print_test_header(test_name, "Test conversation context retention across messages")
 
         start_time = time.time()
         checks_passed = []
@@ -92,10 +83,7 @@ class TestBasicConversationContext(BaseMemoryTest):
             # First exchange - store information
             user_msg1 = "My name is Alice and I work at TechCorp as a software engineer."
             response1 = await self.overlord.chat(
-                user_msg1,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                user_msg1, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -104,7 +92,9 @@ class TestBasicConversationContext(BaseMemoryTest):
                 async for chunk in response1:
                     response1_text += chunk
             else:
-                response1_text = response1.content if hasattr(response1, "content") else str(response1)
+                response1_text = (
+                    response1.content if hasattr(response1, "content") else str(response1)
+                )
 
             transcript.append((user_msg1, response1_text))
             print(f"User: {user_msg1}")
@@ -116,10 +106,7 @@ class TestBasicConversationContext(BaseMemoryTest):
             # Second exchange - test retention
             user_msg2 = "What did I just tell you about myself?"
             response2 = await self.overlord.chat(
-                user_msg2,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                user_msg2, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -128,7 +115,9 @@ class TestBasicConversationContext(BaseMemoryTest):
                 async for chunk in response2:
                     response2_text += chunk
             else:
-                response2_text = response2.content if hasattr(response2, "content") else str(response2)
+                response2_text = (
+                    response2.content if hasattr(response2, "content") else str(response2)
+                )
 
             transcript.append((user_msg2, response2_text))
             print(f"\nUser: {user_msg2}")
@@ -136,9 +125,9 @@ class TestBasicConversationContext(BaseMemoryTest):
 
             # Check retention
             context_retained = (
-                "alice" in response2_text.lower() or
-                "techcorp" in response2_text.lower() or
-                "software engineer" in response2_text.lower()
+                "alice" in response2_text.lower()
+                or "techcorp" in response2_text.lower()
+                or "software engineer" in response2_text.lower()
             )
 
             if context_retained:
@@ -151,10 +140,7 @@ class TestBasicConversationContext(BaseMemoryTest):
             # Third exchange - test deeper retention
             user_msg3 = "What is my profession?"
             response3 = await self.overlord.chat(
-                user_msg3,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                user_msg3, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -163,15 +149,16 @@ class TestBasicConversationContext(BaseMemoryTest):
                 async for chunk in response3:
                     response3_text += chunk
             else:
-                response3_text = response3.content if hasattr(response3, "content") else str(response3)
+                response3_text = (
+                    response3.content if hasattr(response3, "content") else str(response3)
+                )
 
             transcript.append((user_msg3, response3_text))
             print(f"\nUser: {user_msg3}")
             print(f"Assistant: {response3_text[:200]}...")
 
             profession_retained = (
-                "engineer" in response3_text.lower() or
-                "software" in response3_text.lower()
+                "engineer" in response3_text.lower() or "software" in response3_text.lower()
             )
 
             if profession_retained:
@@ -195,9 +182,9 @@ class TestBasicConversationContext(BaseMemoryTest):
 
     async def run_test(self):
         """Run all test cases."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🧠 AREA 2A1: BASIC CONVERSATION CONTEXT")
-        print("="*60)
+        print("=" * 60)
 
         # Run test cases
         config_passed = await self.test_buffer_configurations()
@@ -206,9 +193,11 @@ class TestBasicConversationContext(BaseMemoryTest):
         # Overall result
         all_passed = config_passed and retention_passed
 
-        print("\n" + "="*60)
-        print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if all_passed else '❌ SOME TESTS FAILED'}")
-        print("="*60)
+        print("\n" + "=" * 60)
+        print(
+            f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if all_passed else '❌ SOME TESTS FAILED'}"
+        )
+        print("=" * 60)
 
         print("\n💡 KEY INSIGHTS:")
         print("- Local buffer mode uses in-memory FAISS for vector search")
@@ -217,10 +206,14 @@ class TestBasicConversationContext(BaseMemoryTest):
         print("- Context is preserved for subsequent queries")
 
         return all_passed
+
+
 def main():
     """Main entry point."""
     test = TestBasicConversationContext()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
+
+
 if __name__ == "__main__":
     main()

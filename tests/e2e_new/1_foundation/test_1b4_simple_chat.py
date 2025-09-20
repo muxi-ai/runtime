@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import from the common module
 from common import BaseE2ETest, TestOutputFormatter, TestTimeouts  # noqa: E402
+
+
 class TestSimpleChat(BaseE2ETest):
     """Test simple chat functionality with standardized approach."""
 
@@ -19,7 +21,7 @@ class TestSimpleChat(BaseE2ETest):
         super().__init__(
             test_name="test_1b4_simple_chat",
             test_description="Test simple chat with minimal formation",
-            test_area="1_foundation"
+            test_area="1_foundation",
         )
 
     async def test_1b4_simple_chat(self):
@@ -30,8 +32,7 @@ class TestSimpleChat(BaseE2ETest):
 
         # Print header
         formatter.print_test_header(
-            test_name="test_1b4_simple_chat",
-            description="Test simple chat with minimal formation"
+            test_name="test_1b4_simple_chat", description="Test simple chat with minimal formation"
         )
 
         try:
@@ -60,14 +61,13 @@ class TestSimpleChat(BaseE2ETest):
             print("\n4. Testing simple chat...")
             timeout = TestTimeouts.get_timeout("simple_chat")
             response = await asyncio.wait_for(
-                overlord.chat("Hello, how are you?", user_id="test_user"),
-                timeout=timeout
+                overlord.chat("Hello, how are you?", user_id="test_user"), timeout=timeout
             )
 
             # Verify response
             assert response is not None
             # Handle both string and object responses
-            if hasattr(response, 'content'):
+            if hasattr(response, "content"):
                 response_text = response.content
             else:
                 response_text = str(response)
@@ -91,10 +91,10 @@ class TestSimpleChat(BaseE2ETest):
                     "Structure verified",
                     "Agent initialized",
                     "Chat response received",
-                    "Clean shutdown"
+                    "Clean shutdown",
                 ],
                 transcript=[("Hello, how are you?", response_text)],
-                duration=duration
+                duration=duration,
             )
             success = True
 
@@ -105,7 +105,7 @@ class TestSimpleChat(BaseE2ETest):
                 success=False,
                 checks=[f"Failed: {str(e)}"],
                 transcript=[],
-                duration=duration
+                duration=duration,
             )
             raise
         finally:
@@ -114,6 +114,8 @@ class TestSimpleChat(BaseE2ETest):
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1b4_simple_chat())
+
+
 if __name__ == "__main__":
     test = TestSimpleChat()
     sys.exit(test.run_test())

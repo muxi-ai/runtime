@@ -19,8 +19,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from .base_memory_test import BaseMemoryTest
-from muxi.services.memory.working import WorkingMemory
+from .base_memory_test import BaseMemoryTest  # noqa: E402
+from muxi.services.memory.working import WorkingMemory  # noqa: E402
+
+
 # Mock LLM for testing
 class AuthTestLLM:
     async def embed(self, text):
@@ -28,13 +30,17 @@ class AuthTestLLM:
         text_hash = hash(text) % 1000
         embedding = [text_hash / 1000.0] + [0.1] * 1535
         return embedding
+
+
 class TestPostgreSQLFAISSAuth(BaseMemoryTest):
     """Test PostgreSQL with FAISSx authentication."""
 
     def load_auth_config(self):
         """Load auth configuration from the auth file."""
         try:
-            auth_path = Path(__file__).parent.parent.parent / "assets" / "formations" / "faissx-auth.json"
+            auth_path = (
+                Path(__file__).parent.parent.parent / "assets" / "formations" / "faissx-auth.json"
+            )
             with open(auth_path, "r") as f:
                 auth_config = json.load(f)
             return auth_config
@@ -73,7 +79,7 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
             faiss.configure(
                 server="tcp://localhost:65432",
                 api_key=api_key,
-                timeout=10.0  # Longer timeout for auth
+                timeout=10.0,  # Longer timeout for auth
             )
             print("    ✓ faiss.configure() with auth completed")
 
@@ -89,7 +95,7 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
             return True, {
                 "api_key": api_key,
                 "creation_time": end_time - start_time,
-                "auth_working": True
+                "auth_working": True,
             }
 
         except Exception as e:
@@ -110,22 +116,21 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
             import faissx.client as faiss
 
             # Configure with auth
-            faiss.configure(
-                server="tcp://localhost:65432",
-                api_key=api_key,
-                timeout=10.0
-            )
+            faiss.configure(server="tcp://localhost:65432", api_key=api_key, timeout=10.0)
 
             print("    1. Creating index for authenticated operations...")
             index = faiss.IndexFlatL2(512)  # Smaller dimension for faster testing
 
             # Create test data
             print("    2. Creating test vectors...")
-            test_vectors = np.array([
-                [1.0] + [0.0] * 511,  # Vector 1
-                [0.0, 1.0] + [0.0] * 510,  # Vector 2
-                [0.0, 0.0, 1.0] + [0.0] * 509,  # Vector 3
-            ], dtype=np.float32)
+            test_vectors = np.array(
+                [
+                    [1.0] + [0.0] * 511,  # Vector 1
+                    [0.0, 1.0] + [0.0] * 510,  # Vector 2
+                    [0.0, 0.0, 1.0] + [0.0] * 509,  # Vector 3
+                ],
+                dtype=np.float32,
+            )
 
             print(f"       Created {len(test_vectors)} test vectors")
 
@@ -153,7 +158,7 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
             # Verify results
             expected_best = 0
             got_best = indices[0][0] if len(indices[0]) > 0 else -1
-            best_distance = distances[0][0] if len(distances[0]) > 0 else float('inf')
+            best_distance = distances[0][0] if len(distances[0]) > 0 else float("inf")
 
             correct_match = got_best == expected_best
             perfect_match = abs(best_distance) < 1e-6
@@ -171,7 +176,7 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
                 "add_time": add_end - add_start,
                 "search_time": search_end - search_start,
                 "correct_match": correct_match,
-                "perfect_match": perfect_match
+                "perfect_match": perfect_match,
             }
 
         except Exception as e:
@@ -194,8 +199,8 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
                 remote={
                     "url": "tcp://localhost:65432",
                     "api_key": "this-is-a-key",  # From auth file
-                    "tenant": "test-tenant"
-                }
+                    "tenant": "test-tenant",
+                },
             )
 
             print("    ✓ WorkingMemory created with auth")
@@ -221,7 +226,7 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
             return True, {
                 "messages_added": 2,
                 "search_results": len(results),
-                "auth_config": buffer.remote
+                "auth_config": buffer.remote,
             }
 
         except Exception as e:
@@ -231,10 +236,7 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
     async def test_postgresql_faiss(self):
         """Main test method."""
         test_name = "2e1_postgresql_faiss_auth"
-        self.print_test_header(
-            test_name,
-            "Test PostgreSQL + FAISSx with authentication"
-        )
+        self.print_test_header(test_name, "Test PostgreSQL + FAISSx with authentication")
 
         start_time = time.time()
         checks_passed = []
@@ -309,22 +311,26 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
 
     async def run_test(self):
         """Run all test cases."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🔐 AREA 2E1: POSTGRESQL + FAISSX (AUTH)")
-        print("="*60)
+        print("=" * 60)
 
         # Run test cases
         result = await self.test_postgresql_faiss()
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if result else '❌ SOME TESTS FAILED'}")
-        print("="*60)
+        print("=" * 60)
 
         return result
+
+
 def main():
     """Main entry point."""
     test = TestPostgreSQLFAISSAuth()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
+
+
 if __name__ == "__main__":
     main()

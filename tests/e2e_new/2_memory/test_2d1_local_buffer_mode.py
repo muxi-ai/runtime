@@ -8,16 +8,13 @@ This test validates:
 4. Buffer overflow handling
 """
 
-import sys
 import asyncio
 import time
 import os
-from pathlib import Path
-
-# Add path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from .base_memory_test import BaseMemoryTest
+
+
 class TestBufferMemoryModes(BaseMemoryTest):
     """Test local and remote buffer memory modes."""
 
@@ -31,10 +28,7 @@ class TestBufferMemoryModes(BaseMemoryTest):
     async def test_local_buffer_mode(self):
         """Test local buffer memory mode with in-memory FAISS."""
         test_name = "2d1_local_buffer_mode"
-        self.print_test_header(
-            test_name,
-            "Test local buffer memory with in-memory FAISS"
-        )
+        self.print_test_header(test_name, "Test local buffer memory with in-memory FAISS")
 
         start_time = time.time()
         checks_passed = []
@@ -52,10 +46,7 @@ class TestBufferMemoryModes(BaseMemoryTest):
             # Add initial context
             msg1 = "My name is Alice and I work at TechCorp as a senior developer."
             response1 = await self.overlord.chat(
-                msg1,
-                user_id="alice_local",
-                use_async=False,
-                stream=True  # Test with streaming
+                msg1, user_id="alice_local", use_async=False, stream=True  # Test with streaming
             )
             response1_text = await self.collect_stream(response1)
             transcript.append((msg1, response1_text))
@@ -65,10 +56,7 @@ class TestBufferMemoryModes(BaseMemoryTest):
             # Query context
             msg2 = "What's my name and role?"
             response2 = await self.overlord.chat(
-                msg2,
-                user_id="alice_local",
-                use_async=False,
-                stream=True
+                msg2, user_id="alice_local", use_async=False, stream=True
             )
             response2_text = await self.collect_stream(response2)
             transcript.append((msg2, response2_text))
@@ -78,9 +66,9 @@ class TestBufferMemoryModes(BaseMemoryTest):
             # Check retention
             alice_remembered = "alice" in response2_text.lower()
             role_remembered = (
-                "senior" in response2_text.lower() or
-                "developer" in response2_text.lower() or
-                "techcorp" in response2_text.lower()
+                "senior" in response2_text.lower()
+                or "developer" in response2_text.lower()
+                or "techcorp" in response2_text.lower()
             )
 
             if alice_remembered:
@@ -105,10 +93,7 @@ class TestBufferMemoryModes(BaseMemoryTest):
             for i in range(15):
                 overflow_msg = f"Message {i}: This is test content to fill the buffer with various information."
                 response = await self.overlord.chat(
-                    overflow_msg,
-                    user_id="alice_local",
-                    use_async=False,
-                    stream=False
+                    overflow_msg, user_id="alice_local", use_async=False, stream=False
                 )
                 # Just consume the response
                 if hasattr(response, "__aiter__"):
@@ -122,10 +107,7 @@ class TestBufferMemoryModes(BaseMemoryTest):
             # Check if early context is still accessible
             msg3 = "Do you remember where I work?"
             response3 = await self.overlord.chat(
-                msg3,
-                user_id="alice_local",
-                use_async=False,
-                stream=True
+                msg3, user_id="alice_local", use_async=False, stream=True
             )
             response3_text = await self.collect_stream(response3)
             transcript.append((msg3, response3_text))
@@ -156,10 +138,7 @@ class TestBufferMemoryModes(BaseMemoryTest):
     async def test_remote_buffer_mode(self):
         """Test remote buffer memory mode with FAISSx server."""
         test_name = "2d1_remote_buffer_mode"
-        self.print_test_header(
-            test_name,
-            "Test remote buffer memory with FAISSx server"
-        )
+        self.print_test_header(test_name, "Test remote buffer memory with FAISSx server")
 
         start_time = time.time()
         checks_passed = []
@@ -177,10 +156,7 @@ class TestBufferMemoryModes(BaseMemoryTest):
             # Add initial context
             msg1 = "My name is Bob and I'm a software engineer specializing in distributed systems."
             response1 = await self.overlord.chat(
-                msg1,
-                user_id="bob_remote",
-                use_async=False,
-                stream=True
+                msg1, user_id="bob_remote", use_async=False, stream=True
             )
             response1_text = await self.collect_stream(response1)
             transcript.append((msg1, response1_text))
@@ -190,10 +166,7 @@ class TestBufferMemoryModes(BaseMemoryTest):
             # Query context
             msg2 = "What's my profession?"
             response2 = await self.overlord.chat(
-                msg2,
-                user_id="bob_remote",
-                use_async=False,
-                stream=True
+                msg2, user_id="bob_remote", use_async=False, stream=True
             )
             response2_text = await self.collect_stream(response2)
             transcript.append((msg2, response2_text))
@@ -202,12 +175,10 @@ class TestBufferMemoryModes(BaseMemoryTest):
 
             # Check retention
             engineer_remembered = (
-                "engineer" in response2_text.lower() or
-                "software" in response2_text.lower()
+                "engineer" in response2_text.lower() or "software" in response2_text.lower()
             )
             specialization_remembered = (
-                "distributed" in response2_text.lower() or
-                "systems" in response2_text.lower()
+                "distributed" in response2_text.lower() or "systems" in response2_text.lower()
             )
 
             if engineer_remembered:
@@ -228,10 +199,7 @@ class TestBufferMemoryModes(BaseMemoryTest):
 
             msg3 = "I also work with Python, Kubernetes, and machine learning pipelines."
             response3 = await self.overlord.chat(
-                msg3,
-                user_id="bob_remote",
-                use_async=False,
-                stream=True
+                msg3, user_id="bob_remote", use_async=False, stream=True
             )
             response3_text = await self.collect_stream(response3)
             transcript.append((msg3, response3_text))
@@ -241,10 +209,7 @@ class TestBufferMemoryModes(BaseMemoryTest):
             # Query for technical skills
             msg4 = "What technical skills have I mentioned?"
             response4 = await self.overlord.chat(
-                msg4,
-                user_id="bob_remote",
-                use_async=False,
-                stream=True
+                msg4, user_id="bob_remote", use_async=False, stream=True
             )
             response4_text = await self.collect_stream(response4)
             transcript.append((msg4, response4_text))
@@ -255,15 +220,16 @@ class TestBufferMemoryModes(BaseMemoryTest):
             python_remembered = "python" in response4_text.lower()
             kubernetes_remembered = "kubernetes" in response4_text.lower()
             ml_remembered = (
-                "machine learning" in response4_text.lower() or
-                "ml" in response4_text.lower()
+                "machine learning" in response4_text.lower() or "ml" in response4_text.lower()
             )
 
             technical_count = sum([python_remembered, kubernetes_remembered, ml_remembered])
 
             if technical_count >= 2:
                 print(f"  ✓ Technical skills remembered ({technical_count}/3)")
-                checks_passed.append(f"Remote vector search working ({technical_count}/3 skills found)")
+                checks_passed.append(
+                    f"Remote vector search working ({technical_count}/3 skills found)"
+                )
             elif technical_count >= 1:
                 print(f"  ⚠️ Partial technical retention ({technical_count}/3)")
                 checks_passed.append(f"Partial vector search results ({technical_count}/3)")
@@ -276,10 +242,7 @@ class TestBufferMemoryModes(BaseMemoryTest):
 
             msg5 = "What kind of systems do I build?"
             response5 = await self.overlord.chat(
-                msg5,
-                user_id="bob_remote",
-                use_async=False,
-                stream=True
+                msg5, user_id="bob_remote", use_async=False, stream=True
             )
             response5_text = await self.collect_stream(response5)
             transcript.append((msg5, response5_text))
@@ -288,10 +251,10 @@ class TestBufferMemoryModes(BaseMemoryTest):
 
             # Check semantic understanding
             semantic_match = (
-                "distributed" in response5_text.lower() or
-                "scalable" in response5_text.lower() or
-                "microservices" in response5_text.lower() or
-                "cloud" in response5_text.lower()
+                "distributed" in response5_text.lower()
+                or "scalable" in response5_text.lower()
+                or "microservices" in response5_text.lower()
+                or "cloud" in response5_text.lower()
             )
 
             if semantic_match:
@@ -314,9 +277,9 @@ class TestBufferMemoryModes(BaseMemoryTest):
 
     async def run_test(self):
         """Run all test cases."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("💾 AREA 2D1: BUFFER MEMORY MODES")
-        print("="*60)
+        print("=" * 60)
 
         # Run test cases
         local_passed = await self.test_local_buffer_mode()
@@ -325,9 +288,11 @@ class TestBufferMemoryModes(BaseMemoryTest):
         # Overall result
         all_passed = local_passed and remote_passed
 
-        print("\n" + "="*60)
-        print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if all_passed else '❌ SOME TESTS FAILED'}")
-        print("="*60)
+        print("\n" + "=" * 60)
+        print(
+            f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if all_passed else '❌ SOME TESTS FAILED'}"
+        )
+        print("=" * 60)
 
         print("\n💡 KEY INSIGHTS:")
         print("- Local buffer uses in-memory FAISS for fast vector search")
@@ -337,10 +302,14 @@ class TestBufferMemoryModes(BaseMemoryTest):
         print("- Remote mode better for distributed deployments")
 
         return all_passed
+
+
 def main():
     """Main entry point."""
     test = TestBufferMemoryModes()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
+
+
 if __name__ == "__main__":
     main()

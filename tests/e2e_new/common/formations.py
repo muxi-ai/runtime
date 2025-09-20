@@ -10,12 +10,16 @@ Supports three formation sharing patterns:
 import shutil
 from pathlib import Path
 from typing import Optional, Dict, Any
+
+
 class FormationPattern:
     """Constants for formation patterns."""
 
     RUNTIME = "runtime"  # Pattern 1: Runtime modification
     SHARED = "shared"  # Pattern 2: Shared dir with multiple YAMLs
     SEPARATE = "separate"  # Pattern 3: Complete separation
+
+
 # Test area to pattern mapping
 TEST_PATTERNS = {
     # Pattern 1: Runtime modification (56% of tests)
@@ -34,6 +38,8 @@ TEST_PATTERNS = {
     "orchestration": FormationPattern.SEPARATE,
     "clarification": FormationPattern.SEPARATE,
 }
+
+
 class FormationManager:
     """Manages formation configurations for E2E tests."""
 

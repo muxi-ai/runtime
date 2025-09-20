@@ -6,6 +6,8 @@ import re
 from typing import Dict, Any, List
 
 from ..common.base import BaseE2ETest
+
+
 class BaseSchedulingTest(BaseE2ETest):
     """
     Base class for scheduling tests.
@@ -42,7 +44,7 @@ class BaseSchedulingTest(BaseE2ETest):
             "schedule_type": None,
             "schedule_time": None,
             "description": None,
-            "status": None
+            "status": None,
         }
 
         content_lower = response_content.lower()
@@ -53,7 +55,7 @@ class BaseSchedulingTest(BaseE2ETest):
             "schedule created",
             "job created",
             "task scheduled",
-            "reminder set"
+            "reminder set",
         ]
 
         for indicator in creation_indicators:
@@ -66,7 +68,7 @@ class BaseSchedulingTest(BaseE2ETest):
             r"job id:?\s*([a-zA-Z0-9-_]+)",
             r"schedule id:?\s*([a-zA-Z0-9-_]+)",
             r"task id:?\s*([a-zA-Z0-9-_]+)",
-            r"id:?\s*([a-zA-Z0-9-_]+)"
+            r"id:?\s*([a-zA-Z0-9-_]+)",
         ]
 
         for pattern in job_id_patterns:
@@ -87,7 +89,7 @@ class BaseSchedulingTest(BaseE2ETest):
         time_patterns = [
             r"(\d{1,2}:\d{2}\s*(?:am|pm)?)",
             r"(\d{1,2}\s*(?:am|pm))",
-            r"at\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)"
+            r"at\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)",
         ]
 
         for pattern in time_patterns:
@@ -103,7 +105,7 @@ class BaseSchedulingTest(BaseE2ETest):
         message: str,
         expected_type: str = None,
         user_id: str = "test_user",
-        session_id: str = "test_session"
+        session_id: str = "test_session",
     ) -> Dict[str, Any]:
         """
         Test schedule creation from natural language.
@@ -121,15 +123,11 @@ class BaseSchedulingTest(BaseE2ETest):
 
         # Send the scheduling request
         response = await self.overlord.chat(
-            message=message,
-            user_id=user_id,
-            session_id=session_id,
-            use_async=False,
-            stream=False
+            message=message, user_id=user_id, session_id=session_id, use_async=False, stream=False
         )
 
         # Extract content
-        content = response.content if hasattr(response, 'content') else str(response)
+        content = response.content if hasattr(response, "content") else str(response)
 
         # Store transcript
         self.transcript.append((message, content))
@@ -142,7 +140,7 @@ class BaseSchedulingTest(BaseE2ETest):
             "response": content,
             "schedule_info": schedule_info,
             "success": False,
-            "type_match": False
+            "type_match": False,
         }
 
         # Check if schedule was created
@@ -166,7 +164,9 @@ class BaseSchedulingTest(BaseE2ETest):
                 if result["type_match"]:
                     self.formatter.print_success(f"Schedule type matches expected: {expected_type}")
                 else:
-                    self.formatter.print_warning(f"Expected {expected_type}, got {schedule_info['schedule_type']}")
+                    self.formatter.print_warning(
+                        f"Expected {expected_type}, got {schedule_info['schedule_type']}"
+                    )
 
         else:
             self.formatter.print_failure("Schedule creation failed or not detected")
@@ -181,7 +181,7 @@ class BaseSchedulingTest(BaseE2ETest):
         self,
         schedule_requests: List[Dict[str, Any]],
         user_id: str = "test_user",
-        session_id_prefix: str = "schedule_test"
+        session_id_prefix: str = "schedule_test",
     ) -> List[bool]:
         """
         Test multiple schedule creation requests.
@@ -202,10 +202,7 @@ class BaseSchedulingTest(BaseE2ETest):
             session_id = f"{session_id_prefix}_{i}"
 
             result = await self.test_schedule_creation(
-                message=message,
-                expected_type=expected_type,
-                user_id=user_id,
-                session_id=session_id
+                message=message, expected_type=expected_type, user_id=user_id, session_id=session_id
             )
 
             success = result["success"]
@@ -217,10 +214,7 @@ class BaseSchedulingTest(BaseE2ETest):
         return results
 
     async def test_schedule_management(
-        self,
-        job_id: str = None,
-        user_id: str = "test_user",
-        session_id: str = "management_test"
+        self, job_id: str = None, user_id: str = "test_user", session_id: str = "management_test"
     ) -> Dict[str, Any]:
         """
         Test schedule management operations (list, cancel, modify).
@@ -233,13 +227,11 @@ class BaseSchedulingTest(BaseE2ETest):
         Returns:
             Dict with management operation results
         """
-        self.formatter.print_test_case("Schedule Management Test", f"Testing management for {job_id or 'all schedules'}")
+        self.formatter.print_test_case(
+            "Schedule Management Test", f"Testing management for {job_id or 'all schedules'}"
+        )
 
-        results = {
-            "list_schedules": False,
-            "cancel_schedule": False,
-            "modify_schedule": False
-        }
+        results = {"list_schedules": False, "cancel_schedule": False, "modify_schedule": False}
 
         # Test listing schedules
         try:
@@ -248,12 +240,16 @@ class BaseSchedulingTest(BaseE2ETest):
                 user_id=user_id,
                 session_id=session_id,
                 use_async=False,
-                stream=False
+                stream=False,
             )
 
-            list_content = list_response.content if hasattr(list_response, 'content') else str(list_response)
+            list_content = (
+                list_response.content if hasattr(list_response, "content") else str(list_response)
+            )
 
-            if any(word in list_content.lower() for word in ["schedule", "task", "job", "reminder"]):
+            if any(
+                word in list_content.lower() for word in ["schedule", "task", "job", "reminder"]
+            ):
                 results["list_schedules"] = True
                 self.formatter.print_success("Schedule listing works")
             else:
@@ -273,12 +269,19 @@ class BaseSchedulingTest(BaseE2ETest):
                         user_id=user_id,
                         session_id=session_id,
                         use_async=False,
-                        stream=False
+                        stream=False,
                     )
 
-                    cancel_content = cancel_response.content if hasattr(cancel_response, 'content') else str(cancel_response)
+                    cancel_content = (
+                        cancel_response.content
+                        if hasattr(cancel_response, "content")
+                        else str(cancel_response)
+                    )
 
-                    if any(word in cancel_content.lower() for word in ["cancelled", "canceled", "removed", "deleted"]):
+                    if any(
+                        word in cancel_content.lower()
+                        for word in ["cancelled", "canceled", "removed", "deleted"]
+                    ):
                         results["cancel_schedule"] = True
                         self.formatter.print_success("Schedule cancellation works")
                     else:
@@ -305,16 +308,14 @@ class BaseSchedulingTest(BaseE2ETest):
             "total_cases": len(test_cases),
             "successful_parses": 0,
             "failed_parses": 0,
-            "parsing_details": []
+            "parsing_details": [],
         }
 
         for i, test_case in enumerate(test_cases):
             self.formatter.print_debug(f"Testing: {test_case}")
 
             result = await self.test_schedule_creation(
-                message=test_case,
-                user_id="nl_test_user",
-                session_id=f"nl_test_{i}"
+                message=test_case, user_id="nl_test_user", session_id=f"nl_test_{i}"
             )
 
             if result["success"]:
@@ -324,13 +325,15 @@ class BaseSchedulingTest(BaseE2ETest):
                 results["failed_parses"] += 1
                 status = "FAILED"
 
-            results["parsing_details"].append({
-                "case": test_case,
-                "status": status,
-                "schedule_info": result["schedule_info"]
-            })
+            results["parsing_details"].append(
+                {"case": test_case, "status": status, "schedule_info": result["schedule_info"]}
+            )
 
-        success_rate = results["successful_parses"] / results["total_cases"] if results["total_cases"] > 0 else 0
+        success_rate = (
+            results["successful_parses"] / results["total_cases"]
+            if results["total_cases"] > 0
+            else 0
+        )
         self.formatter.print_info(f"Natural language parsing success rate: {success_rate:.1%}")
 
         return results
@@ -343,7 +346,9 @@ class BaseSchedulingTest(BaseE2ETest):
             total_tests = len(self.schedule_results)
             successful_creations = sum(1 for r in self.schedule_results if r["success"])
 
-            self.formatter.print_info(f"Schedule creation tests: {successful_creations}/{total_tests}")
+            self.formatter.print_info(
+                f"Schedule creation tests: {successful_creations}/{total_tests}"
+            )
 
             # Analyze schedule types
             type_counts = {}
@@ -363,6 +368,8 @@ class BaseSchedulingTest(BaseE2ETest):
                 self.formatter.print_debug(f"  {schedule_id}")
 
         if self.schedule_errors:
-            self.formatter.print_warning(f"Schedule errors encountered: {len(self.schedule_errors)}")
+            self.formatter.print_warning(
+                f"Schedule errors encountered: {len(self.schedule_errors)}"
+            )
             for error in self.schedule_errors:
                 self.formatter.print_debug(f"  Error: {error}")

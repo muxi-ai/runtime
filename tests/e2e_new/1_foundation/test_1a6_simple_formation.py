@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter, TestTimeouts  # noqa: E402
 from muxi.datatypes.intent import IntentType  # noqa: E402
+
+
 class TestSimpleFormation(BaseE2ETest):
     """Test simple formation with schema v1.0.0."""
 
@@ -19,7 +21,7 @@ class TestSimpleFormation(BaseE2ETest):
         super().__init__(
             test_name="test_1a6_simple_formation",
             test_description="Test simple formation loading",
-            test_area="1_foundation"
+            test_area="1_foundation",
         )
 
     async def test_1a6_simple_formation(self):
@@ -31,7 +33,7 @@ class TestSimpleFormation(BaseE2ETest):
         # Print header
         formatter.print_test_header(
             test_name="test_1a6_simple_formation",
-            description="Test simple formation with schema v1.0.0"
+            description="Test simple formation with schema v1.0.0",
         )
 
         try:
@@ -62,11 +64,12 @@ class TestSimpleFormation(BaseE2ETest):
                 # Test the service (fallback mode)
                 result = asyncio.run(
                     agent.intent_service.detect_intent(
-                        "Do you remember what we discussed?",
-                        IntentType.QUERY_TYPE
+                        "Do you remember what we discussed?", IntentType.QUERY_TYPE
                     )
                 )
-                print(f"   Fallback detection result: {result.intent} (confidence: {result.confidence})")
+                print(
+                    f"   Fallback detection result: {result.intent} (confidence: {result.confidence})"
+                )
             else:
                 print("   ℹ️ IntentDetectionService not available (OK for minimal setup)")
 
@@ -82,7 +85,9 @@ class TestSimpleFormation(BaseE2ETest):
             # Test basic chat
             print("\n5. Testing basic chat...")
             timeout = TestTimeouts.get_timeout("simple_chat")
-            response = await asyncio.wait_for(overlord.chat("Hello", user_id="test_user"), timeout=timeout)
+            response = await asyncio.wait_for(
+                overlord.chat("Hello", user_id="test_user"), timeout=timeout
+            )
             assert response is not None
             response_text = response.content if hasattr(response, "content") else str(response)
             print(f"   Response: {response_text[:100]}...")
@@ -105,10 +110,10 @@ class TestSimpleFormation(BaseE2ETest):
                     "IntentDetectionService checked",
                     "Memory system checked",
                     "Chat functionality works",
-                    "Clean shutdown"
+                    "Clean shutdown",
                 ],
                 transcript=[("Hello", response_text)],
-                duration=duration
+                duration=duration,
             )
             success = True
 
@@ -119,14 +124,16 @@ class TestSimpleFormation(BaseE2ETest):
                 success=False,
                 checks=[f"Failed: {str(e)}"],
                 transcript=[],
-                duration=duration
+                duration=duration,
             )
             raise
         finally:
             return 0 if success else 1
+
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1a6_simple_formation())
+
 
 if __name__ == "__main__":
     test = TestSimpleFormation()

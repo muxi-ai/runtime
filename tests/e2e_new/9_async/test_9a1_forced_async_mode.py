@@ -9,6 +9,8 @@ asynchronously regardless of complexity or estimated duration.
 import sys
 
 from .base_async_test import BaseAsyncTest
+
+
 def main():
     """Test forced async mode."""
     test = BaseAsyncTest("9a1_forced_async_mode", "Test forced async mode with use_async=True")
@@ -25,7 +27,7 @@ def main():
             user_id="test_user",
             session_id="async_test_9a1",
             expected_content="4",
-            should_be_async=True
+            should_be_async=True,
         )
 
         # Record result
@@ -37,10 +39,10 @@ def main():
             # Store transcript
             if result["webhook"]:
                 response_content = ""
-                response_data = result["webhook"].get('response', [])
+                response_data = result["webhook"].get("response", [])
                 for item in response_data:
-                    if item.get('type') == 'text':
-                        response_content = item.get('text', '')
+                    if item.get("type") == "text":
+                        response_content = item.get("text", "")
                         break
 
                 test.transcript.append(("What is 2 + 2?", response_content))
@@ -63,6 +65,8 @@ def main():
         None,  # Use pattern-based formation path
         "formation-async.yaml",  # Use shared formation
     )
+
+
 if __name__ == "__main__":
     exit_code = main()
     sys.exit(exit_code)

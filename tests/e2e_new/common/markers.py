@@ -3,6 +3,7 @@ Test categorization markers for different test types and requirements.
 """
 
 import pytest
+
 # Test priority markers
 smoke = pytest.mark.smoke  # Quick tests for PR validation (~5 min)
 regression = pytest.mark.regression  # Full regression suite (~45 min)
@@ -25,6 +26,8 @@ requires_gpu = pytest.mark.requires_gpu  # For multimodal tests
 serial = pytest.mark.serial  # Must run sequentially
 parallel_safe = pytest.mark.parallel_safe  # Safe to run in parallel
 rate_limited = pytest.mark.rate_limited  # Has API rate limits
+
+
 # Feature coverage markers
 def covers(*features):
     """Mark test as covering specific features."""

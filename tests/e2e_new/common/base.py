@@ -19,6 +19,8 @@ from .formations import FormationManager, FormationPattern, TEST_PATTERNS  # noq
 from .env import test_env  # noqa: E402
 from .results import TestResultTracker  # noqa: E402
 from .benchmark import PerformanceBenchmark  # noqa: E402
+
+
 class BaseE2ETest:
     """
     Base class for all E2E tests.

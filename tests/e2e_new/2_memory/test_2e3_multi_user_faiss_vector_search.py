@@ -18,10 +18,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from .base_memory_test import BaseMemoryTest
-from muxi.services.memory.working import WorkingMemory
-from muxi.services.secrets.secrets_manager import SecretsManager
-from muxi.services.llm.llm import LLM
+from .base_memory_test import BaseMemoryTest  # noqa: E402
+from muxi.services.memory.working import WorkingMemory  # noqa: E402
+from muxi.services.secrets.secrets_manager import SecretsManager  # noqa: E402
+from muxi.services.llm.llm import LLM  # noqa: E402
+
+
 class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
     """Test multi-user FAISS vector search."""
 
@@ -44,7 +46,7 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
         # Create real LLM for embeddings with better model
         llm = LLM(
             model="openai/text-embedding-3-large",  # Better model for semantic similarity
-            api_key=openai_api_key
+            api_key=openai_api_key,
         )
 
         print("    Using real embeddings: openai/text-embedding-3-large")
@@ -53,7 +55,7 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
         users = [
             {"id": "alice", "data": "Alice loves Python programming and machine learning"},
             {"id": "bob", "data": "Bob prefers JavaScript and web development"},
-            {"id": "charlie", "data": "Charlie enjoys Rust systems programming"}
+            {"id": "charlie", "data": "Charlie enjoys Rust systems programming"},
         ]
 
         try:
@@ -67,8 +69,8 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
                 mode="remote",
                 remote={
                     "url": "tcp://localhost:45678",
-                    "tenant": tenant_id  # All users share same tenant
-                }
+                    "tenant": tenant_id,  # All users share same tenant
+                },
             )
 
             print("    ✓ Buffer created for multi-user FAISSx")
@@ -85,7 +87,9 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
                 print(f"      Added data for {user['id']}")
 
             # Add some additional mixed data
-            await buffer.add("General programming discussion about algorithms", {"user_id": "system"})
+            await buffer.add(
+                "General programming discussion about algorithms", {"user_id": "system"}
+            )
             await buffer.add("Machine learning is revolutionizing software", {"user_id": "alice"})
             await buffer.add("Web frameworks are evolving rapidly", {"user_id": "bob"})
             end_time = time.time()
@@ -103,27 +107,31 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
             print(f"\n    1. Python search completed in {search_end - search_start:.3f}s")
             print(f"       Found {len(python_results)} results:")
             for i, result in enumerate(python_results):
-                user_id = result.get('metadata', {}).get('user_id', 'unknown')
+                user_id = result.get("metadata", {}).get("user_id", "unknown")
                 print(f"       {i+1}. User {user_id}: {result['text'][:50]}...")
 
             # Search 2: Find web development content (should find Bob's data)
             web_results = await buffer.search("web development JavaScript", limit=3)
             print(f"\n    2. Web development search found {len(web_results)} results:")
             for i, result in enumerate(web_results):
-                user_id = result.get('metadata', {}).get('user_id', 'unknown')
+                user_id = result.get("metadata", {}).get("user_id", "unknown")
                 print(f"       {i+1}. User {user_id}: {result['text'][:50]}...")
 
             # Search 3: Find Rust content (should find Charlie's data)
             rust_results = await buffer.search("Rust systems programming", limit=3)
             print(f"\n    3. Rust search found {len(rust_results)} results:")
             for i, result in enumerate(rust_results):
-                user_id = result.get('metadata', {}).get('user_id', 'unknown')
+                user_id = result.get("metadata", {}).get("user_id", "unknown")
                 print(f"       {i+1}. User {user_id}: {result['text'][:50]}...")
 
             # Verify user data is searchable
-            alice_found = any(r.get('metadata', {}).get('user_id') == 'alice' for r in python_results)
-            bob_found = any(r.get('metadata', {}).get('user_id') == 'bob' for r in web_results)
-            charlie_found = any(r.get('metadata', {}).get('user_id') == 'charlie' for r in rust_results)
+            alice_found = any(
+                r.get("metadata", {}).get("user_id") == "alice" for r in python_results
+            )
+            bob_found = any(r.get("metadata", {}).get("user_id") == "bob" for r in web_results)
+            charlie_found = any(
+                r.get("metadata", {}).get("user_id") == "charlie" for r in rust_results
+            )
 
             print("\n    ✓ User data retrieval:")
             print(f"      Alice's Python data found: {'✅' if alice_found else '❌'}")
@@ -137,14 +145,14 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
                 "search_results": {
                     "python": len(python_results),
                     "web": len(web_results),
-                    "rust": len(rust_results)
+                    "rust": len(rust_results),
                 },
                 "user_data_found": {
                     "alice": alice_found,
                     "bob": bob_found,
-                    "charlie": charlie_found
+                    "charlie": charlie_found,
                 },
-                "add_time": end_time - start_time
+                "add_time": end_time - start_time,
             }
 
         except Exception as e:
@@ -161,10 +169,7 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
         openai_api_key = await secrets_manager.get_secret("OPENAI_API_KEY")
 
         # Create real LLM for embeddings
-        llm = LLM(
-            model="openai/text-embedding-3-small",
-            api_key=openai_api_key
-        )
+        llm = LLM(model="openai/text-embedding-3-small", api_key=openai_api_key)
 
         try:
             # Create buffers for different tenants
@@ -175,10 +180,7 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
                 dimension=1536,
                 model=llm,
                 mode="remote",
-                remote={
-                    "url": "tcp://localhost:45678",
-                    "tenant": "tenant-alpha"
-                }
+                remote={"url": "tcp://localhost:45678", "tenant": "tenant-alpha"},
             )
 
             tenant2_buffer = WorkingMemory(
@@ -188,10 +190,7 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
                 dimension=1536,
                 model=llm,
                 mode="remote",
-                remote={
-                    "url": "tcp://localhost:45678",
-                    "tenant": "tenant-beta"
-                }
+                remote={"url": "tcp://localhost:45678", "tenant": "tenant-beta"},
             )
 
             print("    ✓ Created buffers for two different tenants")
@@ -202,14 +201,24 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
             print("\n    Adding tenant-specific data...")
 
             # Tenant 1 data (alpha)
-            await tenant1_buffer.add("Alpha company specializes in quantum computing", {"tenant": "alpha"})
+            await tenant1_buffer.add(
+                "Alpha company specializes in quantum computing", {"tenant": "alpha"}
+            )
             await tenant1_buffer.add("Quantum algorithms are the future", {"tenant": "alpha"})
-            await tenant1_buffer.add("Alpha's research focuses on qubit stability", {"tenant": "alpha"})
+            await tenant1_buffer.add(
+                "Alpha's research focuses on qubit stability", {"tenant": "alpha"}
+            )
 
             # Tenant 2 data (beta)
-            await tenant2_buffer.add("Beta corporation develops blockchain solutions", {"tenant": "beta"})
-            await tenant2_buffer.add("Cryptocurrency and DeFi are our expertise", {"tenant": "beta"})
-            await tenant2_buffer.add("Beta's platform handles millions of transactions", {"tenant": "beta"})
+            await tenant2_buffer.add(
+                "Beta corporation develops blockchain solutions", {"tenant": "beta"}
+            )
+            await tenant2_buffer.add(
+                "Cryptocurrency and DeFi are our expertise", {"tenant": "beta"}
+            )
+            await tenant2_buffer.add(
+                "Beta's platform handles millions of transactions", {"tenant": "beta"}
+            )
 
             print("    ✓ Added tenant-specific data")
 
@@ -221,11 +230,15 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
             print(f"\n    Tenant Alpha - Quantum search: {len(quantum_results_t1)} results")
 
             # Search for blockchain in tenant 1 (should NOT find results)
-            blockchain_results_t1 = await tenant1_buffer.search("blockchain cryptocurrency", limit=5)
+            blockchain_results_t1 = await tenant1_buffer.search(
+                "blockchain cryptocurrency", limit=5
+            )
             print(f"    Tenant Alpha - Blockchain search: {len(blockchain_results_t1)} results")
 
             # Search for blockchain in tenant 2 (should find results)
-            blockchain_results_t2 = await tenant2_buffer.search("blockchain cryptocurrency", limit=5)
+            blockchain_results_t2 = await tenant2_buffer.search(
+                "blockchain cryptocurrency", limit=5
+            )
             print(f"    Tenant Beta - Blockchain search: {len(blockchain_results_t2)} results")
 
             # Search for quantum in tenant 2 (should NOT find results)
@@ -234,32 +247,44 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
 
             # Verify isolation
             tenant1_has_quantum = len(quantum_results_t1) > 0
-            tenant1_no_blockchain = len(blockchain_results_t1) == 0 or \
-                not any("blockchain" in r['text'].lower() for r in blockchain_results_t1)
+            tenant1_no_blockchain = len(blockchain_results_t1) == 0 or not any(
+                "blockchain" in r["text"].lower() for r in blockchain_results_t1
+            )
             tenant2_has_blockchain = len(blockchain_results_t2) > 0
-            tenant2_no_quantum = len(quantum_results_t2) == 0 or \
-                not any("quantum" in r['text'].lower() for r in quantum_results_t2)
+            tenant2_no_quantum = len(quantum_results_t2) == 0 or not any(
+                "quantum" in r["text"].lower() for r in quantum_results_t2
+            )
 
-            isolation_working = tenant1_has_quantum and tenant1_no_blockchain and \
-                              tenant2_has_blockchain and tenant2_no_quantum
+            isolation_working = (
+                tenant1_has_quantum
+                and tenant1_no_blockchain
+                and tenant2_has_blockchain
+                and tenant2_no_quantum
+            )
 
             print("\n    ✓ Tenant isolation results:")
             print(f"      Tenant Alpha has quantum data: {'✅' if tenant1_has_quantum else '❌'}")
-            print(f"      Tenant Alpha isolated from blockchain: {'✅' if tenant1_no_blockchain else '❌'}")
-            print(f"      Tenant Beta has blockchain data: {'✅' if tenant2_has_blockchain else '❌'}")
-            print(f"      Tenant Beta isolated from quantum: {'✅' if tenant2_no_quantum else '❌'}")
+            print(
+                f"      Tenant Alpha isolated from blockchain: {'✅' if tenant1_no_blockchain else '❌'}"
+            )
+            print(
+                f"      Tenant Beta has blockchain data: {'✅' if tenant2_has_blockchain else '❌'}"
+            )
+            print(
+                f"      Tenant Beta isolated from quantum: {'✅' if tenant2_no_quantum else '❌'}"
+            )
             print(f"      Overall isolation: {'✅ WORKING' if isolation_working else '❌ FAILED'}")
 
             return True if isolation_working else False, {
                 "isolation_working": isolation_working,
                 "tenant1_results": {
                     "quantum": len(quantum_results_t1),
-                    "blockchain": len(blockchain_results_t1)
+                    "blockchain": len(blockchain_results_t1),
                 },
                 "tenant2_results": {
                     "quantum": len(quantum_results_t2),
-                    "blockchain": len(blockchain_results_t2)
-                }
+                    "blockchain": len(blockchain_results_t2),
+                },
             }
 
         except Exception as e:
@@ -280,10 +305,7 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
             tenant_id = "relevance-test"
 
         # Create real LLM for embeddings
-        llm = LLM(
-            model="openai/text-embedding-3-small",
-            api_key=openai_api_key
-        )
+        llm = LLM(model="openai/text-embedding-3-small", api_key=openai_api_key)
 
         print("    Using real embeddings for relevance testing")
 
@@ -296,10 +318,7 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
                 dimension=1536,
                 model=llm,
                 mode="remote",
-                remote={
-                    "url": "tcp://localhost:45678",
-                    "tenant": tenant_id
-                }
+                remote={"url": "tcp://localhost:45678", "tenant": tenant_id},
             )
 
             print("    ✓ Created buffer for relevance testing")
@@ -309,19 +328,45 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
             print("\n    Adding diverse user-specific content...")
 
             # Alice's technical content
-            await buffer.add("Alice: I'm debugging a Python async/await issue", {"user": "alice", "topic": "debugging"})
-            await buffer.add("Alice: The coroutine is not being awaited properly", {"user": "alice", "topic": "async"})
-            await buffer.add("Alice: Found the issue - missing async keyword", {"user": "alice", "topic": "solution"})
+            await buffer.add(
+                "Alice: I'm debugging a Python async/await issue",
+                {"user": "alice", "topic": "debugging"},
+            )
+            await buffer.add(
+                "Alice: The coroutine is not being awaited properly",
+                {"user": "alice", "topic": "async"},
+            )
+            await buffer.add(
+                "Alice: Found the issue - missing async keyword",
+                {"user": "alice", "topic": "solution"},
+            )
 
             # Bob's project content
-            await buffer.add("Bob: Starting new React project with TypeScript", {"user": "bob", "topic": "project"})
-            await buffer.add("Bob: Setting up Redux for state management", {"user": "bob", "topic": "architecture"})
-            await buffer.add("Bob: Implementing authentication with JWT", {"user": "bob", "topic": "security"})
+            await buffer.add(
+                "Bob: Starting new React project with TypeScript",
+                {"user": "bob", "topic": "project"},
+            )
+            await buffer.add(
+                "Bob: Setting up Redux for state management",
+                {"user": "bob", "topic": "architecture"},
+            )
+            await buffer.add(
+                "Bob: Implementing authentication with JWT", {"user": "bob", "topic": "security"}
+            )
 
             # Charlie's learning content
-            await buffer.add("Charlie: Learning about neural networks today", {"user": "charlie", "topic": "learning"})
-            await buffer.add("Charlie: Backpropagation is complex but fascinating", {"user": "charlie", "topic": "ai"})
-            await buffer.add("Charlie: Implementing my first CNN in PyTorch", {"user": "charlie", "topic": "implementation"})
+            await buffer.add(
+                "Charlie: Learning about neural networks today",
+                {"user": "charlie", "topic": "learning"},
+            )
+            await buffer.add(
+                "Charlie: Backpropagation is complex but fascinating",
+                {"user": "charlie", "topic": "ai"},
+            )
+            await buffer.add(
+                "Charlie: Implementing my first CNN in PyTorch",
+                {"user": "charlie", "topic": "implementation"},
+            )
 
             print("    ✓ Added 9 user-specific messages")
 
@@ -333,8 +378,8 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
             print(f"\n    1. Async programming search - {len(async_results)} results:")
             alice_count = 0
             for r in async_results:
-                user = r.get('metadata', {}).get('user', 'unknown')
-                if user == 'alice':
+                user = r.get("metadata", {}).get("user", "unknown")
+                if user == "alice":
                     alice_count += 1
                 print(f"       {user}: {r['text'][:50]}...")
 
@@ -343,8 +388,8 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
             print(f"\n    2. React development search - {len(react_results)} results:")
             bob_count = 0
             for r in react_results:
-                user = r.get('metadata', {}).get('user', 'unknown')
-                if user == 'bob':
+                user = r.get("metadata", {}).get("user", "unknown")
+                if user == "bob":
                     bob_count += 1
                 print(f"       {user}: {r['text'][:50]}...")
 
@@ -353,8 +398,8 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
             print(f"\n    3. Machine learning search - {len(ml_results)} results:")
             charlie_count = 0
             for r in ml_results:
-                user = r.get('metadata', {}).get('user', 'unknown')
-                if user == 'charlie':
+                user = r.get("metadata", {}).get("user", "unknown")
+                if user == "charlie":
                     charlie_count += 1
                 print(f"       {user}: {r['text'][:50]}...")
 
@@ -377,13 +422,13 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
                     "alice": alice_relevance,
                     "bob": bob_relevance,
                     "charlie": charlie_relevance,
-                    "average": avg_relevance
+                    "average": avg_relevance,
                 },
                 "search_counts": {
                     "async": len(async_results),
                     "react": len(react_results),
-                    "ml": len(ml_results)
-                }
+                    "ml": len(ml_results),
+                },
             }
 
         except Exception as e:
@@ -393,10 +438,7 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
     async def test_multi_user_vector(self):
         """Main test method."""
         test_name = "2e3_multi_user_vector_search"
-        self.print_test_header(
-            test_name,
-            "Test multi-user vector search with isolation"
-        )
+        self.print_test_header(test_name, "Test multi-user vector search with isolation")
 
         start_time = time.time()
         checks_passed = []
@@ -411,8 +453,8 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
             if multi_success:
                 checks_passed.append("Multi-user search working")
                 transcript.append(("System", f"Multi-user test passed: {multi_result}"))
-                user_found = multi_result.get('user_data_found', {})
-                if user_found.get('alice') and user_found.get('bob') and user_found.get('charlie'):
+                user_found = multi_result.get("user_data_found", {})
+                if user_found.get("alice") and user_found.get("bob") and user_found.get("charlie"):
                     checks_passed.append("All user data found correctly")
             else:
                 all_passed = False
@@ -432,7 +474,7 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
             if relevance_success:
                 checks_passed.append("Search relevance working")
                 transcript.append(("System", f"Relevance test passed: {relevance_result}"))
-                avg_relevance = relevance_result.get('relevance_scores', {}).get('average', 0)
+                avg_relevance = relevance_result.get("relevance_scores", {}).get("average", 0)
                 if avg_relevance >= 70:
                     checks_passed.append("High relevance scores achieved")
             else:
@@ -477,22 +519,26 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
 
     async def run_test(self):
         """Run all test cases."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("👥 AREA 2E3: MULTI-USER VECTOR SEARCH")
-        print("="*60)
+        print("=" * 60)
 
         # Run test cases
         result = await self.test_multi_user_vector()
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if result else '❌ SOME TESTS FAILED'}")
-        print("="*60)
+        print("=" * 60)
 
         return result
+
+
 def main():
     """Main entry point."""
     test = TestMultiUserFAISSVectorSearch()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
+
+
 if __name__ == "__main__":
     main()

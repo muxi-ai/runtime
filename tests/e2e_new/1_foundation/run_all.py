@@ -7,6 +7,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+
 def run_test(test_file):
     """Run a single test file and return result."""
     print(f"\n{'='*60}")
@@ -42,6 +44,8 @@ def run_test(test_file):
     except Exception as e:
         print(f"❌ ERROR: {e}")
         return False
+
+
 def main():
     """Run all tests in Area 1."""
     tests_dir = Path(__file__).parent
@@ -77,5 +81,7 @@ def main():
     print(f"Total time: {duration:.2f}s")
 
     return 0 if failed == 0 else 1
+
+
 if __name__ == "__main__":
     sys.exit(main())

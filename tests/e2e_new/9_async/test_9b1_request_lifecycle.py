@@ -9,6 +9,8 @@ during async workflow execution.
 import sys
 
 from .base_async_test import BaseAsyncTest
+
+
 def main():
     """Test request lifecycle management."""
     test = BaseAsyncTest("9b1_request_lifecycle", "Test request lifecycle management APIs")
@@ -23,7 +25,7 @@ def main():
             user_id="user_123",
             session_id="session_456",
             expected_content="4",
-            should_be_async=True
+            should_be_async=True,
         )
 
         success = result["success"]
@@ -47,10 +49,10 @@ def main():
         # Store transcript for the main request
         if result["webhook"]:
             response_content = ""
-            response_data = result["webhook"].get('response', [])
+            response_data = result["webhook"].get("response", [])
             for item in response_data:
-                if item.get('type') == 'text':
-                    response_content = item.get('text', '')
+                if item.get("type") == "text":
+                    response_content = item.get("text", "")
                     break
 
             test.transcript.append(("What is 2+2? Please show your work.", response_content))
@@ -71,6 +73,8 @@ def main():
         None,  # Use pattern-based formation path
         "formation-async.yaml",  # Use shared formation
     )
+
+
 if __name__ == "__main__":
     exit_code = main()
     sys.exit(exit_code)

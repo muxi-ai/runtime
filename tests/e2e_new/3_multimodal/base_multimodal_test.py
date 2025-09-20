@@ -8,12 +8,14 @@ import base64
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # Add tests directory
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from muxi.formation import Formation  # noqa: E402
 
 # Import from common module
-from e2e_new.common import TestOutputFormatter  # noqa: E402
+from .common import TestOutputFormatter  # noqa: E402
+
+
 class BaseMultimodalTest:
     """Base class for multimodal tests with simplified setup."""
 
@@ -27,20 +29,25 @@ class BaseMultimodalTest:
     TEST_FILES = {
         "image": {
             "extensions": [".jpg", ".jpeg", ".png", ".gif", ".bmp"],
-            "mime_types": ["image/jpeg", "image/png", "image/gif", "image/bmp"]
+            "mime_types": ["image/jpeg", "image/png", "image/gif", "image/bmp"],
         },
         "audio": {
             "extensions": [".mp3", ".wav", ".m4a", ".ogg"],
-            "mime_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg"]
+            "mime_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg"],
         },
         "video": {
             "extensions": [".mp4", ".avi", ".mov", ".webm"],
-            "mime_types": ["video/mp4", "video/x-msvideo", "video/quicktime", "video/webm"]
+            "mime_types": ["video/mp4", "video/x-msvideo", "video/quicktime", "video/webm"],
         },
         "document": {
             "extensions": [".pdf", ".docx", ".txt", ".md"],
-            "mime_types": ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "text/markdown"]
-        }
+            "mime_types": [
+                "application/pdf",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "text/plain",
+                "text/markdown",
+            ],
+        },
     }
 
     def __init__(self):
@@ -71,8 +78,9 @@ class BaseMultimodalTest:
 
         return self.formation
 
-    async def process_file(self, file_path: str, user_message: str = None,
-                          user_id: str = "test_user") -> Tuple[bool, str]:
+    async def process_file(
+        self, file_path: str, user_message: str = None, user_id: str = "test_user"
+    ) -> Tuple[bool, str]:
         """Process a file through multimodal service.
 
         Args:
@@ -85,7 +93,7 @@ class BaseMultimodalTest:
         """
         try:
             # Read file content
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 file_content = f.read()
 
             # Determine file type
@@ -96,7 +104,7 @@ class BaseMultimodalTest:
             file_data = {
                 "filename": Path(file_path).name,
                 "content": file_content,
-                "content_type": mime_type
+                "content_type": mime_type,
             }
 
             # Process through overlord using appropriate method
@@ -107,15 +115,12 @@ class BaseMultimodalTest:
                     message=user_message,
                     files=[file_data],
                     use_async=False,
-                    stream=False
+                    stream=False,
                 )
             else:
                 # Use avchat for automatic processing (audio/video files)
                 response = await self.overlord.avchat(
-                    files=[file_data],
-                    user_id=user_id,
-                    use_async=False,
-                    stream=False
+                    files=[file_data], user_id=user_id, use_async=False, stream=False
                 )
 
             # Handle response
@@ -131,8 +136,9 @@ class BaseMultimodalTest:
         except Exception as e:
             return False, f"Error processing file: {str(e)}"
 
-    async def process_image(self, image_path: str, question: str = None,
-                           user_id: str = "test_user") -> Tuple[bool, str]:
+    async def process_image(
+        self, image_path: str, question: str = None, user_id: str = "test_user"
+    ) -> Tuple[bool, str]:
         """Process an image file.
 
         Args:
@@ -148,8 +154,9 @@ class BaseMultimodalTest:
 
         return await self.process_file(image_path, question, user_id)
 
-    async def process_audio(self, audio_path: str, task: str = None,
-                          user_id: str = "test_user") -> Tuple[bool, str]:
+    async def process_audio(
+        self, audio_path: str, task: str = None, user_id: str = "test_user"
+    ) -> Tuple[bool, str]:
         """Process an audio file.
 
         Args:
@@ -165,8 +172,9 @@ class BaseMultimodalTest:
 
         return await self.process_file(audio_path, task, user_id)
 
-    async def process_document(self, doc_path: str, query: str = None,
-                             user_id: str = "test_user") -> Tuple[bool, str]:
+    async def process_document(
+        self, doc_path: str, query: str = None, user_id: str = "test_user"
+    ) -> Tuple[bool, str]:
         """Process a document file.
 
         Args:
@@ -210,8 +218,8 @@ class BaseMultimodalTest:
         Returns:
             Base64 encoded string
         """
-        with open(file_path, 'rb') as f:
-            return base64.b64encode(f.read()).decode('utf-8')
+        with open(file_path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
 
     async def test_multimodal_capabilities(self) -> Tuple[bool, Dict[str, bool]]:
         """Test basic multimodal capabilities.
@@ -225,7 +233,7 @@ class BaseMultimodalTest:
         # Test image processing
         try:
             # Create a simple test image (1x1 pixel PNG)
-            test_image = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x00\x00\x00\x00IEND\xaeB`\x82'
+            test_image = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x00\x00\x00\x00IEND\xaeB`\x82"  # noqa: E501
 
             test_path = Path("/tmp/test_image.png")
             test_path.write_bytes(test_image)
@@ -270,7 +278,13 @@ class BaseMultimodalTest:
         """Print standardized test header."""
         self.formatter.print_test_header(test_name, description)
 
-    def print_test_result(self, test_name: str, success: bool, checks: List[str],
-                          transcript: List[Tuple[str, str]], duration: float):
+    def print_test_result(
+        self,
+        test_name: str,
+        success: bool,
+        checks: List[str],
+        transcript: List[Tuple[str, str]],
+        duration: float,
+    ):
         """Print standardized test result."""
         self.formatter.print_test_result(test_name, success, checks, transcript, duration)

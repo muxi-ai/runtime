@@ -4,7 +4,9 @@
 import asyncio
 import time
 
-from base_mcp_test import BaseMCPTest
+from .base_mcp_test import BaseMCPTest
+
+
 class Test4A2SystemInfoMCP(BaseMCPTest):
     """Test system information retrieval using MCP system tools."""
 
@@ -31,10 +33,7 @@ class Test4A2SystemInfoMCP(BaseMCPTest):
             transcript.append(("User", request1))
 
             response1 = await self.overlord.chat(
-                request1,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                request1, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -43,7 +42,9 @@ class Test4A2SystemInfoMCP(BaseMCPTest):
                 async for chunk in response1:
                     response1_text += chunk
             else:
-                response1_text = response1.content if hasattr(response1, "content") else str(response1)
+                response1_text = (
+                    response1.content if hasattr(response1, "content") else str(response1)
+                )
 
             print(f"  Response: {response1_text}")
             transcript.append(("System", response1_text))
@@ -51,8 +52,13 @@ class Test4A2SystemInfoMCP(BaseMCPTest):
             # Verify response contains system stats
             response1_lower = response1_text.lower()
             cpu_mentioned = any(term in response1_lower for term in ["cpu", "processor"])
-            memory_mentioned = any(term in response1_lower for term in ["memory", "ram", "gb", "mb"])
-            usage_mentioned = any(char in response1_text for char in ["%", "percent"]) or "usage" in response1_lower
+            memory_mentioned = any(
+                term in response1_lower for term in ["memory", "ram", "gb", "mb"]
+            )
+            usage_mentioned = (
+                any(char in response1_text for char in ["%", "percent"])
+                or "usage" in response1_lower
+            )
 
             if cpu_mentioned:
                 checks.append("CPU information retrieved")
@@ -70,10 +76,7 @@ class Test4A2SystemInfoMCP(BaseMCPTest):
             transcript.append(("User", request2))
 
             response2 = await self.overlord.chat(
-                request2,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                request2, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -82,13 +85,17 @@ class Test4A2SystemInfoMCP(BaseMCPTest):
                 async for chunk in response2:
                     response2_text += chunk
             else:
-                response2_text = response2.content if hasattr(response2, "content") else str(response2)
+                response2_text = (
+                    response2.content if hasattr(response2, "content") else str(response2)
+                )
 
             print(f"  Response: {response2_text}")
             transcript.append(("System", response2_text))
 
             response2_lower = response2_text.lower()
-            cores_mentioned = any(term in response2_lower for term in ["core", "thread", "processor"])
+            cores_mentioned = any(
+                term in response2_lower for term in ["core", "thread", "processor"]
+            )
             detailed_response = len(response2_text) > 100
 
             if cores_mentioned:
@@ -105,10 +112,7 @@ class Test4A2SystemInfoMCP(BaseMCPTest):
             transcript.append(("User", request3))
 
             response3 = await self.overlord.chat(
-                request3,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                request3, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -117,7 +121,9 @@ class Test4A2SystemInfoMCP(BaseMCPTest):
                 async for chunk in response3:
                     response3_text += chunk
             else:
-                response3_text = response3.content if hasattr(response3, "content") else str(response3)
+                response3_text = (
+                    response3.content if hasattr(response3, "content") else str(response3)
+                )
 
             print(f"  Response: {response3_text}")
             transcript.append(("System", response3_text))
@@ -139,10 +145,7 @@ class Test4A2SystemInfoMCP(BaseMCPTest):
             transcript.append(("User", request4))
 
             response4 = await self.overlord.chat(
-                request4,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                request4, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -151,7 +154,9 @@ class Test4A2SystemInfoMCP(BaseMCPTest):
                 async for chunk in response4:
                     response4_text += chunk
             else:
-                response4_text = response4.content if hasattr(response4, "content") else str(response4)
+                response4_text = (
+                    response4.content if hasattr(response4, "content") else str(response4)
+                )
 
             print(f"  Response: {response4_text}")
             transcript.append(("System", response4_text))
@@ -174,10 +179,7 @@ class Test4A2SystemInfoMCP(BaseMCPTest):
             transcript.append(("User", request5))
 
             response5 = await self.overlord.chat(
-                request5,
-                user_id="test_user",
-                use_async=False,
-                stream=False
+                request5, user_id="test_user", use_async=False, stream=False
             )
 
             # Handle response
@@ -186,7 +188,9 @@ class Test4A2SystemInfoMCP(BaseMCPTest):
                 async for chunk in response5:
                     response5_text += chunk
             else:
-                response5_text = response5.content if hasattr(response5, "content") else str(response5)
+                response5_text = (
+                    response5.content if hasattr(response5, "content") else str(response5)
+                )
 
             print(f"  Response: {response5_text}")
             transcript.append(("System", response5_text))
@@ -204,7 +208,13 @@ class Test4A2SystemInfoMCP(BaseMCPTest):
             print(f"  ✓ Disk space query test: {'PASSED' if test5_success else 'FAILED'}")
 
             # Overall success
-            success = test1_success and test2_success and test3_success and test4_success and test5_success
+            success = (
+                test1_success
+                and test2_success
+                and test3_success
+                and test4_success
+                and test5_success
+            )
 
             if success:
                 checks.append("All system info MCP operations successful")
@@ -224,11 +234,15 @@ class Test4A2SystemInfoMCP(BaseMCPTest):
         self.print_test_result(test_name, success, checks, transcript, duration)
 
         return success
+
+
 async def main():
     """Main test execution."""
     test = Test4A2SystemInfoMCP()
     success = await test.run_test()
     return success
+
+
 if __name__ == "__main__":
     success = asyncio.run(main())
     exit(0 if success else 1)

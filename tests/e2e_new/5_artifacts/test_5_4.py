@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """Test 5_4: File generation and artifacts"""
 
-import sys
 import asyncio
 import time
 import os
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from .base_artifacts_test import BaseArtifactsTest
 
-from e2e_new.artifacts.base_artifacts_test import BaseArtifactsTest
+
 class Test54(BaseArtifactsTest):
     """Test class for 5_4."""
 
@@ -42,21 +40,25 @@ class Test54(BaseArtifactsTest):
 
     async def run_test(self):
         """Run test."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🧪 AREA 5_4")
-        print("="*60)
+        print("=" * 60)
 
         result = await self.test_main()
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print(f"🎯 RESULT: {'✅ PASSED' if result else '❌ FAILED'}")
-        print("="*60)
+        print("=" * 60)
 
         return result
+
+
 def main():
     """Main entry point."""
     test = Test54()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
+
+
 if __name__ == "__main__":
     main()
