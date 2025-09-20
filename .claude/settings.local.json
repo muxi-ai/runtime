@@ -28,7 +28,9 @@
       "Bash(do echo \"Running $test...\")",
       "Bash(xargs:*)",
       "Bash(do echo \"=== $test ===\")",
-      "Bash(do echo -n \"$test: \")"
+      "Bash(do echo -n \"$test: \")",
+      "Bash(awk:*)",
+      "Bash(do sed -i '' 's/from e2e_new.artifacts.base_artifacts_test import BaseArtifactsTest/from .base_artifacts_test import BaseArtifactsTest/' \"$file\")"
     ],
     "deny": [],
     "ask": []

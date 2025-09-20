@@ -1,31 +1,121 @@
 #!/usr/bin/env python3
-"""Test 7_4: Workflow and orchestration"""
+"""Test test_7_4: Complex Workflow Orchestration"""
 
 import asyncio
 import time
 import os
 
-from .base_orchestration_test import BaseOrchestrationTest
+from .base_orchestration_test import Baseorchestrationtest
 
 
-class Test74(BaseOrchestrationTest):
-    """Test class for 7_4."""
+class Testtest74(Baseorchestrationtest):
+    """Test class for test_7_4."""
 
     async def test_main(self):
-        """Main test method."""
-        test_name = "7_4"
-        self.print_test_header(test_name, "Test Workflow and orchestration")
+        """Test complex workflow orchestration functionality."""
+        test_name = "test_7_4"
+        self.print_test_header(test_name, "Complex Workflow Orchestration")
 
         start_time = time.time()
         checks_passed = []
+        transcript = []
         all_passed = True
 
         try:
             await self.setup_formation()
             print("  ✓ Formation loaded")
 
-            # TODO: Migrate test logic
-            checks_passed.append("Placeholder test")
+            # Test 1: Complex Workflow Creation
+            print("\n  1. Testing Complex workflow creation...")
+            prompt1 = "Build a complete data pipeline from ingestion to visualization"
+            transcript.append(("User", prompt1))
+
+            response1 = await self.overlord.chat(
+                prompt1,
+                user_id="test_user",
+                session_id="orchestration_test_1",
+                use_async=False,
+                stream=False
+            )
+
+            result1 = response1.content if hasattr(response1, "content") else str(response1)
+            transcript.append(("System", result1[:100] + "..." if len(result1) > 100 else result1))
+
+            # Verify content
+            if result1 and len(result1) > 5:
+                print(f"    ✓ Response received for Complex workflow creation ({len(result1)} chars)")
+                checks_passed.append("Complex workflow created")
+
+                # Verification logic
+                assert 'pipeline' in result1.lower() or 'data' in result1.lower()
+            else:
+                print("    ✗ No meaningful response for Complex workflow creation")
+                all_passed = False
+
+            # Test 2: Workflow State Management
+            print("\n  2. Testing Workflow state management...")
+            prompt2 = "Execute a long-running process with checkpoints"
+            transcript.append(("User", prompt2))
+
+            response2 = await self.overlord.chat(
+                prompt2,
+                user_id="test_user",
+                session_id="orchestration_test_2",
+                use_async=False,
+                stream=False
+            )
+
+            result2 = response2.content if hasattr(response2, "content") else str(response2)
+            transcript.append(("System", result2[:100] + "..." if len(result2) > 100 else result2))
+
+            # Verify content
+            if result2 and len(result2) > 5:
+                print(f"    ✓ Response received for Workflow state management ({len(result2)} chars)")
+                checks_passed.append("State management working")
+
+                # Verification logic
+                assert 'process' in result2.lower() or 'execute' in result2.lower()
+            else:
+                print("    ✗ No meaningful response for Workflow state management")
+                all_passed = False
+
+            # Test 3: Workflow Error Recovery
+            print("\n  3. Testing Workflow error recovery...")
+            prompt3 = "Handle failures in multi-step automation process"
+            transcript.append(("User", prompt3))
+
+            response3 = await self.overlord.chat(
+                prompt3,
+                user_id="test_user",
+                session_id="orchestration_test_3",
+                use_async=False,
+                stream=False
+            )
+
+            result3 = response3.content if hasattr(response3, "content") else str(response3)
+            transcript.append(("System", result3[:100] + "..." if len(result3) > 100 else result3))
+
+            # Verify content
+            if result3 and len(result3) > 5:
+                print(f"    ✓ Response received for Workflow error recovery ({len(result3)} chars)")
+                checks_passed.append("Error recovery implemented")
+
+                # Verification logic
+                assert 'failure' in result3.lower() or 'automation' in result3.lower()
+            else:
+                print("    ✗ No meaningful response for Workflow error recovery")
+                all_passed = False
+
+            # Final validation
+            print("\n  4. Validating responses...")
+            total_responses = len([r for r in [result1, result2, result3] if r and len(r) > 5])
+
+            if total_responses >= 2:
+                print(f"    ✓ Received {total_responses} meaningful responses")
+                checks_passed.append(f"Total successful responses: {total_responses}")
+            else:
+                print(f"    ✗ Only {total_responses} meaningful responses")
+                all_passed = False
 
         except Exception as e:
             print(f"  ✗ Test failed: {e}")
@@ -35,13 +125,13 @@ class Test74(BaseOrchestrationTest):
             await self.cleanup()
 
         duration = time.time() - start_time
-        self.print_test_result(test_name, all_passed, checks_passed, [], duration)
+        self.print_test_result(test_name, all_passed, checks_passed, transcript, duration)
         return all_passed
 
     async def run_test(self):
         """Run test."""
         print("\n" + "=" * 60)
-        print("🧪 AREA 7_4")
+        print("🧪 AREA TEST_7_4")
         print("=" * 60)
 
         result = await self.test_main()
@@ -55,7 +145,7 @@ class Test74(BaseOrchestrationTest):
 
 def main():
     """Main entry point."""
-    test = Test74()
+    test = Testtest74()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
 

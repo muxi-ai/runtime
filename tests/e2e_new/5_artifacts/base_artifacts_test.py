@@ -272,6 +272,10 @@ class BaseArtifactsTest:
 
         return all_success, results
 
+    async def setup_formation(self) -> Formation:
+        """Setup formation - alias for setup_artifacts_formation for compatibility."""
+        return await self.setup_artifacts_formation()
+
     async def cleanup(self):
         """Clean up formation and resources."""
         if self.formation:

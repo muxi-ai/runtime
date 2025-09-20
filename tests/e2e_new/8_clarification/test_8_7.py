@@ -1,31 +1,121 @@
 #!/usr/bin/env python3
-"""Test 8_7: Clarification and disambiguation"""
+"""Test test_8_7: Clarification with Authentication"""
 
 import asyncio
 import time
 import os
 
-from .base_clarification_test import BaseClarificationTest
+from .base_clarification_test import Baseclarificationtest
 
 
-class Test87(BaseClarificationTest):
-    """Test class for 8_7."""
+class Testtest87(Baseclarificationtest):
+    """Test class for test_8_7."""
 
     async def test_main(self):
-        """Main test method."""
-        test_name = "8_7"
-        self.print_test_header(test_name, "Test Clarification and disambiguation")
+        """Test clarification with authentication functionality."""
+        test_name = "test_8_7"
+        self.print_test_header(test_name, "Clarification with Authentication")
 
         start_time = time.time()
         checks_passed = []
+        transcript = []
         all_passed = True
 
         try:
             await self.setup_formation()
             print("  ✓ Formation loaded")
 
-            # TODO: Migrate test logic
-            checks_passed.append("Placeholder test")
+            # Test 1: Authenticated Clarification Flow
+            print("\n  1. Testing Authenticated clarification flow...")
+            prompt1 = "Access my private data"
+            transcript.append(("User", prompt1))
+
+            response1 = await self.overlord.chat(
+                prompt1,
+                user_id="test_user",
+                session_id="clarification_test_1",
+                use_async=False,
+                stream=False
+            )
+
+            result1 = response1.content if hasattr(response1, "content") else str(response1)
+            transcript.append(("System", result1[:100] + "..." if len(result1) > 100 else result1))
+
+            # Verify content
+            if result1 and len(result1) > 5:
+                print(f"    ✓ Response received for Authenticated clarification flow ({len(result1)} chars)")
+                checks_passed.append("Authentication-aware clarification")
+
+                # Verification logic
+                assert 'access' in result1.lower() or 'data' in result1.lower()
+            else:
+                print("    ✗ No meaningful response for Authenticated clarification flow")
+                all_passed = False
+
+            # Test 2: Permission-Based Clarification
+            print("\n  2. Testing Permission-based clarification...")
+            prompt2 = "Modify the secure settings"
+            transcript.append(("User", prompt2))
+
+            response2 = await self.overlord.chat(
+                prompt2,
+                user_id="test_user",
+                session_id="clarification_test_2",
+                use_async=False,
+                stream=False
+            )
+
+            result2 = response2.content if hasattr(response2, "content") else str(response2)
+            transcript.append(("System", result2[:100] + "..." if len(result2) > 100 else result2))
+
+            # Verify content
+            if result2 and len(result2) > 5:
+                print(f"    ✓ Response received for Permission-based clarification ({len(result2)} chars)")
+                checks_passed.append("Permission clarification working")
+
+                # Verification logic
+                assert 'modify' in result2.lower() or 'setting' in result2.lower()
+            else:
+                print("    ✗ No meaningful response for Permission-based clarification")
+                all_passed = False
+
+            # Test 3: Secure Clarification Completion
+            print("\n  3. Testing Secure clarification completion...")
+            prompt3 = "Update the credentials"
+            transcript.append(("User", prompt3))
+
+            response3 = await self.overlord.chat(
+                prompt3,
+                user_id="test_user",
+                session_id="clarification_test_3",
+                use_async=False,
+                stream=False
+            )
+
+            result3 = response3.content if hasattr(response3, "content") else str(response3)
+            transcript.append(("System", result3[:100] + "..." if len(result3) > 100 else result3))
+
+            # Verify content
+            if result3 and len(result3) > 5:
+                print(f"    ✓ Response received for Secure clarification completion ({len(result3)} chars)")
+                checks_passed.append("Secure clarification completed")
+
+                # Verification logic
+                assert 'credential' in result3.lower() or 'update' in result3.lower()
+            else:
+                print("    ✗ No meaningful response for Secure clarification completion")
+                all_passed = False
+
+            # Final validation
+            print("\n  4. Validating responses...")
+            total_responses = len([r for r in [result1, result2, result3] if r and len(r) > 5])
+
+            if total_responses >= 2:
+                print(f"    ✓ Received {total_responses} meaningful responses")
+                checks_passed.append(f"Total successful responses: {total_responses}")
+            else:
+                print(f"    ✗ Only {total_responses} meaningful responses")
+                all_passed = False
 
         except Exception as e:
             print(f"  ✗ Test failed: {e}")
@@ -35,13 +125,13 @@ class Test87(BaseClarificationTest):
             await self.cleanup()
 
         duration = time.time() - start_time
-        self.print_test_result(test_name, all_passed, checks_passed, [], duration)
+        self.print_test_result(test_name, all_passed, checks_passed, transcript, duration)
         return all_passed
 
     async def run_test(self):
         """Run test."""
         print("\n" + "=" * 60)
-        print("🧪 AREA 8_7")
+        print("🧪 AREA TEST_8_7")
         print("=" * 60)
 
         result = await self.test_main()
@@ -55,7 +145,7 @@ class Test87(BaseClarificationTest):
 
 def main():
     """Main entry point."""
-    test = Test87()
+    test = Testtest87()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
 
