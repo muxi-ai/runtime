@@ -10,7 +10,7 @@ import subprocess
 TEST_GROUPS = {
     "2I: Natural Language Extraction": [
         "test_2i1_natural_language_extraction.py",
-        "test_2i2_complex_extraction.py", 
+        "test_2i2_complex_extraction.py",
         "test_2i3_context_aware_extraction.py"
     ],
     "2J: Collection Field Usage": [
@@ -34,13 +34,13 @@ async def run_test(test_file):
     print(f"\n{'='*80}")
     print(f"Running: {test_file}")
     print('='*80)
-    
+
     result = subprocess.run(
         [sys.executable, test_file],
         capture_output=False,
         text=True
     )
-    
+
     return result.returncode == 0
 
 
@@ -56,16 +56,16 @@ async def main():
     print("- Database optimization and indexes")
     print("- Error resilience and graceful degradation")
     print("\nAll tests use real services via chat flow - no mocks!")
-    
+
     total_tests = sum(len(tests) for tests in TEST_GROUPS.values())
     passed = 0
     failed = 0
-    
+
     for group_name, test_files in TEST_GROUPS.items():
         print(f"\n\n{'='*80}")
         print(f"Test Group {group_name}")
         print('='*80)
-        
+
         for test_file in test_files:
             if await run_test(test_file):
                 passed += 1
@@ -73,7 +73,7 @@ async def main():
             else:
                 failed += 1
                 print(f"❌ {test_file} FAILED")
-    
+
     # Summary
     print(f"\n\n{'='*80}")
     print("ENHANCED TEST SUMMARY")
@@ -82,12 +82,12 @@ async def main():
     print(f"Passed: {passed}")
     print(f"Failed: {failed}")
     print(f"Success Rate: {(passed/total_tests)*100:.1f}%")
-    
+
     if failed == 0:
         print("\n🎉 All enhanced memory tests passed!")
     else:
         print(f"\n⚠️  {failed} tests failed. Please check the output above.")
-    
+
     return failed == 0
 
 
