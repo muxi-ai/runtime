@@ -15,7 +15,15 @@ This plan addresses the need to standardize all e2e tests to ensure:
 - **Areas**: 1_foundation through 12_scheduling
 - **Formation Sharing**: Multiple tests share single formations causing potential conflicts
 
-### Key Issues Identified
+### ✅ AREA 1 MIGRATION COMPLETE (2025-01-20)
+- **Status**: Successfully migrated all 10 tests
+- **Pattern**: Runtime modification approach
+- **Key Fixes**:
+  - Model issue resolved (gpt-5-nano → gpt-4o-mini)
+  - Async/sync patterns fixed
+  - All tests validated working
+
+### Key Issues Identified (Updated)
 
 1. **Shared Formations**
    - Area 12_scheduling: 12 tests share 1 formation
@@ -2193,6 +2201,43 @@ jobs:
       - run: pytest tests/e2e/4_mcp -n 2 --dist loadgroup
       - run: pytest tests/e2e/9_async -n 2
 ```
+
+## Critical Lessons Learned (January 2025)
+
+### 1. Model Performance Issues
+- **Discovery**: `gpt-5-nano` exists but is extremely slow (30+ second responses)
+- **Impact**: Tests timeout waiting for model responses
+- **Solution**: Replace all instances with `gpt-4o-mini` (33 files affected)
+- **Lesson**: Always verify model response times for test environments
+
+### 2. Async/Sync Pattern Complexity
+- **Issue**: Tests mixing `asyncio.run()` with async methods cause event loop conflicts
+- **Pattern That Works**:
+  ```python
+  async def test_method(self):
+      # All test logic here with await
+      formation = await self.setup_formation()
+      response = await overlord.chat()
+
+  def run_test(self):
+      return asyncio.run(self.test_method())
+  ```
+- **Lesson**: Single entry point for event loop, async all the way down
+
+### 3. Test Framework vs Direct Execution
+- **Finding**: Formations load fine directly but timeout in test framework
+- **Cause**: BaseE2ETest adds complexity with thread pools and multiple async contexts
+- **Workaround**: Simplify test execution patterns, avoid nested async contexts
+
+### 4. Invisible Character Detection
+- **Discovery**: LLM responses contain invisible Unicode characters
+- **Solution**: Clean all responses in `_apply_persona()` method
+- **Implementation**: `text_cleaner.py` utility removes zero-width spaces while preserving emojis
+
+### 5. Agent Planning Simplicity
+- **Issue**: Agents using unnecessary tools for simple requests
+- **Solution**: SIMPLICITY FIRST RULE in planning prompt
+- **Result**: Direct responses for conversational requests without tool usage
 
 ## Implementation Plan
 
