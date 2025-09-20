@@ -1,0 +1,46 @@
+schema: "1.0.0"
+id: "memory-test-formation"
+description: "Formation for testing buffer and persistent memory systems"
+
+runtime:
+  built_in_mcps: false
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 2000
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o"
+    - embedding: "openai/text-embedding-3-small"
+
+memory:
+  working:
+    # Shared storage backend configuration (always enabled with defaults)
+    max_memory_mb: 512 # Explicit memory limit required for remote mode
+    fifo_interval_min: 5 # FIFO cleanup interval in minutes
+    vector_dimension: 1536 # Dimension for embedding vectors
+    mode: "remote" # "local" or "remote"
+    remote: # Remote buffer configuration (if mode is "remote")
+      url: "tcp://localhost:65432" # FAISSx Server URL
+      api_key: "${{ secrets.FAISSX_API_KEY }}" # Buffer API Key
+      tenant: "${{ secrets.FAISSX_TENANT_ID }}" # Buffer Tenant ID
+
+  # Buffer configuration (always enabled)
+  buffer:
+    size: 10 # Context window size
+    multiplier: 10 # Buffer multiplier (total = size * multiplier)
+    vector_search: true # Enable vector similarity search
+
+  persistent:
+    connection_string: "${{ secrets.POSTGRES_URI }}"
+    embedding_model: "openai/text-embedding-3-small"
+
+logging:
+  streams:
+    - transport: "stdout"
+      level: "debug"
+      format: "jsonl"
+
+# Agent will be auto-discovered from agents/ directory
