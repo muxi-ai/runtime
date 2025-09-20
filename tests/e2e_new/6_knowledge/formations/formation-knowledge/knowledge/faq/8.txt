@@ -1,0 +1,3 @@
+What technologies do you work with?
+We’ve seen and done it all, but our most common tech stack uses a combination of Node.js, Python, PHP, Bash, Go, React, Vue, Alpine.js, Tailwind, Bootstrap, Postgresql, MySQL, MongoDB, Redis, AWS, Google Cloud, Docker, Kubernetes, Jenkins, and GitHub. For UX/UI, we use Figma, Adobe Illustrator, and Photoshop.
+

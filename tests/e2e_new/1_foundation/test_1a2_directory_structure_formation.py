@@ -11,8 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter, TestTimeouts  # noqa: E402
-
-
 class TestDirectoryStructureFormation(BaseE2ETest):
     """Test directory structure formation loading."""
 
@@ -54,7 +52,7 @@ class TestDirectoryStructureFormation(BaseE2ETest):
 
             # Test 2: Load formation from directory
             print("\n2. Loading formation from directory...")
-            formation = await self.setup_formation(template="standard")
+            await self.setup_formation(template="standard")
             overlord = self.overlord
             print("✅ Formation loaded from directory")
 
@@ -120,9 +118,6 @@ class TestDirectoryStructureFormation(BaseE2ETest):
             raise
         finally:
             return 0 if success else 1
-
-
-
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1a2_directory_structure_formation())

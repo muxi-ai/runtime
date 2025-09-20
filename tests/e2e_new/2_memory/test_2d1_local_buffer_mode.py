@@ -17,9 +17,7 @@ from pathlib import Path
 # Add path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from e2e_new.2_memory.base_memory_test import BaseMemoryTest
-
-
+from .base_memory_test import BaseMemoryTest
 class TestBufferMemoryModes(BaseMemoryTest):
     """Test local and remote buffer memory modes."""
 
@@ -270,7 +268,7 @@ class TestBufferMemoryModes(BaseMemoryTest):
                 print(f"  ⚠️ Partial technical retention ({technical_count}/3)")
                 checks_passed.append(f"Partial vector search results ({technical_count}/3)")
             else:
-                print(f"  ✗ Technical skills not found")
+                print("  ✗ Technical skills not found")
                 all_passed = False
 
             # Test semantic search capability
@@ -339,14 +337,10 @@ class TestBufferMemoryModes(BaseMemoryTest):
         print("- Remote mode better for distributed deployments")
 
         return all_passed
-
-
 def main():
     """Main entry point."""
     test = TestBufferMemoryModes()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
-
-
 if __name__ == "__main__":
     main()

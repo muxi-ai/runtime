@@ -10,21 +10,17 @@ Supports three formation sharing patterns:
 import shutil
 from pathlib import Path
 from typing import Optional, Dict, Any
-
-
 class FormationPattern:
     """Constants for formation patterns."""
 
     RUNTIME = "runtime"  # Pattern 1: Runtime modification
     SHARED = "shared"  # Pattern 2: Shared dir with multiple YAMLs
     SEPARATE = "separate"  # Pattern 3: Complete separation
-
-
 # Test area to pattern mapping
 TEST_PATTERNS = {
     # Pattern 1: Runtime modification (56% of tests)
     "1_foundation": FormationPattern.RUNTIME,
-    "5_artifacts": FormationPattern.RUNTIME,
+    "artifacts": FormationPattern.RUNTIME,
     "9_async": FormationPattern.RUNTIME,
     "10_streaming": FormationPattern.RUNTIME,
     "11_formatting": FormationPattern.RUNTIME,
@@ -32,14 +28,12 @@ TEST_PATTERNS = {
     # Pattern 2: Shared directory with multiple YAMLs (23% of tests)
     "2_memory": FormationPattern.SHARED,
     "4_mcp": FormationPattern.SHARED,
-    "6_knowledge": FormationPattern.SHARED,
+    "knowledge": FormationPattern.SHARED,
     # Pattern 3: Completely separate formations (21% of tests)
     "3_multimodal": FormationPattern.SEPARATE,
-    "7_orchestration": FormationPattern.SEPARATE,
-    "8_clarification": FormationPattern.SEPARATE,
+    "orchestration": FormationPattern.SEPARATE,
+    "clarification": FormationPattern.SEPARATE,
 }
-
-
 class FormationManager:
     """Manages formation configurations for E2E tests."""
 
@@ -191,7 +185,7 @@ class FormationManager:
         Set up a completely separate formation for a test.
 
         Args:
-            test_area: Test area (e.g., "7_orchestration")
+            test_area: Test area (e.g., "orchestration")
             test_name: Specific test name
             formation_config: Complete formation configuration
             template: Base template to use

@@ -11,9 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter, TestTimeouts  # noqa: E402
-from muxi.formation import Formation  # noqa: E402
-
-
 class TestBasicYamlFormation(BaseE2ETest):
     """Test basic YAML formation loading."""
 
@@ -113,8 +110,6 @@ class TestBasicYamlFormation(BaseE2ETest):
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1a1_basic_yaml_formation())
-
-
 if __name__ == "__main__":
     test = TestBasicYamlFormation()
     sys.exit(test.run_test())

@@ -6,8 +6,6 @@ from typing import Callable, Any
 import asyncio
 import time
 from functools import wraps
-
-
 class RetryConfig:
     """Configuration for retry behavior."""
 
@@ -23,8 +21,6 @@ class RetryConfig:
         "connection refused",
         "network unreachable",
     ]
-
-
 class TestRetry:
     """Retry logic for handling transient failures in tests."""
 
@@ -85,8 +81,6 @@ class TestRetry:
         """Check if exception is likely transient and worth retrying."""
         error_msg = str(exception).lower()
         return any(err.lower() in error_msg for err in RetryConfig.TRANSIENT_ERRORS)
-
-
 class CircuitBreaker:
     """Prevent cascading failures by failing fast after threshold."""
 

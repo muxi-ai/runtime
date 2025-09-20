@@ -11,8 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter, TestTimeouts  # noqa: E402
-
-
 class TestSingleAgentResponse(BaseE2ETest):
     """Test single agent response functionality."""
 
@@ -39,7 +37,7 @@ class TestSingleAgentResponse(BaseE2ETest):
         try:
             # Setup formation using standard template (Pattern 1)
             print("\n1. Setting up formation and starting overlord...")
-            formation = await self.setup_formation(template="standard")
+            await self.setup_formation(template="standard")
             overlord = self.overlord  # Overlord is already started by setup_formation
             print("✅ Formation and overlord ready")
 
@@ -121,7 +119,7 @@ class TestSingleAgentResponse(BaseE2ETest):
         try:
             # Setup formation
             print("\n1. Setting up formation...")
-            formation = await self.setup_formation(template="standard")
+            await self.setup_formation(template="standard")
             overlord = self.overlord  # Overlord is already started by setup_formation
             print("✅ Formation ready")
 
@@ -185,9 +183,6 @@ class TestSingleAgentResponse(BaseE2ETest):
             raise
         finally:
             return 0 if success else 1
-
-
-
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1b1_single_agent_response())

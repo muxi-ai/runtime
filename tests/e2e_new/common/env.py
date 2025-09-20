@@ -4,8 +4,6 @@ Environment-specific test configuration.
 
 import os
 from typing import Dict, Any
-
-
 class TestEnvironment:
     """Handle environment-specific test configuration."""
 
@@ -98,7 +96,5 @@ class TestEnvironment:
                 "cleanup_validation": not self.is_ci,  # Skip in CI for speed
             },
         }
-
-
 # Global instance
 test_env = TestEnvironment()

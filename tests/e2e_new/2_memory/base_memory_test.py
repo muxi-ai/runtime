@@ -2,10 +2,9 @@
 """Base test class for Area 2 Memory tests with standardized patterns."""
 
 import sys
-import time
 import asyncio
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Tuple, List
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
@@ -16,9 +15,6 @@ from muxi.formation import Formation  # noqa: E402
 # Import from common module
 from e2e_new.common import BaseE2ETest  # noqa: E402
 from e2e_new.common import TestOutputFormatter  # noqa: E402
-from e2e_new.common import TestTimeouts  # noqa: E402
-
-
 class BaseMemoryTest(BaseE2ETest):
     """Base class for memory system tests with Pattern 2 support."""
 
@@ -195,7 +191,7 @@ class BaseMemoryTest(BaseE2ETest):
         if self.formation:
             try:
                 await self.formation.shutdown()
-            except:
+            except Exception:
                 pass
         self.formation = None
         self.overlord = None

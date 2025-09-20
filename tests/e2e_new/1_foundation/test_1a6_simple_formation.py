@@ -12,8 +12,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter, TestTimeouts  # noqa: E402
 from muxi.datatypes.intent import IntentType  # noqa: E402
-
-
 class TestSimpleFormation(BaseE2ETest):
     """Test simple formation with schema v1.0.0."""
 
@@ -39,7 +37,7 @@ class TestSimpleFormation(BaseE2ETest):
         try:
             # Setup formation using minimal template
             print("\n1. Loading formation and starting overlord...")
-            formation = await self.setup_formation(template="minimal")
+            await self.setup_formation(template="minimal")
             overlord = self.overlord  # Overlord is already started by setup_formation
             print("✅ Formation and overlord ready")
 
@@ -126,9 +124,6 @@ class TestSimpleFormation(BaseE2ETest):
             raise
         finally:
             return 0 if success else 1
-
-
-
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1a6_simple_formation())

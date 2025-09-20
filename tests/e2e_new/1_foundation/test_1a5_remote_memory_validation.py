@@ -11,8 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter  # noqa: E402
-
-
 class TestRemoteMemoryValidation(BaseE2ETest):
     """Test memory configuration validation."""
 
@@ -38,7 +36,7 @@ class TestRemoteMemoryValidation(BaseE2ETest):
         try:
             # Test 1: Load formation with buffer memory
             print("\n1. Loading formation with buffer memory...")
-            formation = await self.setup_formation(template="standard")
+            await self.setup_formation(template="standard")
             overlord = self.overlord
             print("✅ Formation with memory configuration loaded")
 
@@ -128,9 +126,6 @@ class TestRemoteMemoryValidation(BaseE2ETest):
             raise
         finally:
             return 0 if success else 1
-
-
-
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1a5_remote_memory_validation())

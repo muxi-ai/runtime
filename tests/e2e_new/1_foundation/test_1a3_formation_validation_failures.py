@@ -13,8 +13,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter  # noqa: E402
 from muxi.formation import Formation  # noqa: E402
-
-
 class TestFormationValidationFailures(BaseE2ETest):
     """Test formation validation and error handling."""
 
@@ -144,9 +142,6 @@ class TestFormationValidationFailures(BaseE2ETest):
             raise
         finally:
             return 0 if success else 1
-
-
-
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1a3_formation_validation_failures())

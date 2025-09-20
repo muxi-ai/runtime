@@ -8,8 +8,6 @@ import time
 from test_1a6_simple_formation import TestSimpleFormation
 from test_1b1_single_agent_response import TestSingleAgentResponse
 from test_1b4_simple_chat import TestSimpleChat
-
-
 def run_all_tests():
     """Run all Area 1 foundation tests."""
     print("\n" + "="*60)
@@ -64,8 +62,6 @@ def run_all_tests():
             print(f"  - {test}")
 
     return len(tests_failed) == 0
-
-
 if __name__ == "__main__":
     success = run_all_tests()
     sys.exit(0 if success else 1)

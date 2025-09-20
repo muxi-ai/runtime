@@ -12,8 +12,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import from the common module
 from common import BaseE2ETest, TestOutputFormatter, TestTimeouts  # noqa: E402
-
-
 class TestSimpleChat(BaseE2ETest):
     """Test simple chat functionality with standardized approach."""
 
@@ -39,7 +37,7 @@ class TestSimpleChat(BaseE2ETest):
         try:
             # Setup formation using Pattern 1 (minimal template)
             print("\n1. Setting up formation and starting overlord...")
-            formation = await self.setup_formation(template="minimal")
+            await self.setup_formation(template="minimal")
             overlord = self.overlord  # Overlord is already started by setup_formation
             print("✅ Formation and overlord ready")
 
@@ -116,8 +114,6 @@ class TestSimpleChat(BaseE2ETest):
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1b4_simple_chat())
-
-
 if __name__ == "__main__":
     test = TestSimpleChat()
     sys.exit(test.run_test())

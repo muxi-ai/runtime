@@ -11,8 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter  # noqa: E402
-
-
 class TestFlattenedFormationLoading(BaseE2ETest):
     """Test flattened formation loading (single YAML file)."""
 
@@ -38,7 +36,7 @@ class TestFlattenedFormationLoading(BaseE2ETest):
         try:
             # Test loading from minimal template (which is essentially flattened)
             print("\n1. Loading flattened formation...")
-            formation = await self.setup_formation(template="minimal")
+            await self.setup_formation(template="minimal")
             overlord = self.overlord
             print("✅ Flattened formation loaded successfully")
 
@@ -105,9 +103,6 @@ class TestFlattenedFormationLoading(BaseE2ETest):
             raise
         finally:
             return 0 if success else 1
-
-
-
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1a4_flattened_formation_loading())

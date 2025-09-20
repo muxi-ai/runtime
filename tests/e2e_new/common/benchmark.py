@@ -5,8 +5,6 @@ Performance benchmarking for E2E tests.
 from typing import Dict, Tuple
 import json
 from pathlib import Path
-
-
 class PerformanceBenchmark:
     """Track and enforce performance baselines for tests."""
 

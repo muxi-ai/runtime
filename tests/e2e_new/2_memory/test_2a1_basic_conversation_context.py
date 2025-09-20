@@ -16,9 +16,7 @@ from pathlib import Path
 # Add path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from e2e_new.2_memory.base_memory_test import BaseMemoryTest
-
-
+from .base_memory_test import BaseMemoryTest
 class TestBasicConversationContext(BaseMemoryTest):
     """Test basic conversation context with buffer memory."""
 
@@ -219,14 +217,10 @@ class TestBasicConversationContext(BaseMemoryTest):
         print("- Context is preserved for subsequent queries")
 
         return all_passed
-
-
 def main():
     """Main entry point."""
     test = TestBasicConversationContext()
     result = asyncio.run(test.run_test())
     os._exit(0 if result else 1)
-
-
 if __name__ == "__main__":
     main()

@@ -11,8 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter, TestTimeouts  # noqa: E402
-
-
 class TestBasicFormation(BaseE2ETest):
     """Test basic formation functionality."""
 
@@ -39,7 +37,7 @@ class TestBasicFormation(BaseE2ETest):
         try:
             # Setup formation
             print("\n1. Creating formation...")
-            formation = await self.setup_formation(template="minimal")
+            await self.setup_formation(template="minimal")
             overlord = self.overlord
             print("✅ Formation created successfully")
 
@@ -114,9 +112,6 @@ class TestBasicFormation(BaseE2ETest):
             raise
         finally:
             return 0 if success else 1
-
-
-
     def run_test(self):
         """Run the test with proper async handling."""
         return asyncio.run(self.test_1b3_basic_formation())

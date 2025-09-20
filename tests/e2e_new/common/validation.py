@@ -6,8 +6,6 @@ import yaml
 import socket
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
-
-
 class FormationValidator:
     """Validate formations before test execution."""
 

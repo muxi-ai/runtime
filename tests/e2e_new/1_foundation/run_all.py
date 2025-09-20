@@ -7,21 +7,17 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-
 def run_test(test_file):
     """Run a single test file and return result."""
     print(f"\n{'='*60}")
     print(f"Running: {test_file.name}")
-    print('='*60)
+    print("=" * 60)
 
     start_time = time.time()
     try:
         # Run with timeout
         result = subprocess.run(
-            [sys.executable, str(test_file)],
-            capture_output=True,
-            text=True,
-            timeout=30
+            [sys.executable, str(test_file)], capture_output=True, text=True, timeout=30
         )
         duration = time.time() - start_time
 
@@ -29,7 +25,7 @@ def run_test(test_file):
         if result.returncode == 0:
             print(f"✅ PASSED in {duration:.2f}s")
             # Show last few lines of output
-            output_lines = result.stdout.split('\n')
+            output_lines = result.stdout.split("\n")
             for line in output_lines[-5:]:
                 if line.strip():
                     print(f"   {line}")
@@ -46,14 +42,13 @@ def run_test(test_file):
     except Exception as e:
         print(f"❌ ERROR: {e}")
         return False
-
 def main():
     """Run all tests in Area 1."""
     tests_dir = Path(__file__).parent
-    test_files = sorted(tests_dir.glob('test_*.py'))
+    test_files = sorted(tests_dir.glob("test_*.py"))
 
     print(f"Found {len(test_files)} tests in Area 1 Foundation")
-    print(f"Running with 30s timeout per test...")
+    print("Running with 30s timeout per test...")
 
     results = {}
     start_time = time.time()
@@ -69,7 +64,7 @@ def main():
 
     print(f"\n{'='*60}")
     print("TEST SUMMARY")
-    print('='*60)
+    print("=" * 60)
 
     # List results
     for name, success in results.items():
@@ -82,6 +77,5 @@ def main():
     print(f"Total time: {duration:.2f}s")
 
     return 0 if failed == 0 else 1
-
 if __name__ == "__main__":
     sys.exit(main())

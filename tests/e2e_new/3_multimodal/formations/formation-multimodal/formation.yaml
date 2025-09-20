@@ -1,0 +1,43 @@
+schema: "1.0.0"
+id: "multimodal-test"
+description: "Simple formation for testing basic multimodal functionality"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+    google: "${{ secrets.GEMINI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-minii"
+    - vision: "google/gemini-2.0-flash"
+    - video: "google/gemini-2.0-flash"
+    - audio: "openai/whisper-1"
+    - documents: "openai/gpt-4o"
+      settings:
+        max_size_mb: 20
+        extraction:
+          chunk_size: 1000
+          overlap: 100
+          strategy: "adaptive"
+    - embedding: "openai/text-embedding-3-small"
+
+# Disable built-in MCP servers to avoid timeout
+runtime:
+  built_in_mcps: false
+  mcp_server_startup_timeout: 5  # Reduce timeout to 5 seconds
+
+# Async behavior configuration (optional)
+async:
+  threshold_seconds: 30  # Switch to async mode for requests taking longer than this (seconds)
+  enable_estimation: true  # Allow overlord to estimate processing time for smart async decisions
+  webhook_url: "http://127.0.0.1:8765/"  # Default webhook URL for async completion notifications
+
+logging:
+  enabled: true
+  streams:
+    # File example
+    - transport: "file"
+      level: "debug"
+      format: "text"
+      destination: "/Users/ran/Desktop/multimodal.log"
+      events: ["*"]

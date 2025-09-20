@@ -3,8 +3,6 @@ Standardized output formatting for E2E tests.
 """
 
 from typing import List, Tuple, Any
-
-
 class TestOutputFormatter:
     """Standardized test output format for all e2e tests."""
 
