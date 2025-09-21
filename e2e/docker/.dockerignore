@@ -1,0 +1,68 @@
+# Docker build context exclusions for E2E testing
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+.coverage.*
+*.cover
+*.log
+htmlcov/
+.hypothesis/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Test artifacts
+e2e/results/
+e2e/logs/
+test-reports/
+coverage-reports/
+
+# Development files
+.env
+.env.local
+*.env
+!.env.example
+
+# Build artifacts
+*.whl
+pip-wheel-metadata/
+
+# Cache directories
+.cache/
+.pip/
+.npm/
+
+# Unnecessary for Docker build
+migrations/
+examples/
+benchmarks/
+notebooks/

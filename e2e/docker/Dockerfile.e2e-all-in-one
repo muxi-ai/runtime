@@ -1,12 +1,36 @@
 # All-in-One E2E Testing Image for MUXI Runtime
 # Includes all services and the MUXI runtime itself
+FROM python:3.10-slim AS builder
+
+# Build stage for compiling dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    gcc \
+    g++ \
+    make \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pre-compile Python wheels for faster builds
+RUN pip install --upgrade pip wheel setuptools
+
+# Copy and install requirements first for better caching
+COPY requirements.txt /tmp/
+RUN pip wheel --no-cache-dir --no-deps --wheel-dir /tmp/wheels -r /tmp/requirements.txt
+
+# Main stage
 FROM python:3.10-slim
+
+# Add PostgreSQL APT repository for version 17
+RUN apt-get update && apt-get install -y gnupg wget lsb-release \
+    && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
+    && echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    # PostgreSQL
-    postgresql-15 \
-    postgresql-client-15 \
+    # PostgreSQL 17 and pgvector extension
+    postgresql-17 \
+    postgresql-client-17 \
+    postgresql-17-pgvector \
     # Build dependencies
     build-essential \
     gcc \
@@ -29,12 +53,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Set PostgreSQL environment
-ENV PGDATA=/var/lib/postgresql/15/main
-ENV PATH="/usr/lib/postgresql/15/bin:${PATH}"
+ENV PGDATA=/var/lib/postgresql/17/main
+ENV PATH="/usr/lib/postgresql/17/bin:${PATH}"
 
 # Create necessary directories
 RUN mkdir -p /app /data /logs /var/run/postgresql \
     && chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql /logs
+
+# Copy pre-built wheels from builder stage
+COPY --from=builder /tmp/wheels /tmp/wheels
 
 # Install Python packages for services
 RUN pip install --no-cache-dir \
@@ -47,22 +74,29 @@ RUN pip install --no-cache-dir \
 # Copy and install MUXI runtime requirements
 WORKDIR /app
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --no-index --find-links /tmp/wheels -r requirements.txt && \
+    rm -rf /tmp/wheels
 
 # Install additional test requirements
 RUN pip install --no-cache-dir \
-    pytest \
-    pytest-asyncio \
-    pytest-timeout \
-    pytest-xdist \
-    pytest-cov
+    pytest>=7.0.0 \
+    pytest-asyncio>=0.21.0 \
+    pytest-timeout>=2.1.0 \
+    pytest-xdist>=3.0.0 \
+    pytest-cov>=4.0.0 \
+    pytest-benchmark>=4.0.0 \
+    pytest-mock>=3.10.0
 
 # Download spaCy model (required by some dependencies)
 RUN python -m spacy download en_core_web_sm || true
 
-# Copy utility scripts
-COPY e2e/utils/webhook_server.py /app/utils/
-COPY e2e/utils/a2a_registry.py /app/utils/
+# Copy utility scripts (ensure destination is a directory)
+COPY e2e/utils/webhook_server.py e2e/utils/a2a_registry.py /app/utils/
+
+# Create proper user for running services (security improvement)
+RUN useradd -m -u 1000 muxi && \
+    mkdir -p /app/test-formations && \
+    chown -R muxi:muxi /app
 
 # Copy FAISSx auth configuration if it exists
 COPY tests/assets/formations/faissx-auth.json /app/faissx-auth.json 2>/dev/null || true
@@ -75,7 +109,7 @@ logfile=/logs/supervisord.log
 pidfile=/var/run/supervisord.pid
 
 [program:postgresql]
-command=/usr/lib/postgresql/15/bin/postgres -D /var/lib/postgresql/15/main
+command=/usr/lib/postgresql/17/bin/postgres -D /var/lib/postgresql/17/main
 user=postgres
 autostart=true
 autorestart=true
@@ -120,6 +154,20 @@ stderr_logfile=/logs/a2a.err
 priority=20
 EOF
 
+# Create health check script
+RUN cat > /app/healthcheck.sh <<'EOF'
+#!/bin/bash
+# Health check for all services
+curl -f http://localhost:45678/health || exit 1
+curl -f http://localhost:65432/health || exit 1
+curl -f http://localhost:8080 || exit 1
+curl -f http://localhost:8090/health || exit 1
+psql -U muxi -d muxi_test -c 'SELECT 1' > /dev/null 2>&1 || exit 1
+exit 0
+EOF
+
+RUN chmod +x /app/healthcheck.sh
+
 # Create entrypoint script
 RUN cat > /app/entrypoint.sh <<'EOF'
 #!/bin/bash
@@ -154,6 +202,9 @@ su - postgres -c "psql -tc \"SELECT 1 FROM pg_database WHERE datname = 'muxi_tes
 su - postgres -c "psql -tc \"SELECT 1 FROM pg_user WHERE usename = 'muxi'\" | grep -q 1 || createuser muxi"
 su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE muxi_test TO muxi;\""
 
+# Create pgvector extension
+su - postgres -c "psql -d muxi_test -c \"CREATE EXTENSION IF NOT EXISTS vector;\""
+
 # Stop PostgreSQL (supervisor will start it)
 su - postgres -c "pg_ctl -D $PGDATA stop"
 sleep 2
@@ -184,9 +235,23 @@ wait_for_service() {
 /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf &
 SUPERVISOR_PID=$!
 
-# Wait for services
+# Wait for services with proper PostgreSQL check
 sleep 10
-wait_for_service "PostgreSQL" "http://localhost:5432" || true
+
+# Special handling for PostgreSQL (not HTTP)
+echo "Waiting for PostgreSQL..."
+max_attempts=30
+attempt=1
+while [ $attempt -le $max_attempts ]; do
+    if su - postgres -c "psql -U muxi -d muxi_test -c 'SELECT 1'" > /dev/null 2>&1; then
+        echo "PostgreSQL is ready!"
+        break
+    fi
+    echo -n "."
+    sleep 2
+    attempt=$((attempt + 1))
+done
+
 wait_for_service "FAISSx (no auth)" "http://localhost:45678/health"
 wait_for_service "FAISSx (with auth)" "http://localhost:65432/health"
 wait_for_service "Webhook" "http://localhost:8080"
@@ -212,15 +277,21 @@ ENV FAISSX_NO_AUTH_URL=http://localhost:45678
 ENV FAISSX_WITH_AUTH_URL=http://localhost:65432
 ENV A2A_REGISTRY_URL=http://localhost:8090
 ENV WEBHOOK_URL=http://localhost:8080
-ENV PYTHONPATH=/app/src:$PYTHONPATH
+ENV PYTHONPATH=/app/src:/app:$PYTHONPATH
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Test-specific environment variables
+ENV PYTEST_TIMEOUT=300
+ENV TEST_PARALLEL_WORKERS=4
+ENV LOG_LEVEL=info
 
 # Expose all service ports
 EXPOSE 5432 45678 65432 8080 8090
 
-# Health check
+# Health check using the dedicated script
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:45678/health && \
-        curl -f http://localhost:8090/health || exit 1
+    CMD /app/healthcheck.sh
 
 # Set working directory for MUXI runtime
 WORKDIR /app

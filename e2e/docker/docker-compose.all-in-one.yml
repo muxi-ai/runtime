@@ -7,8 +7,12 @@ services:
     build:
       context: ../..
       dockerfile: e2e/docker/Dockerfile.e2e-all-in-one
+      cache_from:
+        - muxi-e2e:builder
+        - muxi-e2e:all-in-one
     image: muxi-e2e:all-in-one
     container_name: muxi-e2e-test
+    hostname: muxi-e2e-test
     volumes:
       # Mount the MUXI runtime source from parent directory
       - ../../src:/app/src:ro
@@ -67,6 +71,23 @@ services:
     stdin_open: true
     tty: true
 
+    # Resource limits (adjust as needed)
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+
+    # Network configuration
+    networks:
+      - muxi-e2e-network
+
+    # Restart policy
+    restart: unless-stopped
+
     # Override command examples (uncomment one):
     # command: pytest e2e/tests/1_foundation/ -v
     # command: pytest e2e/tests/ -v --tb=short
@@ -74,4 +95,13 @@ services:
 
 volumes:
   muxi-cache:
+    driver: local
   pip-cache:
+    driver: local
+
+networks:
+  muxi-e2e-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
