@@ -1,0 +1,77 @@
+# All-in-One Docker Compose for E2E Testing
+# Single container with all services and MUXI runtime
+version: '3.8'
+
+services:
+  muxi-e2e-all:
+    build:
+      context: ../..
+      dockerfile: e2e/docker/Dockerfile.e2e-all-in-one
+    image: muxi-e2e:all-in-one
+    container_name: muxi-e2e-test
+    volumes:
+      # Mount the MUXI runtime source from parent directory
+      - ../../src:/app/src:ro
+      - ../../test-formations:/app/test-formations:ro
+      - ../../.claude:/app/.claude:ro
+
+      # Mount E2E test files
+      - ../tests:/app/e2e/tests:ro
+      - ../utils:/app/e2e/utils:ro
+      - ../fixtures:/app/e2e/fixtures:ro
+
+      # Mount configuration files from parent
+      - ../../pyproject.toml:/app/pyproject.toml:ro
+      - ../../setup.py:/app/setup.py:ro
+      - ../../setup.cfg:/app/setup.cfg:ro
+      - ../../requirements.txt:/app/requirements.txt:ro
+
+      # Mount test results directory (writable)
+      - ../results:/app/e2e/results
+
+      # Mount logs directory (writable)
+      - ../logs:/logs
+
+      # Cache directories for faster rebuilds
+      - muxi-cache:/root/.cache
+      - pip-cache:/root/.pip
+
+    environment:
+      # API Keys (mount from .env file)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+
+      # Test configuration
+      - TEST_PARALLEL_WORKERS=4
+      - TEST_TIMEOUT_MULTIPLIER=1.0
+      - PYTEST_TIMEOUT=300
+
+      # Python settings
+      - PYTHONPATH=/app/src:/app
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FORMAT=jsonl
+
+    ports:
+      # Expose all service ports for debugging
+      - "5432:5432"     # PostgreSQL
+      - "45678:45678"   # FAISSx no-auth
+      - "65432:65432"   # FAISSx with-auth
+      - "8080:8080"     # Webhook
+      - "8090:8090"     # A2A Registry
+
+    stdin_open: true
+    tty: true
+
+    # Override command examples (uncomment one):
+    # command: pytest e2e/tests/1_foundation/ -v
+    # command: pytest e2e/tests/ -v --tb=short
+    # command: bash  # Interactive shell
+
+volumes:
+  muxi-cache:
+  pip-cache:

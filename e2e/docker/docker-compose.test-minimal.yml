@@ -1,0 +1,45 @@
+# Minimal Docker Compose for E2E Testing
+# Only includes essential services for basic tests
+
+version: '3.8'
+
+services:
+  # PostgreSQL for persistent memory storage
+  postgres:
+    image: postgres:15-alpine
+    container_name: muxi-test-postgres
+    environment:
+      POSTGRES_USER: muxi
+      POSTGRES_PASSWORD: test123
+      POSTGRES_DB: muxi_test
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U muxi"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # FAISSx vector database (NO AUTH) - for basic memory tests
+  faissx-no-auth:
+    image: python:3.10-slim
+    container_name: muxi-test-faissx
+    ports:
+      - "45678:45678"
+    command: |
+      bash -c "pip install faissx && faissx.server run --port 45678"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:45678/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Simple HTTP echo server for webhook testing
+  webhook:
+    image: mendhak/http-https-echo:latest
+    container_name: muxi-test-webhook
+    ports:
+      - "8080:8080"
+    environment:
+      HTTP_PORT: 8080

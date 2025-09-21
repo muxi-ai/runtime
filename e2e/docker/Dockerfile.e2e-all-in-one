@@ -1,0 +1,229 @@
+# All-in-One E2E Testing Image for MUXI Runtime
+# Includes all services and the MUXI runtime itself
+FROM python:3.10-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    # PostgreSQL
+    postgresql-15 \
+    postgresql-client-15 \
+    # Build dependencies
+    build-essential \
+    gcc \
+    g++ \
+    make \
+    # System utilities
+    curl \
+    wget \
+    git \
+    supervisor \
+    netcat-openbsd \
+    # Image processing
+    poppler-utils \
+    tesseract-ocr \
+    # Audio/Video processing
+    ffmpeg \
+    # Magic file detection
+    libmagic1 \
+    # Clean up
+    && rm -rf /var/lib/apt/lists/*
+
+# Set PostgreSQL environment
+ENV PGDATA=/var/lib/postgresql/15/main
+ENV PATH="/usr/lib/postgresql/15/bin:${PATH}"
+
+# Create necessary directories
+RUN mkdir -p /app /data /logs /var/run/postgresql \
+    && chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql /logs
+
+# Install Python packages for services
+RUN pip install --no-cache-dir \
+    faissx \
+    fastapi \
+    uvicorn \
+    httpx \
+    aiofiles
+
+# Copy and install MUXI runtime requirements
+WORKDIR /app
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional test requirements
+RUN pip install --no-cache-dir \
+    pytest \
+    pytest-asyncio \
+    pytest-timeout \
+    pytest-xdist \
+    pytest-cov
+
+# Download spaCy model (required by some dependencies)
+RUN python -m spacy download en_core_web_sm || true
+
+# Copy utility scripts
+COPY e2e/utils/webhook_server.py /app/utils/
+COPY e2e/utils/a2a_registry.py /app/utils/
+
+# Copy FAISSx auth configuration if it exists
+COPY tests/assets/formations/faissx-auth.json /app/faissx-auth.json 2>/dev/null || true
+
+# Create supervisor configuration
+RUN cat > /etc/supervisor/conf.d/supervisord.conf <<EOF
+[supervisord]
+nodaemon=true
+logfile=/logs/supervisord.log
+pidfile=/var/run/supervisord.pid
+
+[program:postgresql]
+command=/usr/lib/postgresql/15/bin/postgres -D /var/lib/postgresql/15/main
+user=postgres
+autostart=true
+autorestart=true
+stdout_logfile=/logs/postgresql.log
+stderr_logfile=/logs/postgresql.err
+priority=1
+
+[program:faissx-no-auth]
+command=faissx.server run --port 45678
+directory=/app
+autostart=true
+autorestart=true
+stdout_logfile=/logs/faissx-no-auth.log
+stderr_logfile=/logs/faissx-no-auth.err
+priority=10
+
+[program:faissx-with-auth]
+command=faissx.server run --port 65432 --enable-auth --auth-file /app/faissx-auth.json
+directory=/app
+autostart=true
+autorestart=true
+stdout_logfile=/logs/faissx-with-auth.log
+stderr_logfile=/logs/faissx-with-auth.err
+priority=10
+
+[program:webhook]
+command=python /app/utils/webhook_server.py
+directory=/app
+autostart=true
+autorestart=true
+stdout_logfile=/logs/webhook.log
+stderr_logfile=/logs/webhook.err
+priority=20
+
+[program:a2a-registry]
+command=python /app/utils/a2a_registry.py
+directory=/app
+autostart=true
+autorestart=true
+stdout_logfile=/logs/a2a.log
+stderr_logfile=/logs/a2a.err
+priority=20
+EOF
+
+# Create entrypoint script
+RUN cat > /app/entrypoint.sh <<'EOF'
+#!/bin/bash
+set -e
+
+echo "Starting MUXI E2E Test Environment..."
+
+# Initialize PostgreSQL if needed
+if [ ! -d "$PGDATA" ]; then
+    echo "Initializing PostgreSQL..."
+    su - postgres -c "initdb -D $PGDATA"
+
+    # Configure PostgreSQL for testing
+    su - postgres -c "cat >> $PGDATA/postgresql.conf <<PGCONF
+listen_addresses = '*'
+max_connections = 200
+shared_buffers = 256MB
+PGCONF"
+
+    su - postgres -c "cat >> $PGDATA/pg_hba.conf <<PGHBA
+host    all             all             0.0.0.0/0               trust
+local   all             all                                     trust
+PGHBA"
+fi
+
+# Start PostgreSQL temporarily to create database
+su - postgres -c "pg_ctl -D $PGDATA start"
+sleep 5
+
+# Create test database and user
+su - postgres -c "psql -tc \"SELECT 1 FROM pg_database WHERE datname = 'muxi_test'\" | grep -q 1 || createdb muxi_test"
+su - postgres -c "psql -tc \"SELECT 1 FROM pg_user WHERE usename = 'muxi'\" | grep -q 1 || createuser muxi"
+su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE muxi_test TO muxi;\""
+
+# Stop PostgreSQL (supervisor will start it)
+su - postgres -c "pg_ctl -D $PGDATA stop"
+sleep 2
+
+# Wait for all services to be ready
+wait_for_service() {
+    local name=$1
+    local url=$2
+    local max_attempts=30
+    local attempt=1
+
+    echo "Waiting for $name..."
+    while [ $attempt -le $max_attempts ]; do
+        if curl -s -f "$url" > /dev/null 2>&1; then
+            echo "$name is ready!"
+            return 0
+        fi
+        echo -n "."
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+
+    echo "$name failed to start!"
+    return 1
+}
+
+# Start supervisor in background
+/usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf &
+SUPERVISOR_PID=$!
+
+# Wait for services
+sleep 10
+wait_for_service "PostgreSQL" "http://localhost:5432" || true
+wait_for_service "FAISSx (no auth)" "http://localhost:45678/health"
+wait_for_service "FAISSx (with auth)" "http://localhost:65432/health"
+wait_for_service "Webhook" "http://localhost:8080"
+wait_for_service "A2A Registry" "http://localhost:8090/health"
+
+echo "All services are ready!"
+
+# If command provided, run it; otherwise keep container running
+if [ $# -gt 0 ]; then
+    exec "$@"
+else
+    echo "Ready for E2E testing. Run tests with:"
+    echo "  docker exec -it muxi-e2e-test pytest tests/e2e/tests/ -v"
+    tail -f /logs/*.log
+fi
+EOF
+
+RUN chmod +x /app/entrypoint.sh
+
+# Environment variables for testing
+ENV POSTGRES_URI=postgresql://muxi:muxi_test_password@localhost:5432/muxi_test
+ENV FAISSX_NO_AUTH_URL=http://localhost:45678
+ENV FAISSX_WITH_AUTH_URL=http://localhost:65432
+ENV A2A_REGISTRY_URL=http://localhost:8090
+ENV WEBHOOK_URL=http://localhost:8080
+ENV PYTHONPATH=/app/src:$PYTHONPATH
+
+# Expose all service ports
+EXPOSE 5432 45678 65432 8080 8090
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:45678/health && \
+        curl -f http://localhost:8090/health || exit 1
+
+# Set working directory for MUXI runtime
+WORKDIR /app
+
+# Entrypoint
+ENTRYPOINT ["/app/entrypoint.sh"]

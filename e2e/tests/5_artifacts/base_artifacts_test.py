@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from muxi.formation import Formation  # noqa: E402
 
 # Import from common module
-from .common import TestOutputFormatter  # noqa: E402
+from common import TestOutputFormatter  # noqa: E402
 
 
 class BaseArtifactsTest:

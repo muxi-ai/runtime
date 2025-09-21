@@ -4,11 +4,16 @@ Base test class for Area 9 - Async Operations tests.
 
 import asyncio
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from ..common.base import BaseE2ETest
+# Add paths
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from common.base import BaseE2ETest  # noqa: E402
 
 
 class BaseAsyncTest(BaseE2ETest):

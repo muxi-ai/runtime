@@ -3,10 +3,16 @@ Base test class for Area 10 - Streaming tests.
 """
 
 import asyncio
+import sys
 import time
+from pathlib import Path
 from typing import Optional, Dict, Any, List, AsyncIterator
 
-from ..common.base import BaseE2ETest
+# Add paths
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from common.base import BaseE2ETest  # noqa: E402
 
 
 class BaseStreamingTest(BaseE2ETest):

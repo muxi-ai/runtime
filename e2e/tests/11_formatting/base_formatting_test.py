@@ -4,9 +4,15 @@ Base test class for Area 11 - Formatting tests.
 
 import json
 import re
+import sys
+from pathlib import Path
 from typing import Dict, Any
 
-from ..common.base import BaseE2ETest
+# Add paths
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from common.base import BaseE2ETest  # noqa: E402
 
 
 class BaseFormattingTest(BaseE2ETest):
