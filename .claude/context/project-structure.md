@@ -1,7 +1,7 @@
 ---
 created: 2025-08-21T17:31:00Z
-last_updated: 2025-09-19T14:03:46Z
-version: 1.4
+last_updated: 2025-09-21T20:07:51Z
+version: 1.5
 author: Claude Code PM System
 ---
 
@@ -16,7 +16,13 @@ MUXI Runtime is organized as a Python package with comprehensive test coverage a
 ```
 runtime/
 ├── src/muxi/runtime/      # Core runtime engine
-├── tests/                 # Comprehensive test suite
+├── tests/                 # Unit and integration tests
+├── e2e/                   # Complete E2E testing environment (NEW)
+│   ├── tests/            # 215+ E2E test files across 12 areas
+│   ├── docker/           # Docker configurations for testing
+│   ├── scripts/          # Test runner scripts
+│   ├── utils/            # Testing utilities (webhook, A2A registry)
+│   └── fixtures/         # Test data and formations
 ├── docs/                  # Documentation
 ├── test-formations/       # Example formations
 ├── schemas/               # YAML schema definitions
@@ -149,6 +155,35 @@ Comprehensive documentation covering all aspects:
 - `multi-user-architecture.md` - Multi-tenant design
 - `user-credentials-flow.md` - Credential handling system (Issue #53)
 - `request-lifecycle.md` - Complete request processing flow
+
+## E2E Testing Suite (`e2e/`)
+
+Complete end-to-end testing environment with 215+ tests across 12 areas:
+
+### Test Areas (`e2e/tests/`)
+- `1_foundation/` - Formation loading and basic chat (10 tests)
+- `2_memory/` - Memory systems testing (26 tests)
+- `3_multimodal/` - Image, audio, video processing (38 tests)
+- `4_mcp/` - Model Context Protocol tools (24 tests)
+- `5_artifacts/` - File generation (15 tests)
+- `6_knowledge/` - Knowledge base operations (19 tests)
+- `7_orchestration/` - Multi-agent coordination (25 tests)
+- `8_clarification/` - Clarification flows (49 tests)
+- `9_async/` - Async operations (12 tests)
+- `10_streaming/` - Response streaming (6 tests)
+- `11_formatting/` - Output formatting (4 tests)
+- `12_scheduling/` - Task scheduling (11 tests)
+- `common/` - Shared test utilities and base classes
+
+### Infrastructure (`e2e/docker/`)
+- `Dockerfile.e2e-all-in-one` - Single container with all services
+- `docker-compose.all-in-one.yml` - Complete test environment
+- `docker-compose.e2e.yml` - Full service stack
+- `docker-compose.test-minimal.yml` - Basic services only
+
+### Scripts (`e2e/scripts/`)
+- `test-in-docker.sh` - Run tests in Docker with simple commands
+- `run-e2e-tests.sh` - Run tests with service orchestration
 
 ## Example Formations (`test-formations/`)
 
