@@ -27,8 +27,7 @@ async def example_1_basic_filesystem_server():
         # Register the official MCP filesystem server
         print("📡 Registering MCP filesystem server...")
         await service.register_mcp_server(
-            server_id="filesystem",
-            command="npx @modelcontextprotocol/server-filesystem /tmp"
+            server_id="filesystem", command="npx @modelcontextprotocol/server-filesystem /tmp"
         )
         print("✅ Server registered successfully!")
 
@@ -40,17 +39,15 @@ async def example_1_basic_filesystem_server():
         if "list_directory" in tools:
             print("\n📋 Listing /tmp directory...")
             result = await service.invoke_tool(
-                server_id="filesystem",
-                tool_name="list_directory",
-                parameters={"path": "/tmp"}
+                server_id="filesystem", tool_name="list_directory", parameters={"path": "/tmp"}
             )
 
             if result["status"] == "success":
                 print("✅ Directory listing successful!")
-                files_count = len(result.get('result', {}).get('content', []))
+                files_count = len(result.get("result", {}).get("content", []))
                 print(f"📁 Found files/directories: {files_count}")
             else:
-                error_msg = result.get('error', 'Unknown error')
+                error_msg = result.get("error", "Unknown error")
                 print(f"❌ Directory listing failed: {error_msg}")
         else:
             print("⚠️  list_directory tool not available")
@@ -84,13 +81,9 @@ async def example_2_auto_detection_demo():
         {
             "name": "Streamable HTTP Server",
             "url": "http://localhost:8002/mcp",
-            "expected": "streamable_http"
+            "expected": "streamable_http",
         },
-        {
-            "name": "HTTP+SSE Server",
-            "url": "http://localhost:8001/sse",
-            "expected": "http_sse"
-        }
+        {"name": "HTTP+SSE Server", "url": "http://localhost:8001/sse", "expected": "http_sse"},
     ]
 
     print("🔍 Testing transport auto-detection...")
@@ -102,9 +95,7 @@ async def example_2_auto_detection_demo():
 
             # Let MUXI auto-detect the transport type
             await service.register_mcp_server(
-                server_id=f"test_{test_case['expected']}",
-                url=test_case["url"],
-                request_timeout=5
+                server_id=f"test_{test_case['expected']}", url=test_case["url"], request_timeout=5
             )
 
             detection_time = time.time() - start_time
@@ -115,11 +106,11 @@ async def example_2_auto_detection_demo():
             await service.register_mcp_server(
                 server_id=f"test_{test_case['expected']}_cached",
                 url=test_case["url"],
-                request_timeout=5
+                request_timeout=5,
             )
 
             cached_time = time.time() - start_time
-            speedup = detection_time / cached_time if cached_time > 0 else float('inf')
+            speedup = detection_time / cached_time if cached_time > 0 else float("inf")
             print(f"⚡ Cached detection: {cached_time:.3f}s (speedup: {speedup:.1f}x)")
 
             # Cleanup
@@ -143,9 +134,7 @@ async def example_3_error_handling():
     print("📡 Testing unreachable server handling...")
     try:
         await service.register_mcp_server(
-            server_id="unreachable",
-            url="http://localhost:99999/mcp",
-            request_timeout=3
+            server_id="unreachable", url="http://localhost:99999/mcp", request_timeout=3
         )
         print("⚠️  Unexpected success")
     except MCPConnectionError as e:
@@ -155,9 +144,7 @@ async def example_3_error_handling():
     print("\n💻 Testing invalid command handling...")
     try:
         await service.register_mcp_server(
-            server_id="invalid",
-            command="nonexistent-command-12345",
-            request_timeout=3
+            server_id="invalid", command="nonexistent-command-12345", request_timeout=3
         )
         print("⚠️  Unexpected success")
     except MCPConnectionError as e:
@@ -168,19 +155,16 @@ async def example_3_error_handling():
     try:
         # Register a server first
         await service.register_mcp_server(
-            server_id="test_errors",
-            command="npx @modelcontextprotocol/server-filesystem /tmp"
+            server_id="test_errors", command="npx @modelcontextprotocol/server-filesystem /tmp"
         )
 
         # Try to call a non-existent tool
         result = await service.invoke_tool(
-            server_id="test_errors",
-            tool_name="nonexistent_tool",
-            parameters={}
+            server_id="test_errors", tool_name="nonexistent_tool", parameters={}
         )
 
         if result["status"] == "error":
-            error_msg = result.get('error', 'Unknown')
+            error_msg = result.get("error", "Unknown")
             print(f"✅ Tool error handled gracefully: {error_msg}")
         else:
             print("⚠️  Expected tool error but got success")
@@ -210,8 +194,7 @@ async def example_4_performance_monitoring():
         # Time the initial connection
         start_time = time.time()
         await service.register_mcp_server(
-            server_id="perf_test",
-            command="npx @modelcontextprotocol/server-filesystem /tmp"
+            server_id="perf_test", command="npx @modelcontextprotocol/server-filesystem /tmp"
         )
         connection_time = time.time() - start_time
         print(f"📡 Initial connection: {connection_time:.3f}s")
@@ -231,9 +214,7 @@ async def example_4_performance_monitoring():
                 params = {"path": "/tmp"} if "path" in properties else {}
 
                 result = await service.invoke_tool(
-                    server_id="perf_test",
-                    tool_name=tool_name,
-                    parameters=params
+                    server_id="perf_test", tool_name=tool_name, parameters=params
                 )
                 execution_time = time.time() - start_time
                 execution_times.append(execution_time)
@@ -264,10 +245,8 @@ async def example_5_concurrent_operations():
 
     # Define multiple servers to test concurrency
     servers = [
-        {"id": "concurrent_1",
-         "command": "npx @modelcontextprotocol/server-filesystem /tmp"},
-        {"id": "concurrent_2",
-         "command": "npx @modelcontextprotocol/server-filesystem /home"},
+        {"id": "concurrent_1", "command": "npx @modelcontextprotocol/server-filesystem /tmp"},
+        {"id": "concurrent_2", "command": "npx @modelcontextprotocol/server-filesystem /home"},
     ]
 
     print("🚀 Testing concurrent server registration...")
@@ -276,9 +255,7 @@ async def example_5_concurrent_operations():
         start_time = time.time()
         registration_tasks = [
             service.register_mcp_server(
-                server_id=server["id"],
-                command=server["command"],
-                request_timeout=10
+                server_id=server["id"], command=server["command"], request_timeout=10
             )
             for server in servers
         ]
@@ -287,8 +264,10 @@ async def example_5_concurrent_operations():
         total_time = time.time() - start_time
 
         successful = sum(1 for r in results if not isinstance(r, Exception))
-        print(f"✅ Concurrent registration: {successful}/{len(servers)} "
-              f"successful in {total_time:.3f}s")
+        print(
+            f"✅ Concurrent registration: {successful}/{len(servers)} "
+            f"successful in {total_time:.3f}s"
+        )
 
         # Test concurrent tool execution
         if successful > 0:
@@ -306,22 +285,20 @@ async def example_5_concurrent_operations():
                         params = {"path": "/tmp"} if "path" in properties else {}
 
                         task = service.invoke_tool(
-                            server_id=server_id,
-                            tool_name=tool_name,
-                            parameters=params
+                            server_id=server_id, tool_name=tool_name, parameters=params
                         )
                         tool_tasks.append(task)
 
             if tool_tasks:
                 start_time = time.time()
-                tool_results = await asyncio.gather(*tool_tasks,
-                                                   return_exceptions=True)
+                tool_results = await asyncio.gather(*tool_tasks, return_exceptions=True)
                 execution_time = time.time() - start_time
 
-                tool_successful = sum(1 for r in tool_results
-                                    if not isinstance(r, Exception))
-                print(f"✅ Concurrent execution: {tool_successful}/{len(tool_tasks)} "
-                      f"successful in {execution_time:.3f}s")
+                tool_successful = sum(1 for r in tool_results if not isinstance(r, Exception))
+                print(
+                    f"✅ Concurrent execution: {tool_successful}/{len(tool_tasks)} "
+                    f"successful in {execution_time:.3f}s"
+                )
 
         # Cleanup
         cleanup_tasks = [
