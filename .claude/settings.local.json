@@ -12,7 +12,7 @@
       "Bash(gh:*)",
       "WebSearch",
       "Read(**)",
-      "Bash(ruff check:*)",
+      "Bash(ruff:*)",
       "Bash(bash:*)",
       "Bash(for:*)",
       "Bash(tail:*)",
@@ -27,11 +27,14 @@
       "Bash(flake8:*)",
       "Bash(do echo \"Running $test...\")",
       "Bash(xargs:*)",
-      "Bash(do echo \"=== $test ===\")",
-      "Bash(do echo -n \"$test: \")",
       "Bash(awk:*)",
-      "Bash(do sed -i '' 's/from e2e_new.artifacts.base_artifacts_test import BaseArtifactsTest/from .base_artifacts_test import BaseArtifactsTest/' \"$file\")",
-      "Bash(chmod:*)"
+      "Bash(do sed:*)",
+      "Bash(chmod:*)",
+      "Bash(docker:*)",
+      "Bash(curl:*)",
+      "Bash(do echo:*)",
+      "Bash(nc:*)",
+      "Bash(faissx.server --help)"
     ],
     "deny": [],
     "ask": []

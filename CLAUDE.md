@@ -448,3 +448,4 @@ User: "Yes"
 Claude: "I will now review our interaction and suggest potential improvements to the active CLAUDE.md file."
 </example>
 - always run e2e tests using  bash .claude/scripts/test-and-log.sh tests/e2e/path/to/test.py
+- muxi never uses environment variables. it uses secrets.env files that resides next to the formation yaml files.
