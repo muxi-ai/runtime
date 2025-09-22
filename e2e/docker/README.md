@@ -140,8 +140,8 @@ docker-compose -f e2e/docker/docker-compose.yml down -v
 | PostgreSQL | 5432 | Database with pgvector |
 | FAISSx (no auth) | 45678 | Vector search without auth |
 | FAISSx (with auth) | 65432 | Vector search with auth |
-| Webhook Server | 8080 | Async operation callbacks |
-| A2A Registry | 8090 | Agent communication |
+| Webhook Server | 8765 | Async operation callbacks |
+| A2A Registry | 9090 | Agent communication |
 
 ## Volume Mounts
 

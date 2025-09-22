@@ -252,7 +252,7 @@ if [ $# -gt 0 ]; then
     exec "$@"
 else
     echo "Ready for E2E testing. Run tests with:"
-    echo "  docker exec -it muxi-e2e-test pytest tests/e2e/tests/ -v"
+    echo "  docker exec -it muxi-e2e-test pytest e2e/tests/ -v"
     tail -f /logs/*.log
 fi
 EOF

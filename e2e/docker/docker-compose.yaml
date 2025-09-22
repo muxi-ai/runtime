@@ -6,7 +6,7 @@ services:
   muxi-e2e-all:
     build:
       context: ../..
-      dockerfile: e2e/docker/Dockerfile.e2e-all-in-one
+      dockerfile: e2e/docker/Dockerfile
       cache_from:
         - muxi-e2e:builder
         - muxi-e2e:all-in-one
@@ -68,8 +68,8 @@ services:
       - "5432:5432"     # PostgreSQL
       - "45678:45678"   # FAISSx no-auth
       - "65432:65432"   # FAISSx with-auth
-      - "8080:8080"     # Webhook
-      - "8090:8090"     # A2A Registry
+      - "8765:8765"     # Webhook (aiohttp server)
+      - "9090:9090"     # A2A Registry (FastAPI)
 
     stdin_open: true
     tty: true
