@@ -283,5 +283,14 @@ docs/
 4. **⚡ Minimal Duplication**: No rewriting of well-documented areas
 5. **🎯 Focused Effort**: 20% new content for missing areas like embedding and performance
 
+- **Versioning & Release Management** – Understand how MUXI Runtime uses ScalVer with fixed YYYYMMDD format for maximum clarity and SemVer compatibility.
+  - **ScalVer Overview** – Calendar-aware versioning scheme (MAJOR.YYYYMMDD.PATCH) with precise release dating
+  - **Fixed Date Format** – Why MUXI uses consistent 8-digit dates for crystal-clear release dating
+  - **Same-Day Principle** – Understanding that multiple releases on the same date are always patches, never features
+  - **Compatibility** – Full SemVer compatibility ensures existing tooling works without modification
+  - **Migration Guide** – How to transition from SemVer to fixed YYYYMMDD ScalVer format
+  - **Release Planning** – Best practices for choosing release dates and managing patch cycles
+  - **Pre-release & Metadata** – Handling alpha/beta releases and build metadata with ScalVer
+
 This structure provides a comprehensive, professional documentation site that serves contributors, embedders, and users while maximizing reuse of existing high-quality documentation.
 
