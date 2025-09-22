@@ -43,6 +43,8 @@ cp e2e/.env.example .env
 
 ### 2. Build the Docker image
 ```bash
+docker build -f e2e/docker/Dockerfile -t muxi-e2e .
+# Or use the helper script:
 ./e2e/scripts/docker-build.sh
 ```
 
@@ -79,63 +81,39 @@ Run tests matching a pattern:
 ./e2e/scripts/run-docker-tests.sh -i
 ```
 
-## Docker Compose Configurations
+## Docker Compose Configuration
 
-We provide three Docker Compose configurations for different testing scenarios:
+We provide a single, comprehensive Docker Compose configuration:
 
-### 1. `docker-compose.all-in-one.yml` - Single Container Solution (Recommended)
-**Purpose**: Everything in ONE container - simplest and most portable
-- **Use case**: Quick local testing, CI/CD pipelines, developer onboarding
+### `docker-compose.yml` - All-in-One Solution
+**Purpose**: Everything in ONE container - simple, portable, and comprehensive
+- **Use case**: E2E testing, CI/CD pipelines, developer onboarding
 - **Architecture**: All services (PostgreSQL, FAISSx x2, webhook, A2A) run inside a single container managed by Supervisor
 - **Pros**: Single command execution, no network complexity, easy distribution, perfect for GitHub Actions
-- **Cons**: Can't scale services independently, harder to debug individual services
-
-### 2. `docker-compose.e2e.yml` - Full Service Stack
-**Purpose**: Production-like environment with separate containers per service
-- **Use case**: Integration testing, debugging service interactions, production simulation
-- **Architecture**: Each service in its own container (PostgreSQL, FAISSx x2, webhook, A2A, MUXI runtime)
-- **Pros**: Mirrors production, can debug/restart individual services, better resource isolation
-- **Cons**: More complex setup, requires docker-compose orchestration, more resource intensive
-
-### 3. `docker-compose.test-minimal.yml` - Bare Minimum
-**Purpose**: Lightweight testing with only essential services
-- **Use case**: Unit tests, quick development cycles, resource-constrained environments
-- **Architecture**: Only PostgreSQL + single FAISSx + MUXI runtime
-- **Pros**: Fast startup, minimal resource usage, good for testing core functionality
-- **Cons**: Can't test all features (no auth FAISSx, no webhook, no A2A)
+- **Note**: When all tests pass, we'll create a test-runner image that includes and executes the tests automatically
 
 ## Docker Compose Usage
 
-### Start all services (recommended)
+### Start all services
 ```bash
-docker-compose -f e2e/docker/docker-compose.all-in-one.yml up -d
-```
-
-### Production-like testing
-```bash
-docker-compose -f e2e/docker/docker-compose.e2e.yml up -d
-```
-
-### Minimal testing
-```bash
-docker-compose -f e2e/docker/docker-compose.test-minimal.yml up -d
+docker-compose -f e2e/docker/docker-compose.yml up -d
 ```
 
 ### Run specific tests
 ```bash
-docker-compose -f e2e/docker/docker-compose.all-in-one.yml \
-    run --rm muxi-e2e-all \
+docker-compose -f e2e/docker/docker-compose.yml \
+    run --rm muxi-e2e \
     pytest e2e/tests/1_foundation -v
 ```
 
 ### View logs
 ```bash
-docker-compose -f e2e/docker/docker-compose.all-in-one.yml logs -f
+docker-compose -f e2e/docker/docker-compose.yml logs -f
 ```
 
 ### Stop and clean up
 ```bash
-docker-compose -f e2e/docker/docker-compose.all-in-one.yml down -v
+docker-compose -f e2e/docker/docker-compose.yml down -v
 ```
 
 ## Test Areas
@@ -259,9 +237,9 @@ docker-compose -f e2e/docker/docker-compose.all-in-one.yml \
 
 ## Files
 
-- `Dockerfile.e2e-all-in-one` - Main Docker image definition
-- `docker-compose.all-in-one.yml` - Complete service orchestration
+- `Dockerfile` - Main Docker image definition with all services
+- `docker-compose.yml` - Service orchestration configuration
 - `.dockerignore` - Build context exclusions
 - `../scripts/docker-build.sh` - Build helper script
 - `../scripts/run-docker-tests.sh` - Test runner script
-- `../.env.example` - Environment variable template
+- `../.env.example` - Environment variable template (for future secrets.enc integration)

@@ -1,10 +1,12 @@
 # E2E Test Standardization Plan
 
-## ✅ MIGRATION 100% COMPLETE - RELOCATED TO `e2e/` (2025-01-20)
+## ✅ MIGRATION 100% COMPLETE - RELOCATED TO `e2e/` (2025-09-22)
 
 ### Executive Summary
 
 **Status**: All 215+ E2E tests across 12 areas have been fully migrated with complete test logic implementation and relocated to `e2e/tests/` for better organization.
+
+**Docker Environment**: Complete Docker setup with all services (PostgreSQL 17 + pgvector, FAISSx x2, Webhook, A2A Registry) pre-initialized and ready for testing.
 
 ### Migration Accomplishments
 
@@ -24,7 +26,8 @@
 - **Location**: `e2e/tests/` (self-contained E2E testing environment)
 - **Base Classes**: 12 specialized base classes (one per area)
 - **Common Module**: Comprehensive utilities and formatters
-- **Docker & Scripts**: `e2e/docker/` and `e2e/scripts/` for easy execution
+- **Docker Environment**: `e2e/docker/` with single Dockerfile and docker-compose.yml
+- **Scripts**: `e2e/scripts/` with Docker build and test runner utilities
 
 ### Migration Summary by Area
 
@@ -78,10 +81,16 @@
    - All 215+ files now pass linting checks
 
 6. **✅ Directory Structure Corrected**
-   - Resolved nesting issue (tests were incorrectly in `tests/e2e_new/tests/e2e_new/`)
-   - All areas now properly located in `tests/e2e_new/`
-   - Clean, flat structure maintained
+   - Resolved nesting issue and relocated all tests to `e2e/tests/`
+   - All areas now properly located in root-level `e2e/` directory
+   - Clean, self-contained E2E testing environment
    - Removed redundant documentation files
+
+7. **✅ Docker Environment Complete**
+   - Single Dockerfile with pre-initialized PostgreSQL during build
+   - All services configured and working (correct ports identified)
+   - Simplified to one docker-compose.yml (removed redundant variants)
+   - Health checks configured for all services
 
 ## Current Status & Next Steps
 
@@ -96,8 +105,28 @@
 ### 🚀 Ready for Validation Phase
 Tests are now ready to be executed for functional validation:
 
+#### Docker Environment Setup
 ```bash
-# Run individual test
+# Build the Docker image with all services
+docker build -f e2e/docker/Dockerfile -t muxi-e2e .
+
+# Start all services
+docker-compose -f e2e/docker/docker-compose.yml up -d
+
+# Services available:
+# - PostgreSQL 17 with pgvector: port 5432
+# - FAISSx (no auth): port 45678
+# - FAISSx (with auth): port 65432
+# - Webhook Server: port 8765
+# - A2A Registry: port 9090
+```
+
+#### Running Tests
+```bash
+# Run tests inside container
+docker exec -it muxi-e2e-test pytest e2e/tests/1_foundation/ -v
+
+# Or run individual test
 python e2e/tests/2_memory/test_2a1_basic_conversation_context.py
 
 # Run entire area

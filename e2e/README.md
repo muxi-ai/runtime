@@ -21,16 +21,15 @@ e2e/
 │   ├── 12_scheduling/  # Task scheduling tests
 │   └── common/         # Shared test utilities
 ├── docker/             # Docker configurations
-│   ├── Dockerfile.e2e-all-in-one
-│   ├── docker-compose.all-in-one.yml
-│   ├── docker-compose.e2e.yml
-│   └── docker-compose.test-minimal.yml
+│   ├── Dockerfile      # All-in-one testing environment
+│   ├── docker-compose.yml  # Service orchestration
+│   └── README.md       # Docker-specific documentation
 ├── scripts/            # Test runner scripts
-│   ├── test-in-docker.sh
-│   └── run-e2e-tests.sh
+│   ├── docker-build.sh     # Build Docker image
+│   └── run-docker-tests.sh # Run tests in Docker
 ├── utils/              # Utility services
-│   ├── webhook_server.py
-│   └── a2a_registry.py
+│   ├── webhook_server.py  # Async webhook handler (port 8765)
+│   └── a2a_registry.py    # A2A registry mock (port 9090)
 ├── fixtures/           # Test data and formations
 │   ├── formations/     # Test formation configs
 │   └── test-data/      # Sample test data
@@ -51,48 +50,42 @@ cp .env.example .env
 # Edit .env and add your API keys (especially OPENAI_API_KEY)
 ```
 
-### 2. Run Tests (Three Options)
+### 2. Run Tests with Docker
 
-#### Option A: All-in-One Docker (Recommended)
-Everything runs in a single container with all services included:
+#### Build and Start Services
 
 ```bash
-# From the runtime directory
-cd e2e/scripts
-./test-in-docker.sh
+# Build the Docker image
+docker build -f e2e/docker/Dockerfile -t muxi-e2e .
 
-# Run specific area
-./test-in-docker.sh --area 1
+# Start all services
+docker-compose -f e2e/docker/docker-compose.yml up -d
+
+# Verify services are healthy
+docker ps
+# Should show: muxi-e2e-test container running (healthy)
+```
+
+#### Run Tests
+
+```bash
+# Run tests inside container
+docker exec -it muxi-e2e-test pytest e2e/tests/1_foundation/ -v
+
+# Or run specific test
+docker exec -it muxi-e2e-test python e2e/tests/1_foundation/test_1a6_simple_formation.py
 
 # Interactive shell for debugging
-./test-in-docker.sh --shell
+docker exec -it muxi-e2e-test bash
 ```
 
-#### Option B: Separate Services
-Run services in Docker, tests on host:
-
-```bash
-# Start services
-cd e2e/docker
-docker-compose -f docker-compose.e2e.yml up -d
-
-# Run tests from runtime directory
-cd ../..
-python e2e/tests/1_foundation/test_1a6_simple_formation.py
-```
-
-#### Option C: Minimal Setup
-For quick testing with basic services:
-
-```bash
-# Start minimal services
-cd e2e/docker
-docker-compose -f docker-compose.test-minimal.yml up -d
-
-# Run foundation tests
-cd ../..
-pytest e2e/tests/1_foundation/ -v
-```
+#### Available Services
+Once the container is running, these services are available:
+- **PostgreSQL 17 + pgvector**: `localhost:5432`
+- **FAISSx (no auth)**: `localhost:45678` (ZeroMQ protocol)
+- **FAISSx (with auth)**: `localhost:65432` (ZeroMQ protocol)
+- **Webhook Server**: `http://localhost:8765/health`
+- **A2A Registry**: `http://localhost:9090/health`
 
 ## Test Areas
 

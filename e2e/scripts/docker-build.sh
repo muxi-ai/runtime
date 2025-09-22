@@ -65,8 +65,7 @@ fi
 # Build the image
 echo -e "${GREEN}Building Docker image...${NC}"
 docker build $BUILD_ARGS \
-    -f e2e/docker/Dockerfile.e2e-all-in-one \
-    -t muxi-e2e:all-in-one \
+    -f e2e/docker/Dockerfile \
     -t muxi-e2e:latest \
     .
 
@@ -88,13 +87,13 @@ if [ "$BUILD_ONLY" = false ]; then
     # Run with docker-compose for proper volume mounts
     if [ -n "$RUN_TESTS" ]; then
         echo -e "${YELLOW}Running tests: $RUN_TESTS${NC}"
-        docker-compose -f e2e/docker/docker-compose.all-in-one.yml \
-            run --rm muxi-e2e-all \
+        docker-compose -f e2e/docker/docker-compose.yml \
+            run --rm muxi-e2e \
             pytest "e2e/tests/$RUN_TESTS" -v
     else
         echo -e "${YELLOW}Starting interactive container...${NC}"
-        docker-compose -f e2e/docker/docker-compose.all-in-one.yml \
-            run --rm muxi-e2e-all bash
+        docker-compose -f e2e/docker/docker-compose.yml \
+            run --rm muxi-e2e bash
     fi
 fi
 

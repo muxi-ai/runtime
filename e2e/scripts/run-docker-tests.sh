@@ -164,7 +164,7 @@ if [ "$REBUILD" = true ]; then
 fi
 
 # Check if image exists
-if ! docker image inspect muxi-e2e:all-in-one >/dev/null 2>&1; then
+if ! docker image inspect muxi-e2e:latest >/dev/null 2>&1; then
     echo -e "${YELLOW}Docker image not found. Building...${NC}"
     ./e2e/scripts/docker-build.sh --build-only
 fi
@@ -220,11 +220,11 @@ mkdir -p e2e/results
 mkdir -p e2e/logs
 
 # Run with docker-compose
-docker-compose -f e2e/docker/docker-compose.all-in-one.yml \
+docker-compose -f e2e/docker/docker-compose.yml \
     run --rm \
     -e PYTEST_TIMEOUT=$TIMEOUT \
     -e TEST_PARALLEL_WORKERS=$WORKERS \
-    muxi-e2e-all \
+    muxi-e2e \
     bash -c "$PYTEST_CMD"
 
 TEST_EXIT_CODE=$?
@@ -232,8 +232,8 @@ TEST_EXIT_CODE=$?
 # Drop into interactive shell if requested
 if [ "$INTERACTIVE" = true ]; then
     echo -e "${YELLOW}Dropping into interactive shell...${NC}"
-    docker-compose -f e2e/docker/docker-compose.all-in-one.yml \
-        run --rm muxi-e2e-all bash
+    docker-compose -f e2e/docker/docker-compose.yml \
+        run --rm muxi-e2e bash
 fi
 
 # Print results summary

@@ -24,6 +24,10 @@ services:
       - ../utils:/app/e2e/utils:ro
       - ../fixtures:/app/e2e/fixtures:ro
 
+      # Mount secrets and assets
+      - ../../tests/assets:/app/tests/assets:ro
+      - ../assets:/app/e2e/assets:ro
+
       # Mount configuration files from parent
       - ../../pyproject.toml:/app/pyproject.toml:ro
       - ../../setup.py:/app/setup.py:ro
@@ -41,11 +45,6 @@ services:
       - pip-cache:/root/.pip
 
     environment:
-      # API Keys (mount from .env file)
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-
       # Test configuration
       - TEST_PARALLEL_WORKERS=4
       - TEST_TIMEOUT_MULTIPLIER=1.0
@@ -55,6 +54,10 @@ services:
       - PYTHONPATH=/app/src:/app
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
+
+      # Secrets location (formations will use this)
+      - MUXI_SECRETS_PATH=/app/tests/assets/secrets.enc
+      - MUXI_SECRETS_KEY=/app/tests/assets/.key
 
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-info}
