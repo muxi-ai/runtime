@@ -173,27 +173,59 @@ The core philosophy is **progressive complexity** - each layer builds on the pre
 └── scaling.md              # Scaling and load balancing
 ```
 
-#### **SDK Documentation**
+#### **API & SDK Documentation**
 ```
-/sdks/
-├── README.md               # SDK ecosystem overview
-├── python/                 # Python SDK complete reference
-├── javascript/             # JavaScript/TypeScript SDK
-├── go/                     # Go SDK (future)
-├── rest-api.md             # REST API reference
-└── webhooks.md             # Webhook integration
+/api/
+├── README.md               # API ecosystem overview
+├── rest-api/
+│   ├── authentication.md        # API auth methods and token management
+│   ├── agents.md                # Agent-related endpoints
+│   ├── conversations.md         # Conversation management endpoints
+│   ├── memory.md               # Memory access and manipulation
+│   └── admin.md                # Administration and monitoring endpoints
+├── websocket-api/
+│   ├── connection-management.md # Establishing and maintaining connections
+│   ├── real-time-streaming.md  # Streaming responses and updates
+│   ├── event-handling.md       # Event types and handling
+│   └── error-recovery.md       # WebSocket-specific error patterns
+├── python-sdk/
+│   ├── client.md               # Client class documentation
+│   ├── agent.md                # Agent class reference
+│   ├── memory.md               # Memory interface documentation
+│   └── utilities.md            # Helper functions and tools
+├── javascript-sdk/
+│   ├── client.md               # JavaScript client implementation
+│   ├── react-hooks.md          # React integration hooks
+│   ├── vue-components.md       # Vue.js integration components
+│   └── nodejs-utilities.md    # Server-side JavaScript utilities
+└── webhooks.md             # Webhook integration patterns
 ```
 
-### **Examples & Use Cases**
+### **Cookbooks & Recipes**
 ```
-/examples/
-├── README.md             # Example gallery and use cases
-├── chatbots/             # Customer service, support bots
-├── automation/           # Workflow automation examples
-├── data-processing/      # Document analysis, extraction
-├── multi-agent/          # Complex coordination examples
-├── integrations/         # CRM, database, API integrations
-└── custom-applications/  # Custom UI and application examples
+/cookbooks/
+├── README.md                   # Recipe gallery and practical guides
+├── agent-recipes/
+│   ├── customer-support-agent.md    # Complete customer service implementation
+│   ├── knowledge-base-assistant.md  # Document processing and Q&A agent
+│   ├── coding-assistant.md          # Code generation and explanation agent
+│   ├── research-assistant.md        # Research and data collection agent
+│   └── content-creator.md           # Content generation specialist
+├── system-recipes/
+│   ├── multi-agent-research-team.md # Collaborative research system
+│   ├── content-creation-pipeline.md # Content generation and review system
+│   ├── enterprise-knowledge.md      # Company-wide knowledge management
+│   └── automated-workflow.md        # Task automation and management
+├── integration-recipes/
+│   ├── muxi-plus-slack.md           # Slack integration patterns
+│   ├── muxi-plus-discord.md         # Discord bot implementation
+│   ├── muxi-plus-web-apps.md        # Web application integration
+│   └── muxi-plus-mobile.md          # Mobile app integration
+└── specialized-use-cases/
+    ├── healthcare-applications.md   # HIPAA-compliant healthcare assistants
+    ├── educational-systems.md      # Learning aids and educational tools
+    ├── financial-assistants.md     # Finance-focused implementations
+    └── multilingual-agents.md      # Multi-language support patterns
 ```
 
 ### **Concepts & Architecture**
@@ -207,6 +239,52 @@ The core philosophy is **progressive complexity** - each layer builds on the pre
 ├── scheduling.md         # Proactive AI capabilities
 ├── security.md           # Security model overview
 └── versioning.md         # ScalVer versioning explained
+```
+
+### **Interfaces & Tools**
+```
+/interfaces/
+├── README.md               # Interface ecosystem overview
+├── web-dashboard/
+│   ├── setup.md                 # Installing and configuring the dashboard
+│   ├── user-management.md       # Managing users and permissions
+│   ├── agent-administration.md  # Creating and managing agents
+│   └── analytics-monitoring.md  # Tracking usage and performance
+├── cli/
+│   ├── installation.md          # Setting up the CLI tool
+│   ├── command-reference.md     # Detailed documentation of all commands
+│   ├── configuration.md         # CLI config options and profiles
+│   └── scripting-automation.md  # Using CLI in scripts and automation
+└── api-interfaces/
+    ├── rate-limiting.md         # Understanding and managing API limits
+    ├── versioning.md            # API version compatibility
+    └── error-handling.md        # Standard error responses and codes
+```
+
+### **Deep Dives**
+```
+/deep-dives/
+├── README.md               # Advanced topics overview
+├── memory-systems/
+│   ├── vector-implementation.md # How vector storage is implemented
+│   ├── retrieval-algorithms.md # Detailed explanation of search algorithms
+│   ├── memory-sharding.md      # Scaling memory across instances
+│   └── custom-backends.md      # Creating new memory implementations
+├── performance-optimization/
+│   ├── benchmarking.md         # How to measure performance
+│   ├── scaling-strategies.md   # Handling large deployments
+│   ├── memory-optimization.md  # Reducing memory footprint
+│   └── response-optimization.md # Techniques for faster responses
+├── security-architecture/
+│   ├── permission-systems.md   # Internal permission enforcement
+│   ├── a2a-authentication.md   # Security protocols for agent communication
+│   ├── data-isolation.md       # How user data is kept separate
+│   └── audit-logging.md        # Security event tracking
+└── integration-patterns/
+    ├── external-api-integration.md  # Connecting to third-party services
+    ├── database-integration.md     # Working with external databases
+    ├── auth-system-integration.md  # Integrating with auth providers
+    └── existing-app-integration.md # Adding MUXI to established applications
 ```
 
 ---
