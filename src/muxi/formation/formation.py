@@ -2515,18 +2515,6 @@ class Formation:
                     description="Formation has MCP servers - automatically enabled exit error suppression",
                 )
 
-            # Register built-in MCP servers if enabled
-            try:
-                self._register_builtin_mcps()
-            except Exception as e:
-                # Log error but don't fail startup for MCP issues
-                observability.observe(
-                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
-                    level=observability.EventLevel.WARNING,
-                    data={"error": str(e)},
-                    description=f"Built-in MCP registration failed: {e}",
-                )
-
             # A2A initialization happens through the Overlord's A2ACoordinator
             # No separate service initialization needed here
 
@@ -4312,16 +4300,6 @@ class Formation:
         return await scheduler_service.manager.get_recent_audit_trail(
             limit=limit, user_id=user_id, action=action
         )
-
-    def _register_builtin_mcps(self) -> None:
-        """
-        DEPRECATED: Built-in MCP servers are now added to the configuration during
-        _setup_mcp_config() and registered through the normal MCP registration process.
-
-        This method is kept for backward compatibility but does nothing.
-        """
-        # Built-in MCPs are now handled in _add_builtin_mcps_to_config()
-        pass
 
     async def wait_for_mcp_readiness(self, timeout: float = 30.0) -> bool:
         """
