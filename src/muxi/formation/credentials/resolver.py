@@ -7,36 +7,15 @@ and other components that need to access services on behalf of users.
 
 from typing import Optional, Dict, Any, List
 from sqlalchemy import Column, Integer, String, DateTime, select, Text
-from sqlalchemy.orm import declarative_base
 import nanoid
 
 from ...datatypes.json_type import JSONType
 from ...datatypes.exceptions import FormationError
 from ...utils.datetime_utils import utc_now_naive
 from ...services import observability
-
-Base = declarative_base()
-
-
-class User(Base):
-    """SQLAlchemy model for users table that works with both PostgreSQL and SQLite."""
-
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True)
-    public_id = Column(String(21), nullable=False, unique=True)  # Nano ID for external exposure
-    external_user_id = Column(Text, nullable=False)  # The actual external user ID
-    formation_id = Column(String, nullable=False, default="default-formation")
-    created_at = Column(DateTime, default=lambda: utc_now_naive())
-    updated_at = Column(
-        DateTime,
-        default=lambda: utc_now_naive(),
-        onupdate=lambda: utc_now_naive(),
-    )
-
-    def __repr__(self) -> str:
-        """Return a string representation for debugging."""
-        return f"<User(id={self.id}, external_user_id={self.external_user_id!r}, formation_id={self.formation_id!r})>"
+from ...services.db import Base
+# Import User model from memory module to avoid duplication
+from ...services.memory.long_term import User
 
 
 class Credential(Base):
@@ -44,12 +23,12 @@ class Credential(Base):
 
     __tablename__ = "credentials"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, nullable=False)  # Foreign key to users.id
-    credential_id = Column(String, nullable=False)
-    name = Column(String, nullable=False)
-    service = Column(String, nullable=False)  # Always lowercase
-    credentials = Column(JSONType, nullable=False, default={})  # Works with both DBs
+    credential_id = Column(String(21), nullable=False, unique=True)  # CHAR(21) in PostgreSQL
+    name = Column(String(255), nullable=False)
+    service = Column(String(255), nullable=False)  # Always lowercase
+    credentials = Column(Text, nullable=False)  # Stores encrypted JSON as text
     created_at = Column(DateTime, default=lambda: utc_now_naive())
     updated_at = Column(
         DateTime,

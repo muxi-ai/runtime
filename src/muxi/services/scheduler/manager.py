@@ -97,31 +97,20 @@ class JobManager:
                 raise
 
     async def initialize(self):
-        """Initialize database schema using unified database manager."""
+        """Initialize scheduler service. Tables are now created centrally during formation init."""
         if self._initialized:
             return
 
-        try:
-            from ..db import Base
+        # Tables are now created centrally in formation initialization
+        # Just mark as initialized
+        self._initialized = True
 
-            self.db_manager.create_tables(Base.metadata)
-            self._initialized = True
-
-            observability.observe(
-                event_type=observability.SystemEvents.SCHEDULER_DATABASE_INITIALIZED,
-                level=observability.EventLevel.INFO,
-                data={"database_type": self.db_manager.database_type},
-                description=f"Scheduler database schema initialized for {self.db_manager.database_type}",
-            )
-
-        except Exception as e:
-            observability.observe(
-                event_type=observability.ErrorEvents.DATABASE_TABLE_CREATION_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={"error": str(e), "database_type": self.db_manager.database_type},
-                description=f"Failed to initialize scheduler database: {e}",
-            )
-            raise
+        observability.observe(
+            event_type=observability.SystemEvents.SCHEDULER_INITIALIZED,
+            level=observability.EventLevel.INFO,
+            data={"database_type": self.db_manager.database_type},
+            description=f"Scheduler service initialized for {self.db_manager.database_type}",
+        )
 
     async def create_job(
         self,

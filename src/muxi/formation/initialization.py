@@ -232,6 +232,7 @@ def initialize_llm_config(formation) -> None:
 def initialize_memory_systems(formation) -> None:
     """
     Initialize all memory systems including buffer, working, and persistent memory.
+    Creates all database tables after persistent memory is initialized.
     """
     memory_config = formation._memory_config if hasattr(formation, "_memory_config") else {}
 
@@ -247,6 +248,11 @@ def initialize_memory_systems(formation) -> None:
     persistent_config = memory_config.get("persistent", {})
     if persistent_config and persistent_config.get("connection_string"):
         _initialize_persistent_memory(formation, persistent_config)
+
+        # Create all database tables after persistent memory is initialized
+        # This ensures all models are imported and registered with Base.metadata
+        if hasattr(formation, "_db_manager") and formation._db_manager:
+            _create_all_database_tables(formation._db_manager)
 
 
 def _initialize_working_memory(formation, working_config: Dict[str, Any]) -> None:
@@ -451,6 +457,56 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             description=f"Failed to initialize persistent memory: {str(e)}",
         )
         # Don't raise - persistent memory is optional
+
+
+def _create_all_database_tables(db_manager) -> None:
+    """
+    Create all database tables for the MUXI runtime.
+
+    This function imports all SQLAlchemy models to ensure they are registered
+    with Base.metadata, then creates all tables in a single operation.
+
+    Args:
+        db_manager: The database manager instance with connection to database
+    """
+    try:
+        # Import all models to ensure they are registered with Base.metadata
+        # Memory models (users, memories)
+        from ..services.memory.long_term import User, Memory
+
+        # Credential models (credentials table) - Note: User is already imported above
+        from ..formation.credentials.resolver import Credential
+
+        # Scheduler models (scheduled_jobs, scheduled_job_audit)
+        from ..services.scheduler.models import ScheduledJob, ScheduledJobAudit
+
+        # Get Base from db module
+        from ..services.db import Base
+
+        # Create all tables using the database manager
+        db_manager.create_tables(Base.metadata)
+
+        observability.observe(
+            event_type=observability.SystemEvents.DATABASE_TABLES_CREATED,
+            level=observability.EventLevel.INFO,
+            data={
+                "tables_created": [
+                    "users", "memories",  # Memory system tables
+                    "credentials",  # Credential storage
+                    "scheduled_jobs", "scheduled_job_audit"  # Scheduler tables
+                ]
+            },
+            description="All database tables created successfully",
+        )
+
+    except Exception as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.ERROR,
+            data={"error": str(e), "service": "database"},
+            description=f"Failed to create database tables: {str(e)}",
+        )
+        # Don't raise - allow system to continue with warning
 
 
 def initialize_document_processing(formation) -> None:

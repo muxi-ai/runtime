@@ -169,8 +169,10 @@ class LongTermMemory:
         # Determine if we're in multi-user mode
         self.is_multi_user = self.db_manager.database_type == "postgresql"
 
-        # Create tables if they don't exist
-        self._create_tables()
+        # Tables are now created centrally in formation initialization
+        # Only handle pgvector extension setup here if needed
+        if self.db_manager.database_type == "postgresql":
+            self._ensure_pgvector_extension()
 
         # Create default user and collection for single-user mode
         if not self.is_multi_user:
@@ -209,44 +211,37 @@ class LongTermMemory:
                 raise ValueError(f"Failed to initialize embedding model: {e}")
         return self._embedding_model
 
-    def _create_tables(self) -> None:
+    def _ensure_pgvector_extension(self) -> None:
         """
-        Create database tables if they don't exist.
+        Ensure pgvector extension is created for PostgreSQL.
 
-        This method initializes the database schema, ensuring the pgvector
-        extension is loaded and all required tables are created.
+        This method creates the pgvector extension if it doesn't already exist.
+        It's safe to call multiple times.
         """
         try:
-            # Note: In production, you'd use proper migrations to handle schema changes
+            from sqlalchemy import text
 
-            # Use unified database manager to create tables
-            self.db_manager.create_tables(Base.metadata)
-
-            # Create pgvector extension if using PostgreSQL
-            if self.db_manager.database_type == "postgresql":
-                from sqlalchemy import text
-
-                with self.engine.connect() as conn:
-                    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-                    conn.commit()
+            with self.engine.connect() as conn:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                conn.commit()
 
             observability.observe(
-                event_type=observability.SystemEvents.DATABASE_TABLES_CREATED,
+                event_type=observability.SystemEvents.DATABASE_EXTENSION_CREATED,
                 level=observability.EventLevel.INFO,
                 data={
+                    "extension": "pgvector",
                     "database_type": self.db_manager.database_type,
-                    "component": "long_term_memory",
                 },
-                description="Long-term memory database initialized with unified manager",
+                description="pgvector extension created successfully",
             )
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.DATABASE_TABLE_CREATION_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={"error": str(e), "database_type": self.db_manager.database_type},
-                description=f"Failed to initialize long-term memory database: {e}",
+                event_type=observability.ErrorEvents.DATABASE_EXTENSION_CREATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={"error": str(e), "extension": "pgvector"},
+                description=f"Failed to create pgvector extension: {e}",
             )
-            raise
+            # Don't raise - pgvector might not be available but system can continue
 
     def _get_or_create_user(self, session: Session, external_user_id: Optional[str] = None) -> User:
         """Get existing user or create new one."""
