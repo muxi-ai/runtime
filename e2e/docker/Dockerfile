@@ -78,8 +78,8 @@ RUN useradd -m -u 1000 muxi && \
     mkdir -p /app/test-formations && \
     chown -R muxi:muxi /app
 
-# Create FAISSx auth configuration
-RUN echo '{"auth_key": "test-auth-key"}' > /app/faissx-auth.json
+# Copy FAISSx auth configuration from e2e/assets
+COPY e2e/assets/faissx-auth.json /app/faissx-auth.json
 
 # Initialize PostgreSQL database during build
 USER postgres
