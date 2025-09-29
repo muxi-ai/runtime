@@ -1,7 +1,6 @@
 schema: "1.0.0"
 id: minimal-test-formation
 description: Minimal formation template for simple tests
-secrets_file: secrets.enc
 
 # LLM Configuration (REQUIRED)
 llm:

@@ -2,7 +2,6 @@
 schema: "1.0.0"
 id: foundation-test-base
 description: "Base formation for foundation tests"
-secrets_file: secrets.enc
 
 llm:
   api_keys:

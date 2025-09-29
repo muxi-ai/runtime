@@ -1,7 +1,6 @@
 schema: "1.0.0"
 id: standard-test-formation
 description: Standard formation template for most E2E tests
-secrets_file: secrets.enc
 
 # LLM Configuration (REQUIRED)
 llm:

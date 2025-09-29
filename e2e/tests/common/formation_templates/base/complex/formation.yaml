@@ -1,7 +1,6 @@
 schema: "1.0.0"
 id: complex-test-formation
 description: Complex formation template for advanced multi-agent tests
-secrets_file: secrets.enc
 
 # LLM Configuration with multiple models
 llm:

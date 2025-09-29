@@ -1016,8 +1016,7 @@ ln -s ../../.key .key
 
 ```yaml
 # tests/e2e/common/formations/base/standard/formation.yaml
-id: standard-test-formation
-secrets_file: secrets.enc  # Automatically decrypted using .key
+id: standard-test-formation  # Automatically decrypted using .key
 llm:
   models:
     - text: "openai/gpt-4o-mini"
