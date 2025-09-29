@@ -36,7 +36,8 @@
       "Bash(nc:*)",
       "Bash(faissx.server --help)",
       "Bash(lsof:*)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []
