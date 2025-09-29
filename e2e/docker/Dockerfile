@@ -42,28 +42,30 @@ ENV PATH="/usr/lib/postgresql/17/bin:${PATH}"
 RUN mkdir -p /app /data /logs /var/run/postgresql /var/lib/postgresql/17 \
     && chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql /logs
 
-# Install Python packages for services
-RUN pip install --no-cache-dir \
+# Install uv for much faster Python package management
+# Using pip to install uv directly (more reliable in Docker)
+RUN pip install --no-cache-dir uv
+
+# Copy requirements first for better layer caching
+WORKDIR /app
+COPY requirements.txt /app/
+
+# Install all Python packages in a single layer using uv for speed
+# This combines services, runtime, and test requirements
+RUN uv pip install --system \
     faissx \
     fastapi \
     uvicorn \
     httpx \
-    aiofiles
-
-# Copy and install MUXI runtime requirements
-WORKDIR /app
-COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Install additional test requirements
-RUN pip install --no-cache-dir \
+    aiofiles \
     pytest>=7.0.0 \
     pytest-asyncio>=0.21.0 \
     pytest-timeout>=2.1.0 \
     pytest-xdist>=3.0.0 \
     pytest-cov>=4.0.0 \
     pytest-benchmark>=4.0.0 \
-    pytest-mock>=3.10.0
+    pytest-mock>=3.10.0 \
+    && uv pip install --system -r requirements.txt
 
 # Download spaCy model (required by some dependencies)
 RUN python -m spacy download en_core_web_sm || true
@@ -93,6 +95,8 @@ RUN rm -rf /var/lib/postgresql/17/main/* 2>/dev/null || true \
     && createdb muxi_test \
     && createuser muxi \
     && psql -c "GRANT ALL PRIVILEGES ON DATABASE muxi_test TO muxi;" \
+    && psql -d muxi_test -c "GRANT CREATE ON SCHEMA public TO muxi;" \
+    && psql -d muxi_test -c "GRANT ALL ON SCHEMA public TO muxi;" \
     && psql -d muxi_test -c "CREATE EXTENSION IF NOT EXISTS vector;" \
     && /usr/lib/postgresql/17/bin/pg_ctl -D /var/lib/postgresql/17/main stop
 

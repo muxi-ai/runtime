@@ -1,6 +1,5 @@
 # All-in-One Docker Compose for E2E Testing
 # Single container with all services and MUXI runtime
-version: '3.8'
 
 services:
   muxi-e2e-all:
