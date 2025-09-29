@@ -13,16 +13,16 @@ Area 1 uses **Pattern 1: Runtime Modification** (56% of all tests)
 
 | Original Test | Standardized Test | Status | Pattern Used |
 |---------------|-------------------|---------|--------------|
-| test_1a1_basic_yaml_formation.py | test_1a1_basic_yaml_formation.py | ✅ Migrated & Fixed | Runtime (standard template) |
-| test_1a2_directory_structure_formation.py | test_1a2_directory_structure_formation.py | ✅ Migrated & Fixed | Runtime (standard template) |
-| test_1a3_formation_validation_failures.py | test_1a3_formation_validation_failures.py | ✅ Migrated & Fixed | Runtime (standard template) |
-| test_1a4_flattened_formation_loading.py | test_1a4_flattened_formation_loading.py | ✅ Migrated & Fixed | Runtime (standard template) |
-| test_1a5_remote_memory_validation.py | test_1a5_remote_memory_validation.py | ✅ Migrated & Fixed | Runtime (standard template) |
-| test_1a6_simple_formation.py | test_1a6_simple_formation.py | ✅ Migrated & Fixed | Runtime (minimal template) |
-| test_1b1_single_agent_response.py | test_1b1_single_agent_response.py | ✅ Migrated & Fixed | Runtime (standard template) |
-| test_1b2_agent_routing_validation.py | test_1b2_agent_routing_validation.py | ✅ Migrated & Fixed | Runtime (standard template) |
-| test_1b3_basic_formation.py | test_1b3_basic_formation.py | ✅ Migrated & Fixed | Runtime (standard template) |
-| test_1b4_simple_chat.py | test_1b4_simple_chat.py | ✅ Migrated & Fixed | Runtime (minimal template) |
+| test_1a_1_basic_yaml_formation.py | test_1a_1_basic_yaml_formation.py | ✅ Migrated & Fixed | Runtime (standard template) |
+| test_1a_2_directory_structure_formation.py | test_1a_2_directory_structure_formation.py | ✅ Migrated & Fixed | Runtime (standard template) |
+| test_1a_3_formation_validation_failures.py | test_1a_3_formation_validation_failures.py | ✅ Migrated & Fixed | Runtime (standard template) |
+| test_1a_4_flattened_formation_loading.py | test_1a_4_flattened_formation_loading.py | ✅ Migrated & Fixed | Runtime (standard template) |
+| test_1a_5_remote_memory_validation.py | test_1a_5_remote_memory_validation.py | ✅ Migrated & Fixed | Runtime (standard template) |
+| test_1a_6_simple_formation.py | test_1a_6_simple_formation.py | ✅ Migrated & Fixed | Runtime (minimal template) |
+| test_1b_1_single_agent_response.py | test_1b_1_single_agent_response.py | ✅ Migrated & Fixed | Runtime (standard template) |
+| test_1b_2_agent_routing_validation.py | test_1b_2_agent_routing_validation.py | ✅ Migrated & Fixed | Runtime (standard template) |
+| test_1b_3_basic_formation.py | test_1b_3_basic_formation.py | ✅ Migrated & Fixed | Runtime (standard template) |
+| test_1b_4_simple_chat.py | test_1b_4_simple_chat.py | ✅ Migrated & Fixed | Runtime (minimal template) |
 
 ## Async Issue Resolution
 
@@ -58,7 +58,7 @@ All tests have been fixed to properly handle async/sync patterns:
 
 ```bash
 # Run individual test
-python tests/e2e_new/1_foundation/test_1b4_simple_chat.py
+python tests/e2e_new/1_foundation/test_1b_4_simple_chat.py
 
 # Run all migrated tests
 python tests/e2e_new/1_foundation/run_tests.py
@@ -76,9 +76,9 @@ pytest tests/e2e_new/1_foundation -v
 │       ├── formation.yaml       # Base configuration
 │       ├── secrets.enc -> ../../../../../assets/secrets.enc
 │       └── .key -> ../../../../../assets/.key
-├── test_1a6_simple_formation.py # Uses minimal template
-├── test_1b1_single_agent_response.py # Uses standard template
-├── test_1b4_simple_chat.py      # Uses minimal template
+├── test_1a_6_simple_formation.py # Uses minimal template
+├── test_1b_1_single_agent_response.py # Uses standard template
+├── test_1b_4_simple_chat.py      # Uses minimal template
 └── run_tests.py                 # Test runner
 ```
 
