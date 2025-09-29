@@ -34,7 +34,9 @@
       "Bash(curl:*)",
       "Bash(do echo:*)",
       "Bash(nc:*)",
-      "Bash(faissx.server --help)"
+      "Bash(faissx.server --help)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)"
     ],
     "deny": [],
     "ask": []
