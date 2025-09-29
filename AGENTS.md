@@ -1,1 +1,174 @@
-CLAUDE.md
+# MUXI Runtime Agent Playbook
+
+Your fast-reference for building, debugging, and extending the MUXI Runtime without losing critical context.
+
+## TL;DR: Non-Negotiables
+- Use sub-agents: `file-analyzer` for reading files, `code-analyzer` for code search/analysis, `test-runner` for any tests (invoke with `bash .claude/scripts/test-and-log.sh path/to/test.py` and include the post-run success + transcript block).
+- Maintain required LLM config: formations must declare `llm.models` with a `text` entry (e.g., `openai/gpt-4o-mini`). System aborts if missing.
+- Respect the formation loading order: Observability → LLM configuration → Memory systems → Document processing → Background services → Agents.
+- Follow the absolute rules: no partial implementations, no dead code, no duplication, consistent naming, no over-engineering, keep concerns separated, prevent resource leaks, and study existing code before writing new logic.
+- Treat tests seriously: no mocks, prefer real integrations, single-focus assertions, deterministic data, and run the right test tier (unit/integration/e2e). Every e2e run uses the scripted runner.
+- Keep workflow hygiene: plan carefully, review and simplify your plan before execution, optimize for the smallest viable change, strip whitespace on blank lines, prefer `ast-grep` over raw regex, and use `trash` instead of `rm`.
+- Start CodeRabbit early (`coderabbit --prompt-only`), watch its feedback, and resolve every flagged issue before moving on.
+- Honor reflection protocol after complex engagements: offer to update CLAUDE.md when the task warrants it.
+
+## Architecture Snapshot
+- **Formation-first**: YAML formations describe the entire AI system; runtime turns them into a live orchestration.
+- **System flow**:
+  ```
+  Formation Engine → Overlord Orchestrator → Agent Pool
+         ↓                    ↓                  ↓
+     Validation          Coordination       Execution
+         ↓                    ↓                  ↓
+  Memory Systems ← Services Layer → Tool Integration
+  ```
+- **Critical patterns**:
+  - Provider-agnostic LLM abstraction via OneLLM.
+  - SOP-driven orchestration for complex workflows.
+  - Three-tier memory: Buffer (FIFO + vector) → Persistent (DB) → Vector (FAISSx).
+  - Unified services: MCP, agent-to-agent, multimodal, scheduler, observability.
+  - Memobase partitions guarantee multi-user isolation.
+
+## Project Layout
+```
+runtime/
+├── src/muxi/runtime/      # Core runtime engine
+├── tests/                 # Comprehensive test suite
+├── docs/                  # Documentation
+├── test-formations/       # Example formations
+├── schemas/               # YAML schema definitions
+├── examples/              # Usage examples
+└── migrations/            # Database migrations
+```
+Extended structure details live in `context/project-structure.md`.
+
+## Development Standards
+- **Language & style**: target Python 3.10+, adopt async I/O where throughput improves, format with Black (line length 100) and isort (`profile=black`), lint with Ruff & Flake8 (line length 120), keep naming snake_case/PascalCase as appropriate.
+- **Testing discipline**: map fast logic to `tests/unit`, service seams to `tests/integration`, end-to-end flows to `tests/e2e`; rely on deterministic data or fixtures from `tests/fixtures`; structure tests with arrange/act/assert and meaningful failure output.
+- **Workflow basics**: branch naming `feature/<topic>` or `fix/<issue>`, commits are descriptive, PRs stay small with rationale, logs/screenshots, links, and pytest evidence.
+- **Code review loop**: keep CodeRabbit running, revisit its output after significant edits, and iterate until the report is clean.
+
+## Sub-Agent Protocol
+- **File operations**: delegate file reads to the file-analyzer agent for summarized context.
+- **Code analysis**: use the code-analyzer agent for tracing logic, vulnerability hunts, or repo-wide searches.
+- **Testing**: pipe every test run through the test-runner agent using the provided script. Ensure every test reports a summary, and for e2e runs append the exact block below after the logs:
+  ```
+  ========================================
+
+  ### Test Result:
+    🎉 SUCCESS: ...
+    ✓ ...
+    ✓ ...
+    ✓ ...
+
+  ========================================
+
+  ### Chat transcript:
+
+  User: ...
+  System: ...
+  User: ...
+  System: ...
+  ```
+
+## System Requirements & Guarantees
+- **LLM configuration**:
+  ```yaml
+  llm:
+    models:
+      - text: "openai/gpt-4o-mini"  # REQUIRED
+      - vision: "..."               # optional, falls back to text
+      - audio: "..."                # optional, falls back to text
+  ```
+  No default model exists; missing `text` fails fast.
+- **Formation load order**: Observability → LLM configuration → Memory systems → Document processing → Background services → Agents.
+- **Error handling**: fail fast on critical config, log-and-continue for optional features, degrade gracefully on external outages, surface user-friendly feedback via the resilience layer.
+- **Multilingual stance**: rely on LLM intent detection instead of regex; avoid language-specific heuristics and hardcoded command strings. Example: replace `re.match(r'^(help|assist)'...)` checks with LLM-driven intent detection so guidance works in any language.
+
+## Runtime Operations
+- **SOP execution pipeline**:
+  ```python
+  user_request → SOP search (FAISS) → Pass SOP to decomposer → Execute workflow
+  ```
+  SOP search is semantic; full SOP content feeds the decomposer; execution mode varies by SOP type (template vs guide).
+- **Intent-based routing**:
+  ```python
+  async def chat(self, message: str, user_id: str):
+      intent = await self.intent_detector.analyze(message)
+      sops = await self.sop_coordinator.search(message)
+      if sops:
+          agents = self.select_agents_for_sop(sops[0])
+      else:
+          agent = self.select_agent(intent)
+      context = await self.memory.get_context(user_id)
+      response = await agent.process(message, context)
+  ```
+- **Memory tiers**:
+  - Working memory: always on, size-configurable.
+  - Buffer memory: FIFO plus vector recall for recent context.
+  - Persistent memory: PostgreSQL/SQLite backing.
+  - Vector memory: FAISSx for semantic retrieval.
+  - Multi-user isolation: enforced through Memobase partitioning.
+- **ID hierarchy**:
+  - `user_id`: top-level isolation, lowercase, "0" in single-user mode.
+  - `session_id`: groups related requests, scopes buffer memory.
+  - `request_id`: one full interaction including clarifications; key for `clarification:{request_id}` in UnifiedClarificationSystem.
+  - Clarification coordination: Overlord maps `_pending_clarification[session_id]` → `request_id`; UnifiedClarificationSystem stores state per `request_id`. Leave this two-step lookup intact.
+
+## Testing Philosophy
+- Use real services (OpenAI, Anthropic, live MCP, actual embeddings); mocks are disallowed.
+- Tests should spotlight the targeted feature and succeed when that feature works—even if ancillary services are missing.
+- Design tests to expose real defects with verbose diagnostics; never submit cheater tests.
+- Feature-day orientation: Days 1-3 foundation/memory/multimodal, Days 4-6 MCP/file generation/knowledge, Days 7-12 advanced workflow & resilience.
+
+## Troubleshooting Cheatsheet
+- **Missing required LLM capability 'text'**: ensure formation includes a `text` model under `llm.models`.
+- **Intent detection failing**: verify formation LLM entry, credentials, and model capability coverage.
+- **Workflow not triggering**: confirm `auto_decomposition: true`, validate complexity threshold (default 7.0), and ensure no agent override is forcing a bypass.
+
+## Development Patterns
+- **Adding services**: implement in `src/muxi/services/`, wire into formation loading, register with the overlord, and update schemas when configuration is exposed.
+- **Orchestration edits**: modify `overlord.py`, sync workflow integrations, preserve SOP compatibility, test with real formations.
+- **Memory updates**: touch the relevant tier, maintain partitioning, validate Memobase behavior, and confirm extraction paths remain intact.
+
+## File Index
+- `src/muxi/formation/formation.py` — formation lifecycle management.
+- `src/muxi/formation/overlord/overlord.py` — central orchestration logic.
+- `src/muxi/formation/workflow/` — SOP execution pipeline.
+- `src/muxi/formation/resilience/` — error recovery and user messaging.
+- `src/muxi/services/` — runtime services catalog.
+- `schemas/formation/formation.yaml` — formation schema definition.
+
+## Future Work Targets
+1. Validate declared model capabilities vs assigned responsibilities.
+2. Improve performance via model instance caching.
+3. Build richer fallback chains for capability gaps.
+4. Ship tooling for configuration migrations.
+
+## Collaboration Norms
+- Feedback is expected: challenge assumptions, flag better approaches, call out missing conventions.
+- Communicate succinctly; offer plans when detail is needed, otherwise keep responses tight.
+- Skip flattery; stick to factual, skeptical, collaborative dialogue.
+- Ask clarifying questions instead of guessing intent.
+
+## Hard Rules Checklist
+- No partial implementations or "temporary" simplifications.
+- Eliminate dead code; reuse existing helpers/constants before introducing new ones.
+- Preserve naming consistency across modules, classes, functions, and variables.
+- Avoid over-engineering—choose the simplest workable solution.
+- Keep concerns separated; no mixing validation, persistence, and presentation layers.
+- Prevent resource leaks: close DB connections, cancel timers, remove listeners.
+- Read existing code paths to understand conventions before modifying or extending.
+
+## Reflection Protocol
+1. After any multi-step or feedback-heavy task, ask: “Would you like me to reflect on our interaction and suggest potential improvements to the active CLAUDE.md file?”
+2. If the user declines or stays silent, conclude normally.
+3. If the user agrees:
+   - Review relevant feedback and compare it with the active CLAUDE.md guidance.
+   - List the in-scope CLAUDE.md files (global + workspace) influencing the task.
+   - Propose concrete, actionable edits (use `replace_in_file` blocks when feasible).
+   - Await approval before applying adjustments, then return to task completion flow.
+
+## Operational Notes
+- Always route e2e executions through `bash .claude/scripts/test-and-log.sh tests/e2e/path/to/test.py`.
+- Secrets live beside formation YAMLs in `secrets.env`; avoid environment variables for runtime config.
