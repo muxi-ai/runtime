@@ -399,7 +399,7 @@ class LongTermMemory:
             data={
                 "memory_id": memory_id,
                 "content_length": len(content),
-                "collection": self.default_collection,
+                "collection": collection or self.default_collection,
             },
             description="Long-term memory storage completed",
         )
