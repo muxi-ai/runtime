@@ -58,7 +58,7 @@ def main():
     """Main entry point."""
     test = Test2m1ErrorResilience()
     result = asyncio.run(test.run_test())
-    os._exit(0 if result else 1)
+    sys.exit(0 if result else 1)
 
 
 if __name__ == "__main__":

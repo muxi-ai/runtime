@@ -45,15 +45,10 @@ class TestSQLitePersistence(BaseMemoryTest):
                 user_msg1, user_id=user_id, use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response1, "__aiter__"):
-                response1_text = ""
-                async for chunk in response1:
-                    response1_text += chunk
-            else:
-                response1_text = (
-                    response1.content if hasattr(response1, "content") else str(response1)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response1_text = (
+                response1.content if hasattr(response1, "content") else str(response1)
+            )
 
             transcript.append((user_msg1, response1_text))
             print(f"User: {user_msg1}")
@@ -65,15 +60,10 @@ class TestSQLitePersistence(BaseMemoryTest):
                 user_msg2, user_id=user_id, use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response2, "__aiter__"):
-                response2_text = ""
-                async for chunk in response2:
-                    response2_text += chunk
-            else:
-                response2_text = (
-                    response2.content if hasattr(response2, "content") else str(response2)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response2_text = (
+                response2.content if hasattr(response2, "content") else str(response2)
+            )
 
             transcript.append((user_msg2, response2_text))
             print(f"User: {user_msg2}")
@@ -82,8 +72,8 @@ class TestSQLitePersistence(BaseMemoryTest):
             print("  ✓ Information stored in SQLite")
             checks_passed.append("Information stored successfully")
 
-            # Wait for persistence
-            await asyncio.sleep(3)
+            # Wait for extraction to complete (extraction is async)
+            await asyncio.sleep(10)
 
             # Shutdown formation
             await self.cleanup()
@@ -103,15 +93,10 @@ class TestSQLitePersistence(BaseMemoryTest):
                 user_msg3, user_id=user_id, use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response3, "__aiter__"):
-                response3_text = ""
-                async for chunk in response3:
-                    response3_text += chunk
-            else:
-                response3_text = (
-                    response3.content if hasattr(response3, "content") else str(response3)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response3_text = (
+                response3.content if hasattr(response3, "content") else str(response3)
+            )
 
             transcript.append((user_msg3, response3_text))
             print(f"\nUser: {user_msg3}")
@@ -147,15 +132,10 @@ class TestSQLitePersistence(BaseMemoryTest):
                 user_msg4, user_id=user_id, use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response4, "__aiter__"):
-                response4_text = ""
-                async for chunk in response4:
-                    response4_text += chunk
-            else:
-                response4_text = (
-                    response4.content if hasattr(response4, "content") else str(response4)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response4_text = (
+                response4.content if hasattr(response4, "content") else str(response4)
+            )
 
             transcript.append((user_msg4, response4_text))
             print(f"\nUser: {user_msg4}")
@@ -202,15 +182,10 @@ class TestSQLitePersistence(BaseMemoryTest):
                 user1_msg, user_id="user_david", use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response1, "__aiter__"):
-                response1_text = ""
-                async for chunk in response1:
-                    response1_text += chunk
-            else:
-                response1_text = (
-                    response1.content if hasattr(response1, "content") else str(response1)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response1_text = (
+                response1.content if hasattr(response1, "content") else str(response1)
+            )
 
             transcript.append((f"User1: {user1_msg}", response1_text))
             print(f"User 1: {user1_msg}")
@@ -222,15 +197,10 @@ class TestSQLitePersistence(BaseMemoryTest):
                 user2_msg, user_id="user_emily", use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response2, "__aiter__"):
-                response2_text = ""
-                async for chunk in response2:
-                    response2_text += chunk
-            else:
-                response2_text = (
-                    response2.content if hasattr(response2, "content") else str(response2)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response2_text = (
+                response2.content if hasattr(response2, "content") else str(response2)
+            )
 
             transcript.append((f"User2: {user2_msg}", response2_text))
             print(f"\nUser 2: {user2_msg}")
@@ -244,15 +214,10 @@ class TestSQLitePersistence(BaseMemoryTest):
                 query1, user_id="user_david", use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response3, "__aiter__"):
-                response3_text = ""
-                async for chunk in response3:
-                    response3_text += chunk
-            else:
-                response3_text = (
-                    response3.content if hasattr(response3, "content") else str(response3)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response3_text = (
+                response3.content if hasattr(response3, "content") else str(response3)
+            )
 
             transcript.append((f"User1: {query1}", response3_text))
             print(f"\nUser 1 Query: {query1}")
@@ -274,15 +239,10 @@ class TestSQLitePersistence(BaseMemoryTest):
                 query2, user_id="user_emily", use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response4, "__aiter__"):
-                response4_text = ""
-                async for chunk in response4:
-                    response4_text += chunk
-            else:
-                response4_text = (
-                    response4.content if hasattr(response4, "content") else str(response4)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response4_text = (
+                response4.content if hasattr(response4, "content") else str(response4)
+            )
 
             transcript.append((f"User2: {query2}", response4_text))
             print(f"\nUser 2 Query: {query2}")

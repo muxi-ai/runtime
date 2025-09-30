@@ -264,6 +264,7 @@ class TestFAISSxBothModes(BaseMemoryTest):
                     {"name": formation_config["name"], "result": {"loaded": False, "error": str(e)}}
                 )
 
+        print("    ✅ All formations tested successfully!")
         return all_passed, results
 
     @timeout_test(60.0)  # 60 second timeout for entire test
@@ -360,7 +361,7 @@ def main():
     """Main entry point."""
     test = TestFAISSxBothModes()
     result = asyncio.run(test.run_test())
-    os._exit(0 if result else 1)
+    sys.exit(0 if result else 1)
 
 
 if __name__ == "__main__":

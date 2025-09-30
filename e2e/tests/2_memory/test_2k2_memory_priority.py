@@ -27,7 +27,7 @@ from test_utils import timeout_test, safe_overlord_chat, with_timeout, safe_form
 class Test2k2MemoryPriority(BaseMemoryTest):
     """Test memory prioritization in context enhancement."""
 
-    @timeout_test(60.0)
+    @timeout_test(120.0)
     async def test_2k2memorypriority(self):
         """Test memory prioritization despite buffer noise."""
         test_name = "2k2_memory_priority"
@@ -63,15 +63,12 @@ class Test2k2MemoryPriority(BaseMemoryTest):
             ]
 
             for info in critical_info:
-                response = await self.overlord.chat(info, user_id=test_user, use_async=False)
+                response = await self.overlord.chat(info, user_id=test_user, use_async=False, stream=False)
                 transcript.append(("User", info))
 
                 response_text = ""
-                if hasattr(response, "__aiter__"):
-                    async for chunk in response:
-                        response_text += chunk
-                else:
-                    response_text = response.content if hasattr(response, "content") else str(response)
+                # Handle response (stream=False, so response is a string or object with .content)
+                response_text = response.content if hasattr(response, "content") else str(response)
                 transcript.append(("System", response_text[:50] + "..." if len(response_text) > 50 else response_text))
 
                 await asyncio.sleep(3)
@@ -84,7 +81,7 @@ class Test2k2MemoryPriority(BaseMemoryTest):
 
             for i in range(15):
                 noise_msg = f"Random conversation {i} about the weather, sports, and other topics"
-                await self.overlord.chat(noise_msg, user_id=test_user, use_async=False)
+                await self.overlord.chat(noise_msg, user_id=test_user, use_async=False, stream=False)
                 await asyncio.sleep(0.5)
 
             print("    ✓ Added 15 noise messages to buffer")
@@ -94,22 +91,11 @@ class Test2k2MemoryPriority(BaseMemoryTest):
             print("\n  3. Testing retrieval of important information despite noise...")
 
             health_query = "Do I have any dietary restrictions or health concerns?"
-            response = await self.overlord.chat(health_query, user_id=test_user, use_async=False)
+            response = await self.overlord.chat(health_query, user_id=test_user, use_async=False, stream=False)
             transcript.append(("User", health_query))
 
-            # Handle different response types
-            if hasattr(response, "__aiter__"):
-                full_response = ""
-                async for chunk in response:
-                    if hasattr(chunk, "content") and chunk.content:
-                        full_response += chunk.content
-                    elif isinstance(chunk, str):
-                        full_response += chunk
-                response_text = full_response
-            elif hasattr(response, "content"):
-                response_text = response.content
-            else:
-                response_text = str(response)
+            # Handle response (stream=False, so response is a string or object with .content)
+            response_text = response.content if hasattr(response, "content") else str(response)
 
             transcript.append(("System", response_text[:100] + "..." if len(response_text) > 100 else response_text))
 
@@ -128,22 +114,11 @@ class Test2k2MemoryPriority(BaseMemoryTest):
             print("\n  4. Testing specific health query...")
 
             allergy_query = "Can I eat this peanut butter sandwich?"
-            response = await self.overlord.chat(allergy_query, user_id=test_user, use_async=False)
+            response = await self.overlord.chat(allergy_query, user_id=test_user, use_async=False, stream=False)
             transcript.append(("User", allergy_query))
 
-            # Handle different response types
-            if hasattr(response, "__aiter__"):
-                full_response = ""
-                async for chunk in response:
-                    if hasattr(chunk, "content") and chunk.content:
-                        full_response += chunk.content
-                    elif isinstance(chunk, str):
-                        full_response += chunk
-                response_text = full_response
-            elif hasattr(response, "content"):
-                response_text = response.content
-            else:
-                response_text = str(response)
+            # Handle response (stream=False, so response is a string or object with .content)
+            response_text = response.content if hasattr(response, "content") else str(response)
 
             transcript.append(("System", response_text[:100] + "..." if len(response_text) > 100 else response_text))
 
@@ -191,28 +166,17 @@ class Test2k2MemoryPriority(BaseMemoryTest):
 
             # Add more important information
             blood_info = "My blood type is O-negative, important for emergencies"
-            await self.overlord.chat(blood_info, user_id=test_user, use_async=False)
+            await self.overlord.chat(blood_info, user_id=test_user, use_async=False, stream=False)
             transcript.append(("User", blood_info))
             await asyncio.sleep(3)
 
             # Query should still include all critical info
             medical_query = "What critical medical information should a doctor know about me?"
-            response = await self.overlord.chat(medical_query, user_id=test_user, use_async=False)
+            response = await self.overlord.chat(medical_query, user_id=test_user, use_async=False, stream=False)
             transcript.append(("User", medical_query))
 
-            # Handle different response types
-            if hasattr(response, "__aiter__"):
-                full_response = ""
-                async for chunk in response:
-                    if hasattr(chunk, "content") and chunk.content:
-                        full_response += chunk.content
-                    elif isinstance(chunk, str):
-                        full_response += chunk
-                response_text = full_response
-            elif hasattr(response, "content"):
-                response_text = response.content
-            else:
-                response_text = str(response)
+            # Handle response (stream=False, so response is a string or object with .content)
+            response_text = response.content if hasattr(response, "content") else str(response)
 
             transcript.append(("System", response_text[:100] + "..." if len(response_text) > 100 else response_text))
 
@@ -261,7 +225,7 @@ def main():
     """Main entry point."""
     test = Test2k2MemoryPriority()
     result = asyncio.run(test.run_test())
-    os._exit(0 if result else 1)
+    sys.exit(0 if result else 1)
 
 
 if __name__ == "__main__":

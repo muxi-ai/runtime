@@ -189,7 +189,9 @@ class BaseMemoryTest(BaseE2ETest):
         """Clean up formation and resources."""
         if self.formation:
             try:
-                await self.formation.shutdown()
+                # Use stop_overlord instead of shutdown to avoid os._exit() hang
+                from test_utils import safe_formation_shutdown
+                await safe_formation_shutdown(self.formation, timeout=15.0)
             except Exception:
                 pass
         self.formation = None

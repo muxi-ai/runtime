@@ -1,6 +1,7 @@
 schema: "1.0.0"
 id: "memory-test-formation"
 description: "Formation for testing buffer and persistent memory systems"
+auto_extract_user_info: true
 
 runtime:
   built_in_mcps: false
@@ -21,6 +22,9 @@ memory:
     fifo_interval_min: 5
     vector_dimension: 1536
     mode: "local"
+    auto_extract:
+      enabled: true
+      extract_user_info: true
 
   buffer:
     size: 50

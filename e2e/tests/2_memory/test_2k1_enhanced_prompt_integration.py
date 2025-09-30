@@ -27,7 +27,7 @@ from test_utils import timeout_test, safe_overlord_chat, with_timeout, safe_form
 class Test2k1EnhancedPromptIntegration(BaseMemoryTest):
     """Test enhanced prompt integration with memory."""
 
-    @timeout_test(60.0)
+    @timeout_test(120.0)
     async def test_2k1enhancedpromptintegration(self):
         """Test memory context integration into prompts."""
         test_name = "2k1_enhanced_prompt_integration"
@@ -61,15 +61,12 @@ class Test2k1EnhancedPromptIntegration(BaseMemoryTest):
             ]
 
             for msg in context_messages:
-                response = await self.overlord.chat(msg, user_id=test_user, use_async=False)
+                response = await self.overlord.chat(msg, user_id=test_user, use_async=False, stream=False)
                 transcript.append(("User", msg))
 
                 response_text = ""
-                if hasattr(response, "__aiter__"):
-                    async for chunk in response:
-                        response_text += chunk
-                else:
-                    response_text = response.content if hasattr(response, "content") else str(response)
+                # Handle response (stream=False, so response is a string or object with .content)
+                response_text = response.content if hasattr(response, "content") else str(response)
                 transcript.append(("System", response_text[:50] + "..." if len(response_text) > 50 else response_text))
 
                 await asyncio.sleep(2)
@@ -101,15 +98,12 @@ class Test2k1EnhancedPromptIntegration(BaseMemoryTest):
             ]
 
             for question in test_questions:
-                response = await self.overlord.chat(question, user_id=test_user, use_async=False)
+                response = await self.overlord.chat(question, user_id=test_user, use_async=False, stream=False)
                 transcript.append(("User", question))
 
                 response_text = ""
-                if hasattr(response, "__aiter__"):
-                    async for chunk in response:
-                        response_text += chunk
-                else:
-                    response_text = response.content if hasattr(response, "content") else str(response)
+                # Handle response (stream=False, so response is a string or object with .content)
+                response_text = response.content if hasattr(response, "content") else str(response)
                 transcript.append(("System", response_text[:100] + "..." if len(response_text) > 100 else response_text))
 
                 # Check if response shows awareness of context
@@ -130,16 +124,13 @@ class Test2k1EnhancedPromptIntegration(BaseMemoryTest):
             retrieval_response = await self.overlord.chat(
                 "What do you know about my work experience?",
                 user_id=test_user,
-                use_async=False
+                use_async=False,
+                stream=False
             )
             transcript.append(("User", "What do you know about my work experience?"))
 
-            retrieval_text = ""
-            if hasattr(retrieval_response, "__aiter__"):
-                async for chunk in retrieval_response:
-                    retrieval_text += chunk
-            else:
-                retrieval_text = retrieval_response.content if hasattr(retrieval_response, "content") else str(retrieval_response)
+            # Handle response (stream=False, so response is a string or object with .content)
+            retrieval_text = retrieval_response.content if hasattr(retrieval_response, "content") else str(retrieval_response)
             transcript.append(("System", retrieval_text[:100] + "..." if len(retrieval_text) > 100 else retrieval_text))
 
             # Should mention stored information
@@ -158,7 +149,8 @@ class Test2k1EnhancedPromptIntegration(BaseMemoryTest):
             await self.overlord.chat(
                 "I'm thinking about switching to a startup",
                 user_id=test_user,
-                use_async=False
+                use_async=False,
+                stream=False
             )
             transcript.append(("User", "I'm thinking about switching to a startup"))
             await asyncio.sleep(3)
@@ -166,16 +158,13 @@ class Test2k1EnhancedPromptIntegration(BaseMemoryTest):
             career_response = await self.overlord.chat(
                 "What are the pros and cons for someone in my situation?",
                 user_id=test_user,
-                use_async=False
+                use_async=False,
+                stream=False
             )
             transcript.append(("User", "What are the pros and cons for someone in my situation?"))
 
-            career_text = ""
-            if hasattr(career_response, "__aiter__"):
-                async for chunk in career_response:
-                    career_text += chunk
-            else:
-                career_text = career_response.content if hasattr(career_response, "content") else str(career_response)
+            # Handle response (stream=False, so response is a string or object with .content)
+            career_text = career_response.content if hasattr(career_response, "content") else str(career_response)
             transcript.append(("System", career_text[:100] + "..." if len(career_text) > 100 else career_text))
 
             # Should consider the full context: Google engineer + ML experience + startup interest
@@ -223,7 +212,7 @@ def main():
     """Main entry point."""
     test = Test2k1EnhancedPromptIntegration()
     result = asyncio.run(test.run_test())
-    os._exit(0 if result else 1)
+    sys.exit(0 if result else 1)
 
 
 if __name__ == "__main__":

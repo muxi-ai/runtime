@@ -45,15 +45,10 @@ class TestPostgreSQLUserIsolation(BaseMemoryTest):
                 user1_msg1, user_id="alice_postgres", use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response1, "__aiter__"):
-                response1_text = ""
-                async for chunk in response1:
-                    response1_text += chunk
-            else:
-                response1_text = (
-                    response1.content if hasattr(response1, "content") else str(response1)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response1_text = (
+                response1.content if hasattr(response1, "content") else str(response1)
+            )
 
             transcript.append(("Alice: " + user1_msg1, response1_text))
             print(f"\nAlice: {user1_msg1}")
@@ -65,15 +60,10 @@ class TestPostgreSQLUserIsolation(BaseMemoryTest):
                 user1_msg2, user_id="alice_postgres", use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response2, "__aiter__"):
-                response2_text = ""
-                async for chunk in response2:
-                    response2_text += chunk
-            else:
-                response2_text = (
-                    response2.content if hasattr(response2, "content") else str(response2)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response2_text = (
+                response2.content if hasattr(response2, "content") else str(response2)
+            )
 
             transcript.append(("Alice: " + user1_msg2, response2_text))
             print(f"Alice: {user1_msg2}")
@@ -85,15 +75,10 @@ class TestPostgreSQLUserIsolation(BaseMemoryTest):
                 user2_msg1, user_id="bob_postgres", use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response3, "__aiter__"):
-                response3_text = ""
-                async for chunk in response3:
-                    response3_text += chunk
-            else:
-                response3_text = (
-                    response3.content if hasattr(response3, "content") else str(response3)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response3_text = (
+                response3.content if hasattr(response3, "content") else str(response3)
+            )
 
             transcript.append(("Bob: " + user2_msg1, response3_text))
             print(f"\nBob: {user2_msg1}")
@@ -105,15 +90,10 @@ class TestPostgreSQLUserIsolation(BaseMemoryTest):
                 user3_msg1, user_id="charlie_postgres", use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response4, "__aiter__"):
-                response4_text = ""
-                async for chunk in response4:
-                    response4_text += chunk
-            else:
-                response4_text = (
-                    response4.content if hasattr(response4, "content") else str(response4)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response4_text = (
+                response4.content if hasattr(response4, "content") else str(response4)
+            )
 
             transcript.append(("Charlie: " + user3_msg1, response4_text))
             print(f"\nCharlie: {user3_msg1}")
@@ -129,15 +109,10 @@ class TestPostgreSQLUserIsolation(BaseMemoryTest):
                 alice_query, user_id="alice_postgres", use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response5, "__aiter__"):
-                response5_text = ""
-                async for chunk in response5:
-                    response5_text += chunk
-            else:
-                response5_text = (
-                    response5.content if hasattr(response5, "content") else str(response5)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response5_text = (
+                response5.content if hasattr(response5, "content") else str(response5)
+            )
 
             transcript.append(("Alice: " + alice_query, response5_text))
             print(f"\nAlice Query: {alice_query}")
@@ -166,15 +141,10 @@ class TestPostgreSQLUserIsolation(BaseMemoryTest):
                 bob_query, user_id="bob_postgres", use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response6, "__aiter__"):
-                response6_text = ""
-                async for chunk in response6:
-                    response6_text += chunk
-            else:
-                response6_text = (
-                    response6.content if hasattr(response6, "content") else str(response6)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response6_text = (
+                response6.content if hasattr(response6, "content") else str(response6)
+            )
 
             transcript.append(("Bob: " + bob_query, response6_text))
             print(f"\nBob Query: {bob_query}")
@@ -203,15 +173,10 @@ class TestPostgreSQLUserIsolation(BaseMemoryTest):
                 charlie_query, user_id="charlie_postgres", use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response7, "__aiter__"):
-                response7_text = ""
-                async for chunk in response7:
-                    response7_text += chunk
-            else:
-                response7_text = (
-                    response7.content if hasattr(response7, "content") else str(response7)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response7_text = (
+                response7.content if hasattr(response7, "content") else str(response7)
+            )
 
             transcript.append(("Charlie: " + charlie_query, response7_text))
             print(f"\nCharlie Query: {charlie_query}")
@@ -266,15 +231,10 @@ class TestPostgreSQLUserIsolation(BaseMemoryTest):
                 msg1, user_id=user_id, use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response1, "__aiter__"):
-                response1_text = ""
-                async for chunk in response1:
-                    response1_text += chunk
-            else:
-                response1_text = (
-                    response1.content if hasattr(response1, "content") else str(response1)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response1_text = (
+                response1.content if hasattr(response1, "content") else str(response1)
+            )
 
             transcript.append((msg1, response1_text))
             print(f"User: {msg1}")
@@ -304,15 +264,10 @@ class TestPostgreSQLUserIsolation(BaseMemoryTest):
                 query, user_id=user_id, use_async=False, stream=False
             )
 
-            # Handle response
-            if hasattr(response2, "__aiter__"):
-                response2_text = ""
-                async for chunk in response2:
-                    response2_text += chunk
-            else:
-                response2_text = (
-                    response2.content if hasattr(response2, "content") else str(response2)
-                )
+            # Handle response (stream=False, so response is a string or object with .content)
+            response2_text = (
+                response2.content if hasattr(response2, "content") else str(response2)
+            )
 
             transcript.append((query, response2_text))
             print(f"\nUser Query: {query}")
@@ -383,7 +338,7 @@ def main():
     """Main entry point."""
     test = TestPostgreSQLUserIsolation()
     result = asyncio.run(test.run_test())
-    os._exit(0 if result else 1)
+    sys.exit(0 if result else 1)
 
 
 if __name__ == "__main__":

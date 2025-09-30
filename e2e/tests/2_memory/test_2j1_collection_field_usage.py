@@ -79,15 +79,11 @@ class Test2j1CollectionFieldUsage(BaseMemoryTest):
             ]
 
             for message, expected_collection in test_messages:
-                response = await self.overlord.chat(message, user_id=test_user, use_async=False)
+                response = await self.overlord.chat(message, user_id=test_user, use_async=False, stream=False)
                 transcript.append(("User", message))
 
-                response_text = ""
-                if hasattr(response, "__aiter__"):
-                    async for chunk in response:
-                        response_text += chunk
-                else:
-                    response_text = response.content if hasattr(response, "content") else str(response)
+                # Handle response (stream=False, so response is a string or object with .content)
+                response_text = response.content if hasattr(response, "content") else str(response)
                 transcript.append(("System", response_text[:50] + "..." if len(response_text) > 50 else response_text))
 
                 await asyncio.sleep(3)
@@ -168,17 +164,11 @@ class Test2j1CollectionFieldUsage(BaseMemoryTest):
 
             # Test 4: Collection-based retrieval via chat
             print("\n  4. Testing memory retrieval by context...")
-            retrieval_response = await self.overlord.chat("What activities do I enjoy?", user_id=test_user, use_async=False)
+            retrieval_response = await self.overlord.chat("What activities do I enjoy?", user_id=test_user, use_async=False, stream=False)
             transcript.append(("User", "What activities do I enjoy?"))
 
-            # Handle async generator response
-            if hasattr(retrieval_response, '__aiter__'):
-                response_text = ""
-                async for chunk in retrieval_response:
-                    response_text += chunk
-                retrieval_response = response_text
-            elif hasattr(retrieval_response, 'content'):
-                retrieval_response = retrieval_response.content
+            # Handle response (stream=False, so response is a string or object with .content)
+            retrieval_response = retrieval_response.content if hasattr(retrieval_response, 'content') else str(retrieval_response)
 
             transcript.append(("System", retrieval_response[:100] + "..." if len(retrieval_response) > 100 else retrieval_response))
 
@@ -227,7 +217,7 @@ def main():
     """Main entry point."""
     test = Test2j1CollectionFieldUsage()
     result = asyncio.run(test.run_test())
-    os._exit(0 if result else 1)
+    sys.exit(0 if result else 1)
 
 
 if __name__ == "__main__":

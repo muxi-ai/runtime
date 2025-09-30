@@ -85,8 +85,20 @@ async def safe_formation_shutdown(formation, timeout: float = 5.0) -> bool:
         return True
 
     try:
-        if hasattr(formation, 'shutdown'):
-            await asyncio.wait_for(formation.shutdown(), timeout=timeout)
+        # Use stop_overlord for tests - shutdown() calls os._exit() which kills the process!
+        # But only if overlord was actually started
+        if hasattr(formation, '_overlord') and formation._overlord:
+            if hasattr(formation, 'stop_overlord'):
+                await asyncio.wait_for(formation.stop_overlord(timeout_seconds=timeout), timeout=timeout)
+            else:
+                # Fallback: directly set to None if stop_overlord doesn't exist
+                formation._overlord = None
+
+        # Clean up any other formation resources without calling shutdown
+        # (shutdown calls os._exit which terminates the process)
+        if hasattr(formation, '_is_running'):
+            formation._is_running = False
+
         return True
     except asyncio.TimeoutError:
         print(f"  ⚠️ Formation shutdown timed out after {timeout}s")
@@ -96,6 +108,9 @@ async def safe_formation_shutdown(formation, timeout: float = 5.0) -> bool:
         return False
     except Exception as e:
         print(f"  ⚠️ Formation shutdown error: {e}")
+        # Force cleanup on any error
+        if hasattr(formation, '_overlord'):
+            formation._overlord = None
         return False
 
 
@@ -114,21 +129,12 @@ async def safe_overlord_chat(overlord, message: str, user_id: str = "test", time
     """
     try:
         response = await asyncio.wait_for(
-            overlord.chat(message, user_id=user_id, use_async=False),
+            overlord.chat(message, user_id=user_id, use_async=False, stream=False),
             timeout=timeout
         )
 
-        # Handle different response types
-        if hasattr(response, "__aiter__"):
-            # Async generator - collect with timeout
-            result = ""
-            async def collect():
-                nonlocal result
-                async for chunk in response:
-                    result += chunk
-            await asyncio.wait_for(collect(), timeout=5.0)
-            return result
-        elif hasattr(response, "content"):
+        # Handle response (stream=False, so response is a string or object with .content)
+        if hasattr(response, "content"):
             return response.content
         else:
             return str(response)
