@@ -12,7 +12,14 @@ import asyncio
 import time
 import os
 
-from .base_memory_test import BaseMemoryTest
+import sys
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from base_memory_test import BaseMemoryTest
 
 
 class TestBufferMemoryModes(BaseMemoryTest):

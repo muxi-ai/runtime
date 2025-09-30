@@ -19,7 +19,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from .base_memory_test import BaseMemoryTest  # noqa: E402
+import sys
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from base_memory_test import BaseMemoryTest  # noqa: E402
+from test_utils import timeout_test, safe_overlord_chat, with_timeout, safe_formation_load, safe_formation_shutdown
 from muxi.services.memory.working import WorkingMemory  # noqa: E402
 
 
@@ -39,7 +47,7 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
         """Load auth configuration from the auth file."""
         try:
             auth_path = (
-                Path(__file__).parent.parent.parent / "assets" / "formations" / "faissx-auth.json"
+                Path(__file__).parent.parent.parent / "assets" / "faissx-auth.json"
             )
             with open(auth_path, "r") as f:
                 auth_config = json.load(f)
@@ -48,6 +56,7 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
             print(f"    ❌ Failed to load auth config: {e}")
             return None
 
+    @timeout_test(60.0)
     async def test_faissx_auth_connection(self):
         """Test connection to authenticated FAISSx server."""
         print("\n  🔐 Testing FAISSx Authentication Connection")
@@ -102,6 +111,7 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
             print(f"    ❌ Auth connection failed: {e}")
             return False, {"error": str(e)}
 
+    @timeout_test(60.0)
     async def test_faissx_auth_operations(self):
         """Test authenticated operations (add/search)."""
         print("\n  ⚙️ Testing Authenticated Operations")
@@ -183,6 +193,7 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
             print(f"    ❌ Authenticated operations failed: {e}")
             return False, {"error": str(e)}
 
+    @timeout_test(60.0)
     async def test_workingemory_with_auth(self):
         """Test WorkingMemory with authenticated FAISSx."""
         print("\n  💾 Testing WorkingMemory with Auth")
@@ -233,6 +244,7 @@ class TestPostgreSQLFAISSAuth(BaseMemoryTest):
             print(f"    ❌ WorkingMemory auth test failed: {e}")
             return False, {"error": str(e)}
 
+    @timeout_test(60.0)
     async def test_postgresql_faiss(self):
         """Main test method."""
         test_name = "2e1_postgresql_faiss_auth"

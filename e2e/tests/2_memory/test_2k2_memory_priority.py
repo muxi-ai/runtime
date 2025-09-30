@@ -13,12 +13,21 @@ import time
 import os
 import psycopg2
 
-from .base_memory_test import BaseMemoryTest
+import sys
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from base_memory_test import BaseMemoryTest
+from test_utils import timeout_test, safe_overlord_chat, with_timeout, safe_formation_load, safe_formation_shutdown
 
 
 class Test2k2MemoryPriority(BaseMemoryTest):
     """Test memory prioritization in context enhancement."""
 
+    @timeout_test(60.0)
     async def test_2k2memorypriority(self):
         """Test memory prioritization despite buffer noise."""
         test_name = "2k2_memory_priority"
@@ -35,7 +44,7 @@ class Test2k2MemoryPriority(BaseMemoryTest):
             print("  ✓ Formation loaded")
 
             # Setup database connection
-            conn = psycopg2.connect("postgresql://ran@127.0.0.1/muxi_framework")
+            conn = psycopg2.connect("postgresql://muxi@localhost/muxi_test")
             cur = conn.cursor()
 
             # Clear test data

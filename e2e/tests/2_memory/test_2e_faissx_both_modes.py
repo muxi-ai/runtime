@@ -19,7 +19,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from .base_memory_test import BaseMemoryTest  # noqa: E402
+import sys
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from base_memory_test import BaseMemoryTest  # noqa: E402
+from test_utils import (
+    timeout_test, safe_overlord_chat, with_timeout,
+    safe_formation_load, safe_formation_shutdown
+)
 from muxi.services.memory.working import WorkingMemory  # noqa: E402
 
 
@@ -196,7 +207,14 @@ class TestFAISSxBothModes(BaseMemoryTest):
                 yaml_file = self.MEMORY_CONFIGS.get(formation_config["config"])
                 if yaml_file:
                     formation_path = self.FORMATION_DIR / yaml_file
-                    await formation.load(str(formation_path))
+                    # Use timeout for formation loading
+                    load_success = await safe_formation_load(formation, str(formation_path), timeout=10.0)
+
+                    if not load_success:
+                        print(f"      ❌ Failed to load formation")
+                        all_passed = False
+                        results.append({"name": formation_config["name"], "result": {"loaded": False}})
+                        continue
 
                     # Extract memory config
                     memory_config = formation.config.get("memory", {})
@@ -228,7 +246,9 @@ class TestFAISSxBothModes(BaseMemoryTest):
                         print("      ❌ Auth config mismatch")
                         all_passed = False
 
-                    await formation.shutdown()
+                    print("      🔄 Shutting down formation...")
+                    shutdown_result = await safe_formation_shutdown(formation, timeout=5.0)
+                    print(f"      ✓ Shutdown complete: {shutdown_result}")
 
                 else:
                     print(f"      ❌ Unknown formation config: {formation_config['config']}")
@@ -246,6 +266,7 @@ class TestFAISSxBothModes(BaseMemoryTest):
 
         return all_passed, results
 
+    @timeout_test(60.0)  # 60 second timeout for entire test
     async def test_faissx_modes(self):
         """Main test method."""
         test_name = "2e_faissx_both_modes"

@@ -13,12 +13,24 @@ import time
 import os
 import psycopg2
 
-from .base_memory_test import BaseMemoryTest
+import sys
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from base_memory_test import BaseMemoryTest
+from test_utils import (
+    timeout_test, safe_overlord_chat, with_timeout,
+    safe_formation_load, safe_formation_shutdown
+)
 
 
 class Test2i3ContextAwareExtraction(BaseMemoryTest):
     """Test context-aware memory extraction."""
 
+    @timeout_test(90.0)  # 90 second timeout for entire test
     async def test_2i3contextawareextraction(self):
         """Test extraction that requires understanding previous context."""
         test_name = "2i3_context_aware_extraction"
@@ -35,7 +47,7 @@ class Test2i3ContextAwareExtraction(BaseMemoryTest):
             print("  ✓ Formation loaded")
 
             # Setup database connection for memory inspection
-            conn = psycopg2.connect("postgresql://ran@127.0.0.1/muxi_framework")
+            conn = psycopg2.connect("postgresql://muxi@localhost/muxi_test")
             cur = conn.cursor()
 
             # Clear test data
@@ -46,28 +58,20 @@ class Test2i3ContextAwareExtraction(BaseMemoryTest):
 
             # Test 1: Pronoun resolution
             print("\n  1. Testing pronoun resolution in extraction...")
-            response1 = await self.overlord.chat("I love Italian food", user_id=test_user, use_async=False)
+            response_text1 = await safe_overlord_chat(self.overlord, "I love Italian food", user_id=test_user, timeout=10.0)
             transcript.append(("User", "I love Italian food"))
 
-            response_text1 = ""
-            if hasattr(response1, "__aiter__"):
-                async for chunk in response1:
-                    response_text1 += chunk
-            else:
-                response_text1 = response1.content if hasattr(response1, "content") else str(response1)
+            if not response_text1:
+                response_text1 = "[Timed out]"
             transcript.append(("System", response_text1[:100] + "..." if len(response_text1) > 100 else response_text1))
 
             await asyncio.sleep(2)
 
-            response2 = await self.overlord.chat("That's my favorite!", user_id=test_user, use_async=False)  # "That" refers to Italian food
+            response_text2 = await safe_overlord_chat(self.overlord, "That's my favorite!", user_id=test_user, timeout=10.0)
             transcript.append(("User", "That's my favorite!"))
 
-            response_text2 = ""
-            if hasattr(response2, "__aiter__"):
-                async for chunk in response2:
-                    response_text2 += chunk
-            else:
-                response_text2 = response2.content if hasattr(response2, "content") else str(response2)
+            if not response_text2:
+                response_text2 = "[Timed out]"
             transcript.append(("System", response_text2[:100] + "..." if len(response_text2) > 100 else response_text2))
 
             await asyncio.sleep(5)
@@ -103,28 +107,20 @@ class Test2i3ContextAwareExtraction(BaseMemoryTest):
 
             # Test 2: Building on previous information
             print("\n  2. Testing information building...")
-            response3 = await self.overlord.chat("I work at Google", user_id=test_user, use_async=False)
+            response_text3 = await safe_overlord_chat(self.overlord, "I work at Google", user_id=test_user, timeout=10.0)
             transcript.append(("User", "I work at Google"))
 
-            response_text3 = ""
-            if hasattr(response3, "__aiter__"):
-                async for chunk in response3:
-                    response_text3 += chunk
-            else:
-                response_text3 = response3.content if hasattr(response3, "content") else str(response3)
+            if not response_text3:
+                response_text3 = "[Timed out]"
             transcript.append(("System", response_text3[:100] + "..." if len(response_text3) > 100 else response_text3))
 
             await asyncio.sleep(2)
 
-            response4 = await self.overlord.chat("I've been there for 5 years as a software engineer", user_id=test_user, use_async=False)
+            response_text4 = await safe_overlord_chat(self.overlord, "I've been there for 5 years as a software engineer", user_id=test_user, timeout=10.0)
             transcript.append(("User", "I've been there for 5 years as a software engineer"))
 
-            response_text4 = ""
-            if hasattr(response4, "__aiter__"):
-                async for chunk in response4:
-                    response_text4 += chunk
-            else:
-                response_text4 = response4.content if hasattr(response4, "content") else str(response4)
+            if not response_text4:
+                response_text4 = "[Timed out]"
             transcript.append(("System", response_text4[:100] + "..." if len(response_text4) > 100 else response_text4))
 
             await asyncio.sleep(5)
@@ -166,28 +162,20 @@ class Test2i3ContextAwareExtraction(BaseMemoryTest):
 
             # Test 3: Contextual preferences
             print("\n  3. Testing contextual preference extraction...")
-            response5 = await self.overlord.chat("I love programming in Python", user_id=test_user, use_async=False)
+            response_text5 = await safe_overlord_chat(self.overlord, "I love programming in Python", user_id=test_user, timeout=10.0)
             transcript.append(("User", "I love programming in Python"))
 
-            response_text5 = ""
-            if hasattr(response5, "__aiter__"):
-                async for chunk in response5:
-                    response_text5 += chunk
-            else:
-                response_text5 = response5.content if hasattr(response5, "content") else str(response5)
+            if not response_text5:
+                response_text5 = "[Timed out]"
             transcript.append(("System", response_text5[:100] + "..." if len(response_text5) > 100 else response_text5))
 
             await asyncio.sleep(2)
 
-            response6 = await self.overlord.chat("It's perfect for the data science work I do", user_id=test_user, use_async=False)
+            response_text6 = await safe_overlord_chat(self.overlord, "It's perfect for the data science work I do", user_id=test_user, timeout=10.0)
             transcript.append(("User", "It's perfect for the data science work I do"))
 
-            response_text6 = ""
-            if hasattr(response6, "__aiter__"):
-                async for chunk in response6:
-                    response_text6 += chunk
-            else:
-                response_text6 = response6.content if hasattr(response6, "content") else str(response6)
+            if not response_text6:
+                response_text6 = "[Timed out]"
             transcript.append(("System", response_text6[:100] + "..." if len(response_text6) > 100 else response_text6))
 
             await asyncio.sleep(5)
@@ -224,22 +212,13 @@ class Test2i3ContextAwareExtraction(BaseMemoryTest):
 
             # Test 4: Verify memories use enhanced context
             print("\n  4. Testing enhanced context usage...")
-            response7 = await self.overlord.chat("What's my favorite cuisine again?", user_id=test_user, use_async=False)
+            response_text7 = await safe_overlord_chat(self.overlord, "What's my favorite cuisine again?", user_id=test_user, timeout=10.0)
             transcript.append(("User", "What's my favorite cuisine again?"))
 
-            # Handle different response types
-            if hasattr(response7, '__aiter__'):
-                full_response = ""
-                async for chunk in response7:
-                    if hasattr(chunk, 'content') and chunk.content:
-                        full_response += chunk.content
-                    elif isinstance(chunk, str):
-                        full_response += chunk
-                response_text = full_response
-            elif hasattr(response7, 'content'):
-                response_text = response7.content
-            else:
-                response_text = str(response7)
+            # Handle response types - response_text7 is already processed by safe_overlord_chat
+            if not response_text7:
+                response_text7 = "[Timed out]"
+            response_text = response_text7
 
             transcript.append(("System", response_text[:100] + "..." if len(response_text) > 100 else response_text))
 

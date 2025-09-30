@@ -38,7 +38,11 @@ class BaseMemoryTest(BaseE2ETest):
 
     def __init__(self):
         """Initialize base memory test."""
-        super().__init__()
+        super().__init__(
+            test_name="memory_test",
+            test_description="Memory system test",
+            test_area="2_memory"
+        )
         self.formatter = TestOutputFormatter()
         self.formation = None
         self.overlord = None

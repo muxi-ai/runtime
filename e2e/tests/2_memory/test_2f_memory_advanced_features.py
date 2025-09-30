@@ -18,13 +18,22 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from .base_memory_test import BaseMemoryTest  # noqa: E402
+import sys
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from base_memory_test import BaseMemoryTest  # noqa: E402
+from test_utils import timeout_test, safe_overlord_chat, with_timeout, safe_formation_load, safe_formation_shutdown
 from muxi.services.memory.working import WorkingMemory  # noqa: E402
 
 
 class Test2fMemoryAdvancedFeatures(BaseMemoryTest):
     """Test advanced memory functionality."""
 
+    @timeout_test(90.0)
     async def test_fifo_memory_management(self):
         """Test FIFO memory cleanup when memory limit is exceeded."""
         print("\n  🔄 Testing FIFO Memory Management")
@@ -76,6 +85,7 @@ class Test2fMemoryAdvancedFeatures(BaseMemoryTest):
 
         return fifo_working
 
+        @timeout_test(90.0)
     async def test_buffer_vector_search(self):
         """Test vector search capabilities in buffer memory."""
         print("\n  🔍 Testing Smart Buffer Vector Search")
@@ -150,6 +160,7 @@ class Test2fMemoryAdvancedFeatures(BaseMemoryTest):
             print(f"      ❌ Vector search test failed: {e}")
             return False
 
+        @timeout_test(90.0)
     async def test_automatic_context_extraction(self):
         """Test automatic extraction of user information."""
         print("\n  📤 Testing Automatic Context Extraction")
@@ -212,6 +223,7 @@ class Test2fMemoryAdvancedFeatures(BaseMemoryTest):
             print(f"      ❌ Context extraction test failed: {e}")
             return False
 
+        @timeout_test(90.0)
     async def test_automatic_context_usage(self):
         """Test 2G4: Verify system applies stored context to responses."""
         print("\n  📥 Testing Automatic Context Usage")
@@ -327,6 +339,7 @@ class Test2fMemoryAdvancedFeatures(BaseMemoryTest):
             print(f"      ❌ Automatic context usage test failed: {e}")
             return False
 
+        @timeout_test(90.0)
     async def test_2fmemoryadvancedfeatures(self):
         """Main test method."""
         test_name = "2f_memory_advanced_features"

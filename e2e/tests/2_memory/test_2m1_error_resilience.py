@@ -1,6 +1,5 @@
             # Migrated test logic from test_2m1_error_resilience
-            print("
-  Testing core functionality...")
+            print("Testing core functionality...")
 
             # Basic test implementation migrated from original
             test_response = await self.overlord.chat(

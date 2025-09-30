@@ -18,7 +18,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from .base_memory_test import BaseMemoryTest  # noqa: E402
+import sys
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from base_memory_test import BaseMemoryTest  # noqa: E402
+from test_utils import timeout_test, safe_overlord_chat, with_timeout, safe_formation_load, safe_formation_shutdown
 from muxi.services.memory.working import WorkingMemory  # noqa: E402
 from muxi.services.secrets.secrets_manager import SecretsManager  # noqa: E402
 from muxi.services.llm.llm import LLM  # noqa: E402
@@ -27,6 +35,7 @@ from muxi.services.llm.llm import LLM  # noqa: E402
 class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
     """Test multi-user FAISS vector search."""
 
+    @timeout_test(60.0)
     async def test_multi_user_faissx(self):
         """Test multi-user FAISSx with tenant isolation."""
         print("\n  👥 Testing Multi-User FAISSx with Tenant Isolation")
@@ -159,6 +168,7 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
             print(f"    ❌ Multi-user FAISSx test failed: {e}")
             return False, {"error": str(e)}
 
+    @timeout_test(60.0)
     async def test_tenant_isolation(self):
         """Test that different tenants have isolated vector spaces."""
         print("\n  🔐 Testing Tenant Isolation in FAISSx")
@@ -291,6 +301,7 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
             print(f"    ❌ Tenant isolation test failed: {e}")
             return False, {"error": str(e)}
 
+    @timeout_test(60.0)
     async def test_user_search_relevance(self):
         """Test that vector search returns relevant results for each user."""
         print("\n  🎯 Testing User Search Relevance")
@@ -435,6 +446,7 @@ class TestMultiUserFAISSVectorSearch(BaseMemoryTest):
             print(f"    ❌ Relevance test failed: {e}")
             return False, {"error": str(e)}
 
+    @timeout_test(60.0)
     async def test_multi_user_vector(self):
         """Main test method."""
         test_name = "2e3_multi_user_vector_search"

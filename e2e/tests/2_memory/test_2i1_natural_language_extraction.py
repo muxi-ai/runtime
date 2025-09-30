@@ -20,7 +20,14 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from .base_memory_test import BaseMemoryTest  # noqa: E402
+import sys
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from base_memory_test import BaseMemoryTest  # noqa: E402
 
 
 class TestNaturalLanguageExtraction(BaseMemoryTest):
@@ -35,7 +42,7 @@ class TestNaturalLanguageExtraction(BaseMemoryTest):
 
         # Clear test data first
         try:
-            conn = psycopg2.connect("postgresql://ran@127.0.0.1/muxi_framework")
+            conn = psycopg2.connect("postgresql://muxi@localhost/muxi_test")
             cur = conn.cursor()
             cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
             cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
@@ -112,7 +119,7 @@ class TestNaturalLanguageExtraction(BaseMemoryTest):
         test_user = "natural_lang_test_user"
 
         try:
-            conn = psycopg2.connect("postgresql://ran@127.0.0.1/muxi_framework")
+            conn = psycopg2.connect("postgresql://muxi@localhost/muxi_test")
             cur = conn.cursor()
 
             print("    2. Testing complex information extraction...")
@@ -172,7 +179,7 @@ class TestNaturalLanguageExtraction(BaseMemoryTest):
         test_user = "natural_lang_test_user"
 
         try:
-            conn = psycopg2.connect("postgresql://ran@127.0.0.1/muxi_framework")
+            conn = psycopg2.connect("postgresql://muxi@localhost/muxi_test")
             cur = conn.cursor()
 
             # Get all memories for this user
@@ -230,7 +237,7 @@ class TestNaturalLanguageExtraction(BaseMemoryTest):
         test_user = "natural_lang_test_user"
 
         try:
-            conn = psycopg2.connect("postgresql://ran@127.0.0.1/muxi_framework")
+            conn = psycopg2.connect("postgresql://muxi@localhost/muxi_test")
             cur = conn.cursor()
 
             # Get all memories for this user

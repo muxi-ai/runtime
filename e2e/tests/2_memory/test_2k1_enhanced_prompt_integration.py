@@ -13,12 +13,21 @@ import time
 import os
 import psycopg2
 
-from .base_memory_test import BaseMemoryTest
+import sys
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from base_memory_test import BaseMemoryTest
+from test_utils import timeout_test, safe_overlord_chat, with_timeout, safe_formation_load, safe_formation_shutdown
 
 
 class Test2k1EnhancedPromptIntegration(BaseMemoryTest):
     """Test enhanced prompt integration with memory."""
 
+    @timeout_test(60.0)
     async def test_2k1enhancedpromptintegration(self):
         """Test memory context integration into prompts."""
         test_name = "2k1_enhanced_prompt_integration"
@@ -37,7 +46,7 @@ class Test2k1EnhancedPromptIntegration(BaseMemoryTest):
             test_user = "prompt_integration_user"
 
             # Clear any existing memories
-            conn = psycopg2.connect("postgresql://ran@127.0.0.1/muxi_framework")
+            conn = psycopg2.connect("postgresql://muxi@localhost/muxi_test")
             cur = conn.cursor()
             cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
             cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))

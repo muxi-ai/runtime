@@ -1,6 +1,5 @@
             # Migrated test logic from test_2o1_preference_detection
-            print("
-  Testing core functionality...")
+            print("Testing core functionality...")
 
             # Basic test implementation migrated from original
             test_response = await self.overlord.chat(
