@@ -221,22 +221,42 @@ class LongTermMemory:
         try:
             from sqlalchemy import text
 
+            # First check if extension already exists
+            with self.engine.connect() as conn:
+                result = conn.execute(
+                    text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+                )
+                extension_exists = result.fetchone() is not None
+
+            if extension_exists:
+                # Extension already exists - silent success (no logging needed)
+                return
+
+            # Extension doesn't exist, try to create it
             with self.engine.connect() as conn:
                 conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
                 conn.commit()
 
+            # Successfully created - log at INFO level
             observability.observe(
-                event_type=observability.SystemEvents.DATABASE_EXTENSION_CREATED,
+                event_type=observability.SystemEvents.INITIALIZING,
                 level=observability.EventLevel.INFO,
                 data={
-                    "extension": "pgvector",
+                    "service": "pgvector",
+                    "extension": "vector",
                     "database_type": self.db_manager.database_type,
                 },
                 description="pgvector extension created successfully",
             )
         except Exception as e:
+            # Check if the error is because extension already exists (shouldn't happen, but be safe)
+            error_str = str(e).lower()
+            if "already exists" in error_str or "extension \"vector\" already exists" in error_str:
+                # Extension exists, no need to log as error
+                return
+
             observability.observe(
-                event_type=observability.ErrorEvents.DATABASE_EXTENSION_CREATION_FAILED,
+                event_type=observability.ErrorEvents.DATABASE_EXTENSION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={"error": str(e), "extension": "pgvector"},
                 description=f"Failed to create pgvector extension: {e}",
