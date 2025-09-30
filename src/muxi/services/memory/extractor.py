@@ -61,7 +61,7 @@ class MemoryExtractor:
         whitelist_users: Set[int] = None,
         blacklist_users: Set[int] = None,
         retention_days: int = 365,  # Default to 1 year retention
-        similarity_threshold: float = 0.1,  # Threshold for semantic deduplication
+        similarity_threshold: float = 0.3,  # Threshold for semantic deduplication
     ):
         """
         Initialize the MemoryExtractor.
@@ -78,7 +78,7 @@ class MemoryExtractor:
             blacklist_users: These users will be excluded from extraction
             retention_days: Number of days to retain extracted information
             similarity_threshold: Distance threshold for semantic deduplication (0.0-1.0)
-                Lower values mean stricter matching. Default 0.1 means >90% similarity.
+                Lower values mean stricter matching. Default 0.3 means >77% similarity.
         """
         self.overlord = overlord
         self.extraction_model = extraction_model
@@ -322,6 +322,25 @@ class MemoryExtractor:
             "- This ensures the information stays accurate over time\n\n"
         )
 
+        extraction_rules = (
+            "EXTRACTION RULES:\n"
+            "ONLY extract information when the user explicitly SHARES or STATES facts about themselves.\n\n"
+            "DO extract when the user says:\n"
+            "- Personal information: 'My name is...', 'I work at...', 'I live in...', 'I am X years old'\n"
+            "- Preferences: 'I prefer X over Y', 'I like/love/enjoy X', 'I hate/dislike X', 'My favorite X is Y'\n"
+            "- Habits/routines: 'I usually...', 'I always...', 'Every day/week I...'\n"
+            "- Family/relationships: 'My sister...', 'I have a friend who...', 'My colleague...'\n"
+            "- Goals/plans: 'I want to...', 'I'm planning to...', 'My goal is...'\n"
+            "- Past experiences: 'I worked at...', 'I studied...', 'I visited...'\n\n"
+            "DO NOT extract when the user is:\n"
+            "- Asking questions: 'What is X?', 'How does Y work?', 'Can you explain Z?'\n"
+            "- Requesting information: 'Tell me about...', 'Show me...', 'Give me examples of...'\n"
+            "- Making general statements about topics (not about themselves)\n"
+            "- Discussing hypotheticals: 'What if...', 'Suppose...', 'Imagine...'\n\n"
+            "If the user asks a question, DO NOT infer preferences from their question.\n"
+            "Asking 'What is FastAPI?' does NOT mean they prefer or use FastAPI.\n\n"
+        )
+
         collection_guidelines = (
             "COLLECTION SELECTION:\n"
             "For each extracted fact, assign it to the most appropriate collection:\n"
@@ -361,13 +380,14 @@ class MemoryExtractor:
             "- 'Enjoys hiking on weekends'\n"
             "- 'Has a sister who lives in Boston'\n"
             "- 'Was born in 1995' (not 'year_of_birth: 1995')\n\n"
+            + extraction_rules
             + privacy_guidelines
             + age_conversion_guidelines
             + collection_guidelines
             + f"Conversation:\n{conversation}\n\n"
             "If there is no relevant information to extract, return an empty array for "
             "extracted_info.\n\n"
-            "IMPORTANT: Always follow the age conversion rule above when dealing with age information."
+            "IMPORTANT: Always follow the extraction rules and age conversion rule above."
         )
 
     async def _process_extraction_results(self, extraction_results, user_id):
@@ -449,31 +469,62 @@ class MemoryExtractor:
                     # Check for semantically similar memories before storing
                     should_store = True
 
-                    # TEMP: Disable similarity check for debugging
-                    # # Use long_term_memory's search if available
-                    # if hasattr(self.overlord.long_term_memory, "search"):
-                    #     # Search for similar existing memories
-                    #     # Build search params based on backend type
-                    #     search_params = {
-                    #         "query": memory_content,
-                    #         "limit": 1,
-                    #     }
-                    #     if self.overlord.is_multi_user:
-                    #         search_params["external_user_id"] = external_user_id
-                    #         search_params["collection"] = collection
-                    #     else:
-                    #         search_params["user_id"] = user_id
-                    #         # SQLiteMemory doesn't support collection parameter
+                    # Use long_term_memory's search if available for de-duplication
+                    if hasattr(self.overlord.long_term_memory, "search"):
+                        # Search for similar existing memories
+                        # Build search params based on backend type
+                        search_params = {
+                            "query": memory_content,
+                            "limit": 1,
+                        }
+                        if self.overlord.is_multi_user:
+                            search_params["external_user_id"] = external_user_id
+                            search_params["collection"] = collection
+                        else:
+                            search_params["user_id"] = user_id
+                            # SQLiteMemory doesn't support collection parameter
 
-                    #     existing = await self.overlord.long_term_memory.search(**search_params)
+                        existing = await self.overlord.long_term_memory.search(**search_params)
 
-                    #     if existing:
-                    #         # Check the first result for similarity
-                    #         # Distance of 0 = identical, Distance < similarity_threshold = very similar
-                    #         first_result = existing[0] if isinstance(existing, list) else existing
-                    #         distance = first_result.get("distance", 1.0) if isinstance(first_result, dict) else 1.0
-                    #         if distance < self.similarity_threshold:
-                    #             should_store = False
+                        if existing:
+                            # Check the first result for similarity
+                            # Score = 1/(1+distance), so higher score = more similar
+                            # Score=1.0 means identical, score>0.9 means very similar (distance<0.11)
+                            first_result = existing[0] if isinstance(existing, list) else existing
+                            score = first_result.get("score", 0.0) if isinstance(first_result, dict) else 0.0
+
+                            # Convert distance threshold to score threshold
+                            # If similarity_threshold=0.3, we skip when distance<0.3
+                            # Which means score > 1/(1+0.3) = 0.769
+                            score_threshold = 1.0 / (1.0 + self.similarity_threshold)
+
+                            if score > score_threshold:
+                                # Memory is very similar to existing one - skip to avoid duplicate
+                                observability.observe(
+                                    event_type="memory_extractor_duplicate_skipped",
+                                    level=observability.EventLevel.DEBUG,
+                                    data={
+                                        "new_content": memory_content[:100],
+                                        "existing_content": first_result.get("text", "")[:100],
+                                        "similarity_score": score,
+                                        "threshold": score_threshold,
+                                    },
+                                    description=f"Skipping duplicate memory (similarity: {score:.3f} > {score_threshold:.3f})",
+                                )
+                                should_store = False
+                            else:
+                                # Log when we allow a similar memory through
+                                observability.observe(
+                                    event_type="memory_extractor_similar_stored",
+                                    level=observability.EventLevel.DEBUG,
+                                    data={
+                                        "new_content": memory_content[:100],
+                                        "existing_content": first_result.get("text", "")[:100],
+                                        "similarity_score": score,
+                                        "threshold": score_threshold,
+                                    },
+                                    description=f"Storing similar memory (similarity: {score:.3f} <= {score_threshold:.3f})",
+                                )
 
                     if should_store:
                         # Build add params based on backend type

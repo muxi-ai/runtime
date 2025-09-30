@@ -219,7 +219,8 @@ class PersistentMemoryManager:
                     all_results.extend(collection_results)
 
                 # Sort merged results by relevance score (distance) and take top k
-                all_results.sort(key=lambda x: x[0])
+                # Handle both dict and tuple formats
+                all_results.sort(key=lambda x: x.get("score", 0.0) if isinstance(x, dict) else x[0])
                 lt_results = all_results[:k]
             else:
                 # No collections specified, search all collections
@@ -241,14 +242,27 @@ class PersistentMemoryManager:
             # Convert to standard format
             results = []
             for item in lt_results:
-                results.append(
-                    {
-                        "text": item[1].get("text", ""),
-                        "metadata": item[1].get("metadata", {}),
-                        "distance": item[0],
-                        "source": "long_term",
-                    }
-                )
+                # Handle both dict format (from LongTermMemory) and tuple format (from other backends)
+                if isinstance(item, dict):
+                    # LongTermMemory returns dicts with keys: id, text, metadata, score
+                    results.append(
+                        {
+                            "text": item.get("text", ""),
+                            "metadata": item.get("metadata", {}),
+                            "distance": item.get("score", 0.0),  # score is actually distance/similarity
+                            "source": "long_term",
+                        }
+                    )
+                else:
+                    # Tuple format: (distance, metadata_dict)
+                    results.append(
+                        {
+                            "text": item[1].get("text", ""),
+                            "metadata": item[1].get("metadata", {}),
+                            "distance": item[0],
+                            "source": "long_term",
+                        }
+                    )
 
             return results
 

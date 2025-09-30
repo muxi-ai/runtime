@@ -897,6 +897,7 @@ class ChatOrchestrator:
         # 4. Relevant long-term memories (medium priority)
         if long_term_memories:
             enhanced_parts.append("=== RELEVANT MEMORIES ===")
+            enhanced_parts.append("The user previously shared the following information. Use these facts to answer their question directly:")  # noqa: E501
             enhanced_parts.append(long_term_memories)
             enhanced_parts.append("")
 
