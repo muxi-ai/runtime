@@ -78,7 +78,17 @@ class SQLiteMemory(BaseMemory):
         self.dimension = dimension
         self.default_collection = default_collection
         self.extensions_dir = extensions_dir
-        self.embedding_provider = None  # Will be set by the agent
+
+        # Store embedding model config for lazy loading (like LongTermMemory does)
+        self._embedding_provider = None
+        self._embedding_model_name = None
+        if embedding_model:
+            if isinstance(embedding_model, str):
+                # Store the model name, create LLM on first use
+                self._embedding_model_name = embedding_model
+            else:
+                # Already an LLM instance
+                self._embedding_provider = embedding_model
 
         # Create database directory if it doesn't exist
         os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
@@ -261,6 +271,27 @@ class SQLiteMemory(BaseMemory):
 
         return nanoid.generate(size=size)
 
+    @property
+    def embedding_provider(self):
+        """Lazy load embedding provider on first access (like LongTermMemory)."""
+        if self._embedding_provider is None and self._embedding_model_name:
+            from ..llm import LLM
+            self._embedding_provider = LLM(model=self._embedding_model_name)
+        return self._embedding_provider
+
+    def _extract_embedding_from_response(self, embedding_response):
+        """Extract the actual embedding vector from LLM response (copied from LongTermMemory)."""
+        if hasattr(embedding_response, 'data') and isinstance(embedding_response.data, list):
+            if len(embedding_response.data) > 0:
+                first_embedding = embedding_response.data[0]
+                if hasattr(first_embedding, 'embedding'):
+                    return first_embedding.embedding
+                elif isinstance(first_embedding, (list, np.ndarray)):
+                    return first_embedding
+        elif isinstance(embedding_response, (list, np.ndarray)):
+            return embedding_response
+        return embedding_response
+
     async def add(
         self, content: str, metadata: Optional[Dict[str, Any]] = None, user_id: Optional[str] = None
     ) -> None:
@@ -279,7 +310,12 @@ class SQLiteMemory(BaseMemory):
 
         # Generate embedding if provider is set
         if self.embedding_provider:
-            embedding = await self.embedding_provider.get_embedding(content)
+            try:
+                embedding_response = await self.embedding_provider.embed(content)
+                # Extract the actual embedding vector using helper method (like LongTermMemory)
+                embedding = self._extract_embedding_from_response(embedding_response)
+            except Exception as emb_err:
+                raise
 
             # Add timestamp to metadata
             metadata["timestamp"] = time.time()
