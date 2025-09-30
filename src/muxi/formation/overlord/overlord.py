@@ -2501,11 +2501,55 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 self.default_model = self.extraction_model
 
         except Exception as e:
-            # If initialization fails, log error but don't fail completely
-            # The extraction model is optional
-            _ = e  # remove this after implementing observability
-            # Just keep the extraction_model as None or string
-            pass
+            # Log the initialization failure (was silently ignored before)
+            observability.observe(
+                event_type=observability.SystemEvents.EXTENSION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "component": "extraction_model_init",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "model_string": str(self.extraction_model) if isinstance(self.extraction_model, str) else None,
+                },
+                description=f"Failed to initialize extraction model, will try fallback: {str(e)}"
+            )
+
+            # Try to use the first available text model as fallback
+            try:
+                if hasattr(self, "_capability_models") and "text" in self._capability_models:
+                    text_model = self._capability_models["text"]
+                    if isinstance(text_model, str):
+                        self.extraction_model = await self.create_model(model=text_model)
+                        self.default_model = self.extraction_model
+                        if hasattr(self, "extractor") and self.extractor:
+                            self.extractor.extraction_model = self.extraction_model
+
+                        observability.observe(
+                            event_type=observability.SystemEvents.SERVER_STARTED,
+                            level=observability.EventLevel.INFO,
+                            data={"fallback_model": text_model},
+                            description="Successfully initialized extraction model with fallback"
+                        )
+                    elif hasattr(text_model, "generate_text"):
+                        # It's already an LLM object
+                        self.extraction_model = text_model
+                        self.default_model = self.extraction_model
+                        if hasattr(self, "extractor") and self.extractor:
+                            self.extractor.extraction_model = self.extraction_model
+            except Exception as fallback_error:
+                # If even fallback fails, disable extraction
+                observability.observe(
+                    event_type=observability.SystemEvents.EXTENSION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "error": str(fallback_error),
+                        "action": "disabling_auto_extraction"
+                    },
+                    description="Could not initialize any extraction model, disabling auto-extraction"
+                )
+                self.auto_extract_user_info = False
+                if hasattr(self, "extractor") and self.extractor:
+                    self.extractor.auto_extract = False
 
     async def _initialize_collections(self):
         """Ensure required collections exist in long-term memory."""
@@ -3471,9 +3515,43 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             extraction_model: Optional model to use for extraction.
                 If provided, overrides the default extraction model.
         """
-        await self.extraction_coordinator.handle_user_information_extraction(
-            user_message, agent_response, user_id, agent_id, extraction_model
+        # DEBUG: Log before coordinator call
+        observability.observe(
+            event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+            level=observability.EventLevel.INFO,
+            data={
+                "operation": "overlord_calling_coordinator",
+                "has_coordinator": hasattr(self, "extraction_coordinator") and bool(self.extraction_coordinator),
+                "user_id": str(user_id),
+            },
+            description="Overlord about to call extraction coordinator",
         )
+
+        try:
+            await self.extraction_coordinator.handle_user_information_extraction(
+                user_message, agent_response, user_id, agent_id, extraction_model
+            )
+            # DEBUG: Log after coordinator call
+            observability.observe(
+                event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "operation": "coordinator_call_completed",
+                    "user_id": str(user_id),
+                },
+                description="Coordinator call completed successfully",
+            )
+        except Exception as coord_error:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "coordinator_call_failed",
+                    "error": str(coord_error),
+                    "error_type": type(coord_error).__name__,
+                },
+                description=f"Coordinator call failed: {coord_error}",
+            )
 
     async def extract_user_information(
         self,
