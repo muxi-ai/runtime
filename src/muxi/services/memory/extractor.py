@@ -125,8 +125,9 @@ class MemoryExtractor:
         if not self.auto_extract:
             return
 
-        # Skip extraction for anonymous users (user_id=0)
-        if user_id == 0:
+        # Skip extraction for anonymous users in multi-user mode only
+        # In single-user mode, user_id="0" is normal and expected
+        if self.overlord.is_multi_user and (user_id == 0 or user_id == "0"):
             return
 
         # Skip extraction for users who have opted out
@@ -448,30 +449,71 @@ class MemoryExtractor:
                     # Check for semantically similar memories before storing
                     should_store = True
 
-                    # Use long_term_memory's search if available
-                    if hasattr(self.overlord.long_term_memory, "search"):
-                        # Search for similar existing memories
-                        existing = await self.overlord.long_term_memory.search(
-                            query=memory_content,
-                            limit=1,
-                            external_user_id=external_user_id,
-                            collection=collection
-                        )
+                    # TEMP: Disable similarity check for debugging
+                    # # Use long_term_memory's search if available
+                    # if hasattr(self.overlord.long_term_memory, "search"):
+                    #     # Search for similar existing memories
+                    #     # Build search params based on backend type
+                    #     search_params = {
+                    #         "query": memory_content,
+                    #         "limit": 1,
+                    #     }
+                    #     if self.overlord.is_multi_user:
+                    #         search_params["external_user_id"] = external_user_id
+                    #         search_params["collection"] = collection
+                    #     else:
+                    #         search_params["user_id"] = user_id
+                    #         # SQLiteMemory doesn't support collection parameter
 
-                        if existing:
-                            # Check the first result for similarity
-                            # Distance of 0 = identical, Distance < similarity_threshold = very similar
-                            first_result = existing[0] if isinstance(existing, list) else existing
-                            distance = first_result.get("distance", 1.0) if isinstance(first_result, dict) else 1.0
-                            if distance < self.similarity_threshold:
-                                should_store = False
+                    #     existing = await self.overlord.long_term_memory.search(**search_params)
+
+                    #     if existing:
+                    #         # Check the first result for similarity
+                    #         # Distance of 0 = identical, Distance < similarity_threshold = very similar
+                    #         first_result = existing[0] if isinstance(existing, list) else existing
+                    #         distance = first_result.get("distance", 1.0) if isinstance(first_result, dict) else 1.0
+                    #         if distance < self.similarity_threshold:
+                    #             should_store = False
 
                     if should_store:
-                        await self.overlord.long_term_memory.add(
-                            content=memory_content,
-                            metadata=memory_metadata,
-                            external_user_id=external_user_id,
-                            collection=collection,
+                        # Build add params based on backend type
+                        add_params = {
+                            "content": memory_content,
+                            "metadata": memory_metadata,
+                        }
+                        if self.overlord.is_multi_user:
+                            add_params["external_user_id"] = external_user_id
+                            add_params["collection"] = collection
+                        else:
+                            add_params["user_id"] = user_id
+                            # SQLiteMemory doesn't support collection parameter
+                            # Store collection in metadata instead
+
+                        # DEBUG: Log before add
+                        observability.observe(
+                            event_type=observability.ConversationEvents.MEMORY_LONG_TERM_LOOKUP,
+                            level=observability.EventLevel.DEBUG,
+                            data={
+                                "operation": "before_add",
+                                "is_multi_user": self.overlord.is_multi_user,
+                                "add_params_keys": list(add_params.keys()),
+                                "memory_content": memory_content[:50],
+                                "user_id": str(user_id),
+                            },
+                            description=f"About to call long_term_memory.add with {list(add_params.keys())}",
+                        )
+
+                        await self.overlord.long_term_memory.add(**add_params)
+
+                        # DEBUG: Log after add
+                        observability.observe(
+                            event_type=observability.ConversationEvents.MEMORY_LONG_TERM_ENHANCED,
+                            level=observability.EventLevel.DEBUG,
+                            data={
+                                "operation": "after_add",
+                                "memory_content": memory_content[:50],
+                            },
+                            description="Successfully called long_term_memory.add",
                         )
                 except Exception as e:
                     # Log memory storage failure for debugging while continuing execution

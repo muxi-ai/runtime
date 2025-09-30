@@ -311,9 +311,16 @@ class ChatOrchestrator:
             if (
                 self.overlord.long_term_memory
                 and user_id
-                and user_id != "0"
                 and self.overlord.auto_extract_user_info
             ):
+                # DEBUG: Log task creation
+                observability.observe(
+                    event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+                    level=observability.EventLevel.INFO,
+                    data={"operation": "extraction_task_created", "user_id": user_id},
+                    description="Creating extraction task",
+                )
+
                 asyncio.create_task(
                     self._extract_user_information_async(
                         user_message=message,  # Original message for storage
@@ -911,15 +918,47 @@ class ChatOrchestrator:
         enhanced_message: str = None,
     ) -> None:
         """Extract user information from conversation without blocking."""
+        # DEBUG: Log that async method was called
+        observability.observe(
+            event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+            level=observability.EventLevel.INFO,
+            data={
+                "operation": "extract_async_called",
+                "user_id": user_id,
+            },
+            description="Extraction async method started",
+        )
         try:
             # Use enhanced message for extraction if provided, otherwise use original
             extraction_message = enhanced_message if enhanced_message else user_message
+
+            # DEBUG: Log before calling overlord method
+            observability.observe(
+                event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "operation": "calling_overlord_extract",
+                    "user_id": user_id,
+                },
+                description="About to call overlord.extract_user_information",
+            )
 
             await self.overlord.extract_user_information(
                 user_message=extraction_message,  # Use enhanced for better context
                 agent_response=agent_response,
                 user_id=user_id,
                 agent_id=agent_id,
+            )
+
+            # DEBUG: Log after successful call
+            observability.observe(
+                event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "operation": "overlord_extract_completed",
+                    "user_id": user_id,
+                },
+                description="overlord.extract_user_information completed",
             )
             # User information extraction completed
         except Exception as e:

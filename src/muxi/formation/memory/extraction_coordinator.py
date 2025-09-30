@@ -48,8 +48,9 @@ class ExtractionCoordinator:
             agent_id: The agent's ID that handled the conversation
             extraction_model: Optional model to use for extraction
         """
-        # Skip extraction for anonymous users
-        if user_id == 0:
+        # Skip extraction for anonymous users in multi-user mode only
+        # In single-user mode, user_id="0" is normal and expected
+        if self.overlord.is_multi_user and (user_id == 0 or user_id == "0"):
             return
 
         # Skip if extraction is disabled

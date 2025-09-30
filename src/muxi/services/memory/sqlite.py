@@ -314,7 +314,7 @@ class SQLiteMemory(BaseMemory):
                 embedding_response = await self.embedding_provider.embed(content)
                 # Extract the actual embedding vector using helper method (like LongTermMemory)
                 embedding = self._extract_embedding_from_response(embedding_response)
-            except Exception as emb_err:
+            except Exception:
                 raise
 
             # Add timestamp to metadata
