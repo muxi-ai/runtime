@@ -29,6 +29,21 @@ IMPORTANT RULES:
 - If we lack the tools/capabilities, don't clarify (fail fast)
 - Detect if user wants brainstorming/planning vs direct action
 
+MULTIMODAL CONTENT RULES:
+- If user provides documents/images/files WITH explicit action verbs, that's clear - don't clarify
+- Explicit actions include: summarize, analyze, list, extract, describe, compare, transcribe, translate, explain
+- Examples of CLEAR requests (don't clarify):
+  * "Summarize this document" (with file)
+  * "List key features in this PDF" (with file)
+  * "What's in this image?" (with image)
+  * "Transcribe this audio" (with audio)
+  * "Extract text from this document" (with file)
+  * "Analyze this chart" (with image)
+- Only clarify multimodal requests if action is truly ambiguous:
+  * "Help me with this file" (no specific action)
+  * "Do something with this" (no specific action)
+  * "Fix this" (unclear what needs fixing)
+
 CREDENTIAL HANDLING RULES:
 - Mode: {cred_mode}
 - If user wants to add credentials/accounts for an MCP service (GitHub, etc):
