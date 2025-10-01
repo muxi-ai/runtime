@@ -6,6 +6,10 @@ auto_extract_user_info: true
 runtime:
   built_in_mcps: false
 
+overlord:
+  clarification:
+    enabled: false
+
 llm:
   settings:
     temperature: 0.7

@@ -6,6 +6,16 @@ description: "Test formation for local buffer memory mode"
 runtime:
   built_in_mcps: false
 
+overlord:
+  clarification:
+    style: "brief"
+    max_rounds:
+      direct: 1
+      brainstorm: 1
+      planning: 1
+      execution: 1
+      other: 1
+
 agents:
   - id: "memory-assistant"
     name: "Memory Test Assistant"

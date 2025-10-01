@@ -1,65 +1,156 @@
-            # Migrated test logic from test_2o2_preference_retrieval
-            print("Testing core functionality...")
+#!/usr/bin/env python3
+"""
+Test 2O2: Preference Retrieval in Context
+Verify stored preferences are included in context for relevant queries
+"""
+import sys
+from pathlib import Path
+import asyncio
+import psycopg2
 
-            # Basic test implementation migrated from original
-            test_response = await self.overlord.chat(
-                "Test message",
-                user_id="test_user",
-                use_async=False
-            )
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-            if hasattr(test_response, "__aiter__"):
-                response_text = ""
-                async for chunk in test_response:
-                    response_text += chunk
-            else:
-                response_text = test_response.content if hasattr(test_response, "content") else str(test_response)
-
-            transcript.append(("User", "Test message"))
-            transcript.append(("System", response_text[:100] + "..." if len(response_text) > 100 else response_text))
-
-            # Basic validation
-            if len(response_text) > 0:
-                print("  ✓ Test execution successful")
-                checks_passed.append("Core functionality test passed")
-            else:
-                print("  ✗ Test execution failed")
-                all_passed = False
-
-        except Exception as e:
-            print(f"  ✗ Test failed with error: {e}")
-            all_passed = False
-
-        finally:
-            await self.cleanup()
-
-        duration = time.time() - start_time
-        self.print_test_result(test_name, all_passed, checks_passed, transcript, duration)
-
-        return all_passed
-
-    async def run_test(self):
-        """Run all test cases."""
-        print("\n" + "=" * 60)
-        print("📝 AREA 2O2_PREFERENCE_RETRIEVAL")
-        print("=" * 60)
-
-        # Run test cases
-        result = await self.test_2o2preferenceretrieval()
-
-        print("\n" + "=" * 60)
-        print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if result else '❌ SOME TESTS FAILED'}")
-        print("=" * 60)
-
-        return result
+from muxi.formation import Formation  # noqa: E402
+from test_utils import safe_formation_shutdown  # noqa: E402
 
 
-def main():
-    """Main entry point."""
-    test = Test2o2PreferenceRetrieval()
-    result = asyncio.run(test.run_test())
-    sys.exit(0 if result else 1)
+async def test_preference_retrieval():
+    """Test that preferences are retrieved and influence responses."""
+    print("\n=== Test 2O2: Preference Retrieval in Context ===\n")
+
+    # Setup
+    conn = psycopg2.connect("postgresql://muxi@localhost/muxi_test")
+    cur = conn.cursor()
+
+    # Clear test data
+    test_user = "preference_retrieval_user"
+    cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
+    cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
+    conn.commit()
+
+    formation = Formation()
+    await formation.load(
+        str(Path(__file__).parent / "formations" / "formation-memory" / "formation-postgres.yaml")
+    )
+    overlord = await formation.start_overlord()
+
+    # Test 1: Store multiple preferences
+    print("1. Storing technology preferences...")
+    preferences = [
+        "I always use pytest for testing in Python projects",
+        "For web APIs, I prefer FastAPI over Flask or Django",
+        "I like TypeScript over JavaScript for frontend development",
+    ]
+
+    for pref in preferences:
+        print(f"   Expressing: {pref[:50]}...")
+        await overlord.chat(pref, user_id=test_user, use_async=False, stream=False)
+        await asyncio.sleep(2)  # Wait for storage
+
+    # Verify preferences were stored
+    cur.execute(
+        """
+        SELECT COUNT(*)
+        FROM memories
+        WHERE meta_data->>'user_id' = %s AND collection = 'preferences'
+    """,
+        (test_user,),
+    )
+
+    pref_count = cur.fetchone()[0]
+    print(f"\n✓ Stored {pref_count} preferences")
+    assert pref_count > 0, "No preferences were stored"
+
+    # Test 2: Ask questions that should retrieve preferences
+    print("\n2. Testing preference retrieval in context...")
+
+    # Question about testing
+    print("   Asking about testing...")
+    test_response = await overlord.chat(
+        "What testing framework should I use for my Python project?",
+        user_id=test_user,
+        use_async=False,
+    )
+
+    # Check if pytest preference influenced response
+    test_response_text = test_response.content if hasattr(test_response, 'content') else str(test_response)
+    pytest_mentioned = "pytest" in test_response_text.lower()
+    print(f"   ✓ pytest mentioned in response: {pytest_mentioned}")
+
+    # Question about APIs
+    print("   Asking about API frameworks...")
+    api_response = await overlord.chat(
+        "I need to build a REST API. What framework do you recommend?",
+        user_id=test_user,
+        use_async=False,
+    )
+
+    # Check if FastAPI preference influenced response
+    api_response_text = api_response.content if hasattr(api_response, 'content') else str(api_response)
+    fastapi_mentioned = "fastapi" in api_response_text.lower()
+    print(f"   ✓ FastAPI mentioned in response: {fastapi_mentioned}")
+
+    # Question about frontend
+    print("   Asking about frontend languages...")
+    frontend_response = await overlord.chat(
+        "Should I use JavaScript or TypeScript for my new web app?",
+        user_id=test_user,
+        use_async=False,
+    )
+
+    # Check if TypeScript preference influenced response
+    frontend_response_text = frontend_response.content if hasattr(frontend_response, 'content') else str(frontend_response)
+    typescript_mentioned = "typescript" in frontend_response_text.lower()
+    print(f"   ✓ TypeScript mentioned in response: {typescript_mentioned}")
+
+    # Test 3: Verify preferences are actually being retrieved
+    print("\n3. Verifying preference collection search...")
+
+    # Check database to confirm preferences exist
+    cur.execute(
+        """
+        SELECT text
+        FROM memories
+        WHERE meta_data->>'user_id' = %s AND collection = 'preferences'
+        ORDER BY created_at DESC
+    """,
+        (test_user,),
+    )
+
+    stored_prefs = cur.fetchall()
+    print(f"   Found {len(stored_prefs)} preferences in database:")
+    for (text,) in stored_prefs[:3]:  # Show first 3
+        print(f"   - {text[:60]}...")
+
+    # Calculate success rate
+    preferences_reflected = sum([pytest_mentioned, fastapi_mentioned, typescript_mentioned])
+    success_rate = (preferences_reflected / 3) * 100
+
+    print("\n=== Results ===")
+    print(f"Preferences stored: {pref_count}")
+    print(f"Preferences reflected in responses: {preferences_reflected}/3 ({success_rate:.0f}%)")
+
+    # At least 2 out of 3 should be reflected
+    assert (
+        preferences_reflected >= 2
+    ), f"Only {preferences_reflected}/3 preferences influenced responses"
+
+    # Cleanup
+    cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
+    cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
+    conn.commit()
+    conn.close()
+
+    # Properly shutdown formation
+    await safe_formation_shutdown(formation)
+
+    print("\n=== Test 2O2 Complete ===")
+    print("✓ Preferences stored successfully")
+    print("✓ Preferences retrieved in context searches")
+    print("✓ Preferences influence agent responses")
+    print(f"✓ Success rate: {success_rate:.0f}%")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(test_preference_retrieval())

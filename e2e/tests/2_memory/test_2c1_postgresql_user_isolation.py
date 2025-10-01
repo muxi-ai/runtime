@@ -99,9 +99,9 @@ class TestPostgreSQLUserIsolation(BaseMemoryTest):
             print(f"\nCharlie: {user3_msg1}")
             print(f"Assistant: {response4_text[:200]}...")
 
-            # Wait for persistence
-            await asyncio.sleep(3)
-            print("\n  ⏳ Waiting for PostgreSQL persistence...")
+            # Wait for extraction to complete for all users
+            print("\n  ⏳ Waiting for memory extraction to complete...")
+            await asyncio.sleep(8)  # Wait for extraction and storage
 
             # Test isolation - Alice queries her info
             alice_query = "What is my name and profession?"
@@ -243,8 +243,9 @@ class TestPostgreSQLUserIsolation(BaseMemoryTest):
             print("  ✓ Information stored in PostgreSQL")
             checks_passed.append("Data stored successfully")
 
-            # Wait for persistence
-            await asyncio.sleep(3)
+            # Wait for extraction to complete (extraction interval is 1, so it should trigger)
+            print("  ⏳ Waiting for memory extraction to complete...")
+            await asyncio.sleep(8)  # Wait for extraction and storage
 
             # Shutdown formation
             await self.cleanup()

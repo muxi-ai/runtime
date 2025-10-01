@@ -63,7 +63,10 @@ class TestBufferMemoryModes(BaseMemoryTest):
             # Add initial context
             msg1 = "My name is Alice and I work at TechCorp as a senior developer."
             response1 = await self.overlord.chat(
-                msg1, user_id="alice_local", use_async=False, stream=False  # Don't use streaming in tests
+                msg1,
+                user_id="alice_local",
+                use_async=False,
+                stream=False,  # Don't use streaming in tests
             )
             response1_text = str(response1) if response1 else "[No response]"
             transcript.append((msg1, response1_text))

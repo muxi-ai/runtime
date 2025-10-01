@@ -86,8 +86,11 @@ class Test2j1CollectionFieldUsage(BaseMemoryTest):
                 response_text = response.content if hasattr(response, "content") else str(response)
                 transcript.append(("System", response_text[:50] + "..." if len(response_text) > 50 else response_text))
 
-                await asyncio.sleep(3)
                 print(f"    Sent: {message}")
+
+            # Wait for extraction to complete (extraction interval is 1, so all messages should trigger extraction)
+            print("\n  ⏳ Waiting for memory extraction to complete...")
+            await asyncio.sleep(8)  # Wait for extraction and storage
 
             # Check memories and their collections
             print("\n  2. Verifying collection assignments...")
