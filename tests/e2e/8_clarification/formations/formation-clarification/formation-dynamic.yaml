@@ -9,7 +9,7 @@ llm:
   api_keys:
     openai: "${{ secrets.OPENAI_API_KEY }}"
   models:
-    - text: "openai/gpt-4o-minii"
+    - text: "openai/gpt-4o-mini"
 
 memory:
   buffer:

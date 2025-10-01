@@ -4,7 +4,7 @@ description: "This formation has an invalid schema version"
 
 agents:
   - id: "assistant"
-    model: "openai/gpt-4o-minii"
+    model: "openai/gpt-4o-mini"
 
 memory:
   buffer:
