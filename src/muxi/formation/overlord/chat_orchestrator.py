@@ -896,8 +896,21 @@ class ChatOrchestrator:
 
         # 4. Relevant long-term memories (medium priority)
         if long_term_memories:
-            enhanced_parts.append("=== RELEVANT MEMORIES ===")
-            enhanced_parts.append("The user previously shared the following information. Use these facts to answer their question directly:")  # noqa: E501
+            # Load memory usage protocol from prompts
+            from ..prompts.loader import PromptLoader
+            try:
+                memory_protocol = PromptLoader.get('memory_usage_protocol.md')
+                enhanced_parts.append(memory_protocol)
+                enhanced_parts.append("")
+            except KeyError:
+                # Fallback to inline protocol if file not found
+                enhanced_parts.append("=== RELEVANT MEMORIES ===")
+                enhanced_parts.append(
+                    "IMPORTANT: The following are verified FACTS about this specific user. "
+                    "When answering their question, you MUST use ALL relevant items from this list. "
+                    "These are their stated preferences and information - prioritize these OVER general advice:"
+                )
+
             enhanced_parts.append(long_term_memories)
             enhanced_parts.append("")
 
