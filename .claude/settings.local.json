@@ -39,7 +39,9 @@
       "Bash(while:*)",
       "Bash(head:*)",
       "Bash(docker:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(PGPASSWORD=\"\" psql -U muxi -d muxi_test -c \"SELECT COUNT(*), collection FROM memories WHERE meta_data->>''user_id'' = ''preference_test_user_001'' GROUP BY collection ORDER BY collection;\")",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []
