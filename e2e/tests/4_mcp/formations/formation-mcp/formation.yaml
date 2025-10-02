@@ -30,6 +30,9 @@ mcp:
   max_tool_calls: 50
   max_tool_iterations: 10
 
+workflow:
+  auto_decomposition: false  # Disable workflow decomposition for direct tool calling
+
 memory:
   working:
     max_memory_mb: 1
