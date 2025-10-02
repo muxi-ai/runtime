@@ -53,7 +53,7 @@ async def run_async_test():
         if formation._db_manager:
             try:
                 from sqlalchemy import text
-                async with formation._db_manager.get_session() as session:
+                async with formation._db_manager.get_async_session() as session:
                     result = await session.execute(
                         text("""
                         SELECT u.external_user_id, c.name, c.service

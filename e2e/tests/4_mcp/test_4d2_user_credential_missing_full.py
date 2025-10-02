@@ -48,7 +48,7 @@ async def run_async_test():
         if formation._db_manager:
             try:
                 from sqlalchemy import text
-                async with formation._db_manager.get_session() as session:
+                async with formation._db_manager.get_async_session() as session:
                     # Delete existing GitHub credentials for user2 (more comprehensive)
                     delete_result = await session.execute(
                         text("""
@@ -217,7 +217,7 @@ async def run_async_test():
             try:
                 # Check if credential was saved and if name was updated
                 from sqlalchemy import text
-                async with formation._db_manager.get_session() as session:
+                async with formation._db_manager.get_async_session() as session:
                     result = await session.execute(
                         text("""
                         SELECT c.service, c.name, c.encrypted_data IS NOT NULL as has_data

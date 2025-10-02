@@ -48,7 +48,7 @@ async def run_async_test():
         if formation._db_manager:
             try:
                 from sqlalchemy import text
-                async with formation._db_manager.get_session() as session:
+                async with formation._db_manager.get_async_session() as session:
                     # Delete existing GitHub credentials for user_id=5 (user2)
                     delete_result = await session.execute(
                         text("""
