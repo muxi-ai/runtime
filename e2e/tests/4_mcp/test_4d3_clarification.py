@@ -15,10 +15,10 @@ async def run_async_test():
     """Run the test for ambiguous request with clarification."""
 
     print("\n" + "="*80)
-    print("I am testing: Ambiguous Request with Clarification")
-    print("This test verifies that ambiguous requests trigger clarification:")
+    print("I am testing: Ambiguous Credentials with Clarification")
+    print("This test verifies that ambiguous credentials trigger clarification:")
     print("1. User1 has two GitHub credentials: 'ranaroussi' and 'lily automaze'")
-    print("2. Request 'list my repositories' should trigger clarification")
+    print("2. Request 'list my GitHub repositories' should trigger clarification (ambiguous which account)")
     print("3. User selects option '1' (lily automaze)")
     print("4. System should then list lily's repositories")
     print("="*80 + "\n")
@@ -80,7 +80,7 @@ async def run_async_test():
         print("="*80 + "\n")
 
         session_id = "test_session_4d3_clarification"
-        prompt = "list my repositories"
+        prompt = "list my GitHub repositories"
 
         print("User: user1")
         print(f"Prompt: {prompt}")
