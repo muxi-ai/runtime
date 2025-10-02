@@ -118,6 +118,39 @@ class UnifiedClarificationSystem:
             # No active clarification
             return ClarificationResult(action="execute", request=response)
 
+        # Special handling for credential selection mode
+        if state.get("mode") == "credential" and state.get("available_accounts"):
+            selected_account = await self._parse_credential_selection(
+                response, state["available_accounts"]
+            )
+            
+            if selected_account:
+                # Store the selected account in state
+                state["selected_account"] = selected_account
+                await self._store_state(request_id, state)
+                
+                # Build enhanced request and cleanup
+                enhanced = self._build_enhanced_request(state)
+                await self._cleanup_state(request_id)
+                
+                return ClarificationResult(
+                    action="execute",
+                    request=enhanced,
+                    context={
+                        "mcp_service": state.get("mcp_service"),
+                        "selected_account": selected_account,
+                        "user_id": state.get("user_id"),
+                        "original_request": state.get("original_request")
+                    }
+                )
+            else:
+                # Selection parsing failed - ask again
+                return ClarificationResult(
+                    action="clarify",
+                    question="I couldn't understand your selection. Please specify the account by name or number.",
+                    mode="credential"
+                )
+
         # Update state for non-credential clarifications
         state["collected_info"].append(response)
         state["depth"] += 1
@@ -516,14 +549,53 @@ class UnifiedClarificationSystem:
         content = result.content if hasattr(result, "content") else str(result)
         return "true" in content.lower()
 
+    async def _parse_credential_selection(
+        self, response: str, available_accounts: list
+    ) -> Optional[str]:
+        """
+        Parse user's credential selection from response.
+        Handles both numeric selection (1, 2) and name-based selection (lily, ranaroussi).
+        
+        Args:
+            response: User's response to credential question
+            available_accounts: List of available account names
+            
+        Returns:
+            Selected account name or None if parsing failed
+        """
+        import re
+        
+        # Clean the response
+        response_clean = response.strip()
+        
+        # Try numeric selection first (1, 2, etc.)
+        numbers = re.findall(r'\b(\d+)\b', response_clean)
+        if numbers:
+            try:
+                choice_index = int(numbers[0]) - 1  # Convert to 0-based index
+                if 0 <= choice_index < len(available_accounts):
+                    return available_accounts[choice_index]
+            except (ValueError, IndexError):
+                pass
+        
+        # Try name-based selection (fuzzy match)
+        response_lower = response_clean.lower()
+        for account in available_accounts:
+            account_lower = account.lower()
+            # Check if account name is in response or vice versa
+            if account_lower in response_lower or response_lower in account_lower:
+                return account
+        
+        # No match found
+        return None
+
     def _build_enhanced_request(self, state: Dict) -> str:
         """
         Build enhanced request from original + collected info.
         """
         if state["mode"] == "credential":
-            # For credential selection, return the selection
-            if state["collected_info"]:
-                return state["collected_info"][-1]
+            # For credential selection, return the original request
+            # The actual credential caching is handled by the caller using context
             return state["original_request"]
 
         if state["mode"] in ["brainstorm", "planning"]:
