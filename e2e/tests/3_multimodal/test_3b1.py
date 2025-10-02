@@ -1,66 +1,137 @@
-            # Migrated test logic from test_3b1
-            print("
-  Testing core functionality...")
+"""
+Test 3B1: Speech Transcription - Speech to Text Conversion
+Sync version using audio files from tests/assets/files
+"""
 
-            # Basic test implementation migrated from original
-            test_response = await self.overlord.chat(
-                "Test message",
-                user_id="test_user",
-                use_async=False
-            )
+import asyncio
+import sys
+from pathlib import Path
 
-            if hasattr(test_response, "__aiter__"):
-                response_text = ""
-                async for chunk in test_response:
-                    response_text += chunk
-            else:
-                response_text = test_response.content if hasattr(test_response, "content") else str(test_response)
+# Add parent directories to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-            transcript.append(("User", "Test message"))
-            transcript.append(("System", response_text[:100] + "..." if len(response_text) > 100 else response_text))
-
-            # Basic validation
-            if len(response_text) > 0:
-                print("  ✓ Test execution successful")
-                checks_passed.append("Core functionality test passed")
-            else:
-                print("  ✗ Test execution failed")
-                all_passed = False
-
-        except Exception as e:
-            print(f"  ✗ Test failed with error: {e}")
-            all_passed = False
-
-        finally:
-            await self.cleanup()
-
-        duration = time.time() - start_time
-        self.print_test_result(test_name, all_passed, checks_passed, transcript, duration)
-
-        return all_passed
-
-    async def run_test(self):
-        """Run all test cases."""
-        print("\n" + "=" * 60)
-        print("🎤 AREA 3B1: AUDIO TRANSCRIPTION")
-        print("=" * 60)
-
-        # Run test cases
-        result = await self.test_3b1()
-
-        print("\n" + "=" * 60)
-        print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if result else '❌ SOME TESTS FAILED'}")
-        print("=" * 60)
-
-        return result
+from muxi.formation import Formation  # noqa: E402
 
 
-def main():
-    """Main entry point."""
-    test = TestMultimodal3B1()
-    result = asyncio.run(test.run_test())
-    os._exit(0 if result else 1)
+async def test_speech_to_text():
+    """Test speech transcription capabilities"""
+    print("\n=== Test 3B1: Speech to Text Conversion ===")
+
+    # Load formation
+    formation_path = Path(__file__).parent / "formations" / "formation-multimodal"
+    formation = Formation()
+    await formation.load(str(formation_path))
+    overlord = await formation.start_overlord()
+
+    print("✓ Overlord started")
+
+    # Read audio file from tests/assets/files
+    audio_path = Path(__file__).parent.parent.parent / "assets/files" / "speech.m4a"
+    with open(audio_path, "rb") as f:
+        audio_content = f.read()
+
+    print(f"✓ Loaded audio file: {len(audio_content)} bytes")
+
+    files = [{
+        "filename": "speech.m4a",
+        "content": audio_content,
+        "content_type": "audio/m4a",
+        "size": len(audio_content)
+    }]
+
+    # Test speech transcription
+    print("\n🎤 Testing speech transcription...")
+    response = await overlord.chat(
+        user_id="test_user",
+        message="Please transcribe this audio file",
+        files=files,
+        use_async=False,
+        stream=False,
+    )
+
+    result = response.content if hasattr(response, 'content') else str(response)
+    print(f"📄 Response length: {len(result)} chars")
+    print(f"📄 Response preview: {result[:200]}...")
+
+    # Verify transcription response
+    result_lower = result.lower()
+    expected_keywords = ["transcription", "audio", "speech", "text", "content"]
+    found_keywords = [kw for kw in expected_keywords if kw in result_lower]
+
+    assert len(found_keywords) >= 2, \
+        f"Expected at least 2 keywords from {expected_keywords}, found: {found_keywords}"
+    assert len(result) > 50, "Transcription should be substantial"
+
+    print(f"✅ Found keywords: {found_keywords}")
+    print("✅ Speech transcription test passed!")
+
+    # Cleanup
+    await formation.stop_overlord()
+
+
+async def test_meeting_transcription():
+    """Test meeting audio transcription"""
+    print("\n=== Test 3B1.2: Meeting Transcription ===")
+
+    # Load formation
+    formation_path = Path(__file__).parent / "formations" / "formation-multimodal"
+    formation = Formation()
+    await formation.load(str(formation_path))
+    overlord = await formation.start_overlord()
+
+    print("✓ Overlord started")
+
+    # Read meeting audio from tests/assets/files
+    audio_path = Path(__file__).parent.parent.parent / "assets/files" / "meeting.mp3"
+    with open(audio_path, "rb") as f:
+        audio_content = f.read()
+
+    print(f"✓ Loaded meeting audio: {len(audio_content)} bytes")
+
+    files = [{
+        "filename": "meeting.mp3",
+        "content": audio_content,
+        "content_type": "audio/mp3",
+        "size": len(audio_content)
+    }]
+
+    # Test meeting transcription with summary
+    print("\n🎤 Testing meeting transcription with summary...")
+    response = await overlord.chat(
+        user_id="test_user",
+        message="Transcribe this meeting audio and provide a summary of key points discussed",
+        files=files,
+        use_async=False,
+        stream=False,
+    )
+
+    result = response.content if hasattr(response, 'content') else str(response)
+    print(f"📄 Response length: {len(result)} chars")
+    print(f"📄 Response preview: {result[:200]}...")
+
+    # Verify meeting analysis
+    result_lower = result.lower()
+    expected_keywords = ["meeting", "discuss", "point", "summary", "transcription"]
+    found_keywords = [kw for kw in expected_keywords if kw in result_lower]
+
+    assert len(found_keywords) >= 2, \
+        f"Expected at least 2 keywords from {expected_keywords}, found: {found_keywords}"
+
+    print(f"✅ Found keywords: {found_keywords}")
+    print("✅ Meeting transcription test passed!")
+
+    # Cleanup
+    await formation.stop_overlord()
 
 
 if __name__ == "__main__":
-    main()
+    print("🧪 Running Test 3B1: Speech Transcription (Sync Mode)")
+    print("=" * 60)
+
+    # Run tests sequentially
+    asyncio.run(test_speech_to_text())
+    print("\n" + "="*60 + "\n")
+
+    asyncio.run(test_meeting_transcription())
+
+    print("\n🎉 All Test 3B1 tests completed successfully!")

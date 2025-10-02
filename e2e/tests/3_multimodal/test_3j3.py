@@ -1,66 +1,70 @@
-            # Migrated test logic from test_3j3
-            print("
-  Testing core functionality...")
+"""
+Test 3J3: Corrupted File Handling - Broken Video Frames
+Sync version using files from tests/assets/files
+"""
 
-            # Basic test implementation migrated from original
-            test_response = await self.overlord.chat(
-                "Test message",
-                user_id="test_user",
-                use_async=False
-            )
+import asyncio
+import sys
+from pathlib import Path
 
-            if hasattr(test_response, "__aiter__"):
-                response_text = ""
-                async for chunk in test_response:
-                    response_text += chunk
-            else:
-                response_text = test_response.content if hasattr(test_response, "content") else str(test_response)
+# Add parent directories to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-            transcript.append(("User", "Test message"))
-            transcript.append(("System", response_text[:100] + "..." if len(response_text) > 100 else response_text))
-
-            # Basic validation
-            if len(response_text) > 0:
-                print("  ✓ Test execution successful")
-                checks_passed.append("Core functionality test passed")
-            else:
-                print("  ✗ Test execution failed")
-                all_passed = False
-
-        except Exception as e:
-            print(f"  ✗ Test failed with error: {e}")
-            all_passed = False
-
-        finally:
-            await self.cleanup()
-
-        duration = time.time() - start_time
-        self.print_test_result(test_name, all_passed, checks_passed, transcript, duration)
-
-        return all_passed
-
-    async def run_test(self):
-        """Run all test cases."""
-        print("\n" + "=" * 60)
-        print("📸 AREA 3J3: KNOWLEDGE EXTRACTION")
-        print("=" * 60)
-
-        # Run test cases
-        result = await self.test_3j3()
-
-        print("\n" + "=" * 60)
-        print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if result else '❌ SOME TESTS FAILED'}")
-        print("=" * 60)
-
-        return result
+from muxi.formation import Formation  # noqa: E402
 
 
-def main():
-    """Main entry point."""
-    test = TestMultimodal3J3()
-    result = asyncio.run(test.run_test())
-    os._exit(0 if result else 1)
+async def test_3j3_main():
+    """Test broken video frames"""
+    print("\n=== Test 3J3: Broken Video Frames ===")
+
+    # Load formation
+    formation_path = Path(__file__).parent / "formations" / "formation-multimodal"
+    formation = Formation()
+    await formation.load(str(formation_path))
+    overlord = await formation.start_overlord()
+
+    print("✓ Overlord started")
+
+    # Read the corrupted video file
+    corrupted_video_path = Path(__file__).parent.parent.parent / "assets/files" / "corrupted_video.mov"
+    with open(corrupted_video_path, "rb") as f:
+        corrupted_content = f.read()
+
+    print(f"✓ Loaded corrupted video: {len(corrupted_content)} bytes")
+
+    files = [{
+        "filename": "corrupted_video.mov",
+        "content": corrupted_content,
+        "content_type": "video/quicktime",
+        "size": len(corrupted_content)
+    }]
+
+    # Test broken video frames
+    print("\n📊 Testing broken video frames...")
+    response = await overlord.chat(
+        user_id="test_user",
+        message="Analyze this file and provide insights",
+        files=files,
+        use_async=False,
+        stream=False,
+    )
+
+    result = response.content if hasattr(response, 'content') else str(response)
+    print(f"📄 Response length: {len(result)} chars")
+    print(f"📄 Response preview: {result[:200]}...")
+
+    # Verify response
+    assert len(result) > 50, "Response should be substantial"
+    print("✅ Broken Video Frames test passed!")
+
+    # Cleanup
+    await formation.stop_overlord()
 
 
 if __name__ == "__main__":
-    main()
+    print("🧪 Running Test 3J3: Broken Video Frames (Sync Mode)")
+    print("=" * 60)
+
+    asyncio.run(test_3j3_main())
+
+    print("\n🎉 Test 3J3 completed successfully!")

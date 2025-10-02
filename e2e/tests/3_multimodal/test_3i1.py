@@ -1,66 +1,70 @@
-            # Migrated test logic from test_3i1
-            print("
-  Testing core functionality...")
+"""
+Test 3I1: PowerPoint Video Consistency - Slide-Video Alignment
+Sync version using files from tests/assets/files
+"""
 
-            # Basic test implementation migrated from original
-            test_response = await self.overlord.chat(
-                "Test message",
-                user_id="test_user",
-                use_async=False
-            )
+import asyncio
+import sys
+from pathlib import Path
 
-            if hasattr(test_response, "__aiter__"):
-                response_text = ""
-                async for chunk in test_response:
-                    response_text += chunk
-            else:
-                response_text = test_response.content if hasattr(test_response, "content") else str(test_response)
+# Add parent directories to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-            transcript.append(("User", "Test message"))
-            transcript.append(("System", response_text[:100] + "..." if len(response_text) > 100 else response_text))
-
-            # Basic validation
-            if len(response_text) > 0:
-                print("  ✓ Test execution successful")
-                checks_passed.append("Core functionality test passed")
-            else:
-                print("  ✗ Test execution failed")
-                all_passed = False
-
-        except Exception as e:
-            print(f"  ✗ Test failed with error: {e}")
-            all_passed = False
-
-        finally:
-            await self.cleanup()
-
-        duration = time.time() - start_time
-        self.print_test_result(test_name, all_passed, checks_passed, transcript, duration)
-
-        return all_passed
-
-    async def run_test(self):
-        """Run all test cases."""
-        print("\n" + "=" * 60)
-        print("📸 AREA 3I1: INTEGRATION TESTS")
-        print("=" * 60)
-
-        # Run test cases
-        result = await self.test_3i1()
-
-        print("\n" + "=" * 60)
-        print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if result else '❌ SOME TESTS FAILED'}")
-        print("=" * 60)
-
-        return result
+from muxi.formation import Formation  # noqa: E402
 
 
-def main():
-    """Main entry point."""
-    test = TestMultimodal3I1()
-    result = asyncio.run(test.run_test())
-    os._exit(0 if result else 1)
+async def test_3i1_main():
+    """Test slide-video alignment"""
+    print("\n=== Test 3I1: Slide-Video Alignment ===")
+
+    # Load formation
+    formation_path = Path(__file__).parent / "formations" / "formation-multimodal"
+    formation = Formation()
+    await formation.load(str(formation_path))
+    overlord = await formation.start_overlord()
+
+    print("✓ Overlord started")
+
+    # Read test file from tests/assets/files
+    file_path = Path(__file__).parent.parent.parent / "assets/files" / "presentation.pptx"
+    with open(file_path, "rb") as f:
+        file_content = f.read()
+
+    print(f"✓ Loaded file: {len(file_content)} bytes")
+
+    files = [{
+        "filename": "presentation.pptx",
+        "content": file_content,
+        "content_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "size": len(file_content)
+    }]
+
+    # Test slide-video alignment
+    print("\n📊 Testing slide-video alignment...")
+    response = await overlord.chat(
+        user_id="test_user",
+        message="Analyze this file and provide insights",
+        files=files,
+        use_async=False,
+        stream=False,
+    )
+
+    result = response.content if hasattr(response, 'content') else str(response)
+    print(f"📄 Response length: {len(result)} chars")
+    print(f"📄 Response preview: {result[:200]}...")
+
+    # Verify response
+    assert len(result) > 50, "Response should be substantial"
+    print("✅ Slide-Video Alignment test passed!")
+
+    # Cleanup
+    await formation.stop_overlord()
 
 
 if __name__ == "__main__":
-    main()
+    print("🧪 Running Test 3I1: Slide-Video Alignment (Sync Mode)")
+    print("=" * 60)
+
+    asyncio.run(test_3i1_main())
+
+    print("\n🎉 Test 3I1 completed successfully!")

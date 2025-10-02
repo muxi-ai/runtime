@@ -1,66 +1,159 @@
-            # Migrated test logic from test_3d1
-            print("
-  Testing core functionality...")
+"""
+Test 3D1: Document + Image Cross-Analysis
+Sync version using files from tests/assets/files
+"""
 
-            # Basic test implementation migrated from original
-            test_response = await self.overlord.chat(
-                "Test message",
-                user_id="test_user",
-                use_async=False
-            )
+import asyncio
+import sys
+from pathlib import Path
 
-            if hasattr(test_response, "__aiter__"):
-                response_text = ""
-                async for chunk in test_response:
-                    response_text += chunk
-            else:
-                response_text = test_response.content if hasattr(test_response, "content") else str(test_response)
+# Add parent directories to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-            transcript.append(("User", "Test message"))
-            transcript.append(("System", response_text[:100] + "..." if len(response_text) > 100 else response_text))
-
-            # Basic validation
-            if len(response_text) > 0:
-                print("  ✓ Test execution successful")
-                checks_passed.append("Core functionality test passed")
-            else:
-                print("  ✗ Test execution failed")
-                all_passed = False
-
-        except Exception as e:
-            print(f"  ✗ Test failed with error: {e}")
-            all_passed = False
-
-        finally:
-            await self.cleanup()
-
-        duration = time.time() - start_time
-        self.print_test_result(test_name, all_passed, checks_passed, transcript, duration)
-
-        return all_passed
-
-    async def run_test(self):
-        """Run all test cases."""
-        print("\n" + "=" * 60)
-        print("📸 AREA 3D1: DOCUMENT PROCESSING")
-        print("=" * 60)
-
-        # Run test cases
-        result = await self.test_3d1()
-
-        print("\n" + "=" * 60)
-        print(f"🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if result else '❌ SOME TESTS FAILED'}")
-        print("=" * 60)
-
-        return result
+from muxi.formation import Formation  # noqa: E402
 
 
-def main():
-    """Main entry point."""
-    test = TestMultimodal3D1()
-    result = asyncio.run(test.run_test())
-    os._exit(0 if result else 1)
+async def test_document_image_alignment():
+    """Test aligning document content with visual data"""
+    print("\n=== Test 3D1: Document + Image Cross-Analysis ===")
+
+    # Load formation
+    formation_path = Path(__file__).parent / "formations" / "formation-multimodal"
+    formation = Formation()
+    await formation.load(str(formation_path))
+    overlord = await formation.start_overlord()
+
+    print("✓ Overlord started")
+
+    # Read document and chart from tests/assets/files
+    doc_path = Path(__file__).parent.parent.parent / "assets/files" / "report.pdf"
+    chart_path = Path(__file__).parent.parent.parent / "assets/files" / "chart.png"
+
+    with open(doc_path, "rb") as f:
+        doc_content = f.read()
+    with open(chart_path, "rb") as f:
+        chart_content = f.read()
+
+    files = [
+        {
+            "filename": "report.pdf",
+            "content": doc_content,
+            "content_type": "application/pdf",
+            "size": len(doc_content)
+        },
+        {
+            "filename": "chart.png",
+            "content": chart_content,
+            "content_type": "image/png",
+            "size": len(chart_content)
+        }
+    ]
+
+    print(f"✓ Loaded {len(files)} files for cross-analysis")
+
+    # Test cross-analysis
+    print("\n📊 Testing document and image alignment...")
+    response = await overlord.chat(
+        user_id="test_user",
+        message="Analyze how the data in the chart relates to the information in the report document",
+        files=files,
+        use_async=False,
+        stream=False,
+    )
+
+    result = response.content if hasattr(response, 'content') else str(response)
+    print(f"📄 Response length: {len(result)} chars")
+    print(f"📄 Response preview: {result[:200]}...")
+
+    # Verify cross-analysis
+    result_lower = result.lower()
+    expected_keywords = ["chart", "report", "data", "document", "relate", "analysis"]
+    found_keywords = [kw for kw in expected_keywords if kw in result_lower]
+
+    assert len(found_keywords) >= 3, \
+        f"Expected at least 3 keywords from {expected_keywords}, found: {found_keywords}"
+    assert len(result) > 200, "Cross-analysis should be detailed"
+
+    print(f"✅ Found keywords: {found_keywords}")
+    print("✅ Document + image cross-analysis test passed!")
+
+    # Cleanup
+    await formation.stop_overlord()
+
+
+async def test_slide_document_comparison():
+    """Test comparing presentation slides with documents"""
+    print("\n=== Test 3D1.2: Slide + Document Comparison ===")
+
+    # Load formation
+    formation_path = Path(__file__).parent / "formations" / "formation-multimodal"
+    formation = Formation()
+    await formation.load(str(formation_path))
+    overlord = await formation.start_overlord()
+
+    print("✓ Overlord started")
+
+    # Read slide and document from tests/assets/files
+    slide_path = Path(__file__).parent.parent.parent / "assets/files" / "slide.png"
+    doc_path = Path(__file__).parent.parent.parent / "assets/files" / "document.docx"
+
+    with open(slide_path, "rb") as f:
+        slide_content = f.read()
+    with open(doc_path, "rb") as f:
+        doc_content = f.read()
+
+    files = [
+        {
+            "filename": "slide.png",
+            "content": slide_content,
+            "content_type": "image/png",
+            "size": len(slide_content)
+        },
+        {
+            "filename": "document.docx",
+            "content": doc_content,
+            "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "size": len(doc_content)
+        }
+    ]
+
+    # Test comparison
+    print("\n📊 Testing slide and document comparison...")
+    response = await overlord.chat(
+        user_id="test_user",
+        message="Compare the visual information in the slide with the content in the document",
+        files=files,
+        use_async=False,
+        stream=False,
+    )
+
+    result = response.content if hasattr(response, 'content') else str(response)
+    print(f"📄 Response length: {len(result)} chars")
+    print(f"📄 Response preview: {result[:200]}...")
+
+    # Verify comparison
+    result_lower = result.lower()
+    expected_keywords = ["slide", "document", "visual", "compare", "content", "information"]
+    found_keywords = [kw for kw in expected_keywords if kw in result_lower]
+
+    assert len(found_keywords) >= 3, \
+        f"Expected at least 3 keywords from {expected_keywords}, found: {found_keywords}"
+
+    print(f"✅ Found keywords: {found_keywords}")
+    print("✅ Slide + document comparison test passed!")
+
+    # Cleanup
+    await formation.stop_overlord()
 
 
 if __name__ == "__main__":
-    main()
+    print("🧪 Running Test 3D1: Document + Image Cross-Analysis (Sync Mode)")
+    print("=" * 60)
+
+    # Run tests sequentially
+    asyncio.run(test_document_image_alignment())
+    print("\n" + "="*60 + "\n")
+
+    asyncio.run(test_slide_document_comparison())
+
+    print("\n🎉 All Test 3D1 tests completed successfully!")
