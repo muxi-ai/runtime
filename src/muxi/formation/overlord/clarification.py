@@ -326,6 +326,31 @@ class UnifiedClarificationSystem:
             # Fallback to raw message
             conversation = f"User: {message}"
 
+        # Check for available credentials for each MCP service BEFORE calling LLM
+        # This allows the LLM to know when multiple credentials exist
+        user_id = context.get("user_id", "0") if context else "0"
+        credential_info = []
+        
+        if hasattr(self.overlord, "credential_resolver") and mcp_servers:
+            for service in mcp_servers:
+                try:
+                    credentials = await self.overlord.credential_resolver.get_user_credentials(
+                        user_id, service
+                    )
+                    if credentials and len(credentials) > 0:
+                        account_names = [
+                            cred.get("name", f"Account {i+1}")
+                            for i, cred in enumerate(credentials)
+                        ]
+                        credential_info.append(
+                            f"{service}: {len(credentials)} account(s) - {', '.join(account_names)}"
+                        )
+                except Exception:
+                    # Silently continue if credential check fails
+                    pass
+        
+        available_credentials = "\n".join(credential_info) if credential_info else "No credentials configured"
+
         from ..prompts.loader import PromptLoader
         prompt = PromptLoader.get(
             'clarification_analysis.md',
@@ -333,6 +358,7 @@ class UnifiedClarificationSystem:
             context=json.dumps(context) if context else "{}",
             capabilities=", ".join(capabilities) if capabilities else "Conversation",
             mcp_services=", ".join(mcp_servers) if mcp_servers else "None",
+            available_credentials=available_credentials,
             response_style=response_style,
             cred_mode=cred_mode,
             redirect_message=redirect_message if cred_mode == "redirect" else "Please provide your credential"

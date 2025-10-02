@@ -12,6 +12,9 @@ Analyze this transcript to determine if clarification is needed regarding the us
 === MCP SERVICES AVAILABLE ===
 {mcp_services}
 
+=== AVAILABLE CREDENTIALS ===
+{available_credentials}
+
 
 === INSTRUCTIONS ===
 Be {response_style}.
@@ -46,12 +49,24 @@ MULTIMODAL CONTENT RULES:
 
 CREDENTIAL HANDLING RULES:
 - Mode: {cred_mode}
-- If user wants to add credentials/accounts for an MCP service (GitHub, etc):
+- If user wants to add credentials/accounts for an MCP service:
   * Set needs_clarification=true
-  * Set mcp_service to the relevant service (e.g., "github-mcp" for GitHub)
+  * Set mcp_service to the relevant service
   * question: "{redirect_message}"
-- Examples: "add new GitHub account", "I want to add a new GitHub account", "configure GitHub auth"
 - For requests that need MCP services but lack credentials, also trigger this flow
+
+MULTIPLE CREDENTIAL SCENARIOS:
+- Check the "AVAILABLE CREDENTIALS" section above to see how many credentials exist for each service
+- If a request requires an MCP service but DOES NOT specify which account/credential:
+  * If ONLY ONE credential exists for that service → it's CLEAR, set needs_clarification=false
+  * If MULTIPLE credentials exist for that service → it's AMBIGUOUS, set needs_clarification=true
+  * When ambiguous: Set mcp_service to the service name, question: "Which account would you like to use?"
+- If request explicitly names an account (e.g., "my lily account", "use ranaroussi"), it's CLEAR:
+  * Set needs_clarification=false regardless of how many credentials exist
+- If user asks for help obtaining credentials:
+  * Set needs_clarification=true
+  * Set mcp_service to the relevant service
+  * question: Provide general guidance like "To set up credentials for [service], you'll need to obtain an access token or API key from the service's settings or developer portal, then configure it in your credential manager."
 
 MCP SERVICE DETECTION:
 - Only set mcp_service if the request clearly needs one of the available MCP services
