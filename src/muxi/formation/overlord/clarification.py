@@ -108,9 +108,12 @@ class UnifiedClarificationSystem:
         # Store state for credential mode
         state = {
             "request_id": request_id,
+            "type": "ambiguous_credential",  # For overlord handler routing
             "mode": "credential",
+            "service": error.service,  # Store as 'service' for overlord compatibility
             "mcp_service": error.service,
             "user_id": error.user_id,
+            "available_credentials": error.available_credentials,  # Store full credentials
             "available_accounts": available_accounts,
             "original_request": "credential_selection",  # Will be updated by overlord
             "collected_info": [],
