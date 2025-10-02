@@ -1243,6 +1243,14 @@ class Agent:
                                         description=f"Executed planned step: {step.get('action')}",
                                     )
                         except Exception as e:
+                            # Re-raise credential errors to trigger clarification flow
+                            from ..credentials import AmbiguousCredentialError, MissingCredentialError
+                            from ...services.mcp.service import CredentialSelectionNeededError
+                            
+                            if isinstance(e, (AmbiguousCredentialError, MissingCredentialError, CredentialSelectionNeededError)):
+                                # These need to bubble up to overlord for clarification
+                                raise
+                            
                             # Store error result for placeholder replacement
                             placeholder = step.get(
                                 "output_placeholder", f"{{{tool_name.upper()}_OUTPUT}}"
