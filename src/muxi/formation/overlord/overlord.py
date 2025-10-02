@@ -5555,7 +5555,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                     }
 
                             # Get the original message and clean up
-                            original_message = clarification_info.get("original_message")
+                            # Try both "original_message" and "original_request" for compatibility
+                            original_message = clarification_info.get("original_message") or clarification_info.get("original_request")
                             self._delete_pending_clarification(session_id)
 
                             # Track service use in session history
