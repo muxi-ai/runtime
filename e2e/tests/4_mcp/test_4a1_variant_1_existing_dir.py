@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Test 4A1: File creation in existing directory via MCP filesystem tools."""
 
+import sys
 import asyncio
 import time
 from pathlib import Path
 
-from .base_mcp_test import BaseMCPTest
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from base_mcp_test import BaseMCPTest  # noqa: E402
 
 
 class Test4A1VariantExistingDir(BaseMCPTest):

@@ -32,9 +32,9 @@ class BaseMCPTest(BaseE2ETest):
         "multi": "formation-multi.yaml",  # Multiple MCP servers
     }
 
-    def __init__(self):
+    def __init__(self, test_name: str = "MCP Test", test_description: str = "MCP test", test_area: str = "4_mcp"):
         """Initialize base MCP test."""
-        super().__init__()
+        super().__init__(test_name, test_description, test_area)
         self.formatter = TestOutputFormatter()
         self.formation = None
         self.overlord = None
@@ -44,16 +44,13 @@ class BaseMCPTest(BaseE2ETest):
         """Setup formation with MCP servers.
 
         Args:
-            mcp_config: One of the MCP_CONFIGS keys
+            mcp_config: One of the MCP_CONFIGS keys (currently all use formation.yaml)
 
         Returns:
             Configured Formation instance
         """
-        if mcp_config not in self.MCP_CONFIGS:
-            config_file = "formation.yaml"  # Default
-        else:
-            config_file = self.MCP_CONFIGS[mcp_config]
-
+        # All configs use the same formation.yaml for now
+        config_file = "formation.yaml"
         formation_path = self.FORMATION_DIR / config_file
 
         self.formation = Formation()

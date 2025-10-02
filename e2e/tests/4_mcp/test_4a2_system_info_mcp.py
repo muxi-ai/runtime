@@ -4,7 +4,13 @@
 import asyncio
 import time
 
-from .base_mcp_test import BaseMCPTest
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from base_mcp_test import BaseMCPTest  # noqa: E402
 
 
 class Test4A2SystemInfoMCP(BaseMCPTest):
