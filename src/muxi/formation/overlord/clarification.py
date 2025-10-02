@@ -31,6 +31,9 @@ class UnifiedClarificationSystem:
         self.namespace = "clarification"
         self.active_requests = set()
 
+        # LLM for analysis
+        self.llm = getattr(overlord, "extraction_model", None)
+
         # Configuration - store reference to config object for hierarchy lookup
         self.clarification_config = (
             overlord.clarification_config if hasattr(overlord, "clarification_config") else None
@@ -65,6 +68,96 @@ class UnifiedClarificationSystem:
 
         # Get LLM reference - use extraction_model which has proper fallback to text model
         self.llm = overlord.extraction_model
+
+    async def handle_credential_error(
+        self, error, request_id: str
+    ) -> ClarificationResult:
+        """
+        Handle AmbiguousCredentialError from MCP service.
+        Creates credential selection clarification and stores state.
+        
+        Args:
+            error: AmbiguousCredentialError with service, user_id, available_credentials
+            request_id: Request ID for tracking
+            
+        Returns:
+            ClarificationResult with action="clarify" and credential selection question
+        """
+        # Extract account names from available_credentials
+        available_accounts = []
+        if error.available_credentials:
+            for cred in error.available_credentials:
+                if isinstance(cred, dict):
+                    available_accounts.append(cred.get("name", ""))
+                elif isinstance(cred, str):
+                    available_accounts.append(cred)
+        
+        # Format service name nicely
+        service_display = error.service.capitalize()
+        if error.service == "github":
+            service_display = "GitHub"
+        
+        # Build the clarification question
+        options_text = "\n".join([f"{i+1}. {name}" for i, name in enumerate(available_accounts)])
+        question = (
+            f"I found multiple {service_display} accounts for you. "
+            f"Which account would you like to use?\n\n"
+            f"Available accounts:\n{options_text}"
+        )
+        
+        # Store state for credential mode
+        state = {
+            "request_id": request_id,
+            "mode": "credential",
+            "mcp_service": error.service,
+            "user_id": error.user_id,
+            "available_accounts": available_accounts,
+            "original_request": "credential_selection",  # Will be updated by overlord
+            "collected_info": [],
+            "depth": 0,
+            "max_depth": 1,  # Only one round for credential selection
+            "started_at": time.time(),
+        }
+        
+        await self._store_state(request_id, state)
+        
+        return ClarificationResult(
+            action="clarify",
+            question=question,
+            mode="credential"
+        )
+
+    async def handle_mcp_credential_request(
+        self, service_id: str, user_id: str, request_id: str
+    ) -> ClarificationResult:
+        """
+        Handle MissingCredentialError from MCP service.
+        Creates redirect or dynamic credential request based on formation config.
+        
+        Args:
+            service_id: Service that needs credentials (e.g., "github")
+            user_id: User ID requesting access
+            request_id: Request ID for tracking
+            
+        Returns:
+            ClarificationResult with redirect message or dynamic credential prompt
+        """
+        # Format service name nicely
+        service_display = service_id.capitalize()
+        if service_id == "github":
+            service_display = "GitHub"
+        
+        # Return redirect message (mode="redirect" signals to overlord)
+        redirect_message = (
+            f"For security, {service_display} credentials must be configured outside of this chat interface.\n"
+            f"Please use your organization's credential management system to set up authentication."
+        )
+        
+        return ClarificationResult(
+            action="message",
+            question=redirect_message,
+            mode="redirect"
+        )
 
     async def needs_clarification(
         self, message: str, request_id: str, session_id: str = None, context: Optional[Dict] = None

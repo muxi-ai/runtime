@@ -5663,50 +5663,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                 )
 
                             elif response_result.action == "execute":
-                                # Check if this was a credential selection
-                                if response_result.context and response_result.context.get("selected_account"):
-                                    # Cache the selected credential for the MCP service
-                                    selected_account = response_result.context["selected_account"]
-                                    mcp_service = response_result.context.get("mcp_service")
-                                    ctx_user_id = response_result.context.get("user_id", user_id)
-                                    
-                                    if mcp_service and hasattr(self, "credential_resolver"):
-                                        from ...services.mcp.service import MCPService
-                                        mcp_service_obj = MCPService.get_instance()
-                                        
-                                        if mcp_service_obj:
-                                            # Get all user credentials for this service
-                                            try:
-                                                credentials = await self.credential_resolver.get_user_credentials(
-                                                    ctx_user_id, mcp_service
-                                                )
-                                                
-                                                # Find the selected credential
-                                                selected_cred = None
-                                                for cred in credentials:
-                                                    if cred.get("name") == selected_account:
-                                                        selected_cred = cred
-                                                        break
-                                                
-                                                if selected_cred:
-                                                    # Cache it in MCP service
-                                                    if mcp_service not in mcp_service_obj.user_credentials:
-                                                        mcp_service_obj.user_credentials[mcp_service] = {}
-                                                    
-                                                    credential_data = selected_cred.get("credential_data") or selected_cred.get("credentials")
-                                                    mcp_service_obj.user_credentials[mcp_service][ctx_user_id] = {
-                                                        "type": "bearer",
-                                                        "token": credential_data,
-                                                    }
-                                            except Exception as e:
-                                                observability.observe(
-                                                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                                                    level=observability.EventLevel.WARNING,
-                                                    data={"error": str(e), "service": mcp_service},
-                                                    description=f"Failed to cache selected credential: {e}",
-                                                )
-
                                 # Process the enhanced/final request
+                                # If this was a credential selection, the context will be used
+                                # by the MCP service to automatically resolve the credential
                                 return await self._process_sync_chat(
                                     message=response_result.request,
                                     agent_name=agent_name,
@@ -6084,6 +6043,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     "reactive",
                     "proactive",
                     "multi_turn",
+                    "credential",  # Handle credential selection responses
                 ]:
                     # This is a response to an existing clarification - call handle_response
                     clarification_result = await self.clarification.handle_response(
@@ -6813,6 +6773,12 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         clarification_result = await self.clarification.handle_credential_error(
                             error=e, request_id=request_id
                         )
+
+                        # Update the clarification state with the original_request
+                        state = await self.clarification._get_state(request_id)
+                        if state:
+                            state["original_request"] = actual_message_for_credential
+                            await self.clarification._store_state(request_id, state)
 
                         # Store pending clarification if we have a session
                         if session_id:
