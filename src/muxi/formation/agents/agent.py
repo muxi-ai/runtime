@@ -1487,6 +1487,14 @@ class Agent:
                     return response
 
             except Exception as e:
+                # Re-raise credential errors to trigger clarification flow
+                from ..credentials import AmbiguousCredentialError, MissingCredentialError
+                from ...services.mcp.service import CredentialSelectionNeededError
+                
+                if isinstance(e, (AmbiguousCredentialError, MissingCredentialError, CredentialSelectionNeededError)):
+                    # These need to bubble up to overlord for clarification
+                    raise
+                
                 # If planning fails, continue with normal flow
                 observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,
