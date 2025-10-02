@@ -103,17 +103,32 @@ class CredentialResolver:
             credentials = result.scalars().all()
 
             if credentials:
+                import json
+                
                 if len(credentials) == 1:
                     # Single credential - return it directly
+                    # Deserialize JSON string to dict
                     credential_data = credentials[0].credentials
+                    if isinstance(credential_data, str):
+                        try:
+                            credential_data = json.loads(credential_data)
+                        except (json.JSONDecodeError, TypeError):
+                            pass  # Keep as string if not valid JSON
+                    
                     user_cache = self._cache.setdefault(user_id, {})
                     user_cache[service] = credential_data
                     return credential_data
                 else:
                     # Multiple credentials - return them as a list with names
-                    credential_list = [
-                        {"name": cred.name, "credentials": cred.credentials} for cred in credentials
-                    ]
+                    credential_list = []
+                    for cred in credentials:
+                        cred_data = cred.credentials
+                        if isinstance(cred_data, str):
+                            try:
+                                cred_data = json.loads(cred_data)
+                            except (json.JSONDecodeError, TypeError):
+                                pass  # Keep as string if not valid JSON
+                        credential_list.append({"name": cred.name, "credentials": cred_data})
                     return credential_list
 
             return None
@@ -168,12 +183,16 @@ class CredentialResolver:
 
                 # Token is new, create it
                 # Note: Duplicate checking is handled by EncryptedCredentialResolver
+                # Serialize credentials to JSON string if it's a dict
+                import json
+                credentials_str = json.dumps(credentials) if isinstance(credentials, dict) else credentials
+                
                 new_cred = Credential(
                     user_id=user.id,  # Use the integer user ID from users table
                     credential_id=nanoid.generate(),  # Generate unique ID
                     name=credential_name,  # Use discovered/provided name
                     service=service,
-                    credentials=credentials,
+                    credentials=credentials_str,
                 )
                 session.add(new_cred)
 
