@@ -10,13 +10,13 @@
 Successfully migrated all 24 MCP tests from `tests/e2e/4_mcp` to `e2e/tests/4_mcp`. The migration included updating imports, fixing base classes, and ensuring proper formation paths. All tests execute correctly with the new structure.
 
 ### Overall Results
-- ✅ **Passed:** 16 tests (66.7%)
-- ❌ **Failed:** 8 tests (33.3%)
+- ✅ **Passed:** 17 tests (70.8%)
+- ❌ **Failed:** 7 tests (29.2%)
 - **Total:** 24 tests
 
 ## Test Results Detail
 
-### ✅ Passed Tests (16)
+### ✅ Passed Tests (17)
 
 | Test Name | Category | Description |
 |-----------|----------|-------------|
@@ -30,6 +30,7 @@ Successfully migrated all 24 MCP tests from `tests/e2e/4_mcp` to `e2e/tests/4_mc
 | test_4c3_list_linear_issues | Linear Integration | List Linear issues (fixed async) |
 | test_4d1_user_credential_exists | Credentials | User credential exists scenario |
 | test_4d2_user_credential_missing | Credentials | Handle missing credentials |
+| **test_4d3_clarification** | **Credentials** | **Credential clarification flow (fixed!)** |
 | test_4e1_verify_user_isolation | User Isolation | Cross-user credential protection (fixed async) |
 | test_4e2_multiple_users_permissions | User Isolation | Private content isolation (fixed async) |
 | test_mcp_env_auth_simple | Authentication | Simple MCP environment auth |
@@ -37,7 +38,7 @@ Successfully migrated all 24 MCP tests from `tests/e2e/4_mcp` to `e2e/tests/4_mc
 | test_mcp_env_auth_user | Authentication | User-based MCP auth |
 | test_mcp_env_auth | Authentication | Full MCP authentication |
 
-### ❌ Failed Tests (8)
+### ❌ Failed Tests (7)
 
 | Test Name | Error Type | Issue Description |
 |-----------|------------|-------------------|
@@ -45,7 +46,6 @@ Successfully migrated all 24 MCP tests from `tests/e2e/4_mcp` to `e2e/tests/4_mc
 | test_4d2_user_help_request | Logic Failure | System did not provide adequate help for obtaining token |
 | test_4d3_clarification_with_cache_switch | Clarification Flow | System did not ask for clarification with ambiguous request |
 | test_4d3_clarification_with_cache | Clarification Flow | System did not ask for clarification when expected |
-| test_4d3_clarification | Clarification Flow | Clarification flow not handled correctly |
 | test_4d3_explicit | Credential Selection | System did not use explicitly specified account |
 | test_4d3_multiple_credentials | Credential Selection | Name-based credential matching not working |
 | test_4d4_multiuser_isolation_simple | Database Error | PostgreSQL role "ran" does not exist |
@@ -54,19 +54,22 @@ Successfully migrated all 24 MCP tests from `tests/e2e/4_mcp` to `e2e/tests/4_mc
 
 ## Issue Categories
 
-### 1. Credential Clarification Flow Issues (5 tests)
+### 1. Credential Clarification Flow Issues (4 tests remaining)
 **Tests Affected:**
 - test_4d3_clarification_with_cache_switch
 - test_4d3_clarification_with_cache
-- test_4d3_clarification
 - test_4d3_explicit
 - test_4d3_multiple_credentials
 
-**Problem:** System is not asking for clarification when users make ambiguous requests or when multiple credentials are available. Instead, it's immediately requesting credential configuration.
+**Status:** ✅ **Core flow fixed!** Base clarification test (`test_4d3_clarification`) now passing.
 
-**Expected Behavior:** System should ask "Which GitHub account do you want to use?" when multiple credentials exist or when request is ambiguous.
+**Fixed Issues:**
+- Credential errors now properly bubble up from agent planning phases
+- JSON serialization/deserialization for credential storage
+- Proper type field routing for ambiguous credential handler
+- Original request retry after credential selection
 
-**Actual Behavior:** Returns message "Please configure your API credentials in the external credential manager."
+**Remaining Issues:** Cache persistence, explicit account selection, name-based matching
 
 ### 2. Database Issues (2 tests)
 **Tests Affected:**
@@ -136,6 +139,7 @@ e2e/tests/4_mcp/
 The migration is **100% successful** from a technical standpoint. All tests execute with proper imports and structure. The failures and timeouts are related to business logic, test expectations, and system performance rather than migration issues. The test suite is now properly organized and ready for ongoing development and debugging.
 
 ### Recent Fixes (Oct 2, 2025)
+
 **Fixed Async Response Handling (6 tests)**
 - Converted `handle_response()` from async to sync for MuxiResponse objects
 - Removed incorrect `async for` loops expecting streams
@@ -143,10 +147,26 @@ The migration is **100% successful** from a technical standpoint. All tests exec
 - Fixed assertion logic in repository isolation checks
 - **Result:** All 6 timeout tests now passing ✅
 
+**Fixed Credential Clarification Flow (1 test) - Oct 2, 2025**
+- **Re-raised credential errors** in agent planning execution and planning phase
+- **Fixed credential serialization** - JSON serialize/deserialize for database storage
+- **Added proper type routing** - Set `type: "ambiguous_credential"` in clarification state
+- **Fixed original request retry** - Read `original_request` field after credential selection
+- **Disabled workflow decomposition** in test formation for direct MCP tool calls
+- **Result:** `test_4d3_clarification` now passing ✅
+
+**Code Changes:**
+1. `src/muxi/formation/agents/agent.py` - Re-raise credential errors (2 locations)
+2. `src/muxi/formation/credentials/resolver.py` - JSON serialize credentials
+3. `src/muxi/formation/overlord/clarification.py` - Set type field in state
+4. `src/muxi/formation/overlord/overlord.py` - Read original_request field
+5. `e2e/tests/4_mcp/formations/formation-mcp/formation.yaml` - Disable auto_decomposition
+
 ### Next Steps
-1. Fix credential clarification logic in 5 tests  
+1. ~~Fix credential clarification logic in 5 tests~~ ✅ 1 done, 4 remaining
 2. Resolve database configuration in 2 tests
 3. Improve help/guidance system in 1 test
+4. Fix remaining credential tests (cache, explicit selection, name matching)
 
 **Migration Status: ✅ COMPLETE**  
-**Test Suite Status: 🔄 NEEDS FIXES (16/24 passing - 66.7%)**
+**Test Suite Status: 🔄 IMPROVING (17/24 passing - 70.8%)**
