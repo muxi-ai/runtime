@@ -39,17 +39,16 @@ def test_file_system_coordination():
                 await overlord.ensure_started()
 
                 print("\n1. Testing System → File coordination...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     f"Check the current system memory usage and create a file in {test_dir} "
                     f"called 'system_stats.txt' with the information",
                     user_id="user1",
                     use_async=False,
+                    stream=False,
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 # Verify both MCPs were used
@@ -73,17 +72,16 @@ def test_file_system_coordination():
                 print("✓ System → File coordination successful")
 
                 print("\n2. Testing comprehensive system report...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     f"Create a comprehensive system report in {test_dir}/full_report.txt "
                     f"including CPU usage, memory stats, disk space, and system uptime",
                     user_id="user1",
                     use_async=False,
+                    stream=False,
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 # Verify comprehensive report creation
@@ -105,16 +103,15 @@ def test_file_system_coordination():
                 print("✓ Comprehensive system report created successfully")
 
                 print("\n3. Testing JSON format system data export...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     f"Get current CPU and memory usage and save it as JSON in {test_dir}/stats.json",
                     user_id="user1",
                     use_async=False,
+                    stream=False,
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 # Verify JSON file creation
@@ -138,17 +135,16 @@ def test_file_system_coordination():
                     print("✓ System data exported (non-JSON format)")
 
                 print("\n4. Testing batch system monitoring...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     f"Monitor system resources 3 times with 1 second intervals and "
                     f"save each reading to separate files in {test_dir}/monitoring/",
                     user_id="user1",
                     use_async=False,
+                    stream=False,
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 # Should create monitoring directory with files

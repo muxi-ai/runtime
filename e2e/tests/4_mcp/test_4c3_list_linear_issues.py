@@ -34,10 +34,10 @@ def test_list_linear_issues():
                     "Show me the recent Linear issues", user_id="user1", use_async=False
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 response_lower = response.lower()
@@ -59,16 +59,19 @@ def test_list_linear_issues():
                 print("✓ Recent issues query successful")
 
                 print("\n2. Testing filtered issue search...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Show me all open Linear issues with high priority",
                     user_id="user1",
                     use_async=False,
+
+                    stream=False,
+
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 response_lower = response.lower()
@@ -86,10 +89,10 @@ def test_list_linear_issues():
                     "Get details of my most recent Linear issue", user_id="user1", use_async=False
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 # Should provide issue details or indicate none
@@ -97,16 +100,19 @@ def test_list_linear_issues():
                 print("✓ Issue details retrieval handled")
 
                 print("\n4. Testing issue statistics...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "How many Linear issues are currently in progress?",
                     user_id="user1",
                     use_async=False,
+
+                    stream=False,
+
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 response_lower = response.lower()
@@ -121,16 +127,19 @@ def test_list_linear_issues():
                 print("✓ Issue statistics query successful")
 
                 print("\n5. Testing team issues overview...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Give me an overview of all team issues in Linear",
                     user_id="user1",
                     use_async=False,
+
+                    stream=False,
+
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 # Should provide team overview

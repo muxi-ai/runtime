@@ -30,16 +30,19 @@ def test_update_linear_issue():
                 await overlord.ensure_started()
 
                 print("\n1. Creating an issue to update...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Create a Linear issue titled 'Test Update Workflow' to test status updates",
                     user_id="user1",
                     use_async=False,
+
+                    stream=False,
+
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Create Response: {response}")
 
                 response_lower = response.lower()
@@ -54,16 +57,19 @@ def test_update_linear_issue():
                         return True
 
                 print("\n2. Testing issue status update...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Update the Linear issue we just created to mark it as in progress",
                     user_id="user1",
                     use_async=False,
+
+                    stream=False,
+
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Update Response: {response}")
 
                 # Verify update
@@ -82,10 +88,10 @@ def test_update_linear_issue():
                     "Mark the Linear issue as completed/done", user_id="user1", use_async=False
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Complete Response: {response}")
 
                 response_lower = response.lower()
@@ -101,16 +107,19 @@ def test_update_linear_issue():
                 print("✓ Issue marked as completed")
 
                 print("\n4. Testing issue assignment...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Create a new Linear issue and assign it to the team",
                     user_id="user1",
                     use_async=False,
+
+                    stream=False,
+
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Assignment Response: {response}")
 
                 response_lower = response.lower()
@@ -122,16 +131,19 @@ def test_update_linear_issue():
                 print("✓ Issue assignment handled")
 
                 print("\n5. Testing bulk update scenario...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Update all my recent Linear issues to add a 'reviewed' label",
                     user_id="user1",
                     use_async=False,
+
+                    stream=False,
+
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Bulk Update Response: {response}")
 
                 # Should acknowledge bulk update request

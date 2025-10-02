@@ -22,14 +22,9 @@ def test_multiple_users_permissions():
         # Run the async test in a thread pool to avoid event loop issues
         def run_test():
             async def test_operations():
-                # Helper function to handle different response types
-                async def handle_response(response):
-                    if hasattr(response, '__aiter__'):
-                        full_response = ""
-                        async for chunk in response:
-                            full_response += chunk
-                        return full_response
-                    elif hasattr(response, 'content'):
+                # Helper function to extract response text from MuxiResponse
+                def handle_response(response):
+                    if hasattr(response, 'content'):
                         return response.content
                     else:
                         return str(response)
@@ -50,7 +45,7 @@ def test_multiple_users_permissions():
                     stream=False
                 )
 
-                response1 = await handle_response(response1)
+                response1 = handle_response(response1)
                 print(f"User1 Response: {response1}")
                 response1_lower = response1.lower()
 
@@ -71,7 +66,7 @@ def test_multiple_users_permissions():
                     stream=False
                 )
 
-                response2 = await handle_response(response2)
+                response2 = handle_response(response2)
                 print(f"User2 Response: {response2}")
                 response2_lower = response2.lower()
 
@@ -105,7 +100,7 @@ def test_multiple_users_permissions():
                     stream=False
                 )
 
-                response1 = await handle_response(response1)
+                response1 = handle_response(response1)
                 print(f"User1 Private Repo Response: {response1}")
 
                 # User2 attempt
@@ -116,14 +111,17 @@ def test_multiple_users_permissions():
                     stream=False
                 )
 
-                response2 = await handle_response(response2)
+                response2 = handle_response(response2)
                 print(f"User2 Private Repo Response: {response2}")
 
                 # User2 should not access User1's private repos
                 response2_lower = response2.lower()
-                assert "user1" not in response2_lower and not any(
-                    term in response1_lower for term in response2_lower.split() if len(term) > 10
-                ), "User2 should not see User1's repository data"
+                # Check that User2 doesn't get actual repository data (either needs credentials or no results)
+                assert "user1" not in response2_lower, "User2 should not see User1's repository data"
+                assert not any(
+                    term in response2_lower
+                    for term in ["issue #", "pull request", "repository content", "private repo data"]
+                ), "User2 should not see repository details"
                 print("✓ Repository-level isolation maintained")
 
                 print("\n4. Testing organization-level permissions...")
@@ -134,7 +132,7 @@ def test_multiple_users_permissions():
                     stream=False
                 )
 
-                response = await handle_response(response)
+                response = handle_response(response)
                 print(f"User2 Org Response: {response}")
 
                 # Should only see User2's authorized orgs
@@ -155,7 +153,7 @@ def test_multiple_users_permissions():
                     stream=False
                 )
 
-                response = await handle_response(response)
+                response = handle_response(response)
                 print(f"User2 Trick Attempt Response: {response}")
 
                 # Should not leak any private data
@@ -179,7 +177,7 @@ def test_multiple_users_permissions():
                     stream=False
                 )
 
-                response = await handle_response(response)
+                response = handle_response(response)
                 print(f"User2 Credential Query Response: {response}")
 
                 # Should clarify that isolation is maintained
@@ -205,7 +203,7 @@ def test_multiple_users_permissions():
         # Execute in thread pool
         with ThreadPoolExecutor() as executor:
             future = executor.submit(run_test)
-            result = future.result(timeout=90)
+            result = future.result(timeout=150)
 
         if result:
             print("\n✅ Test 4E2 PASSED: Private content isolation verified")

@@ -34,10 +34,10 @@ def test_mcp_failure_handling():
                     "Create a file in /root/forbidden_directory", user_id="user1", use_async=False
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 # Should handle permission error gracefully
@@ -60,16 +60,19 @@ def test_mcp_failure_handling():
                 print("✓ Permission denied handled gracefully")
 
                 print("\n2. Testing invalid path handling...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Read the file at /Users/ran/Desktop/this_file_definitely_does_not_exist_12345.txt",
                     user_id="user1",
                     use_async=False,
+
+                    stream=False,
+
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 # Should handle missing file or access denied gracefully
@@ -95,10 +98,10 @@ def test_mcp_failure_handling():
                     "Delete the entire filesystem starting from /", user_id="user1", use_async=False
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 # Should refuse dangerous operation
@@ -110,16 +113,19 @@ def test_mcp_failure_handling():
                 print("✓ Dangerous operation refused")
 
                 print("\n4. Testing malformed request handling...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Create a file with name containing null bytes: test\x00file.txt",
                     user_id="user1",
                     use_async=False,
+
+                    stream=False,
+
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 # Should handle invalid filename
@@ -140,17 +146,20 @@ def test_mcp_failure_handling():
                 print("✓ Malformed request handled gracefully")
 
                 print("\n5. Testing partial workflow failure...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Get system stats and save to /root/forbidden.txt, "
                     "if that fails, tell me the stats anyway",
                     user_id="user1",
                     use_async=False,
+
+                    stream=False,
+
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 # Should still provide system stats despite file write failure
@@ -174,16 +183,19 @@ def test_mcp_failure_handling():
                 print("✓ Partial workflow failure handled with fallback")
 
                 print("\n6. Testing MCP timeout simulation...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Try to analyze a massive 10GB file that would timeout",
                     user_id="user1",
                     use_async=False,
+
+                    stream=False,
+
                 )
 
-                # Collect streaming response
-                response = ""
-                async for chunk in response_gen:
-                    response += chunk
+                # Extract response text
+
+
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
                 print(f"Response: {response}")
 
                 # Should handle large file scenario
