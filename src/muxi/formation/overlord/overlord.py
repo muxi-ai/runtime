@@ -6295,6 +6295,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             ),
         )
 
+        # Initialize analysis variable (used later for scheduler routing)
+        analysis = None
+
         # Check for workflow analysis and decomposition (complexity-based routing)
         if agent_name is None and self.auto_decomposition:
             # Analyze request complexity
