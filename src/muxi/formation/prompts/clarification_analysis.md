@@ -61,8 +61,16 @@ MULTIPLE CREDENTIAL SCENARIOS:
   * If ONLY ONE credential exists for that service → it's CLEAR, set needs_clarification=false
   * If MULTIPLE credentials exist for that service → it's AMBIGUOUS, set needs_clarification=true
   * When ambiguous: Set mcp_service to the service name, question: "Which account would you like to use?"
-- If request explicitly names an account (e.g., "my lily account", "use ranaroussi"), it's CLEAR:
+- **IMPORTANT**: If request explicitly names an account that matches an available credential, it's CLEAR:
   * Set needs_clarification=false regardless of how many credentials exist
+  * Examples of explicit account naming:
+    - "my lily account" → matches "lily automaze" credential
+    - "use ranaroussi" → matches "ranaroussi" credential
+    - "in the ranaroussi account" → matches "ranaroussi" credential
+    - "lily's repositories" → matches "lily automaze" credential
+    - "ranaroussi account" → matches "ranaroussi" credential
+  * Match account names case-insensitively and allow partial matches
+  * If you find ANY part of an available account name in the request, treat it as explicit naming
 - If user asks for help obtaining credentials:
   * IMPORTANT: Detect help requests like "I don't know how", "how do I get", "help me", "can you help", "what is", "where do I"
   * Look at conversation context - if system just asked for credentials and user seems confused, treat as help request
