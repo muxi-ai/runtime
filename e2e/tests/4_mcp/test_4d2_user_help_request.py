@@ -27,13 +27,15 @@ async def run_async_test():
     print("="*80 + "\n")
 
     try:
-        # Use the test formation
+        # Use the dynamic formation for inline credential collection
         formation_path = Path(str(Path(__file__).parent / "formations" / "formation-mcp"))
+        formation_config = formation_path / "formation-dynamic.yaml"
 
         # Load formation
-        print("Loading formation...")
+        print(f"Loading formation from {formation_config}...")
+        print("Using DYNAMIC mode for inline credential collection")
         formation = Formation()
-        await formation.load(str(formation_path))
+        await formation.load(str(formation_config))
 
         # Start overlord first (this initializes all services)
         print("Starting overlord...")

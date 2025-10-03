@@ -15,3 +15,4 @@ retry_attempts: 3                  # Number of retry attempts (overrides default
 auth:
   type: "bearer"
   token: "${{ user.credentials.github }}"
+  accept_inline: true  # Allow inline credential collection in dynamic mode
