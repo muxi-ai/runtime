@@ -5569,16 +5569,29 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                     if matching_server not in mcp_service.user_credentials:
                                         mcp_service.user_credentials[matching_server] = {}
 
-                                    # Store the resolved credential in the expected format
+                                    # Get the original auth config from the MCP server to preserve auth type
+                                    original_auth_config = None
+                                    if hasattr(mcp_service, 'servers') and matching_server in mcp_service.servers:
+                                        server_config = mcp_service.servers[matching_server]
+                                        original_auth_config = server_config.get('auth', {})
+
                                     # Handle both "credential_data" and "credentials" keys
                                     credential_data = selected_credential.get(
                                         "credential_data"
                                     ) or selected_credential.get("credentials")
 
-                                    mcp_service.user_credentials[matching_server][user_id] = {
-                                        "type": "bearer",
-                                        "token": credential_data,
-                                    }
+                                    # Use MCP service's method to properly format the auth based on server's auth type
+                                    if original_auth_config:
+                                        resolved_auth = mcp_service._replace_credential_in_auth(
+                                            original_auth_config, credential_data
+                                        )
+                                        mcp_service.user_credentials[matching_server][user_id] = resolved_auth
+                                    else:
+                                        # Fallback: assume bearer token if we can't get the original config
+                                        mcp_service.user_credentials[matching_server][user_id] = {
+                                            "type": "bearer",
+                                            "token": credential_data,
+                                        }
 
                             # Get the original message and clean up
                             # Try both "original_message" and "original_request" for compatibility
