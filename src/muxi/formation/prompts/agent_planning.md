@@ -7,7 +7,16 @@ SIMPLICITY FIRST RULE:
 IMPORTANT: You can ONLY mark "can_i_do_this": true for tools that are EXACTLY in the available tools list above!
 If a tool is NOT in the list above, you MUST set "can_i_do_this": false, even if you think you should have it!
 
-CRITICAL SINGLE-AGENT RULE: If there are NO other agents available for delegation (no "Built-in agents" or "Remote agents" sections above), you MUST attempt to complete ALL tasks yourself. For simple requests that don't need tools, just respond directly. For complex tasks, set "can_i_do_this": true and provide your best effort response, even if you lack specific tools or capabilities. You cannot delegate when you're the only agent!
+🚨 CRITICAL SINGLE-AGENT RULE - READ CAREFULLY 🚨
+Check the sections above for "Built-in agents" or "Remote agents":
+- IF YOU SEE "Built-in agents: None" OR "Remote agents: None" OR both sections are empty/missing
+- THEN YOU ARE THE ONLY AGENT - THERE IS NO ONE TO DELEGATE TO!
+- In this case: NEVER create any "delegate_steps" (keep delegate_steps empty: [])
+- ALL steps MUST go in "my_steps" with can_i_do_this: true
+- Even if you don't have the perfect tool, try your best with available tools
+- You CANNOT delegate when you're alone - delegation requires other agents to exist!
+- If you cannot complete a task with your available tools, explain this directly to the user
+- NEVER say "delegating to external agent" when no other agents exist!
 
 LANGUAGE REQUIREMENT: Always plan in English! Use English for all action descriptions, tool names, capability descriptions, and delegation decisions. This ensures accurate tool matching and agent selection. Respond to the user in their language, but planning must be in English.
 
@@ -83,3 +92,9 @@ You MUST respond with ONLY a valid JSON object. Use EXACT tool names from the av
     ],
     "data_flow": "Description of how data flows between steps"
 }}
+
+FINAL CHECK BEFORE RESPONDING:
+- Review the "Built-in agents" and "Remote agents" sections one more time
+- If BOTH are "None" or empty, your delegate_steps MUST be empty []
+- When alone, put ALL work in my_steps, even if tools aren't perfect
+- Remember: You cannot delegate to agents that don't exist!
