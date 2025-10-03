@@ -69,17 +69,15 @@ class UnifiedClarificationSystem:
         # Get LLM reference - use extraction_model which has proper fallback to text model
         self.llm = overlord.extraction_model
 
-    async def handle_credential_error(
-        self, error, request_id: str
-    ) -> ClarificationResult:
+    async def handle_credential_error(self, error, request_id: str) -> ClarificationResult:
         """
         Handle AmbiguousCredentialError from MCP service.
         Creates credential selection clarification and stores state.
-        
+
         Args:
             error: AmbiguousCredentialError with service, user_id, available_credentials
             request_id: Request ID for tracking
-            
+
         Returns:
             ClarificationResult with action="clarify" and credential selection question
         """
@@ -91,24 +89,28 @@ class UnifiedClarificationSystem:
                     available_accounts.append(cred.get("name", ""))
                 elif isinstance(cred, str):
                     available_accounts.append(cred)
-        
+
         # Format service name nicely
         service_display = error.service.capitalize()
         if error.service == "github":
             service_display = "GitHub"
-        
+
         # Reorder accounts according to ordered_credentials if provided
         # ordered_credentials contains 1-based indices indicating preferred order
         # Example: [2, 1] means show credential #2 first, then credential #1
         display_accounts = available_accounts.copy()
-        if hasattr(error, 'ordered_credentials') and error.ordered_credentials:
+        if hasattr(error, "ordered_credentials") and error.ordered_credentials:
             try:
                 # Reorder using the indices (convert from 1-based to 0-based)
-                display_accounts = [available_accounts[idx - 1] for idx in error.ordered_credentials if 0 < idx <= len(available_accounts)]
+                display_accounts = [
+                    available_accounts[idx - 1]
+                    for idx in error.ordered_credentials
+                    if 0 < idx <= len(available_accounts)
+                ]
             except (IndexError, TypeError):
                 # If reordering fails, use original order
                 pass
-        
+
         # Build the clarification question
         options_text = "\n".join([f"{i+1}. {name}" for i, name in enumerate(display_accounts)])
         question = (
@@ -116,7 +118,7 @@ class UnifiedClarificationSystem:
             f"Which account would you like to use?\n\n"
             f"Available accounts:\n{options_text}"
         )
-        
+
         # Store state for credential mode
         state = {
             "request_id": request_id,
@@ -133,14 +135,10 @@ class UnifiedClarificationSystem:
             "max_depth": 1,  # Only one round for credential selection
             "started_at": time.time(),
         }
-        
+
         await self._store_state(request_id, state)
-        
-        return ClarificationResult(
-            action="clarify",
-            question=question,
-            mode="credential"
-        )
+
+        return ClarificationResult(action="clarify", question=question, mode="credential")
 
     async def handle_mcp_credential_request(
         self, service_id: str, user_id: str, request_id: str
@@ -148,12 +146,12 @@ class UnifiedClarificationSystem:
         """
         Handle MissingCredentialError from MCP service.
         Creates redirect or dynamic credential request based on formation config.
-        
+
         Args:
             service_id: Service that needs credentials (e.g., "github")
             user_id: User ID requesting access
             request_id: Request ID for tracking
-            
+
         Returns:
             ClarificationResult with redirect message or dynamic credential prompt
         """
@@ -161,18 +159,14 @@ class UnifiedClarificationSystem:
         service_display = service_id.capitalize()
         if service_id == "github":
             service_display = "GitHub"
-        
+
         # Return redirect message (mode="redirect" signals to overlord)
         redirect_message = (
             f"For security, {service_display} credentials must be configured outside of this chat interface.\n"
             f"Please use your organization's credential management system to set up authentication."
         )
-        
-        return ClarificationResult(
-            action="message",
-            question=redirect_message,
-            mode="redirect"
-        )
+
+        return ClarificationResult(action="message", question=redirect_message, mode="redirect")
 
     async def needs_clarification(
         self, message: str, request_id: str, session_id: str = None, context: Optional[Dict] = None
@@ -231,16 +225,16 @@ class UnifiedClarificationSystem:
             selected_account = await self._parse_credential_selection(
                 response, state["available_accounts"]
             )
-            
+
             if selected_account:
                 # Store the selected account in state
                 state["selected_account"] = selected_account
                 await self._store_state(request_id, state)
-                
+
                 # Build enhanced request and cleanup
                 enhanced = self._build_enhanced_request(state)
                 await self._cleanup_state(request_id)
-                
+
                 return ClarificationResult(
                     action="execute",
                     request=enhanced,
@@ -248,15 +242,15 @@ class UnifiedClarificationSystem:
                         "mcp_service": state.get("mcp_service"),
                         "selected_account": selected_account,
                         "user_id": state.get("user_id"),
-                        "original_request": state.get("original_request")
-                    }
+                        "original_request": state.get("original_request"),
+                    },
                 )
             else:
                 # Selection parsing failed - ask again
                 return ClarificationResult(
                     action="clarify",
                     question="I couldn't understand your selection. Please specify the account by name or number.",
-                    mode="credential"
+                    mode="credential",
                 )
 
         # Update state for non-credential clarifications
@@ -435,19 +429,19 @@ class UnifiedClarificationSystem:
         # Get formation capabilities (pre-computed during overlord initialization)
         capabilities = getattr(self.overlord, "capabilities", [])
         mcp_servers = getattr(self.overlord, "mcp_servers", [])
-        
+
         # Build detailed MCP services description from formation config
         mcp_services_detail = []
         if hasattr(self.overlord, "formation_config") and self.overlord.formation_config:
             mcp_config = self.overlord.formation_config.get("mcp", {})
             servers_config = mcp_config.get("servers", [])
-            
+
             for server in servers_config:
                 # Get id and description from the YAML configuration
                 server_id = server.get("id", "unknown")
                 description = server.get("description", server_id)
                 mcp_services_detail.append(f"- {server_id}: {description}")
-        
+
         # Fallback if no config available
         if not mcp_services_detail and mcp_servers:
             mcp_services_detail = [f"- {s}" for s in mcp_servers]
@@ -487,13 +481,11 @@ class UnifiedClarificationSystem:
         # This allows the LLM to know when multiple credentials exist
         user_id = context.get("user_id", "0") if context else "0"
         credential_info = []
-        
+
         if hasattr(self.overlord, "credential_resolver") and mcp_servers:
             for service in mcp_servers:
                 try:
-                    credentials = await self.overlord.credential_resolver.resolve(
-                        user_id, service
-                    )
+                    credentials = await self.overlord.credential_resolver.resolve(user_id, service)
                     if credentials:
                         # Handle both single credential (dict) and multiple credentials (list)
                         if isinstance(credentials, list):
@@ -506,16 +498,21 @@ class UnifiedClarificationSystem:
                             )
                         elif isinstance(credentials, dict) and credentials.get("name"):
                             # Single named credential
-                            credential_info.append(f"{service}: 1 account - {credentials.get('name')}")
-                except Exception as e:
+                            credential_info.append(
+                                f"{service}: 1 account - {credentials.get('name')}"
+                            )
+                except Exception:
                     # Silently continue if credential check fails
                     pass
-        
-        available_credentials = "\n".join(credential_info) if credential_info else "No credentials configured"
+
+        available_credentials = (
+            "\n".join(credential_info) if credential_info else "No credentials configured"
+        )
 
         from ..prompts.loader import PromptLoader
+
         prompt = PromptLoader.get(
-            'clarification_analysis.md',
+            "clarification_analysis.md",
             conversation=conversation,
             context=json.dumps(context) if context else "{}",
             capabilities=", ".join(capabilities) if capabilities else "Conversation",
@@ -523,7 +520,9 @@ class UnifiedClarificationSystem:
             available_credentials=available_credentials,
             response_style=response_style,
             cred_mode=cred_mode,
-            redirect_message=redirect_message if cred_mode == "redirect" else "Please provide your credential"
+            redirect_message=(
+                redirect_message if cred_mode == "redirect" else "Please provide your credential"
+            ),
         )
         if not self.llm:
             # Fallback when no LLM available
@@ -596,7 +595,7 @@ class UnifiedClarificationSystem:
                     result["available_accounts"] = available_accounts
 
             return result
-        except Exception as e:
+        except Exception:
             # Fallback if JSON parsing fails
             return {
                 "needs_clarification": False,
@@ -616,12 +615,13 @@ class UnifiedClarificationSystem:
             return {"needs_more": False, "question": None}
 
         from ..prompts.loader import PromptLoader
+
         prompt = PromptLoader.get(
-            'clarification_need_more.md',
-            original_request=state['original_request'],
-            collected_info=state['collected_info'],
-            mode=state['mode'],
-            style=self.style
+            "clarification_need_more.md",
+            original_request=state["original_request"],
+            collected_info=state["collected_info"],
+            mode=state["mode"],
+            style=self.style,
         )
 
         messages = [{"role": "user", "content": prompt}]
@@ -646,11 +646,12 @@ class UnifiedClarificationSystem:
         last_question = state.get("last_question", "a clarification question")
 
         from ..prompts.loader import PromptLoader
+
         prompt = PromptLoader.get(
-            'clarification_context_switch.md',
-            original_request=state['original_request'],
+            "clarification_context_switch.md",
+            original_request=state["original_request"],
             last_question=last_question,
-            response=response
+            response=response,
         )
 
         messages = [{"role": "user", "content": prompt}]
@@ -687,21 +688,21 @@ class UnifiedClarificationSystem:
         """
         Parse user's credential selection from response.
         Handles both numeric selection (1, 2) and name-based selection (lily, ranaroussi).
-        
+
         Args:
             response: User's response to credential question
             available_accounts: List of available account names
-            
+
         Returns:
             Selected account name or None if parsing failed
         """
         import re
-        
+
         # Clean the response
         response_clean = response.strip()
-        
+
         # Try numeric selection first (1, 2, etc.)
-        numbers = re.findall(r'\b(\d+)\b', response_clean)
+        numbers = re.findall(r"\b(\d+)\b", response_clean)
         if numbers:
             try:
                 choice_index = int(numbers[0]) - 1  # Convert to 0-based index
@@ -709,7 +710,7 @@ class UnifiedClarificationSystem:
                     return available_accounts[choice_index]
             except (ValueError, IndexError):
                 pass
-        
+
         # Try name-based selection (fuzzy match)
         response_lower = response_clean.lower()
         for account in available_accounts:
@@ -717,7 +718,7 @@ class UnifiedClarificationSystem:
             # Check if account name is in response or vice versa
             if account_lower in response_lower or response_lower in account_lower:
                 return account
-        
+
         # No match found
         return None
 

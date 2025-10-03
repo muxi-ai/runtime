@@ -9,7 +9,6 @@ from typing import Optional, Dict, Any, List
 from sqlalchemy import Column, Integer, String, DateTime, select, Text
 import nanoid
 
-from ...datatypes.json_type import JSONType
 from ...datatypes.exceptions import FormationError
 from ...utils.datetime_utils import utc_now_naive
 from ...services import observability
@@ -104,7 +103,7 @@ class CredentialResolver:
 
             if credentials:
                 import json
-                
+
                 if len(credentials) == 1:
                     # Single credential - return it directly
                     # Deserialize JSON string to dict
@@ -114,7 +113,7 @@ class CredentialResolver:
                             credential_data = json.loads(credential_data)
                         except (json.JSONDecodeError, TypeError):
                             pass  # Keep as string if not valid JSON
-                    
+
                     user_cache = self._cache.setdefault(user_id, {})
                     user_cache[service] = credential_data
                     return credential_data
@@ -186,7 +185,7 @@ class CredentialResolver:
                 # Serialize credentials to JSON string if it's a dict
                 import json
                 credentials_str = json.dumps(credentials) if isinstance(credentials, dict) else credentials
-                
+
                 new_cred = Credential(
                     user_id=user.id,  # Use the integer user ID from users table
                     credential_id=nanoid.generate(),  # Generate unique ID

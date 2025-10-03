@@ -48,7 +48,7 @@ import time
 from typing import Any, Dict, List, Optional, Union
 
 from ..artifacts.extractor import extract_artifacts_from_tool_results
-from ..credentials import MissingCredentialError, AmbiguousCredentialError
+from ..credentials import MissingCredentialError
 from ...utils.id_generator import generate_nanoid
 from ...datatypes.response import MuxiResponse
 from ...datatypes.intent import IntentType, IntentDetectionContext
@@ -1246,11 +1246,15 @@ class Agent:
                             # Re-raise credential errors to trigger clarification flow
                             from ..credentials import AmbiguousCredentialError, MissingCredentialError
                             from ...services.mcp.service import CredentialSelectionNeededError
-                            
-                            if isinstance(e, (AmbiguousCredentialError, MissingCredentialError, CredentialSelectionNeededError)):
+
+                            if isinstance(e, (
+                                AmbiguousCredentialError,
+                                MissingCredentialError,
+                                CredentialSelectionNeededError,
+                            )):
                                 # These need to bubble up to overlord for clarification
                                 raise
-                            
+
                             # Store error result for placeholder replacement
                             placeholder = step.get(
                                 "output_placeholder", f"{{{tool_name.upper()}_OUTPUT}}"
@@ -1490,11 +1494,11 @@ class Agent:
                 # Re-raise credential errors to trigger clarification flow
                 from ..credentials import AmbiguousCredentialError, MissingCredentialError
                 from ...services.mcp.service import CredentialSelectionNeededError
-                
+
                 if isinstance(e, (AmbiguousCredentialError, MissingCredentialError, CredentialSelectionNeededError)):
                     # These need to bubble up to overlord for clarification
                     raise
-                
+
                 # If planning fails, continue with normal flow
                 observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,

@@ -1794,8 +1794,9 @@ class Overlord:
             else:
                 # Load from PromptLoader
                 from ..prompts.loader import PromptLoader
+
                 try:
-                    self._default_persona = PromptLoader.get('system_persona.md').strip()
+                    self._default_persona = PromptLoader.get("system_persona.md").strip()
                 except KeyError:
                     # Fallback if file doesn't exist
                     fallback = "You are a friendly and helpful assistant."
@@ -1846,10 +1847,8 @@ class Overlord:
             try:
                 # Quick LLM check with formation's text model
                 from ..prompts.loader import PromptLoader
-                prompt = PromptLoader.get(
-                    'overlord_actionability_check.md',
-                    message=message
-                )
+
+                prompt = PromptLoader.get("overlord_actionability_check.md", message=message)
 
                 # Use formation's text model for this quick check
                 text_model_config = self._capability_models.get("text")
@@ -1955,10 +1954,8 @@ Response:""".format(
         if self._capability_models.get("text"):
             try:
                 from ..prompts.loader import PromptLoader
-                prompt = PromptLoader.get(
-                    'overlord_simple_question.md',
-                    message=message_lower
-                )
+
+                prompt = PromptLoader.get("overlord_simple_question.md", message=message_lower)
 
                 # Use cached model if available
                 text_model_config = self._capability_models.get("text")
@@ -1996,6 +1993,7 @@ Response:""".format(
         """
         try:
             import traceback
+
             return traceback.format_exc()
         except Exception:
             return ""
@@ -2036,10 +2034,11 @@ Response:""".format(
             if raw_response is None:
                 # NON-ACTIONABLE PATH: Direct conversational response
                 from ..prompts.loader import PromptLoader
+
                 prompt = PromptLoader.get(
-                    'overlord_greeting_response.md',
+                    "overlord_greeting_response.md",
                     default_persona=self._default_persona,
-                    user_message=user_message
+                    user_message=user_message,
                 )
                 messages = [{"role": "user", "content": prompt}]
                 # Force non-streaming for persona application
@@ -2056,7 +2055,7 @@ Response:""".format(
 
                 # Add format-specific instructions based on response_format setting
                 format_instruction = ""
-                if hasattr(self, 'response_format'):
+                if hasattr(self, "response_format"):
                     if self.response_format == "markdown":
                         format_instruction = (
                             "\n\nFormat your response using proper markdown with headers (# ## ###), "
@@ -2093,7 +2092,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 elif isinstance(response, str):
                     return clean_response_text(response)
                 else:
-                    return clean_response_text(str(response)) if response else clean_response_text(raw_response)
+                    return (
+                        clean_response_text(str(response))
+                        if response
+                        else clean_response_text(raw_response)
+                    )
 
         except Exception as e:
             # Log error and return appropriate fallback
@@ -2102,7 +2105,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             _ = msg
             if raw_response is None:
                 return clean_response_text("I understand. How can I help you?")
-            return clean_response_text(raw_response) if raw_response else "I understand. How can I help you?"
+            return (
+                clean_response_text(raw_response)
+                if raw_response
+                else "I understand. How can I help you?"
+            )
 
     async def _initialize_buffer_memory(self, buffer_config: Dict[str, Any]) -> None:
         """Initialize buffer memory from configuration."""
@@ -2509,9 +2516,13 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     "component": "extraction_model_init",
                     "error": str(e),
                     "error_type": type(e).__name__,
-                    "model_string": str(self.extraction_model) if isinstance(self.extraction_model, str) else None,
+                    "model_string": (
+                        str(self.extraction_model)
+                        if isinstance(self.extraction_model, str)
+                        else None
+                    ),
                 },
-                description=f"Failed to initialize extraction model, will try fallback: {str(e)}"
+                description=f"Failed to initialize extraction model, will try fallback: {str(e)}",
             )
 
             # Try to use the first available text model as fallback
@@ -2528,7 +2539,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             event_type=observability.SystemEvents.SERVER_STARTED,
                             level=observability.EventLevel.INFO,
                             data={"fallback_model": text_model},
-                            description="Successfully initialized extraction model with fallback"
+                            description="Successfully initialized extraction model with fallback",
                         )
                     elif hasattr(text_model, "generate_text"):
                         # It's already an LLM object
@@ -2541,11 +2552,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 observability.observe(
                     event_type=observability.SystemEvents.EXTENSION_FAILED,
                     level=observability.EventLevel.ERROR,
-                    data={
-                        "error": str(fallback_error),
-                        "action": "disabling_auto_extraction"
-                    },
-                    description="Could not initialize any extraction model, disabling auto-extraction"
+                    data={"error": str(fallback_error), "action": "disabling_auto_extraction"},
+                    description="Could not initialize any extraction model, disabling auto-extraction",
                 )
                 self.auto_extract_user_info = False
                 if hasattr(self, "extractor") and self.extractor:
@@ -3521,7 +3529,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             level=observability.EventLevel.INFO,
             data={
                 "operation": "overlord_calling_coordinator",
-                "has_coordinator": hasattr(self, "extraction_coordinator") and bool(self.extraction_coordinator),
+                "has_coordinator": hasattr(self, "extraction_coordinator")
+                and bool(self.extraction_coordinator),
                 "user_id": str(user_id),
             },
             description="Overlord about to call extraction coordinator",
@@ -4801,9 +4810,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             raise ValueError("files parameter is required for avchat()")
 
         # Detect media types
-        media_types = [f.get('content_type', '') for f in files]
-        has_audio = any(ct.startswith('audio/') for ct in media_types)
-        has_video = any(ct.startswith('video/') for ct in media_types)
+        media_types = [f.get("content_type", "") for f in files]
+        has_audio = any(ct.startswith("audio/") for ct in media_types)
+        has_video = any(ct.startswith("video/") for ct in media_types)
 
         # Generate or use custom prompt
         if prompt_template:
@@ -4939,8 +4948,13 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
             # Process using existing sync infrastructure
             result = await self._process_sync_chat(
-                message, agent_name, user_id, session_id=session_id, request_id=request_id,
-                use_async=True, webhook_url=webhook_url
+                message,
+                agent_name,
+                user_id,
+                session_id=session_id,
+                request_id=request_id,
+                use_async=True,
+                webhook_url=webhook_url,
             )
             processing_time = time.time() - start_time
 
@@ -5014,13 +5028,15 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # Send webhook notification if URL is configured
             # Check if this is a scheduled job completion (wrap in try-except to prevent errors)
             try:
-                if hasattr(self, '_scheduler') and self._scheduler and session_id and session_id.startswith("job_"):
+                if (
+                    hasattr(self, "_scheduler")
+                    and self._scheduler
+                    and session_id
+                    and session_id.startswith("job_")
+                ):
                     # This is a scheduled job - handle completion through scheduler
                     handled = await self._scheduler.complete_job_from_webhook(
-                        session_id,
-                        success=True,
-                        result=result_content,
-                        error=None
+                        session_id, success=True, result=result_content, error=None
                     )
                     if handled:
                         return  # Don't send normal webhook for scheduled jobs
@@ -5108,14 +5124,18 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
             # Check if this is a scheduled job failure (wrap in try-except to prevent secondary errors)
             try:
-                if hasattr(self, '_scheduler') and self._scheduler and session_id and session_id.startswith("job_"):
+                if (
+                    hasattr(self, "_scheduler")
+                    and self._scheduler
+                    and session_id
+                    and session_id.startswith("job_")
+                ):
                     # This is a scheduled job - handle failure through scheduler
-                    formatted_error = await self._apply_persona(f"An error occurred: {str(e)}", message)
+                    formatted_error = await self._apply_persona(
+                        f"An error occurred: {str(e)}", message
+                    )
                     handled = await self._scheduler.complete_job_from_webhook(
-                        session_id,
-                        success=False,
-                        result=None,
-                        error=formatted_error
+                        session_id, success=False, result=None, error=formatted_error
                     )
                     if handled:
                         return  # Don't send normal webhook for scheduled jobs
@@ -5152,7 +5172,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
             # Always remove from async requests set when the method completes
             # This ensures cleanup happens regardless of success or failure
-            if hasattr(self, 'observability_manager') and hasattr(self.observability_manager, '_async_requests'):
+            if hasattr(self, "observability_manager") and hasattr(
+                self.observability_manager, "_async_requests"
+            ):
                 self.observability_manager._async_requests.discard(request_id)
 
     async def _should_skip_clarification(self, message: str) -> bool:
@@ -5287,7 +5309,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         # Collect subsequent lines until we hit another section
                         for j in range(i + 2, len(lines)):
                             line_content = lines[j].strip()
-                            if line_content.startswith("===") or (not line_content and len(content_lines) > 0):
+                            if line_content.startswith("===") or (
+                                not line_content and len(content_lines) > 0
+                            ):
                                 break
                             if line_content:
                                 content_lines.append(line_content)
@@ -5299,9 +5323,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             "thinking",
             "Understanding the user's request...",
             stage="process_sync_start",
-            original_message=sanitize_message_preview(display_msg, 500),  # Redact PII before streaming
+            original_message=sanitize_message_preview(
+                display_msg, 500
+            ),  # Redact PII before streaming
             agent_name=agent_name,
-            skip_clarification=skip_clarification
+            skip_clarification=skip_clarification,
         )
 
         # Debug: Entry point
@@ -5556,7 +5582,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
                             # Get the original message and clean up
                             # Try both "original_message" and "original_request" for compatibility
-                            original_message = clarification_info.get("original_message") or clarification_info.get("original_request")
+                            original_message = clarification_info.get(
+                                "original_message"
+                            ) or clarification_info.get("original_request")
                             self._delete_pending_clarification(session_id)
 
                             # Track service use in session history
@@ -5771,10 +5799,15 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                 # If use_async was not set, recalculate based on workflow complexity
                                 if use_async is None and workflow and workflow.tasks:
                                     total_complexity = sum(
-                                        task.estimated_complexity for task in workflow.tasks.values()
+                                        task.estimated_complexity
+                                        for task in workflow.tasks.values()
                                     )
-                                    estimated_minutes = total_complexity * 0.5  # Half minute per complexity point
-                                    threshold_minutes = self.async_threshold_seconds / 60  # Convert seconds to minutes
+                                    estimated_minutes = (
+                                        total_complexity * 0.5
+                                    )  # Half minute per complexity point
+                                    threshold_minutes = (
+                                        self.async_threshold_seconds / 60
+                                    )  # Convert seconds to minutes
                                     use_async = estimated_minutes > threshold_minutes
 
                                     observability.observe(
@@ -5789,8 +5822,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                         },
                                         description=(
                                             f"Recalculated: complexity={total_complexity}, ",
-                                            f"est={estimated_minutes}min > {threshold_minutes}min = {use_async}"
-                                        )
+                                            f"est={estimated_minutes}min > {threshold_minutes}min = {use_async}",
+                                        ),
                                     )
 
                                 # Log final decision
@@ -5837,8 +5870,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                             "service": "workflow_executing_sync",
                                             "use_async": use_async,
                                             "webhook_url": webhook_url,
-                                            "reason": "sync because " + (
-                                                "use_async is False" if not use_async else "no webhook URL"
+                                            "reason": "sync because "
+                                            + (
+                                                "use_async is False"
+                                                if not use_async
+                                                else "no webhook URL"
                                             ),
                                         },
                                         description=(
@@ -6102,13 +6138,13 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     if credential_detection:
                         # Handle based on detection type
                         if credential_detection["type"] == "CREDENTIAL_REQUEST":
-                            service = credential_detection.get('service', 'service')
+                            service = credential_detection.get("service", "service")
                             streaming.stream(
                                 "planning",
                                 f"I need user credentials to access {service}. Let me sort it out...",
                                 stage="credential_request",
                                 service=service,
-                                credential_type=credential_detection.get('type')
+                                credential_type=credential_detection.get("type"),
                             )
                             # Direct credential request - handle immediately
                             result = await self.credential_handler.handle_credential_request(
@@ -6138,7 +6174,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         "thinking",
                         "I need to clarify something with the user...",
                         stage="clarification_needed",
-                        clarification_question=clarification_result.question if clarification_result else None
+                        clarification_question=(
+                            clarification_result.question if clarification_result else None
+                        ),
                     )
                     # Store minimal info - just request_id for reuse
                     if session_id:
@@ -6322,7 +6360,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                 for j in range(i + 2, len(lines)):
                                     line_content = lines[j].strip()
                                     # Stop if we hit another section marker or empty line
-                                    if line_content.startswith("===") or (not line_content and len(content_lines) > 0):
+                                    if line_content.startswith("===") or (
+                                        not line_content and len(content_lines) > 0
+                                    ):
                                         break
                                     if line_content:  # Only add non-empty lines
                                         content_lines.append(line_content)
@@ -6339,9 +6379,13 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     data={
                         "service": "request_analyzer_result",
                         "analysis_fields": dir(analysis) if analysis else [],
-                        "is_scheduling_request": getattr(analysis, "is_scheduling_request", None) if analysis else None,
+                        "is_scheduling_request": (
+                            getattr(analysis, "is_scheduling_request", None) if analysis else None
+                        ),
                         "complexity_score": analysis.complexity_score if analysis else None,
-                        "requires_decomposition": analysis.requires_decomposition if analysis else None,
+                        "requires_decomposition": (
+                            analysis.requires_decomposition if analysis else None
+                        ),
                         "message_analyzed": actual_message[:100],
                     },
                     description=f"Request analyzer returned: scheduling={getattr(analysis, 'is_scheduling_request', 'N/A')}",  # noqa: E501
@@ -6462,7 +6506,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             data={
                 "service": "scheduler_check",
                 "has_analysis": analysis is not None,
-                "is_scheduling_request": getattr(analysis, "is_scheduling_request", False) if analysis else False,
+                "is_scheduling_request": (
+                    getattr(analysis, "is_scheduling_request", False) if analysis else False
+                ),
                 "scheduler_service_available": self.scheduler_service is not None,
                 "message_preview": message[:100],
             },
@@ -6470,7 +6516,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         )
 
         # Route to scheduler if this is a scheduling request
-        if analysis and getattr(analysis, "is_scheduling_request", False) and self.scheduler_service:
+        if (
+            analysis
+            and getattr(analysis, "is_scheduling_request", False)
+            and self.scheduler_service
+        ):
             observability.observe(
                 event_type=observability.ServerEvents.REQUEST_RECEIVED,
                 level=observability.EventLevel.INFO,
@@ -6500,7 +6550,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     title=f"Scheduled: {actual_message[:50]}",
                     original_prompt=actual_message,
                     schedule=actual_message,
-                    exclusions=[]
+                    exclusions=[],
                 )
 
                 response_msg = (
@@ -6522,7 +6572,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 return MuxiResponse(
                     role="assistant",
                     content=response_msg,
-                    metadata={"job_id": job_id, "handled_by": "scheduler_service"}
+                    metadata={"job_id": job_id, "handled_by": "scheduler_service"},
                 )
 
             except Exception as e:
@@ -6567,7 +6617,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 "Determining the best agent to handle this request...",
                 stage="agent_selection",
                 message_preview=message[:500],
-                agent_requested=agent_name
+                agent_requested=agent_name,
             )
 
             # Emit agent selection started event
@@ -6594,7 +6644,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     "progress",
                     "I'll use an agent with the right capabilities to help the user with their request.",
                     stage="agent_selected",
-                    selected_agent=agent_name
+                    selected_agent=agent_name,
                 )
 
         # Check if overlord is accepting new requests
@@ -6612,10 +6662,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         try:
             # Emit streaming event for agent processing
             streaming.stream(
-                "progress",
-                "Processing request...",
-                stage="agent_processing",
-                agent_name=agent_name
+                "progress", "Processing request...", stage="agent_processing", agent_name=agent_name
             )
 
             # Process the message using the agent
@@ -6870,8 +6917,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             "progress",
             "Preparing response...",
             stage="response_preparation",
-            has_persona=bool(getattr(self, '_default_persona', None)),
-            response_format=getattr(self, 'response_format', 'markdown')
+            has_persona=bool(getattr(self, "_default_persona", None)),
+            response_format=getattr(self, "response_format", "markdown"),
         )
 
         # Apply persona to format the response (except for clarifications)
@@ -6930,20 +6977,20 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 result.content = formatted_content
 
         # Apply response format wrapping (for JSON format) and HTML fixing
-        if result and hasattr(result, "content") and hasattr(self, 'response_format'):
+        if result and hasattr(result, "content") and hasattr(self, "response_format"):
             if self.response_format == "json" and result.content:
                 # Wrap the content in JSON format
                 import json as json_lib
-                result.content = json_lib.dumps({
-                    "content": result.content,
-                    "type": "response",
-                    "format": "json"
-                }, indent=2)
+
+                result.content = json_lib.dumps(
+                    {"content": result.content, "type": "response", "format": "json"}, indent=2
+                )
             elif self.response_format == "html" and result.content:
                 # Fix and validate HTML content
                 try:
                     from bs4 import BeautifulSoup
-                    soup = BeautifulSoup(result.content, 'html.parser')
+
+                    soup = BeautifulSoup(result.content, "html.parser")
                     result.content = soup.prettify()
                 except ImportError:
                     # BeautifulSoup not available, leave content as-is
@@ -6965,13 +7012,17 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         #     )
 
         # Emit final completion event with the actual content
-        final_content = result.content if (result and hasattr(result, "content")) else "Request completed successfully"
+        final_content = (
+            result.content
+            if (result and hasattr(result, "content"))
+            else "Request completed successfully"
+        )
         streaming.stream(
             "completed",
             final_content,
             status="success",
             processing_time_ms=int((time.time() - start_time) * 1000),
-            agent_used=agent_name
+            agent_used=agent_name,
         )
 
         # Note: We don't disable streaming here - let the client/test handle cleanup
@@ -7050,7 +7101,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 "This is a complex request. Let me break it down into steps...",
                 stage="workflow_decomposition",
                 complexity_score=analysis.complexity_score if analysis else None,
-                message_preview=message[:500]
+                message_preview=message[:500],
             )
 
             # Emit workflow orchestration started event
@@ -7068,8 +7119,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
             # Determine if approval is needed - ALWAYS if explicitly requested
             needs_approval = (
-                analysis.is_explicit_approval_request or  # User explicitly wants to see plan
-                analysis.complexity_score >= self.plan_approval_threshold  # Or complexity threshold met
+                analysis.is_explicit_approval_request  # User explicitly wants to see plan
+                or analysis.complexity_score
+                >= self.plan_approval_threshold  # Or complexity threshold met
             )
 
             observability.observe(
@@ -7094,11 +7146,10 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 # Create enhanced message with SOP content
                 sop_file = "sop_template_mode.md" if mode == "template" else "sop_guide_mode.md"
                 from ..prompts.loader import PromptLoader
+
                 try:
                     sop_content = PromptLoader.get(sop_file)
-                    sop_instructions = (
-                        f"<sop_execution_mode>\n{sop_content}\n</sop_execution_mode>"
-                    )
+                    sop_instructions = f"<sop_execution_mode>\n{sop_content}\n</sop_execution_mode>"
                 except KeyError:
                     sop_instructions = ""
 
@@ -7343,12 +7394,12 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 )
 
                 # Emit the final response content as a streaming event
-                if result and hasattr(result, 'content'):
+                if result and hasattr(result, "content"):
                     streaming.stream(
                         "content",
                         result.content if isinstance(result.content, str) else str(result.content),
                         stage="final_response",
-                        workflow_id=workflow_id
+                        workflow_id=workflow_id,
                     )
 
                 return result
@@ -7635,6 +7686,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
         # Store task reference in request state for lifecycle management
         from ..background.request_tracker import RequestStatus
+
         request_state = await self.request_tracker.get_request(request_id)
         if request_state:
             request_state.task_ref = task
@@ -7676,16 +7728,18 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
             # Store completed status in buffer memory before removing from tracker
             import time
+
             final_status = {
                 "status": "completed",
                 "error": None,
                 "completed_at": time.time(),
-                "request_id": request_id
+                "request_id": request_id,
             }
             await self.buffer_memory.kv_set(
-                request_id, final_status,
+                request_id,
+                final_status,
                 ttl=172800,  # 48 hours in seconds
-                namespace="request_status"
+                namespace="request_status",
             )
             # Remove from active RequestTracker to prevent memory leaks
             await self.request_tracker.remove_request(request_id)
@@ -7705,13 +7759,13 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # Convert result to JSON-serializable format
             serializable_result = None
             if result:
-                if hasattr(result, 'content'):
+                if hasattr(result, "content"):
                     # Handle MuxiResponse objects
                     serializable_result = {
                         "content": str(result.content),
-                        "request_id": getattr(result, 'request_id', None),
-                        "status": getattr(result, 'status', None),
-                        "timestamp": getattr(result, 'timestamp', None)
+                        "request_id": getattr(result, "request_id", None),
+                        "status": getattr(result, "status", None),
+                        "timestamp": getattr(result, "timestamp", None),
                     }
                 elif isinstance(result, dict):
                     serializable_result = result
@@ -7742,16 +7796,18 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         except Exception as e:
             # Store failed status in buffer memory before removing from tracker
             import time
+
             final_status = {
                 "status": "failed",
                 "error": str(e),
                 "completed_at": time.time(),
-                "request_id": request_id
+                "request_id": request_id,
             }
             await self.buffer_memory.kv_set(
-                request_id, final_status,
+                request_id,
+                final_status,
                 ttl=172800,  # 48 hours in seconds
-                namespace="request_status"
+                namespace="request_status",
             )
             # Remove from active RequestTracker to prevent memory leaks
             await self.request_tracker.remove_request(request_id)
@@ -7852,7 +7908,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         request_state = await self.request_tracker.get_request(request_id)
         if not request_state:
             # Check buffer memory for completed requests
-            completed_status = await self.buffer_memory.kv_get(request_id, namespace="request_status")
+            completed_status = await self.buffer_memory.kv_get(
+                request_id, namespace="request_status"
+            )
             if completed_status:
                 return completed_status
             return {"error": "Request not found"}
@@ -7871,10 +7929,10 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             "request_id": request_id,
             "status": (
                 request_state.status.value
-                if hasattr(request_state.status, 'value')
+                if hasattr(request_state.status, "value")
                 else str(request_state.status)
             ),
-            "progress": request_state.progress
+            "progress": request_state.progress,
         }
 
     async def cancel_request(self, request_id: str) -> Dict[str, Any]:
@@ -7895,16 +7953,18 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
             # Store cancelled status in buffer memory before removing from tracker
             import time
+
             final_status = {
                 "status": "cancelled",
                 "error": None,
                 "completed_at": time.time(),
-                "request_id": request_id
+                "request_id": request_id,
             }
             await self.buffer_memory.kv_set(
-                request_id, final_status,
+                request_id,
+                final_status,
                 ttl=172800,  # 48 hours in seconds
-                namespace="request_status"
+                namespace="request_status",
             )
             # Remove from active RequestTracker to prevent memory leaks
             await self.request_tracker.remove_request(request_id)
@@ -7915,7 +7975,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     webhook_url=request_state.webhook_url,
                     request_id=request_id,
                     status="cancelled",
-                    workflow_id=None
+                    workflow_id=None,
                 )
 
             return {"success": True, "message": "Request cancelled"}
@@ -7985,8 +8045,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         progress = self.workflow_executor.get_workflow_progress(workflow_id)
                         if progress:
                             # Calculate percentage
-                            total_tasks = progress.get('total_tasks', 0)
-                            completed_tasks = progress.get('completed_tasks', 0)
+                            total_tasks = progress.get("total_tasks", 0)
+                            completed_tasks = progress.get("completed_tasks", 0)
                             if total_tasks > 0:
                                 percentage = int((completed_tasks / total_tasks) * 100)
                                 streaming.stream(
@@ -7994,7 +8054,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                     f"Processing workflow tasks... ({completed_tasks}/{total_tasks} - {percentage}%)",
                                     stage="workflow_execution",
                                     workflow_id=workflow_id,
-                                    progress=progress
+                                    progress=progress,
                                 )
 
                     # Log progress
@@ -8073,7 +8133,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     f"Executing workflow with {len(workflow.tasks)} tasks...",
                     stage="workflow_start",
                     workflow_id=workflow_id,
-                    task_count=len(workflow.tasks)
+                    task_count=len(workflow.tasks),
                 )
 
             # Use the ResilientWorkflowExecutor directly (which has our capability fixes)
@@ -8110,7 +8170,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     "thinking",
                     "Synthesizing results from all completed tasks...",
                     stage="workflow_synthesis",
-                    workflow_id=workflow_id
+                    workflow_id=workflow_id,
                 )
 
             # Synthesize final response from task results
@@ -8172,10 +8232,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 # )
                 # Emit the completed event with the actual final content
                 streaming.stream(
-                    "completed",
-                    final_response.content,
-                    stage="final",
-                    workflow_id=workflow_id
+                    "completed", final_response.content, stage="final", workflow_id=workflow_id
                 )
 
             observability.observe(
