@@ -5259,12 +5259,18 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         if not session_id or not self.buffer_memory:
             return
 
-        # Fire-and-forget for performance
-        asyncio.create_task(
-            self.buffer_memory.kv_delete(
-                key=session_id, namespace=self.pending_clarification_namespace
+        # Fire-and-forget for performance - use ensure_future with proper error handling
+        try:
+            task = asyncio.ensure_future(
+                self.buffer_memory.kv_delete(
+                    key=session_id, namespace=self.pending_clarification_namespace
+                )
             )
-        )
+            # Add done callback to catch any errors silently
+            task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
+        except RuntimeError:
+            # No event loop running - this is fine for fire-and-forget
+            pass
 
     async def _process_sync_chat(
         self,
@@ -6815,6 +6821,33 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
                 # Apply persona to format the error message
                 formatted_content = await self._apply_persona(error_content, message)
+
+                # Create pending clarification state so we can detect help requests in next message
+                if session_id and cred_config.get("mode", "redirect") == "redirect":
+                    # Store clarification state in unified system
+                    if self.clarification_system:
+                        await self.clarification_system._create_state(
+                            request_id=request_id,
+                            original_request=message,
+                            mode="redirect",
+                            session_id=session_id
+                        )
+                        # Add MCP service to state
+                        state = await self.clarification_system._get_state(request_id)
+                        if state:
+                            state["mcp_service"] = e.service
+                            state["user_id"] = e.user_id
+                            await self.clarification_system._store_state(request_id, state)
+                    
+                    # Also set pending clarification in overlord
+                    self._set_pending_clarification(
+                        session_id,
+                        {
+                            "request_id": request_id,
+                            "type": "redirect",
+                            "service": e.service,
+                        },
+                    )
 
                 return MuxiResponse(
                     role="assistant",

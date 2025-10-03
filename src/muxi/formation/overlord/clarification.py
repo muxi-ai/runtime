@@ -160,13 +160,14 @@ class UnifiedClarificationSystem:
         if service_id == "github":
             service_display = "GitHub"
 
-        # Return redirect message (mode="redirect" signals to overlord)
+        # Return redirect message with clarify action so we can detect help requests
         redirect_message = (
             f"For security, {service_display} credentials must be configured outside of this chat interface.\n"
-            f"Please use your organization's credential management system to set up authentication."
+            f"Please use your organization's credential management system to set up authentication.\n\n"
+            f"(If you need help obtaining credentials, just ask!)"
         )
 
-        return ClarificationResult(action="message", question=redirect_message, mode="redirect")
+        return ClarificationResult(action="clarify", question=redirect_message, mode="redirect")
 
     async def needs_clarification(
         self, message: str, request_id: str, session_id: str = None, context: Optional[Dict] = None
@@ -220,8 +221,31 @@ class UnifiedClarificationSystem:
             # No active clarification
             return ClarificationResult(action="execute", request=response)
 
+        # Special handling for redirect mode (missing credentials)
+        if state.get("mode") == "redirect":
+            # Check if user is asking for help
+            if self._is_help_request(response):
+                help_result = await self._provide_credential_help(state)
+                # Update state to track we provided help
+                state["help_provided"] = True
+                await self._store_state(request_id, state)
+                return help_result
+            else:
+                # User is presumably providing credentials or continuing
+                # Clean up and let them proceed
+                await self._cleanup_state(request_id)
+                return ClarificationResult(
+                    action="execute",
+                    request=state.get("original_request", response),
+                    context={"credential_configured": True}
+                )
+
         # Special handling for credential selection mode
         if state.get("mode") == "credential" and state.get("available_accounts"):
+            # First check if user is asking for help
+            if self._is_help_request(response):
+                return await self._provide_credential_help(state)
+            
             selected_account = await self._parse_credential_selection(
                 response, state["available_accounts"]
             )
@@ -681,6 +705,82 @@ class UnifiedClarificationSystem:
         result = await self.llm.chat(messages, temperature=0, max_tokens=10)
         content = result.content if hasattr(result, "content") else str(result)
         return "true" in content.lower()
+
+    def _is_help_request(self, response: str) -> bool:
+        """
+        Detect if user is asking for help instead of providing a credential.
+        
+        Args:
+            response: User's response
+            
+        Returns:
+            True if this appears to be a help request
+        """
+        help_patterns = [
+            "how do i",
+            "how to",
+            "help",
+            "don't know",
+            "dont know",
+            "what is",
+            "where do i",
+            "where can i",
+            "can you help",
+            "need help",
+            "not sure",
+        ]
+        
+        response_lower = response.lower()
+        return any(pattern in response_lower for pattern in help_patterns)
+    
+    async def _provide_credential_help(self, state: Dict) -> ClarificationResult:
+        """
+        Provide helpful guidance for obtaining credentials.
+        
+        Args:
+            state: Current clarification state
+            
+        Returns:
+            ClarificationResult with help guidance
+        """
+        mcp_service = state.get("mcp_service", "")
+        
+        # Service-specific help messages
+        help_messages = {
+            "github": """To get a GitHub token:
+1. Go to https://github.com/settings/tokens
+2. Click "Generate new token" → "Generate new token (classic)"
+3. Give it a name (e.g., "MUXI Runtime")
+4. Select scopes: 'repo', 'read:user', 'user:email'
+5. Click "Generate token"
+6. Copy the token and configure it in your credential manager
+
+After setting up your token, you can use it with MUXI.""",
+            
+            "linear": """To get a Linear API key:
+1. Go to https://linear.app/settings/api
+2. Click "Create key"
+3. Give it a description (e.g., "MUXI Runtime")
+4. Copy the API key
+5. Configure it in your credential manager
+
+After setting up your API key, you can use it with MUXI.""",
+        }
+        
+        # Get service-specific help or generic help
+        help_text = help_messages.get(mcp_service, f"""To configure credentials for {mcp_service}:
+1. Obtain an API key or token from the service's settings
+2. Configure it in your credential manager
+3. You can then use it with MUXI
+
+Please check {mcp_service}'s documentation for specific instructions on obtaining credentials.""")
+        
+        # Return help as clarification (stay in credential mode)
+        return ClarificationResult(
+            action="clarify",
+            question=help_text,
+            mode="credential",
+        )
 
     async def _parse_credential_selection(
         self, response: str, available_accounts: list
