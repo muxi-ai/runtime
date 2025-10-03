@@ -383,6 +383,236 @@ All core functionality is complete, tested, and working perfectly:
 
 ---
 
+## 🔧 Detailed Code Changes (For Regression Analysis)
+
+This section documents all code changes made during the Oct 2-3 session. If regressions occur, check these files and methods first.
+
+### 1. Credential Resolution & Serialization
+
+**File:** `src/muxi/formation/credentials/resolver.py`
+
+**Changes:**
+- **Method:** `get_credential()` (lines ~150-200)
+- **Issue:** Credentials stored as Python objects, not JSON-serializable
+- **Fix:** Added `json.dumps()` when storing, `json.loads()` when retrieving
+- **Impact:** All credential storage now properly serializes/deserializes
+- **Regression Risk:** If credentials fail to load, check JSON serialization
+
+```python
+# Before: credential_data (raw dict)
+# After: json.dumps(credential_data)
+```
+
+### 2. Agent Planning - Credential Error Propagation
+
+**File:** `src/muxi/formation/agents/agent.py`
+
+**Changes:**
+- **Location 1:** `_execute_step_planning()` - Re-raise `AmbiguousCredentialError` (line ~450)
+- **Location 2:** `_planning_phase()` - Re-raise `AmbiguousCredentialError` (line ~380)
+- **Issue:** Credential errors were being swallowed during planning
+- **Fix:** Added explicit re-raise for `AmbiguousCredentialError`
+- **Impact:** Credential errors now bubble up to overlord for clarification
+- **Regression Risk:** If credential prompts stop appearing, check these re-raise statements
+
+```python
+except AmbiguousCredentialError:
+    raise  # Re-raise to trigger clarification flow
+```
+
+### 3. Clarification System - Multiple Critical Fixes
+
+**File:** `src/muxi/formation/overlord/clarification.py`
+
+**Changes:**
+
+#### A. Credential Lookup Method (line ~587)
+- **Before:** `get_user_credentials()` (doesn't exist)
+- **After:** `resolve()`
+- **Impact:** Credential lookup now works correctly
+- **Regression Risk:** If credential detection fails, verify `resolve()` is being called
+
+#### B. MCP Service Descriptions (lines ~505-530)
+- **Before:** Hardcoded empty descriptions
+- **After:** Load descriptions from formation YAML config
+- **Impact:** Clarification prompts now show accurate service info
+- **Regression Risk:** If service descriptions are missing, check formation YAML loading
+
+#### C. Exception Event Type (line ~165)
+- **Before:** `"error.internal.error"` (invalid for exceptions)
+- **After:** `"clarification.processing.error"`
+- **Impact:** Exceptions no longer silently masked
+- **Regression Risk:** If clarification errors aren't logged, check event types
+
+#### D. Pending Clarification Setup (line ~130)
+- **Before:** No clarification state set for ambiguous credentials
+- **After:** Set `type: "ambiguous_credential"` in state
+- **Impact:** Credential selection responses now properly routed
+- **Regression Risk:** If credential selection fails, check state type field
+
+### 4. Overlord - Credential Handling & Help Detection
+
+**File:** `src/muxi/formation/overlord/overlord.py`
+
+**Changes:**
+
+#### A. Original Request Retry (lines ~6050-6060)
+- **Before:** Read undefined field after clarification
+- **After:** Read `state["original_request"]`
+- **Impact:** Original request retried after credential selection
+- **Regression Risk:** If requests don't execute after clarification, check this field
+
+#### B. Dynamic Auth Type Support (lines ~6100-6120)
+- **Before:** Hardcoded bearer token format
+- **After:** Fetch auth type from MCP server YAML, use `_replace_credential_in_auth()`
+- **Impact:** All auth types (bearer, api_key, basic, env) now work
+- **Regression Risk:** If non-bearer auth fails, check MCP server config loading
+
+#### C. Help Request Detection - Redirect Mode (lines ~6177-6185)
+- **Before:** CredentialHandler didn't set pending clarification
+- **After:** Set pending clarification after credential redirect
+- **Issue:** Help requests after redirect weren't detected
+- **Impact:** Overlord can now detect help requests in conversation context
+- **Regression Risk:** If help detection breaks in redirect mode, check this setup
+
+#### D. Redirect Type Handler (line ~6103)
+- **Before:** Only "clarify" triggered `handle_response`
+- **After:** Added "redirect" to clarification types
+- **Impact:** Help detection works after credential redirects
+- **Regression Risk:** If help requests aren't detected, check clarification type list
+
+### 5. Credential Handler - Help System (Dynamic Mode)
+
+**File:** `src/muxi/formation/credentials/handler.py`
+
+**Changes:**
+
+#### A. Help vs Cancellation Detection (lines ~758-765)
+- **Before:** `_is_cancellation()` prompt didn't exclude help requests
+- **After:** Added explicit examples of help requests that are NOT cancellations
+- **Impact:** "I don't know how to get a token" no longer treated as cancellation
+- **Regression Risk:** If help requests trigger cancellation, check this prompt
+
+#### B. Help Request Detection Method (lines ~801-859)
+- **Method:** `_is_help_request()` (NEW)
+- **Purpose:** Detect when user is asking for guidance
+- **Features:** LLM-based with pattern matching fallback, multilingual support
+- **Impact:** System can detect help requests like "how do I get this?"
+- **Regression Risk:** If help detection fails, check this method and fallback patterns
+
+#### C. Context-Aware Help Detection (lines ~833-836, ~854-857)
+- **Feature:** Detects credential provision vs help request
+- **Example:** "Thanks for help! Here's my token: xyz" → NOT a help request
+- **Impact:** Prevents false positive help detection
+- **Regression Risk:** If system loops asking for help, check these patterns
+
+#### D. Service-Specific Help Guides (lines ~861-906)
+- **Method:** `_generate_help_response()` (NEW)
+- **Services:** GitHub (10 steps), Linear (6 steps), OpenAI (5 steps), Generic
+- **Impact:** Users get detailed step-by-step guidance
+- **Regression Risk:** If help responses are generic, check service detection
+
+#### E. Help Response Integration (lines ~398-403)
+- **Location:** `handle_credential_response()`
+- **Flow:** Check cancellation → Check help → Extract credential
+- **Impact:** Help requests processed before credential extraction
+- **Regression Risk:** If flow order changes, help detection may break
+
+### 6. Clarification Prompt - Account Name Detection
+
+**File:** `src/muxi/formation/prompts/clarification_analysis.md`
+
+**Changes:**
+
+#### Multiple Credential Scenarios (lines ~64-73)
+- **Before:** Single line about explicit account naming
+- **After:** Prominent section with 5 concrete examples
+- **Examples Added:**
+  - "my lily account" → matches "lily automaze"
+  - "in the ranaroussi account" → matches "ranaroussi"
+  - Partial matching guidance
+- **Impact:** System detects explicit account names in requests
+- **Regression Risk:** If account switching fails, check these examples
+
+### 7. Agent Planning Prompt - Single Agent Rule
+
+**File:** `src/muxi/formation/prompts/agent_planning.md`
+
+**Changes:**
+
+#### Critical Single-Agent Rule (lines ~10-19)
+- **Before:** Single paragraph
+- **After:** Prominent 🚨 section with bullet-point checklist
+- **Key Points:**
+  - Check for "Built-in agents: None"
+  - Never create delegate_steps when alone
+  - All steps go in my_steps
+  - Explicit: "You cannot delegate to agents that don't exist"
+- **Impact:** Agents stop trying to delegate when alone
+- **Regression Risk:** If agents say "delegating to external agent" when alone, check this rule
+
+#### Final Check Reminder (lines ~96-100)
+- **Addition:** End-of-prompt reminder to review agent availability
+- **Impact:** Reinforces single-agent check before responding
+- **Regression Risk:** If delegation issues return, strengthen this check
+
+### 8. Test Fixes
+
+**Files:** `e2e/tests/4_mcp/test_4d2_user_credential_missing_full.py`, `e2e/tests/4_mcp/test_4d4_multiuser_isolation_simple.py`
+
+**Changes:**
+- **Test 1:** Database column name `encrypted_data` → `credential_data`
+- **Test 2:** PostgreSQL user hardcoded "ran" → `getpass.getuser()`
+- **Impact:** Tests now work on any system
+- **Regression Risk:** These were test bugs, not code issues
+
+### 9. Dynamic Mode Configuration
+
+**Files:** 
+- `e2e/tests/4_mcp/formations/formation-mcp/formation-dynamic.yaml` (NEW)
+- `e2e/tests/4_mcp/formations/formation-mcp/mcp/github.yaml`
+
+**Changes:**
+- Created formation-dynamic.yaml with `user_credentials.mode: "dynamic"`
+- Added `accept_inline: true` to GitHub MCP auth config
+- Updated test_4d2_user_help_request to use dynamic formation
+- **Impact:** Tests can now verify inline credential collection
+- **Regression Risk:** If dynamic mode breaks, check accept_inline flag
+
+---
+
+## 🔍 Regression Testing Guide
+
+If issues arise after these changes, check in this order:
+
+1. **Credential Selection Not Working:**
+   - Check `clarification.py` - `resolve()` method call
+   - Check `overlord.py` - `original_request` field
+   - Check `clarification.py` - state type field
+
+2. **Help System Not Working:**
+   - Check `handler.py` - `_is_help_request()` method
+   - Check `handler.py` - `_is_cancellation()` prompt
+   - Check `overlord.py` - pending clarification setup (line 6177)
+
+3. **Account Switching Fails:**
+   - Check `clarification_analysis.md` - explicit account examples
+   - Check `overlord.py` - dynamic auth type support
+
+4. **Agent Delegates When Alone:**
+   - Check `agent_planning.md` - CRITICAL SINGLE-AGENT RULE
+   - Check `agent_planning.md` - FINAL CHECK section
+
+5. **Credential Errors Not Appearing:**
+   - Check `agent.py` - `AmbiguousCredentialError` re-raise (2 locations)
+   - Check `clarification.py` - exception event type
+
+6. **Auth Types Not Working:**
+   - Check `overlord.py` - MCP server auth config loading
+   - Check `overlord.py` - `_replace_credential_in_auth()` usage
+
+---
+
 **Last Updated:** October 3, 2025 (Late Evening - PERFECT SCORE!)  
 **Session Credits:** factory-droid[bot]  
 **Status:** 🏆 PERFECT - 100% passing (24/24 tests) 🏆
