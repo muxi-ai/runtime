@@ -31,6 +31,10 @@ overlord:
   workflow:
     auto_decomposition: false
 
+# Credential handling configuration  
+user_credentials:
+  mode: "redirect"
+
 mcp:
   enhance_user_prompts: true  # Enable message enhancement for better tool selection
   max_tool_calls: 50

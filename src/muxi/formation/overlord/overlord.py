@@ -6092,7 +6092,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             clarification_info = (
                 await self._get_pending_clarification(session_id) if session_id else None
             )
-
+            
             # Use unified clarification system with request_id
             try:
                 if clarification_info and clarification_info.get("type") in [
@@ -6104,10 +6104,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 ]:
                     # This is a response to an existing clarification - call handle_response
                     clarification_result = await self.clarification.handle_response(
-                        response=message,
                         request_id=request_id,
-                        session_id=session_id,
-                        context={"user_id": user_id},
+                        response=message,
                     )
                 else:
                     # Handle pending credential response (must be before detection)
@@ -6173,6 +6171,18 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                 detection_result=credential_detection,
                                 session_id=session_id,
                             )
+                            
+                            # If this is a redirect, set up pending clarification so we can detect help requests
+                            if result.get("action") == "redirect" and session_id:
+                                self._set_pending_clarification(
+                                    session_id,
+                                    {
+                                        "request_id": request_id,
+                                        "type": "redirect",
+                                        "service": service,
+                                    },
+                                )
+                            
                             return MuxiResponse(role="assistant", content=result["message"])
                         # SERVICE_USE now always returns None from detection
                         # so it won't reach here
