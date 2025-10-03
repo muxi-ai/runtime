@@ -11,7 +11,8 @@ Successfully migrated all 24 MCP tests from `tests/e2e/4_mcp` to `e2e/tests/4_mc
 
 ### Overall Results
 - ✅ **Passed:** 20 tests (83.3%)
-- ❌ **Failed:** 4 tests (16.7%)
+- ❌ **Failed:** 2 tests (8.3%) - legitimate code issues
+- 🐛 **Test Bugs:** 2 tests (8.3%) - test environment/setup issues
 - **Total:** 24 tests
 
 ## Test Results Detail
@@ -41,14 +42,19 @@ Successfully migrated all 24 MCP tests from `tests/e2e/4_mcp` to `e2e/tests/4_mc
 | test_mcp_env_auth_user | Authentication | User-based MCP auth |
 | test_mcp_env_auth | Authentication | Full MCP authentication |
 
-### ❌ Failed Tests (2 code issues + 2 test bugs)
+### ❌ Failed Tests - Code Issues (2 tests)
 
 | Test Name | Error Type | Issue Description |
 |-----------|------------|-------------------|
 | test_4d2_user_help_request | Feature Gap | System doesn't detect help requests and provide guidance (needs intelligent help system) |
 | test_4d3_clarification_with_cache_switch | Minor Issue | Account switching mentions both accounts instead of just requested one |
-| ~~test_4d2_user_credential_missing_full~~ | **Test Bug** | Test queries wrong column name (`encrypted_data` vs `credential_data`) |
-| ~~test_4d4_multiuser_isolation_simple~~ | **Test Bug** | PostgreSQL role "ran" doesn't exist (test environment setup issue) |
+
+### 🐛 Failed Tests - Test Bugs (2 tests)
+
+| Test Name | Error Type | Issue Description |
+|-----------|------------|-------------------|
+| test_4d2_user_credential_missing_full | Test Bug | Test queries wrong column name (`encrypted_data` vs `credential_data`) |
+| test_4d4_multiuser_isolation_simple | Test Bug | PostgreSQL role "ran" doesn't exist (test environment setup issue) |
 
 
 
@@ -76,19 +82,20 @@ Successfully migrated all 24 MCP tests from `tests/e2e/4_mcp` to `e2e/tests/4_mc
 
 **Remaining Issues:** Context switch detection (1 test)
 
-### 2. Database Issues (2 tests)
+### 2. Help/Guidance Feature Gap (1 test)
+**Test Affected:** test_4d2_user_help_request
+
+**Problem:** System not providing adequate instructions when user asks for help obtaining credentials.
+
+### 3. Test Bugs - Not Code Issues (2 tests)
 **Tests Affected:**
 - test_4d2_user_credential_missing_full
 - test_4d4_multiuser_isolation_simple
 
 **Problems:**
-- Async context manager error (`__aenter__`)
-- PostgreSQL role not existing
-
-### 3. Help/Guidance Issues (1 test)
-**Test Affected:** test_4d2_user_help_request
-
-**Problem:** System not providing adequate instructions when user asks for help obtaining credentials.
+- Test queries non-existent `encrypted_data` column (should be `credential_data`)
+- PostgreSQL role "ran" doesn't exist in test environment
+- **These are test setup/code issues, not runtime code bugs**
 
 ## Migration Details
 
