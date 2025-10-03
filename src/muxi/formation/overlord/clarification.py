@@ -97,8 +97,20 @@ class UnifiedClarificationSystem:
         if error.service == "github":
             service_display = "GitHub"
         
+        # Reorder accounts according to ordered_credentials if provided
+        # ordered_credentials contains 1-based indices indicating preferred order
+        # Example: [2, 1] means show credential #2 first, then credential #1
+        display_accounts = available_accounts.copy()
+        if hasattr(error, 'ordered_credentials') and error.ordered_credentials:
+            try:
+                # Reorder using the indices (convert from 1-based to 0-based)
+                display_accounts = [available_accounts[idx - 1] for idx in error.ordered_credentials if 0 < idx <= len(available_accounts)]
+            except (IndexError, TypeError):
+                # If reordering fails, use original order
+                pass
+        
         # Build the clarification question
-        options_text = "\n".join([f"{i+1}. {name}" for i, name in enumerate(available_accounts)])
+        options_text = "\n".join([f"{i+1}. {name}" for i, name in enumerate(display_accounts)])
         question = (
             f"I found multiple {service_display} accounts for you. "
             f"Which account would you like to use?\n\n"
@@ -423,6 +435,22 @@ class UnifiedClarificationSystem:
         # Get formation capabilities (pre-computed during overlord initialization)
         capabilities = getattr(self.overlord, "capabilities", [])
         mcp_servers = getattr(self.overlord, "mcp_servers", [])
+        
+        # Build detailed MCP services description from formation config
+        mcp_services_detail = []
+        if hasattr(self.overlord, "formation_config") and self.overlord.formation_config:
+            mcp_config = self.overlord.formation_config.get("mcp", {})
+            servers_config = mcp_config.get("servers", [])
+            
+            for server in servers_config:
+                # Get id and description from the YAML configuration
+                server_id = server.get("id", "unknown")
+                description = server.get("description", server_id)
+                mcp_services_detail.append(f"- {server_id}: {description}")
+        
+        # Fallback if no config available
+        if not mcp_services_detail and mcp_servers:
+            mcp_services_detail = [f"- {s}" for s in mcp_servers]
 
         # Get credential handling configuration
         cred_config = (
@@ -463,18 +491,23 @@ class UnifiedClarificationSystem:
         if hasattr(self.overlord, "credential_resolver") and mcp_servers:
             for service in mcp_servers:
                 try:
-                    credentials = await self.overlord.credential_resolver.get_user_credentials(
+                    credentials = await self.overlord.credential_resolver.resolve(
                         user_id, service
                     )
-                    if credentials and len(credentials) > 0:
-                        account_names = [
-                            cred.get("name", f"Account {i+1}")
-                            for i, cred in enumerate(credentials)
-                        ]
-                        credential_info.append(
-                            f"{service}: {len(credentials)} account(s) - {', '.join(account_names)}"
-                        )
-                except Exception:
+                    if credentials:
+                        # Handle both single credential (dict) and multiple credentials (list)
+                        if isinstance(credentials, list):
+                            account_names = [
+                                cred.get("name", f"Account {i+1}")
+                                for i, cred in enumerate(credentials)
+                            ]
+                            credential_info.append(
+                                f"{service}: {len(credentials)} account(s) - {', '.join(account_names)}"
+                            )
+                        elif isinstance(credentials, dict) and credentials.get("name"):
+                            # Single named credential
+                            credential_info.append(f"{service}: 1 account - {credentials.get('name')}")
+                except Exception as e:
                     # Silently continue if credential check fails
                     pass
         
@@ -486,7 +519,7 @@ class UnifiedClarificationSystem:
             conversation=conversation,
             context=json.dumps(context) if context else "{}",
             capabilities=", ".join(capabilities) if capabilities else "Conversation",
-            mcp_services=", ".join(mcp_servers) if mcp_servers else "None",
+            mcp_services="\n".join(mcp_services_detail) if mcp_services_detail else "None",
             available_credentials=available_credentials,
             response_style=response_style,
             cred_mode=cred_mode,
@@ -522,18 +555,21 @@ class UnifiedClarificationSystem:
                 available_accounts = []
                 if hasattr(self.overlord, "credential_resolver"):
                     try:
-                        credentials = await self.overlord.credential_resolver.get_user_credentials(
+                        credentials = await self.overlord.credential_resolver.resolve(
                             user_id, mcp_service
                         )
                         if credentials:
-                            available_accounts = [
-                                cred.get("name", f"Account {i+1}")
-                                for i, cred in enumerate(credentials)
-                            ]
+                            if isinstance(credentials, list):
+                                available_accounts = [
+                                    cred.get("name", f"Account {i+1}")
+                                    for i, cred in enumerate(credentials)
+                                ]
+                            elif isinstance(credentials, dict) and credentials.get("name"):
+                                available_accounts = [credentials.get("name")]
                     except Exception as e:
                         # Log the error for debugging
                         observability.observe(
-                            event_type=observability.SystemEvents.AUTHENTICATION_FAILED,
+                            event_type=observability.SystemEvents.MEMORY_OPERATION_FAILED,
                             level=observability.EventLevel.WARNING,
                             data={
                                 "error": str(e),
@@ -560,7 +596,7 @@ class UnifiedClarificationSystem:
                     result["available_accounts"] = available_accounts
 
             return result
-        except Exception:
+        except Exception as e:
             # Fallback if JSON parsing fails
             return {
                 "needs_clarification": False,

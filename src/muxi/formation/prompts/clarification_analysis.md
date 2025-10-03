@@ -69,8 +69,14 @@ MULTIPLE CREDENTIAL SCENARIOS:
   * question: Provide general guidance like "To set up credentials for [service], you'll need to obtain an access token or API key from the service's settings or developer portal, then configure it in your credential manager."
 
 MCP SERVICE DETECTION:
-- Only set mcp_service if the request clearly needs one of the available MCP services
-- Set to null if not relevant or not asking about MCP service
+- Analyze the request to determine which MCP service (if any) would be needed to fulfill it
+- Match request intent to available MCP service capabilities listed in "MCP SERVICES AVAILABLE"
+- Examples:
+  * "list my repositories" → likely needs github-mcp (if available) 
+  * "create an issue" → could be github-mcp or linear-mcp (check which is available)
+  * "search the web" → needs web-search-mcp
+- IMPORTANT: If a request requires a service type but that service is NOT in the available list, set needs_clarification=false and let the agent handle it (fail fast)
+- Set mcp_service to the detected service id (e.g., "github", "linear") or null if not relevant
 
 Return JSON:
 {{
