@@ -6100,6 +6100,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     "proactive",
                     "multi_turn",
                     "credential",  # Handle credential selection responses
+                    "redirect",   # Handle missing credential redirect responses (e.g., help requests)
                 ]:
                     # This is a response to an existing clarification - call handle_response
                     clarification_result = await self.clarification.handle_response(

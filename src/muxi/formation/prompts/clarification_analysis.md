@@ -64,9 +64,13 @@ MULTIPLE CREDENTIAL SCENARIOS:
 - If request explicitly names an account (e.g., "my lily account", "use ranaroussi"), it's CLEAR:
   * Set needs_clarification=false regardless of how many credentials exist
 - If user asks for help obtaining credentials:
+  * IMPORTANT: Detect help requests like "I don't know how", "how do I get", "help me", "can you help", "what is", "where do I"
+  * Look at conversation context - if system just asked for credentials and user seems confused, treat as help request
   * Set needs_clarification=true
+  * Set reason="help_request"
+  * Set mode="direct"
   * Set mcp_service to the relevant service
-  * question: Provide general guidance like "To set up credentials for [service], you'll need to obtain an access token or API key from the service's settings or developer portal, then configure it in your credential manager."
+  * question: Provide detailed step-by-step guidance for obtaining credentials for that specific service
 
 MCP SERVICE DETECTION:
 - Analyze the request to determine which MCP service (if any) would be needed to fulfill it
