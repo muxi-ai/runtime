@@ -220,7 +220,7 @@ async def run_async_test():
                 async with formation._db_manager.get_async_session() as session:
                     result = await session.execute(
                         text("""
-                        SELECT c.service, c.name, c.encrypted_data IS NOT NULL as has_data
+                        SELECT c.service, c.name, c.credential_data IS NOT NULL as has_data
                         FROM credentials c
                         JOIN users u ON c.user_id = u.id
                         WHERE u.external_user_id = :user_id
