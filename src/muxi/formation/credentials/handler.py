@@ -817,6 +817,12 @@ Generate the message now:"""
         - "¿Cómo obtengo esto?" (Spanish: How do I get this?)
         - "Comment obtenir ça?" (French: How to get this?)
         - "これをどうやって入手しますか？" (Japanese: How do I get this?)
+        
+        IMPORTANT: These are NOT help requests - they are PROVIDING credentials:
+        - "Thanks for the help! Here's my token: xyz123"
+        - "Here is my key: abc789"
+        - "My token is: ghp_xxxxx"
+        - If the message contains what looks like an actual credential/token, respond NO
 
         Respond with only YES or NO."""
 
@@ -824,6 +830,10 @@ Generate the message now:"""
             llm = await self._get_configured_llm(cache_suffix="help", max_tokens=10)
             if not llm:
                 # Fallback to simple pattern matching
+                message_lower = message.lower()
+                # If message contains a token-like string, it's NOT a help request
+                if any(pattern in message_lower for pattern in ["here's my", "here is my", "my token is", "token:", "key:"]):
+                    return False
                 help_patterns = [
                     "don't know",
                     "how do i",
@@ -834,7 +844,6 @@ Generate the message now:"""
                     "what is",
                     "show me",
                 ]
-                message_lower = message.lower()
                 return any(pattern in message_lower for pattern in help_patterns)
 
             response = await llm.generate_text(prompt)
@@ -842,8 +851,11 @@ Generate the message now:"""
         except Exception as e:
             logger.debug(f"Failed to check help request with LLM: {e}")
             # On LLM failure, fallback to pattern matching
-            help_patterns = ["don't know", "how do i", "how to", "help"]
             message_lower = message.lower()
+            # If message contains a token-like string, it's NOT a help request
+            if any(pattern in message_lower for pattern in ["here's my", "here is my", "my token is", "token:", "key:"]):
+                return False
+            help_patterns = ["don't know", "how do i", "how to", "help"]
             return any(pattern in message_lower for pattern in help_patterns)
 
     async def _generate_help_response(self, service: str) -> str:
