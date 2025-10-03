@@ -395,6 +395,13 @@ Respond in JSON format:
             self._pending.pop(session_id)  # Clear state
             return await self._generate_cancellation_message()
 
+        # Check for help request (user asking for guidance)
+        if await self._is_help_request(message):
+            # DON'T clear pending state - user will provide credentials after help
+            pending = self._pending[session_id]
+            help_response = await self._generate_help_response(pending["service"])
+            return help_response
+
         # DON'T pop - keep state for retry on failure!
         pending = self._pending[session_id]
 
@@ -755,6 +762,15 @@ Generate the message now:"""
         - "cancelar" (Spanish: cancel)
         - "やめる" (Japanese: stop)
 
+        IMPORTANT: These are NOT cancellations - they are HELP REQUESTS:
+        - "I don't know how to get a token"
+        - "How do I get this?"
+        - "Can you help me?"
+        - "Where do I find this?"
+        - "What is this?"
+        
+        If the user is asking for help or guidance, respond NO (not a cancellation).
+
         Respond with only YES or NO."""
 
         try:
@@ -781,6 +797,113 @@ Generate the message now:"""
             logger.debug(f"Failed to check cancellation with LLM: {e}")
             # On LLM failure, assume not cancellation to avoid accidental exits
             return False
+
+    async def _is_help_request(self, message: str) -> bool:
+        """Check if user is asking for help/guidance on getting credentials."""
+        prompt = f"""The user is in the middle of providing credentials.
+        They just said: "{message}"
+
+        Are they asking for HELP or GUIDANCE on how to obtain credentials?
+
+        Examples of help requests (in any language):
+        - "I don't know how to get a token"
+        - "How do I get this?"
+        - "Can you help me?"
+        - "Where do I find this?"
+        - "What is this?"
+        - "How do I create one?"
+        - "I need help"
+        - "Show me how"
+        - "¿Cómo obtengo esto?" (Spanish: How do I get this?)
+        - "Comment obtenir ça?" (French: How to get this?)
+        - "これをどうやって入手しますか？" (Japanese: How do I get this?)
+
+        Respond with only YES or NO."""
+
+        try:
+            llm = await self._get_configured_llm(cache_suffix="help", max_tokens=10)
+            if not llm:
+                # Fallback to simple pattern matching
+                help_patterns = [
+                    "don't know",
+                    "how do i",
+                    "how to",
+                    "can you help",
+                    "help me",
+                    "where do i",
+                    "what is",
+                    "show me",
+                ]
+                message_lower = message.lower()
+                return any(pattern in message_lower for pattern in help_patterns)
+
+            response = await llm.generate_text(prompt)
+            return response.strip().upper().startswith("YES")
+        except Exception as e:
+            logger.debug(f"Failed to check help request with LLM: {e}")
+            # On LLM failure, fallback to pattern matching
+            help_patterns = ["don't know", "how do i", "how to", "help"]
+            message_lower = message.lower()
+            return any(pattern in message_lower for pattern in help_patterns)
+
+    async def _generate_help_response(self, service: str) -> str:
+        """Generate helpful guidance for obtaining credentials for a specific service."""
+        # Service-specific help templates
+        help_guides = {
+            "github": """To get a GitHub personal access token:
+
+1. **Sign in to GitHub** at https://github.com
+2. Click your profile picture (top-right) → **Settings**
+3. Scroll down and click **Developer settings** (bottom-left)
+4. Click **Personal access tokens** → **Tokens (classic)**
+5. Click **Generate new token** → **Generate new token (classic)**
+6. Give it a descriptive name (e.g., "MUXI Access")
+7. Set expiration (recommended: 90 days)
+8. Select scopes based on what you need:
+   - `repo` - Full control of private repositories
+   - `read:org` - Read organization data
+   - `read:user` - Read user profile data
+9. Click **Generate token** at the bottom
+10. **Copy the token immediately** (you won't see it again!)
+
+Once you have your token, just paste it here and I'll use it to access GitHub.""",
+
+            "linear": """To get a Linear API key:
+
+1. **Sign in to Linear** at https://linear.app
+2. Click your workspace avatar (bottom-left)
+3. Go to **Settings** → **API**
+4. Click **Create new key**
+5. Give it a descriptive label (e.g., "MUXI Integration")
+6. **Copy the API key** immediately
+
+Once you have your key, paste it here.""",
+
+            "openai": """To get an OpenAI API key:
+
+1. **Sign in to OpenAI** at https://platform.openai.com
+2. Click your profile icon (top-right) → **View API keys**
+3. Click **Create new secret key**
+4. Give it a name (e.g., "MUXI Integration")
+5. **Copy the key immediately** (starts with sk-)
+
+Once you have your key, paste it here.""",
+        }
+
+        # Check if we have a specific guide for this service
+        if service in help_guides:
+            return help_guides[service]
+
+        # Generic help for unknown services
+        return f"""To get credentials for {service}:
+
+1. Sign in to the {service} website
+2. Look for Settings or Account settings
+3. Find API, Developer settings, or Integrations section
+4. Generate a new API key or access token
+5. Copy the credentials
+
+Once you have your credentials, paste them here and I'll use them to connect to {service}."""
 
     async def _extract_credential_from_text(self, message: str) -> str:
         """Extract credential from natural language using LLM."""
