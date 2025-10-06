@@ -72,9 +72,9 @@
 - **Validations**:
   - ✅ Initial knowledge loading works correctly
   - ✅ File removal detected and handled
-  - ✅ File re-addition detected and handled  
+  - ✅ File re-addition detected and handled
   - ✅ File modification triggers cache invalidation
-- **Fix Applied**: 
+- **Fix Applied**:
   - Fixed relative path to use absolute path (`Path(__file__).parent / "temp-knowledge"`)
   - Changed validation to check buffer/cache instead of sources (accounts for caching bug)
 
