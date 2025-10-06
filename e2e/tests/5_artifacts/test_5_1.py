@@ -12,7 +12,7 @@ import asyncio
 import time
 import os
 
-from .base_artifacts_test import BaseArtifactsTest
+from base_artifacts_test import BaseArtifactsTest
 
 
 class Test51(BaseArtifactsTest):

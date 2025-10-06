@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from muxi.formation import Formation  # noqa: E402
 
-# Import from common module
+# Import from central common module (e2e/tests/common/)
 from common import TestOutputFormatter  # noqa: E402
 
 
