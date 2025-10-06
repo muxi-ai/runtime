@@ -5,7 +5,7 @@ import asyncio
 import time
 import os
 
-from .base_knowledge_test import BaseKnowledgeTest
+from base_knowledge_test import BaseKnowledgeTest
 
 
 class Testtest68(BaseKnowledgeTest):
