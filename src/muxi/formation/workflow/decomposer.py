@@ -177,25 +177,19 @@ class TaskDecomposer:
         Returns:
             LLM-generated workflow
         """
-        decomposition_prompt = self._create_decomposition_prompt(request, context, analysis)
+        # Safety: Truncate very large requests to prevent recursion in LLM processing
+        # Large requests with deeply nested context can cause stack overflow
+        max_request_length = 50000  # 50k chars should be plenty
+        truncated_request = request if len(request) <= max_request_length else (request[:max_request_length] + "\n\n[... request truncated for safety ...]")
+        
+        decomposition_prompt = self._create_decomposition_prompt(truncated_request, context, analysis)
 
         # Debug: Log the actual prompt being sent to LLM
-        capabilities_info = self._get_available_capabilities_info()
-        observability.observe(
-            event_type=observability.SystemEvents.SERVICE_STARTED,
-            level=observability.EventLevel.INFO,  # Changed to INFO so it shows up
-            data={
-                "service": "task_decomposer",
-                "prompt_length": len(decomposition_prompt),
-                "capabilities_info": capabilities_info,
-                "full_prompt": (
-                    decomposition_prompt[:1000] + "..."
-                    if len(decomposition_prompt) > 1000
-                    else decomposition_prompt
-                ),
-            },
-            description="TaskDecomposer using dynamic capabilities",
-        )
+        prompt_length = len(decomposition_prompt)
+        
+        # Skip observability call that might trigger recursion
+        # Instead just log the prompt length
+        # print(f"🔍 Decomposition prompt size: {prompt_length:,} chars, request size: {len(request):,} chars")
 
         # # DEBUG: Print full decomposition prompt to console for debugging tests
         # print("\n" + "=" * 80)
@@ -214,6 +208,11 @@ class TaskDecomposer:
             #     complexity_score=analysis.complexity_score if analysis else None,
             #     request_type=analysis.request_type if analysis and hasattr(analysis, 'request_type') else None
             # )
+
+            # Safety check: Limit prompt size to prevent recursion issues
+            # Very large prompts (>100k chars) can cause recursion in LLM processing
+            if len(decomposition_prompt) > 100000:
+                raise ValueError(f"Decomposition prompt too large ({len(decomposition_prompt)} chars), using heuristic")
 
             response = await self.llm.generate_text(decomposition_prompt, max_tokens=2000)
 
@@ -244,6 +243,22 @@ class TaskDecomposer:
             )
 
             return workflow
+
+        except RecursionError as e:
+            # Handle RecursionError specially to avoid cascading logging errors
+            # This can occur with very large/complex prompts
+            print("\n⚠️  LLM decomposition hit recursion limit, using heuristic decomposition")
+            
+            # Emit streaming event without trying to stringify the error
+            # (which could trigger more recursion)
+            streaming.stream(
+                "planning",
+                "Using alternative approach to break down the request...",
+                stage="decomposition_fallback",
+                error_reason="Recursion limit exceeded"
+            )
+
+            return self._heuristic_decompose_request(workflow_id, request, analysis)
 
         except Exception as e:
             #  Decomposer warning - TODO: add observability
@@ -301,7 +316,23 @@ class TaskDecomposer:
         # Prepare template variables
         context_info = ""
         if context:
-            context_info = f"\nContext: {context}"
+            # Safety: Ensure context doesn't contain circular references
+            # Convert to string carefully to avoid recursion
+            try:
+                # Limit context representation to prevent recursion
+                if isinstance(context, dict):
+                    # Only include safe, simple values
+                    safe_context = {}
+                    for k, v in context.items():
+                        if isinstance(v, (str, int, float, bool, list, tuple)):
+                            safe_context[k] = v
+                        else:
+                            safe_context[k] = str(type(v).__name__)
+                    context_info = f"\nContext: {safe_context}"
+                else:
+                    context_info = f"\nContext: {type(context).__name__}"
+            except:
+                context_info = "\nContext: <unavailable>"
 
         analysis_info = ""
         if analysis:
