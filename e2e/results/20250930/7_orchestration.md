@@ -17,7 +17,7 @@
 | 7A2 | Workflow Approval Flow | Full E2E | ✅ FIXED | ~4 min | Approval request → auto-approve → workflow executes |
 | 7A3 | Workflow Decomposition | Full E2E | ✅ FIXED | ~5 min | Complex requests trigger workflow decomposition + execution |
 | 7A4 | Workflow Resilience | Full E2E | ✅ PASSED | ~30 sec | Resilience features working |
-| 7B1 | Internal A2A Communication | Full E2E | ✅ FIXED | ~15 sec | A2A coordinator active, agents communicate |
+| 7B1 | Internal A2A Communication | Full E2E | ✅ FIXED | ~35 sec | Full A2A: it-support → project-manager → Linear issue created |
 | 7B2 | SOP System Integration | Full E2E | ✅ FIXED | ~20 sec | SOP system loads and formation works with SOPs |
 | 7B3 | A2A Discovery | Full E2E | ✅ PASSED | ~60 sec | Discovered 4 agents successfully |
 
@@ -43,7 +43,7 @@
 **All Tests Fixed**:
 - ✅ 7A2: FIXED - properly tests approval flow (complexity=8.0, approval requested, workflow executes, ~4min)
 - ✅ 7A3: FIXED - tests workflow decomposition (can't test "decline" in automated tests, ~5min)
-- ✅ 7B1: FIXED - tests A2A communication (simplified to avoid slow Linear API, ~15sec)
+- ✅ 7B1: FIXED - tests full A2A collaboration with Linear issue creation (~35sec)
 - ✅ 7B2: FIXED - tests SOP system integration (SOP triggering unreliable, ~20sec)
 
 ---
@@ -345,11 +345,11 @@ Complex workflow tests (7A2, 7A3, 7B1, 7B2) timeout because they trigger **real 
 - 7A2 (~4min) - **FIXED**: Proper approval flow testing
 - 7A3 (~5min) - **FIXED**: Workflow decomposition testing
 - 7A4 (~30sec) - Already passing
-- 7B1 (~15sec) - **FIXED**: A2A communication testing
+- 7B1 (~35sec) - **FIXED**: Full A2A collaboration with Linear issue creation
 - 7B2 (~20sec) - **FIXED**: SOP system integration testing
 - 7B3 (~60sec) - Already passing
 
-**Total Suite Time**: ~16 minutes for all 7 tests
+**Total Suite Time**: ~16.5 minutes for all 7 tests
 
 ### Lesson Learned:
 **DO NOT optimize tests without understanding what they're testing!**
