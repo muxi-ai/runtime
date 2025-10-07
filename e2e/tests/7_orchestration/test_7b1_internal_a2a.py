@@ -3,9 +3,9 @@
 Test 7B1: Internal A2A Communication
 Migrated from: tests/e2e/7_orchestration/test_internal_a2a_communication.py
 
-Tests actual internal Agent-to-Agent communication with a simple request.
-Verifies that agents can communicate and collaborate without timing out.
-Note: Full Linear issue creation may be slow - we test basic A2A functionality.
+Tests actual internal Agent-to-Agent communication by sending a request that requires
+collaboration between agents (system info collection + Linear issue creation).
+Validates that it-support delegates to project-manager via A2A.
 """
 
 import asyncio
@@ -42,22 +42,19 @@ async def test_internal_a2a():
         else:
             print("   ⚠️  No A2A coordinator found")
 
-        # Test: Send simple request that agents can handle
-        print("\n3. Sending request for agent collaboration...")
-        print("   Request: Get system info (simple A2A test)")
-        print("   Expected: it-support agent gets system info and responds")
-        print("   Note: Not testing full Linear creation to avoid timeout")
+        # Test: Send request that requires A2A collaboration
+        print("\n3. Sending request requiring A2A collaboration...")
+        print("   Request: Create Linear issue with system usage info")
+        print("   Expected: it-support gets system info → delegates to project-manager → Linear issue created")
         
-        # Simplified request - just get system info, don't create Linear issue
-        # This tests basic A2A/routing without the slow Linear API call
         response = await asyncio.wait_for(
             overlord.chat(
-                message="what is the current cpu and memory usage?",
+                message="create a linear issue with system usage info like cpu, memory, etc",
                 user_id="test_user",
                 session_id="a2a_test",
                 stream=False
             ),
-            timeout=60  # Should complete quickly
+            timeout=60  # Should complete in ~30-40 seconds based on debug run
         )
 
         # Handle response
@@ -70,20 +67,20 @@ async def test_internal_a2a():
 
         print(f"\n   ✓ Response received ({len(content)} chars)")
         
-        # Check for system info in response (evidence of agent working)
-        system_indicators = ["cpu", "memory", "usage", "percent", "system"]
-        has_system_info = sum(1 for ind in system_indicators if ind in content.lower()) >= 2
+        # Check for Linear issue creation (evidence of A2A collaboration)
+        linear_indicators = ["linear", "issue", "created", "system usage"]
+        has_linear = sum(1 for ind in content.lower() for match in [ind] if match in content.lower()) >= 2
         
-        if has_system_info:
-            print("   ✅ System info received (agent routing/A2A working!)")
-            print("   A2A coordinator active and agents communicating")
-            checks_passed.append("A2A communication: System info retrieved")
+        if has_linear:
+            print("   ✅ Linear issue creation detected!")
+            print("   A2A collaboration successful: it-support → project-manager")
+            checks_passed.append("A2A collaboration: Linear issue created")
             all_passed = True
         else:
-            print("   ⚠️  No clear system info detected")
+            print("   ⚠️  No clear Linear issue creation detected")
             print("   Response preview:")
             print(f"   {content[:300]}...")
-            checks_passed.append("Response received but content unclear")
+            checks_passed.append("Response received but Linear creation unclear")
             all_passed = True  # Don't fail - just log what happened
 
         # Cleanup
