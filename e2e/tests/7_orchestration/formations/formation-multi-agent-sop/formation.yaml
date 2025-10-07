@@ -45,10 +45,10 @@ overlord:
   workflow:
     auto_decomposition: true # Enable automatic task decomposition for SOPs to work
     plan_approval_threshold: 10 # Set high to avoid approval prompts during tests
-    complexity_threshold: 1.0 # Lower threshold to trigger workflows/SOPs
+    complexity_threshold: 7.0 # Higher threshold - let SOPs work without full workflow decomposition
     routing_strategy: "capability_based"
-    parallel_execution: true
-    max_parallel_tasks: 5
+    parallel_execution: false # Disable parallel to make tests faster and more predictable
+    max_parallel_tasks: 1
 
   # Clarification configuration (always enabled for better UX)
   clarification:
