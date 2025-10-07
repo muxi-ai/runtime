@@ -1,29 +1,39 @@
 #!/usr/bin/env python3
-"""Test test_8_1: Basic Clarification Flow"""
+"""
+Test 8.1: Basic Clarification Flow
+Tests fundamental clarification system behavior with ambiguous requests.
+"""
 
 import asyncio
-import time
-import os
+import sys
+from pathlib import Path
 
-from .base_clarification_test import Baseclarificationtest
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+
+from base_clarification_test import BaseClarificationTest  # noqa: E402
 
 
-class Testtest81(Baseclarificationtest):
+class Test81(BaseClarificationTest):
     """Test class for test_8_1."""
 
-    async def test_main(self):
-        """Test basic clarification flow functionality."""
-        test_name = "test_8_1"
-        self.print_test_header(test_name, "Basic Clarification Flow")
+async def test_basic_clarification():
+    """Test basic clarification flow - ambiguous requests should trigger clarification."""
+    print("\n" + "=" * 80)
+    print("Test 8.1: Basic Clarification Flow")
+    print("=" * 80)
 
-        start_time = time.time()
-        checks_passed = []
-        transcript = []
-        all_passed = True
+    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
+    all_passed = True
+    checks_passed = []
 
-        try:
-            await self.setup_formation()
-            print("  ✓ Formation loaded")
+    try:
+        print("\n1. Loading formation...")
+        from muxi.formation import Formation  # noqa: E402
+        formation = Formation()
+        await formation.load(str(formation_path))
+        overlord = await formation.start_overlord()
+        print("   ✓ Formation loaded")
+        print(f"   Clarification enabled: {overlord.clarification is not None}")
 
             # Test 1: Simple Clarification Request
             print("\n  1. Testing Simple clarification request...")

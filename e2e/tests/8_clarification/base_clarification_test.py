@@ -15,9 +15,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from muxi.formation import Formation  # noqa: E402
 
-# Import from common module
+# Import from common module (centralized e2e/tests/common)
 from common import BaseE2ETest  # noqa: E402
 from common import TestOutputFormatter  # noqa: E402
+from common import FormationManager  # noqa: E402
 
 
 class BaseClarificationTest(BaseE2ETest):
@@ -91,8 +92,11 @@ class BaseClarificationTest(BaseE2ETest):
         self.overlord = None
         self.clarification_sessions = []
 
-    async def setup_clarification_formation(self) -> Formation:
+    async def setup_formation(self, formation_name: str = "formation-clarification") -> Formation:
         """Setup formation with clarification capabilities.
+
+        Args:
+            formation_name: Name of the formation directory (default: formation-clarification)
 
         Returns:
             Configured Formation instance
@@ -106,6 +110,10 @@ class BaseClarificationTest(BaseE2ETest):
         self.overlord = await self.formation.start_overlord()
 
         return self.formation
+    
+    async def setup_clarification_formation(self) -> Formation:
+        """Legacy method name - calls setup_formation for backward compatibility."""
+        return await self.setup_formation()
 
     def create_unique_session(self, base_name: str = "test") -> Tuple[str, str]:
         """Create unique user_id and session_id for isolation.
