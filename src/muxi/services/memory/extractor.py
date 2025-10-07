@@ -147,7 +147,13 @@ class MemoryExtractor:
             return
 
         # Create conversation context from this turn
-        conversation = f"User: {user_message}\nAssistant: {agent_response}"
+        # Handle case where agent hasn't responded yet (agent_response is empty)
+        if agent_response and agent_response.strip():
+            conversation = f"User: {user_message}\nAssistant: {agent_response}"
+        else:
+            # No agent response yet - just use the user message
+            # This happens when extraction is called before the agent responds
+            conversation = f"User: {user_message}\n(Note: Extract from user's statement alone, agent hasn't responded yet)"
 
         # Extract information
         extraction_results = await self._extract_user_information(conversation)
