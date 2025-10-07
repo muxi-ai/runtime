@@ -49,7 +49,12 @@ Examples:
 """
 
     try:
-        analysis_response = await overlord.default_llm_model.chat(
+        # Use the same LLM that clarification system uses
+        llm = getattr(overlord, "extraction_model", None)
+        if not llm:
+            raise AttributeError("No LLM available")
+        
+        analysis_response = await llm.chat(
             messages=[{"role": "user", "content": analysis_prompt}],
             temperature=0.0,
             max_tokens=100
