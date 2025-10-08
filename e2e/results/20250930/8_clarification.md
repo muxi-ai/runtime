@@ -18,7 +18,7 @@
 |---------|-----------|------|--------|--------|----------|----------------|
 | 8A1 | Ambiguous Request Clarification | Core Behavior | ✅ PASSED | 2/2 | ~30 sec | Both ambiguous requests triggered clarification |
 | 8A2 | No False Clarification Requests | Core Behavior | ✅ PASSED | 4/4 | ~40 sec | All scenarios passed including recall questions |
-| 8B1 | Multi-Turn Clarification | Context Mgmt | ✅ PASSED | 3/3 | ~45 sec | Context preserved across all turns |
+| 8B1 | Multi-Turn Clarification | Context Mgmt | ✅ PASSED | 3/3 | ~45 sec | Context preserved, async cleanup working |
 | 8B2 | Context Switch Detection | Context Mgmt | ✅ PASSED | 2/2 | ~35 sec | Context switches handled appropriately |
 | 8C1 | Clarification Modes (Multi-Strategy) | Modes | ✅ PASSED | 5/5 | ~80 sec | **PERFECT: All 5 modes detected including Credential** |
 | 8D1 | Safety-Critical Questions | Safety | ✅ PASSED | 3/3 | ~40 sec | All safety scenarios immediate response |
@@ -27,6 +27,8 @@
 **Total Checks**: 20/20 individual checks passing (100%)  
 **Critical Requirements**: Safety ✅ PERFECT (3/3), False Positives ✅ PERFECT (4/4)  
 **🎉 PERFECT SCORES**: Test 8C1 achieves 5/5 modes (100%) | Test 8A2 recall questions 5/5 (100%)
+
+**🔧 INFRASTRUCTURE FIX**: RecursionError in tests completely resolved with custom asyncio handler + async cleanup utility
 
 ---
 
@@ -57,6 +59,240 @@
 **ALL TESTS PASSING!** 🎉
 
 
+
+---
+
+## RecursionError Fix (October 8, 2024)
+
+### Problem Discovered
+
+During Test 8B1 execution, RecursionError spam was flooding the output:
+```
+RecursionError: maximum recursion depth exceeded while calling a Python object
+RecursionError: maximum recursion depth exceeded while calling a Python object
+RecursionError: maximum recursion depth exceeded while calling a Python object
+(hundreds of lines...)
+```
+
+### Root Cause Analysis
+
+**Investigation findings**:
+1. **NOT caused by our observability code** - Disabling all observability → RecursionError still occurred
+2. **NOT from multithreading** - Removing `@multitasking.task` → System deadlocked
+3. **NOT from large data** - All data structures were small and simple
+4. **NOT in our code** - Stack traces showed recursion in Python's asyncio internals
+
+**Actual cause discovered**:
+- Formation uses fire-and-forget `asyncio.create_task()` for performance (buffer memory, observability)
+- When event loop tries to shut down with pending tasks, asyncio raises "Task was destroyed but it is pending!"
+- Python's default asyncio exception handler uses the `logging` module
+- The logging module calls `os.path.basename()` → `isinstance()` → triggers another exception
+- This happens DURING exception handling → **infinite recursion**
+
+**Stack trace evidence**:
+```
+File "asyncio/base_events.py", line 1786, in call_exception_handler
+File "logging/__init__.py", line 1540, in error
+File "logging/__init__.py", line 1634, in _log
+File "logging/__init__.py", line 1644, in makeRecord
+File "posixpath.py", line 152, in basename
+→ isinstance() call → RecursionError
+```
+
+### Two-Part Solution
+
+#### Part 1: Custom Asyncio Exception Handler
+
+**File**: `src/muxi/services/observability/asyncio_handler.py` (NEW)
+
+```python
+def safe_asyncio_exception_handler(
+    loop: asyncio.AbstractEventLoop,
+    context: Dict[str, Any]
+) -> None:
+    """
+    Custom asyncio exception handler that avoids using logging.
+    
+    Writes directly to stderr instead of using Python's logging module,
+    preventing RecursionError during exception handling.
+    """
+    try:
+        exception = context.get('exception')
+        message = context.get('message', 'Unknown asyncio exception')
+        
+        # Write directly to stderr to avoid logging recursion
+        sys.stderr.write(f"\n⚠️  Asyncio exception: {message}\n")
+        
+        if exception:
+            sys.stderr.write(f"Exception type: {type(exception).__name__}\n")
+            # ... traceback handling ...
+        
+        sys.stderr.flush()
+    
+    except Exception as e:
+        # Last resort - if even this handler fails
+        sys.stderr.write(f"\n🔥 Exception handler itself failed: {e}\n")
+        sys.stderr.flush()
+```
+
+**Installed in** `src/muxi/formation/formation.py`:
+```python
+async def start_overlord(self):
+    # Install safe asyncio exception handler to prevent RecursionError
+    import asyncio
+    from ..services.observability.asyncio_handler import safe_asyncio_exception_handler
+    
+    try:
+        loop = asyncio.get_running_loop()
+        loop.set_exception_handler(safe_asyncio_exception_handler)
+    except RuntimeError:
+        pass  # No event loop running yet
+```
+
+**Result**: Prevents recursion, shows clean warnings instead of stack overflow
+
+#### Part 2: Async Cleanup Utility
+
+**File**: `e2e/utils/async_cleanup.py` (NEW)
+
+Provides utilities for proper async task cleanup in tests:
+
+1. **`cleanup_pending_tasks()`** - Aggressive cleanup with cancellation
+2. **`wait_for_background_tasks()`** - Gentle wait for fire-and-forget tasks
+3. **`standard_test_cleanup()`** - All-in-one cleanup for formation tests
+4. **`print_task_summary()`** - Debugging utility
+
+**Example usage**:
+```python
+async def test_something():
+    formation = Formation()
+    # ... test code ...
+    
+    try:
+        # ... test logic ...
+    finally:
+        # Standard cleanup with task waiting
+        await standard_test_cleanup(
+            formation,
+            wait_for_tasks=True,
+            timeout=5.0,
+            verbose=True
+        )
+```
+
+**Result**: Clean test output with graceful task completion
+```
+6. Cleaning up...
+   ℹ️  Waiting for 2 background task(s) (memory/observability)...
+   ✓ All 2 background task(s) completed
+   ✓ Formation stopped
+   ℹ️  No pending tasks to clean up
+```
+
+### Why We Need BOTH Solutions
+
+**Custom handler alone**:
+- ✅ Prevents RecursionError
+- ⚠️ Still shows "Task was destroyed" warnings
+- ⚠️ Tasks don't complete gracefully
+
+**Cleanup utility alone**:
+- ✅ Clean end-of-test shutdown
+- ❌ RecursionError still happens mid-test
+- ⚠️ Can't prevent all task lifecycle events
+
+**Both together**:
+- ✅ No RecursionError (custom handler)
+- ✅ Clean task completion (cleanup utility)
+- ✅ Proper resource cleanup
+- ✅ Clean test output
+
+### Test vs Production Impact
+
+**Tests** (`asyncio.run()` closes loop when done):
+- Fire-and-forget tasks may still be running when test ends
+- Event loop shutdown triggers "Task was destroyed" warnings
+- **Solution**: Cleanup utility waits for tasks before exit
+
+**Production** (long-running servers):
+- Event loop runs indefinitely
+- Tasks complete naturally before server shutdown
+- **Still need**: Custom handler for mid-operation warnings
+
+### Files Added/Modified
+
+**New files**:
+```
+src/muxi/services/observability/asyncio_handler.py  - Custom exception handler
+e2e/utils/async_cleanup.py                          - Test cleanup utilities
+e2e/utils/README.md                                 - Documentation
+e2e/utils/__init__.py                               - Package marker
+```
+
+**Modified files**:
+```
+src/muxi/formation/formation.py                     - Install custom handler
+e2e/tests/8_clarification/test_8b1_multi_turn_clarification.py - Use cleanup utility
+src/muxi/formation/workflow/decomposer.py           - Clean up debug prints
+```
+
+### Validation
+
+**Before fix**:
+```bash
+$ python e2e/tests/8_clarification/test_8b1_multi_turn_clarification.py
+RecursionError: maximum recursion depth exceeded while calling a Python object
+RecursionError: maximum recursion depth exceeded while calling a Python object
+RecursionError: maximum recursion depth exceeded while calling a Python object
+(300+ lines of recursion spam)
+✅ PASSED  # Test still passed, but output was unusable
+```
+
+**After fix**:
+```bash
+$ python e2e/tests/8_clarification/test_8b1_multi_turn_clarification.py
+... normal test output ...
+
+6. Cleaning up...
+   ℹ️  Waiting for 2 background task(s) (memory/observability)...
+   ✓ All 2 background task(s) completed
+   ✓ Formation stopped
+   ℹ️  No pending tasks to clean up
+
+================================================================================
+Test Result: ✅ PASSED
+Checks Passed: 3
+  ✓ Turn 1: Clarification triggered
+  ✓ Turn 3: Continued clarification
+  ✓ Context preservation across turns
+================================================================================
+```
+
+**Result**: Clean, readable test output with no RecursionError spam ✅
+
+### Key Learnings for Future Tests
+
+1. **Always use async cleanup** in tests that create fire-and-forget tasks
+2. **Pattern to follow**:
+   ```python
+   from utils.async_cleanup import standard_test_cleanup
+   
+   try:
+       # test code
+   finally:
+       await standard_test_cleanup(formation, verbose=True)
+   ```
+3. **Fire-and-forget is fine** - not a bug, just needs proper cleanup
+4. **Custom handler is defensive** - prevents Python's logging recursion bug
+
+### Documentation
+
+Complete guide available in `e2e/utils/README.md` with:
+- Why async cleanup matters
+- All utility functions explained
+- Usage examples
+- Troubleshooting guide
+- Performance impact (0-2 seconds for cleanup)
 
 ---
 

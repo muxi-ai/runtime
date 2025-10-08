@@ -180,15 +180,19 @@ class TaskDecomposer:
         # Safety: Truncate very large requests to prevent recursion in LLM processing
         # Large requests with deeply nested context can cause stack overflow
         max_request_length = 50000  # 50k chars should be plenty
-        truncated_request = request if len(request) <= max_request_length else (request[:max_request_length] + "\n\n[... request truncated for safety ...]")
-        
-        decomposition_prompt = self._create_decomposition_prompt(truncated_request, context, analysis)
+        truncated_request = (
+            request
+            if len(request) <= max_request_length
+            else (request[:max_request_length] + "\n\n[... request truncated for safety ...]")
+        )
 
-        # Debug: Log the actual prompt being sent to LLM
-        prompt_length = len(decomposition_prompt)
-        
+        decomposition_prompt = self._create_decomposition_prompt(
+            truncated_request, context, analysis
+        )
+
         # Skip observability call that might trigger recursion
-        # Instead just log the prompt length
+        # Debug logging is commented out to avoid potential issues:
+        # prompt_length = len(decomposition_prompt)
         # print(f"🔍 Decomposition prompt size: {prompt_length:,} chars, request size: {len(request):,} chars")
 
         # # DEBUG: Print full decomposition prompt to console for debugging tests
@@ -201,6 +205,7 @@ class TaskDecomposer:
         try:
             # Event 5: COMMENTED OUT - duplicate planning event
             from ...services import streaming  # Still need import for other uses
+
             # streaming.stream(
             #     "planning",
             #     "Analyzing how to break down this complex request...",
@@ -212,7 +217,9 @@ class TaskDecomposer:
             # Safety check: Limit prompt size to prevent recursion issues
             # Very large prompts (>100k chars) can cause recursion in LLM processing
             if len(decomposition_prompt) > 100000:
-                raise ValueError(f"Decomposition prompt too large ({len(decomposition_prompt)} chars), using heuristic")
+                raise ValueError(
+                    f"Decomposition prompt too large ({len(decomposition_prompt)} chars), using heuristic"
+                )
 
             response = await self.llm.generate_text(decomposition_prompt, max_tokens=2000)
 
@@ -239,38 +246,42 @@ class TaskDecomposer:
                 task_count=len(workflow.tasks),
                 workflow_id=workflow.id if workflow else None,
                 decomposition_details=response,
-                is_llm_response=True
+                is_llm_response=True,
             )
 
             return workflow
 
-        except RecursionError as e:
+        except RecursionError:
             # Handle RecursionError specially to avoid cascading logging errors
             # This can occur with very large/complex prompts
             print("\n⚠️  LLM decomposition hit recursion limit, using heuristic decomposition")
-            
+
             # Emit streaming event without trying to stringify the error
             # (which could trigger more recursion)
             streaming.stream(
                 "planning",
                 "Using alternative approach to break down the request...",
                 stage="decomposition_fallback",
-                error_reason="Recursion limit exceeded"
+                error_reason="Recursion limit exceeded",
             )
 
             return self._heuristic_decompose_request(workflow_id, request, analysis)
 
         except Exception as e:
-            #  Decomposer warning - TODO: add observability
-            print(f"\n❌ LLM DECOMPOSITION FAILED: {type(e).__name__}: {e}")
-            print("🔄 Falling back to heuristic decomposition")
+            # TODO: Add observability for decomposition failures
+            # For now, log to stderr for visibility
+            import sys
+
+            sys.stderr.write(f"\n⚠️  LLM decomposition failed: {type(e).__name__}\n")
+            sys.stderr.write("   Falling back to heuristic decomposition\n")
+            sys.stderr.flush()
 
             # Emit streaming event for fallback
             # Sanitize and truncate error message for streaming
             error_msg = str(e).strip() if e else ""
             if error_msg:
                 # Remove newlines and limit length
-                error_msg = error_msg.replace('\n', ' ').replace('\r', '')[:200]
+                error_msg = error_msg.replace("\n", " ").replace("\r", "")[:200]
             else:
                 error_msg = "LLM decomposition failed"
 
@@ -278,7 +289,7 @@ class TaskDecomposer:
                 "planning",
                 "Using alternative approach to break down the request...",
                 stage="decomposition_fallback",
-                error_reason=error_msg
+                error_reason=error_msg,
             )
 
             return self._heuristic_decompose_request(workflow_id, request, analysis)
@@ -302,8 +313,9 @@ class TaskDecomposer:
         """
         # Read the prompt template from PromptLoader
         from ..prompts.loader import PromptLoader
+
         try:
-            template = PromptLoader.get('decomposition_prompt.md')
+            template = PromptLoader.get("decomposition_prompt.md")
         except KeyError:
             # Fallback to basic template if file not found
             template = (
@@ -331,7 +343,7 @@ class TaskDecomposer:
                     context_info = f"\nContext: {safe_context}"
                 else:
                     context_info = f"\nContext: {type(context).__name__}"
-            except:
+            except Exception:
                 context_info = "\nContext: <unavailable>"
 
         analysis_info = ""
