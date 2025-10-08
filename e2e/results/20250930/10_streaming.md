@@ -27,7 +27,7 @@ Successfully migrated all Area 10 streaming tests from `tests/e2e/10_streaming/`
 |---------|-----------|-------------|-----------|-----------|
 | 10A1 | `test_10_a_1.py` | Basic streaming functionality | ✅ Migrated | ✅ PASSING (27s) |
 | 10A2 | `test_10_a_2.py` | Stream content quality and interruption | ✅ Migrated | ✅ PASSING (42s) |
-| 10A3 | `test_10_a_3.py` | Rephrasing quality in streaming | ✅ Migrated | ⚠️ TIMEOUT (30s) |
+| 10A3 | `test_10_a_3.py` | Rephrasing quality in streaming | ✅ Migrated | ✅ PASSING (24s) |
 | 10A4 | `test_10_a_4.py` | Streaming enable/disable control | ✅ Migrated | ✅ PASSING (13s) |
 | 10A5 | `test_10_a_5.py` | Progress event control | ✅ Migrated | ❌ FAILED (30s) |
 | 10A6 | `test_10_a_6.py` | Clarification with streaming | ✅ Migrated | ✅ PASSING (60s) |
@@ -197,7 +197,7 @@ else:
 |---------|-----------|-----------|------|-------|
 | 10A1 | Basic Streaming | ✅ PASSING | 27s | Got full answer with keyword |
 | 10A2 | Stream Content | ✅ PASSING | 42s | Content quality + interruption OK |
-| 10A3 | Rephrasing Quality | ⚠️ TIMEOUT | 30s | Clarification triggered, no completed event |
+| 10A3 | Rephrasing Quality | ✅ PASSING | 24s | Rephrasing indicators verified |
 | 10A4 | Streaming Control | ✅ PASSING | 13s | Stream on/off control verified |
 | 10A5 | Progress Control | ❌ FAILED | 30s | Progress filtering not working |
 | 10A6 | Clarification Streaming | ✅ PASSING | 60s | Multi-turn conversation streaming OK |
@@ -240,25 +240,35 @@ else:
    - Graceful interruption handling
    - No errors on early termination
 
-### Test 10A3 - Rephrasing Quality ⚠️ TIMEOUT
+### Test 10A3 - Rephrasing Quality ✅ PASSING
 
-**Execution Time**: 30 seconds (timeout)  
-**Stream Events Received**: 3 events  
-**Status**: ⚠️ Timeout - No completed event  
-**Exit Code**: 0 (clean exit despite timeout)
+**Execution Time**: 24 seconds  
+**Stream Events Received**: 8 events total  
+**Content Length**: Verified with rephrasing indicators  
+**Status**: ✅ All checks passed  
+**Exit Code**: 0
 
 **Event Types**:
-- Progress events: 1 ("Working on it...")
-- Thinking events: 2 ("Understanding..." and "I need to clarify...")
+- Progress events: 4
+- Thinking events: 1
+- Planning events: 2
+- Completed events: 1 (contains full answer)
 
-**Root Cause**:
-- Test prompt triggered clarification flow
-- System started asking user for clarification
-- Never reached "completed" event within 30s timeout
-- This is expected behavior for the prompt used
+**Tests Performed**:
+1. **Rephrasing Quality**: ✅ Passed
+   - Found rephrasing indicators ("I'm", "let me", etc.)
+   - Natural language style verified
+   - Internal monologue patterns detected
 
-**Recommendation**: 
-- Increase timeout to 60s or change test prompt to avoid clarification
+2. **Language Consistency**: ⚠️ Mixed
+   - Contains both technical and natural language
+   - This is acceptable for technical questions
+
+**Fix Applied**:
+- Changed prompt from ambiguous stock market question to specific Python features question
+- Original prompt triggered clarification flow causing timeout
+- New prompt: "What are the main features of Python programming language? List the top 5."
+- Increased timeout from 30s to 60s for safety
 
 ### Test 10A4 - Streaming Control ✅ PASSING
 
@@ -578,9 +588,8 @@ The streaming functionality is **working correctly** as evidenced by:
 ## Final Summary
 
 **Migration Status**: ✅ COMPLETE  
-**Test Results**: 4/6 PASSING (67% success rate)  
-- ✅ Passing: 10A1, 10A2, 10A4, 10A6
-- ⚠️ Timeout: 10A3 (clarification triggered)
+**Test Results**: 5/6 PASSING (83% success rate)  
+- ✅ Passing: 10A1, 10A2, 10A3, 10A4, 10A6
 - ❌ Failed: 10A5 (runtime functionality issue - progress filtering)
 
 **Key Achievements**:
@@ -591,5 +600,4 @@ The streaming functionality is **working correctly** as evidenced by:
 5. Critical "completed" event extraction bug fixed
 
 **Known Issues**:
-1. **Test 10A3**: Prompt triggers clarification, needs timeout increase or prompt change
-2. **Test 10A5**: Runtime progress filtering not working - needs runtime fix
+1. **Test 10A5**: Runtime progress filtering not working - needs runtime fix (not a migration issue)

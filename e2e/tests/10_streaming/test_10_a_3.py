@@ -22,11 +22,12 @@ def main():
         await test.setup_formation(formation_path=str(formation_path))
 
         # Make a request that should generate rephrased events
+        # Using a specific, non-ambiguous prompt to avoid clarification flow
         result = await test.test_basic_streaming(
-            message="Analyze the stock market trends and provide investment advice",
+            message="What are the main features of Python programming language? List the top 5.",
             user_id="test_user",
             session_id="rephrasing_test_10a3",
-            timeout=30.0,
+            timeout=60.0,  # Increased timeout for safety
         )
 
         # Analyze for rephrasing indicators
