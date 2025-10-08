@@ -1,7 +1,7 @@
 ---
 created: 2025-08-21T17:31:00Z
-last_updated: 2025-09-21T20:07:51Z
-version: 1.5
+last_updated: 2025-10-08T13:55:25Z
+version: 1.6
 author: Claude Code PM System
 ---
 
@@ -17,11 +17,11 @@ MUXI Runtime is organized as a Python package with comprehensive test coverage a
 runtime/
 ├── src/muxi/runtime/      # Core runtime engine
 ├── tests/                 # Unit and integration tests
-├── e2e/                   # Complete E2E testing environment (NEW)
+├── e2e/                   # Complete E2E testing environment
 │   ├── tests/            # 215+ E2E test files across 12 areas
 │   ├── docker/           # Docker configurations for testing
 │   ├── scripts/          # Test runner scripts
-│   ├── utils/            # Testing utilities (webhook, A2A registry)
+│   ├── utils/            # Testing utilities (async cleanup, webhook, A2A registry)
 │   └── fixtures/         # Test data and formations
 ├── docs/                  # Documentation
 ├── test-formations/       # Example formations
@@ -77,7 +77,7 @@ Unified service architecture:
 - `llm/` - OneLLM integration layer
 - `memory/` - Three-tier memory implementation
 - `multimodal/` - Image/audio/video processing (cleaned Dec 2025: removed MultiModalWorkflowIntegrator)
-- `observability/` - Event streaming (10 formatters, 4 transports)
+- `observability/` - Event streaming (10 formatters, 4 transports, custom asyncio handler)
 - `streaming.py` - Streaming events system with fire-and-forget pattern
 - `scheduler/` - Natural language task scheduling (cleaned Dec 2025: removed MultiLLMCircuitBreaker)
 - `secrets/` - Encrypted credential management
@@ -185,6 +185,11 @@ Complete end-to-end testing environment with 215+ tests across 12 areas:
 - `test-in-docker.sh` - Run tests in Docker with simple commands
 - `run-e2e-tests.sh` - Run tests with service orchestration
 
+### Utilities (`e2e/utils/`)
+- `async_cleanup.py` - Custom asyncio event loop handler for test cleanup
+- `README.md` - Documentation for testing utilities
+- Additional test utilities (webhook server, A2A registry)
+
 ## Example Formations (`test-formations/`)
 
 Ready-to-use formation examples:
@@ -232,4 +237,6 @@ Ready-to-use formation examples:
 This structure supports the "container runtime for AI agents" vision with clear separation of concerns and production-ready features.
 
 ## Update History
+- 2025-10-08: Added e2e/utils/ documentation section with async cleanup utilities
+- 2025-10-08: Updated observability service description to note custom asyncio handler
 - 2025-09-19: Added prompts/ directory with 16 externalized prompts and PromptLoader utility
