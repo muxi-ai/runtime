@@ -15,6 +15,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common.base import BaseE2ETest  # noqa: E402
 
+try:
+    import httpx
+except ImportError:
+    httpx = None
+
 
 class BaseAsyncTest(BaseE2ETest):
     """
@@ -28,25 +33,58 @@ class BaseAsyncTest(BaseE2ETest):
     - Performance monitoring for async operations
     """
 
-    def __init__(self, test_name: str, test_description: str):
-        super().__init__(test_name, test_description, "9_async")
+    def __init__(self, test_name: str, test_description: str, test_area: str = "9_async"):
+        super().__init__(test_name, test_description, test_area)
 
         # Async-specific state
         self.webhook_log_path = Path.cwd() / "webhook_log.json"
         self.async_responses = []
         self.webhook_events = []
+        
+        # Webhook server configuration (default to localhost:8765)
+        self.webhook_url = "http://localhost:8765"
 
     async def clear_webhook_log(self):
-        """Clear webhook log file if it exists."""
-        if self.webhook_log_path.exists():
-            self.webhook_log_path.unlink()
-        await asyncio.sleep(0.1)  # Small delay to ensure file is fully deleted
+        """
+        Clear webhook log via HTTP endpoint (for Docker-based webhook server).
+        Falls back to local file deletion if HTTP request fails.
+        """
+        try:
+            # Try to clear via HTTP endpoint (works with Docker)
+            if httpx:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{self.webhook_url}/clear",
+                        timeout=5.0
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        previous_count = data.get("previous_count", 0)
+                        self.formatter.print_debug(
+                            f"Cleared webhook log via HTTP ({previous_count} entries removed)"
+                        )
+                        await asyncio.sleep(0.1)
+                        return
+            
+            # Fallback to local file deletion (for non-Docker setups)
+            if self.webhook_log_path.exists():
+                self.webhook_log_path.unlink()
+                self.formatter.print_debug("Cleared webhook log via local file deletion")
+            await asyncio.sleep(0.1)
+            
+        except Exception as e:
+            # If HTTP fails, try local file deletion as fallback
+            self.formatter.print_debug(f"HTTP clear failed ({e}), trying local deletion")
+            if self.webhook_log_path.exists():
+                self.webhook_log_path.unlink()
+            await asyncio.sleep(0.1)
 
     async def wait_for_webhook(
         self, request_id: str, max_wait: int = 30, check_interval: int = 1
     ) -> Optional[Dict[str, Any]]:
         """
         Wait for webhook delivery and return the webhook payload.
+        Queries webhook server via HTTP (Docker-compatible).
 
         Args:
             request_id: The request ID to wait for
@@ -63,41 +101,54 @@ class BaseAsyncTest(BaseE2ETest):
             await asyncio.sleep(check_interval)
             waited += check_interval
 
-            if self.webhook_log_path.exists():
-                try:
-                    with open(self.webhook_log_path, "r") as f:
-                        content = f.read()
-                        if not content:
-                            continue  # File exists but empty, wait more
-
-                        # Read lines and parse each as JSON (JSONL format)
-                        for line in content.splitlines():
-                            line = line.strip()
-                            if not line:
-                                continue
-
-                            try:
-                                webhook_entry = json.loads(line)
-                                # The webhook entry contains the full HTTP request details
-                                # The actual webhook payload is in the 'body' field
-                                if "body" in webhook_entry:
-                                    webhook = webhook_entry["body"]
-
-                                    if (
-                                        isinstance(webhook, dict)
-                                        and webhook.get("id") == request_id
-                                    ):
+            try:
+                # Query webhook server via HTTP (works with Docker)
+                if httpx:
+                    async with httpx.AsyncClient() as client:
+                        response = await client.get(
+                            f"{self.webhook_url}/logs",
+                            timeout=5.0
+                        )
+                        if response.status_code == 200:
+                            data = response.json()
+                            logs = data.get("logs", [])
+                            
+                            # Search for our request_id in the logs
+                            for log_entry in logs:
+                                if "body" in log_entry:
+                                    webhook = log_entry["body"]
+                                    if isinstance(webhook, dict) and webhook.get("id") == request_id:
                                         self.formatter.print_success(
                                             f"Webhook received after {waited}s!"
                                         )
                                         self.webhook_events.append(webhook)
                                         return webhook
-                            except json.JSONDecodeError:
-                                # Single line failed to parse, continue with next
-                                continue
-                except (IOError, OSError):
-                    # File might not be ready yet, continue waiting
-                    pass
+                else:
+                    # Fallback: Try local file if httpx not available
+                    if self.webhook_log_path.exists():
+                        with open(self.webhook_log_path, "r") as f:
+                            content = f.read()
+                            if content:
+                                for line in content.splitlines():
+                                    line = line.strip()
+                                    if line:
+                                        try:
+                                            webhook_entry = json.loads(line)
+                                            if "body" in webhook_entry:
+                                                webhook = webhook_entry["body"]
+                                                if (
+                                                    isinstance(webhook, dict)
+                                                    and webhook.get("id") == request_id
+                                                ):
+                                                    self.formatter.print_success(
+                                                        f"Webhook received after {waited}s!"
+                                                    )
+                                                    self.webhook_events.append(webhook)
+                                                    return webhook
+                                        except json.JSONDecodeError:
+                                            continue
+            except Exception as e:
+                self.formatter.print_debug(f"Error checking webhooks: {e}")
 
             if waited % 5 == 0:  # Progress update every 5 seconds
                 self.formatter.print_debug(f"Still waiting... ({waited}s)")
@@ -296,13 +347,15 @@ class BaseAsyncTest(BaseE2ETest):
 
     def print_async_summary(self):
         """Print summary specific to async tests."""
-        self.formatter.print_section("Async Test Summary")
+        print("\n" + "=" * 60)
+        print("Async Test Summary")
+        print("=" * 60)
 
         if self.async_responses:
-            self.formatter.print_info(f"Async responses received: {len(self.async_responses)}")
+            print(f"Async responses received: {len(self.async_responses)}")
 
         if self.webhook_events:
-            self.formatter.print_info(f"Webhook events captured: {len(self.webhook_events)}")
+            print(f"Webhook events captured: {len(self.webhook_events)}")
             for i, webhook in enumerate(self.webhook_events, 1):
                 self.formatter.print_debug(
                     f"  Webhook {i}: ID={webhook.get('id')}, Status={webhook.get('status')}"

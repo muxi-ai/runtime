@@ -7,6 +7,7 @@ asynchronously regardless of complexity or estimated duration.
 """
 
 import sys
+from pathlib import Path
 
 from .base_async_test import BaseAsyncTest
 
@@ -19,7 +20,8 @@ def main():
 
     async def run_async_test():
         # Setup formation using the shared async formation
-        await test.setup_formation(yaml_name="formation-async.yaml")
+        formation_path = Path(__file__).parent / "formations" / "formation-async"
+        await test.setup_formation(formation_path=str(formation_path))
 
         # Run the forced async test
         result = await test.test_async_request(
@@ -57,14 +59,8 @@ def main():
 
         return 0 if result["success"] else 1
 
-    return test.run_in_event_loop(
-        "9a1_forced_async_mode",
-        "Test forced async mode with use_async=True",
-        "9_async",
-        [],  # We handle test cases manually in run_async_test
-        None,  # Use pattern-based formation path
-        "formation-async.yaml",  # Use shared formation
-    )
+    import asyncio
+    return asyncio.run(run_async_test())
 
 
 if __name__ == "__main__":

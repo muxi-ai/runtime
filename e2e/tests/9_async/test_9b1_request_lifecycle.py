@@ -7,6 +7,7 @@ during async workflow execution.
 """
 
 import sys
+from pathlib import Path
 
 from .base_async_test import BaseAsyncTest
 
@@ -17,7 +18,8 @@ def main():
 
     async def run_lifecycle_test():
         # Setup formation using the shared async formation
-        await test.setup_formation(yaml_name="formation-async.yaml")
+        formation_path = Path(__file__).parent / "formations" / "formation-async"
+        await test.setup_formation(formation_path=str(formation_path))
 
         # First, create an async request to test lifecycle on
         result = await test.test_async_request(
@@ -41,7 +43,7 @@ def main():
             test.formatter.print_section("Lifecycle Test Results")
             for test_name, passed in lifecycle_results.items():
                 status = "PASSED" if passed else "FAILED"
-                test.formatter.print_info(f"  {test_name}: {status}")
+                test.formatter.print_debug(f"  {test_name}: {status}")
 
         # Record result
         test.results.append(success)
@@ -65,14 +67,8 @@ def main():
 
         return 0 if success else 1
 
-    return test.run_in_event_loop(
-        "9b1_request_lifecycle",
-        "Test request lifecycle management APIs",
-        "9_async",
-        [],  # We handle test cases manually
-        None,  # Use pattern-based formation path
-        "formation-async.yaml",  # Use shared formation
-    )
+    import asyncio
+    return asyncio.run(run_lifecycle_test())
 
 
 if __name__ == "__main__":
