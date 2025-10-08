@@ -33,9 +33,10 @@ class WebhookServer:
     def setup_routes(self):
         """Setup webhook endpoints"""
         self.app.router.add_post("/", self.handle_webhook)
-        self.app.router.add_post("/{path:.*}", self.handle_webhook)
         self.app.router.add_get("/health", self.health_check)
         self.app.router.add_get("/logs", self.get_logs)
+        self.app.router.add_post("/clear", self.clear_logs_endpoint)
+        self.app.router.add_post("/{path:.*}", self.handle_webhook)  # Catch-all must be last
 
     async def handle_webhook(self, request: web.Request) -> web.Response:
         """Handle incoming webhook requests"""
@@ -98,6 +99,23 @@ class WebhookServer:
             logs = self._read_logs()
             return web.json_response({"status": "success", "count": len(logs), "logs": logs})
         except Exception as e:
+            return web.json_response({"status": "error", "message": str(e)}, status=500)
+
+    async def clear_logs_endpoint(self, request: web.Request) -> web.Response:
+        """Clear webhook logs via HTTP endpoint"""
+        try:
+            previous_count = self._get_webhook_count()
+            self.clear_logs()
+            logger.info(f"Webhook logs cleared via HTTP request (removed {previous_count} entries)")
+            return web.json_response(
+                {
+                    "status": "success",
+                    "message": "Webhook logs cleared",
+                    "previous_count": previous_count,
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error clearing logs: {e}")
             return web.json_response({"status": "error", "message": str(e)}, status=500)
 
     def _append_to_log(self, data: dict):
@@ -183,6 +201,7 @@ async def main():
     logger.info(f"Logging webhooks to: {WEBHOOK_LOG_FILE}")
     logger.info(f"Health check: http://{WEBHOOK_HOST}:{WEBHOOK_PORT}/health")
     logger.info(f"View logs: http://{WEBHOOK_HOST}:{WEBHOOK_PORT}/logs")
+    logger.info(f"Clear logs: POST http://{WEBHOOK_HOST}:{WEBHOOK_PORT}/clear")
 
     # Keep the server running
     try:
