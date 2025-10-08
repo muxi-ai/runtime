@@ -42,7 +42,7 @@ async def test_clarification_modes():
 
         content = response.content if hasattr(response, "content") else str(response)
         print(f"   Response: {content[:150]}...")
-        
+
         direct_indicators = ["which directory", "what folder", "where"]
         if any(indicator in content.lower() for indicator in direct_indicators):
             print("   ✅ Direct mode: Quick clarification question")
@@ -64,7 +64,7 @@ async def test_clarification_modes():
 
         content = response.content if hasattr(response, "content") else str(response)
         print(f"   Response: {content[:150]}...")
-        
+
         brainstorm_indicators = ["what type", "what kind", "ideas", "thinking", "envision"]
         if any(indicator in content.lower() for indicator in brainstorm_indicators):
             print("   ✅ Brainstorm mode: Open-ended exploration")
@@ -86,7 +86,7 @@ async def test_clarification_modes():
 
         content = response.content if hasattr(response, "content") else str(response)
         print(f"   Response: {content[:150]}...")
-        
+
         planning_indicators = ["products", "payment", "features", "requirements", "need"]
         if any(indicator in content.lower() for indicator in planning_indicators):
             print("   ✅ Planning mode: Requirements gathering")
@@ -108,7 +108,7 @@ async def test_clarification_modes():
 
         content = response.content if hasattr(response, "content") else str(response)
         print(f"   Response: {content[:150]}...")
-        
+
         execution_indicators = ["format", "what data", "which", "type of report"]
         if any(indicator in content.lower() for indicator in execution_indicators):
             print("   ✅ Execution mode: Parameter clarification")
@@ -139,7 +139,7 @@ async def test_clarification_modes():
     print(f"Checks Passed: {len(checks_passed)}")
     for check in checks_passed:
         print(f"  ✓ {check}")
-    
+
     print("\n📝 NOTE: Clarification modes are auto-detected by LLM.")
     print("   Responses may vary based on LLM interpretation.")
     print("=" * 80)

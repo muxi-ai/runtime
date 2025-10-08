@@ -18,7 +18,7 @@ async def main():
     """Test workflow plan generation with auto-decline."""
 
     print("🔍 MUXI Runtime - Workflow Plan Generation Test")
-    print("="*60)
+    print("=" * 60)
     print("\n📋 Configuration:")
     print("   • complexity_threshold: 4.0 (triggers workflow)")
     print("   • plan_approval_threshold: 5 (requires approval)")
@@ -36,13 +36,13 @@ async def main():
         # Debug: Check what agents are actually loaded
         print(f"\n🔍 DEBUG: Found {len(overlord.agents)} agents:")
         for agent_id, agent in overlord.agents.items():
-            specialties = getattr(agent, 'specialties', []) or getattr(agent, 'specialization', [])
-            agent_name = getattr(agent, 'name', agent_id)
+            specialties = getattr(agent, "specialties", []) or getattr(agent, "specialization", [])
+            agent_name = getattr(agent, "name", agent_id)
             print(f"   - {agent_name} ({agent_id}): specialties = {specialties}")
 
         # Debug: Check MCP service
-        if hasattr(overlord, 'mcp_service') and overlord.mcp_service:
-            servers = getattr(overlord.mcp_service, 'servers', {})
+        if hasattr(overlord, "mcp_service") and overlord.mcp_service:
+            servers = getattr(overlord.mcp_service, "servers", {})
             print(f"\n🔍 DEBUG: Found {len(servers)} MCP servers:")
             for server_id in servers.keys():
                 print(f"   - {server_id}")
@@ -50,11 +50,13 @@ async def main():
             print("\n🔍 DEBUG: No MCP service found")
 
         # Debug: Check TaskDecomposer setup
-        if hasattr(overlord, 'task_decomposer'):
+        if hasattr(overlord, "task_decomposer"):
             decomposer = overlord.task_decomposer
             print("\n🔍 DEBUG: TaskDecomposer:")
             print(f"   - Has LLM: {decomposer.llm is not None}")
-            print(f"   - Agent registry size: {len(decomposer.agent_registry) if decomposer.agent_registry else 0}")
+            print(
+                f"   - Agent registry size: {len(decomposer.agent_registry) if decomposer.agent_registry else 0}"
+            )
             print(f"   - Has MCP service: {decomposer.mcp_service is not None}")
         else:
             print("\n🔍 DEBUG: No TaskDecomposer found")
@@ -69,14 +71,19 @@ async def main():
 
         # Complex request WITHOUT agent_name to trigger workflow
         response = await overlord.chat(
-            message=f"Research {topic}, analyze current trends, key players, and recent breakthroughs. Then create a comprehensive Linear issue with detailed findings, implementation timeline, potential challenges, and future predictions. Include specific examples and actionable insights.",
+            message=(
+                f"Research {topic}, analyze current trends, key players, and "
+                "recent breakthroughs. Then create a comprehensive Linear issue "
+                "with detailed findings, implementation timeline, potential challenges, "
+                "and future predictions. Include specific examples and actionable insights.",
+            ),
             user_id="demo_user",
             session_id="plan_test",
-            stream=False
+            stream=False,
         )
 
         # Get response
-        if hasattr(response, 'content'):
+        if hasattr(response, "content"):
             content = response.content
         else:
             content = ""
@@ -86,11 +93,11 @@ async def main():
         # Check if approval requested
         if "proposed approach" in content.lower() or "does this approach work" in content.lower():
             print("\n3️⃣ ✅ Workflow approval requested!")
-            print("\n" + "="*60)
+            print("\n" + "=" * 60)
             print("📋 PROPOSED WORKFLOW PLAN:")
-            print("="*60)
+            print("=" * 60)
             print(content)
-            print("="*60)
+            print("=" * 60)
 
             print("\n4️⃣ 🚫 Auto-declining plan (test mode)")
 
@@ -99,18 +106,22 @@ async def main():
                 message="No, cancel this workflow",
                 user_id="demo_user",
                 session_id="plan_test",
-                stream=False
+                stream=False,
             )
 
-            decline_content = decline_response.content if hasattr(decline_response, 'content') else str(decline_response)
+            decline_content = (
+                decline_response.content
+                if hasattr(decline_response, "content")
+                else str(decline_response)
+            )
             print(f"\n✅ Decline processed: {decline_content[:100]}...")
 
         else:
             print("\n⚠️  No approval requested - request may not have been complex enough")
             print("\nResponse received:")
-            print("-"*60)
+            print("-" * 60)
             print(content)
-            print("-"*60)
+            print("-" * 60)
 
         total_time = (datetime.now() - start_time).total_seconds()
 
@@ -134,6 +145,7 @@ async def main():
     except Exception as e:
         print(f"\n❌ Error: {type(e).__name__}: {e}")
         import traceback
+
         traceback.print_exc()
 
 

@@ -119,7 +119,7 @@ async def test_error_resilience():
                 cur.execute("DELETE FROM memories WHERE user_id = %s", (user_db_id,))
         conn.commit()
         conn.close()
-        
+
         original_add = overlord.long_term_memory.add
         add_attempted = False
 
@@ -213,7 +213,7 @@ async def test_error_resilience():
     response_text = await get_response_text(response)
     # For resilience testing, just verify we get a response (system is operational)
     # Content accuracy is tested in other memory tests
-    assert len(response_text) > 0, f"No response received after recovery. System may be down."
+    assert len(response_text) > 0, "No response received after recovery. System may be down."
 
     print("✓ System fully operational after error recovery")
 

@@ -36,7 +36,10 @@ async def test_no_false_clarification():
         # Test 1: Declarative statement should NOT trigger clarification
         print("\n2. Testing declarative statement (should NOT clarify)...")
         response = await overlord.chat(
-            message="I am a PostgreSQL test user. My favorite database is PostgreSQL and I work with distributed systems.",
+            message=(
+                "I am a PostgreSQL test user. My favorite database is PostgreSQL "
+                "and I work with distributed systems.",
+            ),
             user_id="test_user",
             session_id="test_declarative_1",
             stream=False
@@ -44,11 +47,11 @@ async def test_no_false_clarification():
 
         content = response.content if hasattr(response, "content") else str(response)
         print(f"   Response received ({len(content)} chars)")
-        
+
         # Check for clarification indicators (should NOT be present)
         clarification_indicators = ["could you specify", "what assistance", "need more", "clarify", "which"]
         has_clarification = any(indicator in content.lower() for indicator in clarification_indicators)
-        
+
         if not has_clarification:
             print("   ✅ Declarative statement processed without false clarification")
             checks_passed.append("Declarative statement: no false clarification")
@@ -71,7 +74,7 @@ async def test_no_false_clarification():
 
         content = response.content if hasattr(response, "content") else str(response)
         has_clarification = any(indicator in content.lower() for indicator in clarification_indicators)
-        
+
         if not has_clarification:
             print("   ✅ Recall question processed without false clarification")
             checks_passed.append("Recall question: no false clarification")
@@ -91,7 +94,7 @@ async def test_no_false_clarification():
 
         content = response.content if hasattr(response, "content") else str(response)
         has_clarification = any(indicator in content.lower() for indicator in clarification_indicators)
-        
+
         if not has_clarification:
             print("   ✅ Preference statement processed without false clarification")
             checks_passed.append("Preference statement: no false clarification")
@@ -110,7 +113,7 @@ async def test_no_false_clarification():
 
         content = response.content if hasattr(response, "content") else str(response)
         has_clarification = any(indicator in content.lower() for indicator in clarification_indicators)
-        
+
         if not has_clarification:
             print("   ✅ Critical health info processed without false clarification")
             checks_passed.append("Critical health info: no false clarification")
@@ -136,11 +139,11 @@ async def test_no_false_clarification():
     print(f"Checks Passed: {len(checks_passed)}/{4}")
     for check in checks_passed:
         print(f"  ✓ {check}")
-    
+
     if not all_passed:
         print("\n⚠️  NOTE: False positives indicate clarification system is too aggressive.")
         print("   Clear statements should be processed directly, not questioned.")
-    
+
     print("=" * 80)
 
     return 0 if all_passed else 1

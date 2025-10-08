@@ -44,7 +44,7 @@ async def investigate_recall_issue():
         print("\n" + "=" * 80)
         print("PHASE 1: Store Information")
         print("=" * 80)
-        
+
         print("\nTurn 1: User states 'My name is Alice'")
         response1 = await overlord.chat(
             message="My name is Alice",
@@ -54,17 +54,17 @@ async def investigate_recall_issue():
         )
 
         content1 = response1.content if hasattr(response1, "content") else str(response1)
-        print(f"\nResponse 1:")
+        print("\nResponse 1:")
         print(f"   Length: {len(content1)} chars")
         print(f"   Content: {content1}")
-        
+
         # Wait for memory storage
         print("\n   Waiting 3 seconds for memory storage...")
         await asyncio.sleep(3)
 
         # Check what's in memory
         print("\n2. Checking memory state...")
-        
+
         # Check buffer memory
         print("\n   A) Buffer Memory:")
         if overlord.buffer_memory:
@@ -81,7 +81,7 @@ async def investigate_recall_issue():
                 print(f"      {i}. Role: {role}, Content: {content}...")
         else:
             print("      No buffer memory available")
-        
+
         # Check persistent memory (long_term_memory)
         print("\n   B) Long-term Memory:")
         if overlord.long_term_memory:
@@ -103,20 +103,20 @@ async def investigate_recall_issue():
         print("\n" + "=" * 80)
         print("PHASE 2: Recall Question")
         print("=" * 80)
-        
+
         print("\nTurn 2: User asks 'What is my name?'")
-        
+
         # Check if clarification system intercepts
         print("\n   Checking clarification system state...")
         clarification_system = overlord.clarification_system
         if clarification_system:
             print(f"      Clarification system: {type(clarification_system).__name__}")
-            
+
             # Check if there are pending clarifications
             if hasattr(clarification_system, '_pending_clarifications'):
                 pending = clarification_system._pending_clarifications
                 print(f"      Pending clarifications: {len(pending)}")
-        
+
         response2 = await overlord.chat(
             message="What is my name?",
             user_id="test_alice",
@@ -125,13 +125,13 @@ async def investigate_recall_issue():
         )
 
         content2 = response2.content if hasattr(response2, "content") else str(response2)
-        print(f"\nResponse 2:")
+        print("\nResponse 2:")
         print(f"   Length: {len(content2)} chars")
         print(f"   Content: {content2}")
-        
+
         # Analyze response
         print("\n3. Analyzing Response 2...")
-        
+
         clarification_indicators = [
             "could you specify",
             "what assistance",
@@ -142,34 +142,34 @@ async def investigate_recall_issue():
             "can you provide more",
             "could you tell me more"
         ]
-        
+
         found_indicators = [ind for ind in clarification_indicators if ind in content2.lower()]
-        
+
         if found_indicators:
-            print(f"   ❌ CLARIFICATION TRIGGERED!")
+            print("   ❌ CLARIFICATION TRIGGERED!")
             print(f"   Found indicators: {found_indicators}")
-            print(f"\n   This is the BUG: System asked for clarification instead of recalling from memory")
+            print("\n   This is the BUG: System asked for clarification instead of recalling from memory")
         else:
-            print(f"   ✅ No clarification indicators found")
-            
+            print("   ✅ No clarification indicators found")
+
             # Check if "Alice" is in response
             if "alice" in content2.lower():
-                print(f"   ✅ Response contains 'Alice' - memory recall worked!")
+                print("   ✅ Response contains 'Alice' - memory recall worked!")
             else:
-                print(f"   ⚠️  Response doesn't mention 'Alice' - but no clarification")
+                print("   ⚠️  Response doesn't mention 'Alice' - but no clarification")
 
         # Phase 3: Check what context was sent to LLM
         print("\n" + "=" * 80)
         print("PHASE 3: Context Analysis")
         print("=" * 80)
-        
+
         print("\n4. What context should have been available?")
         print("   Expected in enhanced message:")
         print("   - Buffer memory: 'My name is Alice' conversation")
         print("   - Persistent memory: User identity with name=Alice")
         print("   - Vector memory: Relevant past conversations")
         print("\n   The LLM should have seen enough context to answer 'Alice'")
-        
+
         # Cleanup
         print("\n" + "=" * 80)
         print("5. Cleaning up...")
@@ -185,7 +185,7 @@ async def investigate_recall_issue():
     print("\n" + "=" * 80)
     print("INVESTIGATION COMPLETE")
     print("=" * 80)
-    
+
     return 0
 
 

@@ -33,7 +33,7 @@ async def verify_alice_storage_and_retrieval():
         await formation.load(str(formation_path))
         overlord = await formation.start_overlord()
         print("   ✓ Formation loaded")
-        
+
         memobase = overlord.long_term_memory
         print(f"   Memory backend: {type(memobase).__name__}")
 
@@ -41,7 +41,7 @@ async def verify_alice_storage_and_retrieval():
         print("\n" + "=" * 80)
         print("PHASE 1: Store 'My name is Alice'")
         print("=" * 80)
-        
+
         response1 = await overlord.chat(
             message="My name is Alice",
             user_id="alice_user",
@@ -51,7 +51,7 @@ async def verify_alice_storage_and_retrieval():
 
         content1 = response1.content if hasattr(response1, "content") else str(response1)
         print(f"\n✓ Response 1: {content1}")
-        
+
         # Wait for extraction
         print("\n⏳ Waiting 8 seconds for memory extraction...")
         await asyncio.sleep(8)
@@ -60,16 +60,16 @@ async def verify_alice_storage_and_retrieval():
         print("\n" + "=" * 80)
         print("STEP 1: Verify Alice is in Database")
         print("=" * 80)
-        
+
         if memobase:
             # Try to search with correct parameters
             try:
                 # Check if formation is in multi-user mode
                 print(f"   Formation is_multi_user: {overlord.is_multi_user}")
-                
+
                 # For multi-user formations
                 if overlord.is_multi_user:
-                    print(f"   Searching with external_user_id='alice_user'")
+                    print("   Searching with external_user_id='alice_user'")
                     results = await memobase.search(
                         query="Alice name",
                         external_user_id="alice_user",
@@ -77,14 +77,14 @@ async def verify_alice_storage_and_retrieval():
                     )
                 else:
                     # For single-user (user_id stored in metadata)
-                    print(f"   Searching without external_user_id (single-user mode)")
+                    print("   Searching without external_user_id (single-user mode)")
                     results = await memobase.search(
                         query="Alice name",
                         limit=10
                     )
-                
+
                 print(f"\n✓ Search completed: {len(results)} results")
-                
+
                 if results:
                     print("\n✅ FOUND in database!")
                     for i, result in enumerate(results, 1):
@@ -95,7 +95,7 @@ async def verify_alice_storage_and_retrieval():
                         print(f"   Collection: {collection}")
                         print(f"   Score: {score}")
                         print(f"   Text: {text}")
-                        
+
                     print("\n✅ STEP 1 PASSED: Alice IS stored in database")
                 else:
                     print("\n❌ STEP 1 FAILED: NO RESULTS - Alice was NOT stored")
@@ -105,7 +105,7 @@ async def verify_alice_storage_and_retrieval():
                     print(f"   Found {len(all_results)} results for generic 'user' query:")
                     for r in all_results:
                         print(f"   - {r.get('text', r.get('content', str(r)))[:100]}")
-                        
+
             except Exception as e:
                 print(f"\n❌ STEP 1 ERROR: {e}")
                 import traceback
@@ -117,10 +117,10 @@ async def verify_alice_storage_and_retrieval():
         print("\n" + "=" * 80)
         print("PHASE 2: Recall 'What is my name?'")
         print("=" * 80)
-        
+
         # To see the enhanced message, we'll need to intercept it
         # For now, let's just check if the response includes Alice
-        
+
         print("\n⏳ Sending recall question...")
         response2 = await overlord.chat(
             message="What is my name?",
@@ -130,23 +130,23 @@ async def verify_alice_storage_and_retrieval():
         )
 
         content2 = response2.content if hasattr(response2, "content") else str(response2)
-        
+
         # VERIFICATION STEP 2: Check response contains Alice
         print("\n" + "=" * 80)
         print("STEP 2: Verify Response Contains 'Alice'")
         print("=" * 80)
-        
+
         print(f"\n✓ Response 2: {content2}")
-        
+
         has_alice = "alice" in content2.lower()
         has_clarification = any(ind in content2.lower() for ind in [
             "could you specify",
-            "could you clarify", 
+            "could you clarify",
             "what do you mean",
             "need more",
             "which name"
         ])
-        
+
         if has_alice and not has_clarification:
             print("\n✅ STEP 2 PASSED: Response contains 'Alice' without clarification")
         elif has_alice and has_clarification:
@@ -161,13 +161,13 @@ async def verify_alice_storage_and_retrieval():
         print("\n" + "=" * 80)
         print("FINAL VERDICT")
         print("=" * 80)
-        
+
         step1_passed = results and len(results) > 0 if 'results' in locals() else False
         step2_passed = has_alice and not has_clarification
-        
+
         print(f"\n1. Alice stored in database: {'✅ YES' if step1_passed else '❌ NO'}")
         print(f"2. Alice in response (enhanced message worked): {'✅ YES' if step2_passed else '❌ NO'}")
-        
+
         if step1_passed and step2_passed:
             print("\n🎉 SUCCESS: Both storage AND retrieval working!")
             print("   The fix is working correctly.")
@@ -193,7 +193,7 @@ async def verify_alice_storage_and_retrieval():
         traceback.print_exc()
 
     print("\n" + "=" * 80)
-    
+
     return 0
 
 

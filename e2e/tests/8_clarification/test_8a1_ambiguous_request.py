@@ -29,7 +29,7 @@ async def test_ambiguous_request_clarification():
         await formation.load(str(formation_path))
         overlord = await formation.start_overlord()
         print("   ✓ Formation loaded")
-        
+
         # Check clarification system is enabled
         if overlord.clarification:
             print("   ✓ Clarification system initialized")
@@ -49,11 +49,11 @@ async def test_ambiguous_request_clarification():
 
         content = response.content if hasattr(response, "content") else str(response)
         print(f"   Response received ({len(content)} chars)")
-        
+
         # Check for clarification indicators
         clarification_indicators = ["what", "which", "clarify", "specific", "more information"]
         has_clarification = any(indicator in content.lower() for indicator in clarification_indicators)
-        
+
         if has_clarification:
             print("   ✅ Clarification requested for ambiguous 'Build it'")
             checks_passed.append("Ambiguous request triggered clarification")
@@ -73,7 +73,7 @@ async def test_ambiguous_request_clarification():
 
         content = response.content if hasattr(response, "content") else str(response)
         has_clarification = any(indicator in content.lower() for indicator in clarification_indicators)
-        
+
         if has_clarification:
             print("   ✅ Clarification requested for ambiguous 'Fix the issue'")
             checks_passed.append("Multiple ambiguous requests handled")

@@ -25,7 +25,9 @@ async def test_workflow_plan_only():
     print("=" * 80)
 
     # Use formation-workflow-approval to ensure approval is triggered
-    formation_path = Path(__file__).parent / "formations" / "formation-workflow-approval" / "formation.yaml"
+    formation_path = (
+        Path(__file__).parent / "formations" / "formation-workflow-approval" / "formation.yaml"
+    )
     all_passed = True
     checks_passed = []
 
@@ -41,27 +43,31 @@ async def test_workflow_plan_only():
 
         print("\n2. Sending complex request to trigger workflow decomposition...")
         print("   (Testing that high complexity triggers workflow system)")
-        
+
         # Complex request that will trigger workflow decomposition
         # Note: In stream=False mode, approval is auto-granted and workflow executes
         response = await asyncio.wait_for(
             overlord.chat(
-                message="Research AI healthcare diagnostics trends for 2025, analyze key players and breakthroughs, then create a comprehensive Linear issue with detailed findings and future predictions",
+                message=(
+                    "Research AI healthcare diagnostics trends for 2025, "
+                    "analyze key players and breakthroughs, then create a comprehensive "
+                    "Linear issue with detailed findings and future predictions"
+                ),
                 user_id="demo_user",
                 session_id="plan_test",
-                stream=False
+                stream=False,
             ),
-            timeout=300  # 5 minutes for full workflow execution
+            timeout=300,  # 5 minutes for full workflow execution
         )
 
-        content = response.content if hasattr(response, 'content') else str(response)
-        
+        content = response.content if hasattr(response, "content") else str(response)
+
         print(f"\n   ✓ Response received ({len(content)} chars)")
-        
+
         # Check if workflow was triggered and executed
         workflow_indicators = ["task", "step", "phase", "linear", "issue", "research", "analysis"]
         has_workflow = sum(1 for ind in workflow_indicators if ind in content.lower()) >= 3
-        
+
         # Check for Linear issue creation (evidence workflow executed)
         linear_indicators = ["linear", "issue", "created", "mx-"]
         has_linear = any(ind in content.lower() for ind in linear_indicators)
@@ -74,11 +80,11 @@ async def test_workflow_plan_only():
             else:
                 print("   ✅ Workflow execution detected")
                 checks_passed.append("Workflow decomposition triggered")
-            
-            print(f"\n   Result preview:")
+
+            print("\n   Result preview:")
             print(f"   {content[:400]}...")
             all_passed = True
-            
+
         else:
             print("\n   ⚠️  No clear workflow execution detected")
             print("   Response may be direct answer without decomposition")
@@ -95,6 +101,7 @@ async def test_workflow_plan_only():
     except Exception as e:
         print(f"\n✗ Test failed: {str(e)}")
         import traceback
+
         traceback.print_exc()
         all_passed = False
 

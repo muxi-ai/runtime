@@ -25,7 +25,7 @@ from muxi.formation import Formation  # noqa: E402
 async def is_clarifying_question(overlord, response_text: str, original_request: str) -> tuple[bool, str]:
     """
     Use LLM to analyze if a response is a clarifying question.
-    
+
     Returns:
         tuple: (is_question: bool, reason: str)
     """
@@ -53,30 +53,30 @@ Examples:
         llm = getattr(overlord, "extraction_model", None)
         if not llm:
             raise AttributeError("No LLM available")
-        
+
         analysis_response = await llm.chat(
             messages=[{"role": "user", "content": analysis_prompt}],
             temperature=0.0,
             max_tokens=100
         )
-        
+
         analysis_text = analysis_response.content if hasattr(analysis_response, 'content') else str(analysis_response)
-        
+
         # Parse response
         is_question = "VERDICT: YES" in analysis_text.upper()
-        
+
         # Extract reason
         reason_lines = [line for line in analysis_text.split('\n') if 'REASON:' in line.upper()]
         reason = reason_lines[0].split(':', 1)[1].strip() if reason_lines else "LLM analysis"
-        
+
         return is_question, reason
-        
+
     except Exception as e:
         # Fallback to simple heuristics
         has_question_mark = '?' in response_text
         question_words = ['what', 'which', 'how', 'where', 'when', 'why', 'who', 'could', 'would']
         has_question_word = any(word in response_text.lower()[:100] for word in question_words)
-        
+
         return (has_question_mark or has_question_word), f"Heuristic detection (error: {str(e)})"
 
 
@@ -140,7 +140,7 @@ async def test_clarification_modes():
             print(f"\n{i}. Testing {test_case['name']}...")
             print(f"   Request: '{test_case['request']}'")
             print(f"   Expected: {test_case['expected_behavior']}")
-            
+
             response = await overlord.chat(
                 message=test_case['request'],
                 user_id=test_case['user_id'],
@@ -149,26 +149,26 @@ async def test_clarification_modes():
             )
 
             content = response.content if hasattr(response, "content") else str(response)
-            
+
             # Strategy 1: Check for question indicators
             has_question_mark = '?' in content
             question_words = ['what', 'which', 'how', 'where', 'when', 'why']
             has_question_word = any(word in content.lower()[:150] for word in question_words)
-            
+
             # Strategy 2: Check response characteristics
             is_short = len(content) < 500  # Clarifying questions are usually brief
-            
+
             # Strategy 3: Use LLM to analyze (most reliable)
             is_asking, reason = await is_clarifying_question(overlord, content, test_case['request'])
-            
+
             print(f"   Response preview: {content[:150]}...")
-            print(f"   Analysis:")
+            print("   Analysis:")
             print(f"     - Has '?': {has_question_mark}")
             print(f"     - Has question word: {has_question_word}")
             print(f"     - Brief (<500 chars): {is_short}")
             print(f"     - LLM analysis: {'Asking for clarification' if is_asking else 'Providing answer'}")
             print(f"     - Reason: {reason}")
-            
+
             # Determine if mode worked
             confidence_score = sum([
                 has_question_mark,
@@ -176,7 +176,7 @@ async def test_clarification_modes():
                 is_short,
                 is_asking
             ])
-            
+
             if confidence_score >= 2:  # At least 2 of 4 indicators
                 print(f"   ✅ {test_case['name']}: Clarification detected (confidence: {confidence_score}/4)")
                 checks_passed.append(f"{test_case['name']} working")
@@ -184,16 +184,14 @@ async def test_clarification_modes():
                 print(f"   ⚠️  {test_case['name']}: Unclear (confidence: {confidence_score}/4)")
                 # Don't fail - just note it
                 checks_passed.append(f"{test_case['name']} low confidence")
-            
+
             await asyncio.sleep(1)
-
-
 
         # Summary
         print("\n7. Validation Summary...")
         working_modes = [c for c in checks_passed if "working" in c]
         low_conf_modes = [c for c in checks_passed if "low confidence" in c]
-        
+
         print(f"   ✅ Confirmed working: {len(working_modes)}")
         print(f"   ⚠️  Low confidence: {len(low_conf_modes)}")
 
@@ -215,7 +213,7 @@ async def test_clarification_modes():
     print(f"Checks Passed: {len(checks_passed)}")
     for check in checks_passed:
         print(f"  ✓ {check}")
-    
+
     print("\n📝 IMPROVED VALIDATION:")
     print("   This test uses multiple strategies to detect clarification:")
     print("   1. Question indicators (?, question words)")

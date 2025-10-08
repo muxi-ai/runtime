@@ -39,12 +39,17 @@ async def test_workflow_approval():
 
         print("\n2. Sending high-complexity request to trigger approval...")
         print("   (Complexity must be >6.0 to trigger approval)")
-        
+
         # Complex multi-step request that should score >6.0
         # Includes: research (web search) + analysis + synthesis + Linear issue creation
         response = await asyncio.wait_for(
             overlord.chat(
-                message="Research the latest quantum computing breakthroughs from 2024, analyze the top 3 companies and their technologies, synthesize key findings with timeline predictions, and create a comprehensive Linear issue with all details",
+                message=(
+                    "Research the latest quantum computing breakthroughs from 2024, "
+                    "analyze the top 3 companies and their technologies, "
+                    "synthesize key findings with timeline predictions, and create a "
+                    "comprehensive Linear issue with all details"
+                ),
                 user_id="test_user",
                 session_id="workflow_test",
                 stream=False
@@ -54,9 +59,9 @@ async def test_workflow_approval():
 
         # Extract response content
         content = response.content if hasattr(response, "content") else str(response)
-        
+
         print(f"\n   ✓ Response received ({len(content)} chars)")
-        print(f"\n   Response preview:")
+        print("\n   Response preview:")
         print(f"   {content[:300]}...")
 
         # Check for approval request indicators
@@ -69,13 +74,13 @@ async def test_workflow_approval():
             "plan:",
             "workflow:"
         ]
-        
+
         has_approval = any(ind in content.lower() for ind in approval_indicators)
 
         if has_approval:
             print("\n   ✅ Workflow approval requested!")
             checks_passed.append("Approval mechanism triggered")
-            
+
             # Auto-approve to test continuation
             print("\n3. Auto-approving the workflow...")
             response2 = await asyncio.wait_for(
@@ -87,31 +92,31 @@ async def test_workflow_approval():
                 ),
                 timeout=300  # 5 minutes for workflow execution
             )
-            
+
             content2 = response2.content if hasattr(response2, "content") else str(response2)
             print(f"\n   ✓ Workflow execution started ({len(content2)} chars)")
             checks_passed.append("Approval accepted and workflow continued")
-            
+
             # Check if workflow actually executed
             execution_indicators = ["linear", "issue", "created", "research", "quantum"]
             has_execution = any(ind in content2.lower() for ind in execution_indicators)
-            
+
             if has_execution:
                 print("   ✅ Workflow execution confirmed")
                 checks_passed.append("Workflow execution evidence found")
             else:
                 print("   ⚠️  Workflow execution unclear")
-            
+
             all_passed = True
-            
+
         else:
             print("\n   ⚠️  No approval request detected")
             print(f"   Note: Complexity may not have exceeded {overlord.complexity_threshold}")
-            
+
             # Check if workflow was triggered at all
             workflow_indicators = ["task", "step", "phase", "workflow"]
             has_workflow = any(ind in content.lower() for ind in workflow_indicators)
-            
+
             if has_workflow:
                 print("   ℹ️  Workflow was triggered but approval not required")
                 checks_passed.append("Workflow triggered (complexity likely 5.0-6.0)")

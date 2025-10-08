@@ -46,7 +46,7 @@ async def test_internal_a2a():
         print("\n3. Sending request requiring A2A collaboration...")
         print("   Request: Create Linear issue with system usage info")
         print("   Expected: it-support gets system info → delegates to project-manager → Linear issue created")
-        
+
         response = await asyncio.wait_for(
             overlord.chat(
                 message="create a linear issue with system usage info like cpu, memory, etc",
@@ -66,11 +66,11 @@ async def test_internal_a2a():
             content = str(response)
 
         print(f"\n   ✓ Response received ({len(content)} chars)")
-        
+
         # Check for Linear issue creation (evidence of A2A collaboration)
         linear_indicators = ["linear", "issue", "created", "system usage"]
-        has_linear = sum(1 for ind in content.lower() for match in [ind] if match in content.lower()) >= 2
-        
+        has_linear = sum(1 for ind in linear_indicators if ind in content.lower()) >= 2
+
         if has_linear:
             print("   ✅ Linear issue creation detected!")
             print("   A2A collaboration successful: it-support → project-manager")

@@ -18,7 +18,6 @@ from muxi.formation import Formation  # noqa: E402
 # Import from common module (centralized e2e/tests/common)
 from common import BaseE2ETest  # noqa: E402
 from common import TestOutputFormatter  # noqa: E402
-from common import FormationManager  # noqa: E402
 
 
 class BaseClarificationTest(BaseE2ETest):
@@ -110,7 +109,7 @@ class BaseClarificationTest(BaseE2ETest):
         self.overlord = await self.formation.start_overlord()
 
         return self.formation
-    
+
     async def setup_clarification_formation(self) -> Formation:
         """Legacy method name - calls setup_formation for backward compatibility."""
         return await self.setup_formation()
