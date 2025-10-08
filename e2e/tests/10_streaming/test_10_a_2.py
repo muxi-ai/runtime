@@ -5,7 +5,9 @@ Test 10A2: Stream Content Quality
 Tests that streaming content is coherent and complete when reassembled.
 """
 
+import asyncio
 import sys
+from pathlib import Path
 
 from .base_streaming_test import BaseStreamingTest
 
@@ -16,7 +18,8 @@ def main():
 
     async def run_content_test():
         # Setup formation using the shared streaming formation
-        await test.setup_formation(yaml_name="formation-streaming.yaml")
+        formation_path = Path(__file__).parent / "formations" / "formation-streaming"
+        await test.setup_formation(formation_path=str(formation_path))
 
         # Test with a request that should produce substantial content
         result = await test.test_basic_streaming(
@@ -59,10 +62,10 @@ def main():
 
             if success:
                 test.formatter.print_success("Stream content quality test passed")
-                test.formatter.print_info(
+                test.formatter.print_debug(
                     f"Content length: {content_analysis['total_content_length']} characters"
                 )
-                test.formatter.print_info(f"Sentence endings: {sentence_endings}")
+                test.formatter.print_debug(f"Sentence endings: {sentence_endings}")
             else:
                 test.formatter.print_failure("Stream content quality test failed")
 
@@ -70,7 +73,7 @@ def main():
             test.formatter.print_failure("Basic streaming failed")
 
         # Test stream interruption behavior
-        test.formatter.print_section("Testing Stream Interruption")
+        print("\n" + "=" * 60); print("Testing Stream Interruption"); print("=" * 60)
         interrupt_result = await test.test_stream_interruption(
             message="Write a detailed essay about machine learning algorithms",
             interrupt_after=3.0,
@@ -81,7 +84,7 @@ def main():
         interrupt_success = interrupt_result["success"]
         if interrupt_success:
             test.formatter.print_success("Stream interruption handled gracefully")
-            test.formatter.print_info(
+            test.formatter.print_debug(
                 f"Events before interrupt: {interrupt_result['events_before_interrupt']}"
             )
         else:
@@ -101,14 +104,7 @@ def main():
 
         return 0 if overall_success else 1
 
-    return test.run_in_event_loop(
-        "10a2_stream_content",
-        "Test stream content quality and completeness",
-        "10_streaming",
-        [],  # We handle test cases manually
-        None,  # Use pattern-based formation path
-        "formation-streaming.yaml",  # Use shared formation
-    )
+    return asyncio.run(run_content_test())
 
 
 if __name__ == "__main__":

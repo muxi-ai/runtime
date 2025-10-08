@@ -59,7 +59,8 @@ class BaseStreamingTest(BaseE2ETest):
         self.formatter.print_debug("Starting stream consumption...")
 
         try:
-            async with asyncio.timeout(timeout) if timeout else asyncio.nullcontext():
+            # Python 3.10 compatible timeout handling
+            async def consume_with_timeout():
                 async for chunk in stream:
                     event_time = time.time()
                     events.append(chunk)
@@ -76,6 +77,11 @@ class BaseStreamingTest(BaseE2ETest):
                     # Stop if we hit max events
                     if max_events and len(events) >= max_events:
                         break
+
+            if timeout:
+                await asyncio.wait_for(consume_with_timeout(), timeout=timeout)
+            else:
+                await consume_with_timeout()
 
         except asyncio.TimeoutError:
             self.formatter.print_warning(f"Stream consumption timed out after {timeout}s")
@@ -131,7 +137,11 @@ class BaseStreamingTest(BaseE2ETest):
                 event_type = event.get("type", "unknown")
                 analysis["event_types"][event_type] = analysis["event_types"].get(event_type, 0) + 1
 
-                if event_type == "content" or event_type == "text":
+                # Content can come in multiple event types:
+                # - "content": Direct content streaming
+                # - "text": Text content
+                # - "completed": Final response (contains full answer)
+                if event_type in ("content", "text", "completed"):
                     analysis["content_events"] += 1
                     content = event.get("content", "") or event.get("text", "")
                     full_content += content
@@ -242,12 +252,15 @@ class BaseStreamingTest(BaseE2ETest):
             result["timing_analysis"] = timing_analysis
 
             # Determine success
+            # Now that we properly extract content from "completed" events,
+            # we should have actual content to validate
             success_criteria = [
                 len(events) > 0,  # Got some events
-                content_analysis["total_content_length"] > 0,  # Got some content
+                content_analysis["total_content_length"] > 0,  # Got actual content
                 content_analysis["error_events"] == 0,  # No errors
             ]
 
+            # Check keywords if provided
             if expected_keywords:
                 success_criteria.append(content_analysis["contains_keywords"])
 
@@ -331,10 +344,12 @@ class BaseStreamingTest(BaseE2ETest):
 
     def print_streaming_summary(self):
         """Print summary specific to streaming tests."""
-        self.formatter.print_section("Streaming Test Summary")
+        print("\n" + "=" * 60)
+        print("Streaming Test Summary")
+        print("=" * 60)
 
         if self.stream_events:
-            self.formatter.print_info(f"Total stream events: {len(self.stream_events)}")
+            self.formatter.print_debug(f"Total stream events: {len(self.stream_events)}")
 
             # Analyze event types
             event_types = {}
@@ -344,7 +359,7 @@ class BaseStreamingTest(BaseE2ETest):
                     event_types[event_type] = event_types.get(event_type, 0) + 1
 
             if event_types:
-                self.formatter.print_info("Event type distribution:")
+                self.formatter.print_debug("Event type distribution:")
                 for event_type, count in event_types.items():
                     self.formatter.print_debug(f"  {event_type}: {count}")
 
@@ -354,7 +369,7 @@ class BaseStreamingTest(BaseE2ETest):
                 if len(self.stream_timing) > 1
                 else 0
             )
-            self.formatter.print_info(f"Average event interval: {avg_interval:.3f}s")
+            self.formatter.print_debug(f"Average event interval: {avg_interval:.3f}s")
 
         if self.stream_errors:
             self.formatter.print_warning(f"Stream errors encountered: {len(self.stream_errors)}")
