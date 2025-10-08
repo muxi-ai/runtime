@@ -58,7 +58,7 @@ response = await overlord.chat(
 # Force sync mode
 response = await overlord.chat(
     message="What is 2 + 2?",
-    user_id="user123", 
+    user_id="user123",
     session_id="session456",
     use_async=False  # Force sync
 )
@@ -100,15 +100,15 @@ response = await overlord.chat(
 └──────┬──────┘
        │ 1. POST /chat (async request)
        ▼
-┌─────────────────────────────────────┐
-│          Overlord                    │
-│  ┌────────────────────────────┐    │
-│  │   Async Decision Logic     │    │
-│  │  - Complexity analysis      │    │
-│  │  - Time estimation          │    │
-│  │  - Webhook availability     │    │
-│  └────────────────────────────┘    │
-└──────┬────────────────┬─────────────┘
+┌──────────────────────────────────┐
+│             Overlord             │
+│  ┌────────────────────────────┐  │
+│  │   Async Decision Logic     │  │
+│  │  - Complexity analysis     │  │
+│  │  - Time estimation         │  │
+│  │  - Webhook availability    │  │
+│  └────────────────────────────┘  │
+└──────┬────────────────┬──────────┘
        │                │
        │ 2. Immediate   │ 3. Background
        │    response    │    processing
@@ -165,13 +165,13 @@ response = await overlord.chat(
 async:
   # Webhook URL for async results delivery
   webhook_url: "https://your-app.com/webhooks/muxi"
-  
+
   # Time threshold for async decision (seconds)
   threshold_seconds: 30
-  
+
   # Enable/disable time estimation
   enable_estimation: true
-  
+
   # Webhook retry configuration
   webhook_retries: 3
   webhook_timeout: 10
@@ -181,10 +181,10 @@ overlord:
   config:
     # Enable automatic workflow decomposition
     auto_decomposition: true
-    
+
     # Complexity threshold for workflows (0-10 scale)
     complexity_threshold: 5.0
-    
+
     # Approval threshold (workflows >= this need approval)
     plan_approval_threshold: 7.0
 ```
@@ -227,7 +227,7 @@ async def _determine_async_mode(
 ) -> bool:
     """
     Determine whether to process request asynchronously.
-    
+
     Priority Order:
     1. Explicit use_async parameter (highest priority)
     2. Approval needs (force sync for approval flows)
@@ -363,21 +363,21 @@ app = FastAPI()
 @app.post("/webhooks/muxi")
 async def handle_muxi_webhook(request: Request):
     payload = await request.json()
-    
+
     # Extract key information
     request_id = payload["id"]
     status = payload["status"]
-    
+
     if status == "completed":
         response_text = payload["response"][0]["text"]
         # Process successful response
         await process_completion(request_id, response_text)
-        
+
     elif status == "failed":
         error = payload["error"]
         # Handle failure
         await handle_failure(request_id, error)
-    
+
     return {"status": "received"}
 ```
 
@@ -385,9 +385,9 @@ async def handle_muxi_webhook(request: Request):
 ```javascript
 app.post('/webhooks/muxi', async (req, res) => {
   const payload = req.body;
-  
+
   console.log(`Received webhook for request ${payload.id}`);
-  
+
   if (payload.status === 'completed') {
     // Process successful response
     await processCompletion(payload.id, payload.response);
@@ -395,7 +395,7 @@ app.post('/webhooks/muxi', async (req, res) => {
     // Handle failure
     await handleFailure(payload.id, payload.error);
   }
-  
+
   res.json({ status: 'received' });
 });
 ```
@@ -471,7 +471,7 @@ GET /api/v1/requests/{request_id}/status
 # Via Python SDK
 await overlord.cancel_request(request_id)
 
-# Via HTTP API  
+# Via HTTP API
 POST /api/v1/requests/{request_id}/cancel
 ```
 
@@ -497,14 +497,14 @@ from src.muxi.formation.overlord import Overlord
 @pytest.mark.asyncio
 async def test_async_decision_high_complexity():
     overlord = await setup_overlord(webhook_url="http://test.com")
-    
+
     # High complexity should trigger async
     decision = await overlord._determine_async_mode(
         message="Research the top 50 AI companies and create detailed analysis",
         user_id="test",
         session_id="test"
     )
-    
+
     assert decision is True
 ```
 
@@ -519,26 +519,26 @@ from pathlib import Path
 async def test_async_request_with_webhook():
     # Start test webhook server
     webhook_server = await start_webhook_server(port=8765)
-    
+
     # Load formation with webhook config
     overlord = await load_formation_with_webhook("http://localhost:8765")
-    
+
     # Send async request
     response = await overlord.chat(
         message="Complex analysis task",
         use_async=True
     )
-    
+
     # Verify immediate response
     assert "request_id" in response
     assert response["status"] == "processing"
-    
+
     # Wait for webhook delivery
     webhook = await webhook_server.wait_for_webhook(
         request_id=response["request_id"],
         timeout=60
     )
-    
+
     # Verify webhook payload
     assert webhook["status"] == "completed"
     assert webhook["id"] == response["request_id"]
@@ -550,7 +550,7 @@ async def test_async_request_with_webhook():
 See `e2e/tests/9_async/` for comprehensive async operation tests:
 
 - **test_9a1**: Force async mode
-- **test_9a2**: Force sync mode  
+- **test_9a2**: Force sync mode
 - **test_9a3a/b**: Auto mode selection (simple vs complex)
 - **test_9a3b+**: Workflow with approval
 - **test_9a4/9a5**: Webhook configuration
@@ -659,7 +659,7 @@ Enable debug logging to understand async decisions:
 logging:
   level: "DEBUG"
   format: "json"
-  
+
 overlord:
   debug:
     log_async_decisions: true  # Log why async was chosen
@@ -709,17 +709,17 @@ else:
 @app.post("/webhook")
 async def handle_webhook(payload: dict):
     request_id = payload["id"]
-    
+
     # Check if already processed
     if await is_processed(request_id):
         return {"status": "already_processed"}
-    
+
     # Process webhook
     await process_webhook(payload)
-    
+
     # Mark as processed
     await mark_processed(request_id)
-    
+
     return {"status": "ok"}
 ```
 
@@ -736,7 +736,7 @@ metrics = {
 
 ### 5. **Test Both Modes**
 - Test with `use_async=True` explicitly
-- Test with `use_async=False` explicitly  
+- Test with `use_async=False` explicitly
 - Test with auto-detection (no parameter)
 - Test webhook delivery and retries
 - Test status polling and cancellation
@@ -767,6 +767,6 @@ metrics = {
 
 ---
 
-**Last Updated**: October 8, 2025  
-**Version**: 1.0  
+**Last Updated**: October 8, 2025
+**Version**: 1.0
 **Maintainer**: MUXI Runtime Team
