@@ -768,7 +768,7 @@ Generate the message now:"""
         - "Can you help me?"
         - "Where do I find this?"
         - "What is this?"
-        
+
         If the user is asking for help or guidance, respond NO (not a cancellation).
 
         Respond with only YES or NO."""
@@ -817,7 +817,7 @@ Generate the message now:"""
         - "¿Cómo obtengo esto?" (Spanish: How do I get this?)
         - "Comment obtenir ça?" (French: How to get this?)
         - "これをどうやって入手しますか？" (Japanese: How do I get this?)
-        
+
         IMPORTANT: These are NOT help requests - they are PROVIDING credentials:
         - "Thanks for the help! Here's my token: xyz123"
         - "Here is my key: abc789"
@@ -832,7 +832,10 @@ Generate the message now:"""
                 # Fallback to simple pattern matching
                 message_lower = message.lower()
                 # If message contains a token-like string, it's NOT a help request
-                if any(pattern in message_lower for pattern in ["here's my", "here is my", "my token is", "token:", "key:"]):
+                if any(
+                    pattern in message_lower
+                    for pattern in ["here's my", "here is my", "my token is", "token:", "key:"]
+                ):
                     return False
                 help_patterns = [
                     "don't know",
@@ -853,7 +856,10 @@ Generate the message now:"""
             # On LLM failure, fallback to pattern matching
             message_lower = message.lower()
             # If message contains a token-like string, it's NOT a help request
-            if any(pattern in message_lower for pattern in ["here's my", "here is my", "my token is", "token:", "key:"]):
+            if any(
+                pattern in message_lower
+                for pattern in ["here's my", "here is my", "my token is", "token:", "key:"]
+            ):
                 return False
             help_patterns = ["don't know", "how do i", "how to", "help"]
             return any(pattern in message_lower for pattern in help_patterns)
@@ -879,7 +885,6 @@ Generate the message now:"""
 10. **Copy the token immediately** (you won't see it again!)
 
 Once you have your token, just paste it here and I'll use it to access GitHub.""",
-
             "linear": """To get a Linear API key:
 
 1. **Sign in to Linear** at https://linear.app
@@ -890,7 +895,6 @@ Once you have your token, just paste it here and I'll use it to access GitHub.""
 6. **Copy the API key** immediately
 
 Once you have your key, paste it here.""",
-
             "openai": """To get an OpenAI API key:
 
 1. **Sign in to OpenAI** at https://platform.openai.com

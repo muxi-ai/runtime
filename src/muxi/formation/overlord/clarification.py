@@ -237,7 +237,7 @@ class UnifiedClarificationSystem:
                 return ClarificationResult(
                     action="execute",
                     request=state.get("original_request", response),
-                    context={"credential_configured": True}
+                    context={"credential_configured": True},
                 )
 
         # Special handling for credential selection mode
@@ -245,7 +245,7 @@ class UnifiedClarificationSystem:
             # First check if user is asking for help
             if self._is_help_request(response):
                 return await self._provide_credential_help(state)
-            
+
             selected_account = await self._parse_credential_selection(
                 response, state["available_accounts"]
             )
@@ -449,7 +449,7 @@ class UnifiedClarificationSystem:
     async def _analyze_request(self, message: str, context: Dict) -> Dict:
         """
         Analyze request using LLM - no pattern matching.
-        
+
         CRITICAL: Check for recall questions FIRST and search memory before asking for clarification.
         """
         # STEP 1: Check for recall questions and search memory
@@ -463,7 +463,7 @@ class UnifiedClarificationSystem:
                 "confidence": 1.0,
                 "mcp_service": None,
             }
-        
+
         # STEP 2: Continue with normal clarification analysis
         # Get formation capabilities (pre-computed during overlord initialization)
         capabilities = getattr(self.overlord, "capabilities", [])
@@ -724,10 +724,10 @@ class UnifiedClarificationSystem:
     def _is_help_request(self, response: str) -> bool:
         """
         Detect if user is asking for help instead of providing a credential.
-        
+
         Args:
             response: User's response
-            
+
         Returns:
             True if this appears to be a help request
         """
@@ -744,22 +744,22 @@ class UnifiedClarificationSystem:
             "need help",
             "not sure",
         ]
-        
+
         response_lower = response.lower()
         return any(pattern in response_lower for pattern in help_patterns)
-    
+
     async def _provide_credential_help(self, state: Dict) -> ClarificationResult:
         """
         Provide helpful guidance for obtaining credentials.
-        
+
         Args:
             state: Current clarification state
-            
+
         Returns:
             ClarificationResult with help guidance
         """
         mcp_service = state.get("mcp_service", "")
-        
+
         # Service-specific help messages
         help_messages = {
             "github": """To get a GitHub token:
@@ -771,7 +771,6 @@ class UnifiedClarificationSystem:
 6. Copy the token and configure it in your credential manager
 
 After setting up your token, you can use it with MUXI.""",
-            
             "linear": """To get a Linear API key:
 1. Go to https://linear.app/settings/api
 2. Click "Create key"
@@ -781,15 +780,18 @@ After setting up your token, you can use it with MUXI.""",
 
 After setting up your API key, you can use it with MUXI.""",
         }
-        
+
         # Get service-specific help or generic help
-        help_text = help_messages.get(mcp_service, f"""To configure credentials for {mcp_service}:
+        help_text = help_messages.get(
+            mcp_service,
+            f"""To configure credentials for {mcp_service}:
 1. Obtain an API key or token from the service's settings
 2. Configure it in your credential manager
 3. You can then use it with MUXI
 
-Please check {mcp_service}'s documentation for specific instructions on obtaining credentials.""")
-        
+Please check {mcp_service}'s documentation for specific instructions on obtaining credentials.""",
+        )
+
         # Return help as clarification (stay in credential mode)
         return ClarificationResult(
             action="clarify",
@@ -1239,13 +1241,13 @@ Please check {mcp_service}'s documentation for specific instructions on obtainin
     async def _is_recall_question_with_answer(self, message: str, context: Dict) -> bool:
         """
         Check if this is a recall question AND if we have the answer in memory.
-        
+
         Recall questions are like:
         - "What is my name?"
         - "What is my favorite X?"
         - "What did I say about X?"
         - "What's my X?"
-        
+
         Returns True if it's a recall question AND memory has the answer.
         """
         try:
@@ -1259,9 +1261,9 @@ Please check {mcp_service}'s documentation for specific instructions on obtainin
                         if next_line.startswith("User:"):
                             clean_message = next_line[5:].strip()
                             break
-            
+
             # Check if it looks like a recall question using LLM (fast, focused prompt)
-            recall_check_prompt = f"""Is this a recall/memory question asking about something the user previously stated?
+            recall_check_prompt = f"""Is this a recall/memory question about something the user previously stated?
 
 Examples of recall questions:
 - "What is my name?"
@@ -1283,10 +1285,10 @@ Answer with just: YES or NO"""
                     response = await self.llm.chat(
                         [{"role": "user", "content": recall_check_prompt}],
                         temperature=0,
-                        max_tokens=10
+                        max_tokens=10,
                     )
                     content = response.content if hasattr(response, "content") else str(response)
-                    
+
                     if "YES" not in content.upper():
                         # Not a recall question
                         return False
@@ -1295,16 +1297,19 @@ Answer with just: YES or NO"""
                 recall_patterns = ["what is my", "what's my", "what did i say", "what did i tell"]
                 if not any(pattern in clean_message.lower() for pattern in recall_patterns):
                     return False
-            
+
             # It IS a recall question - now check if we have the answer in memory
             user_id = context.get("user_id", "0") if context else "0"
-            
+
             # Skip for anonymous users
             if not user_id or user_id == "0":
                 return False
-            
+
             # Search memory using the same API as chat_orchestrator
-            if hasattr(self.overlord, "persistent_memory_manager") and self.overlord.persistent_memory_manager:
+            if (
+                hasattr(self.overlord, "persistent_memory_manager")
+                and self.overlord.persistent_memory_manager
+            ):
                 try:
                     # Search the same collections that chat_orchestrator uses
                     collections_to_search = [
@@ -1316,14 +1321,14 @@ Answer with just: YES or NO"""
                         "conversations",
                         "default",
                     ]
-                    
+
                     results = await self.overlord.persistent_memory_manager.search_long_term_memory(
                         query=clean_message,
                         k=3,  # Get top 3 relevant memories
                         user_id=user_id,
                         collections=collections_to_search,
                     )
-                    
+
                     # If we found results, we have an answer in memory
                     if results and len(results) > 0:
                         # Memory has the answer - skip clarification!
@@ -1331,7 +1336,7 @@ Answer with just: YES or NO"""
                 except Exception:
                     # If memory search fails, don't skip clarification
                     pass
-            
+
             # Either not a recall question, or no answer in memory
             return False
         except Exception:

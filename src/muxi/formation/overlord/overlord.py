@@ -6092,7 +6092,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             clarification_info = (
                 await self._get_pending_clarification(session_id) if session_id else None
             )
-            
+
             # Use unified clarification system with request_id
             try:
                 if clarification_info and clarification_info.get("type") in [
@@ -6171,7 +6171,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                 detection_result=credential_detection,
                                 session_id=session_id,
                             )
-                            
+
                             # If this is a redirect, set up pending clarification so we can detect help requests
                             if result.get("action") == "redirect" and session_id:
                                 self._set_pending_clarification(
@@ -6182,7 +6182,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                         "service": service,
                                     },
                                 )
-                            
+
                             return MuxiResponse(role="assistant", content=result["message"])
                         # SERVICE_USE now always returns None from detection
                         # so it won't reach here
@@ -6849,7 +6849,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             state["mcp_service"] = e.service
                             state["user_id"] = e.user_id
                             await self.clarification_system._store_state(request_id, state)
-                    
+
                     # Also set pending clarification in overlord
                     self._set_pending_clarification(
                         session_id,
