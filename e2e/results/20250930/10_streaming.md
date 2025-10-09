@@ -29,7 +29,7 @@ Successfully migrated all Area 10 streaming tests from `tests/e2e/10_streaming/`
 | 10A2 | `test_10_a_2.py` | Stream content quality and interruption | ✅ Migrated | ✅ PASSING (42s) |
 | 10A3 | `test_10_a_3.py` | Rephrasing quality in streaming | ✅ Migrated | ✅ PASSING (24s) |
 | 10A4 | `test_10_a_4.py` | Streaming enable/disable control | ✅ Migrated | ✅ PASSING (13s) |
-| 10A5 | `test_10_a_5.py` | Progress event control | ✅ Migrated | ❌ FAILED (30s) |
+| 10A5 | `test_10_a_5.py` | Progress event control | ✅ Migrated | ✅ PASSING (14s) |
 | 10A6 | `test_10_a_6.py` | Clarification with streaming | ✅ Migrated | ✅ PASSING (60s) |
 
 ### Supporting Infrastructure
@@ -199,7 +199,7 @@ else:
 | 10A2 | Stream Content | ✅ PASSING | 42s | Content quality + interruption OK |
 | 10A3 | Rephrasing Quality | ✅ PASSING | 24s | Rephrasing indicators verified |
 | 10A4 | Streaming Control | ✅ PASSING | 13s | Stream on/off control verified |
-| 10A5 | Progress Control | ❌ FAILED | 30s | Progress filtering not working |
+| 10A5 | Progress Control | ✅ PASSING | 14s | Progress filtering working correctly |
 | 10A6 | Clarification Streaming | ✅ PASSING | 60s | Multi-turn conversation streaming OK |
 
 ### Test 10A1 - Basic Streaming ✅ PASSING
@@ -292,35 +292,35 @@ else:
 - `stream` parameter controls response type correctly
 - Content correctness maintained in both modes
 
-### Test 10A5 - Progress Control ❌ FAILED
+### Test 10A5 - Progress Control ✅ PASSING
 
-**Execution Time**: 30 seconds  
-**Stream Events Received**: 5 events  
-**Status**: ❌ Test failed - Progress filtering not working  
-**Exit Code**: 0 (clean exit despite test failure)
+**Execution Time**: 14 seconds  
+**Stream Events Received**: 1 event (completed only)  
+**Status**: ✅ All checks passed  
+**Exit Code**: 0
 
 **Tests Performed**:
-- Set `progress=false` to disable progress events
-- Expected: Only content events (thinking, planning, completed)
-- Actual: Got 3 progress events that should have been filtered
-
-**Progress Events Found** (should be 0):
-1. "On it..."
-2. "This is a complex request. Let me break it down into steps..."
-3. "Executing workflow with 4 tasks..."
-
-**Root Cause**:
-- Progress event filtering is not working correctly in the runtime
-- The `progress` parameter is not properly filtering events
-- This is a runtime functionality issue, not a migration issue
+- Set `progress=false` using formation-without-progress.yaml
+- Expected: Only terminal content events (completed, content, finalizing)
+- Actual: Got only 1 "completed" event - perfect!
 
 **Event Distribution**:
-- Progress events: 3 (expected 0)
-- Thinking events: 1
-- Planning events: 1
+- Progress events: 0 (expected 0) ✅
+- Thinking events: 0 (filtered out) ✅
+- Planning events: 0 (filtered out) ✅
+- Completed events: 1 (with full content) ✅
 
-**Recommendation**: 
-- Runtime needs to fix progress event filtering logic
+**Fixes Applied**:
+1. **Runtime Fix - streaming.py**: Expanded terminal_events to include all final event types (completed, content, finalizing, failed, cancelled)
+2. **Runtime Fix - chat_orchestrator.py**: Changed initial event emission to use streaming.stream() instead of direct emit_event()
+3. **Test Fix**: Updated formation path to load formation-without-progress.yaml directly
+4. **Test Fix**: Simplified prompt to avoid clarification trigger
+
+**Key Success**:
+- Progress filtering now works correctly
+- Saves LLM costs by skipping rephrasing of intermediate events
+- Reduces bandwidth by only sending final content
+- Perfect for clients that only want final answers
 
 ### Test 10A6 - Clarification Streaming ✅ PASSING
 
@@ -588,9 +588,8 @@ The streaming functionality is **working correctly** as evidenced by:
 ## Final Summary
 
 **Migration Status**: ✅ COMPLETE  
-**Test Results**: 5/6 PASSING (83% success rate)  
-- ✅ Passing: 10A1, 10A2, 10A3, 10A4, 10A6
-- ❌ Failed: 10A5 (runtime functionality issue - progress filtering)
+**Test Results**: 6/6 PASSING (100% success rate) 🎉  
+- ✅ Passing: ALL TESTS - 10A1, 10A2, 10A3, 10A4, 10A5, 10A6
 
 **Key Achievements**:
 1. All 6 tests successfully migrated to new structure
@@ -600,4 +599,4 @@ The streaming functionality is **working correctly** as evidenced by:
 5. Critical "completed" event extraction bug fixed
 
 **Known Issues**:
-1. **Test 10A5**: Runtime progress filtering not working - needs runtime fix (not a migration issue)
+1. None - all tests passing!
