@@ -106,7 +106,7 @@ class JobManager:
         self._initialized = True
 
         observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_INITIALIZED,
+            event_type=observability.SystemEvents.SCHEDULER_MANAGER_INITIALIZED,
             level=observability.EventLevel.INFO,
             data={"database_type": self.db_manager.database_type},
             description=f"Scheduler service initialized for {self.db_manager.database_type}",

@@ -8,7 +8,10 @@ from natural language requests.
 
 import sys
 
-from .base_scheduling_test import BaseSchedulingTest
+try:
+    from .base_scheduling_test import BaseSchedulingTest
+except ImportError:
+    from base_scheduling_test import BaseSchedulingTest
 
 
 def main():
@@ -18,8 +21,8 @@ def main():
     )
 
     async def run_scheduling_test():
-        # Setup formation using the shared scheduling formation
-        await test.setup_formation(yaml_name="formation-scheduling.yaml")
+        # Setup formation (uses RUNTIME pattern with single base formation)
+        await test.setup_formation()
 
         # Define test cases for different schedule types
         schedule_requests = [
@@ -110,14 +113,16 @@ def main():
 
         return 0 if overall_success else 1
 
-    return test.run_in_event_loop(
-        "12a1_basic_scheduling",
-        "Test basic scheduling detection and creation",
-        "12_scheduling",
-        [],  # We handle test cases manually
-        None,  # Use pattern-based formation path
-        "formation-scheduling.yaml",  # Use shared formation
-    )
+    # Run the async test directly (no yaml_name for RUNTIME pattern)
+    import asyncio
+    try:
+        exit_code = asyncio.run(run_scheduling_test())
+        return exit_code
+    except Exception as e:
+        test.formatter.print_error(f"Test failed with exception: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
 
 
 if __name__ == "__main__":
