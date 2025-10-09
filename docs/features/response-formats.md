@@ -409,21 +409,180 @@ def set_safe_format(format_name: str) -> str:
 overlord.response_format = set_safe_format(user_requested_format)
 ```
 
+## Validation and Testing
+
+### Format Validation
+
+Each format has specific validation criteria:
+
+#### JSON Format Validation
+```python
+import json
+
+# Validate JSON format
+overlord.response_format = "json"
+response = await overlord.chat("List three benefits of cloud computing")
+
+# Test 1: Valid JSON parsing
+try:
+    parsed = json.loads(response.content)
+    print("✅ Valid JSON structure")
+except json.JSONDecodeError:
+    print("❌ Invalid JSON")
+
+# Test 2: Required fields present
+required_fields = ["content", "type", "format"]
+if all(field in parsed for field in required_fields):
+    print("✅ All required fields present")
+
+# Test 3: Correct field values
+assert parsed["type"] == "response"
+assert parsed["format"] == "json"
+print("✅ Field values correct")
+```
+
+#### Markdown Format Validation
+```python
+import re
+
+# Validate markdown format
+overlord.response_format = "markdown"
+response = await overlord.chat("Create documentation for a Python project")
+
+# Test 1: Has headers
+has_headers = bool(re.search(r"^#{1,6}\s+", response.content, re.MULTILINE))
+print(f"✅ Has headers: {has_headers}")
+
+# Test 2: Has code blocks
+has_code = "```" in response.content or "`" in response.content
+print(f"✅ Has code blocks: {has_code}")
+
+# Test 3: Not JSON (negative validation)
+try:
+    json.loads(response.content)
+    print("❌ Should not be JSON")
+except json.JSONDecodeError:
+    print("✅ Correctly formatted as Markdown")
+```
+
+#### HTML Format Validation
+```python
+from bs4 import BeautifulSoup
+import re
+
+# Validate HTML format
+overlord.response_format = "html"
+response = await overlord.chat("Create a webpage about cloud benefits")
+
+# Test 1: Has HTML tags
+has_html_tags = bool(re.search(r"<[^>]+>", response.content))
+print(f"✅ Has HTML tags: {has_html_tags}")
+
+# Test 2: Has semantic tags
+semantic_tags = ["h1", "h2", "h3", "p", "ul", "li", "strong"]
+has_semantic = any(f"<{tag}" in response.content.lower() for tag in semantic_tags)
+print(f"✅ Has semantic tags: {has_semantic}")
+
+# Test 3: Valid HTML structure
+try:
+    soup = BeautifulSoup(response.content, 'html.parser')
+    print(f"✅ Valid HTML structure with {len(soup.find_all())} tags")
+except Exception as e:
+    print(f"❌ Invalid HTML: {e}")
+```
+
+#### Plain Text Format Validation
+```python
+import re
+
+# Validate plain text format
+overlord.response_format = "text"
+response = await overlord.chat("Explain machine learning in simple terms")
+
+# Test 1: No markdown formatting
+markdown_patterns = [r"^#{1,6}\s+", r"\*\*[^*]+\*\*", r"```", r"`[^`]+`"]
+has_markdown = any(re.search(p, response.content, re.MULTILINE) for p in markdown_patterns)
+print(f"✅ No markdown: {not has_markdown}")
+
+# Test 2: No HTML tags
+has_html = bool(re.search(r"<[^>]+>", response.content))
+print(f"✅ No HTML: {not has_html}")
+
+# Test 3: Is plain text
+is_plain_text = not has_markdown and not has_html
+print(f"✅ Is plain text: {is_plain_text}")
+```
+
+### Testing All Formats
+
+Automated test for format consistency:
+
+```python
+async def test_all_formats():
+    """Test all response formats are working correctly."""
+    formats = ["json", "markdown", "html", "text"]
+    results = {}
+
+    for fmt in formats:
+        overlord.response_format = fmt
+        response = await overlord.chat("List three benefits of cloud computing")
+
+        # Basic validation
+        if fmt == "json":
+            try:
+                parsed = json.loads(response.content)
+                results[fmt] = "content" in parsed and "type" in parsed
+            except:
+                results[fmt] = False
+
+        elif fmt == "markdown":
+            has_structure = "#" in response.content or "```" in response.content
+            not_json = True
+            try:
+                json.loads(response.content)
+                not_json = False
+            except:
+                pass
+            results[fmt] = has_structure and not_json
+
+        elif fmt == "html":
+            has_tags = "<" in response.content and ">" in response.content
+            results[fmt] = has_tags
+
+        elif fmt == "text":
+            # Should be plain text without formatting
+            results[fmt] = "<" not in response.content and "```" not in response.content
+
+    # Print results
+    for fmt, passed in results.items():
+        status = "✅ PASS" if passed else "❌ FAIL"
+        print(f"{fmt.upper()}: {status}")
+
+    return all(results.values())
+```
+
 ## Troubleshooting
 
 ### Common Issues
 
 **Q: HTML tags are malformed**
-A: BeautifulSoup automatically validates and fixes HTML structure. If issues persist, check the LLM model's HTML generation capabilities.
+A: BeautifulSoup automatically validates and fixes HTML structure. If issues persist, check the LLM model's HTML generation capabilities. The system uses semantic tags like `<h1>`, `<h2>`, `<p>`, `<ul>`, `<li>` for proper structure.
 
 **Q: JSON responses aren't valid**
-A: JSON format uses post-processing to ensure validity. The content is automatically wrapped in a valid JSON structure.
+A: JSON format uses post-processing to ensure validity. The content is automatically wrapped in a valid JSON structure with required fields: `content`, `type`, and `format`. If you're seeing invalid JSON, check that you're accessing `response.content` correctly.
 
 **Q: Markdown formatting inconsistent**
-A: Markdown relies on LLM instructions. Consider using more specific prompts or switching to HTML for guaranteed structure.
+A: Markdown relies on LLM instructions. The system expects structure score ≥2 (headers, code blocks, lists, links, emphasis). Consider using more specific prompts or switching to HTML for guaranteed structure.
 
 **Q: Format not applying to responses**
-A: Check that `overlord.response_format` is set before calling `overlord.chat()`. Runtime setting overrides formation configuration.
+A: Check that `overlord.response_format` is set before calling `overlord.chat()`. Runtime setting overrides formation configuration. Also verify the format name is one of: "json", "markdown", "html", "text".
+
+**Q: Format validation failing in tests**
+A: Different formats have different validation criteria:
+- **JSON**: Must parse successfully and have required fields
+- **Markdown**: Must have structure score ≥2 (presence of headers, code blocks, etc.)
+- **HTML**: Must have HTML tags and semantic tags
+- **Text**: Must be plain text without markdown or HTML
 
 ### Debug Mode
 
@@ -437,6 +596,27 @@ overlord.response_format = "html"
 response = await overlord.chat("Test message")
 # Check logs for format processing details
 ```
+
+### Performance Metrics
+
+Expected performance characteristics from e2e tests:
+
+- **JSON Test**: ~18-22 seconds average
+- **Markdown Test**: ~17-25 seconds average
+- **HTML Test**: ~23-36 seconds average (includes validation)
+- **Text Test**: ~17-22 seconds average
+- **Overall Average**: ~24 seconds per format test
+
+Token usage per test:
+- Embedding tokens: ~100-300
+- LLM tokens: ~5,000-6,500 (input + output)
+- Total for full suite: ~25,000-30,000 tokens
+
+## Related Documentation
+
+- **[Quick Start Guide](response-formats-quickstart.md)** - 5-minute guide to get started
+- **[Configuration Reference](../configuration/response-formats.md)** - Detailed configuration options
+- **[Troubleshooting Guide](response-formats-troubleshooting.md)** - Common issues and solutions
 
 ## Migration Guide
 

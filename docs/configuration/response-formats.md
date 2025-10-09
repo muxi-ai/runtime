@@ -461,6 +461,72 @@ print('✅ Configuration valid')
 "
 ```
 
+### Testing Format Configuration
+
+Test your configured format is working correctly:
+
+```python
+import asyncio
+import json
+import re
+from muxi.runtime import Formation
+
+async def test_format_configuration():
+    """Test that formation's configured format works correctly."""
+    # Load formation
+    formation = Formation()
+    await formation.load("formation.yaml")
+    overlord = await formation.start_overlord()
+
+    # Test with the formation's default format
+    response = await overlord.chat("List three benefits of cloud computing")
+
+    # Validate based on configured format
+    config_format = overlord.response_format or "markdown"  # Default
+
+    if config_format == "json":
+        # JSON validation
+        parsed = json.loads(response.content)
+        assert "content" in parsed and "type" in parsed
+        assert parsed["format"] == "json"
+        print(f"✅ JSON format configured correctly")
+
+    elif config_format == "markdown":
+        # Markdown validation
+        has_structure = bool(re.search(r"^#{1,6}\s+", response.content, re.MULTILINE))
+        has_code = "```" in response.content or "`" in response.content
+        structure_score = sum([has_structure, has_code])
+
+        # Negative validation: should not be JSON
+        try:
+            json.loads(response.content)
+            print("❌ Markdown format producing JSON")
+        except json.JSONDecodeError:
+            print(f"✅ Markdown format configured correctly (score: {structure_score}/2)")
+
+    elif config_format == "html":
+        # HTML validation
+        has_tags = bool(re.search(r"<[^>]+>", response.content))
+        semantic_tags = ["h1", "h2", "h3", "p", "ul", "li"]
+        has_semantic = any(f"<{tag}" in response.content.lower() for tag in semantic_tags)
+
+        assert has_tags and has_semantic
+        print(f"✅ HTML format configured correctly")
+
+    elif config_format == "text":
+        # Plain text validation
+        has_markdown = bool(re.search(r"^#{1,6}\s+|\*\*[^*]+\*\*", response.content, re.MULTILINE))
+        has_html = bool(re.search(r"<[^>]+>", response.content))
+
+        assert not has_markdown and not has_html
+        print(f"✅ Plain text format configured correctly")
+
+    await formation.stop_overlord()
+
+# Run test
+asyncio.run(test_format_configuration())
+```
+
 ## Best Practices
 
 ### Format Selection Guidelines

@@ -28,8 +28,13 @@
 - [A2A Communication](a2a/) - Agent-to-agent protocol
 
 ### Features
+- **[Streaming Responses](features/streaming.md)** - Real-time response streaming with SSE
+  - [Quick Start Guide](features/streaming-quickstart.md) - 5-minute guide to streaming
+  - [Troubleshooting Guide](features/streaming-troubleshooting.md) - Common issues and solutions
+- **[Response Formats](features/response-formats.md)** - JSON, Markdown, HTML, and Text output formats
+  - [Quick Start Guide](features/response-formats-quickstart.md) - 5-minute guide to response formats
+  - [Troubleshooting Guide](features/response-formats-troubleshooting.md) - Common issues and solutions
 - [Artifacts System](artifacts.md) - File generation and management
-- [Response Formats](features/response-formats.md) - Response format configuration
 - [File Generation](features/file-generation.md) - Built-in file generation
 
 ### Configuration
