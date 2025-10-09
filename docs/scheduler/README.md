@@ -39,73 +39,82 @@ The MUXI Scheduler transforms MUXI from a reactive assistant into a proactive AI
 
 ## Documentation Index
 
-- **[Architecture Documentation](architecture.md)** - Deep dive into scheduler architecture and implementation
+### 🚀 Getting Started
+- **[Quick Start Guide](quickstart.md)** - ⭐ Get scheduling in 5 minutes with working examples
+
+### 📚 Comprehensive Guides
+- **[Tutorial](tutorial.md)** - Step-by-step tutorial for common use cases
 - **[Usage Guide](usage-guide.md)** - Comprehensive guide for using the scheduler system
 - **[Formation API Reference](formation-api.md)** - Complete API reference for accessing scheduler data through Formation
+
+### 🔧 Advanced Topics
+- **[Architecture Documentation](architecture.md)** - Deep dive into scheduler architecture and implementation
 - **[One-Time Jobs](onetime-jobs.md)** - Guide for scheduling one-time tasks
-- **[Tutorial](tutorial.md)** - Step-by-step tutorial for common use cases
 - **[Audit Trail Guide](audit-trail-guide.md)** - Comprehensive guide to using the audit trail for monitoring and compliance
 
-## Quick Start Guide
+### 💡 Practical Resources
+- **[Test Examples](../../tests/e2e/12_scheduling/)** - Working test suite with 12 comprehensive examples
+- **[Test Documentation](../../tests/e2e/12_scheduling/TEST_MAPPING.md)** - Test coverage and patterns
 
-### 1. Enable Scheduler in Formation
+## Quick Start
 
-```yaml
-# formation.yaml
-scheduler:
-  enabled: true
-  check_interval_minutes: 1
-  max_concurrent_jobs: 10
-  max_failures_before_pause: 3
-  timezone: "America/New_York"
+> **New to scheduling?** Check out the **[5-Minute Quick Start Guide](quickstart.md)** with complete working examples! 🚀
 
-memory:
-  persistent:
-    connection_string: "${POSTGRES_DATABASE_URL}"  # Shared with scheduler
-```
-
-### 2. Schedule Your First Task
+### Basic Example
 
 ```python
-# Using the MUXI Runtime
 from muxi.formation import Formation
 import asyncio
 
 async def main():
     # Load formation with scheduler enabled
     formation = Formation()
-    await formation.load("formation.yaml")  # Must await!
-    overlord = await formation.start_overlord()  # Must await!
+    await formation.load("formation.yaml")
+    overlord = await formation.start_overlord()
 
     # Schedule a task using natural language
     response = await overlord.chat(
-        "Schedule a task to check my email every hour during business hours",
-        user_id="your_user_id"
+        "Remind me every day at 9am to check my calendar",
+        user_id="your_user_id",
+        session_id="session_1",
+        use_async=False,
+        stream=False
     )
+    
+    print(response.content)
+    # ✅ I've created a scheduled job for you...
 
-    await formation.stop_overlord()  # Must await!
+    # Verify it was created
+    jobs = await formation.get_user_jobs("your_user_id")
+    print(f"You have {len(jobs)} scheduled jobs")
 
-# Run the async function
+    await formation.kill_overlord()
+
 asyncio.run(main())
 ```
 
-### 3. Verify Scheduled Jobs
+### Enable Scheduler in Formation
 
-```python
-# Using Formation API (recommended for read operations)
-jobs = await formation.get_user_jobs("your_user_id")
+```yaml
+# formation.yaml
+scheduler:
+  enabled: true
+  check_interval_minutes: 1
+  timezone: "America/New_York"
 
-for job in jobs:
-    print(f"Job: {job['title']}")
-    print(f"Schedule: {job['cron_expression']}")
-    print(f"Status: {job['status']}")
-    print(f"Last run: {job['last_run_at']}")
+memory:
+  persistent:
+    connection_string: "${{ secrets.POSTGRES_URI }}"
+    # Or for SQLite: "sqlite:///./scheduler.db"
 
-# Get job audit trail
-audit_trail = await formation.get_job_audit_trail(job['id'])
-for event in audit_trail[:5]:  # Last 5 events
-    print(f"  {event['timestamp']}: {event['action']}")
+agents:
+  - id: assistant
+    system_message: "You are a helpful assistant."
+    llm_models:
+      - text: "openai/gpt-4o-mini"
 ```
+
+**That's it!** See the [Quick Start Guide](quickstart.md) for complete working examples.
 
 ## Architecture
 

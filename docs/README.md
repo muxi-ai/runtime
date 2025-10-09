@@ -1,5 +1,14 @@
 # MUXI Runtime Documentation
 
+Welcome to the MUXI Runtime documentation. This directory contains comprehensive guides and references for all MUXI features and capabilities.
+
+## 🚀 Quick Start
+
+New to MUXI? Start here:
+- **[Scheduler Quick Start](scheduler/quickstart.md)** ⭐ Schedule recurring AI tasks in 5 minutes
+- **[Streaming Quick Start](features/streaming-quickstart.md)** - Real-time response streaming
+- **[Response Formats Quick Start](features/response-formats-quickstart.md)** - JSON, Markdown, HTML, Text output
+
 ## Core Concepts
 
 - [Formation API](api-v1.md) - REST API specification
@@ -22,9 +31,19 @@
 - [Quick Reference](workflow/quick_reference.md) - Workflow quick reference
 
 ### Services
-- [Scheduler Architecture](scheduler/architecture.md) - Task scheduling system
-- [Scheduler Usage Guide](scheduler/usage-guide.md) - How to use the scheduler
-- [One-time Jobs](scheduler/onetime-jobs.md) - Scheduling single execution tasks
+
+#### Scheduler Service - Automated Task Scheduling
+Transform your AI from reactive to proactive:
+- **[Quick Start Guide](scheduler/quickstart.md)** ⭐ Get started in 5 minutes with examples
+- **[Tutorial](scheduler/tutorial.md)** - Comprehensive step-by-step guide
+- **[Common Patterns](scheduler/common-patterns.md)** - Real-world examples from production tests
+- **[Usage Guide](scheduler/usage-guide.md)** - Complete feature documentation
+- **[Formation API](scheduler/formation-api.md)** - API reference for job management
+- **[Architecture](scheduler/architecture.md)** - Technical deep dive
+- **[One-time Jobs](scheduler/onetime-jobs.md)** - Single execution scheduling
+- **[Audit Trail](scheduler/audit-trail-guide.md)** - Job history and compliance
+
+#### Other Services
 - [A2A Communication](a2a/) - Agent-to-agent protocol
 
 ### Features
