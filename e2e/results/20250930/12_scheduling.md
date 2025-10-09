@@ -1,8 +1,8 @@
 # Area 12 - Scheduling Tests Migration Report
 
-**Date**: 2025-09-30  
-**Migration Status**: ⚠️ PARTIAL - Tests migrated but failing due to scheduler bugs  
-**Tests Migrated**: 2 out of 11 total tests  
+**Date**: 2025-09-30
+**Migration Status**: ⚠️ PARTIAL - Tests migrated but failing due to scheduler bugs
+**Tests Migrated**: 2 out of 11 total tests
 **Pattern Used**: RUNTIME (single base formation)
 
 ## Executive Summary
@@ -90,8 +90,8 @@ According to TEST_MAPPING.md, Area 12 has 11 total tests:
 
 ### test_12_a_1.py - Basic Scheduling
 
-**Execution Time**: ~180s (timed out - very slow)  
-**Status**: ⚠️ PARTIAL FAILURE  
+**Execution Time**: ~180s (timed out - very slow)
+**Status**: ⚠️ PARTIAL FAILURE
 **Exit Code**: 124 (timeout)
 
 #### Test Cases Attempted
@@ -123,9 +123,9 @@ This error appears in scheduler service and causes most scheduling requests to f
 
 ### 1. Scheduler Event Type Bug (FIXED)
 
-**File**: `src/muxi/services/scheduler/manager.py`  
-**Line**: 109  
-**Issue**: Using non-existent event type `SCHEDULER_INITIALIZED`  
+**File**: `src/muxi/services/scheduler/manager.py`
+**Line**: 109
+**Issue**: Using non-existent event type `SCHEDULER_INITIALIZED`
 **Fix**: Changed to `SCHEDULER_MANAGER_INITIALIZED`
 
 ```python
@@ -146,8 +146,8 @@ observability.observe(
 
 ### 2. Schedule Creation Failure (NOT FIXED)
 
-**Error**: `'str' object is not callable`  
-**Impact**: ~80% of scheduling requests fail to create jobs  
+**Error**: `'str' object is not callable`
+**Impact**: ~80% of scheduling requests fail to create jobs
 **Location**: Somewhere in scheduler service (exact location TBD)
 
 **Evidence**:
@@ -167,8 +167,8 @@ observability.observe(
 
 ### 3. Performance Issue (NOT FIXED)
 
-**Observed**: 15-20 seconds per test case  
-**Expected**: 3-5 seconds per test case  
+**Observed**: 15-20 seconds per test case
+**Expected**: 3-5 seconds per test case
 **Impact**: Test suite times out (180s limit exceeded)
 
 **Possible Causes**:
@@ -412,7 +412,7 @@ The new tests use **BaseE2ETest abstraction** which:
    await formation.load(str(formation_path))
    overlord = await formation.start_overlord()
    response = await overlord.chat(message, user_id, session_id, use_async=False, stream=False)
-   
+
    # NEW (FAILING)
    test = BaseSchedulingTest(name, description)
    await test.setup_formation()  # Complex wrapper
@@ -495,8 +495,8 @@ Area 12 scheduling tests migration **revealed a critical lesson about over-engin
 
 ---
 
-**Migration Completed By**: Droid  
-**Review Required**: Yes - Migration approach needs to be reconsidered  
+**Migration Completed By**: Droid
+**Review Required**: Yes - Migration approach needs to be reconsidered
 **Ready for Commit**: ⚠️ Informational Only - This migration should be abandoned; use old test pattern instead
 
 **Status**: This report documents a failed migration attempt that revealed the old test structure is superior and should be preserved.
