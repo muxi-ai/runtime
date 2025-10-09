@@ -121,15 +121,39 @@ Extended structure details live in `context/project-structure.md`.
 - Design tests to expose real defects with verbose diagnostics; never submit cheater tests.
 - Feature-day orientation: Days 1-3 foundation/memory/multimodal, Days 4-6 MCP/file generation/knowledge, Days 7-12 advanced workflow & resilience.
 
+## E2E Testing Standards
+- **Test Structure**: All e2e tests in `tests/e2e/[area_number]_[area_name]/`; 12 areas covering foundation → scheduling.
+- **Three Test Patterns**:
+  - Pattern 1 (Runtime Modification): Modifies formation at runtime—suitable for behavior tests.
+  - Pattern 2 (Shared Directory): Uses shared formation directory—suitable for tests with common config.
+  - Pattern 3 (Separate Formations): Each test has isolated formation—suitable for complex/specialized tests.
+- **Pattern Selection**: Choose based on test requirements, not standardization; standalone scripts > complex abstractions for timing-sensitive tests (e.g., scheduler).
+- **Async Cleanup**: Always use async cleanup utilities for tests creating fire-and-forget tasks; prevents RecursionError spam.
+- **Formation Setup**: Co-locate formations with tests; use symlinks for `.key` and `secrets.enc` files.
+- **Service Dependencies**: Document required services (PostgreSQL, FAISSx, webhook server); tests may require specific ports/configs.
+- **Simplicity Principle**: Don't over-abstract—complex base classes can introduce bugs; working tests > standardized tests.
+
 ## Troubleshooting Cheatsheet
 - **Missing required LLM capability 'text'**: ensure formation includes a `text` model under `llm.models`.
 - **Intent detection failing**: verify formation LLM entry, credentials, and model capability coverage.
 - **Workflow not triggering**: confirm `auto_decomposition: true`, validate complexity threshold (default 7.0), and ensure no agent override is forcing a bypass.
+- **E2E test 'str' object is not callable**: check if base class abstraction interferes; consider standalone pattern without base class.
+- **RecursionError spam in tests**: missing async cleanup; use `ensure_async_cleanup()` utility from test helpers.
+- **Formation not loading in tests**: verify symlinks to `.key` and `secrets.enc` use correct relative paths.
+- **Scheduler tests timing out/failing**: avoid RUNTIME pattern; use standalone scripts with direct formation loading for precise timing control.
 
 ## Development Patterns
 - **Adding services**: implement in `src/muxi/services/`, wire into formation loading, register with the overlord, and update schemas when configuration is exposed.
 - **Orchestration edits**: modify `overlord.py`, sync workflow integrations, preserve SOP compatibility, test with real formations.
 - **Memory updates**: touch the relevant tier, maintain partitioning, validate Memobase behavior, and confirm extraction paths remain intact.
+- **E2E test development**:
+  - Review existing tests in the area to understand patterns.
+  - Choose appropriate pattern (runtime/shared/separate) based on test needs.
+  - Use symlinks for `.key` and `secrets.enc` files with correct relative paths.
+  - Include async cleanup for proper resource management (fire-and-forget tasks).
+  - Test with actual services—no mocks.
+  - Verify formation path resolution works correctly.
+  - Prefer simplicity: standalone script > complex base class if test is timing-sensitive.
 
 ## File Index
 - `src/muxi/formation/formation.py` — formation lifecycle management.
@@ -138,6 +162,8 @@ Extended structure details live in `context/project-structure.md`.
 - `src/muxi/formation/resilience/` — error recovery and user messaging.
 - `src/muxi/services/` — runtime services catalog.
 - `schemas/formation/formation.yaml` — formation schema definition.
+- `tests/e2e/` — 12 test areas (215+ tests) covering all runtime functionality.
+- `e2e/results/` — migration reports and test execution documentation.
 
 ## Future Work Targets
 1. Validate declared model capabilities vs assigned responsibilities.
