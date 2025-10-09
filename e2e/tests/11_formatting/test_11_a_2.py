@@ -6,9 +6,17 @@ Tests that response formats remain consistent across multiple requests
 and that format switching works properly.
 """
 
+import asyncio
 import sys
 
-from .base_formatting_test import BaseFormattingTest
+# Use absolute imports when running as script
+try:
+    from .base_formatting_test import BaseFormattingTest
+except ImportError:
+    # When running as script, adjust path
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent))
+    from base_formatting_test import BaseFormattingTest
 
 
 def main():
@@ -16,8 +24,8 @@ def main():
     test = BaseFormattingTest("11a2_format_consistency", "Test format consistency and switching")
 
     async def run_consistency_test():
-        # Setup formation using the shared formatting formation
-        await test.setup_formation(yaml_name="formation-formatting.yaml")
+        # Setup formation (uses RUNTIME pattern with single base formation)
+        await test.setup_formation()
 
         # Test format consistency - multiple requests with same format
         test.formatter.print_section("Format Consistency Test")
@@ -149,14 +157,15 @@ def main():
 
         return 0 if overall_success else 1
 
-    return test.run_in_event_loop(
-        "11a2_format_consistency",
-        "Test format consistency and switching",
-        "11_formatting",
-        [],  # We handle test cases manually
-        None,  # Use pattern-based formation path
-        "formation-formatting.yaml",  # Use shared formation
-    )
+    # Run the async test function directly
+    try:
+        exit_code = asyncio.run(run_consistency_test())
+        return exit_code
+    except Exception as e:
+        test.formatter.print_error(f"Test failed with exception: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
 
 
 if __name__ == "__main__":

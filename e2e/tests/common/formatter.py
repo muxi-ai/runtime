@@ -103,6 +103,18 @@ class TestOutputFormatter:
         print(f"  🔍 Debug: {message}")
 
     @staticmethod
+    def print_info(message: str):
+        """Print informational message."""
+        print(f"  ℹ️  {message}")
+
+    @staticmethod
+    def print_section(title: str):
+        """Print section header."""
+        print(f"\n{'-'*40}")
+        print(f"{title}")
+        print(f"{'-'*40}")
+
+    @staticmethod
     def print_summary(passed: int, total: int, test_name: str):
         """Print test summary."""
         print(f"\n{'='*60}")
