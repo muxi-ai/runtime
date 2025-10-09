@@ -298,9 +298,12 @@ def stream(event_type: str, content: str, **metadata):
 
         # Check if progress events are disabled (only stream final content)
         if llm_config and not llm_config.get('progress', True):
-            # When progress is false, only emit "content" events (final response)
-            if event_type != "content":
-                return  # Skip all non-content events to save on LLM costs
+            # When progress is false, only emit terminal events (final response)
+            # Allow: completed, content, finalizing (events with actual response)
+            # Block: progress, thinking, planning (intermediate progress events)
+            terminal_events = ('completed', 'content', 'finalizing', 'failed', 'cancelled')
+            if event_type not in terminal_events:
+                return  # Skip all progress/thinking/planning events to save on LLM costs
 
         @multitasking.task
         def _emit_in_background(manager, req_id, evt_type, evt_content, evt_metadata, config):

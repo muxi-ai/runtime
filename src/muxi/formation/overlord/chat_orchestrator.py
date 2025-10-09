@@ -73,9 +73,9 @@ class ChatOrchestrator:
 
             await asyncio.sleep(1.0)  # Give time for subscription to be established
 
-            # Emit a test event to verify streaming
+            # Emit initial acknowledgment event (respects progress config)
             import random
-            from ...services.streaming import streaming_manager
+            from ...services import streaming
 
             # Randomize the initial acknowledgment message
             initial_messages = [
@@ -91,8 +91,8 @@ class ChatOrchestrator:
                 "One second..."
             ]
 
-            streaming_manager.emit_event(
-                request_id,
+            # Use streaming.stream() to respect progress filtering
+            streaming.stream(
                 "progress",
                 random.choice(initial_messages),
                 stage="init",
