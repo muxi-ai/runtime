@@ -31,9 +31,6 @@ class UnifiedClarificationSystem:
         self.namespace = "clarification"
         self.active_requests = set()
 
-        # LLM for analysis
-        self.llm = getattr(overlord, "extraction_model", None)
-
         # Configuration - store reference to config object for hierarchy lookup
         self.clarification_config = (
             overlord.clarification_config if hasattr(overlord, "clarification_config") else None

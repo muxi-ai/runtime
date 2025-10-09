@@ -38,7 +38,7 @@ def safe_asyncio_exception_handler(
         exception = context.get('exception')
         message = context.get('message', 'Unknown asyncio exception')
 
-        # Write directly to stdout to avoid logging recursion
+        # Write directly to stderr to avoid logging recursion
         sys.stderr.write(f"\n⚠️  Asyncio exception: {message}\n")
 
         if exception:
@@ -48,13 +48,7 @@ def safe_asyncio_exception_handler(
             # Print traceback if available
             if hasattr(exception, '__traceback__') and exception.__traceback__:
                 sys.stderr.write("Traceback:\n")
-                traceback.print_exception(
-                    type(exception),
-                    exception,
-                    exception.__traceback__,
-                    limit=10,
-                    file=sys.stderr
-                )
+                traceback.print_exception(exception, limit=10, file=sys.stderr)
 
         sys.stderr.flush()
 

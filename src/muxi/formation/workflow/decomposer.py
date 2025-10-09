@@ -343,7 +343,18 @@ class TaskDecomposer:
                     context_info = f"\nContext: {safe_context}"
                 else:
                     context_info = f"\nContext: {type(context).__name__}"
-            except Exception:
+            except Exception as e:
+                # Log context serialization failure for debugging
+                observability.observe(
+                    event_type=observability.SystemEvents.EXTENSION_FAILED,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "context_type": type(context).__name__ if context else None,
+                    },
+                    description=f"Failed to serialize context for decomposition: {str(e)}"
+                )
                 context_info = "\nContext: <unavailable>"
 
         analysis_info = ""

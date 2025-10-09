@@ -111,8 +111,20 @@ class CredentialResolver:
                     if isinstance(credential_data, str):
                         try:
                             credential_data = json.loads(credential_data)
-                        except (json.JSONDecodeError, TypeError):
-                            pass  # Keep as string if not valid JSON
+                        except (json.JSONDecodeError, TypeError) as e:
+                            # Log parsing error with context, keep as string
+                            observability.observe(
+                                event_type=observability.SystemEvents.EXTENSION_FAILED,
+                                level=observability.EventLevel.WARNING,
+                                data={
+                                    "user_id": user_id,
+                                    "service": service,
+                                    "credential_name": credentials[0].name,
+                                    "error": str(e),
+                                    "error_type": type(e).__name__,
+                                },
+                                description=f"Failed to parse credential JSON for {credentials[0].name}: {str(e)}"
+                            )
 
                     user_cache = self._cache.setdefault(user_id, {})
                     user_cache[service] = credential_data
@@ -125,8 +137,20 @@ class CredentialResolver:
                         if isinstance(cred_data, str):
                             try:
                                 cred_data = json.loads(cred_data)
-                            except (json.JSONDecodeError, TypeError):
-                                pass  # Keep as string if not valid JSON
+                            except (json.JSONDecodeError, TypeError) as e:
+                                # Log parsing error with context, keep as string
+                                observability.observe(
+                                    event_type=observability.SystemEvents.EXTENSION_FAILED,
+                                    level=observability.EventLevel.WARNING,
+                                    data={
+                                        "user_id": user_id,
+                                        "service": service,
+                                        "credential_name": cred.name,
+                                        "error": str(e),
+                                        "error_type": type(e).__name__,
+                                    },
+                                    description=f"Failed to parse credential JSON for {cred.name}: {str(e)}"
+                                )
                         credential_list.append({"name": cred.name, "credentials": cred_data})
                     return credential_list
 

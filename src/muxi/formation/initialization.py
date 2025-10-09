@@ -472,13 +472,13 @@ def _create_all_database_tables(db_manager) -> None:
     try:
         # Import all models to ensure they are registered with Base.metadata
         # Memory models (users, memories)
-        from ..services.memory.long_term import User, Memory
+        from ..services.memory.long_term import User, Memory  # noqa: F401
 
         # Credential models (credentials table) - Note: User is already imported above
-        from ..formation.credentials.resolver import Credential
+        from ..formation.credentials.resolver import Credential  # noqa: F401
 
         # Scheduler models (scheduled_jobs, scheduled_job_audit)
-        from ..services.scheduler.models import ScheduledJob, ScheduledJobAudit
+        from ..services.scheduler.models import ScheduledJob, ScheduledJobAudit  # noqa: F401
 
         # Get Base from db module
         from ..services.db import Base

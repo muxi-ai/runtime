@@ -865,52 +865,46 @@ Generate the message now:"""
             return any(pattern in message_lower for pattern in help_patterns)
 
     async def _generate_help_response(self, service: str) -> str:
-        """Generate helpful guidance for obtaining credentials for a specific service."""
-        # Service-specific help templates
-        help_guides = {
-            "github": """To get a GitHub personal access token:
+        """Generate helpful guidance for obtaining credentials for a specific service.
 
-1. **Sign in to GitHub** at https://github.com
-2. Click your profile picture (top-right) → **Settings**
-3. Scroll down and click **Developer settings** (bottom-left)
-4. Click **Personal access tokens** → **Tokens (classic)**
-5. Click **Generate new token** → **Generate new token (classic)**
-6. Give it a descriptive name (e.g., "MUXI Access")
-7. Set expiration (recommended: 90 days)
-8. Select scopes based on what you need:
-   - `repo` - Full control of private repositories
-   - `read:org` - Read organization data
-   - `read:user` - Read user profile data
-9. Click **Generate token** at the bottom
-10. **Copy the token immediately** (you won't see it again!)
+        Uses LLM to generate service-specific instructions based on world knowledge.
+        This scales to any service and supports any language. Falls back to inline
+        template if LLM fails.
+        """
+        # Try LLM-generated help first
+        try:
+            # Get configured LLM instance
+            llm = await self._get_configured_llm(cache_suffix="credential_help", max_tokens=500)
+            if not llm:
+                raise RuntimeError("No LLM available for help generation")
 
-Once you have your token, just paste it here and I'll use it to access GitHub.""",
-            "linear": """To get a Linear API key:
+            # Detect user language from context
+            user_language = self._detect_user_language()
 
-1. **Sign in to Linear** at https://linear.app
-2. Click your workspace avatar (bottom-left)
-3. Go to **Settings** → **API**
-4. Click **Create new key**
-5. Give it a descriptive label (e.g., "MUXI Integration")
-6. **Copy the API key** immediately
+            # Load prompt template
+            from ..prompts.loader import PromptLoader
 
-Once you have your key, paste it here.""",
-            "openai": """To get an OpenAI API key:
+            prompt = PromptLoader.get(
+                "credential_help_generator.md", service=service, user_language=user_language
+            )
 
-1. **Sign in to OpenAI** at https://platform.openai.com
-2. Click your profile icon (top-right) → **View API keys**
-3. Click **Create new secret key**
-4. Give it a name (e.g., "MUXI Integration")
-5. **Copy the key immediately** (starts with sk-)
+            response = await llm.generate_text(prompt, max_tokens=500)
 
-Once you have your key, paste it here.""",
-        }
+            if response:
+                return response.strip()
 
-        # Check if we have a specific guide for this service
-        if service in help_guides:
-            return help_guides[service]
+        except Exception as e:
+            # Log failure but continue to inline fallback
+            from ...services import observability
 
-        # Generic help for unknown services
+            observability.observe(
+                event_type=observability.SystemEvents.EXTENSION_FAILED,
+                level=observability.EventLevel.DEBUG,
+                data={"service": service, "error": str(e)},
+                description=f"LLM help generation failed, using inline fallback: {e}",
+            )
+
+        # Last resort inline fallback (only if LLM completely unavailable)
         return f"""To get credentials for {service}:
 
 1. Sign in to the {service} website
@@ -919,7 +913,11 @@ Once you have your key, paste it here.""",
 4. Generate a new API key or access token
 5. Copy the credentials
 
-Once you have your credentials, paste them here and I'll use them to connect to {service}."""
+Once you have your credentials, paste them here."""
+
+    def _detect_user_language(self) -> str:
+        """Detect user's language from context or default to English."""
+        return "English"
 
     async def _extract_credential_from_text(self, message: str) -> str:
         """Extract credential from natural language using LLM."""

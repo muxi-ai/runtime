@@ -2541,6 +2541,25 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             data={"fallback_model": text_model},
                             description="Successfully initialized extraction model with fallback",
                         )
+                    elif isinstance(text_model, dict):
+                        # Normal case: text capability is a dict with model config
+                        if "model" not in text_model:
+                            raise ValueError("Text capability config missing 'model' key")
+                        self.extraction_model = await self.create_model(
+                            model=text_model["model"],
+                            api_key=text_model.get("api_key"),
+                            **text_model.get("settings", {}),
+                        )
+                        self.default_model = self.extraction_model
+                        if hasattr(self, "extractor") and self.extractor:
+                            self.extractor.extraction_model = self.extraction_model
+
+                        observability.observe(
+                            event_type=observability.SystemEvents.SERVER_STARTED,
+                            level=observability.EventLevel.INFO,
+                            data={"fallback_model": text_model["model"]},
+                            description="Successfully initialized extraction model with fallback",
+                        )
                     elif hasattr(text_model, "generate_text"):
                         # It's already an LLM object
                         self.extraction_model = text_model
@@ -6836,19 +6855,19 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 # Create pending clarification state so we can detect help requests in next message
                 if session_id and cred_config.get("mode", "redirect") == "redirect":
                     # Store clarification state in unified system
-                    if self.clarification_system:
-                        await self.clarification_system._create_state(
+                    if self.clarification:
+                        await self.clarification._create_state(
                             request_id=request_id,
                             original_request=message,
                             mode="redirect",
                             session_id=session_id
                         )
                         # Add MCP service to state
-                        state = await self.clarification_system._get_state(request_id)
+                        state = await self.clarification._get_state(request_id)
                         if state:
                             state["mcp_service"] = e.service
                             state["user_id"] = e.user_id
-                            await self.clarification_system._store_state(request_id, state)
+                            await self.clarification._store_state(request_id, state)
 
                     # Also set pending clarification in overlord
                     self._set_pending_clarification(

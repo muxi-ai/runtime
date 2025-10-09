@@ -219,8 +219,35 @@ class PersistentMemoryManager:
                     all_results.extend(collection_results)
 
                 # Sort merged results by relevance score (distance) and take top k
-                # Handle both dict and tuple formats
-                all_results.sort(key=lambda x: x.get("score", 0.0) if isinstance(x, dict) else x[0])
+                # Handle both dict and tuple formats with defensive type checking
+                def get_sort_key(item):
+                    if isinstance(item, dict):
+                        score = item.get("score", 0.0)
+                        try:
+                            return float(score)
+                        except (ValueError, TypeError):
+                            raise TypeError(
+                                f"Score value not numeric for dict result: type={type(score).__name__}"
+                            )
+                    elif isinstance(item, (tuple, list)):
+                        if len(item) < 1:
+                            raise TypeError(
+                                f"Tuple/list result must have at least one element for score: "
+                                f"type={type(item).__name__}, length={len(item)}"
+                            )
+                        try:
+                            return float(item[0])
+                        except (ValueError, TypeError):
+                            raise TypeError(
+                                f"Score value not numeric for {type(item).__name__} result: "
+                                f"type={type(item[0]).__name__}"
+                            )
+                    else:
+                        raise TypeError(
+                            f"Unexpected result type in memory search: type={type(item).__name__}"
+                        )
+
+                all_results.sort(key=get_sort_key)
                 lt_results = all_results[:k]
             else:
                 # No collections specified, search all collections

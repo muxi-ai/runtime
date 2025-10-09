@@ -314,8 +314,14 @@ class SQLiteMemory(BaseMemory):
                 embedding_response = await self.embedding_provider.embed(content)
                 # Extract the actual embedding vector using helper method (like LongTermMemory)
                 embedding = self._extract_embedding_from_response(embedding_response)
-            except Exception:
-                raise
+            except Exception as e:
+                # Provide context about embedding generation failure
+                content_preview = content[:100] if content else "<empty>"
+                error_msg = (
+                    f"Failed to generate embedding for content (length={len(content)}, "
+                    f"preview='{content_preview}...'): {str(e)}"
+                )
+                raise RuntimeError(error_msg) from e
 
             # Add timestamp to metadata
             metadata["timestamp"] = time.time()
