@@ -4889,14 +4889,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         try:
             start_time = time.time()
 
-            # Check if clarification is needed before processing
-            try:
-                clarification_result = await self._check_clarification_needs_async(
-                    message, user_id, agent_name
-                )
-            except Exception as e:
-                print(f"⚠️ Clarification check failed: {type(e).__name__}: {str(e)}")
-                clarification_result = None
+            # Legacy clarification check removed - now handled by UnifiedClarificationSystem
+            clarification_result = None
 
             if clarification_result:
                 clarification_question, clarification_request_id = clarification_result
@@ -9183,51 +9177,141 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             agent_name = clarification_metadata.get("agent_name")
 
             # Check if this is a credential clarification response
-            # TODO: Replace legacy clarification_manager with unified system
-            if False and user_id:  # Legacy clarification_manager disabled
-                request_id = self.clarification_manager._user_to_request[user_id]
-                if request_id in self.clarification_manager.active_requests:
-                    clarification_request = self.clarification_manager.active_requests[request_id]
+            clarification_override_message: Optional[str] = None
 
-                    # Check if this is a credential selection clarification
-                    if (
-                        clarification_request.context
-                        and clarification_request.context.get("reason") == "ambiguous_credential"
-                    ):
+            if self.clarification and user_id:
+                clarification_request_id = (
+                    clarification_metadata.get("clarification_request_id")
+                    or clarification_metadata.get("request_id")
+                    or clarification_metadata.get("original_request_id")
+                )
+                session_id = clarification_metadata.get("session_id")
 
-                        # Parse the credential selection from the response
-                        selected_credential = (
-                            await self.credential_handler.parse_credential_selection(
-                                clarification_response, clarification_request
-                            )
+                if not clarification_request_id and session_id:
+                    pending_clarification = await self._get_pending_clarification(session_id)
+                    if pending_clarification:
+                        clarification_request_id = pending_clarification.get("request_id")
+
+                clarification_state = (
+                    await self.clarification.get_state(clarification_request_id)
+                    if clarification_request_id
+                    else None
+                )
+
+                if clarification_state and clarification_state.get("mode") == "credential":
+                    clarification_result = await self.clarification.handle_response(
+                        clarification_request_id, clarification_response
+                    )
+
+                    if clarification_result.action == "clarify" and clarification_result.question:
+                        follow_up_question = await self._apply_persona(
+                            clarification_result.question, original_message
+                        )
+                        return MuxiResponse(
+                            role="assistant",
+                            content=follow_up_question,
+                            metadata={
+                                "requires_clarification": True,
+                                "clarification_source": "agent_request",
+                                "agent_name": agent_name,
+                                "original_agent_response": clarification_metadata.get(
+                                    "original_agent_response"
+                                ),
+                                "required_info": clarification_metadata.get("required_info", {}),
+                                "agent_reasoning": clarification_metadata.get(
+                                    "agent_reasoning", ""
+                                ),
+                                "original_message": original_message,
+                                "request_id": clarification_request_id,
+                                "clarification_type": "credential",
+                            },
                         )
 
-                        if selected_credential:
-                            # Store the selected credential for this user and service
-                            service = clarification_request.context.get("service")
-                            if service and self.mcp_service:
-                                # Find the server that uses this service
-                                for server_id, config in self.mcp_service.servers.items():
-                                    if (
-                                        config.get("uses_user_credentials")
-                                        and service in server_id.lower()
-                                    ):
-                                        # Cache the selected credential
-                                        if server_id not in self.mcp_service.user_credentials:
-                                            self.mcp_service.user_credentials[server_id] = {}
+                    context = clarification_result.context or {}
+                    selected_account = context.get("selected_account")
+                    service = (
+                        context.get("mcp_service") or clarification_state.get("service") or ""
+                    ).lower()
 
-                                        # Store the resolved credential
-                                        self.mcp_service.user_credentials[server_id][
-                                            user_id
-                                        ] = selected_credential
-                                        break
+                    if (
+                        selected_account
+                        and service
+                        and self.credential_resolver
+                        and self.mcp_service
+                    ):
+                        try:
+                            resolved_credentials = await self.credential_resolver.resolve(
+                                str(user_id), service
+                            )
+                            matching_credential = None
+                            if isinstance(resolved_credentials, list):
+                                matching_credential = next(
+                                    (
+                                        cred
+                                        for cred in resolved_credentials
+                                        if cred.get("name") == selected_account
+                                    ),
+                                    None,
+                                )
 
-                            # Clear the clarification request since it's resolved
-                            del self.clarification_manager.active_requests[request_id]
-                            del self.clarification_manager._user_to_request[user_id]
+                            if matching_credential:
+                                credential_payload = matching_credential.get(
+                                    "credential_data"
+                                ) or matching_credential.get("credentials")
+                                if credential_payload:
+                                    server_id = None
+                                    for candidate_id, config in self.mcp_service.servers.items():
+                                        if (
+                                            config.get("uses_user_credentials")
+                                            and service in candidate_id.lower()
+                                        ):
+                                            server_id = candidate_id
+                                            break
+
+                                    if server_id:
+                                        user_cache = self.mcp_service.user_credentials.setdefault(
+                                            server_id, {}
+                                        )
+                                        auth_template = (
+                                            self.mcp_service.servers.get(server_id, {}).get("auth", {})
+                                        )
+                                        if auth_template:
+                                            resolved_auth = self.mcp_service._replace_credential_in_auth(
+                                                auth_template, credential_payload
+                                            )
+                                        else:
+                                            if isinstance(credential_payload, dict):
+                                                token_value = (
+                                                    credential_payload.get("token")
+                                                    or credential_payload.get("value")
+                                                )
+                                            else:
+                                                token_value = credential_payload
+                                            resolved_auth = {
+                                                "type": "bearer",
+                                                "token": token_value,
+                                            }
+                                        user_cache[str(user_id)] = resolved_auth
+                        except Exception as credential_error:
+                            observability.observe(
+                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                level=observability.EventLevel.WARNING,
+                                data={
+                                    "error": str(credential_error),
+                                    "service": service,
+                                    "selected_account": selected_account,
+                                },
+                                description="Failed to cache credential selection after clarification",
+                            )
+
+                    if clarification_result.request:
+                        clarification_override_message = clarification_result.request
 
             # Enhance original message with clarification response
-            enhanced_message = f"{original_message}\n\nAdditional context: {clarification_response}"
+            if clarification_override_message:
+                enhanced_message = clarification_override_message
+            else:
+                enhanced_message = f"{original_message}\n\nAdditional context: {clarification_response}"
 
             # Re-process with enhanced message
             result = await self._process_sync_chat(enhanced_message, agent_name, user_id)
@@ -9502,117 +9586,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             _ = e  # remove this after implementing observability
             return None
 
-    async def _check_clarification_needs_async(
-        self, message: str, user_id: Any, agent_name: Optional[str]
-    ) -> Optional[tuple[str, str]]:
-        """
-        Check if message needs clarification in async mode.
-
-        Args:
-            message: User's message
-            user_id: User identifier
-            agent_name: Selected agent name
-
-        Returns:
-            Tuple of (clarification_question, clarification_request_id) if clarification
-            is needed, None if message can proceed without clarification
-        """
-        try:
-            # TODO: Replace legacy clarification_analyzer with unified system
-            if True:  # Legacy analyzer disabled
-                return None
-
-            # Get user context for analysis
-            user_context = {}
-            if user_id is not None and hasattr(self, "user_context_manager"):
-                try:
-                    user_context = await self.user_context_manager.get_user_context(user_id)
-                except Exception:
-                    pass  # Continue without context
-
-            # Get available tools for analysis
-            available_tools = []
-            if hasattr(self, "mcp_coordinator") and self.mcp_coordinator:
-                try:
-                    # Get all tools from the registry
-                    tool_registry = self.mcp_coordinator.get_tool_registry()
-                    available_tools = []
-                    for server_tools in tool_registry.values():
-                        available_tools.extend(server_tools.keys())
-                except Exception:
-                    pass  # Continue without tools
-
-            # Analyze request for missing information
-            analysis_result = await self.clarification_analyzer.analyze_request(
-                user_message=message,
-                intent="general",
-                available_tools=available_tools,
-                user_context=user_context,
-            )
-
-            # Check if clarification is needed
-            if analysis_result and analysis_result.missing_info:
-                # Create clarification request
-                clarification_request = None
-                if self.clarification_manager:
-                    clarification_request = await self.clarification_manager.start_clarification(
-                        user_id=str(user_id),
-                        agent_id="overlord",
-                        request_type=RequestType.REASONING,
-                        intent="general",
-                        tool_name=None,
-                        provided_info={},
-                    )
-
-                # Generate clarification question
-                question = "Could you please provide more details?"
-                if self.clarification_question_generator:
-                    # For reasoning clarification, use the first missing info item
-                    missing_context = (
-                        analysis_result.missing_info[0]
-                        if analysis_result.missing_info
-                        else "more details"
-                    )
-                    question_obj = (
-                        await self.clarification_question_generator.generate_reasoning_question(
-                            intent="general",
-                            missing_context=missing_context,
-                            user_background={},
-                            style=self.clarification_config.style,
-                        )
-                    )
-                    question = question_obj.question_text
-
-                request_id = (
-                    clarification_request.request_id
-                    if clarification_request
-                    else f"clarify_{user_id}_{time.time()}"
-                )
-
-                observability.observe(
-                    event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "request_id": request_id,
-                        "missing_info": (
-                            analysis_result.missing_info
-                            if isinstance(analysis_result.missing_info, list)
-                            else list(analysis_result.missing_info.keys())
-                        ),
-                    },
-                    description="Async clarification needed",
-                )
-
-                return (question, request_id)
-
-            return None
-
-        except Exception as e:
-            #  Warning - TODO: add observability
-            # ConversationEvents.CLARIFICATION_FAILED
-            _ = e  # remove this after implementing observability
-            # On error, proceed without clarification to avoid blocking
-            return None
+    # Legacy function _check_clarification_needs_async removed
+    # Clarification is now handled by UnifiedClarificationSystem
 
     async def process_async_clarification_response(
         self, request_id: str, clarification_response: str
