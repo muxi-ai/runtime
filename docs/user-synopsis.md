@@ -39,24 +39,23 @@ memory:
 The system splits user information into two categories with different update frequencies and caching strategies:
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                   User Synopsis                        │
-│                                                        │
-│  ┌──────────────────────┐  ┌────────────────────────┐  │
-│  │  Identity Synopsis   │  │  Context Synopsis      │  │
-│  │  (Tier 1)            │  │  (Tier 2)              │  │
-│  ├──────────────────────┤  ├────────────────────────┤  │
-│  │ Collections:         │  │ Collections:           │  │
-│  │ - user_identity      │  │ - preferences          │  │
-│  │ - relationships      │  │ - activities           │  │
-│  │ - work_projects      │  │                        │  │
-│  ├──────────────────────┤  ├────────────────────────┤  │
-│  │ Cache: Permanent     │  │ Cache: 1-hour TTL      │  │
-│  │ Invalidation:        │  │ Invalidation:          │  │
-│  │   Explicit (on       │  │   Automatic (TTL)      │  │
-│  │   update)            │  │                        │  │
-│  └──────────────────────┘  └────────────────────────┘  │
-└────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│                    User Synopsis                     │
+│                                                      │
+│  ┌──────────────────────┐  ┌──────────────────────┐  │
+│  │  Identity Synopsis   │  │  Context Synopsis    │  │
+│  │  (Tier 1)            │  │  (Tier 2)            │  │
+│  ├──────────────────────┤  ├──────────────────────┤  │
+│  │ Collections:         │  │ Collections:         │  │
+│  │ - user_identity      │  │ - preferences        │  │
+│  │ - relationships      │  │ - activities         │  │
+│  │ - work_projects      │  │                      │  │
+│  ├──────────────────────┤  ├──────────────────────┤  │
+│  │ Cache: Permanent     │  │ Cache: 1-hour TTL    │  │
+│  │ Invalidation:        │  │ Invalidation:        │  │
+│  │  Explicit on update  │  │  Automatic (TTL)     │  │
+│  └──────────────────────┘  └──────────────────────┘  │
+└──────────────────────────────────────────────────────┘
 ```
 
 ### Tier 1: Identity Synopsis
