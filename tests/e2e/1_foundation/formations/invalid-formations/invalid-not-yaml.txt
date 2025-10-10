@@ -1,3 +1,0 @@
-This is not a YAML file!
-It's just plain text.
-The formation loader should reject this.

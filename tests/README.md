@@ -70,10 +70,10 @@ Before running tests, ensure these real services are available:
 pytest
 
 # Run specific test area
-pytest tests/e2e/1_foundation/
+pytest e2e/tests/1_foundation/
 
 # Run specific test file
-pytest tests/e2e/1_foundation/test_1a1_basic_yaml_formation.py -v
+pytest e2e/tests/1_foundation/test_1a1_basic_yaml_formation.py -v
 
 # Run with coverage
 pytest --cov=muxi --cov-report=html
@@ -177,10 +177,10 @@ System: ...
 **IMPORTANT**: When running tests, always use the test runner script to save context:
 ```bash
 # Run test with automatic log redirection
-./tests/run-with-log.sh tests/e2e/8_clarification/test_8a1.py
+./tests/run-with-log.sh e2e/tests/8_clarification/test_8a1.py
 
 # Or with custom log name for iteration
-./tests/run-with-log.sh tests/e2e/8_clarification/test_8a1.py test_8a1_v2.log
+./tests/run-with-log.sh e2e/tests/8_clarification/test_8a1.py test_8a1_v2.log
 ```
 
 After running tests:
@@ -191,7 +191,7 @@ After running tests:
 Example workflow:
 ```bash
 # Run test with automatic logging
-./tests/run-with-log.sh tests/e2e/7_orchestration/test_sops.py
+./tests/run-with-log.sh e2e/tests/7_orchestration/test_sops.py
 
 # Then use Task tool to analyze:
 # "Analyze the test log at tests/logs/test_sops.log and summarize any failures or issues"

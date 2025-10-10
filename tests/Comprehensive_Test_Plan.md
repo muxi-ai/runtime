@@ -142,7 +142,7 @@ Each formation includes:
 Each test area should follow the standardized structure with descriptive names:
 
 ```
-tests/e2e/X_feature/
+e2e/tests/X_feature/
 ├── TEST_MAPPING.md          # Maps test plan requirements to actual test files
 ├── FINAL_SUMMARY.md         # Day's accomplishments matching test plan format
 ├── test_Xa1_*.py            # Test Group A, Test 1
@@ -880,7 +880,7 @@ assert sop_search_time < 0.1  # SOP search should add <100ms
 - **Test Groups Completed**: 6 groups (8A through 8F)
 - **Tests Passing**: 100% success rate across all groups
 - **Test Reports**: Complete reports in `tests/reports/`
-- **Formation Used**: `tests/e2e/8_clarification/formations/formation-clarification/`
+- **Formation Used**: `e2e/tests/8_clarification/formations/formation-clarification/`
 
 ### Test Group Summary
 
@@ -982,7 +982,7 @@ user_id (user isolation)
 - **Test Groups Completed**: 3 groups (9B Request Lifecycle, 9C Advanced Scenarios)
 - **Tests Passing**: 100% success rate across all groups
 - **Test Reports**: Complete reports in `reports/`
-- **Formation Used**: `tests/e2e/9_async/formation-async/`
+- **Formation Used**: `e2e/tests/9_async/formation-async/`
 
 ### Test Group Results Summary
 
@@ -1000,7 +1000,7 @@ user_id (user isolation)
 - ✅ Ultra-simplified two-tier storage (RequestTracker → Buffer Memory with 48h TTL)
 
 **Implementation Status:** ✅ **COMPLETED** (September 2025)
-- ✅ Comprehensive test coverage: `tests/e2e/9_async/test_9b1_request_lifecycle.py`
+- ✅ Comprehensive test coverage: `e2e/tests/9_async/test_9b1_request_lifecycle.py`
 - ✅ Complete documentation: `tests/reports/9b.md` and `docs/request-lifecycle.md`
 - ✅ **Production ready**: Only 2 code locations modified, leveraging existing infrastructure
 
@@ -1032,7 +1032,7 @@ user_id (user isolation)
 
 **Formation Configuration:**
 ```yaml
-# tests/e2e/9_async/formation-async/formation.yaml
+# e2e/tests/9_async/formation-async/formation.yaml
 overlord:
   response:
     async:
@@ -1058,7 +1058,7 @@ overlord:
 - **Test Groups Completed**: 1 group (10A Streaming Functionality)
 - **Tests Implemented**: 6 comprehensive tests
 - **Success Rate**: 100% (all tests passing)
-- **Formation Used**: `tests/e2e/10_streaming/formation-streaming/`
+- **Formation Used**: `e2e/tests/10_streaming/formation-streaming/`
 
 ### Test Group Results Summary
 
@@ -1137,7 +1137,7 @@ assert not hasattr(response, '__aiter__')
 - **Test Groups Completed**: 1 group (11A Response Format Types)
 - **Tests Passing**: 4/4 (100% success rate)
 - **Test Reports**: [reports/11a.md](reports/11a.md)
-- **Formation Used**: `tests/e2e/11_formatting/formation-formatting/`
+- **Formation Used**: `e2e/tests/11_formatting/formation-formatting/`
 
 ### Test Group Results Summary
 
@@ -1228,7 +1228,7 @@ response = await overlord.chat("Create a simple guide on the benefits of cloud c
 ### Formation Configuration
 
 ```yaml
-# tests/e2e/11_formatting/formation-formatting/formation.yaml
+# e2e/tests/11_formatting/formation-formatting/formation.yaml
 overlord:
   response:
     format: "markdown"  # "json", "text", "markdown", "html"
@@ -1309,7 +1309,7 @@ The scheduler service integration has been comprehensively tested with natural l
 - Some natural language patterns need refinement
 
 ### Formations Required
-- `tests/e2e/12_scheduling/formation-scheduling/` - Scheduler test formation with webhook configuration
+- `e2e/tests/12_scheduling/formation-scheduling/` - Scheduler test formation with webhook configuration
 - Database: PostgreSQL with proper schema initialization
 
 **Success Criteria:** Natural language scheduling works, jobs execute via webhooks, database persistence functional

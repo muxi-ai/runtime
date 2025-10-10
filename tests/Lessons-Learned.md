@@ -25,7 +25,7 @@ This guide documents key learnings and patterns discovered while implementing th
 
 **What Worked:**
 ```
-tests/e2e/X_feature/
+e2e/tests/X_feature/
 ├── test_Xa1_descriptive_name.py  # Clear numbering system
 ├── TEST_MAPPING.md               # Links plan to implementation
 └── FINAL_SUMMARY.md              # Accomplishments record
@@ -109,7 +109,7 @@ tests/e2e/X_feature/
 **Key Success Factors:**
 - **Leverage Existing Infrastructure**: Used buffer memory TTL instead of creating new systems
 - **Minimal Code Changes**: Only 2 locations modified for complete feature
-- **Production Ready**: Hard-coded 48h TTL, zero configuration overhead  
+- **Production Ready**: Hard-coded 48h TTL, zero configuration overhead
 - **User-Driven Simplification**: Listened to feedback about over-engineering
 - **Proven Cleanup**: Used battle-tested buffer memory FIFO system
 
@@ -127,13 +127,13 @@ tests/e2e/X_feature/
 
 **Group 9B Pattern:**
 - **Tier 1**: Active requests in fast dictionary lookup (RequestTracker)
-- **Tier 2**: Completed requests in TTL storage for history (Buffer Memory)  
+- **Tier 2**: Completed requests in TTL storage for history (Buffer Memory)
 - **Automatic Migration**: Completed requests move from Tier 1 → Tier 2 on completion
 - **Bounded Memory**: TTL ensures eventual cleanup without indefinite accumulation
 
 **Benefits:**
 - Fast access for active operations
-- Historical access for completed operations  
+- Historical access for completed operations
 - No memory leaks through automatic expiration
 - Leverages existing proven infrastructure
 
@@ -522,9 +522,9 @@ PROVIDER_CAPABILITIES = {
 ```python
 def test_large_file_with_timeout_handling():
     """Pattern learned from 132MB video testing"""
-    
+
     large_file_content = load_test_file("presentation.mp4")  # 132MB
-    
+
     response = asyncio.run(overlord.chat(
         user_id="test_user",
         message="Analyze the slides and speaker content in this presentation video",
@@ -536,7 +536,7 @@ def test_large_file_with_timeout_handling():
         }],
         timeout=300  # 5 minute timeout for large files
     ))
-    
+
     # Handle timeout gracefully - this is expected for very large files
     if "timeout" in str(response).lower():
         print("⚠️ Large file timeout - expected behavior")
@@ -563,10 +563,10 @@ MUXI Runtime supports async processing for long-running tasks. Async responses c
 ```python
 def test_processing_with_dynamic_async(overlord):
     """Test that handles both sync and async responses dynamically"""
-    
+
     # Clear webhook logs before test
     setup_webhook_test()
-    
+
     # Send request - async may trigger based on formation or content
     response = get_response(
         overlord.chat(
@@ -575,7 +575,7 @@ def test_processing_with_dynamic_async(overlord):
             # Note: Not specifying use_async - let system decide
         )
     )
-    
+
     # Universal checker that handles both sync and async
     result, was_async = check_response_with_webhook(
         response,
@@ -584,12 +584,12 @@ def test_processing_with_dynamic_async(overlord):
         min_length=100,
         test_name="Dynamic Processing Test"
     )
-    
+
     if was_async:
         print(f"✅ Processed asynchronously via webhook")
     else:
         print(f"✅ Processed synchronously")
-    
+
     # Result contains the actual response text either way
     assert len(result) > 100, "Should have substantial response"
 ```
@@ -601,10 +601,10 @@ Since async responses can be triggered by formation settings or system determina
 ```python
 def test_with_defensive_async_handling(overlord):
     """Example of defensive async testing"""
-    
+
     # Always setup webhook testing, even if you don't expect async
     setup_webhook_test()
-    
+
     # Send any request
     response = get_response(
         overlord.chat(
@@ -614,14 +614,14 @@ def test_with_defensive_async_handling(overlord):
             # Not specifying use_async - let formation/system decide
         )
     )
-    
+
     # Always use universal checker
     result, was_async = check_response_with_webhook(
         response,
         expected_keywords=['document', 'analysis'],
         test_name="Document Analysis"
     )
-    
+
     # Test passes whether response was sync or async
     assert 'document' in result.lower()
     print(f"Processing mode: {'async' if was_async else 'sync'}")
