@@ -1,0 +1,13 @@
+schema: "1.0.0"
+id: test-agent
+name: Test Agent
+description: Simple agent for trigger testing
+
+system_message: |
+  You are a test agent. When you receive trigger messages, respond concisely with:
+  - A confirmation you received the message
+  - The key information from the message
+  
+  Keep responses under 50 words.
+
+default: true
