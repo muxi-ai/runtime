@@ -7,14 +7,15 @@ with template-based message generation from event data.
 
 from typing import Dict, Any, Optional
 import asyncio
-import json
 
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .....services import observability
-from ...utils import render_trigger_template
+from .....datatypes.api import APIObjectType, APIEventType
+from .....utils.id_generator import generate_request_id
+from ...responses import create_api_response, APIResponse
+from ...utils import render_trigger_template, get_header_case_insensitive
 
 router = APIRouter(tags=["Triggers"])
 
@@ -23,18 +24,8 @@ class TriggerRequest(BaseModel):
     """Model for trigger requests."""
 
     data: Dict[str, Any] = Field(..., description="Event data to pass to trigger template")
-    user_id: Optional[str] = Field(default="0", description="User ID for request context")
     session_id: Optional[str] = Field(default=None, description="Session ID for conversation grouping")
     use_async: Optional[bool] = Field(default=True, description="Process trigger asynchronously (default: true)")
-
-
-class TriggerResponse(BaseModel):
-    """Model for trigger response."""
-
-    status: str = Field(..., description="Status: 'queued' for async, 'completed' for sync")
-    trigger_id: str = Field(..., description="ID of the trigger execution")
-    job_id: Optional[str] = Field(None, description="Job ID for async triggers")
-    message: Optional[str] = Field(None, description="Rendered message for sync triggers")
 
 
 @router.post("/formations/{formation_id}/triggers/{trigger_name}")
@@ -44,25 +35,28 @@ async def execute_trigger(
     request: Request,
     trigger_request: TriggerRequest,
     background_tasks: BackgroundTasks,
-) -> TriggerResponse:
+) -> APIResponse:
     """
     Execute a trigger with provided event data.
 
-    Triggers are formation-scoped templates that convert external events
-    into formation chat messages. Templates use ${{ data.* }} syntax
-    for data substitution.
+    Triggers are webhook-friendly request endpoints that render templates
+    into chat messages and process them like any other request.
 
     Args:
         formation_id: ID of the formation
         trigger_name: Name of the trigger template
         trigger_request: Trigger request data
 
+    Headers:
+        X-Muxi-User-Id: User ID for request context (optional, defaults to "0")
+
     Returns:
-        TriggerResponse with execution status and IDs
+        Standard API response with request_id and status
 
     Examples:
         POST /v1/formations/my-formation/triggers/github-issue
-        {
+        Headers: X-Muxi-User-Id: webhook-user
+        Body: {
             "data": {
                 "issue": {
                     "number": 123,
@@ -74,6 +68,12 @@ async def execute_trigger(
         }
     """
     formation = request.app.state.formation
+
+    # Generate request ID upfront
+    request_id = generate_request_id()
+
+    # Extract user_id from header (case-insensitive)
+    user_id = get_header_case_insensitive(request.headers, "X-Muxi-User-Id") or "0"
 
     # Verify formation ID matches
     if formation.formation_id != formation_id:
@@ -116,10 +116,6 @@ async def execute_trigger(
             detail=f"Unexpected error rendering template: {str(e)}",
         )
 
-    # Generate trigger execution ID
-    import uuid
-    trigger_id = f"trigger_{uuid.uuid4().hex[:12]}"
-
     # Log trigger execution
     observability.observe(
         event_type=observability.ConversationEvents.REQUEST_RECEIVED,
@@ -129,13 +125,13 @@ async def execute_trigger(
             "endpoint": "/api/formations/{formation_id}/triggers/{trigger_name}",
             "formation_id": formation_id,
             "trigger_name": trigger_name,
-            "trigger_id": trigger_id,
-            "user_id": trigger_request.user_id,
+            "request_id": request_id,
+            "user_id": user_id,
             "session_id": trigger_request.session_id,
             "use_async": trigger_request.use_async,
             "data_keys": list(trigger_request.data.keys()),
         },
-        description=f"Trigger '{trigger_name}' executed",
+        description=f"Trigger '{trigger_name}' request received",
     )
 
     # Get overlord for processing
@@ -143,17 +139,15 @@ async def execute_trigger(
 
     if trigger_request.use_async:
         # Process asynchronously
-        job_id = f"job_{uuid.uuid4().hex[:12]}"
-
         async def process_async():
             """Background task to process trigger."""
             try:
                 # Use overlord's chat method (non-streaming)
                 response = await overlord.chat(
                     rendered_message,
-                    user_id=trigger_request.user_id,
+                    user_id=user_id,
                     session_id=trigger_request.session_id,
-                    request_id=trigger_id,
+                    request_id=request_id,
                 )
 
                 observability.observe(
@@ -161,8 +155,7 @@ async def execute_trigger(
                     level=observability.EventLevel.INFO,
                     data={
                         "service": "formation_api_server",
-                        "trigger_id": trigger_id,
-                        "job_id": job_id,
+                        "request_id": request_id,
                         "formation_id": formation_id,
                         "trigger_name": trigger_name,
                     },
@@ -175,8 +168,7 @@ async def execute_trigger(
                     level=observability.EventLevel.ERROR,
                     data={
                         "service": "formation_api_server",
-                        "trigger_id": trigger_id,
-                        "job_id": job_id,
+                        "request_id": request_id,
                         "formation_id": formation_id,
                         "trigger_name": trigger_name,
                         "error": str(e),
@@ -188,21 +180,23 @@ async def execute_trigger(
         # Add to background tasks
         background_tasks.add_task(process_async)
 
-        return TriggerResponse(
-            status="queued",
-            trigger_id=trigger_id,
-            job_id=job_id,
+        # Return standard async response
+        return create_api_response(
+            object_type=APIObjectType.REQUEST,
+            event_type=APIEventType.REQUEST_PROCESSING,
+            data={"status": "processing"},
+            request_id=request_id,
         )
 
     else:
-        # Process synchronously
+        # Process synchronously (non-streaming)
         try:
-            # Use overlord's chat method (non-streaming for sync triggers)
+            # Use overlord's chat method (non-streaming for triggers)
             response = await overlord.chat(
                 rendered_message,
-                user_id=trigger_request.user_id,
+                user_id=user_id,
                 session_id=trigger_request.session_id,
-                request_id=trigger_id,
+                request_id=request_id,
             )
 
             observability.observe(
@@ -210,17 +204,22 @@ async def execute_trigger(
                 level=observability.EventLevel.INFO,
                 data={
                     "service": "formation_api_server",
-                    "trigger_id": trigger_id,
+                    "request_id": request_id,
                     "formation_id": formation_id,
                     "trigger_name": trigger_name,
                 },
                 description=f"Trigger '{trigger_name}' completed synchronously",
             )
 
-            return TriggerResponse(
-                status="completed",
-                trigger_id=trigger_id,
-                message=rendered_message,
+            # Return standard sync response with LLM response
+            return create_api_response(
+                object_type=APIObjectType.REQUEST,
+                event_type=APIEventType.REQUEST_COMPLETED,
+                data={
+                    "status": "completed",
+                    "response": response  # LLM response text
+                },
+                request_id=request_id,
             )
 
         except Exception as e:
@@ -229,7 +228,7 @@ async def execute_trigger(
                 level=observability.EventLevel.ERROR,
                 data={
                     "service": "formation_api_server",
-                    "trigger_id": trigger_id,
+                    "request_id": request_id,
                     "formation_id": formation_id,
                     "trigger_name": trigger_name,
                     "error": str(e),
@@ -244,7 +243,7 @@ async def execute_trigger(
 
 
 @router.get("/formations/{formation_id}/triggers")
-async def list_triggers(formation_id: str, request: Request) -> JSONResponse:
+async def list_triggers(formation_id: str, request: Request) -> APIResponse:
     """
     List available triggers for a formation.
 
@@ -266,26 +265,22 @@ async def list_triggers(formation_id: str, request: Request) -> JSONResponse:
     # Get triggers directory
     triggers_dir = formation.formation_dir / "triggers"
 
-    if not triggers_dir.exists():
-        return JSONResponse(
-            content={
-                "formation_id": formation_id,
-                "triggers": [],
-                "count": 0,
-            }
-        )
-
     # List all .md files in triggers directory
     try:
-        trigger_files = list(triggers_dir.glob("*.md"))
-        trigger_names = [f.stem for f in trigger_files]
+        if not triggers_dir.exists():
+            trigger_names = []
+        else:
+            trigger_files = list(triggers_dir.glob("*.md"))
+            trigger_names = sorted([f.stem for f in trigger_files])
 
-        return JSONResponse(
-            content={
+        return create_api_response(
+            object_type=APIObjectType.LIST,
+            event_type=APIEventType.LIST_RETRIEVED,
+            data={
                 "formation_id": formation_id,
-                "triggers": sorted(trigger_names),
+                "triggers": trigger_names,
                 "count": len(trigger_names),
-            }
+            },
         )
     except Exception as e:
         raise HTTPException(

@@ -17,6 +17,11 @@ class APIEventType(str, Enum):
     CHAT_STREAMING = "chat.streaming"
     CHAT_ASYNC_ACCEPTED = "chat.async_accepted"
 
+    # Request events (generic request processing)
+    REQUEST_PROCESSING = "request.processing"
+    REQUEST_COMPLETED = "request.completed"
+    REQUEST_FAILED = "request.failed"
+
     # Resource events
     AGENT_CREATED = "agent.created"
     AGENT_RETRIEVED = "agent.retrieved"
@@ -67,6 +72,9 @@ class APIEventType(str, Enum):
     CONFIG_RETRIEVED = "config.retrieved"
     STATUS_RETRIEVED = "status.retrieved"
 
+    # Generic list events
+    LIST_RETRIEVED = "list.retrieved"
+
     # Error events
     ERROR_VALIDATION = "error.validation"
     ERROR_AUTHENTICATION = "error.authentication"
@@ -83,6 +91,7 @@ class APIObjectType(str, Enum):
     """Object types for API responses."""
 
     CHAT_RESPONSE = "chat_response"
+    REQUEST = "request"
     AGENT = "agent"
     AGENT_LIST = "agent_list"
     SECRET = "secret"
@@ -96,6 +105,9 @@ class APIObjectType(str, Enum):
 
     # Generic list type for spec compliance
     LIST = "list"
+    
+    # Request cancellation
+    REQUEST_CANCELLATION = "request_cancellation"
 
     # Configuration objects
     OVERLORD = "overlord"

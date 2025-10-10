@@ -14,6 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .....services import observability
+from ...utils import get_header_case_insensitive
 
 router = APIRouter(tags=["Chat"])
 
@@ -22,7 +23,7 @@ class ChatRequest(BaseModel):
     """Model for chat requests."""
 
     message: str
-    user_id: Optional[str] = "0"  # Default to "0" if not provided
+    user_id: Optional[str] = None  # Deprecated: use X-Muxi-User-Id header instead
     agent_id: Optional[str] = None
     session_id: Optional[str] = None
     group_id: Optional[str] = None  # Support for group permissions
@@ -40,7 +41,10 @@ async def chat(request: Request, chat_request: ChatRequest) -> StreamingResponse
     For asynchronous requests, returns a job ID.
 
     Args:
-        chat_request: The chat request containing message and optional user_id
+        chat_request: The chat request containing message
+
+    Headers:
+        X-Muxi-User-Id: User ID for request context (optional, defaults to "0")
 
     Returns:
         Streaming response or async job details
@@ -51,8 +55,9 @@ async def chat(request: Request, chat_request: ChatRequest) -> StreamingResponse
     if not formation.is_overlord_running():
         raise HTTPException(status_code=503, detail="Overlord not available")
 
-    # Use user_id from request body
-    effective_user_id = chat_request.user_id
+    # Get user_id from header first, fallback to body (for backward compatibility), then default
+    header_user_id = get_header_case_insensitive(request.headers, "X-Muxi-User-Id")
+    effective_user_id = header_user_id or chat_request.user_id or "0"
 
     # Log chat request
     observability.observe(
