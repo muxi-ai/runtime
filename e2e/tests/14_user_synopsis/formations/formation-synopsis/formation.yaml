@@ -104,7 +104,7 @@ logging:
 agents:
   - id: "assistant"
     name: "assistant"
-    type: "llm"
+    type: "chat"
     model: "openai/gpt-4o-mini"
     description: "General purpose assistant"
     capabilities:

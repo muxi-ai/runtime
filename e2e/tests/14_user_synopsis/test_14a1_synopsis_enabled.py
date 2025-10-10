@@ -9,49 +9,35 @@ import sys
 import time
 from pathlib import Path
 
-# Add parent directories to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add parent directories to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from common import BaseE2ETest, TestOutputFormatter  # noqa: E402
+from src.muxi.formation.formation import Formation  # noqa: E402
 
 
-class TestUserSynopsisEnabled(BaseE2ETest):
-    """Test user synopsis when enabled (default behavior)."""
+async def test_user_synopsis_enabled():
+    """Test that user synopsis appears in enhanced messages when enabled."""
+    print("\n" + "=" * 60)
+    print("TEST 14A1: User Synopsis Enabled")
+    print("=" * 60)
 
-    def __init__(self):
-        super().__init__(
-            test_name="test_14a1_synopsis_enabled",
-            test_description="Test user synopsis appears in enhanced messages",
-            test_area="14_user_synopsis",
-        )
+    formation_path = Path(__file__).parent / "formations" / "formation-synopsis"
+    
+    try:
+        # Initialize and start formation
+        print("\n[Setup] Initializing formation...")
+        formation = Formation()
+        await formation.load(str(formation_path))
+        overlord = await formation.start_overlord()
+        print("[Setup] Formation ready")
 
-    async def test_14a1_synopsis_enabled(self):
-        """Test that user synopsis appears in enhanced messages when enabled."""
-        formatter = TestOutputFormatter()
-        transcript = []
-        start_time = time.time()
+        # Test cases
+        results = []
+        user_id = "test_user_synopsis"
 
-        print("=" * 80)
-        print("Test 14A1: User Synopsis Enabled")
-        print("=" * 80)
-
+        # Test 1: Add user context
+        print("\n[Test 1/4] Adding user context...")
         try:
-            # Load formation with synopsis enabled
-            print("\n1. Loading formation with user synopsis enabled...")
-            formation_path = Path(__file__).parent / "formations" / "formation-synopsis" / "formation.yaml"
-            success = await self.setup_formation(formation_path=formation_path)
-            if not success:
-                raise Exception("Failed to setup formation")
-            
-            overlord = self.overlord
-            print("   ✓ Formation loaded")
-
-            # Test 1: Add user context and verify synopsis generation
-            print("\n2. Adding user context...")
-            user_id = "test_user_synopsis"
-            
-            # Add user context via overlord
             await overlord.add_user_context(
                 user_id=user_id,
                 knowledge={
@@ -61,47 +47,69 @@ class TestUserSynopsisEnabled(BaseE2ETest):
                 },
                 source="test_setup"
             )
-            print("   ✓ User context added")
+            print("  ✅ User context added successfully")
+            results.append(True)
+        except Exception as e:
+            print(f"  ❌ Failed to add user context: {e}")
+            results.append(False)
 
-            # Give some time for processing
-            await asyncio.sleep(2)
+        # Wait for processing
+        await asyncio.sleep(2)
 
-            # Test 2: Send a message and check response
-            print("\n3. Testing synopsis in enhanced message...")
+        # Test 2: Send message and check response
+        print("\n[Test 2/4] Testing synopsis in enhanced message...")
+        try:
             response = await overlord.chat(
                 "What are Python testing best practices?",
                 user_id=user_id,
                 session_id="session_synopsis_test",
+                use_async=False,
                 stream=False,
             )
 
-            assert response is not None, "Response should not be None"
-            response_text = response.content if hasattr(response, "content") else str(response)
-            assert len(response_text) > 0, "Response should not be empty"
+            content = response.content if hasattr(response, "content") else str(response)
+            
+            if content and len(content) > 0:
+                print(f"  ✅ Response received ({len(content)} chars)")
+                results.append(True)
+            else:
+                print("  ❌ Empty response received")
+                results.append(False)
 
-            print(f"   ✓ Response received ({len(response_text)} chars)")
-            transcript.append(("Testing synopsis", response_text[:200]))
+        except Exception as e:
+            print(f"  ❌ ERROR: {str(e)[:100]}")
+            results.append(False)
 
-            # Test 3: Verify synopsis is cached (second call should be fast)
-            print("\n4. Testing synopsis caching...")
+        # Test 3: Verify caching (second request should be fast)
+        print("\n[Test 3/4] Testing synopsis caching...")
+        try:
             cache_start = time.time()
             
             response2 = await overlord.chat(
                 "Tell me about code reviews",
                 user_id=user_id,
                 session_id="session_synopsis_test",
+                use_async=False,
                 stream=False,
             )
             
             elapsed = time.time() - cache_start
-            print(f"   ✓ Second message completed in {elapsed:.2f}s (cache hit)")
+            content2 = response2.content if hasattr(response2, "content") else str(response2)
             
-            assert response2 is not None, "Second response should not be None"
-            response2_text = response2.content if hasattr(response2, "content") else str(response2)
-            assert len(response2_text) > 0, "Second response should not be empty"
+            if content2 and len(content2) > 0:
+                print(f"  ✅ Second message completed in {elapsed:.2f}s")
+                results.append(True)
+            else:
+                print("  ❌ Empty response on second request")
+                results.append(False)
 
-            # Test 4: Update context and verify cache invalidation
-            print("\n5. Testing cache invalidation on context update...")
+        except Exception as e:
+            print(f"  ❌ ERROR: {str(e)[:100]}")
+            results.append(False)
+
+        # Test 4: Update context and verify cache invalidation
+        print("\n[Test 4/4] Testing cache invalidation...")
+        try:
             await overlord.add_user_context(
                 user_id=user_id,
                 knowledge={
@@ -110,66 +118,60 @@ class TestUserSynopsisEnabled(BaseE2ETest):
                 },
                 source="test_update"
             )
-            print("   ✓ Context updated")
-
+            print("  Context updated")
+            
             await asyncio.sleep(2)
-
+            
             response3 = await overlord.chat(
                 "What's my current role?",
                 user_id=user_id,
                 session_id="session_synopsis_test",
+                use_async=False,
                 stream=False,
             )
             
-            assert response3 is not None, "Third response should not be None"
-            print("   ✓ Response after cache invalidation received")
-
-            # Cleanup
-            print("\n6. Cleaning up...")
-            await self.cleanup_formation()
-            print("   ✓ Formation stopped")
-
-            # Calculate duration
-            duration = time.time() - start_time
-
-            # Print results
-            formatter.print_test_result(
-                test_name="test_14a1_synopsis_enabled",
-                success=True,
-                checks=[
-                    "Formation loaded with synopsis enabled",
-                    "User context added successfully",
-                    "Synopsis generated and cached",
-                    "Cache hit on second request",
-                    "Cache invalidated on context update",
-                ],
-                transcript=transcript,
-                duration=duration,
-            )
-
-            return 0
+            content3 = response3.content if hasattr(response3, "content") else str(response3)
+            
+            if content3 and len(content3) > 0:
+                print(f"  ✅ Response after cache invalidation received")
+                results.append(True)
+            else:
+                print("  ❌ Empty response after invalidation")
+                results.append(False)
 
         except Exception as e:
-            print(f"\n❌ Test failed: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"  ❌ ERROR: {str(e)[:100]}")
+            results.append(False)
 
-            duration = time.time() - start_time
+        # Summary
+        print("\n" + "=" * 60)
+        print("TEST SUMMARY")
+        print("=" * 60)
 
-            formatter.print_test_result(
-                test_name="test_14a1_synopsis_enabled",
-                success=False,
-                checks=[f"Failed: {str(e)}"],
-                transcript=transcript,
-                duration=duration,
-            )
-            return 1
+        passed = sum(results)
+        total = len(results)
 
-    def run_test(self):
-        """Run the test with proper async handling."""
-        return asyncio.run(self.test_14a1_synopsis_enabled())
+        print(f"Passed: {passed}/{total}")
+
+        if all(results):
+            print("🎉 ALL TESTS PASSED!")
+        else:
+            print(f"⚠️ {total - passed} test(s) failed")
+
+        # Cleanup
+        print("\n[Cleanup] Stopping formation...")
+        await formation.kill_overlord()
+        print("[Cleanup] Complete")
+
+        return 0 if all(results) else 1
+
+    except Exception as e:
+        print(f"\n❌ Test suite error: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
 
 
 if __name__ == "__main__":
-    test = TestUserSynopsisEnabled()
-    sys.exit(test.run_test())
+    exit_code = asyncio.run(test_user_synopsis_enabled())
+    sys.exit(exit_code)
