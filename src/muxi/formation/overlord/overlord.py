@@ -1508,6 +1508,110 @@ class Overlord:
             description=f"Loaded {loaded_count} agents from formation configuration",
         )
 
+        # Load MUXI default agents (e.g., generalist)
+        await self._load_muxi_default_agents()
+
+        # Set default agent if not already configured
+        await self._set_default_agent_if_needed()
+
+    async def _load_muxi_default_agents(self) -> None:
+        """
+        Load default agents that ship with MUXI (e.g., generalist fallback).
+        
+        These agents are loaded from src/muxi/formation/agents/ directory.
+        User-defined agents always take precedence - if a user defines an agent
+        with the same ID, the MUXI default is skipped.
+        """
+        from pathlib import Path
+        import yaml
+        
+        # Find MUXI's default agents directory
+        muxi_agents_dir = Path(__file__).parent.parent / "agents"
+        
+        if not muxi_agents_dir.exists():
+            return
+        
+        # Load all YAML files from the directory
+        for agent_file in muxi_agents_dir.glob("*.yaml"):
+            try:
+                with open(agent_file, 'r') as f:
+                    agent_config = yaml.safe_load(f)
+                
+                agent_id = agent_config.get("id")
+                if not agent_id:
+                    continue
+                
+                # Skip if user already defined this agent
+                if agent_id in self.agents:
+                    observability.observe(
+                        event_type=observability.SystemEvents.AGENT_INITIALIZED,
+                        level=observability.EventLevel.DEBUG,
+                        data={"agent_id": agent_id, "source": "user"},
+                        description=f"User-defined agent '{agent_id}' takes precedence over MUXI default"
+                    )
+                    continue
+                
+                # Create agent from config
+                agent = await self._create_agent_from_config(agent_config)
+                self.agents[agent_id] = agent
+                
+                # Store agent metadata
+                self.agent_descriptions[agent_id] = agent_config.get("description", "")
+                self.agent_metadata[agent_id] = {
+                    "name": agent_config.get("name", agent_id),
+                    "role": agent_config.get("role", "general"),
+                    "specialties": agent_config.get("specialties", []),
+                    "system_message": agent_config.get("system_message", ""),
+                }
+                
+                observability.observe(
+                    event_type=observability.SystemEvents.AGENT_INITIALIZED,
+                    level=observability.EventLevel.INFO,
+                    data={"agent_id": agent_id, "source": "muxi-default"},
+                    description=f"Loaded MUXI default agent: {agent_id}"
+                )
+                
+            except Exception as e:
+                # Log warning but continue - don't fail formation load
+                observability.observe(
+                    event_type=observability.SystemEvents.AGENT_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={"file": str(agent_file), "error": str(e)},
+                    description=f"Failed to load MUXI default agent from {agent_file.name}: {e}"
+                )
+                continue
+
+    async def _set_default_agent_if_needed(self) -> None:
+        """
+        Set default agent ID if not already configured.
+        
+        Priority:
+        1. User-configured default agent (from formation config with default: true)
+        2. MUXI generalist agent (if loaded)
+        3. No default (existing behavior)
+        """
+        # Skip if already set by user configuration
+        if hasattr(self, 'default_agent_id') and self.default_agent_id:
+            return
+        
+        # Check if any user agent has default: true
+        # (This would be set during agent loading from formation config)
+        agents_config = self._configured_services.get("agents_config", [])
+        for agent_config in agents_config:
+            if agent_config.get("default", False):
+                # User specified a default agent, don't override
+                return
+        
+        # Set muxi-generalist as default if it was loaded
+        if "muxi-generalist" in self.agents:
+            self.default_agent_id = "muxi-generalist"
+            observability.observe(
+                event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+                level=observability.EventLevel.INFO,
+                data={"default_agent_id": "muxi-generalist"},
+                description="Set muxi-generalist as default fallback agent"
+            )
+
     @contextmanager
     def _disable_parallel_execution_temporarily(self):
         """
