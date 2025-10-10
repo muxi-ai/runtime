@@ -263,3 +263,64 @@ async def validate_secret_references(
         )
 
     return len(errors) == 0, errors
+
+
+def render_trigger_template(template: str, data: Dict[str, Any]) -> str:
+    """
+    Render trigger template with data substitution.
+    
+    Supports nested data access using dot notation:
+    - ${{ data.key }} - Simple key access
+    - ${{ data.nested.key }} - Nested key access
+    - ${{ data.user.name }} - Multi-level nesting
+    
+    Args:
+        template: Template string with ${{ data.* }} placeholders
+        data: Dictionary of data to substitute into template
+        
+    Returns:
+        Rendered template with all placeholders replaced
+        
+    Raises:
+        ValueError: If a referenced data key doesn't exist
+        
+    Examples:
+        >>> render_trigger_template("Hello ${{ data.name }}", {"name": "World"})
+        'Hello World'
+        
+        >>> render_trigger_template("Issue #${{ data.issue.id }}", {"issue": {"id": 123}})
+        'Issue #123'
+    """
+    # Pattern matches: ${{ data.key }}, ${{ data.nested.key }}, etc.
+    pattern = re.compile(r'\$\{\{\s*data\.([a-zA-Z0-9_.]+)\s*\}\}')
+    
+    def replace_data(match):
+        key_path = match.group(1)
+        keys = key_path.split('.')
+        value = data
+        
+        # Navigate through nested dict structure
+        for key in keys:
+            if isinstance(value, dict):
+                # Check if key exists (distinguish from value being None)
+                if key not in value:
+                    raise ValueError(
+                        f"Data key 'data.{key_path}' not found. "
+                        f"Available keys: {list(value.keys())}"
+                    )
+                value = value[key]
+            else:
+                raise ValueError(
+                    f"Cannot access '{key}' in non-dict value at 'data.{key_path}'. "
+                    f"Value type: {type(value).__name__}"
+                )
+        
+        return str(value)
+    
+    try:
+        return pattern.sub(replace_data, template)
+    except ValueError:
+        # Re-raise ValueError with context preserved
+        raise
+    except Exception as e:
+        raise ValueError(f"Template rendering failed: {str(e)}")
