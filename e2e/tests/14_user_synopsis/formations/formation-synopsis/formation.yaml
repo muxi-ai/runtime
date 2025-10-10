@@ -99,3 +99,15 @@ logging:
     - transport: "stdout"
       level: "error"  # Only show errors if logging is re-enabled
       format: "jsonl"
+
+# Agent configuration
+agents:
+  - id: "assistant"
+    name: "assistant"
+    type: "llm"
+    model: "openai/gpt-4o-mini"
+    description: "General purpose assistant"
+    capabilities:
+      - "general"
+      - "qa"
+      - "coding"
