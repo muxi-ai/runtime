@@ -3726,6 +3726,18 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         """
         return await self.user_context_manager.get_user_context(user_id, agent_id)
 
+    async def get_user_synopsis(self, external_user_id: str) -> str:
+        """
+        Get formatted user synopsis for message enhancement.
+
+        Args:
+            external_user_id: External user ID (what dev sends us)
+
+        Returns:
+            Formatted synopsis string or empty string
+        """
+        return await self.user_context_manager.get_user_synopsis(external_user_id)
+
     async def add_user_context(
         self,
         user_id: Any,

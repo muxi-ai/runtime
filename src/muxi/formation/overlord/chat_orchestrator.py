@@ -746,25 +746,17 @@ class ChatOrchestrator:
         buffer_size = buffer_config.get("size", 10)
         vector_search = buffer_config.get("vector_search", True)
 
-        # 1. Get user profile from long-term memory (if available)
+        # 1. Get user synopsis (cached) from user context manager
         user_profile_text = ""
         if self.overlord.is_multi_user and user_id and user_id != "0":
             try:
-                user_context = await self.overlord.get_user_context(user_id=user_id)
-                if user_context:
-                    # Format user profile
-                    profile_parts = []
-                    for key, value in user_context.items():
-                        if isinstance(value, dict) and "value" in value:
-                            actual_value = value["value"]
-                            profile_parts.append(f"- {key}: {actual_value}")
-                        else:
-                            profile_parts.append(f"- {key}: {value}")
-                    if profile_parts:
-                        user_profile_text = "\n".join(profile_parts)
+                # Use cached synopsis instead of querying Memobase every time
+                synopsis = await self.overlord.get_user_synopsis(external_user_id=user_id)
+                # Only set if we got actual content (not empty string)
+                if synopsis and synopsis.strip():
+                    user_profile_text = synopsis
             except Exception:
-                # Continue without user profile
-                pass
+                pass  # Continue without user profile
 
         # 2. Search for relevant long-term memories
         long_term_memories = ""

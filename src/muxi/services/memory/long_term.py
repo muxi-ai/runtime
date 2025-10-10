@@ -292,6 +292,36 @@ class LongTermMemory:
 
         return user
 
+    async def get_user_id(self, external_user_id: str) -> Optional[int]:
+        """
+        Get our internal user ID for an external_user_id.
+
+        This method looks up the user record based on the external identifier
+        and returns the internal database ID. This ID should be used for
+        all internal operations like KV cache keys.
+
+        Args:
+            external_user_id: The external user identifier provided by the developer
+
+        Returns:
+            Internal user ID (integer) or None if user doesn't exist
+        """
+        # Handle single-user mode
+        if not self.is_multi_user:
+            external_user_id = "0"
+
+        async with self.db_manager.get_async_session() as session:
+            result = await session.execute(
+                select(User.id)
+                .where(User.external_user_id == external_user_id)
+                .where(User.formation_id == self.formation_id)
+            )
+            user_id = result.scalar_one_or_none()
+
+            # If user doesn't exist yet, return None
+            # (will be created on first memory operation)
+            return user_id
+
     def _ensure_default_user(self) -> None:
         """Ensure default user exists for single-user mode."""
         with self.Session() as session:

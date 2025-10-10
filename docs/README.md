@@ -14,6 +14,7 @@ New to MUXI? Start here:
 - [Formation API](api-v1.md) - REST API specification
 - [Request Lifecycle](request-lifecycle.md) - Complete request processing flow
 - [Memory Systems](memory-systems.md) - Three-tier memory architecture
+- [User Synopsis](user-synopsis.md) - Two-tier LLM-synthesized user context caching
 - [Multi-User Architecture](multi-user-architecture.md) - Multi-tenant design
 
 ## System Components

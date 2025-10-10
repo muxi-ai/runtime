@@ -153,7 +153,9 @@ class MemoryExtractor:
         else:
             # No agent response yet - just use the user message
             # This happens when extraction is called before the agent responds
-            conversation = f"User: {user_message}\n(Note: Extract from user's statement alone, agent hasn't responded yet)"
+            conversation = (
+                f"User: {user_message}\n(Note: Extract from user's statement alone, agent hasn't responded yet)"
+            )
 
         # Extract information
         extraction_results = await self._extract_user_information(conversation)
@@ -515,7 +517,9 @@ class MemoryExtractor:
                                         "similarity_score": score,
                                         "threshold": score_threshold,
                                     },
-                                    description=f"Skipping duplicate memory (similarity: {score:.3f} > {score_threshold:.3f})",
+                                    description=(
+                                        f"Skipping duplicate memory (similarity: {score:.3f} > {score_threshold:.3f})",
+                                    ),
                                 )
                                 should_store = False
                             else:
@@ -529,7 +533,9 @@ class MemoryExtractor:
                                         "similarity_score": score,
                                         "threshold": score_threshold,
                                     },
-                                    description=f"Storing similar memory (similarity: {score:.3f} <= {score_threshold:.3f})",
+                                    description=(
+                                        f"Storing similar memory (similarity: {score:.3f} <= {score_threshold:.3f})",
+                                    ),
                                 )
 
                     if should_store:
@@ -561,6 +567,16 @@ class MemoryExtractor:
                         )
 
                         await self.overlord.long_term_memory.add(**add_params)
+
+                        # Invalidate identity synopsis cache if this affects identity collections
+                        if collection in ["user_identity", "relationships", "work_projects"]:
+                            try:
+                                if hasattr(self.overlord, 'user_context_manager'):
+                                    await self.overlord.user_context_manager.invalidate_identity_synopsis_cache(
+                                        user_id
+                                    )
+                            except Exception:
+                                pass  # Cache invalidation failure is non-critical
 
                         # DEBUG: Log after add
                         observability.observe(

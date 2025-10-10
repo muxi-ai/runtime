@@ -111,7 +111,12 @@ class WorkingMemory:
     """
 
     # Namespaces excluded from FIFO cleanup
-    _NAMESPACES_EXCLUDED_FROM_FIFO = ["knowledge", "sops"]
+    _NAMESPACES_EXCLUDED_FROM_FIFO = [
+        "knowledge",
+        "sops",
+        "user_synopsis_identity",  # Permanent cache, explicit invalidation
+        "user_synopsis_context",  # TTL-based, self-managing
+    ]
 
     def __init__(
         self,
