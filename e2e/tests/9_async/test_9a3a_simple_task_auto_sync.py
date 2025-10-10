@@ -68,8 +68,6 @@ def main():
             await asyncio.sleep(2)
 
             if test.webhook_log_path.exists():
-                import json
-
                 with open(test.webhook_log_path) as f:
                     file_content = f.read()
                     if file_content.strip():

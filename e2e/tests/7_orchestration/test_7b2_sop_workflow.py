@@ -24,7 +24,9 @@ async def test_sop_workflow():
     print("Test 7B2: SOP System Integration")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-multi-agent-sop" / "formation.yaml"
+    formation_path = (
+        Path(__file__).parent / "formations" / "formation-multi-agent-sop" / "formation.yaml"
+    )
     all_passed = True
     checks_passed = []
 
@@ -37,10 +39,10 @@ async def test_sop_workflow():
 
         # Test: Check SOP system
         print("\n2. Checking SOP system...")
-        if hasattr(overlord, 'sop_system') and overlord.sop_system:
-            sop_count = len(overlord.sop_system.sops) if hasattr(overlord.sop_system, 'sops') else 0
+        if hasattr(overlord, "sop_system") and overlord.sop_system:
+            sop_count = len(overlord.sop_system.sops) if hasattr(overlord.sop_system, "sops") else 0
             print(f"   ✓ SOP system initialized with {sop_count} SOPs")
-            
+
             # Wait for SOP indexing
             print("   ⏳ Waiting for SOP indexing...")
             await asyncio.sleep(2)
@@ -53,7 +55,7 @@ async def test_sop_workflow():
         print("   Request: Get system usage info")
         print("   Note: SOP triggering is unreliable in automated tests")
         print("   Goal: Verify request completes successfully with SOP system loaded")
-        
+
         # Send simple request - we just want to verify the system works
         # Actual SOP triggering is hard to test reliably (depends on semantic matching, timing, etc.)
         response = await asyncio.wait_for(
@@ -61,9 +63,9 @@ async def test_sop_workflow():
                 message="get system cpu and memory info",
                 user_id="test_user",
                 session_id="sop_test",
-                stream=False
+                stream=False,
             ),
-            timeout=60  # Should complete quickly
+            timeout=60,  # Should complete quickly
         )
 
         # Handle response
@@ -75,12 +77,12 @@ async def test_sop_workflow():
             content = str(response)
 
         print(f"\n   ✓ Response received ({len(content)} chars)")
-        
+
         # Just verify we got a reasonable response about system info
         # Don't try to verify SOP triggering - it's too unreliable in automated tests
         system_indicators = ["cpu", "memory", "usage", "percent", "system"]
         has_system_info = sum(1 for ind in system_indicators if ind in content.lower()) >= 2
-        
+
         if has_system_info:
             print("   ✅ System info response received")
             print("   SOP system loaded and formation working correctly")
@@ -106,6 +108,7 @@ async def test_sop_workflow():
     except Exception as e:
         print(f"\n✗ Test failed: {str(e)}")
         import traceback
+
         traceback.print_exc()
         all_passed = False
 

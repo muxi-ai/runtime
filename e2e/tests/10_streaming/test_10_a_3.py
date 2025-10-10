@@ -31,7 +31,9 @@ def main():
         )
 
         # Analyze for rephrasing indicators
-        print("\n" + "=" * 60); print("Rephrasing Analysis"); print("=" * 60)
+        print("\n" + "=" * 60)
+        print("Rephrasing Analysis")
+        print("=" * 60)
 
         if result["success"]:
             content_analysis = result["content_analysis"]
@@ -56,9 +58,7 @@ def main():
             found_indicators = [ind for ind in rephrasing_indicators if ind in full_content]
 
             if found_indicators:
-                test.formatter.print_success(
-                    f"Found {len(found_indicators)} rephrasing indicators"
-                )
+                test.formatter.print_success(f"Found {len(found_indicators)} rephrasing indicators")
                 for ind in found_indicators[:5]:  # Show first 5
                     test.formatter.print_debug(f"  • '{ind}'")
 
@@ -78,7 +78,9 @@ def main():
                 test.results.append(True)
 
             # Language consistency check
-            print("\n" + "=" * 60); print("Language Consistency"); print("=" * 60)
+            print("\n" + "=" * 60)
+            print("Language Consistency")
+            print("=" * 60)
 
             has_technical = any(word in full_content for word in ["api", "json", "endpoint"])
             has_natural = any(ind in full_content for ind in ["let me", "i'll", "thinking"])

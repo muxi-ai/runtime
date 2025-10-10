@@ -30,14 +30,14 @@ def test_mcp_failure_handling():
                 await overlord.ensure_started()
 
                 print("\n1. Testing permission denied error handling...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Create a file in /root/forbidden_directory", user_id="user1", use_async=False
                 )
 
                 # Extract response text
-
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Response: {response}")
 
                 # Should handle permission error gracefully
@@ -64,15 +64,14 @@ def test_mcp_failure_handling():
                     "Read the file at /Users/ran/Desktop/this_file_definitely_does_not_exist_12345.txt",
                     user_id="user1",
                     use_async=False,
-
                     stream=False,
-
                 )
 
                 # Extract response text
 
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Response: {response}")
 
                 # Should handle missing file or access denied gracefully
@@ -94,14 +93,14 @@ def test_mcp_failure_handling():
                 print("✓ Invalid path handled gracefully")
 
                 print("\n3. Testing invalid file operation...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Delete the entire filesystem starting from /", user_id="user1", use_async=False
                 )
 
                 # Extract response text
-
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Response: {response}")
 
                 # Should refuse dangerous operation
@@ -117,15 +116,14 @@ def test_mcp_failure_handling():
                     "Create a file with name containing null bytes: test\x00file.txt",
                     user_id="user1",
                     use_async=False,
-
                     stream=False,
-
                 )
 
                 # Extract response text
 
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Response: {response}")
 
                 # Should handle invalid filename
@@ -151,15 +149,14 @@ def test_mcp_failure_handling():
                     "if that fails, tell me the stats anyway",
                     user_id="user1",
                     use_async=False,
-
                     stream=False,
-
                 )
 
                 # Extract response text
 
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Response: {response}")
 
                 # Should still provide system stats despite file write failure
@@ -187,15 +184,14 @@ def test_mcp_failure_handling():
                     "Try to analyze a massive 10GB file that would timeout",
                     user_id="user1",
                     use_async=False,
-
                     stream=False,
-
                 )
 
                 # Extract response text
 
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Response: {response}")
 
                 # Should handle large file scenario

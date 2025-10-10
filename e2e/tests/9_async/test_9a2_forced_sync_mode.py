@@ -55,20 +55,19 @@ def main():
 
             # Wait a bit to ensure no webhook is sent
             import asyncio
+
             await asyncio.sleep(3)
 
             # Verify no webhook was sent via HTTP endpoint
             try:
                 import httpx
+
                 async with httpx.AsyncClient() as client:
-                    response_check = await client.get(
-                        f"{test.webhook_url}/logs",
-                        timeout=5.0
-                    )
+                    response_check = await client.get(f"{test.webhook_url}/logs", timeout=5.0)
                     if response_check.status_code == 200:
                         data = response_check.json()
                         logs = data.get("logs", [])
-                        
+
                         if len(logs) > 0:
                             test.formatter.print_failure("Unexpected webhook sent in sync mode!")
                             test.formatter.print_debug(f"Found {len(logs)} webhook(s)")
@@ -76,9 +75,7 @@ def main():
                         else:
                             test.formatter.print_success("No webhooks sent (as expected)")
                             test.results.append(True)
-                            test.transcript.append(
-                                ("What is 5 + 5?", content[:200] + "...")
-                            )
+                            test.transcript.append(("What is 5 + 5?", content[:200] + "..."))
             except Exception as e:
                 test.formatter.print_warning(f"Could not check webhooks via HTTP: {e}")
                 test.formatter.print_success("Assuming no webhooks sent (HTTP check failed)")
@@ -94,6 +91,7 @@ def main():
         return 0 if all(test.results) else 1
 
     import asyncio
+
     return asyncio.run(run_async_test())
 
 

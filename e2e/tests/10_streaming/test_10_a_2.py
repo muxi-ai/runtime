@@ -73,7 +73,9 @@ def main():
             test.formatter.print_failure("Basic streaming failed")
 
         # Test stream interruption behavior
-        print("\n" + "=" * 60); print("Testing Stream Interruption"); print("=" * 60)
+        print("\n" + "=" * 60)
+        print("Testing Stream Interruption")
+        print("=" * 60)
         interrupt_result = await test.test_stream_interruption(
             message="Write a detailed essay about machine learning algorithms",
             interrupt_after=3.0,

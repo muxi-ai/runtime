@@ -34,15 +34,14 @@ def test_update_linear_issue():
                     "Create a Linear issue titled 'Test Update Workflow' to test status updates",
                     user_id="user1",
                     use_async=False,
-
                     stream=False,
-
                 )
 
                 # Extract response text
 
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Create Response: {response}")
 
                 response_lower = response.lower()
@@ -61,15 +60,14 @@ def test_update_linear_issue():
                     "Update the Linear issue we just created to mark it as in progress",
                     user_id="user1",
                     use_async=False,
-
                     stream=False,
-
                 )
 
                 # Extract response text
 
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Update Response: {response}")
 
                 # Verify update
@@ -84,14 +82,14 @@ def test_update_linear_issue():
                 print("✓ Issue status updated successfully")
 
                 print("\n3. Testing issue completion...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Mark the Linear issue as completed/done", user_id="user1", use_async=False
                 )
 
                 # Extract response text
-
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Complete Response: {response}")
 
                 response_lower = response.lower()
@@ -111,15 +109,14 @@ def test_update_linear_issue():
                     "Create a new Linear issue and assign it to the team",
                     user_id="user1",
                     use_async=False,
-
                     stream=False,
-
                 )
 
                 # Extract response text
 
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Assignment Response: {response}")
 
                 response_lower = response.lower()
@@ -135,15 +132,14 @@ def test_update_linear_issue():
                     "Update all my recent Linear issues to add a 'reviewed' label",
                     user_id="user1",
                     use_async=False,
-
                     stream=False,
-
                 )
 
                 # Extract response text
 
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Bulk Update Response: {response}")
 
                 # Should acknowledge bulk update request

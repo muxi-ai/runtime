@@ -30,14 +30,14 @@ def test_list_linear_issues():
                 await overlord.ensure_started()
 
                 print("\n1. Testing recent issues listing...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Show me the recent Linear issues", user_id="user1", use_async=False
                 )
 
                 # Extract response text
-
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Response: {response}")
 
                 response_lower = response.lower()
@@ -63,15 +63,14 @@ def test_list_linear_issues():
                     "Show me all open Linear issues with high priority",
                     user_id="user1",
                     use_async=False,
-
                     stream=False,
-
                 )
 
                 # Extract response text
 
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Response: {response}")
 
                 response_lower = response.lower()
@@ -85,14 +84,14 @@ def test_list_linear_issues():
                 print("✓ Filtered issue search handled")
 
                 print("\n3. Testing issue details retrieval...")
-                response_gen = await overlord.chat(
+                response_obj = await overlord.chat(
                     "Get details of my most recent Linear issue", user_id="user1", use_async=False
                 )
 
                 # Extract response text
-
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Response: {response}")
 
                 # Should provide issue details or indicate none
@@ -104,15 +103,14 @@ def test_list_linear_issues():
                     "How many Linear issues are currently in progress?",
                     user_id="user1",
                     use_async=False,
-
                     stream=False,
-
                 )
 
                 # Extract response text
 
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Response: {response}")
 
                 response_lower = response.lower()
@@ -131,15 +129,14 @@ def test_list_linear_issues():
                     "Give me an overview of all team issues in Linear",
                     user_id="user1",
                     use_async=False,
-
                     stream=False,
-
                 )
 
                 # Extract response text
 
-
-                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 print(f"Response: {response}")
 
                 # Should provide team overview
@@ -150,6 +147,7 @@ def test_list_linear_issues():
 
                 # Force immediate exit - bypasses all cleanup
                 import os
+
                 os._exit(0)
 
             # Run the async test

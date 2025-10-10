@@ -25,7 +25,9 @@ def main():
         session_id = "streaming_clarification_test"
 
         # First request - incomplete, should trigger clarification
-        print("\n" + "=" * 60); print("Test 1: Incomplete request (should trigger clarification)"); print("=" * 60)
+        print("\n" + "=" * 60)
+        print("Test 1: Incomplete request (should trigger clarification)")
+        print("=" * 60)
 
         response1 = await test.overlord.chat(
             message="Help me with",
@@ -81,7 +83,9 @@ def main():
             )
 
         # Second request - provide clarification
-        print("\n" + "=" * 60); print("Test 2: Providing clarification"); print("=" * 60)
+        print("\n" + "=" * 60)
+        print("Test 2: Providing clarification")
+        print("=" * 60)
 
         response2 = await test.overlord.chat(
             message="debugging Python code",
@@ -124,7 +128,9 @@ def main():
                 break
 
         # Results
-        print("\n" + "=" * 60); print("Results"); print("=" * 60)
+        print("\n" + "=" * 60)
+        print("Results")
+        print("=" * 60)
         test.formatter.print_debug(f"First request events: {len(stream1_events)}")
         test.formatter.print_debug(f"Clarification detected: {'✅' if clarification_found else '⚠️'}")
         test.formatter.print_debug(f"Second request events: {len(stream2_events)}")

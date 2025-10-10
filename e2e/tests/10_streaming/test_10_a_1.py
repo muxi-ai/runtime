@@ -40,7 +40,9 @@ def main():
 
             # Print content analysis
             content_analysis = result["content_analysis"]
-            print("\n" + "=" * 60); print("Content Analysis"); print("=" * 60)
+            print("\n" + "=" * 60)
+            print("Content Analysis")
+            print("=" * 60)
             test.formatter.print_debug(f"Total events: {content_analysis['total_events']}")
             test.formatter.print_debug(f"Content events: {content_analysis['content_events']}")
             test.formatter.print_debug(
@@ -52,7 +54,9 @@ def main():
 
             # Print timing analysis
             timing_analysis = result["timing_analysis"]
-            print("\n" + "=" * 60); print("Timing Analysis"); print("=" * 60)
+            print("\n" + "=" * 60)
+            print("Timing Analysis")
+            print("=" * 60)
             test.formatter.print_debug(f"Average interval: {timing_analysis['avg_interval']:.3f}s")
             test.formatter.print_debug(f"Total duration: {timing_analysis['total_duration']:.2f}s")
 

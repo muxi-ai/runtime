@@ -36,7 +36,7 @@ def main():
 
         start_time = time.time()
 
-        response1 = await test.overlord.chat(
+        await test.overlord.chat(
             message="What is 2 + 2?",
             user_id="test_user",
             session_id="timeout_test",

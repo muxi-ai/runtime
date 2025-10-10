@@ -25,7 +25,9 @@ def main():
         session_id = "control_test_10a4"
 
         # Test 1: Streaming disabled (stream=False)
-        print("\n" + "=" * 60); print("Test 1: stream=False"); print("=" * 60)
+        print("\n" + "=" * 60)
+        print("Test 1: stream=False")
+        print("=" * 60)
 
         response_no_stream = await test.overlord.chat(
             message="What is the capital of France?",
@@ -56,7 +58,9 @@ def main():
                 test.formatter.print_success("Response contains correct answer")
 
         # Test 2: Streaming enabled (stream=True)
-        print("\n" + "=" * 60); print("Test 2: stream=True"); print("=" * 60)
+        print("\n" + "=" * 60)
+        print("Test 2: stream=True")
+        print("=" * 60)
 
         response_stream = await test.overlord.chat(
             message="What is the capital of Germany?",
@@ -93,7 +97,9 @@ def main():
             test2_passed = False
 
         # Test 3: Default behavior (no stream parameter)
-        print("\n" + "=" * 60); print("Test 3: Default behavior (no stream parameter)"); print("=" * 60)
+        print("\n" + "=" * 60)
+        print("Test 3: Default behavior (no stream parameter)")
+        print("=" * 60)
 
         response_default = await test.overlord.chat(
             message="What is the capital of Spain?",

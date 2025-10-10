@@ -20,8 +20,10 @@ def main():
     async def run_progress_test():
         # Setup formation using the formation without progress
         # We load formation-without-progress.yaml which has progress: false
-        formation_path = Path(__file__).parent / "formations" / "formation-streaming" / "formation-without-progress.yaml"
-        
+        formation_path = (
+            Path(__file__).parent / "formations" / "formation-streaming" / "formation-without-progress.yaml"
+        )
+
         # Load formation with specific YAML file (progress: false)
         await test.setup_formation(formation_path=str(formation_path))
 
@@ -32,7 +34,9 @@ def main():
 
         # Make a request that would normally generate progress events
         # Using a simple, non-ambiguous prompt to avoid clarification
-        print("\n" + "=" * 60); print("Testing task with progress=false (should only get final content)"); print("=" * 60)
+        print("\n" + "=" * 60)
+        print("Testing task with progress=false (should only get final content)")
+        print("=" * 60)
 
         response_stream = await test.overlord.chat(
             message="What is the capital of France? Please answer in one sentence.",
@@ -91,13 +95,17 @@ def main():
                     content_events.append(chunk)
 
         # Results analysis
-        print("\n" + "=" * 60); print("Results"); print("=" * 60)
+        print("\n" + "=" * 60)
+        print("Results")
+        print("=" * 60)
         test.formatter.print_debug(f"Total events: {len(all_events)}")
         test.formatter.print_debug(f"Progress events: {len(progress_events)}")
         test.formatter.print_debug(f"Content events: {len(content_events)}")
 
         # With progress disabled, we should have no progress events
-        print("\n" + "=" * 60); print("Expected behavior: Progress DISABLED (content only)"); print("=" * 60)
+        print("\n" + "=" * 60)
+        print("Expected behavior: Progress DISABLED (content only)")
+        print("=" * 60)
 
         if len(progress_events) == 0:
             test.formatter.print_success("No progress events emitted (as expected)")

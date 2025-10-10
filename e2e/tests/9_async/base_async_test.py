@@ -40,7 +40,7 @@ class BaseAsyncTest(BaseE2ETest):
         self.webhook_log_path = Path.cwd() / "webhook_log.json"
         self.async_responses = []
         self.webhook_events = []
-        
+
         # Webhook server configuration (default to localhost:8765)
         self.webhook_url = "http://localhost:8765"
 
@@ -53,10 +53,7 @@ class BaseAsyncTest(BaseE2ETest):
             # Try to clear via HTTP endpoint (works with Docker)
             if httpx:
                 async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"{self.webhook_url}/clear",
-                        timeout=5.0
-                    )
+                    response = await client.post(f"{self.webhook_url}/clear", timeout=5.0)
                     if response.status_code == 200:
                         data = response.json()
                         previous_count = data.get("previous_count", 0)
@@ -65,13 +62,13 @@ class BaseAsyncTest(BaseE2ETest):
                         )
                         await asyncio.sleep(0.1)
                         return
-            
+
             # Fallback to local file deletion (for non-Docker setups)
             if self.webhook_log_path.exists():
                 self.webhook_log_path.unlink()
                 self.formatter.print_debug("Cleared webhook log via local file deletion")
             await asyncio.sleep(0.1)
-            
+
         except Exception as e:
             # If HTTP fails, try local file deletion as fallback
             self.formatter.print_debug(f"HTTP clear failed ({e}), trying local deletion")
@@ -105,19 +102,19 @@ class BaseAsyncTest(BaseE2ETest):
                 # Query webhook server via HTTP (works with Docker)
                 if httpx:
                     async with httpx.AsyncClient() as client:
-                        response = await client.get(
-                            f"{self.webhook_url}/logs",
-                            timeout=5.0
-                        )
+                        response = await client.get(f"{self.webhook_url}/logs", timeout=5.0)
                         if response.status_code == 200:
                             data = response.json()
                             logs = data.get("logs", [])
-                            
+
                             # Search for our request_id in the logs
                             for log_entry in logs:
                                 if "body" in log_entry:
                                     webhook = log_entry["body"]
-                                    if isinstance(webhook, dict) and webhook.get("id") == request_id:
+                                    if (
+                                        isinstance(webhook, dict)
+                                        and webhook.get("id") == request_id
+                                    ):
                                         self.formatter.print_success(
                                             f"Webhook received after {waited}s!"
                                         )
