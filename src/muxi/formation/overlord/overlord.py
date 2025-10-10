@@ -6573,6 +6573,41 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             use_async=use_async,
                             webhook_url=webhook_url,
                         )
+                    else:
+                        # SOP explicitly requested but not found - return error to user
+                        available_sops = list(self.sop_system.sops.keys()) if self.sop_system else []
+                        observability.observe(
+                            event_type=observability.ConversationEvents.SOP_MATCHED,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "sop_id": sop_id,
+                                "available_sops": available_sops,
+                                "sop_system_enabled": self._ensure_sop_system(),
+                                "reason": "sop_not_found_or_disabled",
+                            },
+                            description=f"Explicit SOP request '{sop_id}' could not be fulfilled",
+                        )
+                        
+                        # Return clear error message to user
+                        from ...datatypes.overlord import MuxiResponse
+                        if available_sops:
+                            available_list = ", ".join(f"'{s}'" for s in available_sops)
+                            error_msg = (
+                                f"I couldn't find the SOP '{sop_id}' that you requested. "
+                                f"Available SOPs in this formation are: {available_list}. "
+                                f"Please check the SOP name or update your formation configuration."
+                            )
+                        else:
+                            error_msg = (
+                                f"I couldn't find the SOP '{sop_id}' that you requested. "
+                                f"This formation has no SOPs configured. "
+                                f"Please add SOPs to your formation or check your request."
+                            )
+                        
+                        return MuxiResponse(
+                            role="assistant",
+                            content=error_msg,
+                        )
 
                 # Check if complexity exceeds threshold
                 # Use workflow config threshold if available, otherwise fall back to overlord threshold
