@@ -17,7 +17,7 @@ from muxi.formation import Formation  # noqa: E402
 async def main():
     """Test list triggers endpoint."""
     print("🚀 MUXI Runtime - Test 13A1: List Triggers")
-    print("="*60)
+    print("=" * 60)
 
     formation_path = Path(__file__).parent / "formation-triggers"
 
@@ -25,13 +25,13 @@ async def main():
         # Load formation
         formation = Formation()
         await formation.load(str(formation_path))
-        
+
         # Start server
         server = await formation.start_server(block=False)
         await asyncio.sleep(2)  # Wait for server to be ready
 
         formation_id = formation.formation_id
-        base_url = f"http://localhost:18271/v1"
+        base_url = "http://localhost:18271/v1"
         client_key = "testing-api-key"  # Static key from formation config
 
         print(f"\n✅ Formation loaded: {formation_id}")
@@ -39,42 +39,42 @@ async def main():
 
         # Test list triggers
         print("\n📋 Testing GET /formations/{formation_id}/triggers...")
-        
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
                 f"{base_url}/formations/{formation_id}/triggers",
-                headers={"X-Muxi-Client-Key": client_key}
+                headers={"X-Muxi-Client-Key": client_key},
             )
-            
+
             print(f"   Status: {response.status_code}")
-            
+
             if response.status_code == 200:
                 data = response.json()
                 print(f"   Response: {data}")
-                
+
                 # Validate response structure
                 assert "data" in data, "Response missing 'data' field"
                 trigger_data = data["data"]
-                
+
                 assert "formation_id" in trigger_data, "Missing formation_id"
                 assert "triggers" in trigger_data, "Missing triggers list"
                 assert "count" in trigger_data, "Missing count"
-                
+
                 print(f"\n✅ Formation ID: {trigger_data['formation_id']}")
                 print(f"✅ Trigger count: {trigger_data['count']}")
                 print(f"✅ Triggers: {trigger_data['triggers']}")
-                
+
                 # Verify expected triggers
                 expected_triggers = {"test-simple", "test-nested", "github-issue"}
                 actual_triggers = set(trigger_data["triggers"])
-                
+
                 if expected_triggers <= actual_triggers:
-                    print(f"\n✅ All expected triggers found")
+                    print("\n✅ All expected triggers found")
                 else:
                     missing = expected_triggers - actual_triggers
                     print(f"\n❌ Missing triggers: {missing}")
                     return False
-                    
+
                 print("\n✅ Test 13A1 PASSED")
                 return True
             else:
@@ -85,11 +85,12 @@ async def main():
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     finally:
         # Cleanup
-        if 'formation' in locals():
+        if "formation" in locals():
             await formation.shutdown()
         await asyncio.sleep(1)
 

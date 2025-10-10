@@ -17,7 +17,7 @@ from muxi.formation import Formation  # noqa: E402
 async def main():
     """Test simple trigger execution."""
     print("🚀 MUXI Runtime - Test 13A2: Execute Simple Trigger (Sync)")
-    print("="*60)
+    print("=" * 60)
 
     formation_path = Path(__file__).parent / "formation-triggers"
 
@@ -25,13 +25,13 @@ async def main():
         # Load formation
         formation = Formation()
         await formation.load(str(formation_path))
-        
+
         # Start server
         server = await formation.start_server(block=False)
         await asyncio.sleep(2)  # Wait for server to be ready
 
         formation_id = formation.formation_id
-        base_url = f"http://localhost:18271/v1"
+        base_url = "http://localhost:18271/v1"
         client_key = "testing-api-key"
 
         print(f"\n✅ Formation loaded: {formation_id}")
@@ -39,54 +39,51 @@ async def main():
 
         # Test simple trigger execution (sync mode)
         print("\n📋 Testing POST /formations/{formation_id}/triggers/test-simple...")
-        
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 f"{base_url}/formations/{formation_id}/triggers/test-simple",
-                headers={
-                    "X-Muxi-Client-Key": client_key,
-                    "X-Muxi-User-Id": "test-trigger-user"
-                },
+                headers={"X-Muxi-Client-Key": client_key, "X-Muxi-User-Id": "test-trigger-user"},
                 json={
-                    "data": {
-                        "message": "Hello from webhook test"
-                    },
-                    "use_async": False  # Synchronous processing
-                }
+                    "data": {"message": "Hello from webhook test"},
+                    "use_async": False,  # Synchronous processing
+                },
             )
-            
+
             print(f"   Status: {response.status_code}")
-            
+
             if response.status_code == 200:
                 data = response.json()
                 print(f"   Response type: {data.get('type')}")
-                
+
                 # Validate response structure (standard API envelope)
                 assert "data" in data, "Response missing 'data' field"
                 assert "request" in data, "Response missing 'request' field"
                 assert "success" in data, "Response missing 'success' field"
-                
+
                 request_info = data["request"]
                 assert "id" in request_info, "Missing request.id"
                 request_id = request_info["id"]
-                
+
                 response_data = data["data"]
-                
+
                 # For sync mode, we should get the complete response
-                assert "message" in response_data or "content" in response_data, "Missing response content"
-                
+                assert (
+                    "message" in response_data or "content" in response_data
+                ), "Missing response content"
+
                 print(f"\n✅ Request ID: {request_id}")
                 print(f"✅ Response type: {data.get('type')}")
                 print(f"✅ Success: {data.get('success')}")
-                
+
                 # Check that the agent received and processed the trigger message
                 content = response_data.get("message") or response_data.get("content", "")
                 print(f"✅ Agent response preview: {content[:100] if content else 'N/A'}...")
-                
+
                 # Verify the trigger message was properly rendered
                 # The template is: "Test trigger: ${{ data.message }}"
                 # So overlord should have received: "Test trigger: Hello from webhook test"
-                
+
                 print("\n✅ Test 13A2 PASSED")
                 return True
             else:
@@ -97,11 +94,12 @@ async def main():
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     finally:
         # Cleanup
-        if 'formation' in locals():
+        if "formation" in locals():
             await formation.shutdown()
         await asyncio.sleep(1)
 

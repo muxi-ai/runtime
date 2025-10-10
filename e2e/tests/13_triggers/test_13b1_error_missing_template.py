@@ -17,7 +17,7 @@ from muxi.formation import Formation  # noqa: E402
 async def main():
     """Test error handling for missing trigger template."""
     print("🚀 MUXI Runtime - Test 13B1: Error - Missing Trigger Template")
-    print("="*60)
+    print("=" * 60)
 
     formation_path = Path(__file__).parent / "formation-triggers"
 
@@ -25,13 +25,13 @@ async def main():
         # Load formation
         formation = Formation()
         await formation.load(str(formation_path))
-        
+
         # Start server
         server = await formation.start_server(block=False)
         await asyncio.sleep(2)  # Wait for server to be ready
 
         formation_id = formation.formation_id
-        base_url = f"http://localhost:18271/v1"
+        base_url = "http://localhost:18271/v1"
         client_key = "testing-api-key"
 
         print(f"\n✅ Formation loaded: {formation_id}")
@@ -39,46 +39,40 @@ async def main():
 
         # Test non-existent trigger
         print("\n📋 Testing POST /formations/{formation_id}/triggers/non-existent...")
-        
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 f"{base_url}/formations/{formation_id}/triggers/non-existent",
-                headers={
-                    "X-Muxi-Client-Key": client_key,
-                    "X-Muxi-User-Id": "test-user"
-                },
-                json={
-                    "data": {
-                        "message": "This should fail"
-                    }
-                }
+                headers={"X-Muxi-Client-Key": client_key, "X-Muxi-User-Id": "test-user"},
+                json={"data": {"message": "This should fail"}},
             )
-            
+
             print(f"   Status: {response.status_code}")
-            
+
             # Should return 404 Not Found
             if response.status_code == 404:
                 data = response.json()
                 print(f"   Response: {data}")
-                
+
                 # Validate error response structure
                 assert "error" in data, "Response missing 'error' field"
                 assert "success" in data, "Response missing 'success' field"
                 assert data["success"] is False, "Success should be false for errors"
-                
+
                 error_info = data["error"]
                 assert "code" in error_info, "Missing error.code"
                 assert "message" in error_info, "Missing error.message"
-                
+
                 # Check error message mentions the missing trigger
                 message = error_info["message"]
-                assert "non-existent" in message.lower() or "not found" in message.lower(), \
-                    f"Error message should mention missing trigger: {message}"
-                
-                print(f"\n✅ Correct status code: 404")
+                assert (
+                    "non-existent" in message.lower() or "not found" in message.lower()
+                ), f"Error message should mention missing trigger: {message}"
+
+                print("\n✅ Correct status code: 404")
                 print(f"✅ Error code: {error_info['code']}")
                 print(f"✅ Error message: {message}")
-                
+
                 print("\n✅ Test 13B1 PASSED")
                 return True
             else:
@@ -89,11 +83,12 @@ async def main():
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     finally:
         # Cleanup
-        if 'formation' in locals():
+        if "formation" in locals():
             await formation.shutdown()
         await asyncio.sleep(1)
 

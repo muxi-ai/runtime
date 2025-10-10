@@ -14,7 +14,6 @@ Test Suite 13: Trigger System
   - 13B3: Invalid formation ID
 """
 
-import asyncio
 import subprocess
 import sys
 from pathlib import Path

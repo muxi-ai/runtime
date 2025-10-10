@@ -25,13 +25,13 @@ async def main():
         # Load formation
         formation = Formation()
         await formation.load(str(formation_path))
-        
+
         # Start server
         server = await formation.start_server(block=False)
         await asyncio.sleep(2)  # Wait for server to be ready
 
         formation_id = formation.formation_id
-        base_url = f"http://localhost:18271/v1"
+        base_url = "http://localhost:18271/v1"
         client_key = "testing-api-key"
 
         print(f"\n✅ Formation loaded: {formation_id}")
@@ -40,7 +40,7 @@ async def main():
         # Test trigger with missing data field
         # The github-issue template requires: data.repository, data.issue.number, etc.
         print("\n📋 Testing POST with missing required data.issue.number field...")
-        
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 f"{base_url}/formations/{formation_id}/triggers/github-issue",
@@ -60,32 +60,32 @@ async def main():
                     }
                 }
             )
-            
+
             print(f"   Status: {response.status_code}")
-            
+
             # Should return 400 Bad Request or 500 Internal Error
             if response.status_code in [400, 500]:
                 data = response.json()
                 print(f"   Response type: {data.get('type')}")
-                
+
                 # Validate error response structure
                 assert "error" in data, "Response missing 'error' field"
                 assert "success" in data, "Response missing 'success' field"
                 assert data["success"] is False, "Success should be false for errors"
-                
+
                 error_info = data["error"]
                 assert "code" in error_info, "Missing error.code"
                 assert "message" in error_info, "Missing error.message"
-                
+
                 message = error_info["message"]
                 print(f"\n✅ Correct error status: {response.status_code}")
                 print(f"✅ Error code: {error_info['code']}")
                 print(f"✅ Error message: {message}")
-                
+
                 # The error should mention the missing field or template rendering failure
                 assert any(keyword in message.lower() for keyword in ["missing", "not found", "number", "template"]), \
                     f"Error message should indicate missing data: {message}"
-                
+
                 print("\n✅ Test 13B2 PASSED")
                 return True
             else:
