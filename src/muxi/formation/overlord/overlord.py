@@ -6517,7 +6517,14 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                 actual_message = " ".join(content_lines)
                                 break
 
-                analysis = await self.request_analyzer.analyze_request(actual_message)
+                # Build context with available SOPs for the analyzer
+                analysis_context = {}
+                if self._ensure_sop_system() and self.sop_system.enabled:
+                    analysis_context["available_sops"] = list(self.sop_system.sops.keys())
+
+                analysis = await self.request_analyzer.analyze_request(
+                    actual_message, context=analysis_context
+                )
 
                 # Debug: Log the complete analysis object
                 observability.observe(
@@ -6538,6 +6545,35 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     description=f"Request analyzer returned: scheduling={getattr(analysis, 'is_scheduling_request', 'N/A')}",  # noqa: E501
                 )
 
+                # FIRST: Check for explicit SOP request - highest priority
+                if analysis.explicit_sop_request:
+                    # User explicitly requested a specific SOP
+                    sop_id = analysis.explicit_sop_request
+                    if self._ensure_sop_system() and sop_id in self.sop_system.sops:
+                        observability.observe(
+                            event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "service": "explicit_sop_request",
+                                "sop_id": sop_id,
+                                "sop_name": self.sop_system.sops[sop_id].get("name", sop_id),
+                                "user_message_preview": redact_message_preview(actual_message, 100),
+                            },
+                            description=f"User explicitly requested SOP: {sop_id}",
+                        )
+                        
+                        # Direct SOP invocation - bypass complexity analysis
+                        return await self._process_with_workflow(
+                            message=message,
+                            analysis=analysis,
+                            user_id=user_id,
+                            session_id=session_id,
+                            request_id=request_id,
+                            relevant_sop=self.sop_system.sops[sop_id],
+                            use_async=use_async,
+                            webhook_url=webhook_url,
+                        )
+
                 # Check if complexity exceeds threshold
                 # Use workflow config threshold if available, otherwise fall back to overlord threshold
                 threshold = (
@@ -6557,6 +6593,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         "exceeds_threshold": analysis.complexity_score >= threshold,
                         "requires_decomposition": analysis.requires_decomposition,
                         "requires_approval": analysis.requires_approval,
+                        "explicit_sop_request": analysis.explicit_sop_request,
                     },
                     description=(
                         f"Workflow analysis: score={analysis.complexity_score}, "

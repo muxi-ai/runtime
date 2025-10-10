@@ -2,6 +2,8 @@ Analyze this user request to determine its complexity and requirements:
 
 User Request: "{user_message}" {context_info}
 
+{sop_context}
+
 Please provide analysis in JSON format:
 
 {{
@@ -12,6 +14,7 @@ Please provide analysis in JSON format:
   "confidence_score": [0.0-1.0 how confident you are in this analysis],
   "is_scheduling_request": [true ONLY if user is ASKING you to CREATE/SET a schedule, reminder, or alert for future execution. Examples of TRUE: 'Remind me tomorrow at 3pm', 'At 3pm tell me a joke', 'At 15:30 today send the report', 'Schedule daily standup at 10am', 'Every Monday at 2pm team sync', 'In 2 hours take medicine', 'In 5 minutes generate a report', 'In 30 minutes check the logs', 'Set a reminder for next Friday', 'Send status update every hour', 'Run backup every night', 'Check metrics every 5 minutes', 'Generate summary every week', 'Tomorrow at 9am check emails', 'At noon send lunch reminder', 'At 5pm today log off reminder'. IMPORTANT: Any request with 'At [time]' followed by an action is a scheduling request. Recurring patterns with 'every [time unit]' are scheduling requests when followed by an action/request. The pattern is: [action/verb] + 'every' + [time period]. Common time units: minute, hour, day, week, month, morning, evening, night. Pay special attention to patterns like 'In X minutes/hours/days, do Y' which means schedule Y for X time from now. Also 'At [specific time] [action]' means schedule that action for that time. Examples of FALSE: 'Tell me about scheduling', 'I always remind myself', 'What time should I schedule?', 'The daily standup is at 10am' (statement, not request), 'What happened at 3pm?' (asking about past). Must be a request to CREATE a schedule, not a statement about schedules],
   "is_explicit_approval_request": [true ONLY if user is explicitly asking to see/review your plan or approach BEFORE you execute. This detects if they want to PREVIEW the approach, regardless of task complexity. Examples of TRUE: 'Show me your plan first', 'How would you approach this?', 'Walk me through your process', 'Let me see your strategy', 'Explain your method before starting', 'What steps would you take?', 'How are you going to handle this?'. Examples of FALSE: 'Create a report' (direct command), 'Fix this bug' (wants action), 'Help me understand Python' (wants information, not execution plan)],
+  "explicit_sop_request": [If user explicitly requests a specific SOP/procedure/workflow by name, return the SOP ID (e.g., "deployment", "customer-onboarding"). If not explicitly requesting a specific SOP by name, return null. Examples of EXPLICIT requests: "Execute the deployment SOP", "Run the customer-onboarding procedure", "Use the incident-response workflow", "Apply the code-review SOP". Examples of IMPLICIT (return null): "Deploy to production" (no SOP mentioned), "Fix the bug" (general request), "Help with onboarding" (vague, not calling specific SOP). CRITICAL: Only return a SOP ID if the user EXPLICITLY mentions executing/running/using a specific named SOP/procedure/workflow. Check if the mentioned SOP exists in the available list above.],
   "reasoning": [Brief explanation of the analysis]
 }}
 

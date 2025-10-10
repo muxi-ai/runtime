@@ -149,6 +149,10 @@ class RequestAnalysis(BaseModel):
         default=False,
         description="Whether user explicitly wants to see the plan/approach before execution"
     )
+    explicit_sop_request: Optional[str] = Field(
+        default=None,
+        description="SOP ID if user explicitly requests a specific SOP/procedure/workflow by name"
+    )
 
     @field_validator("implicit_subtasks", "required_capabilities", "acceptance_criteria")
     @classmethod

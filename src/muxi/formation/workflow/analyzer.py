@@ -326,11 +326,19 @@ class RequestAnalyzer:
         if context:
             context_info = f"\nConversation context: {context}"
 
+        # Add SOP context if SOPs are available
+        sop_context = ""
+        if context and "available_sops" in context:
+            sop_list = context["available_sops"]
+            if sop_list:
+                sop_context = f"\nAvailable SOPs: {', '.join(sop_list)}"
+
         from ..prompts.loader import PromptLoader
         return PromptLoader.get(
             'workflow_request_analysis.md',
             user_message=user_message,
-            context_info=context_info
+            context_info=context_info,
+            sop_context=sop_context
         )
 
     def _parse_llm_analysis(self, response: str) -> RequestAnalysis:
@@ -362,6 +370,7 @@ class RequestAnalyzer:
                     confidence_score=float(data.get("confidence_score", 0.8)),
                     is_scheduling_request=data.get("is_scheduling_request", False),
                     is_explicit_approval_request=data.get("is_explicit_approval_request", False),
+                    explicit_sop_request=data.get("explicit_sop_request"),
                 )
             else:
                 raise ValueError("No valid JSON found in response")
