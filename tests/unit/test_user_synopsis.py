@@ -5,7 +5,7 @@ Tests the two-tier LLM-synthesized user synopsis system with configuration suppo
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from src.muxi.formation.memory.user_context import UserContextManager
 
 
@@ -30,12 +30,12 @@ class TestUserSynopsisConfiguration:
         overlord.is_multi_user = True
         overlord.buffer_memory = MagicMock()
         overlord.persistent_memory_manager = MagicMock()
-        
+
         manager = UserContextManager(overlord)
-        
+
         # Should return empty immediately without any cache/LLM calls
         result = await manager.get_user_synopsis("test_user")
-        
+
         assert result == ""
         # Verify no cache operations were attempted
         assert not overlord.buffer_memory.kv_get.called
@@ -52,12 +52,12 @@ class TestUserSynopsisConfiguration:
         overlord.persistent_memory_manager = MagicMock()
         overlord.long_term_memory = AsyncMock()
         overlord.long_term_memory.get_user_public_id = AsyncMock(return_value="usr_123")
-        
+
         manager = UserContextManager(overlord)
-        
+
         # Should attempt to get synopsis (will fail due to minimal mocking, but that's ok)
-        result = await manager.get_user_synopsis("test_user")
-        
+        await manager.get_user_synopsis("test_user")
+
         # Should have attempted cache lookup (proves it's enabled)
         overlord.buffer_memory.kv_get.assert_called()
 
@@ -84,16 +84,16 @@ class TestUserSynopsisConfiguration:
         overlord.persistent_memory_manager.search_long_term_memory = AsyncMock(return_value=[])
         overlord.long_term_memory = AsyncMock()
         overlord.long_term_memory.get_user_public_id = AsyncMock(return_value="usr_123")
-        
+
         manager = UserContextManager(overlord)
-        
+
         # Get context synopsis (should use custom TTL for empty cache)
         await manager._get_context_synopsis("test_user")
-        
+
         # Verify custom TTL was used
         calls = overlord.buffer_memory.kv_set.call_args_list
         assert any(
-            call.kwargs.get('ttl') == 7200 
+            call.kwargs.get('ttl') == 7200
             for call in calls
         ), f"Expected cache_ttl=7200 to be used, calls: {calls}"
 
@@ -117,12 +117,12 @@ class TestUserSynopsisCacheInvalidation:
         }
         overlord.buffer_memory = AsyncMock()
         overlord.buffer_memory.kv_delete = AsyncMock()
-        
+
         manager = UserContextManager(overlord)
-        
+
         # Should return immediately without cache operations
         await manager.invalidate_identity_synopsis_cache("test_user")
-        
+
         # Verify no cache deletions were attempted
         assert not overlord.buffer_memory.kv_delete.called
 
@@ -144,12 +144,12 @@ class TestUserSynopsisCacheInvalidation:
         overlord.buffer_memory.kv_delete = AsyncMock()
         overlord.long_term_memory = AsyncMock()
         overlord.long_term_memory.get_user_public_id = AsyncMock(return_value="usr_123")
-        
+
         manager = UserContextManager(overlord)
-        
+
         # Should invalidate cache
         await manager.invalidate_identity_synopsis_cache("test_user")
-        
+
         # Verify cache deletion was called
         overlord.buffer_memory.kv_delete.assert_called_once()
 
@@ -172,16 +172,16 @@ class TestUserSynopsisCacheInvalidation:
         overlord.long_term_memory.add_user_context = AsyncMock(return_value=["mem_1"])
         overlord.buffer_memory = AsyncMock()
         overlord.buffer_memory.kv_delete = AsyncMock()
-        
+
         manager = UserContextManager(overlord)
-        
+
         # Add user context
         await manager.add_user_context(
             "test_user",
             {"name": "Test User"},
             source="test"
         )
-        
+
         # Verify no cache deletions (invalidation skipped)
         assert not overlord.buffer_memory.kv_delete.called
 
@@ -218,12 +218,12 @@ class TestUserSynopsisTwoTierSystem:
         overlord.extraction_model.chat = AsyncMock(
             return_value=MagicMock(content="Test User is a software engineer.")
         )
-        
+
         manager = UserContextManager(overlord)
-        
+
         # Get identity synopsis
         await manager._get_identity_synopsis("test_user")
-        
+
         # Find the cache set call with actual synopsis (not empty string)
         calls = overlord.buffer_memory.kv_set.call_args_list
         synopsis_cache_call = None
@@ -232,7 +232,7 @@ class TestUserSynopsisTwoTierSystem:
             if args[1] != "":  # Not empty string
                 synopsis_cache_call = call
                 break
-        
+
         assert synopsis_cache_call is not None, "Should have cached synopsis"
         # Verify permanent cache (ttl=None)
         assert synopsis_cache_call.kwargs.get('ttl') is None
@@ -262,12 +262,12 @@ class TestUserSynopsisTwoTierSystem:
         )
         overlord.long_term_memory = AsyncMock()
         overlord.long_term_memory.get_user_public_id = AsyncMock(return_value="usr_123")
-        
+
         manager = UserContextManager(overlord)
-        
+
         # Get identity synopsis (empty)
         await manager._get_identity_synopsis("test_user")
-        
+
         # Verify custom TTL was used for empty cache
         overlord.buffer_memory.kv_set.assert_called_once()
         call_kwargs = overlord.buffer_memory.kv_set.call_args.kwargs
@@ -302,12 +302,12 @@ class TestUserSynopsisTwoTierSystem:
         overlord.extraction_model.chat = AsyncMock(
             return_value=MagicMock(content="User prefers concise communication.")
         )
-        
+
         manager = UserContextManager(overlord)
-        
+
         # Get context synopsis
         await manager._get_context_synopsis("test_user")
-        
+
         # Verify custom TTL was used
         calls = overlord.buffer_memory.kv_set.call_args_list
         assert any(
@@ -330,16 +330,16 @@ class TestUserSynopsisTwoTierSystem:
                 }
             }
         }
-        
+
         manager = UserContextManager(overlord)
-        
+
         # Mock both tier methods
         manager._get_identity_synopsis = AsyncMock(return_value="John Doe is a software engineer.")
         manager._get_context_synopsis = AsyncMock(return_value="He prefers technical communication.")
-        
+
         # Get combined synopsis
         result = await manager.get_user_synopsis("test_user")
-        
+
         # Should combine both
         assert "John Doe is a software engineer." in result
         assert "He prefers technical communication." in result
@@ -366,17 +366,17 @@ class TestUserSynopsisUserIdCaching:
         overlord.buffer_memory.kv_get = AsyncMock(return_value="Cached synopsis")
         overlord.long_term_memory = AsyncMock()
         overlord.long_term_memory.get_user_id = AsyncMock(return_value=42)  # Integer user ID
-        
+
         manager = UserContextManager(overlord)
-        
+
         # Get synopsis (should hit cache)
-        result = await manager.get_user_synopsis("external_user_123")
-        
+        await manager.get_user_synopsis("external_user_123")
+
         # The key verification: user_id was looked up for external_user_id
         overlord.long_term_memory.get_user_id.assert_called()
         first_call_arg = overlord.long_term_memory.get_user_id.call_args[0][0]
         assert first_call_arg == "external_user_123"
-        
+
         # Verify cache was queried with integer user_id (not external_user_id)
         calls = overlord.buffer_memory.kv_get.call_args_list
         assert len(calls) >= 1
