@@ -10,8 +10,20 @@ llm:
     - text: "openai/gpt-4o-mini"
 
 agents:
-  - file: agents/test-agent.yaml
+  - id: test-agent
+    name: Test Agent
+    description: Simple agent for trigger testing
+    system_message: |
+      You are a test agent. When you receive trigger messages, respond concisely with:
+      - A confirmation you received the message
+      - The key information from the message
+      Keep responses under 50 words.
+    default: true
 
 server:
   host: 0.0.0.0
   port: 18271
+  access_log: false
+  api_keys:
+    admin_key: "testing-api-key"
+    client_key: "testing-api-key"

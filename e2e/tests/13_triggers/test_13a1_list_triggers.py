@@ -32,7 +32,7 @@ async def main():
 
         formation_id = formation.formation_id
         base_url = f"http://localhost:18271/v1"
-        client_key = formation.client_key
+        client_key = "testing-api-key"  # Static key from formation config
 
         print(f"\n✅ Formation loaded: {formation_id}")
         print(f"📡 Server running at {base_url}")
@@ -43,7 +43,7 @@ async def main():
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
                 f"{base_url}/formations/{formation_id}/triggers",
-                headers={"X-Client-Key": client_key}
+                headers={"X-Muxi-Client-Key": client_key}
             )
             
             print(f"   Status: {response.status_code}")

@@ -6,7 +6,7 @@ with template-based message generation from event data.
 """
 
 from typing import Dict, Any, Optional
-import asyncio
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -86,8 +86,16 @@ async def execute_trigger(
     if not formation.is_overlord_running():
         raise HTTPException(status_code=503, detail="Overlord not available")
 
+    # Get formation directory
+    formation_path = formation.get_formation_path()
+    if not formation_path:
+        raise HTTPException(status_code=500, detail="Formation path not available")
+    formation_dir = Path(formation_path)
+    if formation_dir.is_file():
+        formation_dir = formation_dir.parent
+
     # Load trigger template
-    trigger_path = formation.formation_dir / "triggers" / f"{trigger_name}.md"
+    trigger_path = formation_dir / "triggers" / f"{trigger_name}.md"
     if not trigger_path.exists():
         raise HTTPException(
             status_code=404,
@@ -262,8 +270,16 @@ async def list_triggers(formation_id: str, request: Request) -> APIResponse:
             detail=f"Formation '{formation_id}' not found. Current formation: '{formation.formation_id}'",
         )
 
+    # Get formation directory
+    formation_path = formation.get_formation_path()
+    if not formation_path:
+        raise HTTPException(status_code=500, detail="Formation path not available")
+    formation_dir = Path(formation_path)
+    if formation_dir.is_file():
+        formation_dir = formation_dir.parent
+
     # Get triggers directory
-    triggers_dir = formation.formation_dir / "triggers"
+    triggers_dir = formation_dir / "triggers"
 
     # List all .md files in triggers directory
     try:
