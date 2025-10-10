@@ -66,13 +66,13 @@ The `Dockerfile.e2e-all-in-one` creates a single container with:
 ### Running All Tests
 ```bash
 docker-compose -f docker-compose.all-in-one.yml run --rm muxi-e2e-all \
-    pytest tests/e2e_new/ -v
+    pytest e2e/tests_new/ -v
 ```
 
 ### Running Specific Area
 ```bash
 docker-compose -f docker-compose.all-in-one.yml run --rm muxi-e2e-all \
-    pytest tests/e2e_new/2_memory/ -v
+    pytest e2e/tests_new/2_memory/ -v
 ```
 
 ### Interactive Development
@@ -81,7 +81,7 @@ docker-compose -f docker-compose.all-in-one.yml run --rm muxi-e2e-all \
 docker-compose -f docker-compose.all-in-one.yml run --rm muxi-e2e-all bash
 
 # Inside container:
-pytest tests/e2e_new/1_foundation/test_1a6_simple_formation.py -v -s
+pytest e2e/tests_new/1_foundation/test_1a6_simple_formation.py -v -s
 ```
 
 ### Viewing Logs
@@ -195,7 +195,7 @@ docker exec -it muxi-e2e-test curl http://localhost:65432/health
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   run: |
     docker-compose -f docker-compose.all-in-one.yml run --rm \
-      muxi-e2e-all pytest tests/e2e_new/ -v --junit-xml=test-results.xml
+      muxi-e2e-all pytest e2e/tests_new/ -v --junit-xml=test-results.xml
 
 - name: Upload test results
   uses: actions/upload-artifact@v2
@@ -225,19 +225,19 @@ docker rmi muxi-e2e:all-in-one
 ### Custom pytest options
 ```bash
 docker-compose -f docker-compose.all-in-one.yml run --rm muxi-e2e-all \
-    pytest tests/e2e_new/ -v -s -x --tb=long --maxfail=3
+    pytest e2e/tests_new/ -v -s -x --tb=long --maxfail=3
 ```
 
 ### Running with coverage
 ```bash
 docker-compose -f docker-compose.all-in-one.yml run --rm muxi-e2e-all \
-    pytest tests/e2e_new/ --cov=muxi --cov-report=html
+    pytest e2e/tests_new/ --cov=muxi --cov-report=html
 ```
 
 ### Parallel test execution
 ```bash
 docker-compose -f docker-compose.all-in-one.yml run --rm muxi-e2e-all \
-    pytest tests/e2e_new/ -n 4
+    pytest e2e/tests_new/ -n 4
 ```
 
 ## Benefits

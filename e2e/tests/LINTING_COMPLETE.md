@@ -65,13 +65,13 @@ All tests are now ready to run:
 
 ```bash
 # Run individual test
-python tests/e2e_new/2_memory/test_2a1_basic_conversation_context.py
+python e2e/tests_new/2_memory/test_2a1_basic_conversation_context.py
 
 # Run entire area
-pytest tests/e2e_new/2_memory/ -v
+pytest e2e/tests_new/2_memory/ -v
 
 # Run all tests
-pytest tests/e2e_new/ -v
+pytest e2e/tests_new/ -v
 ```
 
 ## Key Improvements

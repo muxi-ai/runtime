@@ -53,12 +53,12 @@ The foundational runtime engine that powers AI agent formations is now complete 
   - Fixed AttributeError: clarification_system → clarification (overlord.py)
   - Fixed missing LLM initialization in credential help generation (handler.py)
   - Added contextual error handling for embedding failures (sqlite.py)
-  
+
 - ✅ **Security Improvements**:
   - Prevented PII leakage in memory sort error messages (persistent_manager.py)
   - Added defensive type checking with safe error messages
   - Added error logging for credential JSON parsing failures (resolver.py)
-  
+
 - ✅ **Code Quality Improvements**:
   - Removed redundant LLM initialization code (clarification.py)
   - Modernized traceback.print_exception API to Python 3.10+ (asyncio_handler.py)
@@ -78,8 +78,8 @@ The foundational runtime engine that powers AI agent formations is now complete 
   - Simplified call site to direct assignment (6 lines)
 
 **Testing**:
-- ✅ Verified with tests/e2e/8_clarification/test_8a3_credential_clarification.py
-- ✅ Verified with tests/e2e/8_clarification/test_8e2a_apikey_dynamic.py
+- ✅ Verified with e2e/tests/8_clarification/test_8a3_credential_clarification.py
+- ✅ Verified with e2e/tests/8_clarification/test_8e2a_apikey_dynamic.py
 - ✅ All tests passing, zero regression
 
 **Impact**:

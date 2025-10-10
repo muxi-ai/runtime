@@ -57,7 +57,7 @@ async def schedule_daily_reminder():
     formation = Formation()
     await formation.load("formation.yaml")  # or Path to your formation directory
     overlord = await formation.start_overlord()
-    
+
     # Schedule a task using natural language
     response = await overlord.chat(
         "Remind me every day at 9am to check my calendar",
@@ -66,9 +66,9 @@ async def schedule_daily_reminder():
         use_async=False,
         stream=False
     )
-    
+
     print(response.content)
-    
+
     # Cleanup
     await formation.kill_overlord()
 
@@ -78,7 +78,7 @@ asyncio.run(schedule_daily_reminder())
 
 **Expected output:**
 ```
-✅ I've created a scheduled job for you. Your request 'check my calendar' 
+✅ I've created a scheduled job for you. Your request 'check my calendar'
 will be executed daily at 9:00 AM. Job ID: job_abc123xyz456
 ```
 
@@ -89,16 +89,16 @@ async def check_jobs():
     formation = Formation()
     await formation.load("formation.yaml")
     overlord = await formation.start_overlord()
-    
+
     # Get all jobs for your user
     jobs = await formation.get_user_jobs("your_user_id")
-    
+
     for job in jobs:
         print(f"📅 {job['title']}")
         print(f"   Schedule: {job['cron_expression']}")
         print(f"   Status: {job['status']}")
         print(f"   Created: {job['created_at']}")
-    
+
     await formation.kill_overlord()
 
 asyncio.run(check_jobs())
@@ -240,7 +240,7 @@ async def main():
         total = len(results)
 
         print(f"✅ Passed: {passed}/{total}")
-        
+
         if passed == total:
             print("\n🎉 All scheduling tasks created successfully!")
         else:
@@ -250,7 +250,7 @@ async def main():
         print("\n" + "="*60)
         print("YOUR SCHEDULED JOBS")
         print("="*60)
-        
+
         for i in range(1, len(test_cases) + 1):
             jobs = await formation.get_user_jobs(f"user_{i}")
             for job in jobs:
@@ -309,8 +309,8 @@ scheduler = overlord.scheduler_service
 
 # Pause a job
 await scheduler.job_manager.pause_job(
-    job_id, 
-    user_id, 
+    job_id,
+    user_id,
     reason="Going on vacation"
 )
 
@@ -319,8 +319,8 @@ await scheduler.job_manager.resume_job(job_id, user_id)
 
 # Delete a job
 await scheduler.job_manager.delete_job(
-    job_id, 
-    user_id, 
+    job_id,
+    user_id,
     reason="No longer needed"
 )
 ```
@@ -336,7 +336,7 @@ for job in jobs:
     print(f"  Failures: {job['total_failures']}")
     print(f"  Last run: {job['last_run_at']}")
     print(f"  Last status: {job['last_run_status']}")
-    
+
     if job['total_runs'] > 0:
         success_rate = (job['total_runs'] - job['total_failures']) / job['total_runs']
         print(f"  Success rate: {success_rate:.1%}")
@@ -412,7 +412,7 @@ Format: minute hour day month weekday
 
 Examples:
   0 9 * * *      Every day at 9am
-  0 14 * * 1-5   Weekdays at 2pm  
+  0 14 * * 1-5   Weekdays at 2pm
   */30 * * * *   Every 30 minutes
   0 0 1 * *      First day of month
   0 18 * * 5     Every Friday at 6pm
@@ -475,7 +475,7 @@ await overlord.chat(
 
 ## Support
 
-- **Test Suite**: See `tests/e2e/12_scheduling/` for working examples
+- **Test Suite**: See `e2e/tests/12_scheduling/` for working examples
 - **Issues**: Check test results in test reports for common patterns
 - **Debug**: Enable debug logging for detailed execution traces
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The MUXI Runtime E2E test suite validates all major functionality across 12 areas with 215+ tests. Tests are located in `tests/e2e_new/` with a standardized structure.
+The MUXI Runtime E2E test suite validates all major functionality across 12 areas with 215+ tests. Tests are located in `e2e/tests_new/` with a standardized structure.
 
 ## Required Services
 
@@ -35,7 +35,7 @@ cp .env.e2e.example .env.e2e
 
 3. **Run a simple test to verify setup:**
 ```bash
-python tests/e2e_new/1_foundation/test_1a6_simple_formation.py
+python e2e/tests_new/1_foundation/test_1a6_simple_formation.py
 ```
 
 ### Option 2: Full Setup (All services)
@@ -54,13 +54,13 @@ docker-compose -f docker-compose.e2e.yml up -d
 
 ### Individual Test
 ```bash
-python tests/e2e_new/2_memory/test_2a1_basic_conversation_context.py
+python e2e/tests_new/2_memory/test_2a1_basic_conversation_context.py
 ```
 
 ### All Tests in an Area
 ```bash
 # Using pytest
-pytest tests/e2e_new/2_memory/ -v
+pytest e2e/tests_new/2_memory/ -v
 
 # Using the test runner script
 ./scripts/run-e2e-tests.sh --area 2
@@ -69,7 +69,7 @@ pytest tests/e2e_new/2_memory/ -v
 ### All Tests
 ```bash
 # Using pytest
-pytest tests/e2e_new/ -v
+pytest e2e/tests_new/ -v
 
 # Using the test runner script
 ./scripts/run-e2e-tests.sh
@@ -77,7 +77,7 @@ pytest tests/e2e_new/ -v
 
 ### With Detailed Logging
 ```bash
-bash .claude/scripts/test-and-log.sh tests/e2e_new/1_foundation/test_1a6_simple_formation.py
+bash .claude/scripts/test-and-log.sh e2e/tests_new/1_foundation/test_1a6_simple_formation.py
 ```
 
 ## Test Areas
@@ -161,7 +161,7 @@ For GitHub Actions or other CI systems:
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     POSTGRES_URI: postgresql://muxi:test123@localhost:5432/muxi_test
-  run: pytest tests/e2e_new/ -v --tb=short
+  run: pytest e2e/tests_new/ -v --tb=short
 ```
 
 ## Tips
@@ -176,13 +176,13 @@ For GitHub Actions or other CI systems:
 
 ```bash
 # Quick test to verify setup
-python tests/e2e_new/1_foundation/test_1a6_simple_formation.py
+python e2e/tests_new/1_foundation/test_1a6_simple_formation.py
 
 # Run all memory tests
-pytest tests/e2e_new/2_memory/ -v
+pytest e2e/tests_new/2_memory/ -v
 
 # Run with specific timeout
-TEST_TIMEOUT_MULTIPLIER=2.0 pytest tests/e2e_new/3_multimodal/ -v
+TEST_TIMEOUT_MULTIPLIER=2.0 pytest e2e/tests_new/3_multimodal/ -v
 
 # Stop all services
 docker-compose -f docker-compose.test-minimal.yml down

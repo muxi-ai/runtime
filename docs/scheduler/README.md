@@ -53,8 +53,8 @@ The MUXI Scheduler transforms MUXI from a reactive assistant into a proactive AI
 - **[Audit Trail Guide](audit-trail-guide.md)** - Comprehensive guide to using the audit trail for monitoring and compliance
 
 ### 💡 Practical Resources
-- **[Test Examples](../../tests/e2e/12_scheduling/)** - Working test suite with 12 comprehensive examples
-- **[Test Documentation](../../tests/e2e/12_scheduling/TEST_MAPPING.md)** - Test coverage and patterns
+- **[Test Examples](../../e2e/tests/12_scheduling/)** - Working test suite with 12 comprehensive examples
+- **[Test Documentation](../../e2e/tests/12_scheduling/TEST_MAPPING.md)** - Test coverage and patterns
 
 ## Quick Start
 
@@ -80,7 +80,7 @@ async def main():
         use_async=False,
         stream=False
     )
-    
+
     print(response.content)
     # ✅ I've created a scheduled job for you...
 
@@ -360,7 +360,7 @@ The scheduler has been comprehensively tested as part of the MUXI Runtime Test P
 ### Test Structure
 
 ```
-tests/e2e/12_scheduling/
+e2e/tests/12_scheduling/
 ├── test_12a1_basic_scheduling.py        # Basic scheduling detection
 ├── test_12a2_natural_language_scheduling.py  # Natural language parsing
 ├── test_12a3_schedule_with_context.py   # Context preservation

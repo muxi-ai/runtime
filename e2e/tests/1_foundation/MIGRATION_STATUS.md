@@ -58,13 +58,13 @@ All tests have been fixed to properly handle async/sync patterns:
 
 ```bash
 # Run individual test
-python tests/e2e_new/1_foundation/test_1b_4_simple_chat.py
+python e2e/tests_new/1_foundation/test_1b_4_simple_chat.py
 
 # Run all migrated tests
-python tests/e2e_new/1_foundation/run_tests.py
+python e2e/tests_new/1_foundation/run_tests.py
 
 # Run with pytest (when fully migrated)
-pytest tests/e2e_new/1_foundation -v
+pytest e2e/tests_new/1_foundation -v
 ```
 
 ## Formation Structure

@@ -5,8 +5,8 @@
 
 if [ $# -eq 0 ]; then
     echo "Usage: $0 <test_file_path> [log_filename]"
-    echo "Example: $0 tests/e2e/my_test_name.py"
-    echo "Example: $0 tests/e2e/my_test_name.py my_test_name_v2.log"
+    echo "Example: $0 e2e/tests/my_test_name.py"
+    echo "Example: $0 e2e/tests/my_test_name.py my_test_name_v2.log"
     exit 1
 fi
 

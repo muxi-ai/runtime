@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test 7B1: Internal A2A Communication
-Migrated from: tests/e2e/7_orchestration/test_internal_a2a_communication.py
+Migrated from: e2e/tests/7_orchestration/test_internal_a2a_communication.py
 
 Tests actual internal Agent-to-Agent communication by sending a request that requires
 collaboration between agents (system info collection + Linear issue creation).

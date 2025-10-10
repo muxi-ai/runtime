@@ -1,14 +1,14 @@
 # E2E Test Structure Verification - All Fixed ✅
 
 ## Issue Found and Resolved
-- **Problem**: Some areas (5-12) were incorrectly nested in `tests/e2e_new/tests/e2e_new/`
+- **Problem**: Some areas (5-12) were incorrectly nested in `e2e/tests_new/e2e/tests_new/`
 - **Solution**: Moved all directories to correct location and merged content
 - **Status**: ✅ **FIXED**
 
 ## Current Structure (Correct)
 
 ```
-tests/e2e_new/
+e2e/tests_new/
 ├── 1_foundation/     ✅ 13 Python files, formations included
 ├── 2_memory/         ✅ 21 Python files, base test, formations
 ├── 3_multimodal/     ✅ 40 Python files, base test, formations
@@ -45,7 +45,7 @@ tests/e2e_new/
 
 ## What Was Fixed
 
-1. **Moved directories** from nested `tests/e2e_new/tests/e2e_new/` to correct location
+1. **Moved directories** from nested `e2e/tests_new/e2e/tests_new/` to correct location
 2. **Merged content** from duplicate directories (kept the versions with actual test logic)
 3. **Removed empty templates** that had generic names like `test_9_1.py`
 4. **Preserved formations** directories where they existed
@@ -57,13 +57,13 @@ All directories are now properly structured and ready for test execution:
 
 ```bash
 # Test any area
-python tests/e2e_new/1_foundation/test_1a1_formation_loading.py
-python tests/e2e_new/2_memory/test_2a1_basic_conversation_context.py
-python tests/e2e_new/3_multimodal/test_3a1.py
-python tests/e2e_new/4_mcp/test_test_4a1_variant_1_existing_dir.py
+python e2e/tests_new/1_foundation/test_1a1_formation_loading.py
+python e2e/tests_new/2_memory/test_2a1_basic_conversation_context.py
+python e2e/tests_new/3_multimodal/test_3a1.py
+python e2e/tests_new/4_mcp/test_test_4a1_variant_1_existing_dir.py
 
 # Or run with pytest
-pytest tests/e2e_new/ -v
+pytest e2e/tests_new/ -v
 ```
 
 ## Notes

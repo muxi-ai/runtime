@@ -106,7 +106,7 @@
 
 ## Infrastructure Created
 
-### Common Module (`tests/e2e_new/common/`)
+### Common Module (`e2e/tests_new/common/`)
 ✅ Complete infrastructure for all tests:
 - `BaseE2ETest` - Foundation class
 - `TestOutputFormatter` - Standardized output
@@ -169,24 +169,24 @@
 ### 1. Quick Validation
 ```bash
 # Test Area 1 (fully complete)
-cd tests/e2e_new/1_foundation
+cd e2e/tests_new/1_foundation
 python test_1a1_formation_loading.py
 
 # Test Area 2 (partially complete)
-cd tests/e2e_new/2_memory
+cd e2e/tests_new/2_memory
 python test_2a1_basic_conversation_context.py
 
 # Test Areas 9-12 (newly completed)
-cd tests/e2e_new/9_async
+cd e2e/tests_new/9_async
 python test_9a1_forced_async_mode.py
 
-cd tests/e2e_new/10_streaming
+cd e2e/tests_new/10_streaming
 python test_10a1_basic_streaming.py
 
-cd tests/e2e_new/11_formatting
+cd e2e/tests_new/11_formatting
 python test_11a1_response_formats.py
 
-cd tests/e2e_new/12_scheduling
+cd e2e/tests_new/12_scheduling
 python test_12a1_basic_scheduling.py
 ```
 
@@ -202,15 +202,15 @@ faissx.server run --port 45678
 
 ### 3. Complete Logic Migration
 For each templated test:
-1. Open original test in `tests/e2e/[area]/`
-2. Copy test logic to new test in `tests/e2e_new/[area]/`
+1. Open original test in `e2e/tests/[area]/`
+2. Copy test logic to new test in `e2e/tests_new/[area]/`
 3. Adapt to use new base class methods
 4. Test individually
 
 ### 4. CI/CD Integration
 ```yaml
 # Add to CI pipeline
-pytest tests/e2e_new/ -v --tb=short
+pytest e2e/tests_new/ -v --tb=short
 ```
 
 ## Migration Metrics

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test 7A3: Workflow Decomposition
-Migrated from: tests/e2e/7_orchestration/test_workflow_plan_only.py
+Migrated from: e2e/tests/7_orchestration/test_workflow_plan_only.py
 
 Tests that complex requests trigger workflow decomposition and execution.
 Note: Original test tried to test "plan + decline" but that requires human interaction.

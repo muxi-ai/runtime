@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test 7A4: Workflow Resilience
-Migrated from: tests/e2e/7_orchestration/test_workflow_resilience_integration.py
+Migrated from: e2e/tests/7_orchestration/test_workflow_resilience_integration.py
 Tests resilience features during workflow execution with error handling.
 """
 

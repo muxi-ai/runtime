@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test 7B2: SOP System Integration
-Migrated from: tests/e2e/7_orchestration/test_internal_sops.py
+Migrated from: e2e/tests/7_orchestration/test_internal_sops.py
 
 Tests that SOP system is properly initialized and available.
 Note: Actual SOP triggering is difficult to test reliably in automated tests

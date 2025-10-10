@@ -237,14 +237,14 @@ EMBEDDING_BATCH_SIZE=100
 pytest
 
 # Run specific test suites
-pytest tests/e2e/1_foundation/  # Foundation tests
-pytest tests/e2e/2_memory/  # Memory systems
-pytest tests/e2e/3_multimodal/  # Multimodal processing
-pytest tests/e2e/4_mcp/  # MCP integration
-pytest tests/e2e/5_artifacts/  # File generation
-pytest tests/e2e/6_knowledge/  # Knowledge system
-pytest tests/e2e/7_orchestration/  # Workflow orchestration (7A) and comprehensive A2A communication (7B)
-pytest tests/e2e/8_clarification/  # Intelligent clarification flows
+pytest e2e/tests/1_foundation/  # Foundation tests
+pytest e2e/tests/2_memory/  # Memory systems
+pytest e2e/tests/3_multimodal/  # Multimodal processing
+pytest e2e/tests/4_mcp/  # MCP integration
+pytest e2e/tests/5_artifacts/  # File generation
+pytest e2e/tests/6_knowledge/  # Knowledge system
+pytest e2e/tests/7_orchestration/  # Workflow orchestration (7A) and comprehensive A2A communication (7B)
+pytest e2e/tests/8_clarification/  # Intelligent clarification flows
 
 # Run with coverage
 pytest --cov=muxi --cov-report=html

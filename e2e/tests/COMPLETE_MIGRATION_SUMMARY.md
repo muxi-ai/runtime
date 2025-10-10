@@ -122,38 +122,38 @@
 ### Running Individual Areas
 ```bash
 # Area 1: Foundation
-pytest tests/e2e_new/1_foundation/ -v
+pytest e2e/tests_new/1_foundation/ -v
 
 # Area 2: Memory
-pytest tests/e2e_new/2_memory/ -v
+pytest e2e/tests_new/2_memory/ -v
 
 # Area 3: Multimodal
-pytest tests/e2e_new/3_multimodal/ -v
+pytest e2e/tests_new/3_multimodal/ -v
 
 # Area 4: MCP
-pytest tests/e2e_new/4_mcp/ -v
+pytest e2e/tests_new/4_mcp/ -v
 
 # Areas 5-12
-pytest tests/e2e_new/5_artifacts/ -v
-pytest tests/e2e_new/6_knowledge/ -v
-pytest tests/e2e_new/7_orchestration/ -v
-pytest tests/e2e_new/8_clarification/ -v
-pytest tests/e2e_new/9_async/ -v
-pytest tests/e2e_new/10_streaming/ -v
-pytest tests/e2e_new/11_formatting/ -v
-pytest tests/e2e_new/12_scheduling/ -v
+pytest e2e/tests_new/5_artifacts/ -v
+pytest e2e/tests_new/6_knowledge/ -v
+pytest e2e/tests_new/7_orchestration/ -v
+pytest e2e/tests_new/8_clarification/ -v
+pytest e2e/tests_new/9_async/ -v
+pytest e2e/tests_new/10_streaming/ -v
+pytest e2e/tests_new/11_formatting/ -v
+pytest e2e/tests_new/12_scheduling/ -v
 ```
 
 ### Running All Tests
 ```bash
 # Run entire suite
-pytest tests/e2e_new/ -v --tb=short
+pytest e2e/tests_new/ -v --tb=short
 
 # Run with parallelization
-pytest tests/e2e_new/ -n auto
+pytest e2e/tests_new/ -n auto
 
 # Run smoke tests only
-pytest tests/e2e_new/ -m smoke
+pytest e2e/tests_new/ -m smoke
 ```
 
 ### Service Dependencies

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test 7A2: Workflow Approval Flow
-Migrated from: tests/e2e/7_orchestration/test_7a1_workflow_with_approval.py
+Migrated from: e2e/tests/7_orchestration/test_7a1_workflow_with_approval.py
 
 Tests that overlord requests approval for high-complexity workflows.
 Uses formation-workflow-approval with plan_approval_threshold=5.0 and complexity_threshold=6.0.

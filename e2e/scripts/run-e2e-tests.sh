@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 # Configuration
 COMPOSE_FILE="docker-compose.e2e.yml"
 ENV_FILE=".env.e2e"
-TEST_DIR="tests/e2e_new"
+TEST_DIR="e2e/tests"
 WAIT_TIMEOUT=60
 
 # Parse command line arguments

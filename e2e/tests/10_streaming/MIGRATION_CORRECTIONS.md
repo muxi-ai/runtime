@@ -1,13 +1,13 @@
 # Migration Corrections - Area 10 Streaming Tests
 
-**Date**: October 8, 2025  
+**Date**: October 8, 2025
 **Issue**: Initial migration made tests too strict compared to originals
 
 ---
 
 ## Problem Discovered
 
-After reviewing the original tests from `tests/e2e/10_streaming/` and their report (`tests/reports/10a.md` from September 8, 2025), we discovered that:
+After reviewing the original tests from `e2e/tests/10_streaming/` and their report (`tests/reports/10a.md` from September 8, 2025), we discovered that:
 
 ### Original Tests Were LENIENT ✅
 The original test_10a1 that was **passing** in September had very simple success criteria:
@@ -101,7 +101,7 @@ if not result["success"]:
 
 ### 3. Timeout Adjustment
 
-**Before**: 30 seconds  
+**Before**: 30 seconds
 **After**: 60 seconds
 
 **Rationale**: Allow time for both meta-events AND content events if they come. But test will pass with just meta-events.

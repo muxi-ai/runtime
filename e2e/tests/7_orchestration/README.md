@@ -4,8 +4,8 @@
 
 This directory contains 7 tests covering orchestration, workflow decomposition, and agent-to-agent (A2A) communication functionality.
 
-**Status**: ✅ All 7 tests passing  
-**CI/CD Ready**: Yes (~7 minute total execution time)  
+**Status**: ✅ All 7 tests passing
+**CI/CD Ready**: Yes (~7 minute total execution time)
 **Last Updated**: October 7, 2024
 
 ---
@@ -21,12 +21,12 @@ These tests validate complete end-to-end functionality with real API calls:
    - Real web search API calls
    - Real Linear issue creation
    - Multi-agent coordination
-   
+
 2. **test_7a4_workflow_resilience.py** (~30 seconds)
    - Tests workflow resilience features
    - Error handling validation
    - Fast execution with simple prompt
-   
+
 3. **test_7b3_a2a_discovery.py** (~60 seconds)
    - Tests A2A agent discovery
    - Registry functionality
@@ -40,17 +40,17 @@ These tests validate system configuration and initialization without slow workfl
    - Validates workflow approval configuration
    - Checks approval/complexity thresholds
    - Basic communication test
-   
+
 5. **test_7a3_workflow_plan_only.py** (~10 seconds)
    - Validates workflow system configuration
    - Checks auto-decomposition settings
    - Basic communication test
-   
+
 6. **test_7b1_internal_a2a.py** (~10 seconds)
    - Validates A2A coordinator initialization
    - Checks A2A configuration
    - Basic communication test
-   
+
 7. **test_7b2_sop_workflow.py** (~10 seconds)
    - Validates SOP system initialization
    - Checks SOP loading and indexing
@@ -183,7 +183,7 @@ See `test_7b4_external_a2a_README.md` for implementation guide.
 
 ## Migration Notes
 
-These tests were migrated from `tests/e2e/7_orchestration/` to follow the new E2E test standardization plan.
+These tests were migrated from `e2e/tests/7_orchestration/` to follow the new E2E test standardization plan.
 
 **Key Changes**:
 - All tests send real messages via `overlord.chat()`
@@ -192,5 +192,5 @@ These tests were migrated from `tests/e2e/7_orchestration/` to follow the new E2
 - Configuration tests added to reduce CI/CD time
 - Full E2E coverage maintained via comprehensive tests
 
-**Migration Date**: October 6-7, 2024  
+**Migration Date**: October 6-7, 2024
 **Optimization Date**: October 7, 2024
