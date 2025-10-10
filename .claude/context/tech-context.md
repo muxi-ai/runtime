@@ -98,6 +98,7 @@ MUXI Runtime is built using modern Python technologies with a focus on productio
 - **HTTPX**: Async HTTP client with SSE support for external A2A communication
 - **WebSockets**: Real-time bidirectional communication
 - **FastAPI/Uvicorn**: API server components with OpenAPI spec compliance
+- **Jinja2**: Template rendering for webhook triggers with event data interpolation
 - **A2A Registry**: Agent discovery and registration system with service ID precedence
 
 #### Observability

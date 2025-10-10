@@ -58,6 +58,7 @@ MUXI Runtime is the low-level execution engine that powers AI agent formations i
 - **Observability & Monitoring**: Comprehensive event streaming system with 4 transport types (stdout, file, stream, trail), 10 event formatters (jsonl, text, msgpack, protobuf, datadog, splunk, elastic, grafana, newrelic, opentelemetry), health monitoring, and distributed tracing
 - **MCP Code Quality Enhancement**: Comprehensive code quality improvements including elimination of 150+ lines of duplicated code, enhanced error handling with logging, performance optimizations with caching, type safety improvements, JSON-RPC compliance, and proper subprocess safety patterns
 - **Task Scheduling System**: Natural language task scheduling for both recurring jobs ("check email every hour") and one-time tasks ("remind me tomorrow at 2pm") with intelligent detection, unified database architecture, proactive AI capabilities, security hardening, and enterprise features including audit trails and Formation API exposure
+- **Webhook Triggers**: Event-driven execution system that allows external systems to trigger formation actions through HTTP endpoints with template-based message generation from event data, supporting async/sync modes and complete request tracing
 
 ## 🏗️ Architecture Overview
 

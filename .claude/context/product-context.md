@@ -18,7 +18,7 @@ MUXI Runtime exists as the execution engine that transforms declarative AI syste
 
 5. **Knowledge Management**: Agent-specific domain knowledge with MarkItDown file processing, MD5-based smart caching, and 45% cache hit rates for efficient updates.
 
-6. **Production Features**: Built-in async operations, webhook delivery, comprehensive observability with 10 formatters, and secure credential management with encryption.
+6. **Production Features**: Built-in async operations, webhook delivery, comprehensive observability with 10 formatters, secure credential management with encryption, and webhook triggers for event-driven integrations.
 
 ### For End Users
 
@@ -54,7 +54,9 @@ MUXI Runtime exists as the execution engine that transforms declarative AI syste
 
 4. **Tool Usage**: Agents seamlessly integrate external tools via MCP servers to enhance their capabilities.
 
-5. **Context Retention**: The system maintains context across interactions, providing a coherent user experience.
+5. **Event-Driven Triggers**: External systems can trigger formation actions via HTTP webhooks with template-based message generation from event payloads.
+
+6. **Context Retention**: The system maintains context across interactions, providing a coherent user experience.
 
 ## User Experience Goals
 

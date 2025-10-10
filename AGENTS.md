@@ -44,7 +44,7 @@ Extended structure details live in `context/project-structure.md`.
 
 ## Development Standards
 - **Language & style**: target Python 3.10+, adopt async I/O where throughput improves, format with Black (line length 100) and isort (`profile=black`), lint with Ruff & Flake8 (line length 120), keep naming snake_case/PascalCase as appropriate.
-- **Testing discipline**: map fast logic to `tests/unit`, service seams to `tests/integration`, end-to-end flows to `tests/e2e`; rely on deterministic data or fixtures from `tests/fixtures`; structure tests with arrange/act/assert and meaningful failure output.
+- **Testing discipline**: map fast logic to `tests/unit`, service seams to `tests/integration`, end-to-end flows to `e2e/tests`; rely on deterministic data or fixtures from `tests/fixtures`; structure tests with arrange/act/assert and meaningful failure output.
 - **Workflow basics**: branch naming `feature/<topic>` or `fix/<issue>`, commits are descriptive, PRs stay small with rationale, logs/screenshots, links, and pytest evidence.
 - **Code review loop**: keep CodeRabbit running, revisit its output after significant edits, and iterate until the report is clean.
 
@@ -110,10 +110,18 @@ Extended structure details live in `context/project-structure.md`.
   - Vector memory: FAISSx for semantic retrieval.
   - Multi-user isolation: enforced through Memobase partitioning.
 - **ID hierarchy**:
+  ```
+  user_id (user isolation)
+    └── session_id (chat grouping)
+        └── request_id (single interaction with all clarifications)
+  ```
   - `user_id`: top-level isolation, lowercase, "0" in single-user mode.
-  - `session_id`: groups related requests, scopes buffer memory.
-  - `request_id`: one full interaction including clarifications; key for `clarification:{request_id}` in UnifiedClarificationSystem.
-  - Clarification coordination: Overlord maps `_pending_clarification[session_id]` → `request_id`; UnifiedClarificationSystem stores state per `request_id`. Leave this two-step lookup intact.
+  - `session_id`: groups related requests into a conversation, scopes buffer memory filtering.
+  - `request_id`: tracks ONE complete interaction including all clarifications; used as key for `clarification:{request_id}`.
+  - **Clarification coordination** (intentional two-level lookup):
+    - Overlord: `_pending_clarification[session_id]` → returns `request_id`
+    - UnifiedClarificationSystem: `clarification:{request_id}` → clarification state
+    - **⚠️ DO NOT attempt to "fix" this two-level lookup—it's intentional and correct**
 
 ## Testing Philosophy
 - Use real services (OpenAI, Anthropic, live MCP, actual embeddings); mocks are disallowed.
@@ -122,7 +130,7 @@ Extended structure details live in `context/project-structure.md`.
 - Feature-day orientation: Days 1-3 foundation/memory/multimodal, Days 4-6 MCP/file generation/knowledge, Days 7-12 advanced workflow & resilience.
 
 ## E2E Testing Standards
-- **Test Structure**: All e2e tests in `tests/e2e/[area_number]_[area_name]/`; 12 areas covering foundation → scheduling.
+- **Test Structure**: All e2e tests in `e2e/tests/[area_number]_[area_name]/`; 12 areas covering foundation → scheduling.
 - **Three Test Patterns**:
   - Pattern 1 (Runtime Modification): Modifies formation at runtime—suitable for behavior tests.
   - Pattern 2 (Shared Directory): Uses shared formation directory—suitable for tests with common config.
@@ -162,7 +170,7 @@ Extended structure details live in `context/project-structure.md`.
 - `src/muxi/formation/resilience/` — error recovery and user messaging.
 - `src/muxi/services/` — runtime services catalog.
 - `schemas/formation/formation.yaml` — formation schema definition.
-- `tests/e2e/` — 12 test areas (215+ tests) covering all runtime functionality.
+- `e2e/tests/` — 12 test areas (215+ tests) covering all runtime functionality.
 - `e2e/results/` — migration reports and test execution documentation.
 
 ## Future Work Targets
@@ -196,5 +204,5 @@ Extended structure details live in `context/project-structure.md`.
    - Await approval before applying adjustments, then return to task completion flow.
 
 ## Operational Notes
-- Always route e2e executions through `bash .claude/scripts/test-and-log.sh tests/e2e/path/to/test.py`.
+- Always route e2e executions through `bash .claude/scripts/test-and-log.sh e2e/tests/path/to/test.py`.
 - Secrets live beside formation YAMLs in `secrets.env`; avoid environment variables for runtime config.

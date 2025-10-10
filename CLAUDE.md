@@ -190,7 +190,7 @@ See AGENTS.md "Hard Rules Checklist" - these are non-negotiable.
 See AGENTS.md "Reflection Protocol" section for the self-improvement process.
 
 ## Operational Notes
-- Always run e2e tests using: `bash .claude/scripts/test-and-log.sh tests/e2e/path/to/test.py`
+- Always run e2e tests using: `bash .claude/scripts/test-and-log.sh e2e/tests/path/to/test.py`
 - MUXI uses `secrets.env` files beside formation YAMLs (never environment variables)
 - See AGENTS.md "Operational Notes" for more details
 - We do not use environment variables. Everything we need is/should be confined to secrets
