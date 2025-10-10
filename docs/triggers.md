@@ -1,59 +1,122 @@
 # Trigger System
 
-The MUXI trigger system provides a webhook-like interface for external systems to initiate formation actions with template-based message generation.
+**Philosophy**: Triggers are requests. They use the same patterns, responses, and IDs as any other request in MUXI.
 
-## Overview
+The trigger system provides a webhook-friendly interface for external systems to initiate formation actions through template-based message generation.
 
-Triggers allow you to:
-- Accept external event data via HTTP POST
-- Transform event data using templates with `${{ data.* }}` syntax
-- Process events asynchronously or synchronously
-- Integrate with external systems (GitHub, Linear, monitoring tools, etc.)
+## Core Concept
 
-## Architecture
+Triggers = **Webhook-Friendly Requests**
 
 ```
-External System → Trigger Endpoint → Template Rendering → Formation Chat
-     (JSON)           (HTTP POST)         (${{ data.* }})       (Message)
+Webhook JSON → Template Rendering → Chat Message → Standard Request Processing
 ```
 
-## API Endpoints
+The only difference between triggers and regular requests is **where the message comes from**:
+- Regular `/chat`: User provides message directly
+- Triggers: Template + data → rendered message
+
+Everything else (authentication, processing, responses, IDs) is identical.
+
+## Quick Start
+
+### 1. Create a Trigger Template
+
+Create `formations/my-formation/triggers/github-issue.md`:
+
+```markdown
+New GitHub issue from ${{ data.repository }}:
+
+**Issue #${{ data.issue.number }}**: ${{ data.issue.title }}
+**Author**: ${{ data.issue.author }}
+
+Please analyze and suggest next steps.
+```
+
+### 2. Send a Trigger Request
+
+```bash
+curl -X POST http://localhost:8271/v1/formations/my-formation/triggers/github-issue \
+  -H "X-Muxi-Client-Key: YOUR_CLIENT_KEY" \
+  -H "X-Muxi-User-Id: webhook-user" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": {
+      "repository": "muxi/runtime",
+      "issue": {
+        "number": 123,
+        "title": "Bug in login flow",
+        "author": "alice"
+      }
+    },
+    "use_async": true
+  }'
+```
+
+### 3. Receive Standard API Response
+
+```json
+{
+  "object": "request",
+  "timestamp": 1706616000000,
+  "type": "request.processing",
+  "request": {
+    "id": "req_abc123",
+    "idempotency_key": null
+  },
+  "success": true,
+  "error": null,
+  "data": {
+    "status": "processing"
+  }
+}
+```
+
+## API Reference
 
 ### Execute Trigger
 
 ```http
 POST /v1/formations/{formation_id}/triggers/{trigger_name}
-X-Client-Key: YOUR_CLIENT_KEY_HERE
-Content-Type: application/json
+```
 
+**Headers** (Required):
+- `X-Muxi-Client-Key`: Client API key
+- `X-Muxi-User-Id`: User ID (optional, defaults to "0")
+
+**Request Body**:
+```json
 {
   "data": {
-    "key1": "value1",
-    "nested": {
-      "key2": "value2"
-    }
+    // Event data for template rendering
   },
-  "user_id": "0",
-  "session_id": "optional-session",
-  "use_async": true
+  "session_id": "optional-session-id",
+  "use_async": true  // or false for synchronous
 }
 ```
 
-**Response (Async)**:
+**Response (Async - default)**:
 ```json
 {
-  "status": "queued",
-  "trigger_id": "trigger_abc123",
-  "job_id": "job_def456"
+  "object": "request",
+  "type": "request.processing",
+  "request": {"id": "req_abc123"},
+  "success": true,
+  "data": {"status": "processing"}
 }
 ```
 
 **Response (Sync)**:
 ```json
 {
-  "status": "completed",
-  "trigger_id": "trigger_abc123",
-  "message": "Rendered message..."
+  "object": "request",
+  "type": "request.completed",
+  "request": {"id": "req_abc123"},
+  "success": true,
+  "data": {
+    "status": "completed",
+    "response": "LLM's full response text here..."
+  }
 }
 ```
 
@@ -61,185 +124,48 @@ Content-Type: application/json
 
 ```http
 GET /v1/formations/{formation_id}/triggers
-X-Client-Key: YOUR_CLIENT_KEY_HERE
 ```
 
 **Response**:
 ```json
 {
-  "formation_id": "my-formation",
-  "triggers": ["github-issue", "linear-ticket", "deployment-notification"],
-  "count": 3
+  "object": "list",
+  "type": "list.retrieved",
+  "request": {"id": "req_xyz789"},
+  "success": true,
+  "data": {
+    "formation_id": "my-formation",
+    "triggers": ["github-issue", "linear-ticket"],
+    "count": 2
+  }
 }
 ```
 
 ## Template Syntax
 
-Triggers use markdown templates with `${{ data.* }}` placeholders for data substitution.
+Templates use `${{ data.* }}` for data substitution:
 
-### Simple Substitution
-
+### Simple Access
 ```markdown
 Hello ${{ data.name }}!
 ```
+Data: `{"name": "World"}` → Result: `Hello World!`
 
-With data: `{"name": "World"}`  
-Result: `Hello World!`
-
-### Nested Data Access
-
+### Nested Access
 ```markdown
 Issue #${{ data.issue.number }}: ${{ data.issue.title }}
-Author: ${{ data.issue.author }}
 ```
+Data: `{"issue": {"number": 123, "title": "Bug"}}` → Result: `Issue #123: Bug`
 
-With data:
-```json
-{
-  "issue": {
-    "number": 123,
-    "title": "Bug fix",
-    "author": "alice"
-  }
-}
-```
-
-Result:
-```
-Issue #123: Bug fix
-Author: alice
-```
-
-### Multi-level Nesting
-
+### Multi-Level Nesting
 ```markdown
-User: ${{ data.user.profile.name }} (${{ data.user.profile.email }})
+User: ${{ data.user.profile.name }}
 ```
-
-Template syntax supports arbitrary nesting depth using dot notation.
-
-## Creating Triggers
-
-1. **Create trigger directory** in your formation:
-   ```bash
-   mkdir -p formations/my-formation/triggers
-   ```
-
-2. **Create trigger template** (e.g., `github-issue.md`):
-   ```markdown
-   New GitHub issue from ${{ data.repository }}:
-   
-   **Issue #${{ data.issue.number }}**: ${{ data.issue.title }}
-   
-   **Author**: ${{ data.issue.author }}
-   **State**: ${{ data.issue.state }}
-   **Labels**: ${{ data.issue.labels }}
-   
-   **Description**:
-   ${{ data.issue.body }}
-   
-   Please analyze this issue and provide:
-   1. A summary of the problem
-   2. Potential impact assessment
-   3. Suggested priority level
-   4. Relevant code areas to investigate
-   ```
-
-3. **Configure webhook** in external system:
-   - URL: `https://your-server.com/v1/formations/my-formation/triggers/github-issue`
-   - Method: `POST`
-   - Headers: `X-Client-Key: YOUR_CLIENT_KEY_HERE`
-   - Content-Type: `application/json`
-
-## Example Templates
-
-### GitHub Issue Trigger
-
-**File**: `formations/my-formation/triggers/github-issue.md`
-
-```markdown
-New GitHub issue from ${{ data.repository }}:
-
-**Issue #${{ data.issue.number }}**: ${{ data.issue.title }}
-
-**Author**: ${{ data.issue.author }}
-**State**: ${{ data.issue.state }}
-**Labels**: ${{ data.issue.labels }}
-
-**Description**:
-${{ data.issue.body }}
-
-Please analyze this issue and suggest next steps.
-```
-
-**Usage**:
-```bash
-curl -X POST https://your-server.com/v1/formations/my-formation/triggers/github-issue \
-  -H "X-Client-Key: YOUR_CLIENT_KEY_HERE" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "data": {
-      "repository": "muxi/runtime",
-      "issue": {
-        "number": 123,
-        "title": "Add trigger system",
-        "author": "alice",
-        "state": "open",
-        "labels": "enhancement, api",
-        "body": "We need a trigger system for webhooks..."
-      }
-    }
-  }'
-```
-
-### Linear Ticket Trigger
-
-**File**: `formations/my-formation/triggers/linear-ticket.md`
-
-```markdown
-Linear ticket update from ${{ data.team }}:
-
-**Ticket**: ${{ data.ticket.identifier }}
-**Title**: ${{ data.ticket.title }}
-**Status**: ${{ data.ticket.status }}
-**Priority**: ${{ data.ticket.priority }}
-**Assignee**: ${{ data.ticket.assignee }}
-
-**Description**:
-${{ data.ticket.description }}
-
-**Action**: ${{ data.action }}
-
-Please review this ticket update and provide recommended next steps.
-```
-
-### Deployment Notification Trigger
-
-**File**: `formations/my-formation/triggers/deployment-notification.md`
-
-```markdown
-Deployment notification for ${{ data.service }}:
-
-**Environment**: ${{ data.environment }}
-**Version**: ${{ data.version }}
-**Status**: ${{ data.status }}
-**Deployed by**: ${{ data.deployer }}
-**Timestamp**: ${{ data.timestamp }}
-
-**Changes**:
-${{ data.changes }}
-
-**Health Checks**:
-- API Status: ${{ data.health.api }}
-- Database: ${{ data.health.database }}
-- Cache: ${{ data.health.cache }}
-
-Please monitor this deployment and report any anomalies.
-```
+Data: `{"user": {"profile": {"name": "Alice"}}}` → Result: `User: Alice`
 
 ## Processing Modes
 
-### Async Mode (Default)
+### Async Mode (Default, Recommended for Webhooks)
 
 ```json
 {
@@ -248,12 +174,12 @@ Please monitor this deployment and report any anomalies.
 }
 ```
 
-- Returns immediately with `job_id`
-- Processing happens in background
-- No blocking on caller
-- Recommended for webhook integrations
+- Returns immediately with `request_id`
+- Processes in background
+- Non-blocking for webhook caller
+- **Best for webhook integrations**
 
-### Sync Mode
+### Sync Mode (For Interactive Use)
 
 ```json
 {
@@ -262,166 +188,294 @@ Please monitor this deployment and report any anomalies.
 }
 ```
 
-- Waits for formation to process message
-- Returns rendered message
+- Waits for LLM completion
+- Returns full response text
 - Blocks until complete
-- Use for interactive or testing scenarios
+- **Use for testing or interactive scenarios**
 
-## Error Handling
+Note: Triggers **never stream** - they return complete responses.
 
-### Template Rendering Errors
+## Example Templates
 
-**Missing Key**:
-```json
-{
-  "error": "Template rendering failed: Data key 'data.missing' not found. Available keys: ['existing']",
-  "type": "ValueError"
-}
+### GitHub Issue
+
+**File**: `triggers/github-issue.md`
+```markdown
+New GitHub issue from ${{ data.repository }}:
+
+**Issue #${{ data.issue.number }}**: ${{ data.issue.title }}
+**Author**: ${{ data.issue.author }}
+**State**: ${{ data.issue.state }}
+**Labels**: ${{ data.issue.labels }}
+
+**Description**:
+${{ data.issue.body }}
+
+Please analyze this issue and provide:
+1. A summary of the problem
+2. Potential impact assessment
+3. Suggested priority level
+4. Relevant code areas to investigate
 ```
 
-**Non-dict Access**:
-```json
-{
-  "error": "Template rendering failed: Cannot access 'field' in non-dict value at 'data.name.field'",
-  "type": "ValueError"
-}
-```
-
-### System Errors
-
-**Trigger Not Found**:
-```json
-{
-  "error": "Trigger template 'unknown' not found at: /path/to/triggers/unknown.md"
-}
-```
-
-**Overlord Unavailable**:
-```json
-{
-  "error": "Overlord not available"
-}
-```
-
-## Security
-
-### Authentication
-
-All trigger endpoints require client key authentication:
-```http
-X-Client-Key: YOUR_CLIENT_KEY_HERE
-```
-
-### Formation Isolation
-
-Triggers are formation-scoped:
-- Each formation has its own `triggers/` directory
-- Triggers cannot access other formations
-- Formation ID must match the request
-
-### Input Validation
-
-- Template rendering validates data structure
-- Missing keys result in clear error messages
-- No code execution - only string substitution
-
-## Best Practices
-
-1. **Template Design**:
-   - Keep templates focused and specific
-   - Provide clear context in rendered messages
-   - Include actionable instructions for the formation
-
-2. **Data Structure**:
-   - Use nested objects to organize related data
-   - Keep key names descriptive and consistent
-   - Document expected data shape for webhook integrations
-
-3. **Error Handling**:
-   - Test templates with sample data before deploying
-   - Monitor trigger execution logs via observability
-   - Set up alerts for failed trigger executions
-
-4. **Performance**:
-   - Use async mode for webhook integrations
-   - Batch related events if possible
-   - Monitor formation load and scale as needed
-
-5. **Naming**:
-   - Use descriptive trigger names (e.g., `github-issue-opened`)
-   - Follow consistent naming conventions
-   - Document trigger purpose and expected data
-
-## Observability
-
-All trigger executions emit observability events:
-
-```python
-# Trigger received
-event_type: ConversationEvents.REQUEST_RECEIVED
-data: {
-    "trigger_name": "github-issue",
-    "trigger_id": "trigger_abc123",
-    "formation_id": "my-formation",
-    ...
-}
-
-# Trigger completed
-event_type: ConversationEvents.RESPONSE_COMPLETED
-data: {
-    "trigger_id": "trigger_abc123",
-    ...
-}
-
-# Trigger failed
-event_type: ConversationEvents.REQUEST_FAILED
-data: {
-    "trigger_id": "trigger_abc123",
-    "error": "...",
-    "error_type": "ValueError"
-}
-```
-
-## Testing
-
-### Manual Testing
-
+**Request**:
 ```bash
-# Test with curl
-curl -X POST http://localhost:8271/v1/formations/test-formation/triggers/test-trigger \
-  -H "X-Client-Key: YOUR_CLIENT_KEY_HERE" \
+curl -X POST http://localhost:8271/v1/formations/my-formation/triggers/github-issue \
+  -H "X-Muxi-Client-Key: YOUR_CLIENT_KEY" \
+  -H "X-Muxi-User-Id: github-webhook" \
   -H "Content-Type: application/json" \
   -d '{
     "data": {
-      "test": "value"
-    },
-    "use_async": false
+      "repository": "muxi/runtime",
+      "issue": {
+        "number": 456,
+        "title": "Memory leak in overlord",
+        "author": "bob",
+        "state": "open",
+        "labels": "bug, critical",
+        "body": "Observing gradual memory increase over 24 hours..."
+      }
+    }
   }'
 ```
 
-### Unit Testing
+### Linear Ticket
 
-See `tests/unit/test_trigger_rendering.py` for template rendering tests.
+**File**: `triggers/linear-ticket.md`
+```markdown
+Linear ticket update from ${{ data.team }}:
 
-### Integration Testing
+**Ticket**: ${{ data.ticket.identifier }}
+**Title**: ${{ data.ticket.title }}
+**Status**: ${{ data.ticket.status }}
+**Priority**: ${{ data.ticket.priority }}
 
-See `tests/e2e/` for full trigger flow tests.
+**Action**: ${{ data.action }}
+
+Please review and suggest next steps.
+```
+
+### Deployment Notification
+
+**File**: `triggers/deployment-notification.md`
+```markdown
+Deployment to ${{ data.environment }}:
+
+**Service**: ${{ data.service }}
+**Version**: ${{ data.version }}
+**Status**: ${{ data.status }}
+**Deployed by**: ${{ data.deployer }}
+
+**Changes**: ${{ data.changes }}
+
+**Health Checks**:
+- API: ${{ data.health.api }}
+- Database: ${{ data.health.database }}
+
+Please monitor and report any anomalies.
+```
+
+## Error Handling
+
+Triggers use standard API error responses:
+
+### Missing Template Data
+
+```json
+{
+  "object": "error",
+  "type": "error.validation",
+  "request": {"id": "req_err123"},
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Template rendering failed: Data key 'data.issue.number' not found. Available keys: ['title', 'author']"
+  }
+}
+```
+
+### Trigger Not Found
+
+```json
+{
+  "object": "error",
+  "type": "error.not_found",
+  "request": {"id": "req_err456"},
+  "success": false,
+  "error": {
+    "code": "RESOURCE_NOT_FOUND",
+    "message": "Trigger template 'unknown' not found at: /path/to/triggers/unknown.md"
+  }
+}
+```
+
+## Authentication
+
+All trigger endpoints require:
+- **`X-Muxi-Client-Key`**: Client API key (required)
+- **`X-Muxi-User-Id`**: User ID for multi-user isolation (optional, defaults to "0")
+
+## Formation Isolation
+
+- Triggers are formation-scoped
+- Each formation has its own `triggers/` directory
+- No cross-formation access
+- Formation ID validated on every request
+
+## Best Practices
+
+### 1. Template Design
+- Keep templates focused and specific
+- Provide clear context for the LLM
+- Include actionable instructions
+- Use nested data for organization
+
+### 2. Async for Webhooks
+```json
+{"use_async": true}  // ✅ Best for webhooks
+```
+Webhooks expect fast acknowledgment, not long-lived connections.
+
+### 3. Naming Conventions
+- Use descriptive names: `github-issue-opened` not `gh-1`
+- Follow consistent patterns across triggers
+- Document expected data structure
+
+### 4. Error Monitoring
+- Monitor trigger executions via observability
+- Set up alerts for failed triggers
+- Log webhook payloads for debugging
+
+### 5. Testing
+```bash
+# Test with sample data before deploying webhook
+curl -X POST .../triggers/my-trigger \
+  -H "X-Muxi-Client-Key: test_key" \
+  -d '{"data": {...}, "use_async": false}'  # Sync for testing
+```
+
+## Observability
+
+All trigger executions emit standard request events:
+
+```python
+# Request received
+event_type: ConversationEvents.REQUEST_RECEIVED
+data: {"request_id": "req_abc123", "trigger_name": "github-issue", ...}
+
+# Request completed
+event_type: ConversationEvents.RESPONSE_COMPLETED
+data: {"request_id": "req_abc123", ...}
+
+# Request failed
+event_type: ConversationEvents.REQUEST_FAILED
+data: {"request_id": "req_abc123", "error": "...", ...}
+```
+
+Track triggers like any other request using `request_id`.
+
+## Webhook Integration Examples
+
+### GitHub Webhook
+
+1. **Create trigger template** in your formation
+2. **Configure GitHub webhook**:
+   - URL: `https://your-muxi.com/v1/formations/my-formation/triggers/github-issue`
+   - Content type: `application/json`
+   - Secret: Use for HMAC validation (implement in middleware)
+   - Events: Issues, Pull requests, etc.
+
+3. **Transform GitHub payload** (optional middleware):
+```javascript
+// Middleware to transform GitHub webhook to trigger format
+app.post('/github-webhook', (req, res) => {
+  const triggerPayload = {
+    data: {
+      repository: req.body.repository.full_name,
+      issue: {
+        number: req.body.issue.number,
+        title: req.body.issue.title,
+        author: req.body.issue.user.login,
+        state: req.body.issue.state,
+        body: req.body.issue.body
+      }
+    }
+  };
+  
+  // Forward to MUXI trigger
+  fetch('http://localhost:8271/v1/formations/my-formation/triggers/github-issue', {
+    method: 'POST',
+    headers: {
+      'X-Muxi-Client-Key': process.env.MUXI_CLIENT_KEY,
+      'X-Muxi-User-Id': 'github-webhook',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(triggerPayload)
+  });
+  
+  res.status(200).send('OK');
+});
+```
+
+### Linear Webhook
+
+Similar pattern - transform Linear webhook payload to match your trigger template's expected data structure.
 
 ## Limitations
 
-- Templates use simple regex-based substitution (no Jinja2 features)
-- No conditional logic in templates
-- No loops or iteration over lists
+- Templates use simple regex substitution (no Jinja2)
+- No conditional logic in templates (LLM handles that)
+- No loops or iteration
 - Formation-scoped only (not global)
-- Requires client key authentication
 
-## Future Enhancements
+## Why No Jinja2?
 
-Potential future additions:
-- Jinja2 template engine support
-- Conditional rendering
-- Loop support for lists
-- Template validation tooling
-- Trigger execution history API
-- Rate limiting per trigger
-- Trigger-specific permissions
+Triggers are for **data transformation**, not logic:
+- Simple patterns are more secure
+- Templates stay declarative
+- LLM handles the "intelligence" part
+- Easier to debug and maintain
+
+If you need conditional logic, handle it in the LLM response, not the template.
+
+## Comparison with /chat
+
+| Feature | /chat | /triggers/{name} |
+|---------|-------|------------------|
+| Message source | Request body | Template + data |
+| Response type | SSE stream (sync) or job (async) | Complete response (no streaming) |
+| User ID | Header or body | Header only |
+| Use case | Interactive chat | Webhook integration |
+| Authentication | Same (X-Muxi-Client-Key) | Same |
+| Response format | Standard API envelope | Standard API envelope |
+| Request ID | Standard (req_*) | Standard (req_*) |
+
+Both are requests - triggers are just webhook-optimized.
+
+## FAQ
+
+**Q: Why don't triggers stream responses?**
+A: Webhooks expect quick acknowledgment, not long-lived SSE connections. Use async mode for webhooks.
+
+**Q: Can I use triggers for interactive chat?**
+A: You can, but `/chat` is better suited. Triggers are optimized for webhooks.
+
+**Q: Do triggers have different rate limits?**
+A: No - triggers are requests. They use the same rate limiting as `/chat`.
+
+**Q: Can I get the trigger execution status later?**
+A: Yes - use the `request_id` with request status endpoints (when implemented).
+
+**Q: Why use X-Muxi-User-Id header instead of body?**
+A: Consistency - all MUXI API endpoints use this pattern. Keeps request bodies focused on domain data.
+
+## Summary
+
+Triggers = Webhook-friendly requests that:
+1. Render templates with event data
+2. Process like any other request
+3. Return standard API responses
+4. Use the same authentication and IDs
+5. Appear in the same observability logs
+
+**Remember**: If you're doing something special for triggers, you're probably doing it wrong. Triggers should use the same code paths as regular requests.
