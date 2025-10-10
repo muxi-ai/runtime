@@ -135,6 +135,7 @@ class ChatOrchestrator:
         agent_name: Optional[str] = None,
         user_id: Any = None,
         session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
         use_async: Optional[bool] = None,
         webhook_url: Optional[str] = None,
         threshold_seconds: Optional[float] = None,
@@ -154,6 +155,9 @@ class ChatOrchestrator:
             agent_name: Optional specific agent to use. If None, overlord will
                 select the most appropriate agent for the message.
             user_id: Optional user ID for multi-user support and context.
+            session_id: Optional session ID for conversation grouping.
+            request_id: Optional request ID for tracing/correlation. If not provided,
+                a new one will be generated automatically.
             use_async: Force async behavior. None=intelligent decision, True=force async,
                 False=force sync. When None, uses time estimation to decide.
             webhook_url: Optional webhook URL for completion notification. Defaults
@@ -200,7 +204,11 @@ class ChatOrchestrator:
         if session_id:
             pending_clarification = await self.overlord._get_pending_clarification(session_id)
 
-        if pending_clarification:
+        # Determine request_id: use provided -> clarification -> generate new
+        if request_id:
+            # Use provided request_id (e.g., from triggers or external callers)
+            pass
+        elif pending_clarification:
             # Reuse the existing request_id for multi-turn clarification
             stored_request_id = pending_clarification.get("request_id")
             if stored_request_id:

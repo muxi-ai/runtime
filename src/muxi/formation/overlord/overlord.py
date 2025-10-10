@@ -97,7 +97,7 @@ from .clarification import UnifiedClarificationSystem
 # ClarificationHandler removed - using UnifiedClarificationSystem
 from ...services import observability, streaming
 from ...datatypes.response import MuxiResponse
-from ...datatypes.clarification import ClarificationRequest, ClarificationResponse, RequestType
+from ...datatypes.clarification import ClarificationRequest, ClarificationResponse
 from ...services.mcp.service import MCPService
 from ...services.memory.working import WorkingMemory
 from ...services.memory.long_term import LongTermMemory
@@ -1517,30 +1517,30 @@ class Overlord:
     async def _load_muxi_default_agents(self) -> None:
         """
         Load default agents that ship with MUXI (e.g., generalist fallback).
-        
+
         These agents are loaded from src/muxi/formation/agents/ directory.
         User-defined agents always take precedence - if a user defines an agent
         with the same ID, the MUXI default is skipped.
         """
         from pathlib import Path
         import yaml
-        
+
         # Find MUXI's default agents directory
         muxi_agents_dir = Path(__file__).parent.parent / "agents"
-        
+
         if not muxi_agents_dir.exists():
             return
-        
+
         # Load all YAML files from the directory
         for agent_file in muxi_agents_dir.glob("*.yaml"):
             try:
                 with open(agent_file, 'r') as f:
                     agent_config = yaml.safe_load(f)
-                
+
                 agent_id = agent_config.get("id")
                 if not agent_id:
                     continue
-                
+
                 # Skip if user already defined this agent
                 if agent_id in self.agents:
                     observability.observe(
@@ -1550,11 +1550,11 @@ class Overlord:
                         description=f"User-defined agent '{agent_id}' takes precedence over MUXI default"
                     )
                     continue
-                
+
                 # Create agent from config
                 agent = await self._create_agent_from_config(agent_config)
                 self.agents[agent_id] = agent
-                
+
                 # Store agent metadata
                 self.agent_descriptions[agent_id] = agent_config.get("description", "")
                 self.agent_metadata[agent_id] = {
@@ -1563,14 +1563,14 @@ class Overlord:
                     "specialties": agent_config.get("specialties", []),
                     "system_message": agent_config.get("system_message", ""),
                 }
-                
+
                 observability.observe(
                     event_type=observability.SystemEvents.AGENT_INITIALIZED,
                     level=observability.EventLevel.INFO,
                     data={"agent_id": agent_id, "source": "muxi-default"},
                     description=f"Loaded MUXI default agent: {agent_id}"
                 )
-                
+
             except Exception as e:
                 # Log warning but continue - don't fail formation load
                 observability.observe(
@@ -1584,7 +1584,7 @@ class Overlord:
     async def _set_default_agent_if_needed(self) -> None:
         """
         Set default agent ID if not already configured.
-        
+
         Priority:
         1. User-configured default agent (from formation config with default: true)
         2. MUXI generalist agent (if loaded)
@@ -1593,7 +1593,7 @@ class Overlord:
         # Skip if already set by user configuration
         if hasattr(self, 'default_agent_id') and self.default_agent_id:
             return
-        
+
         # Check if any user agent has default: true
         # (This would be set during agent loading from formation config)
         agents_config = self._configured_services.get("agents_config", [])
@@ -1601,7 +1601,7 @@ class Overlord:
             if agent_config.get("default", False):
                 # User specified a default agent, don't override
                 return
-        
+
         # Set muxi-generalist as default if it was loaded
         if "muxi-generalist" in self.agents:
             self.default_agent_id = "muxi-generalist"
@@ -4806,6 +4806,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         agent_name: Optional[str] = None,
         user_id: Any = None,
         session_id: Optional[str] = None,  # Optional session ID for tracking
+        request_id: Optional[str] = None,  # Optional request ID for tracing
         use_async: Optional[bool] = None,  # None=intelligent, True=force async, False=force sync
         webhook_url: Optional[str] = None,  # Optional webhook URL
         threshold_seconds: Optional[float] = None,  # Optional threshold override
@@ -4825,6 +4826,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             agent_name: Optional specific agent to use. If None, overlord will
                 select the most appropriate agent for the message.
             user_id: Optional user ID for multi-user support and context.
+            session_id: Optional session ID for conversation grouping.
+            request_id: Optional request ID for tracing/correlation. If not provided,
+                a new one will be generated automatically.
             use_async: Force async behavior. None=intelligent decision, True=force async,
                 False=force sync. When None, uses time estimation to decide.
             webhook_url: Optional webhook URL for completion notification. Defaults
@@ -4880,6 +4884,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             agent_name=agent_name,
             user_id=user_id,
             session_id=session_id,
+            request_id=request_id,
             use_async=use_async,
             webhook_url=webhook_url,
             threshold_seconds=threshold_seconds,
@@ -6561,7 +6566,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             },
                             description=f"User explicitly requested SOP: {sop_id}",
                         )
-                        
+
                         # Direct SOP invocation - bypass complexity analysis
                         return await self._process_with_workflow(
                             message=message,
@@ -6587,9 +6592,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             },
                             description=f"Explicit SOP request '{sop_id}' could not be fulfilled",
                         )
-                        
+
                         # Return clear error message to user
-                        from ...datatypes.overlord import MuxiResponse
                         if available_sops:
                             available_list = ", ".join(f"'{s}'" for s in available_sops)
                             error_msg = (
@@ -6603,7 +6607,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                 f"This formation has no SOPs configured. "
                                 f"Please add SOPs to your formation or check your request."
                             )
-                        
+
                         return MuxiResponse(
                             role="assistant",
                             content=error_msg,

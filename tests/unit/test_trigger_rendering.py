@@ -94,10 +94,10 @@ Status: ${{ data.status }}
         """Test that missing keys raise ValueError with helpful message."""
         template = "Hello ${{ data.missing }}!"
         data = {"name": "World"}
-        
+
         with pytest.raises(ValueError) as exc_info:
             render_trigger_template(template, data)
-        
+
         assert "data.missing" in str(exc_info.value)
         assert "not found" in str(exc_info.value).lower()
 
@@ -105,20 +105,20 @@ Status: ${{ data.status }}
         """Test that missing nested keys raise ValueError."""
         template = "Value: ${{ data.user.missing }}"
         data = {"user": {"name": "Alice"}}
-        
+
         with pytest.raises(ValueError) as exc_info:
             render_trigger_template(template, data)
-        
+
         assert "data.user.missing" in str(exc_info.value)
 
     def test_non_dict_access_error(self):
         """Test that accessing nested keys on non-dict values raises error."""
         template = "Value: ${{ data.name.first }}"
         data = {"name": "Alice"}  # name is string, not dict
-        
+
         with pytest.raises(ValueError) as exc_info:
             render_trigger_template(template, data)
-        
+
         assert "non-dict" in str(exc_info.value).lower()
 
     def test_empty_template(self):
@@ -150,7 +150,7 @@ Status: ${{ data.status }}
 
 **Author**: ${{ data.issue.author }}
 **State**: ${{ data.issue.state }}"""
-        
+
         data = {
             "repository": "muxi/runtime",
             "issue": {
@@ -160,7 +160,7 @@ Status: ${{ data.status }}
                 "state": "open"
             }
         }
-        
+
         result = render_trigger_template(template, data)
         assert "New GitHub issue from muxi/runtime" in result
         assert "Issue #123" in result
@@ -173,7 +173,7 @@ Status: ${{ data.status }}
         template = """Linear ticket: ${{ data.ticket.identifier }}
 Title: ${{ data.ticket.title }}
 Priority: ${{ data.ticket.priority }}"""
-        
+
         data = {
             "ticket": {
                 "identifier": "ENG-456",
@@ -181,7 +181,7 @@ Priority: ${{ data.ticket.priority }}"""
                 "priority": "high"
             }
         }
-        
+
         result = render_trigger_template(template, data)
         assert "ENG-456" in result
         assert "Implement triggers" in result
@@ -252,3 +252,86 @@ Priority: ${{ data.ticket.priority }}"""
         }
         result = render_trigger_template(template, data)
         assert result == "Alice Bob"
+
+    def test_list_indexing(self):
+        """Test basic list indexing with numeric keys."""
+        template = "First: ${{ data.items.0 }}, Second: ${{ data.items.1 }}"
+        data = {"items": ["apple", "banana", "cherry"]}
+        result = render_trigger_template(template, data)
+        assert result == "First: apple, Second: banana"
+
+    def test_list_nested_dict_access(self):
+        """Test accessing dict properties inside list elements."""
+        template = "Label: ${{ data.labels.0.name }}, Color: ${{ data.labels.0.color }}"
+        data = {
+            "labels": [
+                {"name": "bug", "color": "red"},
+                {"name": "feature", "color": "blue"}
+            ]
+        }
+        result = render_trigger_template(template, data)
+        assert result == "Label: bug, Color: red"
+
+    def test_list_multiple_indices(self):
+        """Test accessing multiple list indices."""
+        template = "${{ data.tags.0 }}, ${{ data.tags.1 }}, ${{ data.tags.2 }}"
+        data = {"tags": ["urgent", "backend", "bug"]}
+        result = render_trigger_template(template, data)
+        assert result == "urgent, backend, bug"
+
+    def test_nested_list_access(self):
+        """Test nested structure with lists at multiple levels."""
+        template = "Author: ${{ data.issue.labels.0.name }}"
+        data = {
+            "issue": {
+                "labels": [
+                    {"name": "enhancement"},
+                    {"name": "priority-high"}
+                ]
+            }
+        }
+        result = render_trigger_template(template, data)
+        assert result == "Author: enhancement"
+
+    def test_list_index_out_of_range(self):
+        """Test that out of range list index raises ValueError."""
+        template = "Item: ${{ data.items.5.name }}"
+        data = {"items": [{"name": "a"}]}
+
+        with pytest.raises(ValueError) as exc_info:
+            render_trigger_template(template, data)
+
+        assert "index 5 out of range" in str(exc_info.value).lower()
+        assert "length: 1" in str(exc_info.value).lower()
+
+    def test_list_non_numeric_key_error(self):
+        """Test that non-numeric keys on lists raise ValueError."""
+        template = "Item: ${{ data.items.foo }}"
+        data = {"items": [1, 2, 3]}
+
+        with pytest.raises(ValueError) as exc_info:
+            render_trigger_template(template, data)
+
+        assert "non-numeric key" in str(exc_info.value).lower()
+        assert "foo" in str(exc_info.value)
+
+    def test_github_labels_template(self):
+        """Test realistic GitHub issue with labels array."""
+        template = """Issue: ${{ data.issue.title }}
+First Label: ${{ data.issue.labels.0.name }}
+Second Label: ${{ data.issue.labels.1.name }}"""
+
+        data = {
+            "issue": {
+                "title": "Bug fix",
+                "labels": [
+                    {"name": "bug", "color": "red"},
+                    {"name": "urgent", "color": "orange"}
+                ]
+            }
+        }
+
+        result = render_trigger_template(template, data)
+        assert "Issue: Bug fix" in result
+        assert "First Label: bug" in result
+        assert "Second Label: urgent" in result

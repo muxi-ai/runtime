@@ -360,6 +360,13 @@ class RequestAnalyzer:
                 json_str = response[json_start:json_end]
                 data = json.loads(json_str)
 
+                # Normalize explicit_sop_request: strip whitespace and convert empty/whitespace to None
+                explicit_sop = data.get("explicit_sop_request")
+                if explicit_sop:
+                    explicit_sop = explicit_sop.strip()
+                    if not explicit_sop:  # Empty after stripping
+                        explicit_sop = None
+
                 return RequestAnalysis(
                     complexity_score=float(data.get("complexity_score", 5.0)),
                     requires_decomposition=False,  # Will be set by should_decompose
@@ -370,7 +377,7 @@ class RequestAnalyzer:
                     confidence_score=float(data.get("confidence_score", 0.8)),
                     is_scheduling_request=data.get("is_scheduling_request", False),
                     is_explicit_approval_request=data.get("is_explicit_approval_request", False),
-                    explicit_sop_request=data.get("explicit_sop_request"),
+                    explicit_sop_request=explicit_sop,
                 )
             else:
                 raise ValueError("No valid JSON found in response")

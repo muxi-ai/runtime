@@ -268,38 +268,42 @@ async def validate_secret_references(
 def render_trigger_template(template: str, data: Dict[str, Any]) -> str:
     """
     Render trigger template with data substitution.
-    
+
     Supports nested data access using dot notation:
     - ${{ data.key }} - Simple key access
     - ${{ data.nested.key }} - Nested key access
     - ${{ data.user.name }} - Multi-level nesting
-    
+    - ${{ data.items.0.name }} - List indexing (numeric segments)
+
     Args:
         template: Template string with ${{ data.* }} placeholders
         data: Dictionary of data to substitute into template
-        
+
     Returns:
         Rendered template with all placeholders replaced
-        
+
     Raises:
-        ValueError: If a referenced data key doesn't exist
-        
+        ValueError: If a referenced data key doesn't exist or index is out of range
+
     Examples:
         >>> render_trigger_template("Hello ${{ data.name }}", {"name": "World"})
         'Hello World'
-        
+
         >>> render_trigger_template("Issue #${{ data.issue.id }}", {"issue": {"id": 123}})
         'Issue #123'
+
+        >>> render_trigger_template("Label: ${{ data.labels.0.name }}", {"labels": [{"name": "bug"}]})
+        'Label: bug'
     """
     # Pattern matches: ${{ data.key }}, ${{ data.nested.key }}, etc.
     pattern = re.compile(r'\$\{\{\s*data\.([a-zA-Z0-9_.]+)\s*\}\}')
-    
+
     def replace_data(match):
         key_path = match.group(1)
         keys = key_path.split('.')
         value = data
-        
-        # Navigate through nested dict structure
+
+        # Navigate through nested dict/list structure
         for key in keys:
             if isinstance(value, dict):
                 # Check if key exists (distinguish from value being None)
@@ -309,14 +313,30 @@ def render_trigger_template(template: str, data: Dict[str, Any]) -> str:
                         f"Available keys: {list(value.keys())}"
                     )
                 value = value[key]
+            elif isinstance(value, list):
+                # Handle list indexing with numeric strings
+                if key.isdigit():
+                    index = int(key)
+                    if 0 <= index < len(value):
+                        value = value[index]
+                    else:
+                        raise ValueError(
+                            f"List index {index} out of range at 'data.{key_path}'. "
+                            f"List length: {len(value)}"
+                        )
+                else:
+                    raise ValueError(
+                        f"Cannot access non-numeric key '{key}' in list at 'data.{key_path}'. "
+                        f"Use numeric index (0-{len(value)-1})"
+                    )
             else:
                 raise ValueError(
-                    f"Cannot access '{key}' in non-dict value at 'data.{key_path}'. "
+                    f"Cannot access '{key}' in non-dict/non-list value at 'data.{key_path}'. "
                     f"Value type: {type(value).__name__}"
                 )
-        
+
         return str(value)
-    
+
     try:
         return pattern.sub(replace_data, template)
     except ValueError:

@@ -147,14 +147,15 @@ async def execute_trigger(
 
     if trigger_request.use_async:
         # Process asynchronously
-        async def process_async():
+        async def process_async() -> None:
             """Background task to process trigger."""
             try:
                 # Use overlord's chat method (non-streaming)
-                response = await overlord.chat(
+                await overlord.chat(
                     rendered_message,
                     user_id=user_id,
                     session_id=trigger_request.session_id,
+                    request_id=request_id,
                 )
 
                 observability.observe(
@@ -203,6 +204,7 @@ async def execute_trigger(
                 rendered_message,
                 user_id=user_id,
                 session_id=trigger_request.session_id,
+                request_id=request_id,
             )
 
             observability.observe(
@@ -220,7 +222,7 @@ async def execute_trigger(
             # Return standard sync response with LLM response
             # Extract response content from overlord response object
             response_content = response.content if hasattr(response, 'content') else str(response)
-            
+
             return create_api_response(
                 object_type=APIObjectType.REQUEST,
                 event_type=APIEventType.REQUEST_COMPLETED,
