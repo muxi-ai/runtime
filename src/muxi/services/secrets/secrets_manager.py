@@ -43,6 +43,7 @@ class SecretsManager:
         self.formation_dir = Path(formation_dir)
         self.master_key_path = self.formation_dir / ".key"
         self.secrets_file_path = self.formation_dir / "secrets.enc"
+        self.secrets_example_path = self.formation_dir / "secrets.example"
         self._fernet: Optional[Fernet] = None
         self._secrets_cache: Optional[Dict[str, Any]] = None
         self._used_secrets: Set[str] = set()  # Track which secrets are actually used
@@ -282,6 +283,9 @@ class SecretsManager:
                 await self._save_secrets_to_file(secrets)
                 self._secrets_cache = secrets
 
+                # Update secrets.example file
+                self._update_secrets_example(normalized_name)
+
         except Exception as e:
             # Observability: Secret storage failed with exception
             observability.observe(
@@ -343,15 +347,22 @@ class SecretsManager:
             )
             raise
 
-    async def delete_secret(self, name: str) -> bool:
+    async def delete_secret(self, name: str, force: bool = False) -> bool:
         """
         Delete secret by name.
 
+        By default, prevents deletion of secrets that are in use in formation YAML files.
+        Use force=True to bypass this check (not recommended).
+
         Args:
             name: Secret name to delete
+            force: If True, skip usage check and delete anyway (default: False)
 
         Returns:
             True if secret was deleted, False if not found
+
+        Raises:
+            ValueError: If secret is in use and force=False
         """
         try:
             if not self._fernet:
@@ -365,9 +376,27 @@ class SecretsManager:
                 if normalized_name not in secrets:
                     return False
 
+                # Check if secret is in use (unless forced)
+                if not force:
+                    usages = self.check_secret_usage(normalized_name)
+                    if usages:
+                        # Build detailed error message
+                        usage_details = "\n".join([
+                            f"  - {file_path.relative_to(self.formation_dir)}:{line_num} -> {line_content}"
+                            for file_path, line_num, line_content in usages
+                        ])
+                        raise ValueError(
+                            f"Cannot delete secret '{normalized_name}' - it is currently in use:\n{usage_details}\n"
+                            f"Remove these references first, or use force=True to delete anyway."
+                        )
+
                 del secrets[normalized_name]
                 await self._save_secrets_to_file(secrets)
                 self._secrets_cache = secrets
+
+                # Remove from secrets.example file
+                self._remove_from_secrets_example(normalized_name)
+
                 return True
 
         except Exception as e:
@@ -611,3 +640,72 @@ class SecretsManager:
                 },
             )
             raise
+
+    def _update_secrets_example(self, secret_name: str) -> None:
+        """
+        Update secrets.example file with ALL keys from secrets.enc.
+        This ensures the example file always matches what's actually stored.
+
+        Args:
+            secret_name: Normalized secret name (not used, kept for API compatibility)
+        """
+        # Get ALL keys from the secrets cache (which was just updated)
+        if self._secrets_cache is None:
+            return
+
+        all_keys = sorted(self._secrets_cache.keys())
+
+        # Write all keys in ENV format (KEY=)
+        lines = [f"{key}=" for key in all_keys]
+        self.secrets_example_path.write_text('\n'.join(lines) + '\n')
+
+    def _remove_from_secrets_example(self, secret_name: str) -> None:
+        """
+        Update secrets.example file with ALL remaining keys from secrets.enc.
+        This ensures the example file always matches what's actually stored.
+
+        Args:
+            secret_name: Normalized secret name (not used, kept for API compatibility)
+        """
+        # Get ALL keys from the secrets cache (which was just updated)
+        if self._secrets_cache is None or not self._secrets_cache:
+            # No secrets left, remove the example file
+            if self.secrets_example_path.exists():
+                self.secrets_example_path.unlink()
+            return
+
+        all_keys = sorted(self._secrets_cache.keys())
+
+        # Write all keys in ENV format (KEY=)
+        lines = [f"{key}=" for key in all_keys]
+        self.secrets_example_path.write_text('\n'.join(lines) + '\n')
+
+    def check_secret_usage(self, secret_name: str) -> List[tuple]:
+        """
+        Check if a secret is being used in any formation YAML files.
+
+        Args:
+            secret_name: Secret name to check (will be normalized)
+
+        Returns:
+            List of (file_path, line_number, line_content) tuples where secret is used
+        """
+        normalized_name = self._normalize_secret_name(secret_name)
+        usages = []
+
+        # Search in all YAML files (.yaml and .yml) in formation directory and subdirectories
+        yaml_patterns = ['*.yaml', '*.yml']
+        for pattern in yaml_patterns:
+            for yaml_file in self.formation_dir.rglob(pattern):
+                try:
+                    content = yaml_file.read_text()
+                    for line_num, line in enumerate(content.split('\n'), start=1):
+                        matches = self._secrets_pattern.findall(line)
+                        for match in matches:
+                            if self._normalize_secret_name(match) == normalized_name:
+                                usages.append((yaml_file, line_num, line.strip()))
+                except Exception:
+                    # Skip files that can't be read
+                    continue
+
+        return usages
