@@ -126,15 +126,30 @@ Context synopsis uses TTL-based invalidation:
 
 ### Cache Keys
 
-Both tiers use `public_id` (internal stable user ID) as cache keys, not `external_user_id`:
+Both tiers use `users.id` (internal integer database ID) as cache keys, not `external_user_id`:
 
 ```python
 # Cache key pattern
-cache_key = f"{public_id}"  # e.g., "usr_abc123xyz"
+cache_key = user_id  # e.g., 42 (integer from users.id)
 namespace = "user_synopsis_identity" | "user_synopsis_context"
 ```
 
-This ensures cache keys remain stable even if external user IDs change (future-proofing for multi-identity support).
+**Why integers?**
+- More efficient than string keys (smaller memory footprint)
+- Consistent with how internal memory operations work
+- Direct database lookups without string manipulation
+- Simpler and faster cache operations
+
+**Lookup flow:**
+```
+external_user_id="john@company.com"
+    ↓
+long_term_memory.get_user_id(external_user_id)
+    ↓
+users.id=42 (integer)
+    ↓
+Cache key: 42
+```
 
 ## LLM Synthesis
 
