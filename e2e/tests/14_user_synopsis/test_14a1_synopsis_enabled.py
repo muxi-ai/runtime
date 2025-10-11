@@ -40,20 +40,20 @@ async def test_user_synopsis_enabled():
         try:
             # Add identity information
             await overlord.long_term_memory.add(
-                text="User's name is Alice Johnson",
+                content="User's name is Alice Johnson",
                 collection="user_identity",
                 external_user_id=user_id,
                 metadata={"source": "test_setup", "type": "identity"}
             )
             await overlord.long_term_memory.add(
-                text="Works as a Senior Software Engineer",
+                content="Works as a Senior Software Engineer",
                 collection="user_identity",
                 external_user_id=user_id,
                 metadata={"source": "test_setup", "type": "occupation"}
             )
             # Add relationship information
             await overlord.long_term_memory.add(
-                text="Part of the Platform Engineering team",
+                content="Part of the Platform Engineering team",
                 collection="relationships",
                 external_user_id=user_id,
                 metadata={"source": "test_setup", "type": "team"}
@@ -123,14 +123,14 @@ async def test_user_synopsis_enabled():
         try:
             # Update role (identity collection)
             await overlord.long_term_memory.add(
-                text="Promoted to Principal Engineer",
+                content="Promoted to Principal Engineer",
                 collection="user_identity",
                 external_user_id=user_id,
                 metadata={"source": "test_update", "type": "occupation"}
             )
             # Add current project (work_projects collection)
             await overlord.long_term_memory.add(
-                text="Currently working on User Synopsis System",
+                content="Currently working on User Synopsis System",
                 collection="work_projects",
                 external_user_id=user_id,
                 metadata={"source": "test_update", "type": "project"}
