@@ -11,6 +11,7 @@ Your fast-reference for building, debugging, and extending the MUXI Runtime with
 - Keep workflow hygiene: plan carefully, review and simplify your plan before execution, optimize for the smallest viable change, strip whitespace on blank lines, prefer `ast-grep` over raw regex, and use `trash` instead of `rm`.
 - Start CodeRabbit early (`coderabbit --prompt-only`), watch its feedback, and resolve every flagged issue before moving on.
 - Honor reflection protocol after complex engagements: offer to update CLAUDE.md when the task warrants it.
+- Never use emojies
 
 ## Architecture Snapshot
 - **Formation-first**: YAML formations describe the entire AI system; runtime turns them into a live orchestration.
