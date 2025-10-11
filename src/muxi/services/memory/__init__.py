@@ -64,7 +64,6 @@ from .working import WorkingMemory
 from .long_term import LongTermMemory
 from .memobase import Memobase
 from .sqlite import SQLiteMemory
-from .context_memory import ContextMemory
 
 __all__ = [
     "BaseMemory",
@@ -72,5 +71,4 @@ __all__ = [
     "LongTermMemory",
     "Memobase",
     "SQLiteMemory",
-    "ContextMemory",
 ]

@@ -3698,33 +3698,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             user_message, agent_response, user_id, agent_id, extraction_model
         )
 
-    async def get_user_context(
-        self, user_id: Any, agent_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Get context memory for a specific user.
-
-        This method retrieves structured information about a user, such as preferences,
-        facts, and other contextual details that have been stored in the memory system.
-        It requires multi-user support to be enabled (Memobase).
-
-        Args:
-            user_id: The user's ID to get context for. This identifies the specific
-                user whose context should be retrieved.
-            agent_id: Optional agent ID to scope the context. Currently not used,
-                but maintained for API consistency.
-
-        Returns:
-            Dictionary of user context information. The structure depends on what
-            has been stored for the user, but typically includes sections like:
-            - preferences: User UI/interaction preferences
-            - personal_info: User personal details
-            - facts: Known facts about the user
-
-            Returns an empty dictionary if no context exists or if multi-user
-            support is not enabled.
-        """
-        return await self.user_context_manager.get_user_context(user_id, agent_id)
 
     async def get_user_synopsis(self, external_user_id: str) -> str:
         """
@@ -3738,65 +3711,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         """
         return await self.user_context_manager.get_user_synopsis(external_user_id)
 
-    async def add_user_context(
-        self,
-        user_id: Any,
-        knowledge: Dict[str, Any],
-        source: str = "manual_input",
-        importance: float = 0.9,
-        agent_id: Optional[str] = None,
-    ) -> List[str]:
-        """
-        Add context memory for a specific user.
 
-        This method stores structured information about a user, such as preferences,
-        facts, and other contextual details. It requires multi-user support to be
-        enabled (Memobase).
-
-        Args:
-            user_id: The user's ID. This identifies the specific user whose
-                context is being updated.
-            knowledge: Dictionary of information to store. Can contain nested
-                structures like preferences, personal information, etc.
-            source: Where this knowledge came from (e.g., "manual_input",
-                "conversation", "profile_update").
-            importance: Importance score (0.0 to 1.0). Higher values indicate
-                more important information.
-            agent_id: Optional agent ID that provided this information.
-                Currently not used, but maintained for API consistency.
-
-        Returns:
-            List of memory IDs for stored information. These can be used to
-            reference the specific memory items later.
-            Returns an empty list if multi-user support is not enabled.
-        """
-        return await self.user_context_manager.add_user_context(
-            user_id, knowledge, source, importance, agent_id
-        )
-
-    async def clear_user_context(
-        self, user_id: Any, keys: Optional[List[str]] = None, agent_id: Optional[str] = None
-    ) -> bool:
-        """
-        Clear context memory for a specific user.
-
-        This method removes stored information about a user from the memory system.
-        It requires multi-user support to be enabled (Memobase).
-
-        Args:
-            user_id: The user's ID. This identifies the specific user whose
-                context should be cleared.
-            keys: Optional list of specific keys to clear. If provided, only
-                clears those specific keys rather than all context.
-                Example: ["preferences.theme", "location"]
-            agent_id: Optional agent ID that's clearing the memory.
-                Currently not used, but maintained for API consistency.
-
-        Returns:
-            True if successful, False otherwise (including if multi-user
-            support is not enabled).
-        """
-        return await self.user_context_manager.clear_user_context(user_id, keys, agent_id)
 
     async def _add_to_long_term_memory(
         self,
