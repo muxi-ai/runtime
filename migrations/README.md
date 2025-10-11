@@ -2,20 +2,24 @@
 
 This directory contains database migration scripts for MUXI Runtime.
 
-## Quick Setup for E2E Tests (Recommended)
+## Quick Setup (Recommended)
 
-Use the complete schema dump instead of running migrations:
+Use the init schema instead of running individual migrations:
 
 ```bash
-# Drop and recreate test database
-docker exec muxi-e2e-test psql -U muxi -c "DROP DATABASE IF EXISTS muxi_test;"
-docker exec muxi-e2e-test psql -U muxi -c "CREATE DATABASE muxi_test;"
+# Terminate connections and recreate database
+docker exec muxi-e2e-test psql -U postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'muxi_test' AND pid <> pg_backend_pid();"
+docker exec muxi-e2e-test psql -U postgres -c "DROP DATABASE IF EXISTS muxi_test;"
+docker exec muxi-e2e-test psql -U postgres -c "CREATE DATABASE muxi_test OWNER muxi;"
 
-# Load complete schema (much faster than migrations)
-docker exec -i muxi-e2e-test psql -U muxi muxi_test < migrations/schema.sql
+# Create vector extension (requires superuser)
+docker exec muxi-e2e-test psql -U postgres muxi_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+# Load init schema
+docker exec -i muxi-e2e-test psql -U muxi muxi_test < migrations/init_schema.sql
 ```
 
-This ensures consistent schema and is **much faster** than running all migrations.
+The `init_schema.sql` file is the **SINGLE SOURCE OF TRUTH** for the database structure.
 
 ## Running Migrations
 
