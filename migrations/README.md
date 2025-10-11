@@ -2,6 +2,21 @@
 
 This directory contains database migration scripts for MUXI Runtime.
 
+## Quick Setup for E2E Tests (Recommended)
+
+Use the complete schema dump instead of running migrations:
+
+```bash
+# Drop and recreate test database
+docker exec muxi-e2e-test psql -U muxi -c "DROP DATABASE IF EXISTS muxi_test;"
+docker exec muxi-e2e-test psql -U muxi -c "CREATE DATABASE muxi_test;"
+
+# Load complete schema (much faster than migrations)
+docker exec -i muxi-e2e-test psql -U muxi muxi_test < migrations/schema.sql
+```
+
+This ensures consistent schema and is **much faster** than running all migrations.
+
 ## Running Migrations
 
 ### For Credential Indexes
