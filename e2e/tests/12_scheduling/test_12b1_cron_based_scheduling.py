@@ -39,10 +39,10 @@ async def test_cron_based_scheduling():
         overlord = await formation.start_overlord()
 
         # Test cron-based scheduling
-        print("\n[Test] Scheduling with cron: 'Generate sales report every Monday at 8am'")
+        print("\n[Test] Scheduling with cron: 'Schedule reminder every Monday at 8am'")
 
         response = await overlord.chat(
-            "Generate sales report every Monday at 8am",
+            "Schedule a reminder to check emails every Monday at 8am",
             user_id="test_user",
             session_id="test_session",
             use_async=False,
