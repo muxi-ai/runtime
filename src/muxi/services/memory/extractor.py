@@ -206,32 +206,34 @@ class MemoryExtractor:
         Purge all automatically extracted data for a user.
 
         This method removes all information that was automatically extracted
-        for a user, while preserving manually added information. This supports
-        privacy requirements like data deletion requests.
+        for a user. This supports privacy requirements like data deletion requests.
+
+        Note: This is a legacy method. The old context_memory system has been
+        replaced by rich collections (user_identity, relationships, work_projects).
+        This method is preserved for API compatibility but currently does nothing.
 
         Args:
             user_id: The user ID to purge data for
 
         Returns:
-            True if successful, False otherwise
+            True (always successful - no-op)
         """
         # Skip for anonymous users
         if user_id == 0:
             return True
 
-        # Get existing context to find auto-extracted entries
-        context = await self.overlord.get_user_context(user_id=user_id)
-
-        # Look for keys that were created by automatic extraction
-        to_delete = []
-
-        for key, value in context.items():
-            if isinstance(value, dict) and value.get("source") == "automatic_extraction":
-                to_delete.append(key)
-
-        # Clear these specific keys
-        if to_delete:
-            return await self.overlord.clear_user_context(user_id=user_id, keys=to_delete)
+        # Legacy method - old context_memory system has been removed.
+        # Automatic extraction now uses rich collections which have their own
+        # purge mechanisms via the long_term_memory interface.
+        observability.observe(
+            event_type=observability.SystemEvents.SYSTEM_ACTION,
+            level=observability.EventLevel.WARNING,
+            description="purge_user_data called on legacy MemoryExtractor",
+            data={
+                "user_id": user_id,
+                "note": "This method is deprecated - use rich collections directly",
+            },
+        )
 
         return True
 
