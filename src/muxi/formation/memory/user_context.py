@@ -308,11 +308,11 @@ class UserContextManager:
 
             for collection in identity_collections:
                 try:
-                    results = await self.overlord.persistent_memory_manager.search_long_term_memory(
-                        query="",
-                        k=3,
-                        user_id=external_user_id,
-                        collections=[collection],
+                    # Get ALL recent memories from collection (no semantic search/embeddings needed)
+                    results = self.overlord.long_term_memory.get_recent_memories(
+                        limit=10,
+                        collection=collection,
+                        external_user_id=external_user_id
                     )
                     if results:
                         identity_memories.extend(results)
@@ -410,11 +410,11 @@ class UserContextManager:
 
             for collection in context_collections:
                 try:
-                    results = await self.overlord.persistent_memory_manager.search_long_term_memory(
-                        query="",
-                        k=3,
-                        user_id=external_user_id,
-                        collections=[collection],
+                    # Get ALL recent memories from collection (no semantic search/embeddings needed)
+                    results = self.overlord.long_term_memory.get_recent_memories(
+                        limit=10,
+                        collection=collection,
+                        external_user_id=external_user_id
                     )
                     if results:
                         context_memories.extend(results)
