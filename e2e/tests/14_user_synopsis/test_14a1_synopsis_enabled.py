@@ -35,22 +35,33 @@ async def test_user_synopsis_enabled():
         results = []
         user_id = "test_user_synopsis"
 
-        # Test 1: Add user context
-        print("\n[Test 1/4] Adding user context...")
+        # Test 1: Add user data to rich collections (modern approach)
+        print("\n[Test 1/4] Adding user data to rich collections...")
         try:
-            await overlord.add_user_context(
-                user_id=user_id,
-                knowledge={
-                    "name": "Alice Johnson",
-                    "role": "Senior Software Engineer",
-                    "team": "Platform Engineering",
-                },
-                source="test_setup"
+            # Add identity information
+            await overlord.long_term_memory.add(
+                text="User's name is Alice Johnson",
+                collection="user_identity",
+                external_user_id=user_id,
+                metadata={"source": "test_setup", "type": "identity"}
             )
-            print("  ✅ User context added successfully")
+            await overlord.long_term_memory.add(
+                text="Works as a Senior Software Engineer",
+                collection="user_identity",
+                external_user_id=user_id,
+                metadata={"source": "test_setup", "type": "occupation"}
+            )
+            # Add relationship information
+            await overlord.long_term_memory.add(
+                text="Part of the Platform Engineering team",
+                collection="relationships",
+                external_user_id=user_id,
+                metadata={"source": "test_setup", "type": "team"}
+            )
+            print("  ✅ User data added to rich collections successfully")
             results.append(True)
         except Exception as e:
-            print(f"  ❌ Failed to add user context: {e}")
+            print(f"  ❌ Failed to add user data: {e}")
             results.append(False)
 
         # Wait for processing
@@ -107,18 +118,27 @@ async def test_user_synopsis_enabled():
             print(f"  ❌ ERROR: {str(e)[:100]}")
             results.append(False)
 
-        # Test 4: Update context and verify cache invalidation
+        # Test 4: Update identity data and verify cache invalidation
         print("\n[Test 4/4] Testing cache invalidation...")
         try:
-            await overlord.add_user_context(
-                user_id=user_id,
-                knowledge={
-                    "role": "Principal Engineer",  # Updated role
-                    "current_project": "User Synopsis System",
-                },
-                source="test_update"
+            # Update role (identity collection)
+            await overlord.long_term_memory.add(
+                text="Promoted to Principal Engineer",
+                collection="user_identity",
+                external_user_id=user_id,
+                metadata={"source": "test_update", "type": "occupation"}
             )
-            print("  Context updated")
+            # Add current project (work_projects collection)
+            await overlord.long_term_memory.add(
+                text="Currently working on User Synopsis System",
+                collection="work_projects",
+                external_user_id=user_id,
+                metadata={"source": "test_update", "type": "project"}
+            )
+            
+            # Manually invalidate identity cache (simulates extraction's behavior)
+            await overlord.user_context_manager.invalidate_identity_synopsis_cache(user_id)
+            print("  Data updated and cache invalidated")
             
             await asyncio.sleep(2)
             

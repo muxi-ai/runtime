@@ -169,20 +169,17 @@ class TestUserSynopsisCacheInvalidation:
         }
         overlord.is_multi_user = True
         overlord.long_term_memory = AsyncMock()
-        overlord.long_term_memory.add_user_context = AsyncMock(return_value=["mem_1"])
+        overlord.long_term_memory.get_user_id = AsyncMock(return_value=42)
         overlord.buffer_memory = AsyncMock()
         overlord.buffer_memory.kv_delete = AsyncMock()
 
         manager = UserContextManager(overlord)
 
-        # Add user context
-        await manager.add_user_context(
-            "test_user",
-            {"name": "Test User"},
-            source="test"
-        )
+        # Directly test invalidation method (no longer using add_user_context)
+        # When synopsis is disabled, invalidation should be skipped
+        await manager.invalidate_identity_synopsis_cache("test_user")
 
-        # Verify no cache deletions (invalidation skipped)
+        # Verify no cache deletions (invalidation skipped when disabled)
         assert not overlord.buffer_memory.kv_delete.called
 
 
