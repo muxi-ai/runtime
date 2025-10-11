@@ -205,11 +205,8 @@ persistent:
 **Updated** (for new tests):
 ```yaml
 persistent:
-  connection_string: "sqlite:///memory_test.db"
+  connection_string: "${{ secrets.POSTGRES_URI }}"
 ```
-
-**Reason**: Avoid PostgreSQL dependency for e2e tests; use SQLite for portability
-
 ### Scheduler Configuration
 
 ```yaml

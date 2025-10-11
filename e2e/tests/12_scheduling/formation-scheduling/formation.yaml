@@ -92,7 +92,7 @@ memory:
     vector_search: true
 
   persistent:
-    connection_string: "sqlite:///memory_test.db"
+    connection_string: "${{ secrets.POSTGRES_URI }}"
     embedding_model: "openai/text-embedding-3-small"
 
 logging:
