@@ -352,6 +352,19 @@ The system uses graceful degradation at every level:
    - Sample and review generated synopses
    - Ensure coherence and accuracy
 
+## Implementation Notes
+
+### Recent Changes (October 2025)
+
+**Critical Bug Fix:**
+- Fixed synopsis to use direct memory queries instead of semantic search
+- Removed unnecessary embeddings (synopsis needs ALL user data, not search)
+- Changed from `search_long_term_memory()` to `get_recent_memories()`
+- Eliminated "Input cannot be empty" errors from OpenAI embeddings
+- More efficient: direct SELECT instead of embedding + vector search
+
+**Rationale:** Synopsis generation doesn't need semantic search - it needs comprehensive user data from specific collections. Direct queries are simpler, faster, and don't require embeddings.
+
 ## Future Enhancements
 
 ### Potential Improvements
@@ -371,10 +384,6 @@ The system uses graceful degradation at every level:
 4. **A/B Testing:**
    - Compare single-tier vs two-tier performance
    - Optimize TTL values based on real usage
-
-5. **Context_memory Deprecation:**
-   - Remove legacy `context_memory` collection entirely
-   - Simplify codebase (see Issue #XX)
 
 ## Related Documentation
 
@@ -474,6 +483,6 @@ bash .claude/scripts/test-and-log.sh e2e/tests/test_user_synopsis.py
 
 ---
 
-**Last Updated:** 2025-01-XX
+**Last Updated:** 2025-10-11
 **Author:** MUXI Runtime Team
 **Status:** Production
