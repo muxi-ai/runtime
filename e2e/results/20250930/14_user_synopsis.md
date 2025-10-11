@@ -319,8 +319,14 @@ FATAL: role "ran" does not exist
 | `6d05b8e` | Documentation formatting | - |
 | `916a87d` | E2E test updates (WIP) | -353, +138 |
 | `d20d546` | Unit test cleanup | 80 changes |
+| `23b849c` | Test results report | +397 lines |
+| `a3d502f` | Simplified e2e test pattern | +112, -110 |
+| `d95ec65` | Test cleanup improvements | +11, -10 |
+| `d8f0fbd` | Report update (tests passing) | +31, -17 |
+| `5d0a1d8` | Regression testing completed | - |
+| **Latest** | Cache invalidation bug fix | +6, -4 |
 
-**Total:** 5 commits on `user-synopsis` branch
+**Total:** 9 commits on `user-synopsis` branch
 
 ---
 
