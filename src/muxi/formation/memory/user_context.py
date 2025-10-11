@@ -116,14 +116,15 @@ class UserContextManager:
 
         if synopsis_config.get("enabled", True) and self.overlord.buffer_memory:
             try:
-                public_id = await self.overlord.long_term_memory.get_user_public_id(user_id)
-                if public_id:
+                internal_user_id = await self.overlord.long_term_memory.get_user_id(user_id)
+                if internal_user_id:
                     # Invalidate both caches to be safe
+                    # Use internal user_id (integer) since synopsis is stored with users.id
                     await self.overlord.buffer_memory.kv_delete(
-                        public_id, namespace="user_synopsis_identity"
+                        internal_user_id, namespace="user_synopsis_identity"
                     )
                     await self.overlord.buffer_memory.kv_delete(
-                        public_id, namespace="user_synopsis_context"
+                        internal_user_id, namespace="user_synopsis_context"
                     )
             except Exception:
                 pass  # Cache invalidation failure is non-critical
@@ -172,13 +173,14 @@ class UserContextManager:
 
         if synopsis_config.get("enabled", True) and self.overlord.buffer_memory:
             try:
-                public_id = await self.overlord.long_term_memory.get_user_public_id(user_id)
-                if public_id:
+                internal_user_id = await self.overlord.long_term_memory.get_user_id(user_id)
+                if internal_user_id:
+                    # Use internal user_id (integer) since synopsis is stored with users.id
                     await self.overlord.buffer_memory.kv_delete(
-                        public_id, namespace="user_synopsis_identity"
+                        internal_user_id, namespace="user_synopsis_identity"
                     )
                     await self.overlord.buffer_memory.kv_delete(
-                        public_id, namespace="user_synopsis_context"
+                        internal_user_id, namespace="user_synopsis_context"
                     )
             except Exception:
                 pass
