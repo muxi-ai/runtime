@@ -1,10 +1,13 @@
-# Database Migrations
+# Database Schema
 
-This directory contains database migration scripts for MUXI Runtime.
+This directory contains the authoritative database schemas for MUXI Runtime.
 
-## Quick Setup (Recommended)
+## Schema Files (SINGLE SOURCE OF TRUTH)
 
-Use the init schema instead of running individual migrations:
+- **`init_schema.sql`** - PostgreSQL schema with pgvector support
+- **`init_schema_sqlite.sql`** - SQLite schema with FTS5 support
+
+## PostgreSQL Setup
 
 ```bash
 # Terminate connections and recreate database
@@ -15,36 +18,61 @@ docker exec muxi-e2e-test psql -U postgres -c "CREATE DATABASE muxi_test OWNER m
 # Create vector extension (requires superuser)
 docker exec muxi-e2e-test psql -U postgres muxi_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
-# Load init schema
+# Load schema
 docker exec -i muxi-e2e-test psql -U muxi muxi_test < migrations/init_schema.sql
 ```
 
-The `init_schema.sql` file is the **SINGLE SOURCE OF TRUTH** for the database structure.
-
-## Running Migrations
-
-### For Credential Indexes
+## SQLite Setup
 
 ```bash
-# Check existing indexes
-python migrations/add_credential_indexes.py check "postgresql://user@localhost/database"
+# Create new database with schema
+sqlite3 muxi.db < migrations/init_schema_sqlite.sql
 
-# Run migration to add indexes
-python migrations/add_credential_indexes.py migrate "postgresql://user@localhost/database"
-
-# For SQLite
-python migrations/add_credential_indexes.py migrate "path/to/database.db"
+# Or for existing database (will skip existing tables)
+sqlite3 existing.db < migrations/init_schema_sqlite.sql
 ```
 
-## Migration Scripts
+## Schema Overview
 
-- `add_credential_indexes.py` - Adds performance indexes to the credentials table
-  - `idx_credentials_user_service` - Composite index on (user_id, service, formation_id_hash)
-  - `idx_credentials_user_formation` - Composite index on (user_id, formation_id_hash)
-  - `idx_credentials_service_lower` - Index on lowercase service name for case-insensitive lookups
+### Core Tables
+- **users** - Multi-user support with formation isolation
+- **memories** - Vector embeddings and text content for semantic search
+- **credentials** - Encrypted credential storage per user/service
+- **scheduled_jobs** - Recurring and one-time job scheduling
+- **scheduled_job_audit** - Audit trail for job lifecycle events
+
+### SQLite-Specific Tables
+- **collections** - Collection management (SQLite uses explicit table)
+- **memories_fts** - FTS5 virtual table for full-text search
+
+### PostgreSQL-Specific Features
+- pgvector extension for vector similarity search
+- GIN indexes for full-text search
+- IVFFlat indexes for fast vector search
+- nanoid() function for generating unique IDs
+
+### SQLite-Specific Features
+- FTS5 virtual tables for full-text search
+- Triggers to sync FTS index with memories table
+- BLOB storage for vector embeddings
+- JSON stored as TEXT
+
+## Key Differences
+
+| Feature | PostgreSQL | SQLite |
+|---------|-----------|--------|
+| Auto-increment | SERIAL | INTEGER PRIMARY KEY AUTOINCREMENT |
+| JSON | JSONB | TEXT (JSON strings) |
+| Boolean | BOOLEAN | INTEGER (0/1) |
+| Vectors | vector(1536) | BLOB |
+| Full-text | GIN indexes | FTS5 virtual tables |
+| ID generation | nanoid() function | Application code |
+| Foreign keys | Always enforced | PRAGMA foreign_keys = ON required |
 
 ## Notes
 
-- All migrations support both PostgreSQL and SQLite
-- Migrations are idempotent - safe to run multiple times
-- Always backup your database before running migrations in production
+- These schemas are the **SINGLE SOURCE OF TRUTH** - no migration history
+- Both schemas create identical logical structures with DB-appropriate types
+- All tables include proper indexes for performance
+- Schemas are idempotent - safe to run multiple times (uses IF NOT EXISTS)
+- Always backup your database before schema changes in production
