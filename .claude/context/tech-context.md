@@ -2,7 +2,16 @@
 
 This document outlines the technical context of the MUXI Runtime, including technologies used, development setup, constraints, and dependencies.
 
-## Recent Technical Improvements (July-September 2025)
+## Recent Technical Improvements (July-October 2025)
+
+### User Synopsis System (October 2025)
+- **Two-Tier Caching**: Identity (permanent) + Context (TTL-based) for optimal cost/freshness
+- **Collections**: user_identity, relationships, work_projects (Tier 1); preferences, activities (Tier 2)
+- **LLM Synthesis**: Type-specific prompts for identity vs context generation
+- **Cache Keys**: Internal users.id (integer) for efficiency and consistency
+- **Performance**: ~85% cost reduction via intelligent caching strategy
+- **Query Optimization**: Direct get_recent_memories() instead of semantic search
+- **Integration**: Automatic injection into enhanced messages via chat_orchestrator
 
 ### SOP System Simplification & Refactoring (August 2025)
 - **Architecture**: Direct pass to task decomposer (no manual parsing)

@@ -38,6 +38,7 @@ MUXI Runtime is the low-level execution engine that powers AI agent formations i
 - **Agent Framework**: Flexible agent implementation with specialized capabilities
 - **Unified Services Architecture**: Consolidated multimodal, memory, MCP, A2A, and observability services
 - **Memory Systems**: Sophisticated memory management with buffer and long-term storage, including FIFO cleanup and automatic memory management with async database operations for 3x performance improvement
+- **User Synopsis**: Two-tier LLM-synthesized caching system that automatically generates and caches user profile summaries (identity + context) for enhanced message injection, reducing LLM costs by ~85% while maintaining fresh, relevant context
 - **MCP Protocol**: Model Context Protocol implementation for tool integration
 - **Built-in MCP Servers**: File Generation MCP for secure creation of charts, documents, spreadsheets, images, and presentations through sandboxed Python execution
 - **Artifacts System**: Comprehensive file generation, tracking, and management with secure sandboxed execution, intelligent metadata extraction, session-based storage, and nanoid-based unique identifiers

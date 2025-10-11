@@ -43,6 +43,49 @@ The foundational runtime engine that powers AI agent formations is now complete 
 
 ## 🎉 Major Achievements
 
+### October 2025: User Synopsis System ✅
+
+**Status**: Complete - Two-tier LLM-synthesized caching for enhanced message context
+
+**Implementation Details (Oct 11)**:
+- ✅ **Two-Tier Architecture**:
+  - Identity Synopsis (Tier 1): Permanent cache for stable info (name, role, team)
+  - Context Synopsis (Tier 2): Configurable TTL for dynamic info (preferences, activities)
+  - Collections: user_identity, relationships, work_projects, preferences, activities
+  
+- ✅ **Smart Caching Strategy**:
+  - Identity: Permanent cache + explicit invalidation on updates
+  - Context: 1-hour TTL (configurable) for automatic freshness
+  - Cache keys use internal users.id (integer) for efficiency
+  - Excluded from FIFO cleanup (self-managing via TTL)
+
+- ✅ **Performance Optimization**:
+  - ~85% reduction in LLM synthesis costs
+  - Changed from semantic search to direct memory queries
+  - No embeddings needed (synopsis wants ALL user data, not search results)
+  - Eliminated "Input cannot be empty" errors
+
+- ✅ **Automatic Integration**:
+  - Injected into enhanced messages automatically by chat_orchestrator
+  - Works transparently for all agents
+  - Graceful degradation on failure
+
+**Testing**:
+- ✅ 11/11 unit tests passing (configuration, caching, invalidation)
+- ✅ 1/1 e2e test passing (all 4 test cases validated)
+- ✅ PostgreSQL multi-user test passing with synopsis enabled
+- ✅ No regressions in memory tests
+
+**Documentation**:
+- ✅ Complete feature documentation (docs/user-synopsis.md)
+- ✅ Test results report (e2e/results/20250930/14_user_synopsis.md)
+- ✅ README updated with feature description
+
+**Database**:
+- ✅ init_schema.sql updated (PostgreSQL)
+- ✅ init_schema_sqlite.sql created (SQLite)
+- ✅ Migrations directory cleaned up (31 old files removed)
+
 ### October 2025: CodeRabbit Review & Dead Code Cleanup ✅
 
 **Status**: Complete - Fixed critical bugs, improved security, and removed 159 lines of dead legacy code
