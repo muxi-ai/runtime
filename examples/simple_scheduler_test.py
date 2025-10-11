@@ -28,7 +28,7 @@ class SimpleSchedulerTest:
 
     def __init__(self):
         self.test_results = {}
-        self.postgres_url = "postgresql://ran@127.0.0.1/muxi_framework"
+        self.postgres_url = "postgresql://muxi@localhost/muxi_test"
 
     async def test_onetime_job_sqlite(self):
         """Test one-time job with SQLite."""

@@ -23,7 +23,7 @@ async def test_postgres_multiuser():
     print("👥 PostgreSQL Multi-User Real-World Test")
     print("=" * 60)
 
-    postgres_url = "postgresql://ran@127.0.0.1/muxi_framework"
+    postgres_url = "postgresql://muxi@localhost/muxi_test"
 
     try:
         # Initialize database manager

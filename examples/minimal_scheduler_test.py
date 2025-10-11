@@ -56,7 +56,7 @@ class MinimalSchedulerTest:
 
     def __init__(self):
         self.test_results = {}
-        self.postgres_url = "postgresql://ran@127.0.0.1/muxi_framework"
+        self.postgres_url = "postgresql://muxi@localhost/muxi_test"
 
     def create_database_manager(self, connection_string: str) -> DatabaseManager:
         """Create a database manager with minimal setup."""

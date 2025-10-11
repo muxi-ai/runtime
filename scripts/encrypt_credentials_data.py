@@ -45,7 +45,7 @@ async def encrypt_credentials():
     print(f"[{datetime.now()}] Starting credential encryption...")
 
     # Get database URL from environment or use default
-    db_url = os.getenv("DATABASE_URL", "postgresql://ran@127.0.0.1/muxi_framework")
+    db_url = os.getenv("DATABASE_URL", "postgresql://muxi@localhost/muxi_test")
 
     # Connect to database
     conn = await asyncpg.connect(db_url)
@@ -144,7 +144,7 @@ async def decrypt_credentials():
     print(f"[{datetime.now()}] Starting credential decryption...")
 
     # Get database URL from environment or use default
-    db_url = os.getenv("DATABASE_URL", "postgresql://ran@127.0.0.1/muxi_framework")
+    db_url = os.getenv("DATABASE_URL", "postgresql://muxi@localhost/muxi_test")
 
     # Connect to database
     conn = await asyncpg.connect(db_url)
