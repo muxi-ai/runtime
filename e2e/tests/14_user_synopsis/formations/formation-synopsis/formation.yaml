@@ -86,7 +86,7 @@ memory:
   persistent:
     connection_string: "${{ secrets.POSTGRES_URI }}"
     embedding_model: "openai/text-embedding-3-small"
-    
+
     # User synopsis configuration
     user_synopsis:
       enabled: true      # Enable user synopsis (default: true)
@@ -102,12 +102,9 @@ logging:
 
 # Agent configuration
 agents:
-  - id: "assistant"
-    name: "assistant"
-    type: "chat"
-    model: "openai/gpt-4o-mini"
-    description: "General purpose assistant"
+  - id: test-agent
+    name: Test Agent
+    description: General purpose assistant
+    default: true
     capabilities:
       - "general"
-      - "qa"
-      - "coding"

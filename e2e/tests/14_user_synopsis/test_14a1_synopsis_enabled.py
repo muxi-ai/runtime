@@ -160,8 +160,12 @@ async def test_user_synopsis_enabled():
 
         # Cleanup
         print("\n[Cleanup] Stopping formation...")
-        await formation.kill_overlord()
-        print("[Cleanup] Complete")
+        try:
+            if formation.overlord:
+                await formation.kill_overlord()
+            print("[Cleanup] Complete")
+        except Exception as cleanup_error:
+            print(f"[Cleanup] Warning: {cleanup_error}")
 
         return 0 if all(results) else 1
 
