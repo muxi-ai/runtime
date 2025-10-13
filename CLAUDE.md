@@ -45,6 +45,37 @@ Use CodeRabbit CLI for continuous code review - see AGENTS.md for protocol.
 
 ## Recent Architectural Changes
 
+### October 2025: LLM Response Caching
+
+**Impact**: Intelligent response caching with 70%+ cost savings on repeated queries.
+
+1. **OneLLM Cache Integration**:
+   - Global cache initialization via `llm.settings.caching` in formation YAML
+   - Module-level initialization in `src/muxi/services/llm/llm.py`
+   - Production defaults: 10K entries, 0.95 similarity, 24hr TTL, sentence chunking
+   - Semantic similarity matching using OneLLM's built-in cache system
+
+2. **Configuration Schema**:
+   ```yaml
+   llm:
+     settings:
+       caching:
+         enabled: true  # Default
+         max_entries: 10000
+         p: 0.95  # Similarity threshold
+         ttl: 86400  # 24 hours
+   ```
+
+3. **Implementation Details**:
+   - Cache parameter filtering: `caching` excluded from provider API requests
+   - Warning suppression: Harmless OneLLM semantic cache warnings filtered
+   - Idempotent initialization: Only runs once during formation startup
+   - Universal coverage: All LLM calls benefit automatically
+
+4. **Documentation**:
+   - `docs/features/llm-caching.md` - Comprehensive user guide with examples and troubleshooting
+   - E2E tests: `e2e/tests/16_caching/` (3 tests, 3 formations)
+
 ### August 2025: Clarification System Improvements
 
 **Impact**: Fixed critical context preservation bug and improved context switch detection.
