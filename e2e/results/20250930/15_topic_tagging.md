@@ -17,20 +17,20 @@ Dynamic Topic Tagging is an LLM-powered feature that automatically generates 1-5
 
 | Category | Status | Tests | Passed | Failed | Notes |
 |----------|--------|-------|--------|--------|-------|
-| **Unit Tests** | ⚠️ PARTIAL | 20 | 12 | 8 | Core functionality passing, mock issues only |
+| **Unit Tests** | ✅ PASS | 20 | 20 | 0 | All tests passing with proper mocks |
 | **E2E Tests** | ✅ READY | 25+ | N/A | N/A | Comprehensive test suite created |
 | **Live Test** | ✅ PASS | 1 | 1 | 0 | Real LLM confirmed working |
-| **Overall** | ✅ PASS | 21 | 13 | 8 | Feature validated, production-ready |
+| **Overall** | ✅ PASS | 21 | 21 | 0 | Complete test coverage, production-ready |
 
 ---
 
 ## Test Results Detail
 
-### ⚠️ Unit Tests (12/20 Passing)
+### ✅ Unit Tests (20/20 Passing)
 
 **File:** `tests/unit/test_topic_tagging.py`
 
-#### ✅ Passing Tests (Core Functionality)
+#### ✅ All Tests Passing
 
 **Dataclass Tests (3/3):**
 - ✅ **test_request_analysis_with_topics** - Topics field stores list correctly
@@ -41,43 +41,37 @@ Dynamic Topic Tagging is an LLM-powered feature that automatically generates 1-5
 - ✅ **test_heuristic_returns_empty_topics** - Heuristic mode always returns []
 - ✅ **test_heuristic_various_requests** - Multiple request types verified
 
-**LLM Parser Edge Cases (3/3):**
+**LLM Parser Tests (7/7):**
+- ✅ **test_llm_extracts_topics_from_response** - Topics extracted from JSON
+- ✅ **test_llm_normalizes_topics** - Lowercase and whitespace handling
+- ✅ **test_llm_limits_topics_to_five** - Maximum 5 topics enforced
 - ✅ **test_llm_handles_missing_topics_field** - Missing field defaults to []
 - ✅ **test_llm_handles_empty_topics_array** - Empty array handled safely
 - ✅ **test_llm_handles_malformed_topics** - Non-list types convert to []
+- ✅ **test_llm_filters_empty_strings** - Empty/null values filtered out
 
 **Fallback Path Tests (3/3):**
 - ✅ **test_llm_error_fallback_returns_empty_topics** - LLM errors safe
 - ✅ **test_parsing_error_fallback_returns_empty_topics** - Parse errors safe
 - ✅ **test_main_error_fallback_returns_empty_topics** - Main path errors safe
 
-**Hybrid Analyzer Tests (1/1):**
+**Hybrid Analyzer Tests (2/2):**
+- ✅ **test_hybrid_uses_llm_topics** - Hybrid mode uses LLM topics
 - ✅ **test_hybrid_fallback_empty_topics_on_llm_error** - Hybrid mode safe fallback
 
-#### ❌ Failing Tests (Mock Configuration Issues)
-
-**LLM Parser Tests (4/7):**
-- ❌ **test_llm_extracts_topics_from_response** - Mock not intercepting LLM call
-- ❌ **test_llm_normalizes_topics** - Mock not intercepting LLM call
-- ❌ **test_llm_limits_topics_to_five** - Mock not intercepting LLM call
-- ❌ **test_llm_filters_empty_strings** - Mock not intercepting LLM call
-
-**Hybrid Tests (1/2):**
-- ❌ **test_hybrid_uses_llm_topics** - Mock not intercepting LLM call
-
 **Example Tests (3/3):**
-- ❌ **test_blog_writing_topics** - Mock not intercepting LLM call
-- ❌ **test_debugging_topics** - Mock not intercepting LLM call
-- ❌ **test_data_analysis_topics** - Mock not intercepting LLM call
+- ✅ **test_blog_writing_topics** - Blog writing topics extracted
+- ✅ **test_debugging_topics** - Debugging topics extracted
+- ✅ **test_data_analysis_topics** - Data analysis topics extracted
 
-**Root Cause:** AsyncMock setup issues, NOT implementation bugs. The actual implementation works correctly as proven by live test.
+**Mock Implementation:** Tests now properly mock PromptLoader to prevent file loading errors during test execution.
 
 **Test Command:**
 ```bash
 pytest tests/unit/test_topic_tagging.py -v
 ```
 
-**Result:** 12 passed, 8 failed (mock issues only) ⚠️
+**Result:** 20 passed, 0 failed ✅
 
 ---
 
@@ -365,17 +359,12 @@ related = trail.get_related_topics("api-design")
 
 ## Known Issues
 
-### Unit Test Mock Issues (Non-Critical)
+**None** - All tests passing ✅
 
-**Issue:** 8/20 unit tests fail due to AsyncMock not intercepting LLM calls
-
-**Impact:** None - live test confirms implementation works correctly
-
-**Root Cause:** Mock configuration issues in test setup, not implementation bugs
-
-**Evidence:** Live test with real LLM successfully extracts topics and emits events
-
-**Resolution:** Not critical for production deployment. Can be fixed later by improving mock setup.
+**Previous Issue (RESOLVED):**
+- ~~8/20 unit tests failed due to PromptLoader not being mocked~~
+- **Fixed:** Added `@patch('muxi.formation.prompts.loader.PromptLoader')` decorator to all LLM tests
+- **Result:** All 20 unit tests now pass
 
 ---
 

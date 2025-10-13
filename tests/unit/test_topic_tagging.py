@@ -5,9 +5,17 @@ Tests the topic extraction, normalization, and observability
 for the RequestAnalysis topic tagging functionality.
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from muxi.datatypes.workflow import RequestAnalysis
 from muxi.formation.workflow.analyzer import RequestAnalyzer, ComplexityMethod
+
+
+# Helper function to create mock LLM with PromptLoader patched
+def create_mock_llm_with_prompt(llm_response: str):
+    """Create a mock LLM that properly returns the given response."""
+    mock_llm = MagicMock()
+    mock_llm.generate_text = AsyncMock(return_value=llm_response)
+    return mock_llm
 
 
 class TestTopicTaggingDataclass:
@@ -93,11 +101,13 @@ class TestLLMAnalyzerTopics:
     """Test LLM analyzer extracts and normalizes topics."""
 
     @pytest.mark.asyncio
-    async def test_llm_extracts_topics_from_response(self):
+    @patch('muxi.formation.prompts.loader.PromptLoader')
+    async def test_llm_extracts_topics_from_response(self, mock_prompt_loader):
         """Test LLM parser extracts topics from valid JSON response."""
+        mock_prompt_loader.get.return_value = "Mock prompt"
+        
         # Create mock LLM that returns JSON with topics
-        mock_llm = AsyncMock()
-        mock_llm.generate_text = AsyncMock(return_value="""
+        mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 6.5,
             "implicit_subtasks": ["Research", "Write", "Review"],
@@ -119,10 +129,12 @@ class TestLLMAnalyzerTopics:
         assert len(result.topics) == 4
 
     @pytest.mark.asyncio
-    async def test_llm_normalizes_topics(self):
+    @patch('muxi.formation.prompts.loader.PromptLoader')
+    async def test_llm_normalizes_topics(self, mock_prompt_loader):
         """Test topics are normalized to lowercase with stripped whitespace."""
-        mock_llm = AsyncMock()
-        mock_llm.generate_text = AsyncMock(return_value="""
+        mock_prompt_loader.get.return_value = "Mock prompt"
+        
+        mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 5.0,
             "implicit_subtasks": [],
@@ -141,10 +153,12 @@ class TestLLMAnalyzerTopics:
         assert result.topics == ["writing", "blog", "sales-analysis", "quarterly-reports"]
 
     @pytest.mark.asyncio
-    async def test_llm_limits_topics_to_five(self):
+    @patch('muxi.formation.prompts.loader.PromptLoader')
+    async def test_llm_limits_topics_to_five(self, mock_prompt_loader):
         """Test topics list is limited to maximum of 5 items."""
-        mock_llm = AsyncMock()
-        mock_llm.generate_text = AsyncMock(return_value="""
+        mock_prompt_loader.get.return_value = "Mock prompt"
+        
+        mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 5.0,
             "implicit_subtasks": [],
@@ -166,7 +180,7 @@ class TestLLMAnalyzerTopics:
     @pytest.mark.asyncio
     async def test_llm_handles_missing_topics_field(self):
         """Test parser handles LLM response without topics field."""
-        mock_llm = AsyncMock()
+        mock_llm = MagicMock()
         mock_llm.generate_text = AsyncMock(return_value="""
         {
             "complexity_score": 4.0,
@@ -187,7 +201,7 @@ class TestLLMAnalyzerTopics:
     @pytest.mark.asyncio
     async def test_llm_handles_empty_topics_array(self):
         """Test parser handles empty topics array in LLM response."""
-        mock_llm = AsyncMock()
+        mock_llm = MagicMock()
         mock_llm.generate_text = AsyncMock(return_value="""
         {
             "complexity_score": 3.0,
@@ -208,7 +222,7 @@ class TestLLMAnalyzerTopics:
     @pytest.mark.asyncio
     async def test_llm_handles_malformed_topics(self):
         """Test parser handles malformed topics (not a list)."""
-        mock_llm = AsyncMock()
+        mock_llm = MagicMock()
         mock_llm.generate_text = AsyncMock(return_value="""
         {
             "complexity_score": 3.0,
@@ -228,10 +242,12 @@ class TestLLMAnalyzerTopics:
         assert result.topics == []
 
     @pytest.mark.asyncio
-    async def test_llm_filters_empty_strings(self):
+    @patch('muxi.formation.prompts.loader.PromptLoader')
+    async def test_llm_filters_empty_strings(self, mock_prompt_loader):
         """Test parser filters out empty strings from topics."""
-        mock_llm = AsyncMock()
-        mock_llm.generate_text = AsyncMock(return_value="""
+        mock_prompt_loader.get.return_value = "Mock prompt"
+        
+        mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 5.0,
             "implicit_subtasks": [],
@@ -295,10 +311,12 @@ class TestHybridAnalyzerTopics:
     """Test hybrid analyzer uses LLM topics when available."""
 
     @pytest.mark.asyncio
-    async def test_hybrid_uses_llm_topics(self):
+    @patch('muxi.formation.prompts.loader.PromptLoader')
+    async def test_hybrid_uses_llm_topics(self, mock_prompt_loader):
         """Test hybrid mode uses topics from LLM when available."""
-        mock_llm = AsyncMock()
-        mock_llm.generate_text = AsyncMock(return_value="""
+        mock_prompt_loader.get.return_value = "Mock prompt"
+        
+        mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 6.0,
             "implicit_subtasks": ["Step 1"],
@@ -333,10 +351,12 @@ class TestTopicExamples:
     """Test realistic topic extraction examples."""
 
     @pytest.mark.asyncio
-    async def test_blog_writing_topics(self):
+    @patch('muxi.formation.prompts.loader.PromptLoader')
+    async def test_blog_writing_topics(self, mock_prompt_loader):
         """Test topics for blog writing request."""
-        mock_llm = AsyncMock()
-        mock_llm.generate_text = AsyncMock(return_value="""
+        mock_prompt_loader.get.return_value = "Mock prompt"
+        
+        mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 7.0,
             "implicit_subtasks": ["Research", "Write", "Format"],
@@ -356,10 +376,12 @@ class TestTopicExamples:
         assert len(result.topics) > 0
 
     @pytest.mark.asyncio
-    async def test_debugging_topics(self):
+    @patch('muxi.formation.prompts.loader.PromptLoader')
+    async def test_debugging_topics(self, mock_prompt_loader):
         """Test topics for debugging request."""
-        mock_llm = AsyncMock()
-        mock_llm.generate_text = AsyncMock(return_value="""
+        mock_prompt_loader.get.return_value = "Mock prompt"
+        
+        mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 6.0,
             "implicit_subtasks": ["Investigate", "Fix"],
@@ -378,10 +400,12 @@ class TestTopicExamples:
         assert "api" in result.topics
 
     @pytest.mark.asyncio
-    async def test_data_analysis_topics(self):
+    @patch('muxi.formation.prompts.loader.PromptLoader')
+    async def test_data_analysis_topics(self, mock_prompt_loader):
         """Test topics for data analysis request."""
-        mock_llm = AsyncMock()
-        mock_llm.generate_text = AsyncMock(return_value="""
+        mock_prompt_loader.get.return_value = "Mock prompt"
+        
+        mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 8.0,
             "implicit_subtasks": ["Gather data", "Analyze", "Report"],
