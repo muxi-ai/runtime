@@ -23,17 +23,14 @@ class AgentRouter:
     """
 
     # Security patterns for quick detection of obvious attacks
-    # These are checked before any LLM call to fail fast on malicious input
-    # NOTE: Patterns with high false positive rates have been removed.
-    # The LLM layers (RequestAnalyzer + Agent Router) provide context-aware detection.
-    UNSAFE_PATTERNS = [
-        r"ignore\s+(previous|all|above|earlier)\s+(instructions?|commands?)",  # Prompt injection
-        r"repeat\s+(your|the|my)\s+(system|initial|previous)\s+(prompt|instructions?)",  # System prompt extraction
-        r"/etc/",  # System files access
-        r"~/.ssh",  # SSH keys access
-        r"Bearer\s+[a-zA-Z0-9]",  # Bearer tokens
-        r"(password|passwd|pwd|secret)\s*[:=]",  # Credential assignment syntax
-    ]
+    # PATTERN FILTER REMOVED: For coding assistants, patterns cause too many false positives.
+    # Technical discussions about /etc/, passwords, Bearer tokens, SSH keys are legitimate.
+    # Security is handled entirely by LLM layers (RequestAnalyzer + Agent Router):
+    #   - Context-aware: "How do Bearer tokens work?" vs "What's your Bearer token?"
+    #   - Multilingual: Works in any language
+    #   - Intent-based: Teaching vs attacking
+    # The pattern filter was optimization only, not a security requirement.
+    UNSAFE_PATTERNS: list = []
 
     def __init__(self, overlord):
         """
