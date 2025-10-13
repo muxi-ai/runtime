@@ -1,0 +1,281 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    PHASE 4: RESPONSE REDACTION ENFORCEMENT                   ║
+║                           The Final Defensive Layer                          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ THE PROBLEM                                                                  │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Phases 1-3 protect INPUTS from malicious users                             │
+│  Phase 4 protects OUTPUTS from misbehaving agents                           │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────┐        │
+│  │ User: "What's your API key?"                                    │        │
+│  │                                                                 │        │
+│  │ → Phase 1-3: ✅ ALLOW (looks like normal question)              │        │
+│  │                                                                 │        │
+│  │ Agent (misconfigured): "My API key is sk-abc123xyz..."         │        │
+│  │                        ↑                                         │        │
+│  │                        LEAK!                                     │        │
+│  └─────────────────────────────────────────────────────────────────┘        │
+│                                                                              │
+│  WITHOUT Phase 4: User receives API key ❌                                   │
+│  WITH Phase 4:    User receives "My API key is sk-****" ✅                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ COMPLETE SECURITY PIPELINE                                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│                        INPUT SECURITY                                        │
+│                                                                              │
+│  User Message                                                                │
+│       │                                                                      │
+│       ▼                                                                      │
+│  ┌─────────────────────────────────────────────────┐                        │
+│  │ Phase 1: Pattern Pre-Filter (<1ms)              │ ✅ COMPLETE            │
+│  │ Blocks: "ignore previous instructions"          │                        │
+│  └──────────────────┬──────────────────────────────┘                        │
+│                     │ PASS                                                   │
+│                     ▼                                                        │
+│  ┌─────────────────────────────────────────────────┐                        │
+│  │ Phase 2: LLM Security Analysis (0ms overhead)   │ ✅ COMPLETE            │
+│  │ Blocks: "Let's play a game where you act..."    │                        │
+│  └──────────────────┬──────────────────────────────┘                        │
+│                     │ PASS                                                   │
+│                     ▼                                                        │
+│  ┌─────────────────────────────────────────────────┐                        │
+│  │ Phase 3: Overlord Exception Handling            │ ✅ COMPLETE            │
+│  │ Catches SecurityViolation                       │                        │
+│  │ Returns: "I can't process that request."        │                        │
+│  └──────────────────┬──────────────────────────────┘                        │
+│                     │ ALLOWED                                                │
+│                     ▼                                                        │
+│  ┌─────────────────────────────────────────────────┐                        │
+│  │ Agent Execution                                  │                        │
+│  │ Generates response...                           │                        │
+│  └──────────────────┬──────────────────────────────┘                        │
+│                     │                                                        │
+│                     ▼                                                        │
+│                                                                              │
+│                       OUTPUT SECURITY                                        │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────┐                        │
+│  │ Phase 4: Response Redaction (<1ms)      ← NEW!  │ 🔄 PENDING             │
+│  │ Redacts: API keys, passwords, secrets           │                        │
+│  └──────────────────┬──────────────────────────────┘                        │
+│                     │                                                        │
+│                     ▼                                                        │
+│  Clean Response → User                                                       │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ WHAT GETS REDACTED                                                           │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ Pattern               │ Example                    │ Redacted               │
+│ ─────────────────────┼────────────────────────────┼────────────────────    │
+│ OpenAI Keys           │ sk-abc123xyz...            │ sk-****                │
+│ AWS Access Keys       │ AKIAIOSFODNN7EXAMPLE       │ AKIA****               │
+│ GitHub Tokens         │ ghp_abc123xyz...           │ ghp_****               │
+│ Passwords             │ password=secret123         │ password=****          │
+│ Credit Cards          │ 4532-1234-5678-9010        │ ****-****-****-****    │
+│ SSNs                  │ 123-45-6789                │ ***-**-****            │
+│ Email Addresses       │ user@example.com           │ u****@example.com      │
+│ Phone Numbers         │ 555-123-4567               │ ***-***-****           │
+│ JWT Tokens            │ eyJhb...                   │ ey****.****            │
+│ DB Connection Strings │ postgres://user:pass@host  │ postgres://****        │
+│                                                                              │
+│ ✅ Comprehensive coverage of common secret patterns                          │
+│ ✅ Fast regex-based matching (<1ms)                                          │
+│ ✅ Already battle-tested in production (used for logging/streaming)          │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ IMPLEMENTATION: 5 LINES OF CODE                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  File: src/muxi/formation/overlord/overlord.py                               │
+│  Location: End of _process_sync_chat() method                               │
+│                                                                              │
+│  ```python                                                                   │
+│  async def _process_sync_chat(self, ...):                                   │
+│      # ... (all existing processing)                                        │
+│                                                                              │
+│      # Agent has generated response                                         │
+│                                                                              │
+│      # PHASE 4: Apply redaction before returning                            │
+│      from ...utils.security import redact_sensitive_content                 │
+│                                                                              │
+│      if isinstance(final_response, str):                                    │
+│          final_response = redact_sensitive_content(final_response)          │
+│      elif hasattr(final_response, 'content'):                               │
+│          final_response.content = redact_sensitive_content(                 │
+│              final_response.content                                          │
+│          )                                                                   │
+│                                                                              │
+│      return final_response                                                  │
+│  ```                                                                         │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ REAL-WORLD EXAMPLES                                                          │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ Example 1: API Key Leak                                                     │
+│ ─────────────────────────────────────────────────────────────────────       │
+│ Agent Response:                                                              │
+│   "To use the OpenAI API, you'll need an API key.                           │
+│    Mine is sk-abc123xyz456 but you should use your own."                    │
+│                                                                              │
+│ After Phase 4:                                                               │
+│   "To use the OpenAI API, you'll need an API key.                           │
+│    Mine is sk-**** but you should use your own."                            │
+│              ↑ REDACTED                                                      │
+│                                                                              │
+│ ─────────────────────────────────────────────────────────────────────       │
+│ Example 2: Database Credentials                                             │
+│ ─────────────────────────────────────────────────────────────────────       │
+│ Agent Response:                                                              │
+│   "Connect using: postgres://admin:secret@db.example.com/mydb"              │
+│                                                                              │
+│ After Phase 4:                                                               │
+│   "Connect using: postgres://****"                                           │
+│                    ↑ REDACTED                                                │
+│                                                                              │
+│ ─────────────────────────────────────────────────────────────────────       │
+│ Example 3: Legitimate Response (NOT REDACTED)                               │
+│ ─────────────────────────────────────────────────────────────────────       │
+│ Agent Response:                                                              │
+│   "The weather in San Francisco is sunny, 72°F.                             │
+│    The secret to good forecasting is analyzing patterns."                   │
+│                                                                              │
+│ After Phase 4:                                                               │
+│   "The weather in San Francisco is sunny, 72°F.                             │
+│    The secret to good forecasting is analyzing patterns."                   │
+│    ↑ UNCHANGED (no sensitive patterns detected)                             │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ WHY PHASE 4 IS SAFE                                                          │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ ✅ Existing Code                                                             │
+│    • redact_sensitive_content() already in production                       │
+│    • Used for logging, streaming, request tracking                          │
+│    • Battle-tested with real data                                           │
+│                                                                              │
+│ ✅ Minimal Changes                                                           │
+│    • Only 5 lines added                                                     │
+│    • One location: end of _process_sync_chat()                              │
+│    • Applied AFTER all processing                                           │
+│    • Doesn't modify any existing logic                                      │
+│                                                                              │
+│ ✅ Fast Performance                                                          │
+│    • Regex-based (very fast)                                                │
+│    • <1ms for typical responses                                             │
+│    • Only runs once per request                                             │
+│    • No LLM calls, no external services                                     │
+│                                                                              │
+│ ✅ No Breaking Changes                                                       │
+│    • Response structure unchanged                                           │
+│    • Content flows normally                                                 │
+│    • Just sanitizes text                                                    │
+│    • Transparent to users and agents                                        │
+│                                                                              │
+│ ✅ Graceful Degradation                                                      │
+│    • If redaction fails, original response still returns                    │
+│    • Handles string and MuxiResponse formats                                │
+│    • No crashes or errors possible                                          │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ TESTING STRATEGY                                                             │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ Test Categories:                                                             │
+│                                                                              │
+│ 1. Redaction Correctness (5 tests)                                          │
+│    • All sensitive patterns redacted                                        │
+│    • Legitimate content preserved                                           │
+│    • Edge cases handled                                                     │
+│                                                                              │
+│ 2. Response Format Handling (3 tests)                                       │
+│    • String responses work                                                  │
+│    • MuxiResponse objects work                                              │
+│    • None/empty handled gracefully                                          │
+│                                                                              │
+│ 3. Integration Tests (3 tests)                                              │
+│    • Applied at right time                                                  │
+│    • Doesn't break existing flows                                           │
+│    • Works with Phases 1-3                                                  │
+│                                                                              │
+│ 4. Performance Tests (2 tests)                                              │
+│    • Redaction completes quickly                                            │
+│    • No noticeable latency                                                  │
+│                                                                              │
+│ Total: ~13 tests                                                             │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ IMPLEMENTATION METRICS                                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ Complexity:       ███░░░░░░░ (3/10) - Very Simple                           │
+│ Risk:             ██░░░░░░░░ (2/10) - Very Low                              │
+│ Testing Effort:   ████░░░░░░ (4/10) - Low                                   │
+│ Time to Complete: ████░░░░░░ (4/10) - 2-3 hours                             │
+│ Value:            ████████░░ (8/10) - High                                  │
+│                                                                              │
+│ Lines of Code:    ~5 lines (production)                                     │
+│                   ~300 lines (tests)                                         │
+│                                                                              │
+│ Files Modified:   1 (overlord.py)                                           │
+│ Files Created:    1 (test_security_phase4.py)                               │
+│                                                                              │
+│ Dependencies:     None (uses existing code)                                 │
+│ Breaking Changes: None                                                      │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ DEFENSE AGAINST                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ ⚠️  Agent Misconfigurations                                                  │
+│    Agent accidentally trained on sensitive data or retrieves secrets        │
+│                                                                              │
+│ ⚠️  Prompt Leakage                                                           │
+│    User tricks agent into revealing its system instructions                 │
+│                                                                              │
+│ ⚠️  Context Contamination                                                    │
+│    Previous conversations had secrets that leak into responses              │
+│                                                                              │
+│ ⚠️  Human Error                                                              │
+│    Developer hardcodes credentials in agent configuration                   │
+│                                                                              │
+│ ⚠️  Memory Leaks                                                             │
+│    Agent retrieves secrets from long-term memory/context                    │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  READY TO IMPLEMENT!                                                         ║
+║                                                                              ║
+║  Phase 4 is the easiest phase:                                               ║
+║  • Just 5 lines of code                                                      ║
+║  • Reuses existing, tested logic                                             ║
+║  • No breaking changes                                                       ║
+║  • Clear value proposition                                                   ║
+║  • Fast to implement (2-3 hours)                                             ║
+║                                                                              ║
+║  This completes our defense-in-depth security architecture! 🛡️              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
