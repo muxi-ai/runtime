@@ -84,6 +84,7 @@ from onellm import ChatCompletion, Embedding
 from onellm.audio import AudioTranscription
 from onellm.config import set_api_key
 from onellm.errors import AuthenticationError, RateLimitError, InvalidRequestError
+from onellm import init_cache as onellm_init_cache
 
 # Import multimodal components
 from ..multimodal import (
@@ -92,6 +93,99 @@ from ..multimodal import (
     ModalityType,
     ProcessingMode,
 )
+
+# Filter noisy OneLLM cache warnings that don't affect functionality
+import logging
+
+
+class OneLLMCacheWarningFilter(logging.Filter):
+    """Filter out harmless OneLLM semantic cache warnings."""
+
+    def filter(self, record):
+        # Suppress the numpy array warning from semantic cache fallback
+        return "Failed to add to semantic cache" not in record.getMessage()
+
+
+# Apply filter to OneLLM cache logger
+_onellm_cache_logger = logging.getLogger("onellm.cache")
+_onellm_cache_logger.addFilter(OneLLMCacheWarningFilter())
+
+# Module-level cache initialization state
+_cache_initialized = False
+
+
+def initialize_onellm_cache(cache_config: Optional[Dict[str, Any]] = None) -> bool:
+    """
+    Initialize OneLLM cache with provided configuration.
+
+    This function should be called once during application startup.
+    Subsequent calls are ignored (idempotent).
+
+    Args:
+        cache_config: Dictionary with cache configuration:
+            - enabled: bool (default: True)
+            - max_entries: int (default: 10000)
+            - p: float (default: 0.95)
+            - hash_only: bool (default: False)
+            - stream_chunk_strategy: str (default: "sentences")
+            - stream_chunk_length: int (default: 1)
+            - ttl: int (default: 86400)
+
+    Requires: onellm >= 0.20251013.0
+
+    Returns:
+        bool: True if cache was initialized, False if already initialized or disabled
+    """
+    global _cache_initialized
+
+    # Return early if already initialized
+    if _cache_initialized:
+        return False
+
+    # Use defaults if no config provided
+    if cache_config is None:
+        cache_config = {}
+
+    # Check if caching is enabled (default: True)
+    if not cache_config.get("enabled", True):
+        observability.observe(
+            event_type=observability.SystemEvents.INITIALIZING,
+            level=observability.EventLevel.INFO,
+            data={"service": "onellm_cache", "enabled": False},
+            description="OneLLM cache is disabled in configuration",
+        )
+        _cache_initialized = True  # Mark as initialized to prevent retry
+        return False
+
+    # Extract cache parameters with defaults optimized for MUXI
+    cache_params = {
+        "max_entries": cache_config.get("max_entries", 10000),
+        "p": cache_config.get("p", 0.95),
+        "hash_only": cache_config.get("hash_only", False),
+        "stream_chunk_strategy": cache_config.get("stream_chunk_strategy", "sentences"),
+        "stream_chunk_length": cache_config.get("stream_chunk_length", 1),
+        "ttl": cache_config.get("ttl", 86400),  # 24 hours
+    }
+
+    # Initialize OneLLM cache
+    onellm_init_cache(**cache_params)
+
+    observability.observe(
+        event_type=observability.SystemEvents.INITIALIZING,
+        level=observability.EventLevel.INFO,
+        data={
+            "service": "onellm_cache",
+            "enabled": True,
+            **cache_params,
+        },
+        description=(
+            f"OneLLM cache initialized with {cache_params['max_entries']} max entries, "
+            f"{cache_params['p']} similarity threshold, {cache_params['ttl']}s TTL"
+        ),
+    )
+
+    _cache_initialized = True
+    return True
 
 
 # File processing configuration
@@ -919,6 +1013,8 @@ class LLM:
             params["stop"] = kwargs["stop"]
 
         # Add any additional kwargs not already handled
+        # Note: caching is excluded because it's a MUXI/OneLLM global setting,
+        # not a per-request parameter for the underlying provider APIs
         excluded_params = {
             "temperature",
             "max_tokens",
@@ -928,10 +1024,16 @@ class LLM:
             "stop",
             "files",
             "timeout",
+            "caching",  # MUXI-specific, not an API parameter
         }
         additional_kwargs = {k: v for k, v in kwargs.items() if k not in excluded_params}
         params.update(additional_kwargs)
-        params.update(self.additional_params)
+
+        # Filter caching from additional_params as well
+        filtered_additional_params = {
+            k: v for k, v in self.additional_params.items() if k not in excluded_params
+        }
+        params.update(filtered_additional_params)
 
         return params
 
@@ -1009,35 +1111,35 @@ class LLM:
             usage_data = {}
 
             # Handle object with usage attribute
-            if hasattr(response, 'usage'):
+            if hasattr(response, "usage"):
                 usage = response.usage
                 if isinstance(usage, dict):
                     usage_data = {
-                        'total_tokens': usage.get('total_tokens', 0),
-                        'prompt_tokens': usage.get('prompt_tokens', 0),
-                        'completion_tokens': usage.get('completion_tokens', 0),
-                        'prompt_tokens_cached': usage.get('prompt_tokens_cached', 0),
-                        'completion_tokens_cached': usage.get('completion_tokens_cached', 0),
+                        "total_tokens": usage.get("total_tokens", 0),
+                        "prompt_tokens": usage.get("prompt_tokens", 0),
+                        "completion_tokens": usage.get("completion_tokens", 0),
+                        "prompt_tokens_cached": usage.get("prompt_tokens_cached", 0),
+                        "completion_tokens_cached": usage.get("completion_tokens_cached", 0),
                     }
                 else:
                     # Handle object-style usage
                     usage_data = {
-                        'total_tokens': getattr(usage, 'total_tokens', 0),
-                        'prompt_tokens': getattr(usage, 'prompt_tokens', 0),
-                        'completion_tokens': getattr(usage, 'completion_tokens', 0),
-                        'prompt_tokens_cached': getattr(usage, 'prompt_tokens_cached', 0),
-                        'completion_tokens_cached': getattr(usage, 'completion_tokens_cached', 0),
+                        "total_tokens": getattr(usage, "total_tokens", 0),
+                        "prompt_tokens": getattr(usage, "prompt_tokens", 0),
+                        "completion_tokens": getattr(usage, "completion_tokens", 0),
+                        "prompt_tokens_cached": getattr(usage, "prompt_tokens_cached", 0),
+                        "completion_tokens_cached": getattr(usage, "completion_tokens_cached", 0),
                     }
 
             # Handle dictionary format
-            elif isinstance(response, dict) and 'usage' in response:
-                usage = response['usage']
+            elif isinstance(response, dict) and "usage" in response:
+                usage = response["usage"]
                 usage_data = {
-                    'total_tokens': usage.get('total_tokens', 0),
-                    'prompt_tokens': usage.get('prompt_tokens', 0),
-                    'completion_tokens': usage.get('completion_tokens', 0),
-                    'prompt_tokens_cached': usage.get('prompt_tokens_cached', 0),
-                    'completion_tokens_cached': usage.get('completion_tokens_cached', 0),
+                    "total_tokens": usage.get("total_tokens", 0),
+                    "prompt_tokens": usage.get("prompt_tokens", 0),
+                    "completion_tokens": usage.get("completion_tokens", 0),
+                    "prompt_tokens_cached": usage.get("prompt_tokens_cached", 0),
+                    "completion_tokens_cached": usage.get("completion_tokens_cached", 0),
                 }
 
             return usage_data
@@ -1407,8 +1509,9 @@ Provide a helpful, conversational response that directly addresses what the user
 
             # Track token usage
             usage_data = self._extract_tokens_from_response(response)
-            if usage_data and usage_data.get('total_tokens', 0) > 0:
+            if usage_data and usage_data.get("total_tokens", 0) > 0:
                 from ...services.observability.context import get_current_request_context
+
                 context = get_current_request_context()
                 if context:
                     context.tokens.add_tokens(self.model_name, usage_data)
@@ -1470,8 +1573,9 @@ Provide a helpful, conversational response that directly addresses what the user
 
             # Track token usage
             usage_data = self._extract_tokens_from_response(response)
-            if usage_data and usage_data.get('total_tokens', 0) > 0:
+            if usage_data and usage_data.get("total_tokens", 0) > 0:
                 from ...services.observability.context import get_current_request_context
+
                 context = get_current_request_context()
                 if context:
                     context.tokens.add_tokens(self.model_name, usage_data)
@@ -1525,6 +1629,7 @@ Provide a helpful, conversational response that directly addresses what the user
             usage_data = self._extract_tokens_from_response(response)
             if usage_data:
                 from ...services.observability.context import get_current_request_context
+
                 context = get_current_request_context()
                 if context:
                     context.tokens.add_tokens(embedding_model, usage_data)
@@ -1597,6 +1702,7 @@ Provide a helpful, conversational response that directly addresses what the user
             usage_data = self._extract_tokens_from_response(response)
             if usage_data:
                 from ...services.observability.context import get_current_request_context
+
                 context = get_current_request_context()
                 if context:
                     context.tokens.add_tokens(transcription_model, usage_data)
@@ -1651,6 +1757,7 @@ Provide a helpful, conversational response that directly addresses what the user
             usage_data = self._extract_tokens_from_response(response)
             if usage_data:
                 from ...services.observability.context import get_current_request_context
+
                 context = get_current_request_context()
                 if context:
                     context.tokens.add_tokens(embedding_model, usage_data)

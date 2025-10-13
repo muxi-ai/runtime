@@ -23,7 +23,6 @@ from ..services.observability.logger import EventLogger
 from .config.document_processing import DocumentProcessingConfig
 from .documents.storage.chunk_manager import DocumentChunkManager
 
-
 # Configuration limits
 MAX_CLARIFICATION_ROUNDS = 32  # Maximum rounds allowed for any clarification mode
 
@@ -125,6 +124,13 @@ def initialize_llm_config(formation) -> None:
         ConfigurationValidationError: If the 'text' capability is not configured
     """
     llm_config = formation._llm_config if hasattr(formation, "_llm_config") else {}
+
+    # Initialize OneLLM cache if configured
+    # Import here to avoid circular dependency
+    from ..services.llm.llm import initialize_onellm_cache
+    settings = llm_config.get("settings", {})
+    cache_config = settings.get("caching", {})
+    initialize_onellm_cache(cache_config)
 
     # Initialize model cache for capability-based resolution
     formation._model_cache = {}
