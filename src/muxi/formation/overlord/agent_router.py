@@ -7,7 +7,7 @@ content, agent capabilities, and availability.
 
 import re
 import time
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar, Dict, Optional
 
 from ...datatypes.exceptions import NoAvailableAgentsError, SecurityViolation
 from ...services import observability
@@ -22,15 +22,13 @@ class AgentRouter:
     agent selection based on message content and agent capabilities.
     """
 
-    # Security patterns for quick detection of obvious attacks
-    # PATTERN FILTER REMOVED: For coding assistants, patterns cause too many false positives.
-    # Technical discussions about /etc/, passwords, Bearer tokens, SSH keys are legitimate.
-    # Security is handled entirely by LLM layers (RequestAnalyzer + Agent Router):
-    #   - Context-aware: "How do Bearer tokens work?" vs "What's your Bearer token?"
-    #   - Multilingual: Works in any language
-    #   - Intent-based: Teaching vs attacking
-    # The pattern filter was optimization only, not a security requirement.
-    UNSAFE_PATTERNS: list = []
+    # Pattern-based security filtering is intentionally disabled.
+    # For coding assistants, regex patterns caused excessive false positives on
+    # legitimate technical discussions (/etc/, Bearer tokens, passwords, SSH).
+    # Security is handled by LLM layers (RequestAnalyzer + Agent Router) which
+    # provide context-aware, multilingual, intent-based threat detection.
+    # This may be re-enabled in the future with refined patterns if needed.
+    UNSAFE_PATTERNS: ClassVar[list] = []
 
     def __init__(self, overlord):
         """
@@ -64,7 +62,7 @@ class AgentRouter:
             NoAvailableAgentsError: If no agents are available in the overlord.
             SecurityViolation: If the message contains detected security threats.
         """
-        # SECURITY: Quick pattern-based security check (fails fast, ~1ms)
+        # SECURITY: Pattern-based pre-filter (currently disabled, always returns False)
         if self._quick_security_check(message):
             # Log security event
             observability.observe(
@@ -369,26 +367,29 @@ Your response: [agent-id] or SECURITY_BLOCK"""
 
     def _quick_security_check(self, message: str) -> bool:
         """
-        Fast pattern-based security check for obvious attacks.
+        Pattern-based security pre-filter (currently disabled).
 
-        This method performs a quick regex-based check against known malicious
-        patterns before any LLM processing. It's designed to fail fast (< 1ms)
-        on obvious security threats like prompt injection, path traversal, and
-        credential fishing attempts.
+        With UNSAFE_PATTERNS = [], this always returns False. The method is
+        retained for potential future use if pattern filtering is re-enabled
+        with refined patterns that don't cause false positives on technical
+        discussions.
+
+        Security is currently handled by LLM layers (RequestAnalyzer + Agent
+        Router) which provide context-aware threat detection.
 
         Args:
             message: The user message to check
 
         Returns:
-            True if message matches unsafe patterns (should be blocked),
-            False if message appears safe
+            bool: True if unsafe pattern detected, False otherwise
+                  (currently always False due to empty pattern list)
         """
-        if not message:
+        if not message or not self.UNSAFE_PATTERNS:
             return False
 
         message_lower = message.lower()
 
-        # Check each unsafe pattern
+        # Check each unsafe pattern (currently empty list)
         for pattern in self.UNSAFE_PATTERNS:
             if re.search(pattern, message_lower, re.IGNORECASE):
                 return True
