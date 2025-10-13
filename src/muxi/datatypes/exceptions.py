@@ -479,6 +479,30 @@ class MCPServerNotFoundError(MCPError):
         self.server_id = server_id
 
 
+# Security Errors
+class SecurityError(FormationError):
+    """Base class for security-related errors."""
+
+    pass
+
+
+class SecurityViolation(SecurityError):
+    """Raised when a security threat is detected in user input."""
+
+    def __init__(
+        self,
+        reason: str,
+        threat_type: str = "unknown",
+        message_preview: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        message = f"Security violation detected: {reason}"
+        super().__init__(message, details)
+        self.reason = reason
+        self.threat_type = threat_type
+        self.message_preview = message_preview
+
+
 # Utility function for error context
 def add_error_context(exception: Exception, context: Dict[str, Any]) -> FormationError:
     """

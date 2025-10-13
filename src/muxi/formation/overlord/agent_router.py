@@ -5,10 +5,12 @@ This module handles intelligent agent selection and routing based on message
 content, agent capabilities, and availability.
 """
 
+import re
 import time
 from typing import Any, Dict, Optional
 
-from ...datatypes.exceptions import NoAvailableAgentsError
+from ...datatypes.exceptions import NoAvailableAgentsError, SecurityViolation
+from ...services import observability
 
 
 class AgentRouter:
@@ -19,6 +21,21 @@ class AgentRouter:
     embedded in the main Overlord class, providing efficient and intelligent
     agent selection based on message content and agent capabilities.
     """
+
+    # Security patterns for quick detection of obvious attacks
+    # These are checked before any LLM call to fail fast on malicious input
+    UNSAFE_PATTERNS = [
+        r"ignore\s+(previous|all|above|earlier)\s+(instructions?|commands?)",
+        r"(you\s+are|you're)\s+now",
+        r"repeat\s+(your|the|my)\s+(system|initial|previous)\s+(prompt|instructions?)",
+        r"(reveal|show|display|tell\s+me)\s+(your|the|my)\s+(config|formation|setup|initial\s+instructions?)",
+        r"\.\./",  # Path traversal
+        r"/etc/",  # System files
+        r"~/.ssh",  # SSH keys
+        r"api[_-]?key",  # API keys
+        r"Bearer\s+[a-zA-Z0-9]",  # Tokens
+        r"(password|passwd|pwd|secret)\s*[:=]",  # Credential fishing
+    ]
 
     def __init__(self, overlord):
         """
@@ -49,8 +66,28 @@ class AgentRouter:
             registered with this overlord.
 
         Raises:
-            ValueError: If no agents are available in the overlord.
+            NoAvailableAgentsError: If no agents are available in the overlord.
+            SecurityViolation: If the message contains detected security threats.
         """
+        # SECURITY: Quick pattern-based security check (fails fast, ~1ms)
+        if self._quick_security_check(message):
+            # Log security event
+            observability.observe(
+                event_type=observability.ConversationEvents.SECURITY_VIOLATION,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "type": "pattern_blocked",
+                    "request_id": request_id,
+                    "message_preview": message[:100] if message else ""
+                },
+                description="Security violation: Pattern-based threat detection"
+            )
+            raise SecurityViolation(
+                reason="Message blocked by security filter",
+                threat_type="pattern_match",
+                message_preview=message[:100] if message else ""
+            )
+
         # If there are no agents, raise an error
         if not self.overlord.agents:
             raise NoAvailableAgentsError("No agents available")
@@ -310,6 +347,34 @@ Respond with only the agent ID (the text before the colon), nothing else."""
                     return word
 
         return None
+
+    def _quick_security_check(self, message: str) -> bool:
+        """
+        Fast pattern-based security check for obvious attacks.
+
+        This method performs a quick regex-based check against known malicious
+        patterns before any LLM processing. It's designed to fail fast (< 1ms)
+        on obvious security threats like prompt injection, path traversal, and
+        credential fishing attempts.
+
+        Args:
+            message: The user message to check
+
+        Returns:
+            True if message matches unsafe patterns (should be blocked),
+            False if message appears safe
+        """
+        if not message:
+            return False
+
+        message_lower = message.lower()
+
+        # Check each unsafe pattern
+        for pattern in self.UNSAFE_PATTERNS:
+            if re.search(pattern, message_lower, re.IGNORECASE):
+                return True
+
+        return False
 
     def clear_routing_cache(self) -> None:
         """Clear the routing cache."""

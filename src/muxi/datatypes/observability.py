@@ -406,6 +406,9 @@ class ConversationEvents(Enum):
     REQUEST_DENIED_VALIDATION = "request.denied.validation"
     # When request is rejected due to validation errors
 
+    SECURITY_VIOLATION = "security.violation"
+    # When a security threat is detected and blocked
+
     REQUEST_FAILED = "request.failed"  # Error state
     # When request processing fails with error
 
