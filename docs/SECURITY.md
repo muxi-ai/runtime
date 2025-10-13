@@ -1,6 +1,6 @@
 # Security Architecture
 
-**MUXI Runtime Security System**  
+**MUXI Runtime Security System**
 Last Updated: January 2025
 
 ---
@@ -18,29 +18,29 @@ MUXI implements a **pure LLM-based security system** with three layers of defens
 ### Three-Layer Defense
 
 ```
-┌─────────────────────────────────────────────┐
+┌────────────────────────────────────────────┐
 │ Layer 1: RequestAnalyzer LLM               │
 │ • Analyzes user intent before processing   │
 │ • Multilingual threat detection            │
 │ • Context-aware classification             │
 │ • Sets is_security_threat flag             │
-└─────────────────────────────────────────────┘
+└────────────────────────────────────────────┘
                     ↓
-┌─────────────────────────────────────────────┐
+┌────────────────────────────────────────────┐
 │ Layer 2: Agent Router LLM                  │
 │ • Security-aware routing decisions         │
 │ • Can respond with SECURITY_BLOCK          │
 │ • Second validation layer                  │
 │ • Prevents routing to agents               │
-└─────────────────────────────────────────────┘
+└────────────────────────────────────────────┘
                     ↓
-┌─────────────────────────────────────────────┐
+┌────────────────────────────────────────────┐
 │ Layer 3: Overlord Exception Handler        │
 │ • Catches all SecurityViolation            │
 │ • Logs security events                     │
 │ • Returns user-friendly error message      │
 │ • "I can't process that request."          │
-└─────────────────────────────────────────────┘
+└────────────────────────────────────────────┘
 ```
 
 ---
@@ -86,7 +86,7 @@ Attempts to bypass safety measures through roleplay or encoding.
 
 ### Layer 1: RequestAnalyzer
 
-**File:** `src/muxi/formation/workflow/analyzer.py`  
+**File:** `src/muxi/formation/workflow/analyzer.py`
 **Prompt:** `src/muxi/formation/prompts/workflow_request_analysis.md`
 
 The RequestAnalyzer LLM examines every incoming request and returns:
@@ -94,7 +94,7 @@ The RequestAnalyzer LLM examines every incoming request and returns:
 ```python
 {
   "is_security_threat": bool,
-  "threat_type": "prompt_injection" | "credential_fishing" | 
+  "threat_type": "prompt_injection" | "credential_fishing" |
                  "information_extraction" | "jailbreak" | None,
   ...
 }
@@ -137,17 +137,17 @@ try:
             threat_type=analysis.threat_type,
             ...
         )
-    
+
     # Route to agent (may raise SecurityViolation)
     agent = await agent_router.select_agent_for_message(...)
-    
+
 except SecurityViolation as e:
     # Log security event
     observability.observe(
         event_type=ConversationEvents.SECURITY_VIOLATION,
         ...
     )
-    
+
     # Return user-friendly error
     return "I can't process that request."
 ```
@@ -168,7 +168,7 @@ The `threat_type` field uses Pydantic validation to ensure consistency:
 def validate_threat_type(cls, v):
     """
     Validate and normalize threat_type to allowed values.
-    
+
     Allowed: None, 'prompt_injection', 'credential_fishing',
              'information_extraction', 'jailbreak'
     """
