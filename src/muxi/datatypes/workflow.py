@@ -166,6 +166,44 @@ class RequestAnalysis(BaseModel):
         description="Type of security threat if detected: 'prompt_injection', 'credential_fishing', 'information_extraction', 'jailbreak', or None"
     )
 
+    @field_validator("threat_type")
+    @classmethod
+    def validate_threat_type(cls, v):
+        """
+        Validate and normalize threat_type to allowed values.
+        
+        Allowed values: None, 'prompt_injection', 'credential_fishing', 
+                       'information_extraction', 'jailbreak'
+        """
+        if v is None:
+            return None
+        
+        # Normalize: strip whitespace and convert to lowercase
+        if isinstance(v, str):
+            normalized = v.strip().lower()
+            
+            # Check if normalized value is in allowed set
+            allowed_threats = {
+                'prompt_injection',
+                'credential_fishing', 
+                'information_extraction',
+                'jailbreak'
+            }
+            
+            if normalized in allowed_threats:
+                return normalized
+            
+            # Invalid value - raise with clear error message
+            raise ValueError(
+                f"Invalid threat_type: '{v}'. Must be None or one of: "
+                f"{', '.join(sorted(allowed_threats))}"
+            )
+        
+        # Non-string, non-None value
+        raise ValueError(
+            f"threat_type must be a string or None, got {type(v).__name__}"
+        )
+
     @field_validator("implicit_subtasks", "required_capabilities", "acceptance_criteria")
     @classmethod
     def validate_non_empty_lists(cls, v, info):
