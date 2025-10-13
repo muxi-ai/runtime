@@ -6459,6 +6459,36 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     actual_message, context=analysis_context
                 )
 
+                # SECURITY CHECK: Block security threats detected by LLM analyzer
+                if analysis.is_security_threat:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.SECURITY_VIOLATION,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "reason": f"LLM detected {analysis.threat_type} attempt",
+                            "threat_type": analysis.threat_type or "llm_detected",
+                            "request_id": request_id,
+                            "user_id": str(user_id) if user_id else None,
+                            "session_id": session_id,
+                            "detection_method": "request_analyzer",
+                        },
+                        description=f"Security threat detected by LLM analyzer: {analysis.threat_type}",
+                    )
+
+                    # Emit streaming event to inform user
+                    streaming.stream(
+                        "error",
+                        "I can't process that request.",
+                        stage="security_blocked",
+                        request_id=request_id,
+                    )
+
+                    # Return error response
+                    return MuxiResponse(
+                        role="assistant",
+                        content="I can't process that request.",
+                    )
+
                 # Emit topic extraction event if topics were generated
                 if analysis.topics:
                     observability.observe(

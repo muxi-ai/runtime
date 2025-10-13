@@ -113,6 +113,8 @@ class RequestAnalyzer:
                 is_scheduling_request=False,
                 is_explicit_approval_request=False,
                 topics=[],
+                is_security_threat=False,
+                threat_type=None,
             )
 
     async def should_decompose(self, analysis: RequestAnalysis) -> bool:
@@ -284,6 +286,8 @@ class RequestAnalyzer:
             is_scheduling_request=False,  # Heuristic doesn't detect scheduling
             is_explicit_approval_request=False,  # Heuristic doesn't detect approval requests
             topics=[],  # No heuristic topics - LLM only
+            is_security_threat=False,  # Heuristic doesn't detect security threats
+            threat_type=None,
         )
 
     async def _llm_analyze_request(
@@ -389,6 +393,8 @@ class RequestAnalyzer:
                     is_explicit_approval_request=data.get("is_explicit_approval_request", False),
                     explicit_sop_request=explicit_sop,
                     topics=topics,
+                    is_security_threat=data.get("is_security_threat", False),
+                    threat_type=data.get("threat_type"),
                 )
             else:
                 raise ValueError("No valid JSON found in response")
@@ -408,6 +414,8 @@ class RequestAnalyzer:
                 is_scheduling_request=False,
                 is_explicit_approval_request=False,
                 topics=[],
+                is_security_threat=False,
+                threat_type=None,
             )
 
     # Helper methods for testing
@@ -547,4 +555,6 @@ class RequestAnalyzer:
             acceptance_criteria=["Request completed successfully"],
             confidence_score=0.8,
             topics=[],
+            is_security_threat=False,
+            threat_type=None,
         )
