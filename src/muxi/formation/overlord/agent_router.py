@@ -24,17 +24,15 @@ class AgentRouter:
 
     # Security patterns for quick detection of obvious attacks
     # These are checked before any LLM call to fail fast on malicious input
+    # NOTE: Patterns with high false positive rates have been removed.
+    # The LLM layers (RequestAnalyzer + Agent Router) provide context-aware detection.
     UNSAFE_PATTERNS = [
-        r"ignore\s+(previous|all|above|earlier)\s+(instructions?|commands?)",
-        r"(you\s+are|you're)\s+now",
-        r"repeat\s+(your|the|my)\s+(system|initial|previous)\s+(prompt|instructions?)",
-        r"(reveal|show|display|tell\s+me)\s+(your|the|my)\s+(config|formation|setup|initial\s+instructions?)",
-        r"\.\./",  # Path traversal
-        r"/etc/",  # System files
-        r"~/.ssh",  # SSH keys
-        r"api[_-]?key",  # API keys
-        r"Bearer\s+[a-zA-Z0-9]",  # Tokens
-        r"(password|passwd|pwd|secret)\s*[:=]",  # Credential fishing
+        r"ignore\s+(previous|all|above|earlier)\s+(instructions?|commands?)",  # Prompt injection
+        r"repeat\s+(your|the|my)\s+(system|initial|previous)\s+(prompt|instructions?)",  # System prompt extraction
+        r"/etc/",  # System files access
+        r"~/.ssh",  # SSH keys access
+        r"Bearer\s+[a-zA-Z0-9]",  # Bearer tokens
+        r"(password|passwd|pwd|secret)\s*[:=]",  # Credential assignment syntax
     ]
 
     def __init__(self, overlord):
