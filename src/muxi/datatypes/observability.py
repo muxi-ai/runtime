@@ -756,6 +756,12 @@ class ConversationEvents(Enum):
     # When clarification completes
 
     # ===================================================================
+    # REQUEST ANALYSIS & CLASSIFICATION
+    # ===================================================================
+    REQUEST_TOPICS_EXTRACTED = "request.topics.extracted"
+    # When topic tags are dynamically extracted from user request via LLM analysis
+
+    # ===================================================================
     # SCHEDULER OPERATIONS
     # ===================================================================
     SCHEDULED_JOB_CREATED = "scheduled.job.created"
