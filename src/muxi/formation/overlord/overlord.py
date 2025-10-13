@@ -169,6 +169,7 @@ from ...datatypes.exceptions import (
     AgentHasDependentsError,
     AgentNotFoundError,
     OverlordShuttingDownError,
+    SecurityViolation,
 )
 
 # Import multimodal and synthesis components
@@ -6795,7 +6796,36 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 description="Starting agent selection process",
             )
 
-            agent_name = await self.select_agent_for_message(message, request_id=request_id)
+            try:
+                agent_name = await self.select_agent_for_message(message, request_id=request_id)
+            except SecurityViolation as e:
+                # Security threat detected - log event and return error response
+                observability.observe(
+                    event_type=observability.ConversationEvents.SECURITY_VIOLATION,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "reason": str(e),
+                        "threat_type": e.threat_type,
+                        "request_id": request_id,
+                        "user_id": str(user_id) if user_id else None,
+                        "session_id": session_id,
+                    },
+                    description=f"Security violation detected: {e.threat_type}",
+                )
+
+                # Emit streaming event to inform user
+                streaming.stream(
+                    "error",
+                    "I can't process that request.",
+                    stage="security_blocked",
+                    request_id=request_id,
+                )
+
+                # Return error response
+                return MuxiResponse(
+                    role="assistant",
+                    content="I can't process that request.",
+                )
 
             # Emit agent selection completed event
             observability.observe(
