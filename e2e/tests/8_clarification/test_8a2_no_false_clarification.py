@@ -38,7 +38,7 @@ async def test_no_false_clarification():
         response = await overlord.chat(
             message=(
                 "I am a PostgreSQL test user. My favorite database is PostgreSQL "
-                "and I work with distributed systems.",
+                "and I work with distributed systems."
             ),
             user_id="test_user",
             session_id="test_declarative_1",
