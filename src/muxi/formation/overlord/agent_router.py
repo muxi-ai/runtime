@@ -5,9 +5,8 @@ This module handles intelligent agent selection and routing based on message
 content, agent capabilities, and availability.
 """
 
-import re
 import time
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, Dict, Optional
 
 from ...datatypes.exceptions import NoAvailableAgentsError, SecurityViolation
 from ...services import observability
@@ -22,13 +21,10 @@ class AgentRouter:
     agent selection based on message content and agent capabilities.
     """
 
-    # Pattern-based security filtering is intentionally disabled.
-    # For coding assistants, regex patterns caused excessive false positives on
-    # legitimate technical discussions (/etc/, Bearer tokens, passwords, SSH).
-    # Security is handled by LLM layers (RequestAnalyzer + Agent Router) which
-    # provide context-aware, multilingual, intent-based threat detection.
-    # This may be re-enabled in the future with refined patterns if needed.
-    UNSAFE_PATTERNS: ClassVar[list] = []
+    # Pattern-based security filtering was removed in favor of LLM-based detection.
+    # Security is now handled by RequestAnalyzer and Agent Router LLM which provide
+    # context-aware, multilingual, intent-based threat detection without the false
+    # positives that regex patterns caused on technical discussions.
 
     def __init__(self, overlord):
         """
@@ -48,6 +44,10 @@ class AgentRouter:
         suited to handle it, based on agent descriptions and capabilities. It uses the
         routing model to make this determination with intelligent fallbacks.
 
+        Security is handled by LLM layers (RequestAnalyzer + Agent Router LLM)
+        which provide context-aware, multilingual threat detection. Pattern-based
+        filtering was removed to eliminate false positives on technical discussions.
+
         Args:
             message: The message to route. This is the user's message or query
                 that needs to be directed to an appropriate agent.
@@ -60,27 +60,9 @@ class AgentRouter:
 
         Raises:
             NoAvailableAgentsError: If no agents are available in the overlord.
-            SecurityViolation: If the message contains detected security threats.
+            SecurityViolation: If the message contains detected security threats
+                (raised by LLM layers, not pattern matching).
         """
-        # SECURITY: Pattern-based pre-filter (currently disabled, always returns False)
-        if self._quick_security_check(message):
-            # Log security event
-            observability.observe(
-                event_type=observability.ConversationEvents.SECURITY_VIOLATION,
-                level=observability.EventLevel.WARNING,
-                data={
-                    "type": "pattern_blocked",
-                    "request_id": request_id,
-                    "message_preview": message[:100] if message else ""
-                },
-                description="Security violation: Pattern-based threat detection"
-            )
-            raise SecurityViolation(
-                reason="Message blocked by security filter",
-                threat_type="pattern_match",
-                message_preview=message[:100] if message else ""
-            )
-
         # If there are no agents, raise an error
         if not self.overlord.agents:
             raise NoAvailableAgentsError("No agents available")
@@ -364,37 +346,6 @@ Your response: [agent-id] or SECURITY_BLOCK"""
                     return word
 
         return None
-
-    def _quick_security_check(self, message: str) -> bool:
-        """
-        Pattern-based security pre-filter (currently disabled).
-
-        With UNSAFE_PATTERNS = [], this always returns False. The method is
-        retained for potential future use if pattern filtering is re-enabled
-        with refined patterns that don't cause false positives on technical
-        discussions.
-
-        Security is currently handled by LLM layers (RequestAnalyzer + Agent
-        Router) which provide context-aware threat detection.
-
-        Args:
-            message: The user message to check
-
-        Returns:
-            bool: True if unsafe pattern detected, False otherwise
-                  (currently always False due to empty pattern list)
-        """
-        if not message or not self.UNSAFE_PATTERNS:
-            return False
-
-        message_lower = message.lower()
-
-        # Check each unsafe pattern (currently empty list)
-        for pattern in self.UNSAFE_PATTERNS:
-            if re.search(pattern, message_lower, re.IGNORECASE):
-                return True
-
-        return False
 
     def clear_routing_cache(self) -> None:
         """Clear the routing cache."""
