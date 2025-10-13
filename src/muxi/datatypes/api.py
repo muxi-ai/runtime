@@ -105,7 +105,7 @@ class APIObjectType(str, Enum):
 
     # Generic list type for spec compliance
     LIST = "list"
-    
+
     # Request cancellation
     REQUEST_CANCELLATION = "request_cancellation"
 

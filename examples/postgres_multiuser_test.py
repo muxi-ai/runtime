@@ -12,10 +12,10 @@ import os
 from datetime import datetime, timedelta
 
 # Add the runtime path so we can import muxi
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from muxi.services.scheduler.manager import JobManager
-from muxi.services.db import get_database_manager
+from muxi.services.scheduler.manager import JobManager  # noqa: E402
+from muxi.services.db import get_database_manager  # noqa: E402
 
 
 async def test_postgres_multiuser():
@@ -70,18 +70,22 @@ async def test_postgres_multiuser():
 
         print(f"📊 Alice has {len(alice_jobs)} job(s):")
         for job in alice_jobs:
-            job_type = "recurring" if job['is_recurring'] else "one-time"
+            job_type = "recurring" if job["is_recurring"] else "one-time"
             print(f"  - {job['title']} ({job_type})")
 
         print(f"📊 Bob has {len(bob_jobs)} job(s):")
         for job in bob_jobs:
-            job_type = "recurring" if job['is_recurring'] else "one-time"
-            scheduled_info = f"scheduled for {job['scheduled_for']}" if job['scheduled_for'] else f"cron: {job['cron_expression']}"
+            job_type = "recurring" if job["is_recurring"] else "one-time"
+            scheduled_info = (
+                f"scheduled for {job['scheduled_for']}"
+                if job["scheduled_for"]
+                else f"cron: {job['cron_expression']}"
+            )
             print(f"  - {job['title']} ({job_type}, {scheduled_info})")
 
         # Verify job types are correct
-        alice_has_recurring = any(job['is_recurring'] for job in alice_jobs)
-        bob_has_onetime = any(not job['is_recurring'] for job in bob_jobs)
+        alice_has_recurring = any(job["is_recurring"] for job in alice_jobs)
+        bob_has_onetime = any(not job["is_recurring"] for job in bob_jobs)
 
         if alice_has_recurring and bob_has_onetime and len(alice_jobs) > 0 and len(bob_jobs) > 0:
             print("\n🎉 SUCCESS: Multi-user isolation working correctly!")
@@ -93,7 +97,7 @@ async def test_postgres_multiuser():
 
             # Show when Bob's job will execute
             bob_job = bob_jobs[0]
-            time_until = bob_job['scheduled_for'] - datetime.now()
+            time_until = bob_job["scheduled_for"] - datetime.now()
             minutes_until = int(time_until.total_seconds() / 60)
             print(f"\n⏰ Bob's job will execute in ~{minutes_until} minutes")
             print(f"   Scheduled for: {bob_job['scheduled_for']}")
@@ -106,6 +110,7 @@ async def test_postgres_multiuser():
     except Exception as e:
         print(f"\n❌ Test failed with error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

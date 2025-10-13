@@ -30,9 +30,8 @@
 # =============================================================================
 
 import asyncio
-import json
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from .long_term import LongTermMemory
 from .. import observability
@@ -593,4 +592,3 @@ class Memobase:
                 },
             )
             raise
-

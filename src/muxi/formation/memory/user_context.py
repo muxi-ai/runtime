@@ -5,9 +5,7 @@ This module handles user context memory operations including getting, adding,
 and clearing user-specific context information.
 """
 
-from typing import Any, Dict, List, Optional
-
-from ...services.memory.memobase import Memobase
+from typing import Any
 
 
 class UserContextManager:

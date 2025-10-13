@@ -10,12 +10,10 @@ import asyncio
 import sys
 import os
 import tempfile
-import time
 from datetime import datetime, timedelta
-from pathlib import Path
 
 # Add the runtime path so we can import muxi
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
 class MockObservability:
@@ -37,7 +35,8 @@ class MockObservability:
 
 
 # Mock the observability module before importing scheduler components
-import muxi.services.observability as obs_module
+import muxi.services.observability as obs_module  # noqa: E402
+
 mock_obs = MockObservability()
 obs_module.SystemEvents = mock_obs.SystemEvents
 obs_module.ErrorEvents = mock_obs.ErrorEvents
@@ -45,10 +44,9 @@ obs_module.observe = mock_obs.observe
 obs_module.emit_event = mock_obs.emit_event
 
 
-from muxi.services.scheduler.manager import JobManager
-from muxi.services.scheduler.parser import ScheduleParser
-from muxi.services.db import DatabaseManager
-import sqlalchemy
+from muxi.services.scheduler.manager import JobManager  # noqa: E402
+from muxi.services.scheduler.parser import ScheduleParser  # noqa: E402
+from muxi.services.db import DatabaseManager  # noqa: E402
 
 
 class MinimalSchedulerTest:
@@ -100,6 +98,7 @@ class MinimalSchedulerTest:
             print(f"❌ Job type detection test failed: {e}")
             self.test_results["job_type_detection"] = False
             import traceback
+
             traceback.print_exc()
 
         print()
@@ -143,6 +142,7 @@ class MinimalSchedulerTest:
             print(f"❌ Datetime parsing test failed: {e}")
             self.test_results["datetime_parsing"] = False
             import traceback
+
             traceback.print_exc()
 
         print()
@@ -188,10 +188,14 @@ class MinimalSchedulerTest:
             onetime_job = await job_manager.get_job(job_id)
             recurring_job = await job_manager.get_job(recurring_job_id)
 
-            if (onetime_job and not onetime_job['is_recurring'] and
-                recurring_job and recurring_job['is_recurring']):
-                print("✅ Created one-time job:", onetime_job['title'])
-                print("✅ Created recurring job:", recurring_job['title'])
+            if (
+                onetime_job
+                and not onetime_job["is_recurring"]
+                and recurring_job
+                and recurring_job["is_recurring"]
+            ):
+                print("✅ Created one-time job:", onetime_job["title"])
+                print("✅ Created recurring job:", recurring_job["title"])
                 print("🎉 Database operations test PASSED!")
                 self.test_results["database_sqlite"] = True
             else:
@@ -202,6 +206,7 @@ class MinimalSchedulerTest:
             print(f"❌ Database operations test failed: {e}")
             self.test_results["database_sqlite"] = False
             import traceback
+
             traceback.print_exc()
 
         print()
@@ -241,8 +246,12 @@ class MinimalSchedulerTest:
             user_a_jobs = await job_manager.get_user_jobs("user_a_test")
             user_b_jobs = await job_manager.get_user_jobs("user_b_test")
 
-            user_a_has_recurring = any(job['is_recurring'] for job in user_a_jobs if job['id'] == user_a_job_id)
-            user_b_has_onetime = any(not job['is_recurring'] for job in user_b_jobs if job['id'] == user_b_job_id)
+            user_a_has_recurring = any(
+                job["is_recurring"] for job in user_a_jobs if job["id"] == user_a_job_id
+            )
+            user_b_has_onetime = any(
+                not job["is_recurring"] for job in user_b_jobs if job["id"] == user_b_job_id
+            )
 
             if user_a_has_recurring and user_b_has_onetime:
                 print(f"✅ User A has {len(user_a_jobs)} job(s) (recurring)")
@@ -257,6 +266,7 @@ class MinimalSchedulerTest:
             print(f"❌ PostgreSQL operations test failed: {e}")
             self.test_results["database_postgres"] = False
             import traceback
+
             traceback.print_exc()
 
         print()

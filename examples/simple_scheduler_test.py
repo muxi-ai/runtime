@@ -10,17 +10,14 @@ import asyncio
 import sys
 import os
 import tempfile
-import time
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
 
 # Add the runtime path so we can import muxi
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from muxi.services.scheduler.service import SchedulerService
-from muxi.services.scheduler.manager import JobManager
-from muxi.services.scheduler.parser import ScheduleParser
-from muxi.services.db import DatabaseManager, get_database_manager
+from muxi.services.scheduler.manager import JobManager  # noqa: E402
+from muxi.services.scheduler.parser import ScheduleParser  # noqa: E402
+from muxi.services.db import get_database_manager  # noqa: E402
 
 
 class SimpleSchedulerTest:
@@ -68,8 +65,8 @@ class SimpleSchedulerTest:
 
                 # Wait for job time
                 print("⏳ Waiting for job execution time...")
-                now = datetime.now(schedule_result['scheduled_for'].tzinfo)
-                wait_seconds = (schedule_result['scheduled_for'] - now).total_seconds()
+                now = datetime.now(schedule_result["scheduled_for"].tzinfo)
+                wait_seconds = (schedule_result["scheduled_for"] - now).total_seconds()
 
                 if wait_seconds > 0:
                     await asyncio.sleep(wait_seconds + 10)  # Wait a bit extra
@@ -77,8 +74,8 @@ class SimpleSchedulerTest:
                 # Check if job would have been due
                 job = await job_manager.get_job(job_id)
                 if job:
-                    now = datetime.now(job['scheduled_for'].tzinfo)
-                    if now >= job['scheduled_for']:
+                    now = datetime.now(job["scheduled_for"].tzinfo)
+                    if now >= job["scheduled_for"]:
                         print("🎉 One-time job test PASSED - job time has arrived!")
                         print(f"Job scheduled for: {job['scheduled_for']}")
                         print(f"Current time: {now}")
@@ -98,6 +95,7 @@ class SimpleSchedulerTest:
             print(f"❌ One-time SQLite test failed: {e}")
             self.test_results["onetime_sqlite"] = False
             import traceback
+
             traceback.print_exc()
 
         print()
@@ -140,7 +138,7 @@ class SimpleSchedulerTest:
 
                 # Verify job was created correctly
                 job = await job_manager.get_job(job_id)
-                if job and job['is_recurring'] and job['cron_expression']:
+                if job and job["is_recurring"] and job["cron_expression"]:
                     print("🎉 Recurring job test PASSED - job created correctly!")
                     self.test_results["recurring_sqlite"] = True
                 else:
@@ -155,6 +153,7 @@ class SimpleSchedulerTest:
             print(f"❌ Recurring SQLite test failed: {e}")
             self.test_results["recurring_sqlite"] = False
             import traceback
+
             traceback.print_exc()
 
         print()
@@ -209,8 +208,8 @@ class SimpleSchedulerTest:
             print(f"User B has {len(user_b_jobs)} job(s)")
 
             if len(user_a_jobs) > 0 and len(user_b_jobs) > 0:
-                user_a_recurring = user_a_jobs[0]['is_recurring']
-                user_b_onetime = not user_b_jobs[0]['is_recurring']
+                user_a_recurring = user_a_jobs[0]["is_recurring"]
+                user_b_onetime = not user_b_jobs[0]["is_recurring"]
 
                 if user_a_recurring and user_b_onetime:
                     print("🎉 PostgreSQL multi-user test PASSED - proper isolation!")
@@ -226,6 +225,7 @@ class SimpleSchedulerTest:
             print(f"❌ PostgreSQL multi-user test failed: {e}")
             self.test_results["postgres_multiuser"] = False
             import traceback
+
             traceback.print_exc()
 
         print()
@@ -267,6 +267,7 @@ class SimpleSchedulerTest:
             print(f"❌ Job type detection test failed: {e}")
             self.test_results["job_type_detection"] = False
             import traceback
+
             traceback.print_exc()
 
         print()
