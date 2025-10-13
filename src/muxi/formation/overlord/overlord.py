@@ -3699,7 +3699,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             user_message, agent_response, user_id, agent_id, extraction_model
         )
 
-
     async def get_user_synopsis(self, external_user_id: str) -> str:
         """
         Get formatted user synopsis for message enhancement.
@@ -3711,8 +3710,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             Formatted synopsis string or empty string
         """
         return await self.user_context_manager.get_user_synopsis(external_user_id)
-
-
 
     async def _add_to_long_term_memory(
         self,
@@ -6499,7 +6496,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             "topic_count": len(analysis.topics),
                             "complexity_score": analysis.complexity_score,
                             "analysis_method": (
-                                "llm" if self.request_analyzer.llm 
+                                "llm" if self.request_analyzer.llm
                                 else "heuristic"
                             ),
                         },
