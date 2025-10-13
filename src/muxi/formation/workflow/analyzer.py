@@ -112,6 +112,7 @@ class RequestAnalyzer:
                 confidence_score=0.3,
                 is_scheduling_request=False,
                 is_explicit_approval_request=False,
+                topics=[],
             )
 
     async def should_decompose(self, analysis: RequestAnalysis) -> bool:
@@ -282,6 +283,7 @@ class RequestAnalyzer:
             confidence_score=0.7,  # Heuristic confidence
             is_scheduling_request=False,  # Heuristic doesn't detect scheduling
             is_explicit_approval_request=False,  # Heuristic doesn't detect approval requests
+            topics=[],  # No heuristic topics - LLM only
         )
 
     async def _llm_analyze_request(
@@ -367,6 +369,14 @@ class RequestAnalyzer:
                     if not explicit_sop:  # Empty after stripping
                         explicit_sop = None
 
+                # Extract and normalize topics
+                topics = data.get("topics", [])
+                if not isinstance(topics, list):
+                    topics = []  # Handle malformed response
+                # Normalize: strip whitespace, lowercase, remove empty strings
+                topics = [str(t).strip().lower() for t in topics if t]
+                topics = [t for t in topics if t][:5]  # Remove empties, limit to 5
+
                 return RequestAnalysis(
                     complexity_score=float(data.get("complexity_score", 5.0)),
                     requires_decomposition=False,  # Will be set by should_decompose
@@ -378,6 +388,7 @@ class RequestAnalyzer:
                     is_scheduling_request=data.get("is_scheduling_request", False),
                     is_explicit_approval_request=data.get("is_explicit_approval_request", False),
                     explicit_sop_request=explicit_sop,
+                    topics=topics,
                 )
             else:
                 raise ValueError("No valid JSON found in response")
@@ -396,6 +407,7 @@ class RequestAnalyzer:
                 confidence_score=0.3,
                 is_scheduling_request=False,
                 is_explicit_approval_request=False,
+                topics=[],
             )
 
     # Helper methods for testing
@@ -473,9 +485,10 @@ class RequestAnalyzer:
 
                 heuristic_analysis.required_capabilities = combined_capabilities
                 heuristic_analysis.implicit_subtasks = combined_subtasks
+                heuristic_analysis.topics = llm_analysis.topics  # Use LLM topics
             except Exception:
                 # Use heuristic score if LLM fails
-                pass
+                pass  # heuristic_analysis.topics remains []
 
         # Add custom scoring if available
         custom_score = heuristic_score
@@ -533,4 +546,5 @@ class RequestAnalyzer:
             required_capabilities=capabilities,
             acceptance_criteria=["Request completed successfully"],
             confidence_score=0.8,
+            topics=[],
         )

@@ -6458,6 +6458,23 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     actual_message, context=analysis_context
                 )
 
+                # Emit topic extraction event if topics were generated
+                if analysis.topics:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.REQUEST_TOPICS_EXTRACTED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "topics": analysis.topics,
+                            "topic_count": len(analysis.topics),
+                            "complexity_score": analysis.complexity_score,
+                            "analysis_method": (
+                                "llm" if self.request_analyzer.llm 
+                                else "heuristic"
+                            ),
+                        },
+                        description=f"Extracted {len(analysis.topics)} topic tags from request"
+                    )
+
                 # Debug: Log the complete analysis object
                 observability.observe(
                     event_type=observability.ServerEvents.REQUEST_RECEIVED,
