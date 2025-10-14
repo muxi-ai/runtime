@@ -465,7 +465,7 @@ class LongTermMemory:
         content: str,
         metadata: Dict[str, Any] = None,
         embedding: Optional[Union[List[float], np.ndarray]] = None,
-        external_user_id: Optional[str] = None,
+        user_id: Optional[str] = None,
         collection: Optional[str] = None,
     ) -> str:
         """
@@ -476,8 +476,7 @@ class LongTermMemory:
             metadata (dict, optional): Additional metadata to associate with the content.
             embedding (list[float] or np.ndarray, optional): Pre-computed embedding vector.
             If not provided, an embedding is generated.
-            external_user_id (str, optional): The external user identifier for
-            multi-user environments.
+            user_id (str, optional): The user identifier (will be resolved to internal_user_id).
             collection (str, optional): The collection to store the memory in.
             If not provided, uses the default collection.
 
@@ -510,7 +509,7 @@ class LongTermMemory:
 
         # Insert into database using async method
         memory_id = await self._add_internal_async(
-            content, embedding, metadata, collection, external_user_id
+            content, embedding, metadata, collection, user_id
         )
 
         # Emit memory storage completed event
@@ -532,7 +531,7 @@ class LongTermMemory:
         embedding: Union[List[float], np.ndarray],
         metadata: Dict[str, Any] = None,
         collection: Optional[str] = None,
-        external_user_id: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> str:
         """
         Asynchronously adds a new memory entry to the database with the
@@ -543,7 +542,7 @@ class LongTermMemory:
             embedding (Union[List[float], np.ndarray]): The vector embedding representing the content.
             metadata (Dict[str, Any], optional): Additional metadata to associate with the memory.
             collection (str, optional): The collection name to store the memory in. Defaults to the default collection.
-            external_user_id (str, optional): The external user identifier for multi-user environments (deprecated - uses RequestContext).
+            user_id (str, optional): The user identifier (will be resolved to internal_user_id).
 
         Returns:
             str: The unique ID of the newly created memory entry.

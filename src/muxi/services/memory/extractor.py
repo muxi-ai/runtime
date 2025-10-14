@@ -541,18 +541,13 @@ class MemoryExtractor:
                                 )
 
                     if should_store:
-                        # Build add params based on backend type
+                        # Build add params - use user_id for both backends
                         add_params = {
                             "content": memory_content,
                             "metadata": memory_metadata,
+                            "user_id": user_id,
+                            "collection": collection,
                         }
-                        if self.overlord.is_multi_user:
-                            add_params["external_user_id"] = external_user_id
-                            add_params["collection"] = collection
-                        else:
-                            add_params["user_id"] = user_id
-                            # SQLiteMemory doesn't support collection parameter
-                            # Store collection in metadata instead
 
                         # DEBUG: Log before add
                         observability.observe(
