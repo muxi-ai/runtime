@@ -50,6 +50,8 @@ class ChatOrchestrator:
         request_id: str,
         use_async: Optional[bool],
         webhook_url: Optional[str],
+        internal_user_id: Optional[int] = None,
+        muxi_user_id: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Create a streaming generator that fires off processing and yields events.
@@ -67,7 +69,9 @@ class ChatOrchestrator:
                 id=request_id,
                 user_id=user_id,
                 session_id=session_id,
-                formation_id=getattr(self.overlord, 'formation_id', 'unknown')
+                formation_id=getattr(self.overlord, 'formation_id', 'unknown'),
+                internal_user_id=internal_user_id,
+                muxi_user_id=muxi_user_id,
             )
             set_request_context(request_context)
 
@@ -232,12 +236,28 @@ class ChatOrchestrator:
 
         timestamp = time.time()
 
+        # Resolve user identifier to internal IDs (multi-identity support)
+        # This maps external identifiers (email, Slack ID, etc.) to internal MUXI user
+        internal_user_id = None
+        muxi_user_id = None
+        if user_id is not None:
+            from ...utils.user_resolution import resolve_user_identifier
+            
+            internal_user_id, muxi_user_id = await resolve_user_identifier(
+                identifier=user_id,
+                formation_id=self.overlord.formation_id,
+                db_manager=self.overlord.db_manager,
+                kv_cache=self.overlord.kv,
+            )
+
         # Start request tracking with observability
         with self.overlord.observability_manager.track_request(
             request_id=request_id,
             session_id=session_id,
             formation_id=self.overlord.formation_id,
             user_id=str(user_id) if user_id is not None else None,
+            internal_user_id=internal_user_id,
+            muxi_user_id=muxi_user_id,
         ) as context:
             # Note: REQUEST_RECEIVED is already emitted by observability_manager.track_request
             # So we don't need to emit it again here
@@ -400,6 +420,8 @@ class ChatOrchestrator:
                     request_id=request_id,
                     use_async=use_async,
                     webhook_url=webhook_url,
+                    internal_user_id=internal_user_id,
+                    muxi_user_id=muxi_user_id,
                 )
 
             # else...

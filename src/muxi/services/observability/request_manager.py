@@ -80,13 +80,20 @@ class RequestContextManager:
         session_id: Optional[str] = None,
         formation_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        internal_user_id: Optional[int] = None,
+        muxi_user_id: Optional[str] = None,
     ):
         """Context manager for request tracking with automatic context propagation."""
         if request_id is None:
             request_id = generate_id()
 
         context = RequestContext(
-            id=request_id, formation_id=formation_id, user_id=user_id, session_id=session_id
+            id=request_id,
+            formation_id=formation_id,
+            user_id=user_id,
+            session_id=session_id,
+            internal_user_id=internal_user_id,
+            muxi_user_id=muxi_user_id,
         )
 
         # Set the context variable when entering the context
