@@ -490,9 +490,9 @@ class SQLiteMemory(BaseMemory):
         else:
             internal_user_id = self.default_user_id
 
-        # Search with embedding
+        # Search with embedding (search ALL collections, not just default)
         results = self._search_internal(
-            query_embedding, limit, self.default_collection, internal_user_id
+            query_embedding, limit, collection=None, user_id=internal_user_id
         )
 
         # Format results
@@ -570,31 +570,47 @@ class SQLiteMemory(BaseMemory):
             query_embedding = np.array(query_embedding, dtype=np.float32).tobytes()
 
         # Use defaults if not specified
-        collection = collection or self.default_collection
         user_id = user_id or self.default_user_id
 
         # Build query with JOIN to ensure formation isolation
-        query = """
-            SELECT
-                m.id,
-                m.text,
-                m.metadata,
-                m.created_at,
-                vec_distance_cosine(m.embedding, ?) as score
-            FROM memories m
-            JOIN users u ON m.user_id = u.id
-            WHERE m.collection = ?
-                AND m.user_id = ?
-                AND u.formation_id = ?
-            ORDER BY score ASC
-            LIMIT ?
-        """
+        # Search across ALL collections if collection is None
+        if collection:
+            query = """
+                SELECT
+                    m.id,
+                    m.text,
+                    m.metadata,
+                    m.created_at,
+                    vec_distance_cosine(m.embedding, ?) as score
+                FROM memories m
+                JOIN users u ON m.user_id = u.id
+                WHERE m.collection = ?
+                    AND m.user_id = ?
+                    AND u.formation_id = ?
+                ORDER BY score ASC
+                LIMIT ?
+            """
+            params = (query_embedding, collection, user_id, self.formation_id, k)
+        else:
+            # Search ALL collections
+            query = """
+                SELECT
+                    m.id,
+                    m.text,
+                    m.metadata,
+                    m.created_at,
+                    vec_distance_cosine(m.embedding, ?) as score
+                FROM memories m
+                JOIN users u ON m.user_id = u.id
+                WHERE m.user_id = ?
+                    AND u.formation_id = ?
+                ORDER BY score ASC
+                LIMIT ?
+            """
+            params = (query_embedding, user_id, self.formation_id, k)
 
         # Execute search
-        cursor = self.conn.execute(
-            query,
-            (query_embedding, collection, user_id, self.formation_id, k),
-        )
+        cursor = self.conn.execute(query, params)
 
         # Format results
         results = []
