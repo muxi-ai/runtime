@@ -13,8 +13,6 @@ from ...datatypes.exceptions import FormationError
 from ...utils.datetime_utils import utc_now_naive
 from ...services import observability
 from ...services.db import Base
-# Import User model from memory module to avoid duplication
-from ...services.memory.long_term import User
 from ...utils.user_resolution import resolve_user_identifier
 
 
@@ -52,7 +50,7 @@ class CredentialResolver:
     the JSONType abstraction.
     """
 
-    def __init__(self, async_session_maker, formation_id: str, llm_model: Optional[str] = None):
+    def __init__(self, async_session_maker, formation_id: str, llm_model: Optional[str] = None, db_manager=None):
         """
         Initialize the credential resolver.
 
@@ -60,20 +58,23 @@ class CredentialResolver:
             async_session_maker: Async SQLAlchemy session factory
             formation_id: The formation ID (normalized)
             llm_model: Optional LLM model to use for extraction (e.g., from formation.llm.models.text)
+            db_manager: Database manager instance for user resolution
         """
         self.async_session_maker = async_session_maker
         self.formation_id = formation_id
         self._cache = {}  # In-memory cache: {user_id: {service: credentials}}
         self.llm_model = llm_model  # Store the LLM model to use
+        self.db_manager = db_manager  # Store for user identifier resolution
 
     async def _resolve_user_id(self, identifier: str) -> int:
         """Resolve external user identifier to internal user ID."""
-        result = await resolve_user_identifier(
+        internal_user_id, muxi_user_id = await resolve_user_identifier(
             identifier=identifier,
             formation_id=self.formation_id,
-            db_session_maker=self.async_session_maker,
+            db_manager=self.db_manager,
+            kv_cache=None,  # KV cache not yet implemented
         )
-        return result["internal_user_id"]
+        return internal_user_id
 
     async def resolve(self, user_id: str, service: str) -> Optional[Dict]:
         """

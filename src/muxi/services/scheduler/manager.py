@@ -51,42 +51,41 @@ class JobManager:
     def _resolve_user_id_sync(self, external_user_id: str) -> int:
         """
         Resolve external user identifier to internal user ID.
-        
+
         For scheduler, we always resolve synchronously since jobs are managed outside request context.
         This uses the user_identifiers table for multi-identity support.
-        
+
         Returns:
             int: Internal user ID for database operations
         """
         with self.db_manager.get_session() as session:
             from ...services.memory.long_term import UserIdentifier
-            
+
             # Query user_identifiers table to find user
             result = session.execute(
                 select(UserIdentifier.user_id).where(
                     UserIdentifier.identifier == external_user_id,
-                    UserIdentifier.formation_id == self.formation_id
+                    UserIdentifier.formation_id == self.formation_id,
                 )
             )
             user_id = result.scalar_one_or_none()
-            
+
             if user_id:
                 return user_id
-            
+
             # User doesn't exist - create new user + identifier
-            from ...utils.datetime_utils import utc_now_naive
             from ...utils.id_generator import get_default_nanoid
             from sqlalchemy.exc import IntegrityError
-            
+
             new_user = User(
                 public_id=get_default_nanoid()(),
                 formation_id=self.formation_id,
             )
-            
+
             try:
                 session.add(new_user)
                 session.flush()
-                
+
                 # Create identifier
                 new_identifier = UserIdentifier(
                     user_id=new_user.id,
@@ -95,7 +94,7 @@ class JobManager:
                 )
                 session.add(new_identifier)
                 session.commit()
-                
+
                 return new_user.id
             except IntegrityError:
                 # Handle concurrent creation - retry lookup
@@ -103,13 +102,15 @@ class JobManager:
                 result = session.execute(
                     select(UserIdentifier.user_id).where(
                         UserIdentifier.identifier == external_user_id,
-                        UserIdentifier.formation_id == self.formation_id
+                        UserIdentifier.formation_id == self.formation_id,
                     )
                 )
                 user_id = result.scalar_one_or_none()
                 if user_id:
                     return user_id
-                raise ValueError(f"Failed to resolve user after concurrent creation: {external_user_id}")
+                raise ValueError(
+                    f"Failed to resolve user after concurrent creation: {external_user_id}"
+                )
 
     # DEPRECATED: Old method removed - use _resolve_user_id_sync() instead
     # This method queried external_user_id column which no longer exists.
@@ -286,11 +287,8 @@ class JobManager:
             internal_user_id = self._resolve_user_id_sync(user_id)
 
             with self.db_manager.get_session() as session:
-                query = (
-                    session.query(ScheduledJob)
-                    .filter(
-                        ScheduledJob.user_id == internal_user_id,
-                    )
+                query = session.query(ScheduledJob).filter(
+                    ScheduledJob.user_id == internal_user_id,
                 )
 
                 if status:
@@ -385,7 +383,7 @@ class JobManager:
                 job = (
                     session.query(ScheduledJob)
                     .filter(
-                    ScheduledJob.id == job_id,
+                        ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -602,7 +600,7 @@ class JobManager:
                 job = (
                     session.query(ScheduledJob)
                     .filter(
-                    ScheduledJob.id == job_id,
+                        ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -647,7 +645,7 @@ class JobManager:
                 job = (
                     session.query(ScheduledJob)
                     .filter(
-                    ScheduledJob.id == job_id,
+                        ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -677,7 +675,7 @@ class JobManager:
                 job = (
                     session.query(ScheduledJob)
                     .filter(
-                    ScheduledJob.id == job_id,
+                        ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -720,7 +718,7 @@ class JobManager:
                 job = (
                     session.query(ScheduledJob)
                     .filter(
-                    ScheduledJob.id == job_id,
+                        ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -765,7 +763,7 @@ class JobManager:
                 job = (
                     session.query(ScheduledJob)
                     .filter(
-                    ScheduledJob.id == job_id,
+                        ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -790,7 +788,7 @@ class JobManager:
                 job = (
                     session.query(ScheduledJob)
                     .filter(
-                    ScheduledJob.id == job_id,
+                        ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -1188,7 +1186,7 @@ class JobManager:
         # Otherwise, do a normal update
         # Resolve user identifier to internal user ID (multi-identity support)
         internal_user_id = self._resolve_user_id_sync(user_id)
-        
+
         with self.db_manager.get_session() as session:
 
             job = (
@@ -1202,7 +1200,7 @@ class JobManager:
                 raise ValueError(f"Job {job_id} not found")
 
             # Validate user ownership
-            if job.user_id != user.id:
+            if job.user_id != internal_user_id:
                 raise ValueError(f"User {user_id} does not have permission to update job {job_id}")
 
             # Build update dict
@@ -1315,10 +1313,9 @@ class JobManager:
             llm = LLM(service=llm_service)
 
             from ...formation.prompts.loader import PromptLoader
+
             prompt = PromptLoader.get(
-                'scheduler_task_comparison.md',
-                old_prompt=old_prompt,
-                new_prompt=new_prompt
+                "scheduler_task_comparison.md", old_prompt=old_prompt, new_prompt=new_prompt
             ).strip()
 
             response = await llm.generate_json(prompt)

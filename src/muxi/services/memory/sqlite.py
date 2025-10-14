@@ -122,11 +122,11 @@ class SQLiteMemory(BaseMemory):
             "INSERT INTO users (public_id, formation_id) VALUES (?, ?)",
             (public_id, self.formation_id),
         )
-        
+
         # Get the new user ID
         cursor = self.conn.execute("SELECT last_insert_rowid()")
         user_id = cursor.fetchone()[0]
-        
+
         # Create identifier mapping
         self.conn.execute(
             "INSERT INTO user_identifiers (user_id, identifier, formation_id) VALUES (?, ?, ?)",
@@ -331,9 +331,9 @@ class SQLiteMemory(BaseMemory):
         return embedding_response
 
     async def add(
-        self, 
-        content: str, 
-        metadata: Optional[Dict[str, Any]] = None, 
+        self,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None,
         user_id: Optional[str] = None,
         collection: Optional[str] = None,
         embedding: Optional[Union[List[float], np.ndarray]] = None,
@@ -399,7 +399,7 @@ class SQLiteMemory(BaseMemory):
                 content, embedding, metadata, collection, internal_user_id
             )
             return memory_id
-        
+
         # If no embedding provider and no embedding provided, raise error
         raise ValueError("No embedding provided and no embedding provider configured")
 

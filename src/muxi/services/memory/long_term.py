@@ -47,8 +47,6 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from ...datatypes.json_type import JSONType
-from sqlalchemy.orm import Session
-from sqlalchemy.ext.asyncio import AsyncSession
 
 # Note: No longer importing global config - values passed as parameters
 from ...utils.id_generator import get_default_nanoid
@@ -93,7 +91,7 @@ class User(Base, AsyncModelMixin):
 class UserIdentifier(Base, AsyncModelMixin):
     """
     User identifier table for multi-identity support.
-    
+
     Enables multiple external identifiers (email, Slack ID, Telegram handle, etc.)
     to map to a single MUXI user. This allows context and memory carryover across
     communication channels.
@@ -285,16 +283,16 @@ class LongTermMemory:
     async def _resolve_user_id_async(self, external_user_id: Optional[str] = None) -> int:
         """
         Resolve user identifier to internal user ID.
-        
+
         Prefers RequestContext.internal_user_id if available (normal path after Phase 3).
         Falls back to resolving external_user_id for direct API calls and tests.
-        
+
         Returns:
             int: Internal user ID for database operations
         """
         from ..observability.context import get_current_request_context
         ctx = get_current_request_context()
-        
+
         if ctx and ctx.internal_user_id is not None:
             # Normal path: Use internal user ID from context (already resolved at entry)
             return ctx.internal_user_id
@@ -329,13 +327,13 @@ class LongTermMemory:
     def _resolve_user_id_sync(self, external_user_id: Optional[str] = None) -> int:
         """
         Synchronous version of _resolve_user_id_async.
-        
+
         Note: Sync methods are deprecated - prefer async methods where possible.
         This is provided for backward compatibility only.
         """
         from ..observability.context import get_current_request_context
         ctx = get_current_request_context()
-        
+
         if ctx and ctx.internal_user_id is not None:
             return ctx.internal_user_id
         else:
@@ -346,7 +344,7 @@ class LongTermMemory:
                 external_user_id = "0"
             elif external_user_id is None:
                 raise ValueError("external_user_id required in multi-user mode")
-            
+
             # Find or create user synchronously
             with self.Session() as session:
                 result = session.execute(
@@ -359,10 +357,10 @@ class LongTermMemory:
                     )
                 )
                 user_id = result.scalar_one_or_none()
-                
+
                 if user_id:
                     return user_id
-                
+
                 # Create new user if not found
                 new_user = User(
                     public_id=get_default_nanoid(),
@@ -370,7 +368,7 @@ class LongTermMemory:
                 )
                 session.add(new_user)
                 session.flush()
-                
+
                 # Create identifier
                 new_identifier = UserIdentifier(
                     user_id=new_user.id,
@@ -379,7 +377,7 @@ class LongTermMemory:
                 )
                 session.add(new_identifier)
                 session.commit()
-                
+
                 return new_user.id
 
     async def get_user_id(self, external_user_id: str) -> Optional[int]:
@@ -557,7 +555,7 @@ class LongTermMemory:
         metadata["timestamp"] = time.time()
 
         # Resolve user identifier to internal user ID (multi-identity support)
-        internal_user_id = await self._resolve_user_id_async(external_user_id)
+        internal_user_id = await self._resolve_user_id_async(user_id)
 
         async with self.db_manager.get_async_session() as session:
             # Convert numpy array to list if necessary
@@ -1346,7 +1344,7 @@ class LongTermMemory:
                 query_obj = (
                     select(Memory)
                     .filter(
-                        Memory.user_id == user.id,
+                        Memory.user_id == internal_user_id,
                         Memory.collection == collection,
                         Memory.text.ilike(f"%{query}%"),
                     )

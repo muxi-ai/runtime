@@ -2656,6 +2656,24 @@ class Formation:
                         description=f"Failed to disconnect MCP servers: {mcp_error}",
                     )
 
+            # Dispose database engine to prevent event loop pollution in tests
+            if self._overlord and hasattr(self._overlord, 'db_manager') and self._overlord.db_manager:
+                try:
+                    await self._overlord.db_manager.close_async()
+                    observability.observe(
+                        event_type=observability.SystemEvents.CLEANUP,
+                        level=observability.EventLevel.INFO,
+                        data={"action": "database_engine_disposed", "component": "db_manager"},
+                        description="Database engine disposed during Formation shutdown",
+                    )
+                except Exception as db_error:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={"error": str(db_error), "operation": "database_engine_disposal"},
+                        description=f"Failed to dispose database engine: {db_error}",
+                    )
+
             # Clean up references
             self._overlord = None
             self._is_running = False

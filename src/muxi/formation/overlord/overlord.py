@@ -476,6 +476,7 @@ class Overlord:
                         async_session_maker=db_manager.AsyncSession,
                         formation_id=self.formation_id,
                         llm_model=llm_model,
+                        db_manager=db_manager,
                         encryption_key=encryption_key,  # Optional custom key
                     )
                     observability.observe(
@@ -489,6 +490,7 @@ class Overlord:
                         async_session_maker=db_manager.AsyncSession,
                         formation_id=self.formation_id,
                         llm_model=llm_model,
+                        db_manager=db_manager,
                     )
 
                     observability.observe(
@@ -5403,12 +5405,22 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         # Check if this is a response to a workflow approval request
         # If so, we'll skip credential and clarification checks
         is_workflow_approval_response = False
+        skip_security_check = False  # Flag to bypass security for credential/workflow responses
         if session_id:
             pending_clarification = await self._get_pending_clarification(session_id)
-            if pending_clarification and pending_clarification.get("type") == "workflow_approval":
-                is_workflow_approval_response = True
-                # Set skip_clarification flag to bypass clarification analysis
-                skip_clarification = True
+            if pending_clarification:
+                clarification_type = pending_clarification.get("type")
+                if clarification_type == "workflow_approval":
+                    is_workflow_approval_response = True
+                    # Set skip_clarification flag to bypass clarification analysis
+                    skip_clarification = True
+                    skip_security_check = True
+                elif clarification_type in ["credential", "ambiguous_credential"]:
+                    # Skip security check for credential input responses only
+                    # Note: "redirect" mode does NOT bypass security - it redirects users to
+                    # external credential management, so their response should NOT contain
+                    # credentials and should undergo normal security analysis
+                    skip_security_check = True
 
         # Check if this might be a credential response (e.g., GitHub token)
         # Check if message contains a credential token using UnifiedClarificationSystem
@@ -6457,7 +6469,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 )
 
                 # SECURITY CHECK: Block security threats detected by LLM analyzer
-                if analysis.is_security_threat:
+                # Skip security check if this is a credential or workflow approval response
+                if analysis.is_security_threat and not skip_security_check:
                     observability.observe(
                         event_type=observability.ConversationEvents.SECURITY_VIOLATION,
                         level=observability.EventLevel.WARNING,
@@ -6826,33 +6839,38 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             try:
                 agent_name = await self.select_agent_for_message(message, request_id=request_id)
             except SecurityViolation as e:
-                # Security threat detected - log event and return error response
-                observability.observe(
-                    event_type=observability.ConversationEvents.SECURITY_VIOLATION,
-                    level=observability.EventLevel.WARNING,
-                    data={
-                        "reason": str(e),
-                        "threat_type": e.threat_type,
-                        "request_id": request_id,
-                        "user_id": str(user_id) if user_id else None,
-                        "session_id": session_id,
-                    },
-                    description=f"Security violation detected: {e.threat_type}",
-                )
+                # Security threat detected - but skip if this is a credential/workflow response
+                if skip_security_check:
+                    # Allow credential/workflow responses to bypass security
+                    agent_name = None  # Will use default routing
+                else:
+                    # Security threat detected - log event and return error response
+                    observability.observe(
+                        event_type=observability.ConversationEvents.SECURITY_VIOLATION,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "reason": str(e),
+                            "threat_type": e.threat_type,
+                            "request_id": request_id,
+                            "user_id": str(user_id) if user_id else None,
+                            "session_id": session_id,
+                        },
+                        description=f"Security violation detected: {e.threat_type}",
+                    )
 
-                # Emit streaming event to inform user
-                streaming.stream(
-                    "error",
-                    "I can't process that request.",
-                    stage="security_blocked",
-                    request_id=request_id,
-                )
+                    # Emit streaming event to inform user
+                    streaming.stream(
+                        "error",
+                        "I can't process that request.",
+                        stage="security_blocked",
+                        request_id=request_id,
+                    )
 
-                # Return error response
-                return MuxiResponse(
-                    role="assistant",
-                    content="I can't process that request.",
-                )
+                    # Return error response
+                    return MuxiResponse(
+                        role="assistant",
+                        content="I can't process that request.",
+                    )
 
             # Emit agent selection completed event
             observability.observe(

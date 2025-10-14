@@ -48,6 +48,9 @@ async def resolve_user_identifier(
         Tuple of (internal_user_id: int, muxi_user_id: str)
         Example: (123, "usr_abc123")
 
+    Raises:
+        ValueError: If identifier or formation_id is not a non-empty string
+
     Example:
         >>> internal_id, muxi_id = await resolve_user_identifier(
         ...     identifier="alice@email.com",
@@ -58,6 +61,16 @@ async def resolve_user_identifier(
         >>> print(f"Internal: {internal_id}, MUXI: {muxi_id}")
         Internal: 123, MUXI: usr_abc123
     """
+    # Input validation - fail fast with clear errors
+    if not isinstance(identifier, str) or not identifier.strip():
+        raise ValueError(
+            f"identifier must be a non-empty string, got: {type(identifier).__name__} = {repr(identifier)}"
+        )
+    if not isinstance(formation_id, str) or not formation_id.strip():
+        raise ValueError(
+            f"formation_id must be a non-empty string, got: {type(formation_id).__name__} = {repr(formation_id)}"
+        )
+
     cache_key = f"user_id:{formation_id}:{identifier}"
 
     # Step 1: Check cache (if available)
@@ -316,19 +329,23 @@ async def associate_user_identifiers(
                     identifier_type=identifier_type,
                     formation_id=formation_id,
                 )
+                
+                # Commit immediately to preserve this success even if later ones fail
+                await session.commit()
+                
+                # Track successful creation
                 new_identifiers.append(identifier)
 
-                # Invalidate cache
+                # Invalidate cache for this identifier
                 if kv_cache is not None:
                     cache_key = f"user_id:{formation_id}:{identifier}"
                     await kv_cache.delete(cache_key)
 
             except IntegrityError:
-                # Identifier already exists for this user
-                existing_identifiers.append(identifier)
+                # Identifier already exists - rollback only this failed statement
+                # Previous successful creates are already committed
                 await session.rollback()
-
-        await session.commit()
+                existing_identifiers.append(identifier)
 
         # Step 4: Log event
         observability.observe(

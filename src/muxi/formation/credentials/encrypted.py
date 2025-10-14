@@ -33,6 +33,7 @@ class EncryptedCredentialResolver(CredentialResolver):
         async_session_maker,
         formation_id: str,
         llm_model: Optional[str] = None,
+        db_manager=None,
         encryption_key: Optional[str] = None,
     ):
         """
@@ -42,9 +43,10 @@ class EncryptedCredentialResolver(CredentialResolver):
             async_session_maker: Async SQLAlchemy session factory
             formation_id: The formation ID (used as default encryption key)
             llm_model: Optional LLM model for extraction
+            db_manager: Database manager instance for user resolution
             encryption_key: Optional custom encryption key (overrides formation_id)
         """
-        super().__init__(async_session_maker, formation_id, llm_model)
+        super().__init__(async_session_maker, formation_id, llm_model, db_manager)
         self.custom_key = encryption_key
         self._fernet_cache = {}  # Cache Fernet instances per user
 
@@ -260,13 +262,13 @@ class EncryptedCredentialResolver(CredentialResolver):
 
         # Resolve user identifier to internal user ID
         try:
-            result = await resolve_user_identifier(
+            internal_user_id, _ = await resolve_user_identifier(
                 identifier=user_id,
                 formation_id=self.formation_id,
-                db_session_maker=self.async_session_maker,
+                db_manager=self.async_session_maker,
+                kv_cache=None,
             )
-            internal_user_id = result["internal_user_id"]
-        except:
+        except Exception:
             # If resolution fails, user doesn't exist, so no duplicates
             return False
 
