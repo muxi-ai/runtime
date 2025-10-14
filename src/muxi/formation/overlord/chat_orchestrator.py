@@ -980,6 +980,17 @@ class ChatOrchestrator:
             enhanced_parts.append("")
 
         # 4. Relevant long-term memories (medium priority)
+        # DEBUG: Log if memories will be added
+        observability.observe(
+            event_type="memory.long_term.injection_check",
+            level=observability.EventLevel.INFO,
+            data={
+                "has_memories": bool(long_term_memories),
+                "memory_length": len(long_term_memories) if long_term_memories else 0,
+            },
+            description=f"Checking if memories will be injected: {bool(long_term_memories)}",
+        )
+        
         if long_term_memories:
             # Load memory usage protocol from prompts
             from ..prompts.loader import PromptLoader
