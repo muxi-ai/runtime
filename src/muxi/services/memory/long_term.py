@@ -471,7 +471,7 @@ class LongTermMemory:
             embedding (Union[List[float], np.ndarray]): The vector embedding representing the content.
             metadata (Dict[str, Any], optional): Additional metadata to associate with the memory.
             collection (str, optional): The collection name to store the memory in. Defaults to the default collection.
-            external_user_id (str, optional): The external user identifier for multi-user environments.
+            external_user_id (str, optional): The external user identifier for multi-user environments (deprecated - uses RequestContext).
 
         Returns:
             str: The unique ID of the newly created memory entry.
@@ -485,18 +485,51 @@ class LongTermMemory:
         # Add timestamp to metadata
         metadata["timestamp"] = time.time()
 
-        async with self.db_manager.get_async_session() as session:
-            # Get or create user
-            user = await self._get_or_create_user_async(session, external_user_id)
+        # Get internal user ID from RequestContext (multi-identity support)
+        # After Phase 3, all entry points set RequestContext with internal_user_id
+        from ..observability.context import get_current_request_context
+        ctx = get_current_request_context()
+        
+        if ctx and ctx.internal_user_id is not None:
+            # Normal path: Use internal user ID from context (already resolved at entry)
+            internal_user_id = ctx.internal_user_id
+        else:
+            # Fallback for non-context calls (tests, direct API usage, etc.)
+            # Single-user mode: Use default user "0"
+            # Multi-user mode: Resolve external_user_id if provided
+            if not self.is_multi_user:
+                # Single-user mode: Always use user_id "0"
+                from ...utils.user_resolution import resolve_user_identifier
+                internal_user_id, _ = await resolve_user_identifier(
+                    identifier="0",
+                    formation_id=self.formation_id,
+                    db_manager=self.db_manager,
+                    kv_cache=None,
+                )
+            elif external_user_id:
+                # Multi-user mode: Resolve provided external_user_id
+                from ...utils.user_resolution import resolve_user_identifier
+                internal_user_id, _ = await resolve_user_identifier(
+                    identifier=external_user_id,
+                    formation_id=self.formation_id,
+                    db_manager=self.db_manager,
+                    kv_cache=None,
+                )
+            else:
+                raise ValueError(
+                    "RequestContext not available and no external_user_id provided. "
+                    "This should not happen in normal operation."
+                )
 
+        async with self.db_manager.get_async_session() as session:
             # Convert numpy array to list if necessary
             if isinstance(embedding, np.ndarray):
                 embedding = embedding.tolist()
 
-            # Create memory using async model helper
+            # Create memory using async model helper with internal user ID
             memory = await Memory.create(
                 session,
-                user_id=user.id,
+                user_id=internal_user_id,  # Use resolved internal ID
                 text=text,
                 embedding=embedding,
                 meta_data=metadata,
