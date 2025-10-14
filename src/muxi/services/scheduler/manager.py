@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ...utils.datetime_utils import utc_now
 from ...utils.id_generator import generate_nanoid
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from .. import observability
