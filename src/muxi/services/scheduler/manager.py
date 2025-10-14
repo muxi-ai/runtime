@@ -333,10 +333,8 @@ class JobManager:
             with self.db_manager.get_session() as session:
                 query = (
                     session.query(ScheduledJob)
-                    .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.user_id == internal_user_id,
-                        User.formation_id == self.formation_id,
                     )
                 )
 
@@ -432,10 +430,8 @@ class JobManager:
             with self.db_manager.get_session() as session:
                 job = (
                     session.query(ScheduledJob)
-                    .join(User, ScheduledJob.user_id == User.id)
                     .filter(
-                        ScheduledJob.id == job_id,
-                        User.formation_id == self.formation_id,
+                    ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -651,10 +647,8 @@ class JobManager:
                 # First check if job exists and belongs to formation
                 job = (
                     session.query(ScheduledJob)
-                    .join(User, ScheduledJob.user_id == User.id)
                     .filter(
-                        ScheduledJob.id == job_id,
-                        User.formation_id == self.formation_id,
+                    ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -698,10 +692,8 @@ class JobManager:
                 # First check if job exists and belongs to formation
                 job = (
                     session.query(ScheduledJob)
-                    .join(User, ScheduledJob.user_id == User.id)
                     .filter(
-                        ScheduledJob.id == job_id,
-                        User.formation_id == self.formation_id,
+                    ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -730,10 +722,8 @@ class JobManager:
                 # First check if job exists and belongs to formation
                 job = (
                     session.query(ScheduledJob)
-                    .join(User, ScheduledJob.user_id == User.id)
                     .filter(
-                        ScheduledJob.id == job_id,
-                        User.formation_id == self.formation_id,
+                    ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -775,10 +765,8 @@ class JobManager:
                 # First check if job exists and belongs to formation
                 job = (
                     session.query(ScheduledJob)
-                    .join(User, ScheduledJob.user_id == User.id)
                     .filter(
-                        ScheduledJob.id == job_id,
-                        User.formation_id == self.formation_id,
+                    ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -822,10 +810,8 @@ class JobManager:
             with self.db_manager.get_session() as session:
                 job = (
                     session.query(ScheduledJob)
-                    .join(User, ScheduledJob.user_id == User.id)
                     .filter(
-                        ScheduledJob.id == job_id,
-                        User.formation_id == self.formation_id,
+                    ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -849,10 +835,8 @@ class JobManager:
                 # First check if job exists and belongs to formation
                 job = (
                     session.query(ScheduledJob)
-                    .join(User, ScheduledJob.user_id == User.id)
                     .filter(
-                        ScheduledJob.id == job_id,
-                        User.formation_id == self.formation_id,
+                    ScheduledJob.id == job_id,
                     )
                     .first()
                 )
@@ -1256,10 +1240,8 @@ class JobManager:
 
             job = (
                 session.query(ScheduledJob)
-                .join(User, ScheduledJob.user_id == User.id)
                 .filter(
                     ScheduledJob.id == job_id,
-                    User.formation_id == self.formation_id,
                 )
                 .first()
             )

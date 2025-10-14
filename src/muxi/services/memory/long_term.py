@@ -834,10 +834,8 @@ class LongTermMemory:
                     Memory,
                     func.l2_distance(Memory.embedding, query_embedding_vector).label("distance"),
                 )
-                .join(User, Memory.user_id == User.id)
                 .filter(
                     Memory.user_id == internal_user_id,
-                    User.formation_id == self.formation_id,
                     Memory.collection == collection,
                 )
                 .order_by("distance")
@@ -1072,15 +1070,13 @@ class LongTermMemory:
         internal_user_id = self._resolve_user_id_sync(external_user_id)
 
         with self.Session() as session:
-            # Get distinct collections from memories table
+            # Get distinct collections from memories table (no JOIN needed)
             from sqlalchemy import distinct
 
             collections = (
                 session.query(distinct(Memory.collection))
-                .join(User, Memory.user_id == User.id)
                 .filter(
                     Memory.user_id == internal_user_id,
-                    User.formation_id == self.formation_id,
                 )
                 .all()
             )
@@ -1148,14 +1144,12 @@ class LongTermMemory:
         internal_user_id = self._resolve_user_id_sync(external_user_id)
 
         with self.Session() as session:
-            # Check if there are memories in this collection
+            # Check if there are memories in this collection (no JOIN needed)
             memories_count = (
                 session.query(Memory)
-                .join(User, Memory.user_id == User.id)
                 .filter(
                     Memory.collection == name,
                     Memory.user_id == internal_user_id,
-                    User.formation_id == self.formation_id,
                 )
                 .count()
             )
@@ -1309,10 +1303,8 @@ class LongTermMemory:
                     Memory,
                     func.l2_distance(Memory.embedding, query_embedding_vector).label("distance"),
                 )
-                .join(User, Memory.user_id == User.id)
                 .filter(
                     Memory.user_id == internal_user_id,
-                    User.formation_id == self.formation_id,
                     Memory.collection == collection,
                 )
                 .order_by("distance")
