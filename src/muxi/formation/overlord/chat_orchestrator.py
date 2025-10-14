@@ -249,12 +249,19 @@ class ChatOrchestrator:
                 if self.overlord.long_term_memory else None
             )
             
-            internal_user_id, muxi_user_id = await resolve_user_identifier(
-                identifier=user_id,
-                formation_id=self.overlord.formation_id,
-                db_manager=db_mgr,
-                kv_cache=None,  # KV cache not yet implemented
-            )
+            # Only resolve if db_manager is available
+            if db_mgr is not None:
+                internal_user_id, muxi_user_id = await resolve_user_identifier(
+                    identifier=user_id,
+                    formation_id=self.overlord.formation_id,
+                    db_manager=db_mgr,
+                    kv_cache=None,  # KV cache not yet implemented
+                )
+            else:
+                # No database available - skip resolution
+                # user_id will be used directly by downstream code
+                internal_user_id = None
+                muxi_user_id = None
 
         # Start request tracking with observability
         with self.overlord.observability_manager.track_request(

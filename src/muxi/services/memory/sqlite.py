@@ -233,11 +233,19 @@ class SQLiteMemory(BaseMemory):
             # Create default user
             public_id = self._generate_id()
             conn.execute(
-                "INSERT INTO users (public_id, external_user_id, formation_id) " "VALUES (?, ?, ?)",
-                (public_id, default_user_id, self.formation_id),
+                "INSERT INTO users (public_id, formation_id) VALUES (?, ?)",
+                (public_id, self.formation_id),
+            )
+            # Also create user_identifier entry
+            conn.execute(
+                "INSERT INTO user_identifiers (user_id, identifier, formation_id) "
+                "SELECT id, ?, ? FROM users WHERE public_id = ? AND formation_id = ?",
+                (default_user_id, self.formation_id, public_id, self.formation_id),
             )
             cursor = conn.execute(
-                "SELECT id FROM users WHERE external_user_id = ? AND formation_id = ?",
+                "SELECT u.id FROM users u "
+                "JOIN user_identifiers ui ON u.id = ui.user_id "
+                "WHERE ui.identifier = ? AND ui.formation_id = ?",
                 (default_user_id, self.formation_id),
             )
             user_row = cursor.fetchone()

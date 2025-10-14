@@ -150,6 +150,8 @@ class ObservabilityManager:
         session_id: Optional[str] = None,
         formation_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        internal_user_id: Optional[int] = None,
+        muxi_user_id: Optional[str] = None,
     ):
         """Context manager for request tracking with automatic context propagation (sync version)."""
         # Since request_manager.track_request is async, we need to handle this differently
