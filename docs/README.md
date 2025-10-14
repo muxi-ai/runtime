@@ -15,6 +15,8 @@ New to MUXI? Start here:
 - [Request Lifecycle](request-lifecycle.md) - Complete request processing flow
 - [Memory Systems](memory-systems.md) - Three-tier memory architecture
 - [User Synopsis](user-synopsis.md) - Two-tier LLM-synthesized user context caching
+- **[Multi-Identity User Management](features/multi-identity.md)** - Multiple identifiers per user with automatic resolution
+  - [Quick Start Guide](features/multi-identity-quickstart.md) - Get started in 5 minutes
 - [Multi-User Architecture](multi-user-architecture.md) - Multi-tenant design
 
 ## System Components
@@ -48,6 +50,9 @@ Transform your AI from reactive to proactive:
 - [A2A Communication](a2a/) - Agent-to-agent protocol
 
 ### Features
+- **[Multi-Identity User Management](features/multi-identity.md)** - Multiple identifiers per user with automatic resolution
+  - [Quick Start Guide](features/multi-identity-quickstart.md) - Get started in 5 minutes
+- **[LLM Caching](features/llm-caching.md)** - Intelligent response caching with 70%+ cost savings
 - **[Streaming Responses](features/streaming.md)** - Real-time response streaming with SSE
   - [Quick Start Guide](features/streaming-quickstart.md) - 5-minute guide to streaming
   - [Troubleshooting Guide](features/streaming-troubleshooting.md) - Common issues and solutions
@@ -82,6 +87,7 @@ Transform your AI from reactive to proactive:
 
 ## Recent Updates
 
+- **October 2025**: Added [LLM Caching](features/llm-caching.md) - Intelligent response caching for 70%+ cost savings
 - **September 2025**: Added [Prompt Management](prompt-management.md) documentation for centralized prompt system
 - **September 2025**: Enhanced clarification system with multilingual support
 - **August 2025**: Added scheduler service with natural language scheduling
