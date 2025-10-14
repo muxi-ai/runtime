@@ -48,6 +48,69 @@ class JobManager:
             description=f"Job manager initialized with {self.db_manager.database_type} database",
         )
 
+    def _resolve_user_id_sync(self, external_user_id: str) -> int:
+        """
+        Resolve external user identifier to internal user ID.
+        
+        For scheduler, we always resolve synchronously since jobs are managed outside request context.
+        This uses the user_identifiers table for multi-identity support.
+        
+        Returns:
+            int: Internal user ID for database operations
+        """
+        with self.db_manager.get_session() as session:
+            from ...services.memory.long_term import UserIdentifier
+            
+            # Query user_identifiers table to find user
+            result = session.execute(
+                select(UserIdentifier.user_id).where(
+                    UserIdentifier.identifier == external_user_id,
+                    UserIdentifier.formation_id == self.formation_id
+                )
+            )
+            user_id = result.scalar_one_or_none()
+            
+            if user_id:
+                return user_id
+            
+            # User doesn't exist - create new user + identifier
+            from ...utils.datetime_utils import utc_now_naive
+            from ...utils.id_generator import get_default_nanoid
+            from sqlalchemy.exc import IntegrityError
+            
+            new_user = User(
+                public_id=get_default_nanoid()(),
+                formation_id=self.formation_id,
+            )
+            
+            try:
+                session.add(new_user)
+                session.flush()
+                
+                # Create identifier
+                new_identifier = UserIdentifier(
+                    user_id=new_user.id,
+                    identifier=external_user_id,
+                    formation_id=self.formation_id,
+                )
+                session.add(new_identifier)
+                session.commit()
+                
+                return new_user.id
+            except IntegrityError:
+                # Handle concurrent creation - retry lookup
+                session.rollback()
+                result = session.execute(
+                    select(UserIdentifier.user_id).where(
+                        UserIdentifier.identifier == external_user_id,
+                        UserIdentifier.formation_id == self.formation_id
+                    )
+                )
+                user_id = result.scalar_one_or_none()
+                if user_id:
+                    return user_id
+                raise ValueError(f"Failed to resolve user after concurrent creation: {external_user_id}")
+
     def _get_or_create_user(self, session, external_user_id: str) -> User:
         """Get existing user or create new one with proper concurrency handling."""
         # Try to find existing user with formation scope
@@ -164,13 +227,13 @@ class JobManager:
         job_id = f"job_{generate_nanoid(size=16)}"
 
         try:
-            with self.db_manager.get_session() as session:
-                # Get or create user
-                user = self._get_or_create_user(session, user_id)
+            # Resolve user identifier to internal user ID (multi-identity support)
+            internal_user_id = self._resolve_user_id_sync(user_id)
 
+            with self.db_manager.get_session() as session:
                 job = ScheduledJob(
                     id=job_id,
-                    user_id=user.id,  # Use internal user ID
+                    user_id=internal_user_id,  # Use internal user ID
                     title=title,
                     original_prompt=original_prompt,
                     execution_prompt=execution_prompt,
@@ -264,15 +327,15 @@ class JobManager:
         await self.initialize()
 
         try:
-            with self.db_manager.get_session() as session:
-                # Get internal user ID
-                user = self._get_or_create_user(session, user_id)
+            # Resolve user identifier to internal user ID (multi-identity support)
+            internal_user_id = self._resolve_user_id_sync(user_id)
 
+            with self.db_manager.get_session() as session:
                 query = (
-                    session.query(ScheduledJob, User.external_user_id)
+                    session.query(ScheduledJob)
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
-                        ScheduledJob.user_id == user.id,
+                        ScheduledJob.user_id == internal_user_id,
                         User.formation_id == self.formation_id,
                     )
                 )
@@ -280,15 +343,10 @@ class JobManager:
                 if status:
                     query = query.filter(ScheduledJob.status == status)
 
-                jobs_with_users = query.order_by(ScheduledJob.created_at.desc()).all()
+                jobs = query.order_by(ScheduledJob.created_at.desc()).all()
 
-                # Build result with external_user_id from User table
-                result = []
-                for job, external_user_id in jobs_with_users:
-                    job_dict = job.to_dict()
-                    job_dict['external_user_id'] = external_user_id
-                    result.append(job_dict)
-
+                # Build result
+                result = [job.to_dict() for job in jobs]
                 return result
 
         except SQLAlchemyError as e:
@@ -1191,9 +1249,10 @@ class JobManager:
                 return (new_job_id, "replaced")
 
         # Otherwise, do a normal update
+        # Resolve user identifier to internal user ID (multi-identity support)
+        internal_user_id = self._resolve_user_id_sync(user_id)
+        
         with self.db_manager.get_session() as session:
-            # Get user internal ID
-            user = self._get_or_create_user(session, user_id)
 
             job = (
                 session.query(ScheduledJob)

@@ -282,6 +282,106 @@ class LongTermMemory:
             )
             # Don't raise - pgvector might not be available but system can continue
 
+    async def _resolve_user_id_async(self, external_user_id: Optional[str] = None) -> int:
+        """
+        Resolve user identifier to internal user ID.
+        
+        Prefers RequestContext.internal_user_id if available (normal path after Phase 3).
+        Falls back to resolving external_user_id for direct API calls and tests.
+        
+        Returns:
+            int: Internal user ID for database operations
+        """
+        from ..observability.context import get_current_request_context
+        ctx = get_current_request_context()
+        
+        if ctx and ctx.internal_user_id is not None:
+            # Normal path: Use internal user ID from context (already resolved at entry)
+            return ctx.internal_user_id
+        else:
+            # Fallback for non-context calls (tests, direct API usage, etc.)
+            if not self.is_multi_user:
+                # Single-user mode: Always use identifier "0"
+                from ...utils.user_resolution import resolve_user_identifier
+                internal_user_id, _ = await resolve_user_identifier(
+                    identifier="0",
+                    formation_id=self.formation_id,
+                    db_manager=self.db_manager,
+                    kv_cache=None,
+                )
+                return internal_user_id
+            elif external_user_id:
+                # Multi-user mode: Resolve provided external_user_id
+                from ...utils.user_resolution import resolve_user_identifier
+                internal_user_id, _ = await resolve_user_identifier(
+                    identifier=external_user_id,
+                    formation_id=self.formation_id,
+                    db_manager=self.db_manager,
+                    kv_cache=None,
+                )
+                return internal_user_id
+            else:
+                raise ValueError(
+                    "RequestContext not available and no external_user_id provided. "
+                    "This should not happen in normal operation."
+                )
+
+    def _resolve_user_id_sync(self, external_user_id: Optional[str] = None) -> int:
+        """
+        Synchronous version of _resolve_user_id_async.
+        
+        Note: Sync methods are deprecated - prefer async methods where possible.
+        This is provided for backward compatibility only.
+        """
+        from ..observability.context import get_current_request_context
+        ctx = get_current_request_context()
+        
+        if ctx and ctx.internal_user_id is not None:
+            return ctx.internal_user_id
+        else:
+            # Fallback: Need to do blocking resolution (not ideal)
+            # For sync fallback, we'll use the old _get_or_create_user pattern
+            # This is only hit in tests or direct sync API usage
+            if not self.is_multi_user:
+                external_user_id = "0"
+            elif external_user_id is None:
+                raise ValueError("external_user_id required in multi-user mode")
+            
+            # Find or create user synchronously
+            with self.Session() as session:
+                result = session.execute(
+                    select(User.id).where(
+                        User.formation_id == self.formation_id
+                    ).limit(1) if not self.is_multi_user else
+                    select(User.id).join(UserIdentifier).where(
+                        UserIdentifier.identifier == external_user_id,
+                        UserIdentifier.formation_id == self.formation_id
+                    )
+                )
+                user_id = result.scalar_one_or_none()
+                
+                if user_id:
+                    return user_id
+                
+                # Create new user if not found
+                new_user = User(
+                    public_id=get_default_nanoid(),
+                    formation_id=self.formation_id,
+                )
+                session.add(new_user)
+                session.flush()
+                
+                # Create identifier
+                new_identifier = UserIdentifier(
+                    user_id=new_user.id,
+                    identifier=external_user_id,
+                    formation_id=self.formation_id,
+                )
+                session.add(new_identifier)
+                session.commit()
+                
+                return new_user.id
+
     def _get_or_create_user(self, session: Session, external_user_id: Optional[str] = None) -> User:
         """Get existing user or create new one."""
         # Handle single-user mode
@@ -485,41 +585,8 @@ class LongTermMemory:
         # Add timestamp to metadata
         metadata["timestamp"] = time.time()
 
-        # Get internal user ID from RequestContext (multi-identity support)
-        # After Phase 3, all entry points set RequestContext with internal_user_id
-        from ..observability.context import get_current_request_context
-        ctx = get_current_request_context()
-        
-        if ctx and ctx.internal_user_id is not None:
-            # Normal path: Use internal user ID from context (already resolved at entry)
-            internal_user_id = ctx.internal_user_id
-        else:
-            # Fallback for non-context calls (tests, direct API usage, etc.)
-            # Single-user mode: Use default user "0"
-            # Multi-user mode: Resolve external_user_id if provided
-            if not self.is_multi_user:
-                # Single-user mode: Always use user_id "0"
-                from ...utils.user_resolution import resolve_user_identifier
-                internal_user_id, _ = await resolve_user_identifier(
-                    identifier="0",
-                    formation_id=self.formation_id,
-                    db_manager=self.db_manager,
-                    kv_cache=None,
-                )
-            elif external_user_id:
-                # Multi-user mode: Resolve provided external_user_id
-                from ...utils.user_resolution import resolve_user_identifier
-                internal_user_id, _ = await resolve_user_identifier(
-                    identifier=external_user_id,
-                    formation_id=self.formation_id,
-                    db_manager=self.db_manager,
-                    kv_cache=None,
-                )
-            else:
-                raise ValueError(
-                    "RequestContext not available and no external_user_id provided. "
-                    "This should not happen in normal operation."
-                )
+        # Resolve user identifier to internal user ID (multi-identity support)
+        internal_user_id = await self._resolve_user_id_async(external_user_id)
 
         async with self.db_manager.get_async_session() as session:
             # Convert numpy array to list if necessary
@@ -569,17 +636,17 @@ class LongTermMemory:
         # Add timestamp to metadata
         metadata["timestamp"] = time.time()
 
-        with self.Session() as session:
-            # Get or create user
-            user = self._get_or_create_user(session, external_user_id)
+        # Resolve user identifier to internal user ID (multi-identity support)
+        internal_user_id = self._resolve_user_id_sync(external_user_id)
 
+        with self.Session() as session:
             # Convert numpy array to list if necessary
             if isinstance(embedding, np.ndarray):
                 embedding = embedding.tolist()
 
             # Create memory
             memory = Memory(
-                user_id=user.id,
+                user_id=internal_user_id,
                 text=text,
                 embedding=embedding,
                 meta_data=metadata,
@@ -748,10 +815,10 @@ class LongTermMemory:
         if collection is None:
             collection = self.default_collection
 
-        with self.Session() as session:
-            # Get user
-            user = self._get_or_create_user(session, external_user_id)
+        # Resolve user identifier to internal user ID (multi-identity support)
+        internal_user_id = self._resolve_user_id_sync(external_user_id)
 
+        with self.Session() as session:
             # For PostgreSQL with pgvector, we need to cast the query embedding
             if self.db_manager.database_type == "postgresql":
                 from sqlalchemy import cast
@@ -769,7 +836,7 @@ class LongTermMemory:
                 )
                 .join(User, Memory.user_id == User.id)
                 .filter(
-                    Memory.user_id == user.id,
+                    Memory.user_id == internal_user_id,
                     User.formation_id == self.formation_id,
                     Memory.collection == collection,
                 )
@@ -1001,10 +1068,10 @@ class LongTermMemory:
         Returns:
             A list of dictionaries containing collection information.
         """
-        with self.Session() as session:
-            # Get user
-            user = self._get_or_create_user(session, external_user_id)
+        # Resolve user identifier to internal user ID (multi-identity support)
+        internal_user_id = self._resolve_user_id_sync(external_user_id)
 
+        with self.Session() as session:
             # Get distinct collections from memories table
             from sqlalchemy import distinct
 
@@ -1012,7 +1079,7 @@ class LongTermMemory:
                 session.query(distinct(Memory.collection))
                 .join(User, Memory.user_id == User.id)
                 .filter(
-                    Memory.user_id == user.id,
+                    Memory.user_id == internal_user_id,
                     User.formation_id == self.formation_id,
                 )
                 .all()
@@ -1077,17 +1144,17 @@ class LongTermMemory:
         if name == self.default_collection:
             raise ValueError("Cannot delete the default collection")
 
-        with self.Session() as session:
-            # Get user
-            user = self._get_or_create_user(session, external_user_id)
+        # Resolve user identifier to internal user ID (multi-identity support)
+        internal_user_id = self._resolve_user_id_sync(external_user_id)
 
+        with self.Session() as session:
             # Check if there are memories in this collection
             memories_count = (
                 session.query(Memory)
                 .join(User, Memory.user_id == User.id)
                 .filter(
                     Memory.collection == name,
-                    Memory.user_id == user.id,
+                    Memory.user_id == internal_user_id,
                     User.formation_id == self.formation_id,
                 )
                 .count()
@@ -1099,12 +1166,12 @@ class LongTermMemory:
             if delete_memories:
                 # Delete all memories in the collection for this user
                 session.query(Memory).filter(
-                    Memory.collection == name, Memory.user_id == user.id
+                    Memory.collection == name, Memory.user_id == internal_user_id
                 ).delete()
             else:
                 # Move memories to default collection for this user
                 session.query(Memory).filter(
-                    Memory.collection == name, Memory.user_id == user.id
+                    Memory.collection == name, Memory.user_id == internal_user_id
                 ).update({"collection": self.default_collection})
 
             session.commit()
@@ -1223,10 +1290,10 @@ class LongTermMemory:
         if collection is None:
             collection = self.default_collection
 
-        async with self.db_manager.get_async_session() as session:
-            # Get user
-            user = await self._get_or_create_user_async(session, external_user_id)
+        # Resolve user identifier to internal user ID (multi-identity support)
+        internal_user_id = await self._resolve_user_id_async(external_user_id)
 
+        async with self.db_manager.get_async_session() as session:
             # For PostgreSQL with pgvector, we need to cast the query embedding
             if self.db_manager.database_type == "postgresql":
                 from sqlalchemy import cast
@@ -1244,7 +1311,7 @@ class LongTermMemory:
                 )
                 .join(User, Memory.user_id == User.id)
                 .filter(
-                    Memory.user_id == user.id,
+                    Memory.user_id == internal_user_id,
                     User.formation_id == self.formation_id,
                     Memory.collection == collection,
                 )
@@ -1296,9 +1363,10 @@ class LongTermMemory:
         if collection is None:
             collection = self.default_collection
 
+        # Resolve user identifier to internal user ID (multi-identity support)
+        internal_user_id = await self._resolve_user_id_async(external_user_id)
+
         async with self.db_manager.get_async_session() as session:
-            # Get user - this ensures we have the correct internal user ID
-            user = await self._get_or_create_user_async(session, external_user_id)
 
             # Build the query with proper user isolation
             if self.db_manager.database_type == "postgresql":
@@ -1329,7 +1397,7 @@ class LongTermMemory:
                     sql,
                     {
                         "query": query,
-                        "user_id": user.id,
+                        "user_id": internal_user_id,
                         "formation_id": self.formation_id,
                         "collection": collection,
                         "limit": limit,
