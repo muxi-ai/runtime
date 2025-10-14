@@ -34,4 +34,4 @@ memory:
 
 database:
   type: "postgresql"
-  url: "${{ secrets.DATABASE_URL }}"
+  url: "${{ secrets.POSTGRES_URI }}"

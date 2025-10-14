@@ -66,7 +66,7 @@ async def resolve_user_identifier(
             try:
                 internal_id_str, muxi_id = cached_value.split(":", 1)
                 observability.observe(
-                    event_type=observability.SystemEvents.CACHE_HIT,
+                    event_type="user_identifier.cache_hit",
                     level=observability.EventLevel.DEBUG,
                     data={
                         "cache_type": "user_identifier",
@@ -79,7 +79,7 @@ async def resolve_user_identifier(
             except (ValueError, AttributeError) as e:
                 # Corrupted cache entry - invalidate it
                 observability.observe(
-                    event_type=observability.ErrorEvents.WARNING,
+                    event_type="user_identifier.cache_corrupted",
                     level=observability.EventLevel.WARNING,
                     data={
                         "message": "Corrupted cache entry for user identifier",
@@ -91,7 +91,7 @@ async def resolve_user_identifier(
 
     # Step 2: Database lookup
     observability.observe(
-        event_type=observability.SystemEvents.CACHE_MISS,
+        event_type="user_identifier.cache_miss",
         level=observability.EventLevel.DEBUG,
         data={
             "cache_type": "user_identifier",
@@ -117,7 +117,7 @@ async def resolve_user_identifier(
             # Found existing user
             internal_id, muxi_id = row
             observability.observe(
-                event_type=observability.SystemEvents.USER_IDENTIFIER_RESOLVED,
+                event_type="user_identifier.resolved",
                 level=observability.EventLevel.INFO,
                 data={
                     "identifier": identifier,
@@ -147,7 +147,7 @@ async def resolve_user_identifier(
             internal_id, muxi_id = new_user.id, new_user.public_id
 
             observability.observe(
-                event_type=observability.SystemEvents.USER_IDENTIFIER_RESOLVED,
+                event_type="user_identifier.resolved",
                 level=observability.EventLevel.INFO,
                 data={
                     "identifier": identifier,

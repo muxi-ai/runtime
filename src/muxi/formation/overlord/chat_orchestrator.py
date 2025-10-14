@@ -243,10 +243,16 @@ class ChatOrchestrator:
         if user_id is not None:
             from ...utils.user_resolution import resolve_user_identifier
             
+            # Use long_term_memory's db_manager if overlord's is not available
+            db_mgr = self.overlord.db_manager or (
+                self.overlord.long_term_memory.db_manager 
+                if self.overlord.long_term_memory else None
+            )
+            
             internal_user_id, muxi_user_id = await resolve_user_identifier(
                 identifier=user_id,
                 formation_id=self.overlord.formation_id,
-                db_manager=self.overlord.db_manager,
+                db_manager=db_mgr,
                 kv_cache=None,  # KV cache not yet implemented
             )
 
