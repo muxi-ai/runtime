@@ -14,6 +14,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.fernet import Fernet
 
 from .resolver import CredentialResolver
+from ...utils.user_resolution import resolve_user_identifier
 
 
 class EncryptedCredentialResolver(CredentialResolver):
@@ -253,25 +254,26 @@ class EncryptedCredentialResolver(CredentialResolver):
             True if duplicate exists, False otherwise
         """
         from sqlalchemy import select
-        from .resolver import User, Credential
+        from .resolver import Credential
 
         service = service.lower()
 
-        async with self.async_session_maker() as session:
-            # Get the user
-            user_stmt = select(User).where(
-                User.external_user_id == user_id, User.formation_id == self.formation_id
+        # Resolve user identifier to internal user ID
+        try:
+            result = await resolve_user_identifier(
+                identifier=user_id,
+                formation_id=self.formation_id,
+                db_session_maker=self.async_session_maker,
             )
-            user_result = await session.execute(user_stmt)
-            user = user_result.scalar_one_or_none()
+            internal_user_id = result["internal_user_id"]
+        except:
+            # If resolution fails, user doesn't exist, so no duplicates
+            return False
 
-            if not user:
-                # No user, so no duplicates
-                return False
-
+        async with self.async_session_maker() as session:
             # Check existing credentials
             cred_stmt = select(Credential).where(
-                Credential.user_id == user.id,
+                Credential.user_id == internal_user_id,
                 Credential.service == service,
             )
             result = await session.execute(cred_stmt)

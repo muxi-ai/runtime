@@ -400,11 +400,12 @@ class LongTermMemory:
         if not self.is_multi_user:
             external_user_id = "0"
 
+        # Query via user_identifiers table
         async with self.db_manager.get_async_session() as session:
             result = await session.execute(
-                select(User.id)
-                .where(User.external_user_id == external_user_id)
-                .where(User.formation_id == self.formation_id)
+                select(UserIdentifier.user_id)
+                .where(UserIdentifier.identifier == external_user_id)
+                .where(UserIdentifier.formation_id == self.formation_id)
             )
             user_id = result.scalar_one_or_none()
 
