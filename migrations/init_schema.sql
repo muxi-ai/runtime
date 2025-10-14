@@ -61,16 +61,28 @@ $$;
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     public_id VARCHAR(21) NOT NULL UNIQUE,
-    external_user_id VARCHAR(255) NOT NULL,
     formation_id VARCHAR(255) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(external_user_id, formation_id)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_public_id ON users(public_id);
-CREATE INDEX IF NOT EXISTS idx_users_external_user_id ON users(external_user_id);
 CREATE INDEX IF NOT EXISTS idx_users_formation_id ON users(formation_id);
+
+-- User identifiers table (for multi-identity support)
+CREATE TABLE IF NOT EXISTS user_identifiers (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    identifier VARCHAR(255) NOT NULL,
+    identifier_type VARCHAR(50),
+    formation_id VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(identifier, formation_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_identifiers_lookup ON user_identifiers(identifier, formation_id);
+CREATE INDEX IF NOT EXISTS idx_user_identifiers_user_id ON user_identifiers(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_identifiers_formation_id ON user_identifiers(formation_id);
 
 -- Memories table
 CREATE TABLE IF NOT EXISTS memories (

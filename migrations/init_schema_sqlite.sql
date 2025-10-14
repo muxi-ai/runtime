@@ -19,16 +19,29 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     public_id TEXT NOT NULL UNIQUE,
-    external_user_id TEXT NOT NULL,
     formation_id TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(external_user_id, formation_id)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_public_id ON users(public_id);
-CREATE INDEX IF NOT EXISTS idx_users_external_user_id ON users(external_user_id);
 CREATE INDEX IF NOT EXISTS idx_users_formation_id ON users(formation_id);
+
+-- User identifiers table (for multi-identity support)
+CREATE TABLE IF NOT EXISTS user_identifiers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    identifier TEXT NOT NULL,
+    identifier_type TEXT,
+    formation_id TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(identifier, formation_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_identifiers_lookup ON user_identifiers(identifier, formation_id);
+CREATE INDEX IF NOT EXISTS idx_user_identifiers_user_id ON user_identifiers(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_identifiers_formation_id ON user_identifiers(formation_id);
 
 -- Collections table (SQLite uses this for collection management)
 CREATE TABLE IF NOT EXISTS collections (

@@ -75,7 +75,8 @@ class User(Base, AsyncModelMixin):
     """
     User table for multi-user support.
 
-    Maps external user IDs to internal database IDs.
+    Core user entity that can have multiple external identifiers.
+    External identifiers are stored in the user_identifiers table.
     """
 
     __tablename__ = "users"
@@ -83,15 +84,33 @@ class User(Base, AsyncModelMixin):
     id = Column(Integer, primary_key=True, autoincrement=True)
     public_id = Column(
         String(21), nullable=False, unique=True, index=True
-    )  # Nano ID for external exposure
-    external_user_id = Column(String(255), nullable=False, index=True)
+    )  # Nano ID for external exposure (muxi_user_id)
     formation_id = Column(String(255), nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=utc_now_naive)
     updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
-    # Composite unique constraint to ensure uniqueness within each formation
+
+class UserIdentifier(Base, AsyncModelMixin):
+    """
+    User identifier table for multi-identity support.
+    
+    Enables multiple external identifiers (email, Slack ID, Telegram handle, etc.)
+    to map to a single MUXI user. This allows context and memory carryover across
+    communication channels.
+    """
+
+    __tablename__ = "user_identifiers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    identifier = Column(String(255), nullable=False)
+    identifier_type = Column(String(50))  # Optional: 'email', 'slack', 'telegram', etc.
+    formation_id = Column(String(255), nullable=False, index=True)
+    created_at = Column(DateTime, default=utc_now_naive)
+
+    # Composite unique constraint to ensure identifier uniqueness per formation
     __table_args__ = (
-        UniqueConstraint("external_user_id", "formation_id", name="uq_user_formation_external_id"),
+        UniqueConstraint("identifier", "formation_id", name="uq_identifier_formation"),
     )
 
 

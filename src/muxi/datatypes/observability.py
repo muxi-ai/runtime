@@ -1019,7 +1019,12 @@ class RequestContext:
     status: str = "processing"
     started: float = field(default_factory=lambda: time.time() * 1000)  # milliseconds
     formation_id: Optional[str] = None
-    user_id: Optional[str] = None
+    
+    # User identity (three aspects for multi-identity support)
+    internal_user_id: Optional[int] = None      # Database ID (for queries) - NEVER exposed externally
+    muxi_user_id: Optional[str] = None          # MUXI's canonical public_id (e.g., "usr_abc123") for observability
+    user_id: Optional[str] = None               # What developer provided (e.g., "alice@email.com") - channel context
+    
     session_id: Optional[str] = None
     tokens: TokenUsage = field(default_factory=TokenUsage)
     _parent_events: Set[str] = field(default_factory=set, init=False)
