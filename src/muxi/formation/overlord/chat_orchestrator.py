@@ -783,7 +783,7 @@ class ChatOrchestrator:
 
         # 1. Get user synopsis (cached) from user context manager
         user_profile_text = ""
-        if self.overlord.is_multi_user and user_id and user_id != "0":
+        if self.overlord.is_multi_user and user_id:
             try:
                 # Use cached synopsis instead of querying Memobase every time
                 synopsis = await self.overlord.get_user_synopsis(external_user_id=user_id)
@@ -795,7 +795,21 @@ class ChatOrchestrator:
 
         # 2. Search for relevant long-term memories
         long_term_memories = ""
-        if self.overlord.long_term_memory and user_id and user_id != "0":
+        
+        # DEBUG: Log condition check
+        from ...services import observability
+        observability.observe(
+            event_type="memory.long_term.condition_check",
+            level=observability.EventLevel.INFO,
+            data={
+                "has_long_term_memory": self.overlord.long_term_memory is not None,
+                "user_id": str(user_id) if user_id else None,
+                "user_id_truthy": bool(user_id),
+            },
+            description=f"Checking memory search conditions",
+        )
+        
+        if self.overlord.long_term_memory and user_id:
             try:
                 # Search long-term memory using current message as query
                 # Search specific collections that are commonly used
@@ -814,6 +828,21 @@ class ChatOrchestrator:
                     user_id=user_id,
                     collections=collections_to_search,
                 )
+                
+                # DEBUG: Log search results
+                from ...services import observability
+                observability.observe(
+                    event_type="memory.long_term.search_debug",
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "query": message[:100],
+                        "user_id": str(user_id),
+                        "results_count": len(lt_results) if lt_results else 0,
+                        "has_results": bool(lt_results),
+                    },
+                    description=f"Long-term memory search returned {len(lt_results) if lt_results else 0} results",
+                )
+                
                 if lt_results:
                     # Format long-term memories
                     memory_parts = []
@@ -826,9 +855,30 @@ class ChatOrchestrator:
                             memory_parts.append(f"- {content}")
                     if memory_parts:
                         long_term_memories = "\n".join(memory_parts[:3])  # Limit to top 3
-            except Exception:
-                # Continue without long-term memories
-                pass
+                        
+                        # DEBUG: Log formatted memories
+                        observability.observe(
+                            event_type="memory.long_term.formatted",
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "memory_count": len(memory_parts),
+                                "formatted_length": len(long_term_memories),
+                                "sample": long_term_memories[:100],
+                            },
+                            description=f"Formatted {len(memory_parts)} memories for injection",
+                        )
+            except Exception as e:
+                # Log error but continue without long-term memories
+                from ...services import observability
+                observability.observe(
+                    event_type="memory.long_term.search_failed",
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    },
+                    description=f"Long-term memory search failed: {str(e)}",
+                )
 
         # 3. Search for recent conversation context (buffer memory)
         context_text = ""

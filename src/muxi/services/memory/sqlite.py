@@ -500,7 +500,7 @@ class SQLiteMemory(BaseMemory):
         for score, memory in results:
             formatted_results.append(
                 {
-                    "content": memory["text"],
+                    "text": memory["text"],  # Use "text" key to match LongTermMemory format
                     "metadata": memory["metadata"] if "metadata" in memory else {},
                     "score": score,
                 }
