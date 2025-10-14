@@ -96,22 +96,20 @@ class SQLiteMemory(BaseMemory):
         # Initialize database
         self.conn = self._init_database()
 
-    async def get_or_create_user(self, external_user_id: str) -> int:
+    async def get_or_create_user(self, identifier: str) -> int:
         """
-        Get or create a user by external ID.
+        Get or create a user by identifier.
 
         Args:
-            external_user_id: The external user identifier
+            identifier: The user identifier (email, Slack ID, etc.)
 
         Returns:
             The internal database user ID
         """
-        # user_id is now just external_user_id
-
         # Look up via user_identifiers table
         cursor = self.conn.execute(
             "SELECT user_id FROM user_identifiers WHERE identifier = ? AND formation_id = ?",
-            (external_user_id, self.formation_id),
+            (identifier, self.formation_id),
         )
         user_row = cursor.fetchone()
 
@@ -132,7 +130,7 @@ class SQLiteMemory(BaseMemory):
         # Create identifier mapping
         self.conn.execute(
             "INSERT INTO user_identifiers (user_id, identifier, formation_id) VALUES (?, ?, ?)",
-            (user_id, external_user_id, self.formation_id),
+            (user_id, identifier, self.formation_id),
         )
         self.conn.commit()
 
@@ -170,13 +168,38 @@ class SQLiteMemory(BaseMemory):
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 public_id TEXT NOT NULL UNIQUE,
-                external_user_id TEXT NOT NULL,
                 formation_id TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(external_user_id, formation_id)
+                UNIQUE(public_id, formation_id)
             )
         """
+        )
+
+        # Create user_identifiers table
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_identifiers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                identifier TEXT NOT NULL,
+                identifier_type TEXT,
+                formation_id TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE(identifier, formation_id)
+            )
+        """
+        )
+
+        # Create indexes for user_identifiers
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_user_identifiers_identifier "
+            "ON user_identifiers(identifier, formation_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_user_identifiers_user_id "
+            "ON user_identifiers(user_id)"
         )
 
         conn.execute(
@@ -224,7 +247,9 @@ class SQLiteMemory(BaseMemory):
         default_user_id = "0"
         # Check if user exists
         cursor = conn.execute(
-            "SELECT id FROM users WHERE external_user_id = ? AND formation_id = ?",
+            "SELECT u.id FROM users u "
+            "JOIN user_identifiers ui ON u.id = ui.user_id "
+            "WHERE ui.identifier = ? AND ui.formation_id = ?",
             (default_user_id, self.formation_id),
         )
         user_row = cursor.fetchone()
@@ -618,7 +643,9 @@ class SQLiteMemory(BaseMemory):
         if user_id:
             # Synchronous version of get_or_create_user
             cursor = self.conn.execute(
-                "SELECT id FROM users WHERE external_user_id = ? AND formation_id = ?",
+                "SELECT u.id FROM users u "
+                "JOIN user_identifiers ui ON u.id = ui.user_id "
+                "WHERE ui.identifier = ? AND ui.formation_id = ?",
                 (user_id, self.formation_id),
             )
             user_row = cursor.fetchone()
