@@ -262,6 +262,10 @@ async def associate_user_identifiers(
             )
             await session.commit()
 
+        # Capture user attributes before they expire
+        user_id = user.id
+        user_public_id = user.public_id
+
         # Step 2: Check for conflicts
         conflicts = []
         for identifier, _ in normalized_identifiers:
@@ -273,7 +277,7 @@ async def associate_user_identifiers(
                 )
             )
             existing_user_id = result.scalar_one_or_none()
-            if existing_user_id and existing_user_id != user.id:
+            if existing_user_id and existing_user_id != user_id:
                 conflicts.append(
                     {
                         "identifier": identifier,
@@ -283,11 +287,11 @@ async def associate_user_identifiers(
 
         if conflicts:
             observability.observe(
-                event_type=observability.ErrorEvents.WARNING,
+                event_type="user_identifier.association_conflict",
                 level=observability.EventLevel.WARNING,
                 data={
                     "message": "Identifier conflicts detected",
-                    "muxi_user_id": user.public_id,
+                    "muxi_user_id": user_public_id,
                     "conflicts": conflicts,
                     "formation_id": formation_id,
                 },
@@ -307,7 +311,7 @@ async def associate_user_identifiers(
                 # Try to create new identifier
                 await UserIdentifier.create(
                     session,
-                    user_id=user.id,
+                    user_id=user_id,
                     identifier=identifier,
                     identifier_type=identifier_type,
                     formation_id=formation_id,
@@ -315,8 +319,9 @@ async def associate_user_identifiers(
                 new_identifiers.append(identifier)
 
                 # Invalidate cache
-                cache_key = f"user_id:{formation_id}:{identifier}"
-                await kv_cache.delete(cache_key)
+                if kv_cache is not None:
+                    cache_key = f"user_id:{formation_id}:{identifier}"
+                    await kv_cache.delete(cache_key)
 
             except IntegrityError:
                 # Identifier already exists for this user
@@ -327,11 +332,11 @@ async def associate_user_identifiers(
 
         # Step 4: Log event
         observability.observe(
-            event_type=observability.SystemEvents.USER_IDENTIFIERS_ASSOCIATED,
+            event_type="user_identifier.associated",
             level=observability.EventLevel.INFO,
             data={
-                "muxi_user_id": user.public_id,
-                "internal_user_id": user.id,
+                "muxi_user_id": user_public_id,
+                "internal_user_id": user_id,
                 "identifiers_associated": len(new_identifiers),
                 "new_identifiers": new_identifiers,
                 "existing_identifiers": existing_identifiers,
@@ -340,8 +345,8 @@ async def associate_user_identifiers(
         )
 
         return {
-            "muxi_user_id": user.public_id,
-            "internal_user_id": user.id,
+            "muxi_user_id": user_public_id,
+            "internal_user_id": user_id,
             "identifiers_associated": len(new_identifiers),
             "new_identifiers": new_identifiers,
             "existing_identifiers": existing_identifiers,
