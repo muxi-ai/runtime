@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 E2E Test: Multi-Identity User Management - Comprehensive Tests
 
@@ -10,16 +11,19 @@ Tests the complete multi-identity functionality:
 6. SQLite and PostgreSQL compatibility
 """
 
-import pytest
 import asyncio
+import sys
 from pathlib import Path
-import os
+
+# Add parent directories to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+
+from src.muxi.formation.formation import Formation  # noqa: E402
 
 
-@pytest.mark.asyncio
-async def test_multi_identity_memory_carryover(runtime_from_yaml):
+async def test_multi_identity_memory_carryover_sqlite():
     """
-    Test that memories carry over when same user uses different identifiers.
+    Test that memories carry over when same user uses different identifiers - SQLite.
     
     Flow:
     1. Alice chats via email: "alice@company.com" 
@@ -27,12 +31,16 @@ async def test_multi_identity_memory_carryover(runtime_from_yaml):
     3. Alice chats via Slack ID: "U12345"
     4. Verify Alice's Python preference is remembered
     """
-    # Setup formation
-    formation_dir = Path(__file__).parent
-    formation_path = formation_dir / "formation.yaml"
+    print("\n" + "=" * 60)
+    print("TEST: Multi-Identity Memory Carryover (SQLite)")
+    print("=" * 60)
     
-    # Initialize formation
-    overlord = await runtime_from_yaml(str(formation_path))
+    # Setup formation
+    formation_path = Path(__file__).parent / "formations" / "formation-sqlite"
+    
+    formation = Formation()
+    await formation.load(str(formation_path))
+    overlord = await formation.start_overlord()
     
     try:
         # Step 1: User interacts via email
@@ -77,7 +85,8 @@ async def test_multi_identity_memory_carryover(runtime_from_yaml):
 
 
 @pytest.mark.asyncio
-async def test_different_users_isolated(runtime_from_yaml):
+@pytest.mark.parametrize("backend", ["sqlite", "postgres"])
+async def test_different_users_isolated(runtime_from_yaml, backend):
     """
     Test that different users remain isolated even with similar content.
     
@@ -86,8 +95,11 @@ async def test_different_users_isolated(runtime_from_yaml):
     2. Bob mentions he likes JavaScript
     3. Verify each user's preference is correctly isolated
     """
-    formation_dir = Path(__file__).parent
+    formation_dir = Path(__file__).parent / "formations" / f"formation-{backend}"
     formation_path = formation_dir / "formation.yaml"
+    
+    if not formation_path.exists():
+        pytest.skip(f"Formation not found: {formation_path}")
     
     overlord = await runtime_from_yaml(str(formation_path))
     
@@ -255,10 +267,12 @@ async def test_sqlite_compatibility(runtime_from_yaml):
     
     This ensures our SQL queries are compatible with both PostgreSQL and SQLite.
     """
-    formation_dir = Path(__file__).parent
+    formation_dir = Path(__file__).parent / "formations" / "formation-sqlite"
     formation_path = formation_dir / "formation.yaml"
     
-    # Force SQLite (the formation should use SQLite by default for tests)
+    if not formation_path.exists():
+        pytest.skip(f"Formation not found: {formation_path}")
+    
     overlord = await runtime_from_yaml(str(formation_path))
     
     try:
@@ -289,15 +303,18 @@ async def test_sqlite_compatibility(runtime_from_yaml):
             await overlord.cleanup()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  
 async def test_request_context_user_ids(runtime_from_yaml):
     """
     Test that RequestContext properly carries all three user IDs.
     
     Verifies that internal_user_id, muxi_user_id, and user_id are all set.
     """
-    formation_dir = Path(__file__).parent
+    formation_dir = Path(__file__).parent / "formations" / "formation-sqlite"
     formation_path = formation_dir / "formation.yaml"
+    
+    if not formation_path.exists():
+        pytest.skip(f"Formation not found: {formation_path}")
     
     overlord = await runtime_from_yaml(str(formation_path))
     

@@ -60,33 +60,34 @@ async def resolve_user_identifier(
     """
     cache_key = f"user_id:{formation_id}:{identifier}"
 
-    # Step 1: Check cache
-    if cached_value := await kv_cache.get(cache_key):
-        try:
-            internal_id_str, muxi_id = cached_value.split(":", 1)
-            observability.observe(
-                event_type=observability.SystemEvents.CACHE_HIT,
-                level=observability.EventLevel.DEBUG,
-                data={
-                    "cache_type": "user_identifier",
-                    "cache_key": cache_key,
-                    "identifier": identifier,
-                    "formation_id": formation_id,
-                },
-            )
-            return (int(internal_id_str), muxi_id)
-        except (ValueError, AttributeError) as e:
-            # Corrupted cache entry - invalidate it
-            observability.observe(
-                event_type=observability.ErrorEvents.WARNING,
-                level=observability.EventLevel.WARNING,
-                data={
-                    "message": "Corrupted cache entry for user identifier",
-                    "cache_key": cache_key,
-                    "error": str(e),
-                },
-            )
-            await kv_cache.delete(cache_key)
+    # Step 1: Check cache (if available)
+    if kv_cache is not None:
+        if cached_value := await kv_cache.get(cache_key):
+            try:
+                internal_id_str, muxi_id = cached_value.split(":", 1)
+                observability.observe(
+                    event_type=observability.SystemEvents.CACHE_HIT,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "cache_type": "user_identifier",
+                        "cache_key": cache_key,
+                        "identifier": identifier,
+                        "formation_id": formation_id,
+                    },
+                )
+                return (int(internal_id_str), muxi_id)
+            except (ValueError, AttributeError) as e:
+                # Corrupted cache entry - invalidate it
+                observability.observe(
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "message": "Corrupted cache entry for user identifier",
+                        "cache_key": cache_key,
+                        "error": str(e),
+                    },
+                )
+                await kv_cache.delete(cache_key)
 
     # Step 2: Database lookup
     observability.observe(
@@ -158,8 +159,9 @@ async def resolve_user_identifier(
                 },
             )
 
-    # Step 3: Cache result (1 hour TTL)
-    await kv_cache.set(cache_key, f"{internal_id}:{muxi_id}", ttl=3600)
+    # Step 3: Cache result (1 hour TTL) - if cache available
+    if kv_cache is not None:
+        await kv_cache.set(cache_key, f"{internal_id}:{muxi_id}", ttl=3600)
 
     return (internal_id, muxi_id)
 

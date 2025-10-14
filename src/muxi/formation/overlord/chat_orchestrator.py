@@ -247,7 +247,7 @@ class ChatOrchestrator:
                 identifier=user_id,
                 formation_id=self.overlord.formation_id,
                 db_manager=self.overlord.db_manager,
-                kv_cache=self.overlord.kv,
+                kv_cache=None,  # KV cache not yet implemented
             )
 
         # Start request tracking with observability
