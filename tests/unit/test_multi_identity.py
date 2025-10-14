@@ -169,21 +169,22 @@ def test_no_old_get_or_create_user_methods():
 
 
 @pytest.mark.asyncio
-async def test_migrations_exist():
-    """Test that migration files exist."""
+async def test_init_schemas_have_multi_identity():
+    """Test that init schemas include multi-identity tables (no incremental migrations needed)."""
     import os
     
     migrations_dir = 'migrations'
     
-    # Check migration files exist
-    assert os.path.exists(f'{migrations_dir}/add_user_identifiers.sql')
-    assert os.path.exists(f'{migrations_dir}/add_user_identifiers_sqlite.sql')
-    
-    # Check init schemas have user_identifiers table
+    # Check init schemas have user_identifiers table (SINGLE SOURCE OF TRUTH)
     with open(f'{migrations_dir}/init_schema.sql', 'r') as f:
         init_schema = f.read()
-        assert 'user_identifiers' in init_schema
-        assert 'external_user_id' not in init_schema or 'DROP COLUMN' in init_schema
+        assert 'user_identifiers' in init_schema, "PostgreSQL init schema missing user_identifiers table"
+        assert 'external_user_id' not in init_schema, "PostgreSQL init schema should not have external_user_id column"
+    
+    with open(f'{migrations_dir}/init_schema_sqlite.sql', 'r') as f:
+        init_schema_sqlite = f.read()
+        assert 'user_identifiers' in init_schema_sqlite, "SQLite init schema missing user_identifiers table"
+        assert 'external_user_id' not in init_schema_sqlite, "SQLite init schema should not have external_user_id column"
 
 
 def test_user_model_imports():

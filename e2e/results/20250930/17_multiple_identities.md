@@ -482,20 +482,22 @@ CREATE INDEX idx_user_identifiers_user_id
 
 ### Migration Verification
 
-**PostgreSQL Migration:**
+**PostgreSQL Schema:**
 ```bash
-$ psql -U muxi -d muxi_test -f migrations/add_user_identifiers.sql
--- ✅ Migration successful
--- ✅ Data migrated: 9 users → 9 identifiers
--- ✅ No data loss
+$ docker exec -i muxi-e2e-test psql -U muxi muxi_test < migrations/init_schema.sql
+-- ✅ Schema loaded successfully
+-- ✅ user_identifiers table created
+-- ✅ All indexes created
+-- ✅ No external_user_id column
 ```
 
-**SQLite Migration:**
+**SQLite Schema:**
 ```bash
-$ sqlite3 muxi.db < migrations/add_user_identifiers_sqlite.sql
--- ✅ Migration successful
--- ✅ Table rebuild completed
--- ✅ Indexes created
+$ sqlite3 muxi.db < migrations/init_schema_sqlite.sql
+-- ✅ Schema loaded successfully
+-- ✅ user_identifiers table created
+-- ✅ All indexes created
+-- ✅ No external_user_id column
 ```
 
 ---
