@@ -868,17 +868,20 @@ class ChatOrchestrator:
                             description=f"Formatted {len(memory_parts)} memories for injection",
                         )
             except Exception as e:
-                # Log error but continue without long-term memories
+                # Log error but continue without long-term memories  
                 from ...services import observability
                 observability.observe(
                     event_type="memory.long_term.search_failed",
-                    level=observability.EventLevel.WARNING,
+                    level=observability.EventLevel.ERROR,  # Changed to ERROR to see it
                     data={
                         "error": str(e),
                         "error_type": type(e).__name__,
+                        "traceback": str(e.__traceback__) if hasattr(e, '__traceback__') else None,
                     },
                     description=f"Long-term memory search failed: {str(e)}",
                 )
+                # Make sure long_term_memories is empty
+                long_term_memories = ""
 
         # 3. Search for recent conversation context (buffer memory)
         context_text = ""
@@ -1016,6 +1019,19 @@ class ChatOrchestrator:
             enhanced_parts.append(context_text)
 
         enhanced_message = "\n".join(enhanced_parts)
+        
+        # DEBUG: Log final enhanced message
+        observability.observe(
+            event_type="memory.enhanced_message_final",
+            level=observability.EventLevel.INFO,
+            data={
+                "message_length": len(enhanced_message),
+                "has_memories_marker": "RELEVANT MEMORIES" in enhanced_message,
+                "has_protocol_marker": "CRITICAL:" in enhanced_message,
+                "sample": enhanced_message[:500] if len(enhanced_message) > 500 else enhanced_message,
+            },
+            description=f"Enhanced message final (length: {len(enhanced_message)})",
+        )
 
         return enhanced_message
 
