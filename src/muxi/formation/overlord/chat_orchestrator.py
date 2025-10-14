@@ -795,20 +795,6 @@ class ChatOrchestrator:
 
         # 2. Search for relevant long-term memories
         long_term_memories = ""
-        
-        # DEBUG: Log condition check
-        from ...services import observability
-        observability.observe(
-            event_type="memory.long_term.condition_check",
-            level=observability.EventLevel.INFO,
-            data={
-                "has_long_term_memory": self.overlord.long_term_memory is not None,
-                "user_id": str(user_id) if user_id else None,
-                "user_id_truthy": bool(user_id),
-            },
-            description=f"Checking memory search conditions",
-        )
-        
         if self.overlord.long_term_memory and user_id:
             try:
                 # Search long-term memory using current message as query
@@ -828,21 +814,6 @@ class ChatOrchestrator:
                     user_id=user_id,
                     collections=collections_to_search,
                 )
-                
-                # DEBUG: Log search results
-                from ...services import observability
-                observability.observe(
-                    event_type="memory.long_term.search_debug",
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "query": message[:100],
-                        "user_id": str(user_id),
-                        "results_count": len(lt_results) if lt_results else 0,
-                        "has_results": bool(lt_results),
-                    },
-                    description=f"Long-term memory search returned {len(lt_results) if lt_results else 0} results",
-                )
-                
                 if lt_results:
                     # Format long-term memories
                     memory_parts = []
@@ -855,18 +826,6 @@ class ChatOrchestrator:
                             memory_parts.append(f"- {content}")
                     if memory_parts:
                         long_term_memories = "\n".join(memory_parts[:3])  # Limit to top 3
-                        
-                        # DEBUG: Log formatted memories
-                        observability.observe(
-                            event_type="memory.long_term.formatted",
-                            level=observability.EventLevel.INFO,
-                            data={
-                                "memory_count": len(memory_parts),
-                                "formatted_length": len(long_term_memories),
-                                "sample": long_term_memories[:100],
-                            },
-                            description=f"Formatted {len(memory_parts)} memories for injection",
-                        )
             except Exception as e:
                 # Log error but continue without long-term memories  
                 from ...services import observability
@@ -983,17 +942,6 @@ class ChatOrchestrator:
             enhanced_parts.append("")
 
         # 4. Relevant long-term memories (medium priority)
-        # DEBUG: Log if memories will be added
-        observability.observe(
-            event_type="memory.long_term.injection_check",
-            level=observability.EventLevel.INFO,
-            data={
-                "has_memories": bool(long_term_memories),
-                "memory_length": len(long_term_memories) if long_term_memories else 0,
-            },
-            description=f"Checking if memories will be injected: {bool(long_term_memories)}",
-        )
-        
         if long_term_memories:
             # Load memory usage protocol from prompts
             from ..prompts.loader import PromptLoader
@@ -1019,19 +967,6 @@ class ChatOrchestrator:
             enhanced_parts.append(context_text)
 
         enhanced_message = "\n".join(enhanced_parts)
-        
-        # DEBUG: Log final enhanced message
-        observability.observe(
-            event_type="memory.enhanced_message_final",
-            level=observability.EventLevel.INFO,
-            data={
-                "message_length": len(enhanced_message),
-                "has_memories_marker": "RELEVANT MEMORIES" in enhanced_message,
-                "has_protocol_marker": "CRITICAL:" in enhanced_message,
-                "sample": enhanced_message[:500] if len(enhanced_message) > 500 else enhanced_message,
-            },
-            description=f"Enhanced message final (length: {len(enhanced_message)})",
-        )
 
         return enhanced_message
 
