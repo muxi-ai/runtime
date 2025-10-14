@@ -4,6 +4,30 @@ This document outlines the technical context of the MUXI Runtime, including tech
 
 ## Recent Technical Improvements (July-October 2025)
 
+### Multi-Identity User Management (October 2025)
+- **Database Schema**: Two-table design for one-to-many identifier mapping
+  - `users` table: Core entity with auto-increment ID, public_id (usr_xxxx), formation_id
+  - `user_identifiers` table: External identifier mapping with user_id FK, identifier, identifier_type
+  - Optimized indexes: `(identifier, formation_id)` for lookups, `user_id` for joins
+  - Cascading deletes: Remove identifiers when user deleted
+- **User Resolution**: Fast identifier-to-user mapping with KV caching
+  - `resolve_user_identifier()`: Main resolution with auto-creation (~5ms cache hits, ~50ms DB)
+  - `associate_user_identifiers()`: Batch identifier association with conflict detection
+  - Cache strategy: `user_id:{formation_id}:{identifier}` → `{internal_id}:{muxi_id}`, 1hr TTL
+  - Transaction safety: Individual commits preserve successful creates on partial failures
+- **Service Integration**: Resolution integrated across all user-scoped services
+  - Long-Term Memory: `_resolve_user_id_async/sync()` for memory operations
+  - Credential Resolver: `_resolve_user_id()` for credential lookups
+  - Scheduler: User resolution for job associations and audit trails
+  - Chat Orchestrator: User resolution for context and synopsis injection
+- **Input Validation**: Fail-fast validation for robustness
+  - Identifier and formation_id: Must be non-empty strings (ValueError on failure)
+  - Clear error messages showing type and value for debugging
+- **Security Improvements**: Security analysis correctly scoped
+  - Only credential/ambiguous_credential clarifications bypass security checks
+  - Redirect clarifications undergo normal security analysis
+  - Fixed observability enum references to prevent AttributeErrors
+
 ### LLM Response Caching (October 2025)
 - **OneLLM Integration**: Built-in semantic similarity caching via `init_cache()`
 - **Configuration**: Formation YAML `llm.settings.caching` with 7 tunable parameters

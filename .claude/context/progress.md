@@ -1,7 +1,7 @@
 ---
 created: 2025-08-21T17:31:00Z
-last_updated: 2025-10-13T18:30:00Z
-version: 2.6
+last_updated: 2025-10-14T22:16:26Z
+version: 2.7
 author: Claude Code PM System
 ---
 
@@ -22,7 +22,7 @@ The foundational runtime engine that powers AI agent formations is now complete 
 | **Formation Engine** | ✅ Complete | 100% | YAML loading, validation, hot reload |
 | **Overlord Orchestrator** | ✅ Complete | 100% | Intent routing, SOP guidance, async/streaming |
 | **Agent Framework** | ✅ Complete | 100% | Specialization, knowledge bases, tool integration |
-| **Memory Systems** | ✅ Complete | 100% | Three-tier architecture with multi-user isolation, FIFO KV cleanup |
+| **Memory Systems** | ✅ Complete | 100% | Three-tier architecture with multi-identity user management |
 | **LLM Response Caching** | ✅ Complete | 100% | Semantic similarity cache via OneLLM, 70%+ cost savings |
 | **MCP Protocol** | ✅ Complete | 100% | Full implementation with multiple transports |
 | **Built-in MCPs** | ✅ Complete | 100% | File Generation (Artifacts System) |
@@ -43,6 +43,68 @@ The foundational runtime engine that powers AI agent formations is now complete 
 | **Test Coverage** | ✅ Complete | 100% | 10 days of comprehensive testing, all passing |
 
 ## 🎉 Major Achievements
+
+### October 2025: Multi-Identity User Management ✅
+
+**Status**: Complete - Sophisticated user management with multiple identifiers per user
+
+**Implementation Details (Oct 14)**:
+- ✅ **Database Schema**:
+  - `users` table: Core user entity with public_id (usr_xxxx) and formation isolation
+  - `user_identifiers` table: One-to-many mapping of external identifiers to users
+  - Proper foreign keys, cascading deletes, optimized indexes
+  - Removed legacy `external_user_id` column from users table
+
+- ✅ **User Resolution System**:
+  - Fast KV-cached identifier-to-user resolution (~5ms cache hits)
+  - `resolve_user_identifier()`: Main resolution function with automatic user creation
+  - `associate_user_identifiers()`: Link multiple identifiers to one user
+  - Input validation: Fail-fast for empty/invalid identifiers
+  - Transaction safety: Successful creates preserved on partial failures
+
+- ✅ **Service Integration**:
+  - Long-Term Memory: `_resolve_user_id_async()` and `_resolve_user_id_sync()` methods
+  - Credential Resolver: `_resolve_user_id()` with db_manager integration
+  - Scheduler: User resolution for job associations and audit trails
+  - Chat Orchestrator: User resolution for context and synopsis
+  - All services updated to use `user_identifiers` table
+
+- ✅ **Security & Quality Improvements** (CodeRabbit feedback):
+  - Removed security bypass for "redirect" clarification mode
+  - Fixed observability enum references (CLEANUP, DATABASE_OPERATION_FAILED)
+  - Fixed credential resolver parameter names and tuple unpacking
+  - Added input validation for identifier and formation_id
+  - Fixed transaction rollback to preserve successful creates
+
+**Testing**:
+- ✅ 21/21 E2E tests passing
+  - 6/6 memory tests (preferences, error resilience, database optimization)
+  - 12/12 scheduler tests (regression suite)
+  - 1/1 synopsis test
+  - 1/1 clarification test
+  - 1/1 MCP credential test
+- ✅ All tests pass sequentially (no event loop pollution)
+- ✅ Database engine disposal working correctly
+
+**Documentation**:
+- ✅ Comprehensive feature guide (docs/features/multi-identity.md - 665 lines)
+- ✅ Quick start guide (docs/features/multi-identity-quickstart.md - 315 lines)
+- ✅ Features index (docs/features/README.md)
+- ✅ Updated architecture doc (docs/multi-user-architecture.md)
+- ✅ Updated main README (docs/README.md)
+- ✅ Total: ~1,200 lines of production-ready documentation
+
+**Use Cases Covered**:
+- Single user (default behavior with identifier "0")
+- Email-based identification
+- Slack integration (Slack user IDs)
+- Multi-platform users (email + Slack + GitHub)
+- API integration with multiple auth methods
+- Anonymous → Authenticated user flow
+- OAuth identity linking
+- API key mapping to users
+
+**Files Modified**: 29 files (21 test files + 8 core implementation files)
 
 ### October 2025: LLM Response Caching ✅
 
