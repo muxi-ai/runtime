@@ -331,8 +331,13 @@ class SQLiteMemory(BaseMemory):
         return embedding_response
 
     async def add(
-        self, content: str, metadata: Optional[Dict[str, Any]] = None, user_id: Optional[str] = None
-    ) -> None:
+        self, 
+        content: str, 
+        metadata: Optional[Dict[str, Any]] = None, 
+        user_id: Optional[str] = None,
+        collection: Optional[str] = None,
+        embedding: Optional[Union[List[float], np.ndarray]] = None,
+    ) -> str:
         """
         Add content to memory.
 
@@ -342,16 +347,34 @@ class SQLiteMemory(BaseMemory):
         Args:
             content: The text content to store
             metadata: Optional metadata to associate with the content
+            user_id: Optional user identifier for multi-user support
+            collection: Optional collection name
+            embedding: Optional pre-computed embedding
+
+        Returns:
+            The ID of the newly created memory entry
         """
         if metadata is None:
             metadata = {}
 
-        # Generate embedding if provider is set
-        if self.embedding_provider:
+        # Use provided collection or default
+        if collection is None:
+            collection = self.default_collection
+
+        # Generate embedding if not provided and provider is set
+        if embedding is None and self.embedding_provider:
             try:
+                # Use embed() method like LongTermMemory does
                 embedding_response = await self.embedding_provider.embed(content)
-                # Extract the actual embedding vector using helper method (like LongTermMemory)
+                # Extract the actual embedding vector using helper method
                 embedding = self._extract_embedding_from_response(embedding_response)
+            except AttributeError as e:
+                # Provider doesn't have embed() method
+                raise RuntimeError(
+                    f"Embedding provider doesn't have 'embed()' method. "
+                    f"Provider type: {type(self.embedding_provider).__name__}. "
+                    f"Error: {str(e)}"
+                ) from e
             except Exception as e:
                 # Provide context about embedding generation failure
                 content_preview = content[:100] if content else "<empty>"
@@ -371,10 +394,14 @@ class SQLiteMemory(BaseMemory):
             else:
                 internal_user_id = self.default_user_id
 
-            # Add to database
-            self._add_internal(
-                content, embedding, metadata, self.default_collection, internal_user_id
+            # Add to database and return memory ID
+            memory_id = self._add_internal(
+                content, embedding, metadata, collection, internal_user_id
             )
+            return memory_id
+        
+        # If no embedding provider and no embedding provided, raise error
+        raise ValueError("No embedding provided and no embedding provider configured")
 
     def _add_internal(
         self,
@@ -452,7 +479,9 @@ class SQLiteMemory(BaseMemory):
         if not self.embedding_provider:
             return []
 
-        query_embedding = await self.embedding_provider.get_embedding(query)
+        # Generate embedding for query using embed() method
+        embedding_response = await self.embedding_provider.embed(query)
+        query_embedding = self._extract_embedding_from_response(embedding_response)
 
         # Get or create user if provided
         internal_user_id = None
