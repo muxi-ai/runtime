@@ -15,6 +15,7 @@ from ...services import observability
 from ...services.db import Base
 # Import User model from memory module to avoid duplication
 from ...services.memory.long_term import User
+from ...utils.user_resolution import resolve_user_identifier
 
 
 class Credential(Base):
@@ -65,6 +66,15 @@ class CredentialResolver:
         self._cache = {}  # In-memory cache: {user_id: {service: credentials}}
         self.llm_model = llm_model  # Store the LLM model to use
 
+    async def _resolve_user_id(self, identifier: str) -> int:
+        """Resolve external user identifier to internal user ID."""
+        result = await resolve_user_identifier(
+            identifier=identifier,
+            formation_id=self.formation_id,
+            db_session_maker=self.async_session_maker,
+        )
+        return result["internal_user_id"]
+
     async def resolve(self, user_id: str, service: str) -> Optional[Dict]:
         """
         Resolve user credentials for a service.
@@ -86,14 +96,15 @@ class CredentialResolver:
         if user_id in self._cache and service in self._cache[user_id]:
             return self._cache[user_id][service]
 
-        # Query database using async session with proper JOIN
+        # Resolve user identifier to internal user ID
+        internal_user_id = await self._resolve_user_id(user_id)
+
+        # Query database using internal_user_id
         async with self.async_session_maker() as session:
             stmt = (
                 select(Credential)
-                .join(User, Credential.user_id == User.id)
                 .where(
-                    User.external_user_id == user_id,
-                    User.formation_id == self.formation_id,
+                    Credential.user_id == internal_user_id,
                     Credential.service == service,
                 )
             )
@@ -183,27 +194,11 @@ class CredentialResolver:
             # Smart naming requires credentials to be available for the identity tool
             credential_name = service
 
+        # Resolve user identifier to internal user ID
+        internal_user_id = await self._resolve_user_id(user_id)
+
         async with self.async_session_maker() as session:
             try:
-                # First, find or create the user
-                # Look up the user
-                user_stmt = select(User).where(
-                    User.external_user_id == user_id,
-                    User.formation_id == self.formation_id,
-                )
-                user_result = await session.execute(user_stmt)
-                user = user_result.scalar_one_or_none()
-
-                if not user:
-                    # Create the user if it doesn't exist
-                    user = User(
-                        public_id=nanoid.generate(size=21),
-                        external_user_id=user_id,
-                        formation_id=self.formation_id,
-                    )
-                    session.add(user)
-                    await session.flush()  # Flush to get the ID
-
                 # Token is new, create it
                 # Note: Duplicate checking is handled by EncryptedCredentialResolver
                 # Serialize credentials to JSON string if it's a dict
@@ -211,7 +206,7 @@ class CredentialResolver:
                 credentials_str = json.dumps(credentials) if isinstance(credentials, dict) else credentials
 
                 new_cred = Credential(
-                    user_id=user.id,  # Use the integer user ID from users table
+                    user_id=internal_user_id,  # Use the resolved internal user ID
                     credential_id=nanoid.generate(),  # Generate unique ID
                     name=credential_name,  # Use discovered/provided name
                     service=service,
@@ -281,14 +276,15 @@ class CredentialResolver:
                 description=f"Updated credential name from '{service}' to '{smart_name}'",
             )
 
+            # Resolve user identifier to internal user ID
+            internal_user_id = await self._resolve_user_id(user_id)
+
             # Update in database
             async with self.async_session_maker() as session:
                 stmt = (
                     select(Credential)
-                    .join(User, Credential.user_id == User.id)
                     .where(
-                        User.external_user_id == user_id,
-                        User.formation_id == self.formation_id,
+                        Credential.user_id == internal_user_id,
                         Credential.service == service,
                     )
                 )
@@ -333,13 +329,14 @@ class CredentialResolver:
         # Normalize service to lowercase
         service = service.lower()
 
+        # Resolve user identifier to internal user ID
+        internal_user_id = await self._resolve_user_id(user_id)
+
         async with self.async_session_maker() as session:
             stmt = (
                 select(Credential)
-                .join(User, Credential.user_id == User.id)
                 .where(
-                    User.external_user_id == user_id,
-                    User.formation_id == self.formation_id,
+                    Credential.user_id == internal_user_id,
                     Credential.service == service,
                 )
             )
@@ -368,13 +365,14 @@ class CredentialResolver:
         Returns:
             Dictionary mapping service names to lists of credential objects
         """
+        # Resolve user identifier to internal user ID
+        internal_user_id = await self._resolve_user_id(user_id)
+
         async with self.async_session_maker() as session:
             stmt = (
                 select(Credential)
-                .join(User, Credential.user_id == User.id)
                 .where(
-                    User.external_user_id == user_id,
-                    User.formation_id == self.formation_id,
+                    Credential.user_id == internal_user_id,
                 )
             )
             result = await session.execute(stmt)

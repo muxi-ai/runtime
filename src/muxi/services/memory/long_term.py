@@ -382,35 +382,6 @@ class LongTermMemory:
                 
                 return new_user.id
 
-    def _get_or_create_user(self, session: Session, external_user_id: Optional[str] = None) -> User:
-        """Get existing user or create new one."""
-        # Handle single-user mode
-        if not self.is_multi_user:
-            external_user_id = "0"
-        elif external_user_id is None:
-            raise ValueError("external_user_id is required in multi-user mode")
-
-        # Try to find existing user with formation scope
-        user = (
-            session.query(User)
-            .filter_by(external_user_id=external_user_id, formation_id=self.formation_id)
-            .first()
-        )
-        if user:
-            return user
-
-        # Create new user
-        user = User(
-            public_id=get_default_nanoid(),
-            external_user_id=external_user_id,
-            formation_id=self.formation_id,
-            created_at=utc_now_naive(),
-        )
-        session.add(user)
-        session.commit()
-
-        return user
-
     async def get_user_id(self, external_user_id: str) -> Optional[int]:
         """
         Get our internal user ID for an external_user_id.
@@ -443,8 +414,8 @@ class LongTermMemory:
 
     def _ensure_default_user(self) -> None:
         """Ensure default user exists for single-user mode."""
-        with self.Session() as session:
-            self._get_or_create_user(session, "0")
+        # Use resolution utility to ensure default user exists
+        self._resolve_user_id_sync("0")
 
     # Collection table removed - no longer needed
 
@@ -1212,43 +1183,6 @@ class LongTermMemory:
                 }
                 for m in memories
             ]
-
-    async def _get_or_create_user_async(
-        self, session: AsyncSession, external_user_id: Optional[str] = None
-    ) -> User:
-        """
-        Asynchronously retrieves an existing user or creates a new one based on
-        the external user ID and formation scope.
-
-        Raises:
-            ValueError: If `external_user_id` is not provided in multi-user mode.
-
-        Returns:
-            User: The retrieved or newly created user instance.
-        """
-        # Handle single-user mode
-        if not self.is_multi_user:
-            external_user_id = "0"
-        elif external_user_id is None:
-            raise ValueError("external_user_id is required in multi-user mode")
-
-        # Try to get existing user
-        user = await User.get(
-            session,
-            external_user_id=external_user_id,
-            formation_id=self.formation_id,
-        )
-
-        if not user:
-            # Create new user
-            user = await User.create(
-                session,
-                public_id=get_default_nanoid(),
-                external_user_id=external_user_id,
-                formation_id=self.formation_id,
-            )
-
-        return user
 
     # Async collection methods removed - using simple column-based collections
 

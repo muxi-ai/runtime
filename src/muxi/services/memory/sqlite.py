@@ -108,9 +108,9 @@ class SQLiteMemory(BaseMemory):
         """
         # user_id is now just external_user_id
 
-        # Check if user exists
+        # Look up via user_identifiers table
         cursor = self.conn.execute(
-            "SELECT id FROM users WHERE external_user_id = ? AND formation_id = ?",
+            "SELECT user_id FROM user_identifiers WHERE identifier = ? AND formation_id = ?",
             (external_user_id, self.formation_id),
         )
         user_row = cursor.fetchone()
@@ -118,20 +118,25 @@ class SQLiteMemory(BaseMemory):
         if user_row:
             return user_row[0]
 
-        # Create new user
+        # Create new user + identifier
         public_id = self._generate_id()
         self.conn.execute(
-            "INSERT INTO users (public_id, external_user_id, formation_id) " "VALUES (?, ?, ?)",
-            (public_id, external_user_id, self.formation_id),
+            "INSERT INTO users (public_id, formation_id) VALUES (?, ?)",
+            (public_id, self.formation_id),
+        )
+        
+        # Get the new user ID
+        cursor = self.conn.execute("SELECT last_insert_rowid()")
+        user_id = cursor.fetchone()[0]
+        
+        # Create identifier mapping
+        self.conn.execute(
+            "INSERT INTO user_identifiers (user_id, identifier, formation_id) VALUES (?, ?, ?)",
+            (user_id, external_user_id, self.formation_id),
         )
         self.conn.commit()
 
-        # Get the newly created user ID
-        cursor = self.conn.execute(
-            "SELECT id FROM users WHERE external_user_id = ? AND formation_id = ?",
-            (external_user_id, self.formation_id),
-        )
-        return cursor.fetchone()[0]
+        return user_id
 
     def _init_database(self) -> sqlite3.Connection:
         """

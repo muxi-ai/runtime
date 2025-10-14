@@ -111,53 +111,9 @@ class JobManager:
                     return user_id
                 raise ValueError(f"Failed to resolve user after concurrent creation: {external_user_id}")
 
-    def _get_or_create_user(self, session, external_user_id: str) -> User:
-        """Get existing user or create new one with proper concurrency handling."""
-        # Try to find existing user with formation scope
-        user = (
-            session.query(User)
-            .filter_by(external_user_id=external_user_id, formation_id=self.formation_id)
-            .first()
-        )
-        if user:
-            return user
-
-        # Create new user with proper concurrency control
-        from ...utils.datetime_utils import utc_now_naive
-        from ...utils.id_generator import get_default_nanoid
-        from sqlalchemy.exc import IntegrityError
-
-        user = User(
-            public_id=get_default_nanoid()(),
-            external_user_id=external_user_id,
-            formation_id=self.formation_id,
-            created_at=utc_now_naive(),
-        )
-
-        try:
-            # Attempt to create the user
-            session.add(user)
-            session.commit()
-            return user
-        except IntegrityError as e:
-            # Handle unique constraint violation (concurrent creation)
-            session.rollback()
-
-            # Check if this is the unique constraint we expect
-            if "uq_user_formation_external_id" in str(e) or "UNIQUE constraint failed" in str(e):
-                # Another concurrent request created the user, fetch it
-                user = (
-                    session.query(User)
-                    .filter_by(external_user_id=external_user_id, formation_id=self.formation_id)
-                    .first()
-                )
-                if user:
-                    return user
-                # If still not found, something else went wrong
-                raise ValueError(f"Failed to retrieve user after concurrent creation: {external_user_id}")
-            else:
-                # Some other integrity error, re-raise
-                raise
+    # DEPRECATED: Old method removed - use _resolve_user_id_sync() instead
+    # This method queried external_user_id column which no longer exists.
+    # See _resolve_user_id_sync() for the new multi-identity approach.
 
     async def initialize(self):
         """Initialize scheduler service. Tables are now created centrally during formation init."""
@@ -291,8 +247,8 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                jobs_with_users = (
-                    session.query(ScheduledJob, User.external_user_id)
+                jobs = (
+                    session.query(ScheduledJob)
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.status == "ACTIVE",
@@ -304,9 +260,8 @@ class JobManager:
 
                 # Build result with external_user_id from User table
                 result = []
-                for job, external_user_id in jobs_with_users:
+                for job in jobs:
                     job_dict = job.to_dict()
-                    job_dict['external_user_id'] = external_user_id
                     result.append(job_dict)
 
                 return result
@@ -370,7 +325,7 @@ class JobManager:
         try:
             with self.db_manager.get_session() as session:
                 query = (
-                    session.query(ScheduledJob, User.external_user_id)
+                    session.query(ScheduledJob)
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(User.formation_id == self.formation_id)
                 )
@@ -379,9 +334,9 @@ class JobManager:
                     query = query.filter(ScheduledJob.status == status)
 
                 if user_id:
-                    # Get internal user ID
-                    user = self._get_or_create_user(session, user_id)
-                    query = query.filter(ScheduledJob.user_id == user.id)
+                    # Resolve user identifier to internal user ID
+                    internal_user_id = self._resolve_user_id_sync(user_id)
+                    query = query.filter(ScheduledJob.user_id == internal_user_id)
 
                 if is_recurring is not None:
                     query = query.filter(ScheduledJob.is_recurring == is_recurring)
@@ -394,13 +349,12 @@ class JobManager:
                 if limit:
                     query = query.limit(limit)
 
-                jobs_with_users = query.all()
+                jobs = query.all()
 
                 # Build result with external_user_id from User table
                 result = []
-                for job, external_user_id in jobs_with_users:
+                for job in jobs:
                     job_dict = job.to_dict()
-                    job_dict['external_user_id'] = external_user_id
                     result.append(job_dict)
 
                 return result
@@ -1076,8 +1030,8 @@ class JobManager:
         try:
             with self.db_manager.get_session() as session:
                 # Join with User table to get external_user_id
-                jobs_with_users = (
-                    session.query(ScheduledJob, User.external_user_id)
+                jobs = (
+                    session.query(ScheduledJob)
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(ScheduledJob.status == "ACTIVE")
                     .order_by(ScheduledJob.created_at)
@@ -1088,9 +1042,8 @@ class JobManager:
 
                 # Build result with external_user_id from User table
                 result = []
-                for job, external_user_id in jobs_with_users:
+                for job in jobs:
                     job_dict = job.to_dict()
-                    job_dict['external_user_id'] = external_user_id
                     result.append(job_dict)
 
                 return result
