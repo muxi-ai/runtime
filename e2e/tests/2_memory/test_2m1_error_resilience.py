@@ -112,7 +112,11 @@ async def test_error_resilience():
             host="localhost"
         )
         with conn.cursor() as cur:
-            cur.execute("SELECT id FROM users WHERE external_user_id = %s", (test_user,))
+            cur.execute("""
+                SELECT u.id FROM users u
+                JOIN user_identifiers ui ON u.id = ui.user_id
+                WHERE ui.identifier = %s
+            """, (test_user,))
             result = cur.fetchone()
             if result:
                 user_db_id = result[0]

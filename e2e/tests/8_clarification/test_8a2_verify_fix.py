@@ -69,15 +69,15 @@ async def verify_alice_storage_and_retrieval():
 
                 # For multi-user formations
                 if overlord.is_multi_user:
-                    print("   Searching with external_user_id='alice_user'")
+                    print("   Searching with user_id='alice_user'")
                     results = await memobase.search(
                         query="Alice name",
-                        external_user_id="alice_user",
+                        user_id="alice_user",
                         limit=10
                     )
                 else:
                     # For single-user (user_id stored in metadata)
-                    print("   Searching without external_user_id (single-user mode)")
+                    print("   Searching without user_id (single-user mode)")
                     results = await memobase.search(
                         query="Alice name",
                         limit=10

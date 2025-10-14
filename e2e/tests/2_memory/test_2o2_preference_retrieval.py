@@ -26,7 +26,11 @@ async def test_preference_retrieval():
     # Clear test data
     test_user = "preference_retrieval_user"
     cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
-    cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
+    cur.execute("""
+        DELETE FROM users WHERE id IN (
+            SELECT user_id FROM user_identifiers WHERE identifier = %s
+        )
+    """, (test_user,))
     conn.commit()
 
     formation = Formation()
@@ -46,7 +50,7 @@ async def test_preference_retrieval():
     for pref in preferences:
         print(f"   Expressing: {pref[:50]}...")
         await overlord.chat(pref, user_id=test_user, use_async=False, stream=False)
-        await asyncio.sleep(2)  # Wait for storage
+        await asyncio.sleep(10)  # Wait for storage (extraction takes 8-10s)
 
     # Verify preferences were stored
     cur.execute(
@@ -59,8 +63,13 @@ async def test_preference_retrieval():
     )
 
     pref_count = cur.fetchone()[0]
-    print(f"\n✓ Stored {pref_count} preferences")
-    assert pref_count > 0, "No preferences were stored"
+    print(f"\n✓ Stored {pref_count} preferences (expected at least 1)")
+    if pref_count == 0:
+        # Check if memories were stored in any collection
+        cur.execute("SELECT COUNT(*) FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
+        total_count = cur.fetchone()[0]
+        print(f"   Total memories stored: {total_count}")
+    assert pref_count > 0, f"No preferences were stored (expected at least 1 from {len(preferences)} expressions)"
 
     # Test 2: Ask questions that should retrieve preferences
     print("\n2. Testing preference retrieval in context...")
@@ -136,14 +145,28 @@ async def test_preference_retrieval():
         preferences_reflected >= 2
     ), f"Only {preferences_reflected}/3 preferences influenced responses"
 
-    # Cleanup
+    # Shutdown formation (this now disposes database engine internally)
+    await safe_formation_shutdown(formation)
+    
+    # Cancel all pending background tasks (except current task)
+    current_task = asyncio.current_task()
+    pending = [task for task in asyncio.all_tasks() if task != current_task and not task.done()]
+    for task in pending:
+        task.cancel()
+    
+    # Wait for tasks to cancel
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+    
+    # Cleanup database records
     cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
-    cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
+    cur.execute("""
+        DELETE FROM users WHERE id IN (
+            SELECT user_id FROM user_identifiers WHERE identifier = %s
+        )
+    """, (test_user,))
     conn.commit()
     conn.close()
-
-    # Properly shutdown formation
-    await safe_formation_shutdown(formation)
 
     print("\n=== Test 2O2 Complete ===")
     print("✓ Preferences stored successfully")

@@ -33,7 +33,7 @@ overlord:
 
 # Credential handling configuration  
 user_credentials:
-  mode: "redirect"
+  mode: "dynamic"  # Dynamic mode allows credentials to be provided in chat
 
 mcp:
   enhance_user_prompts: true  # Enable message enhancement for better tool selection

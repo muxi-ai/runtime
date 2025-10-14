@@ -48,7 +48,11 @@ class Test2i2ComplexExtraction(BaseMemoryTest):
             # Clear test data
             test_user = "complex_extraction_user"
             cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
-            cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
+            cur.execute("""
+                DELETE FROM users WHERE id IN (
+                    SELECT user_id FROM user_identifiers WHERE identifier = %s
+                )
+            """, (test_user,))
             conn.commit()
 
             # Test 1: CEO and company information

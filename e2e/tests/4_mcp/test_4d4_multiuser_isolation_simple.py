@@ -35,7 +35,8 @@ async def test_credential_isolation():
     formation_id = "test_formation_4d4"
     credential_resolver = CredentialResolver(
         async_session_maker=db_manager.AsyncSession,
-        formation_id=formation_id
+        formation_id=formation_id,
+        db_manager=db_manager
     )
 
     print("\n1. Setting up test credentials...")
@@ -109,12 +110,14 @@ async def test_credential_isolation():
         print(f"   Total GitHub credentials for formation {formation_id}: {len(all_creds)}")
 
         # Verify each user's credential
-        for external_user_id in ["alice_4d4_test", "bob_4d4_test"]:
+        from muxi.services.memory.long_term import UserIdentifier
+        for user_identifier in ["alice_4d4_test", "bob_4d4_test"]:
             stmt = (
                 select(Credential)
                 .join(User, Credential.user_id == User.id)
+                .join(UserIdentifier, User.id == UserIdentifier.user_id)
                 .where(
-                    User.external_user_id == external_user_id,
+                    UserIdentifier.identifier == user_identifier,
                     User.formation_id == formation_id,
                     Credential.service == "github"
                 )
@@ -123,9 +126,9 @@ async def test_credential_isolation():
             user_creds = result.scalars().all()
 
             if len(user_creds) == 1:
-                print(f"   ✅ {external_user_id} has exactly 1 GitHub credential")
+                print(f"   ✅ {user_identifier} has exactly 1 GitHub credential")
             else:
-                print(f"   ❌ {external_user_id} has {len(user_creds)} GitHub credentials (expected 1)")
+                print(f"   ❌ {user_identifier} has {len(user_creds)} GitHub credentials (expected 1)")
                 return False
 
     print("\n4. Testing credential update isolation...")

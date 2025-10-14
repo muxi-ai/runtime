@@ -33,24 +33,38 @@ def test_user_isolation():
         # Insert test memories
         import uuid
         for user_id, name, content in test_data:
-            # First ensure user exists
-            public_id = str(uuid.uuid4())[:21]  # Generate unique public ID
+            # First check if user exists via identifier
             cursor.execute("""
-                INSERT INTO users (public_id, external_user_id, formation_id, created_at)
-                VALUES (%s, %s, 'test', NOW())
-                ON CONFLICT (external_user_id, formation_id) DO UPDATE
-                SET updated_at = NOW()
-                RETURNING id
-            """, (public_id, user_id,))
-
+                SELECT u.id FROM users u
+                JOIN user_identifiers ui ON u.id = ui.user_id
+                WHERE ui.identifier = %s AND ui.formation_id = 'test'
+            """, (user_id,))
+            
             user_result = cursor.fetchone()
             if user_result:
                 user_db_id = user_result[0]
-                memory_id = str(uuid.uuid4())[:21]  # Generate unique ID
+            else:
+                # Create new user
+                public_id = str(uuid.uuid4())[:21]
                 cursor.execute("""
-                    INSERT INTO memories (id, user_id, text, meta_data, collection, created_at)
-                    VALUES (%s, %s, %s, '{}', 'default', NOW())
-                """, (memory_id, user_db_id, content))
+                    INSERT INTO users (public_id, formation_id, created_at)
+                    VALUES (%s, 'test', NOW())
+                    RETURNING id
+                """, (public_id,))
+                user_db_id = cursor.fetchone()[0]
+                
+                # Create identifier mapping
+                cursor.execute("""
+                    INSERT INTO user_identifiers (user_id, identifier, formation_id, created_at)
+                    VALUES (%s, %s, 'test', NOW())
+                """, (user_db_id, user_id))
+            
+            # Insert memory
+            memory_id = str(uuid.uuid4())[:21]
+            cursor.execute("""
+                INSERT INTO memories (id, user_id, text, meta_data, collection, created_at)
+                VALUES (%s, %s, %s, '{}', 'default', NOW())
+            """, (memory_id, user_db_id, content))
 
         conn.commit()
         print("✅ Inserted test data for Alice, Bob, and Charlie")
@@ -63,7 +77,8 @@ def test_user_isolation():
                 SELECT m.text
                 FROM memories m
                 JOIN users u ON m.user_id = u.id
-                WHERE u.external_user_id = %s AND u.formation_id = 'test'
+                JOIN user_identifiers ui ON u.id = ui.user_id
+                WHERE ui.identifier = %s AND ui.formation_id = 'test'
                 ORDER BY m.created_at DESC
             """, (test_user,))
 
@@ -96,13 +111,17 @@ def test_user_isolation():
             cursor.execute("""
                 DELETE FROM memories
                 WHERE user_id IN (
-                    SELECT id FROM users
-                    WHERE external_user_id = %s AND formation_id = 'test'
+                    SELECT u.id FROM users u
+                    JOIN user_identifiers ui ON u.id = ui.user_id
+                    WHERE ui.identifier = %s AND ui.formation_id = 'test'
                 )
             """, (test_user,))
             cursor.execute("""
                 DELETE FROM users
-                WHERE external_user_id = %s AND formation_id = 'test'
+                WHERE id IN (
+                    SELECT user_id FROM user_identifiers
+                    WHERE identifier = %s AND formation_id = 'test'
+                )
             """, (test_user,))
 
         conn.commit()

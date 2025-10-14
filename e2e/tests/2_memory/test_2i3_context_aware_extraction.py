@@ -53,7 +53,11 @@ class Test2i3ContextAwareExtraction(BaseMemoryTest):
             # Clear test data
             test_user = "context_aware_user"
             cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
-            cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
+            cur.execute("""
+                DELETE FROM users WHERE id IN (
+                    SELECT user_id FROM user_identifiers WHERE identifier = %s
+                )
+            """, (test_user,))
             conn.commit()
 
             # Test 1: Pronoun resolution

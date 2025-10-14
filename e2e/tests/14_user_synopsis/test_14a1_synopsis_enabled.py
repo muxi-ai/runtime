@@ -42,20 +42,20 @@ async def test_user_synopsis_enabled():
             await overlord.long_term_memory.add(
                 content="User's name is Alice Johnson",
                 collection="user_identity",
-                external_user_id=user_id,
+                user_id=user_id,
                 metadata={"source": "test_setup", "type": "identity"}
             )
             await overlord.long_term_memory.add(
                 content="Works as a Senior Software Engineer",
                 collection="user_identity",
-                external_user_id=user_id,
+                user_id=user_id,
                 metadata={"source": "test_setup", "type": "occupation"}
             )
             # Add relationship information
             await overlord.long_term_memory.add(
                 content="Part of the Platform Engineering team",
                 collection="relationships",
-                external_user_id=user_id,
+                user_id=user_id,
                 metadata={"source": "test_setup", "type": "team"}
             )
             print("  ✅ User data added to rich collections successfully")
@@ -125,14 +125,14 @@ async def test_user_synopsis_enabled():
             await overlord.long_term_memory.add(
                 content="Promoted to Principal Engineer",
                 collection="user_identity",
-                external_user_id=user_id,
+                user_id=user_id,
                 metadata={"source": "test_update", "type": "occupation"}
             )
             # Add current project (work_projects collection)
             await overlord.long_term_memory.add(
                 content="Currently working on User Synopsis System",
                 collection="work_projects",
-                external_user_id=user_id,
+                user_id=user_id,
                 metadata={"source": "test_update", "type": "project"}
             )
             

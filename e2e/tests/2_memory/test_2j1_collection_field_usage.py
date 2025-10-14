@@ -63,7 +63,11 @@ class Test2j1CollectionFieldUsage(BaseMemoryTest):
             # Clear test data
             test_user = "collection_test_user"
             cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
-            cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
+            cur.execute("""
+                DELETE FROM users WHERE id IN (
+                    SELECT user_id FROM user_identifiers WHERE identifier = %s
+                )
+            """, (test_user,))
             conn.commit()
 
             # Test different types of information

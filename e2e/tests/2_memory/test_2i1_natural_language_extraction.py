@@ -45,7 +45,11 @@ class TestNaturalLanguageExtraction(BaseMemoryTest):
             conn = psycopg2.connect("postgresql://muxi@localhost/muxi_test")
             cur = conn.cursor()
             cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
-            cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
+            cur.execute("""
+                DELETE FROM users WHERE id IN (
+                    SELECT user_id FROM user_identifiers WHERE identifier = %s
+                )
+            """, (test_user,))
             conn.commit()
         except Exception as e:
             print(f"    Warning: Could not clear test data: {e}")

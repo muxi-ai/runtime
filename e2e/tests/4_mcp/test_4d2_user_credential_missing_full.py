@@ -55,7 +55,9 @@ async def run_async_test():
                         DELETE FROM credentials
                         WHERE service = 'github'
                         AND user_id IN (
-                            SELECT id FROM users WHERE external_user_id = 'user2'
+                            SELECT u.id FROM users u
+                            JOIN user_identifiers ui ON u.id = ui.user_id
+                            WHERE ui.identifier = 'user2'
                         )
                         """)
                     )
@@ -64,7 +66,12 @@ async def run_async_test():
 
                     # Also check if user2 exists
                     user_check = await session.execute(
-                        text("SELECT id, external_user_id FROM users WHERE external_user_id = 'user2'")
+                        text("""
+                        SELECT u.id, ui.identifier
+                        FROM users u
+                        JOIN user_identifiers ui ON u.id = ui.user_id
+                        WHERE ui.identifier = 'user2'
+                        """)
                     )
                     user = user_check.fetchone()
                     if user:
@@ -174,9 +181,9 @@ async def run_async_test():
         # Check for different outcomes
         found_repos = any(word in response2_str for word in ["repository", "repositories", "repo", "repos"])
         has_error = "error" in response2_str or "failed" in response2_str
-        invalid_token = any(phrase in response2_str for phrase in ["invalid", "expired", "unauthorized", "401"])
+        invalid_token = any(phrase in response2_str for phrase in ["invalid", "expired", "unauthorized", "401", "didn't work", "did not work"])
         asks_again = any(phrase in response2_str for phrase in [
-            "please provide", "need your", "github token", "try again"
+            "please provide", "need your", "github token", "try again", "double-check", "create a new"
         ])
 
         # If we found repositories, extract and print them
@@ -220,10 +227,11 @@ async def run_async_test():
                 async with formation._db_manager.get_async_session() as session:
                     result = await session.execute(
                         text("""
-                        SELECT c.service, c.name, c.credential_data IS NOT NULL as has_data
+                        SELECT c.service, c.name, c.credentials IS NOT NULL as has_data
                         FROM credentials c
                         JOIN users u ON c.user_id = u.id
-                        WHERE u.external_user_id = :user_id
+                        JOIN user_identifiers ui ON u.id = ui.user_id
+                        WHERE ui.identifier = :user_id
                         AND c.service = 'github'
                         """),
                         {"user_id": "user2"}

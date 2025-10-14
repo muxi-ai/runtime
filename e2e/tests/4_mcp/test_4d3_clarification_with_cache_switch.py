@@ -60,10 +60,11 @@ async def run_async_test():
                 async with formation._db_manager.get_async_session() as session:
                     result = await session.execute(
                         text("""
-                        SELECT u.external_user_id, c.name, c.service
+                        SELECT ui.identifier, c.name, c.service
                         FROM credentials c
                         JOIN users u ON c.user_id = u.id
-                        WHERE u.external_user_id = :user_id
+                        JOIN user_identifiers ui ON u.id = ui.user_id
+                        WHERE ui.identifier = :user_id
                         AND c.service = 'github'
                         ORDER BY c.name
                         """),

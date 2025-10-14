@@ -26,7 +26,11 @@ async def test_preference_detection():
     # Clear test data
     test_user = "preference_test_user_001"
     cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
-    cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
+    cur.execute("""
+        DELETE FROM users WHERE id IN (
+            SELECT user_id FROM user_identifiers WHERE identifier = %s
+        )
+    """, (test_user,))
     conn.commit()
 
     formation = Formation()
@@ -40,7 +44,20 @@ async def test_preference_detection():
         user_id=test_user,
         use_async=False,
     )
-    await asyncio.sleep(5)  # Wait for preference detection and storage
+    await asyncio.sleep(10)  # Wait for preference detection and storage (extraction takes 8-10s)
+
+    # First check if ANY memories were stored
+    cur.execute("""
+        SELECT text, collection, meta_data
+        FROM memories
+        WHERE meta_data->>'user_id' = %s
+        ORDER BY created_at DESC
+    """, (test_user,))
+    all_memories = cur.fetchall()
+    print(f"   Total memories stored: {len(all_memories)}")
+    if all_memories:
+        for mem in all_memories[:3]:  # Show first 3
+            print(f"   - Collection: {mem[1]}, Text: {mem[0][:50]}...")
 
     # Check memories in database - specifically in preferences collection
     cur.execute("""
@@ -54,7 +71,7 @@ async def test_preference_detection():
     preference_texts = [pref[0] for pref in preferences]
 
     # Verify preference was stored
-    assert len(preferences) > 0, "No preferences were stored in the preferences collection"
+    assert len(preferences) > 0, f"No preferences were stored in the preferences collection. Total memories: {len(all_memories)}"
 
     # Verify it contains the preference content
     fastapi_found = any("FastAPI" in text or "Flask" in text for text in preference_texts)
@@ -76,7 +93,7 @@ async def test_preference_detection():
     for pref in test_preferences:
         print(f"   Expressing: {pref}")
         await overlord.chat(pref, user_id=test_user, use_async=False, stream=False)
-        await asyncio.sleep(3)  # Wait between preferences
+        await asyncio.sleep(10)  # Wait between preferences (extraction takes 8-10s)
 
     # Check all preferences
     cur.execute("""
@@ -151,14 +168,28 @@ async def test_preference_detection():
 
     # Note: We can't guarantee the exact response, but we've verified the preference is stored
 
-    # Cleanup
+    # Shutdown formation (this now disposes database engine internally)
+    await safe_formation_shutdown(formation)
+    
+    # Cancel all pending background tasks (except current task)
+    current_task = asyncio.current_task()
+    pending = [task for task in asyncio.all_tasks() if task != current_task and not task.done()]
+    for task in pending:
+        task.cancel()
+    
+    # Wait for tasks to cancel
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+    
+    # Cleanup database records
     cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
-    cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
+    cur.execute("""
+        DELETE FROM users WHERE id IN (
+            SELECT user_id FROM user_identifiers WHERE identifier = %s
+        )
+    """, (test_user,))
     conn.commit()
     conn.close()
-
-    # Properly shutdown formation to avoid timeout
-    await safe_formation_shutdown(formation)
 
     print("\n=== Test 2O1 Complete ===")
     print("✓ Preferences are detected from natural language")

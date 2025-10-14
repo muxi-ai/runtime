@@ -26,7 +26,11 @@ async def test_2o1_preference_detection_and_storage():
     
     # Clear test data
     cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
-    cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
+    cur.execute("""
+        DELETE FROM users WHERE id IN (
+            SELECT user_id FROM user_identifiers WHERE identifier = %s
+        )
+    """, (test_user,))
     conn.commit()
 
     # Load formation
@@ -80,7 +84,19 @@ async def test_2o1_preference_detection_and_storage():
         return True
 
     finally:
+        # Shutdown formation (this now disposes database engine internally)
         await safe_formation_shutdown(formation)
+        
+        # Cancel all pending background tasks (except current task)
+        current_task = asyncio.current_task()
+        pending = [task for task in asyncio.all_tasks() if task != current_task and not task.done()]
+        for task in pending:
+            task.cancel()
+        
+        # Wait for tasks to cancel
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        
         cur.close()
         conn.close()
 
@@ -96,7 +112,11 @@ async def test_2o2_preference_context_inclusion():
     
     # Clear test data
     cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
-    cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
+    cur.execute("""
+        DELETE FROM users WHERE id IN (
+            SELECT user_id FROM user_identifiers WHERE identifier = %s
+        )
+    """, (test_user,))
     conn.commit()
 
     # Load formation
@@ -185,7 +205,19 @@ async def test_2o2_preference_context_inclusion():
             return False
 
     finally:
+        # Shutdown formation (this now disposes database engine internally)
         await safe_formation_shutdown(formation)
+        
+        # Cancel all pending background tasks (except current task)
+        current_task = asyncio.current_task()
+        pending = [task for task in asyncio.all_tasks() if task != current_task and not task.done()]
+        for task in pending:
+            task.cancel()
+        
+        # Wait for tasks to cancel
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        
         cur.close()
         conn.close()
 

@@ -79,15 +79,30 @@ class TestDatabaseOptimization(BaseMemoryTest):
             cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
 
             # Get or create user
-            public_id = str(uuid.uuid4())[:21]
             cur.execute("""
-                INSERT INTO users (public_id, external_user_id, formation_id, created_at)
-                VALUES (%s, %s, 'test', NOW())
-                ON CONFLICT (external_user_id, formation_id) DO UPDATE
-                SET updated_at = NOW()
-                RETURNING id
-            """, (public_id, test_user))
-            user_db_id = cur.fetchone()[0]
+                SELECT u.id FROM users u
+                JOIN user_identifiers ui ON u.id = ui.user_id
+                WHERE ui.identifier = %s AND ui.formation_id = 'test'
+            """, (test_user,))
+            
+            user_result = cur.fetchone()
+            if user_result:
+                user_db_id = user_result[0]
+            else:
+                # Create new user
+                public_id = str(uuid.uuid4())[:21]
+                cur.execute("""
+                    INSERT INTO users (public_id, formation_id, created_at)
+                    VALUES (%s, 'test', NOW())
+                    RETURNING id
+                """, (public_id,))
+                user_db_id = cur.fetchone()[0]
+                
+                # Create identifier mapping
+                cur.execute("""
+                    INSERT INTO user_identifiers (user_id, identifier, formation_id, created_at)
+                    VALUES (%s, %s, 'test', NOW())
+                """, (user_db_id, test_user))
             
             # Clean up existing memories for this user
             cur.execute("DELETE FROM memories WHERE user_id = %s", (user_db_id,))

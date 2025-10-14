@@ -50,7 +50,11 @@ class Test2k2MemoryPriority(BaseMemoryTest):
             # Clear test data
             test_user = "priority_test_user"
             cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
-            cur.execute("DELETE FROM users WHERE external_user_id = %s", (test_user,))
+            cur.execute("""
+                DELETE FROM users WHERE id IN (
+                    SELECT user_id FROM user_identifiers WHERE identifier = %s
+                )
+            """, (test_user,))
             conn.commit()
 
             # Test 1: Important information extraction
