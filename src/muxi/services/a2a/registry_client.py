@@ -341,11 +341,7 @@ class A2ARegistryClient:
             # Emit health check result event
             observability.observe(
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK_COMPLETED,
-                level=(
-                    observability.EventLevel.INFO
-                    if is_healthy
-                    else observability.EventLevel.WARNING
-                ),
+                level=observability.EventLevel.INFO if is_healthy else observability.EventLevel.WARNING,
                 description=f"Registry health check {'passed' if is_healthy else 'failed'} (SDK): {registry_url}",
                 data={
                     "registry_url": registry_url,

@@ -2456,11 +2456,7 @@ class Formation:
         if failed_servers or skipped_servers:
             observability.observe(
                 event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
-                level=(
-                    observability.EventLevel.WARNING
-                    if failed_servers
-                    else observability.EventLevel.INFO
-                ),
+                level=observability.EventLevel.WARNING if failed_servers else observability.EventLevel.INFO,
                 data={
                     "total_servers": len(self._mcp_servers),
                     "successful": len(successful_servers),
@@ -2470,10 +2466,7 @@ class Formation:
                     "skipped_server_ids": skipped_servers,
                     "successful_server_ids": successful_servers,
                 },
-                description=(
-                    f"MCP server registration completed: {len(successful_servers)} successful, "
-                    f"{len(failed_servers)} failed, {len(skipped_servers)} skipped"
-                ),
+                description=f"MCP server registration completed: {len(successful_servers)} successful, {len(failed_servers)} failed, {len(skipped_servers)} skipped",
             )
 
         # Show info message if there were failures

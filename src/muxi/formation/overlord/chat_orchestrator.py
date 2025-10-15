@@ -830,9 +830,10 @@ class ChatOrchestrator:
                 # Log error but continue without long-term memories  
                 from ...services import observability
                 observability.observe(
-                    event_type="memory.long_term.search_failed",
+                    event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
                     level=observability.EventLevel.ERROR,  # Changed to ERROR to see it
                     data={
+                        "operation": "long_term_memory_search",
                         "error": str(e),
                         "error_type": type(e).__name__,
                         "traceback": str(e.__traceback__) if hasattr(e, '__traceback__') else None,

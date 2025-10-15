@@ -595,11 +595,7 @@ class A2AInboundAuthenticator:
             authenticated, client_id, error_message = result
             observability.observe(
                 event_type=observability.SystemEvents.A2A_AUTH_VALIDATED,
-                level=(
-                    observability.EventLevel.INFO
-                    if authenticated
-                    else observability.EventLevel.WARNING
-                ),
+                level=observability.EventLevel.INFO if authenticated else observability.EventLevel.WARNING,
                 description=f"A2A inbound authentication {'successful' if authenticated else 'failed'}",  # noqa: E501
                 data={
                     "auth_mode": self.auth_mode.value,

@@ -79,7 +79,7 @@ async def resolve_user_identifier(
             try:
                 internal_id_str, muxi_id = cached_value.split(":", 1)
                 observability.observe(
-                    event_type="user_identifier.cache_hit",
+                    event_type=observability.SystemEvents.OPERATION_COMPLETED,
                     level=observability.EventLevel.DEBUG,
                     data={
                         "cache_type": "user_identifier",
@@ -92,7 +92,7 @@ async def resolve_user_identifier(
             except (ValueError, AttributeError) as e:
                 # Corrupted cache entry - invalidate it
                 observability.observe(
-                    event_type="user_identifier.cache_corrupted",
+                    event_type=observability.ErrorEvents.VALIDATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "message": "Corrupted cache entry for user identifier",
@@ -104,7 +104,7 @@ async def resolve_user_identifier(
 
     # Step 2: Database lookup
     observability.observe(
-        event_type="user_identifier.cache_miss",
+        event_type=observability.SystemEvents.OPERATION_COMPLETED,
         level=observability.EventLevel.DEBUG,
         data={
             "cache_type": "user_identifier",
@@ -130,9 +130,10 @@ async def resolve_user_identifier(
             # Found existing user
             internal_id, muxi_id = row
             observability.observe(
-                event_type="user_identifier.resolved",
+                event_type=observability.SystemEvents.OPERATION_COMPLETED,
                 level=observability.EventLevel.INFO,
                 data={
+                    "operation": "user_identifier_resolved",
                     "identifier": identifier,
                     "muxi_user_id": muxi_id,
                     "internal_user_id": internal_id,
@@ -160,9 +161,10 @@ async def resolve_user_identifier(
             internal_id, muxi_id = new_user.id, new_user.public_id
 
             observability.observe(
-                event_type="user_identifier.resolved",
+                event_type=observability.SystemEvents.OPERATION_COMPLETED,
                 level=observability.EventLevel.INFO,
                 data={
+                    "operation": "user_identifier_resolved",
                     "identifier": identifier,
                     "muxi_user_id": muxi_id,
                     "internal_user_id": internal_id,
@@ -300,7 +302,7 @@ async def associate_user_identifiers(
 
         if conflicts:
             observability.observe(
-                event_type="user_identifier.association_conflict",
+                event_type=observability.ErrorEvents.VALIDATION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "message": "Identifier conflicts detected",
@@ -349,7 +351,7 @@ async def associate_user_identifiers(
 
         # Step 4: Log event
         observability.observe(
-            event_type="user_identifier.associated",
+            event_type=observability.SystemEvents.OPERATION_COMPLETED,
             level=observability.EventLevel.INFO,
             data={
                 "muxi_user_id": user_public_id,

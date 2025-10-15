@@ -755,7 +755,7 @@ class Overlord:
         self.clarification = UnifiedClarificationSystem(self)
 
         observability.observe(
-            event_type="service.initialized",
+            event_type=observability.SystemEvents.SERVICE_STARTED,
             level=observability.EventLevel.INFO,
             data={"service": "clarification", "components": ["unified_system"]},
             description="Clarification system initialized with unified components",
@@ -859,11 +859,7 @@ class Overlord:
             # Log task completion
             observability.observe(
                 event_type=observability.SystemEvents.SERVICE_STARTED,  # Reuse existing event type
-                level=(
-                    observability.EventLevel.DEBUG
-                    if not exception_str
-                    else observability.EventLevel.ERROR
-                ),
+                level=observability.EventLevel.DEBUG if not exception_str else observability.EventLevel.ERROR,
                 data={
                     "task_name": task.get_name() if hasattr(task, "get_name") else "unnamed",
                     "remaining_tasks": len(self._background_tasks),
@@ -1207,11 +1203,7 @@ class Overlord:
 
                         observability.observe(
                             event_type=observability.SystemEvents.A2A_HEALTH_CHECK_COMPLETED,
-                            level=(
-                                observability.EventLevel.INFO
-                                if healthy_count > 0
-                                else observability.EventLevel.WARNING
-                            ),
+                            level=observability.EventLevel.INFO if healthy_count > 0 else observability.EventLevel.WARNING,
                             data={
                                 "healthy_registries": healthy_count,
                                 "unhealthy_registries": unhealthy_count,
@@ -1333,7 +1325,7 @@ class Overlord:
                     # The unified system gets its LLM reference directly from overlord
                     # No separate clarification_llm instance needed
                     observability.observe(
-                        event_type="service.started",
+                        event_type=observability.SystemEvents.SERVICE_STARTED,
                         level=observability.EventLevel.INFO,
                         data={"service": "clarification_llm", "model": text_config["model"]},
                         description=f"Created LLM for clarification: {text_config['model']}",
@@ -1350,9 +1342,9 @@ class Overlord:
         # No additional manager updates needed
 
         observability.observe(
-            event_type="service.updated",
+            event_type=observability.SystemEvents.OPERATION_COMPLETED,
             level=observability.EventLevel.INFO,
-            data={"service": "clarification", "updated_components": ["llm", "managers"]},
+            data={"operation": "clarification_service_update", "service": "clarification", "updated_components": ["llm", "managers"]},
             description="Clarification system updated with actual services",
         )
 

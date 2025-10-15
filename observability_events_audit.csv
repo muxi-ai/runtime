@@ -67,31 +67,31 @@ ConversationEvents.AGENT_RESPONSE_GENERATED,INFO,src/muxi/formation/agents/agent
 ConversationEvents.AGENT_TOOL_CHAIN_COMPLETED,INFO,src/muxi/formation/agents/agent.py:2134,Tool chain completed after {iteration} iterations and {total_tool_calls} tool calls,src/muxi/formation/agents/agent.py,2134
 ConversationEvents.AGENT_TOOL_CHAIN_ITERATION_COMPLETED,INFO,src/muxi/formation/agents/agent.py:2080,Tool chain iteration {iteration + 1} completed,src/muxi/formation/agents/agent.py,2080
 ConversationEvents.AGENT_TOOL_CHAIN_ITERATION_STARTED,INFO,src/muxi/formation/agents/agent.py:1778,Tool chain iteration {iteration + 1} started with {len(tool_calls)} tool calls,src/muxi/formation/agents/agent.py,1778
-ConversationEvents.ASYNC_PROCESSING_COMPLETED,INFO,src/muxi/formation/overlord/overlord.py:5130,Request {request_id}: Completed async processing in {processing_time:.2f}s,src/muxi/formation/overlord/overlord.py,5130
-ConversationEvents.ASYNC_PROCESSING_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:7971,"Post-approval time estimation failed, using sync execution",src/muxi/formation/overlord/overlord.py,7971
-ConversationEvents.ASYNC_PROCESSING_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:8234,Webhook notification failed after all retries,src/muxi/formation/overlord/overlord.py,8234
+ConversationEvents.ASYNC_PROCESSING_COMPLETED,INFO,src/muxi/formation/overlord/overlord.py:5122,Request {request_id}: Completed async processing in {processing_time:.2f}s,src/muxi/formation/overlord/overlord.py,5122
+ConversationEvents.ASYNC_PROCESSING_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:7963,"Post-approval time estimation failed, using sync execution",src/muxi/formation/overlord/overlord.py,7963
+ConversationEvents.ASYNC_PROCESSING_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:8226,Webhook notification failed after all retries,src/muxi/formation/overlord/overlord.py,8226
 ConversationEvents.ASYNC_PROCESSING_STARTED,INFO,src/muxi/formation/overlord/chat_orchestrator.py:521,Creating async task for request {request_id},src/muxi/formation/overlord/chat_orchestrator.py,521
-ConversationEvents.ASYNC_PROCESSING_STARTED,INFO,src/muxi/formation/overlord/overlord.py:4990,Starting async processing for request {request_id},src/muxi/formation/overlord/overlord.py,4990
-ConversationEvents.ASYNC_THRESHOLD_DETECTED,INFO,src/muxi/formation/overlord/overlord.py:7631,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,7631
-ConversationEvents.ASYNC_THRESHOLD_DETECTED,INFO,src/muxi/formation/overlord/overlord.py:7954,Post-approval async decision: {'async' if should_async else 'sync'},src/muxi/formation/overlord/overlord.py,7954
-ConversationEvents.ASYNC_THRESHOLD_DETECTED,INFO,src/muxi/formation/overlord/overlord.py:8222,Webhook notification sent successfully with retries,src/muxi/formation/overlord/overlord.py,8222
-ConversationEvents.CLARIFICATION_COMPLETED,INFO,src/muxi/formation/overlord/overlord.py:9600,Agent clarification completed for {agent_name},src/muxi/formation/overlord/overlord.py,9600
-ConversationEvents.CLARIFICATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:9380,Failed to handle agent clarification request: {str(e)},src/muxi/formation/overlord/overlord.py,9380
-ConversationEvents.CLARIFICATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:9614,Failed to process agent clarification response: {str(e)},src/muxi/formation/overlord/overlord.py,9614
-ConversationEvents.CLARIFICATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:9996,Failed to send additional clarification for request {request_id},src/muxi/formation/overlord/overlord.py,9996
-ConversationEvents.CLARIFICATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:10006,Clarification failed for request {request_id},src/muxi/formation/overlord/overlord.py,10006
-ConversationEvents.CLARIFICATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:10033,Exception during clarification processing for request {request_id},src/muxi/formation/overlord/overlord.py,10033
-ConversationEvents.CLARIFICATION_REQUEST_GENERATED,INFO,src/muxi/formation/overlord/overlord.py:9365,Agent {agent_name} requested clarification from user,src/muxi/formation/overlord/overlord.py,9365
-ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:5516,"Checking for pending clarifications (workflow approval, credentials, etc.)",src/muxi/formation/overlord/overlord.py,5516
-ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:5880,Processing workflow approval response,src/muxi/formation/overlord/overlord.py,5880
-ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:5897,Looking up workflow {workflow_id} in pending approvals,src/muxi/formation/overlord/overlord.py,5897
-ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:6452,Checking workflow analysis conditions,src/muxi/formation/overlord/overlord.py,6452
-ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:7477,Workflow approval decision: {'REQUIRED' if needs_approval else 'NOT REQUIRED'},src/muxi/formation/overlord/overlord.py,7477
-ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:9697,Requesting {service} credentials from user,src/muxi/formation/overlord/overlord.py,9697
-ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:9989,Additional clarification question sent for request {request_id},src/muxi/formation/overlord/overlord.py,9989
-ConversationEvents.CLARIFICATION_REQUEST_SENT,WARNING,src/muxi/formation/overlord/overlord.py:6883,Agent selection triggered - check if this should have been handled as clarification,src/muxi/formation/overlord/overlord.py,6883
-ConversationEvents.CLARIFICATION_RESPONSE_RECEIVED,INFO,src/muxi/formation/overlord/overlord.py:5808,Processing {clarification_info.get('type')} clarification response,src/muxi/formation/overlord/overlord.py,5808
-ConversationEvents.CLARIFICATION_SKIPPED,INFO,src/muxi/formation/overlord/overlord.py:9652,Clarification disabled - cannot request missing credential,src/muxi/formation/overlord/overlord.py,9652
+ConversationEvents.ASYNC_PROCESSING_STARTED,INFO,src/muxi/formation/overlord/overlord.py:4982,Starting async processing for request {request_id},src/muxi/formation/overlord/overlord.py,4982
+ConversationEvents.ASYNC_THRESHOLD_DETECTED,INFO,src/muxi/formation/overlord/overlord.py:7623,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,7623
+ConversationEvents.ASYNC_THRESHOLD_DETECTED,INFO,src/muxi/formation/overlord/overlord.py:7946,Post-approval async decision: {'async' if should_async else 'sync'},src/muxi/formation/overlord/overlord.py,7946
+ConversationEvents.ASYNC_THRESHOLD_DETECTED,INFO,src/muxi/formation/overlord/overlord.py:8214,Webhook notification sent successfully with retries,src/muxi/formation/overlord/overlord.py,8214
+ConversationEvents.CLARIFICATION_COMPLETED,INFO,src/muxi/formation/overlord/overlord.py:9592,Agent clarification completed for {agent_name},src/muxi/formation/overlord/overlord.py,9592
+ConversationEvents.CLARIFICATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:9372,Failed to handle agent clarification request: {str(e)},src/muxi/formation/overlord/overlord.py,9372
+ConversationEvents.CLARIFICATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:9606,Failed to process agent clarification response: {str(e)},src/muxi/formation/overlord/overlord.py,9606
+ConversationEvents.CLARIFICATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:9988,Failed to send additional clarification for request {request_id},src/muxi/formation/overlord/overlord.py,9988
+ConversationEvents.CLARIFICATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:9998,Clarification failed for request {request_id},src/muxi/formation/overlord/overlord.py,9998
+ConversationEvents.CLARIFICATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:10025,Exception during clarification processing for request {request_id},src/muxi/formation/overlord/overlord.py,10025
+ConversationEvents.CLARIFICATION_REQUEST_GENERATED,INFO,src/muxi/formation/overlord/overlord.py:9357,Agent {agent_name} requested clarification from user,src/muxi/formation/overlord/overlord.py,9357
+ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:5508,"Checking for pending clarifications (workflow approval, credentials, etc.)",src/muxi/formation/overlord/overlord.py,5508
+ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:5872,Processing workflow approval response,src/muxi/formation/overlord/overlord.py,5872
+ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:5889,Looking up workflow {workflow_id} in pending approvals,src/muxi/formation/overlord/overlord.py,5889
+ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:6444,Checking workflow analysis conditions,src/muxi/formation/overlord/overlord.py,6444
+ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:7469,Workflow approval decision: {'REQUIRED' if needs_approval else 'NOT REQUIRED'},src/muxi/formation/overlord/overlord.py,7469
+ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:9689,Requesting {service} credentials from user,src/muxi/formation/overlord/overlord.py,9689
+ConversationEvents.CLARIFICATION_REQUEST_SENT,INFO,src/muxi/formation/overlord/overlord.py:9981,Additional clarification question sent for request {request_id},src/muxi/formation/overlord/overlord.py,9981
+ConversationEvents.CLARIFICATION_REQUEST_SENT,WARNING,src/muxi/formation/overlord/overlord.py:6875,Agent selection triggered - check if this should have been handled as clarification,src/muxi/formation/overlord/overlord.py,6875
+ConversationEvents.CLARIFICATION_RESPONSE_RECEIVED,INFO,src/muxi/formation/overlord/overlord.py:5800,Processing {clarification_info.get('type')} clarification response,src/muxi/formation/overlord/overlord.py,5800
+ConversationEvents.CLARIFICATION_SKIPPED,INFO,src/muxi/formation/overlord/overlord.py:9644,Clarification disabled - cannot request missing credential,src/muxi/formation/overlord/overlord.py,9644
 ConversationEvents.CONTENT_EXTRACTION_COMPLETED,DEBUG,src/muxi/formation/artifacts/extractor.py:114,Successfully parsed JSON content from text field,src/muxi/formation/artifacts/extractor.py,114
 ConversationEvents.CONTENT_EXTRACTION_COMPLETED,DEBUG,src/muxi/formation/artifacts/extractor.py:144,Successfully parsed JSON content from string,src/muxi/formation/artifacts/extractor.py,144
 ConversationEvents.CONTENT_EXTRACTION_STARTED,DEBUG,src/muxi/formation/artifacts/extractor.py:88,Tool result type: {type(file_info)},src/muxi/formation/artifacts/extractor.py,88
@@ -117,9 +117,9 @@ ConversationEvents.DOCUMENT_PROCESSING_FAILED,DEBUG,src/muxi/services/llm/llm.py
 ConversationEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/agents/knowledge/handler.py:915,Failed to process knowledge file during addition,src/muxi/formation/agents/knowledge/handler.py,915
 ConversationEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/artifacts/extractor.py:282,Failed to create artifact from file {file_path}: {str(e)},src/muxi/formation/artifacts/extractor.py,282
 ConversationEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/artifacts/processor.py:288,Error creating artifact from {file_path}: {str(e)},src/muxi/formation/artifacts/processor.py,288
-ConversationEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:8999,Error synthesizing workflow results: {str(e)},src/muxi/formation/overlord/overlord.py,8999
+ConversationEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:8991,Error synthesizing workflow results: {str(e)},src/muxi/formation/overlord/overlord.py,8991
 ConversationEvents.DOCUMENT_PROCESSING_FAILED,WARNING,src/muxi/formation/agents/knowledge/handler.py:825,No chunks generated from knowledge file,src/muxi/formation/agents/knowledge/handler.py,825
-ConversationEvents.DOCUMENT_PROCESSING_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:8988,"LLM synthesis failed, using fallback: {str(e)}",src/muxi/formation/overlord/overlord.py,8988
+ConversationEvents.DOCUMENT_PROCESSING_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:8980,"LLM synthesis failed, using fallback: {str(e)}",src/muxi/formation/overlord/overlord.py,8980
 ConversationEvents.DOCUMENT_PROCESSING_FAILED,WARNING,src/muxi/services/llm/llm.py:833,"Could not import fusion engine, falling back to basic processing",src/muxi/services/llm/llm.py,833
 ConversationEvents.DOCUMENT_PROCESSING_STARTED,DEBUG,src/muxi/utils/document.py:24,Starting document loading,src/muxi/utils/document.py,24
 ConversationEvents.DOCUMENT_PROCESSING_STARTED,DEBUG,src/muxi/utils/document.py:94,Starting text chunking,src/muxi/utils/document.py,94
@@ -167,18 +167,19 @@ ConversationEvents.MEMORY_WORKING_LOOKUP,DEBUG,src/muxi/formation/memory/buffer_
 ConversationEvents.MEMORY_WORKING_LOOKUP,INFO,src/muxi/services/memory/working.py:583,Working memory search started,src/muxi/services/memory/working.py,583
 ConversationEvents.MEMORY_WORKING_LOOKUP,WARNING,src/muxi/services/llm/llm.py:454,Circuit breaker opened due to repeated failures,src/muxi/services/llm/llm.py,454
 ConversationEvents.MEMORY_WORKING_RETRIEVED,DEBUG,src/muxi/formation/memory/buffer_manager.py:146,NO DESCRIPTION,src/muxi/formation/memory/buffer_manager.py,146
+ConversationEvents.MEMORY_WORKING_RETRIEVED,DEBUG,src/muxi/services/memory/sqlite.py:730,Retrieved {len(results)} recent memories with orders: {orders[:5]},src/muxi/services/memory/sqlite.py,730
 ConversationEvents.MEMORY_WORKING_RETRIEVED,INFO,src/muxi/services/memory/working.py:603,Working memory using recency search (no embedding model configured),src/muxi/services/memory/working.py,603
 ConversationEvents.MEMORY_WORKING_RETRIEVED,INFO,src/muxi/services/memory/working.py:622,Working memory search completed (recency-only),src/muxi/services/memory/working.py,622
 ConversationEvents.MEMORY_WORKING_RETRIEVED,INFO,src/muxi/services/memory/working.py:785,Working memory search completed,src/muxi/services/memory/working.py,785
 ConversationEvents.MEMORY_WORKING_RETRIEVED,WARNING,src/muxi/services/memory/working.py:678,NO DESCRIPTION,src/muxi/services/memory/working.py,678
 ConversationEvents.MEMORY_WORKING_RETRIEVED,WARNING,src/muxi/services/memory/working.py:827,Working memory search completed with fallback,src/muxi/services/memory/working.py,827
-ConversationEvents.MEMORY_WORKING_UPDATED,DEBUG,src/muxi/formation/overlord/overlord.py:5102,Stored async response in buffer memory for request {request_id},src/muxi/formation/overlord/overlord.py,5102
+ConversationEvents.MEMORY_WORKING_UPDATED,DEBUG,src/muxi/formation/overlord/overlord.py:5094,Stored async response in buffer memory for request {request_id},src/muxi/formation/overlord/overlord.py,5094
 ConversationEvents.MEMORY_WORKING_UPDATED,INFO,src/muxi/formation/agents/knowledge/handler.py:1314,Knowledge results injected into working memory,src/muxi/formation/agents/knowledge/handler.py,1314
 ConversationEvents.MEMORY_WORKING_UPDATED,INFO,src/muxi/formation/memory/buffer_manager.py:76,Successfully added message to buffer memory,src/muxi/formation/memory/buffer_manager.py,76
 ConversationEvents.MEMORY_WORKING_UPDATE_FAILED,WARNING,src/muxi/formation/agents/knowledge/handler.py:1328,Failed to inject knowledge into working memory,src/muxi/formation/agents/knowledge/handler.py,1328
 ConversationEvents.MEMORY_WORKING_UPDATE_FAILED,WARNING,src/muxi/formation/agents/knowledge/handler.py:1410,Failed to search working memory in unified search,src/muxi/formation/agents/knowledge/handler.py,1410
 ConversationEvents.MEMORY_WORKING_UPDATE_FAILED,WARNING,src/muxi/formation/memory/buffer_manager.py:87,[BufferManager] Error adding to buffer: {e},src/muxi/formation/memory/buffer_manager.py,87
-ConversationEvents.MEMORY_WORKING_UPDATE_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:5114,Failed to store async response in buffer memory: {e},src/muxi/formation/overlord/overlord.py,5114
+ConversationEvents.MEMORY_WORKING_UPDATE_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:5106,Failed to store async response in buffer memory: {e},src/muxi/formation/overlord/overlord.py,5106
 ConversationEvents.MODEL_REQUEST_COMPLETED,INFO,src/muxi/services/llm/llm.py:1255,Fallback model {self.fallback_model} succeeded after {original_model} failed,src/muxi/services/llm/llm.py,1255
 ConversationEvents.MODEL_REQUEST_COMPLETED,INFO,src/muxi/services/llm/service.py:373,Chat completion served from cache for {model},src/muxi/services/llm/service.py,373
 ConversationEvents.MODEL_REQUEST_COMPLETED,INFO,src/muxi/services/llm/service.py:413,Chat completion successful for {model},src/muxi/services/llm/service.py,413
@@ -189,26 +190,26 @@ ConversationEvents.MODEL_REQUEST_STARTED,INFO,src/muxi/services/llm/service.py:3
 ConversationEvents.MODEL_REQUEST_STARTED,INFO,src/muxi/services/llm/service.py:498,Embedding request started for {model},src/muxi/services/llm/service.py,498
 ConversationEvents.ONETIME_JOB_COMPLETED,INFO,src/muxi/services/scheduler/service.py:895,One-time job completed via webhook: {job['title']},src/muxi/services/scheduler/service.py,895
 ConversationEvents.ONETIME_JOB_MARKED_COMPLETED,INFO,src/muxi/services/scheduler/manager.py:568,One-time job marked as completed: {job_id},src/muxi/services/scheduler/manager.py,568
-ConversationEvents.OVERLORD_AGENT_SELECTED,INFO,src/muxi/formation/overlord/overlord.py:6957,Agent selection completed: {agent_name},src/muxi/formation/overlord/overlord.py,6957
-ConversationEvents.OVERLORD_AGENT_SELECTION_STARTED,INFO,src/muxi/formation/overlord/overlord.py:6913,Starting agent selection process,src/muxi/formation/overlord/overlord.py,6913
-ConversationEvents.OVERLORD_PROCESSING_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:9307,Error checking agent clarification request: {str(e)},src/muxi/formation/overlord/overlord.py,9307
+ConversationEvents.OVERLORD_AGENT_SELECTED,INFO,src/muxi/formation/overlord/overlord.py:6949,Agent selection completed: {agent_name},src/muxi/formation/overlord/overlord.py,6949
+ConversationEvents.OVERLORD_AGENT_SELECTION_STARTED,INFO,src/muxi/formation/overlord/overlord.py:6905,Starting agent selection process,src/muxi/formation/overlord/overlord.py,6905
+ConversationEvents.OVERLORD_PROCESSING_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:9299,Error checking agent clarification request: {str(e)},src/muxi/formation/overlord/overlord.py,9299
 ConversationEvents.OVERLORD_ROUTING_COMPLETED,INFO,src/muxi/formation/overlord/agent_router.py:119,Routing model acquired for agent selection,src/muxi/formation/overlord/agent_router.py,119
 ConversationEvents.OVERLORD_ROUTING_COMPLETED,INFO,src/muxi/formation/overlord/agent_router.py:162,Agent selected via LLM routing model,src/muxi/formation/overlord/agent_router.py,162
-ConversationEvents.OVERLORD_ROUTING_COMPLETED,INFO,src/muxi/formation/overlord/overlord.py:8588,Workflow {workflow_id} execution complete,src/muxi/formation/overlord/overlord.py,8588
+ConversationEvents.OVERLORD_ROUTING_COMPLETED,INFO,src/muxi/formation/overlord/overlord.py:8580,Workflow {workflow_id} execution complete,src/muxi/formation/overlord/overlord.py,8580
 ConversationEvents.OVERLORD_ROUTING_COMPLETED,WARNING,src/muxi/formation/overlord/agent_router.py:152,"Routing model returned invalid agent, used intelligent selection",src/muxi/formation/overlord/agent_router.py,152
-ConversationEvents.OVERLORD_ROUTING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:8612,Error executing workflow {workflow_id}: {str(e)},src/muxi/formation/overlord/overlord.py,8612
-ConversationEvents.OVERLORD_ROUTING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:8858,Error in streaming workflow execution: {str(e)},src/muxi/formation/overlord/overlord.py,8858
+ConversationEvents.OVERLORD_ROUTING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:8604,Error executing workflow {workflow_id}: {str(e)},src/muxi/formation/overlord/overlord.py,8604
+ConversationEvents.OVERLORD_ROUTING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:8850,Error in streaming workflow execution: {str(e)},src/muxi/formation/overlord/overlord.py,8850
 ConversationEvents.OVERLORD_ROUTING_FAILED,WARNING,src/muxi/formation/overlord/agent_router.py:127,"Routing model creation failed, falling back to intelligent selection",src/muxi/formation/overlord/agent_router.py,127
 ConversationEvents.OVERLORD_ROUTING_FAILED,WARNING,src/muxi/formation/overlord/agent_router.py:183,"Agent routing failed, falling back to intelligent selection",src/muxi/formation/overlord/agent_router.py,183
-ConversationEvents.OVERLORD_ROUTING_STARTED,INFO,src/muxi/formation/overlord/overlord.py:8452,Starting SEQUENTIAL execution of SOP workflow {workflow_id},src/muxi/formation/overlord/overlord.py,8452
-ConversationEvents.OVERLORD_ROUTING_STARTED,INFO,src/muxi/formation/overlord/overlord.py:8468,Starting execution of workflow {workflow_id},src/muxi/formation/overlord/overlord.py,8468
-ConversationEvents.OVERLORD_TASK_DECOMPOSED,INFO,src/muxi/formation/overlord/overlord.py:8411,Workflow {workflow_id} progress update,src/muxi/formation/overlord/overlord.py,8411
+ConversationEvents.OVERLORD_ROUTING_STARTED,INFO,src/muxi/formation/overlord/overlord.py:8444,Starting SEQUENTIAL execution of SOP workflow {workflow_id},src/muxi/formation/overlord/overlord.py,8444
+ConversationEvents.OVERLORD_ROUTING_STARTED,INFO,src/muxi/formation/overlord/overlord.py:8460,Starting execution of workflow {workflow_id},src/muxi/formation/overlord/overlord.py,8460
+ConversationEvents.OVERLORD_TASK_DECOMPOSED,INFO,src/muxi/formation/overlord/overlord.py:8403,Workflow {workflow_id} progress update,src/muxi/formation/overlord/overlord.py,8403
 ConversationEvents.OVERLORD_WORKFLOW_CANCELLED,INFO,src/muxi/formation/workflow/executor.py:1696,Workflow {workflow_id} cancelled with {len(cancelled_tasks)} in-progress tasks,src/muxi/formation/workflow/executor.py,1696
-ConversationEvents.OVERLORD_WORKFLOW_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7458,Starting workflow orchestration (complexity: {analysis.complexity_score}),src/muxi/formation/overlord/overlord.py,7458
+ConversationEvents.OVERLORD_WORKFLOW_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7450,Starting workflow orchestration (complexity: {analysis.complexity_score}),src/muxi/formation/overlord/overlord.py,7450
 ConversationEvents.PROMPT_FORMATION_ENHANCED,INFO,src/muxi/services/scheduler/rewriter.py:292,Prompt enhanced for formation capabilities,src/muxi/services/scheduler/rewriter.py,292
 ConversationEvents.PROMPT_FORMATION_ENHANCEMENT_STARTED,INFO,src/muxi/services/scheduler/rewriter.py:229,Starting formation-specific prompt enhancement,src/muxi/services/scheduler/rewriter.py,229
 ConversationEvents.PROMPT_VALIDATION_COMPLETED,INFO,src/muxi/services/scheduler/rewriter.py:407,Execution prompt validation completed,src/muxi/services/scheduler/rewriter.py,407
-ConversationEvents.REQUEST_COMPLETED,INFO,src/muxi/formation/overlord/overlord.py:5143,Request {request_id} completed in {int(processing_time * 1000)}ms,src/muxi/formation/overlord/overlord.py,5143
+ConversationEvents.REQUEST_COMPLETED,INFO,src/muxi/formation/overlord/overlord.py:5135,Request {request_id} completed in {int(processing_time * 1000)}ms,src/muxi/formation/overlord/overlord.py,5135
 ConversationEvents.REQUEST_COMPLETED,INFO,src/muxi/formation/server/routes/client/triggers.py:161,Trigger '{trigger_name}' completed,src/muxi/formation/server/routes/client/triggers.py,161
 ConversationEvents.REQUEST_COMPLETED,INFO,src/muxi/formation/server/routes/client/triggers.py:210,Trigger '{trigger_name}' completed synchronously,src/muxi/formation/server/routes/client/triggers.py,210
 ConversationEvents.REQUEST_COMPLETED,INFO,src/muxi/formation/workflow/decomposer.py:1181,ApprovalManager.present_plan_for_approval completed successfully,src/muxi/formation/workflow/decomposer.py,1181
@@ -217,7 +218,7 @@ ConversationEvents.REQUEST_FAILED,ERROR,src/muxi/formation/overlord/chat_orchest
 ConversationEvents.REQUEST_FAILED,ERROR,src/muxi/formation/server/routes/client/chat.py:113,Chat request failed: {e},src/muxi/formation/server/routes/client/chat.py,113
 ConversationEvents.REQUEST_FAILED,ERROR,src/muxi/formation/server/routes/client/triggers.py:174,Trigger '{trigger_name}' failed: {e},src/muxi/formation/server/routes/client/triggers.py,174
 ConversationEvents.REQUEST_FAILED,ERROR,src/muxi/formation/server/routes/client/triggers.py:237,Trigger '{trigger_name}' failed: {e},src/muxi/formation/server/routes/client/triggers.py,237
-ConversationEvents.REQUEST_PROCESSING,DEBUG,src/muxi/formation/overlord/overlord.py:6407,"Non-actionable message, using fast conversational path",src/muxi/formation/overlord/overlord.py,6407
+ConversationEvents.REQUEST_PROCESSING,DEBUG,src/muxi/formation/overlord/overlord.py:6399,"Non-actionable message, using fast conversational path",src/muxi/formation/overlord/overlord.py,6399
 ConversationEvents.REQUEST_PROCESSING,DEBUG,src/muxi/services/memory/memobase.py:124,Skipping memory store for anonymous user,src/muxi/services/memory/memobase.py,124
 ConversationEvents.REQUEST_PROCESSING,DEBUG,src/muxi/services/memory/memobase.py:236,Skipping memory search for anonymous user,src/muxi/services/memory/memobase.py,236
 ConversationEvents.REQUEST_PROCESSING,DEBUG,src/muxi/services/memory/memobase.py:380,Skipping memory deletion for anonymous user,src/muxi/services/memory/memobase.py,380
@@ -236,17 +237,17 @@ ConversationEvents.REQUEST_PROCESSING,INFO,src/muxi/services/scheduler/rewriter.
 ConversationEvents.REQUEST_PROCESSING,INFO,src/muxi/services/scheduler/rewriter.py:114,Prompt rewritten using LLM,src/muxi/services/scheduler/rewriter.py,114
 ConversationEvents.REQUEST_RECEIVED,INFO,src/muxi/formation/server/routes/client/chat.py:63,Chat request received via Formation API,src/muxi/formation/server/routes/client/chat.py,63
 ConversationEvents.REQUEST_RECEIVED,INFO,src/muxi/formation/server/routes/client/triggers.py:128,Trigger '{trigger_name}' request received,src/muxi/formation/server/routes/client/triggers.py,128
-ConversationEvents.REQUEST_TOPICS_EXTRACTED,INFO,src/muxi/formation/overlord/overlord.py:6585,Extracted {len(analysis.topics)} topic tags from request,src/muxi/formation/overlord/overlord.py,6585
+ConversationEvents.REQUEST_TOPICS_EXTRACTED,INFO,src/muxi/formation/overlord/overlord.py:6577,Extracted {len(analysis.topics)} topic tags from request,src/muxi/formation/overlord/overlord.py,6577
 ConversationEvents.REQUEST_VALIDATED,DEBUG,src/muxi/formation/overlord/chat_orchestrator.py:220,Reusing request_id {request_id} for clarification response,src/muxi/formation/overlord/chat_orchestrator.py,220
 ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/chat_orchestrator.py:279,Request {request_id} validated,src/muxi/formation/overlord/chat_orchestrator.py,279
 ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/chat_orchestrator.py:358,Creating extraction task,src/muxi/formation/overlord/chat_orchestrator.py,358
-ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/chat_orchestrator.py:983,Extraction async method started,src/muxi/formation/overlord/chat_orchestrator.py,983
-ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/chat_orchestrator.py:997,About to call overlord.extract_user_information,src/muxi/formation/overlord/chat_orchestrator.py,997
-ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/chat_orchestrator.py:1015,overlord.extract_user_information completed,src/muxi/formation/overlord/chat_orchestrator.py,1015
-ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/overlord.py:3704,Overlord about to call extraction coordinator,src/muxi/formation/overlord/overlord.py,3704
-ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/overlord.py:3721,Coordinator call completed successfully,src/muxi/formation/overlord/overlord.py,3721
-ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/overlord.py:4875,Async mode requested with streaming - ignoring streaming to prevent conflict,src/muxi/formation/overlord/overlord.py,4875
-ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/overlord.py:6624,User explicitly requested SOP: {sop_id},src/muxi/formation/overlord/overlord.py,6624
+ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/chat_orchestrator.py:984,Extraction async method started,src/muxi/formation/overlord/chat_orchestrator.py,984
+ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/chat_orchestrator.py:998,About to call overlord.extract_user_information,src/muxi/formation/overlord/chat_orchestrator.py,998
+ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/chat_orchestrator.py:1016,overlord.extract_user_information completed,src/muxi/formation/overlord/chat_orchestrator.py,1016
+ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/overlord.py:3696,Overlord about to call extraction coordinator,src/muxi/formation/overlord/overlord.py,3696
+ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/overlord.py:3713,Coordinator call completed successfully,src/muxi/formation/overlord/overlord.py,3713
+ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/overlord.py:4867,Async mode requested with streaming - ignoring streaming to prevent conflict,src/muxi/formation/overlord/overlord.py,4867
+ConversationEvents.REQUEST_VALIDATED,INFO,src/muxi/formation/overlord/overlord.py:6616,User explicitly requested SOP: {sop_id},src/muxi/formation/overlord/overlord.py,6616
 ConversationEvents.RESPONSE_CONVERSION_COMPLETED,DEBUG,src/muxi/utils/response_converter.py:58,OneLLM to MUXI content conversion completed,src/muxi/utils/response_converter.py,58
 ConversationEvents.RESPONSE_CONVERSION_COMPLETED,DEBUG,src/muxi/utils/response_converter.py:124,MCP string content extraction completed,src/muxi/utils/response_converter.py,124
 ConversationEvents.RESPONSE_CONVERSION_COMPLETED,DEBUG,src/muxi/utils/response_converter.py:165,MCP list content extraction completed,src/muxi/utils/response_converter.py,165
@@ -278,8 +279,8 @@ ConversationEvents.SCHEDULED_JOB_RESUMED,INFO,src/muxi/services/scheduler/servic
 ConversationEvents.SCHEDULED_JOB_STARTED,INFO,src/muxi/services/scheduler/service.py:673,Starting execution of scheduled job: {job['title']},src/muxi/services/scheduler/service.py,673
 ConversationEvents.SCHEDULED_JOB_UPDATED,INFO,src/muxi/services/scheduler/manager.py:1268,Job {job_id} updated successfully,src/muxi/services/scheduler/manager.py,1268
 ConversationEvents.SCHEDULED_JOB_WEBHOOK_RECEIVED,INFO,src/muxi/services/scheduler/service.py:950,Webhook received for scheduled job: {job_id},src/muxi/services/scheduler/service.py,950
-ConversationEvents.SECURITY_VIOLATION,WARNING,src/muxi/formation/overlord/overlord.py:6555,Security threat detected by LLM analyzer: {analysis.threat_type},src/muxi/formation/overlord/overlord.py,6555
-ConversationEvents.SECURITY_VIOLATION,WARNING,src/muxi/formation/overlord/overlord.py:6929,Security violation detected: {e.threat_type},src/muxi/formation/overlord/overlord.py,6929
+ConversationEvents.SECURITY_VIOLATION,WARNING,src/muxi/formation/overlord/overlord.py:6547,Security threat detected by LLM analyzer: {analysis.threat_type},src/muxi/formation/overlord/overlord.py,6547
+ConversationEvents.SECURITY_VIOLATION,WARNING,src/muxi/formation/overlord/overlord.py:6921,Security violation detected: {e.threat_type},src/muxi/formation/overlord/overlord.py,6921
 ConversationEvents.SESSION_CREATED,DEBUG,src/muxi/formation/agents/knowledge/handler.py:650,Knowledge disabled for agent,src/muxi/formation/agents/knowledge/handler.py,650
 ConversationEvents.SESSION_CREATED,DEBUG,src/muxi/formation/agents/knowledge/handler.py:658,Knowledge disabled for agent,src/muxi/formation/agents/knowledge/handler.py,658
 ConversationEvents.SESSION_CREATED,DEBUG,src/muxi/services/llm/service.py:176,API key accessed for provider: {provider},src/muxi/services/llm/service.py,176
@@ -293,17 +294,17 @@ ConversationEvents.SESSION_CREATED,INFO,src/muxi/services/llm/service.py:695,Ser
 ConversationEvents.SESSION_CREATED,INFO,src/muxi/services/memory/memobase.py:66,Memobase initialized,src/muxi/services/memory/memobase.py,66
 ConversationEvents.SESSION_CREATED,WARNING,src/muxi/formation/agents/knowledge/handler.py:668,No knowledge sources configured for agent,src/muxi/formation/agents/knowledge/handler.py,668
 ConversationEvents.SESSION_CREATED,WARNING,src/muxi/formation/agents/knowledge/handler.py:676,No knowledge sources configured for agent,src/muxi/formation/agents/knowledge/handler.py,676
-ConversationEvents.SOP_EXECUTED,INFO,src/muxi/formation/overlord/overlord.py:7531,Passed SOP '{relevant_sop['name']}' to decomposer in {mode} mode,src/muxi/formation/overlord/overlord.py,7531
+ConversationEvents.SOP_EXECUTED,INFO,src/muxi/formation/overlord/overlord.py:7523,Passed SOP '{relevant_sop['name']}' to decomposer in {mode} mode,src/muxi/formation/overlord/overlord.py,7523
 ConversationEvents.SOP_LOADED,INFO,src/muxi/formation/workflow/sops.py:85,Loaded {len(self.sops)} SOPs from {self.sop_dir},src/muxi/formation/workflow/sops.py,85
-ConversationEvents.SOP_MATCHED,INFO,src/muxi/formation/overlord/overlord.py:1006,Matched SOP '{relevant_sop['name']}' for request,src/muxi/formation/overlord/overlord.py,1006
-ConversationEvents.SOP_MATCHED,WARNING,src/muxi/formation/overlord/overlord.py:6650,Explicit SOP request '{sop_id}' could not be fulfilled,src/muxi/formation/overlord/overlord.py,6650
+ConversationEvents.SOP_MATCHED,INFO,src/muxi/formation/overlord/overlord.py:1002,Matched SOP '{relevant_sop['name']}' for request,src/muxi/formation/overlord/overlord.py,1002
+ConversationEvents.SOP_MATCHED,WARNING,src/muxi/formation/overlord/overlord.py:6642,Explicit SOP request '{sop_id}' could not be fulfilled,src/muxi/formation/overlord/overlord.py,6642
 ConversationEvents.WEBHOOK_FAILED,DEBUG,src/muxi/formation/background/webhook_manager.py:216,Webhook retry with exponential backoff,src/muxi/formation/background/webhook_manager.py,216
 ConversationEvents.WEBHOOK_FAILED,DEBUG,src/muxi/formation/background/webhook_manager.py:466,Webhook retry with exponential backoff,src/muxi/formation/background/webhook_manager.py,466
-ConversationEvents.WEBHOOK_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:5210,Webhook delivery failed for request {request_id},src/muxi/formation/overlord/overlord.py,5210
-ConversationEvents.WEBHOOK_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:5291,Webhook delivery failed for async request {request_id},src/muxi/formation/overlord/overlord.py,5291
-ConversationEvents.WEBHOOK_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:5220,"Request {request_id}: No webhook URL configured, skipping notification",src/muxi/formation/overlord/overlord.py,5220
-ConversationEvents.WEBHOOK_SENT,INFO,src/muxi/formation/overlord/overlord.py:5176,Starting webhook delivery for request {request_id},src/muxi/formation/overlord/overlord.py,5176
-ConversationEvents.WEBHOOK_SENT,INFO,src/muxi/formation/overlord/overlord.py:5199,Webhook delivered successfully for request {request_id},src/muxi/formation/overlord/overlord.py,5199
+ConversationEvents.WEBHOOK_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:5202,Webhook delivery failed for request {request_id},src/muxi/formation/overlord/overlord.py,5202
+ConversationEvents.WEBHOOK_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:5283,Webhook delivery failed for async request {request_id},src/muxi/formation/overlord/overlord.py,5283
+ConversationEvents.WEBHOOK_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:5212,"Request {request_id}: No webhook URL configured, skipping notification",src/muxi/formation/overlord/overlord.py,5212
+ConversationEvents.WEBHOOK_SENT,INFO,src/muxi/formation/overlord/overlord.py:5168,Starting webhook delivery for request {request_id},src/muxi/formation/overlord/overlord.py,5168
+ConversationEvents.WEBHOOK_SENT,INFO,src/muxi/formation/overlord/overlord.py:5191,Webhook delivered successfully for request {request_id},src/muxi/formation/overlord/overlord.py,5191
 ConversationEvents.WORKFLOW_ANALYSIS_FAILED,ERROR,src/muxi/formation/workflow/analyzer.py:103,"Workflow request analysis failed, using fallback",src/muxi/formation/workflow/analyzer.py,103
 ConversationEvents.WORKFLOW_ANALYSIS_FAILED,ERROR,src/muxi/formation/workflow/analyzer.py:421,"LLM-based workflow analysis failed, using fallback",src/muxi/formation/workflow/analyzer.py,421
 ConversationEvents.WORKFLOW_DECOMPOSITION_COMPLETED,INFO,src/muxi/formation/workflow/decomposer.py:91,Decomposed request into workflow {workflow_id} with {len(validated_workflow.tasks)} tasks,src/muxi/formation/workflow/decomposer.py,91
@@ -327,15 +328,15 @@ ConversationEvents.WORKFLOW_EXECUTION_STARTED,INFO,src/muxi/formation/workflow/e
 ConversationEvents.WORKFLOW_EXECUTION_STARTED,INFO,src/muxi/formation/workflow/executor.py:1784,Workflow {workflow_id} progress: {completed_tasks}/{total_tasks} tasks ({progress_info['progress_percentage']:.1f}%),src/muxi/formation/workflow/executor.py,1784
 ConversationEvents.WORKFLOW_TASK_ASSIGNED,INFO,src/muxi/formation/workflow/executor.py:753,Task '{task.name}' assigned to agent '{agent.agent_id}',src/muxi/formation/workflow/executor.py,753
 ConversationEvents.WORKFLOW_TASK_COMPLETED,INFO,src/muxi/formation/workflow/executor.py:804,Task '{task.name}' completed by agent '{task.assigned_agent_id}',src/muxi/formation/workflow/executor.py,804
-ErrorEvents.AGENT_CREATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:3226,Failed to add agent '{agent_id}' to overlord: {str(e)},src/muxi/formation/overlord/overlord.py,3226
+ErrorEvents.AGENT_CREATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:3218,Failed to add agent '{agent_id}' to overlord: {str(e)},src/muxi/formation/overlord/overlord.py,3218
 ErrorEvents.CIRCUIT_BREAKER_FALLBACK_FAILED,ERROR,src/muxi/formation/resilience/circuit_breaker.py:158,Circuit breaker '{self.name}' fallback execution failed: {str(e)},src/muxi/formation/resilience/circuit_breaker.py,158
 ErrorEvents.CONFIGURATION_ERROR,DEBUG,src/muxi/formation/overlord/overlord.py:562,Could not extract text model for extraction: {str(e)},src/muxi/formation/overlord/overlord.py,562
 ErrorEvents.CONFIGURATION_ERROR,ERROR,src/muxi/formation/formation.py:400,Failed to initialize SecretsManager: {str(e)},src/muxi/formation/formation.py,400
-ErrorEvents.CONFIGURATION_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:1182,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,1182
-ErrorEvents.CONFIGURATION_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:3271,Task decomposer has unexpected structure: {str(e)},src/muxi/formation/overlord/overlord.py,3271
-ErrorEvents.CONFIGURATION_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:3311,Workflow executor has unexpected structure: {str(e)},src/muxi/formation/overlord/overlord.py,3311
-ErrorEvents.CONFIGURATION_ERROR,ERROR,src/muxi/services/a2a/registry_client.py:447,Registry {registry_url} is unreachable (strict mode),src/muxi/services/a2a/registry_client.py,447
-ErrorEvents.CONFIGURATION_ERROR,ERROR,src/muxi/services/a2a/registry_client.py:506,Registry {registry_url} still unreachable after {retry_timeout_seconds}s,src/muxi/services/a2a/registry_client.py,506
+ErrorEvents.CONFIGURATION_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:1178,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,1178
+ErrorEvents.CONFIGURATION_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:3263,Task decomposer has unexpected structure: {str(e)},src/muxi/formation/overlord/overlord.py,3263
+ErrorEvents.CONFIGURATION_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:3303,Workflow executor has unexpected structure: {str(e)},src/muxi/formation/overlord/overlord.py,3303
+ErrorEvents.CONFIGURATION_ERROR,ERROR,src/muxi/services/a2a/registry_client.py:443,Registry {registry_url} is unreachable (strict mode),src/muxi/services/a2a/registry_client.py,443
+ErrorEvents.CONFIGURATION_ERROR,ERROR,src/muxi/services/a2a/registry_client.py:502,Registry {registry_url} still unreachable after {retry_timeout_seconds}s,src/muxi/services/a2a/registry_client.py,502
 ErrorEvents.CONFIGURATION_ERROR,ERROR,src/muxi/utils/run_formation.py:200,Failed to load formation configuration: {e},src/muxi/utils/run_formation.py,200
 ErrorEvents.CONFIGURATION_ERROR,WARNING,src/muxi/formation/formation.py:741,Failed to load agent file {agent_file}: {e},src/muxi/formation/formation.py,741
 ErrorEvents.CONFIGURATION_ERROR,WARNING,src/muxi/formation/formation.py:789,Failed to load A2A file {a2a_file}: {e},src/muxi/formation/formation.py,789
@@ -350,6 +351,7 @@ ErrorEvents.CONNECTION_TIMEOUT,WARNING,src/muxi/formation/workflow/executor.py:1
 ErrorEvents.DATABASE_EXTENSION_FAILED,WARNING,src/muxi/services/db.py:251,Failed to create pgvector extension (may not be needed),src/muxi/services/db.py,251
 ErrorEvents.DATABASE_EXTENSION_FAILED,WARNING,src/muxi/services/db.py:353,Failed to create pgvector extension for async engine (may not be needed),src/muxi/services/db.py,353
 ErrorEvents.DATABASE_EXTENSION_FAILED,WARNING,src/muxi/services/memory/long_term.py:275,Failed to create pgvector extension: {e},src/muxi/services/memory/long_term.py,275
+ErrorEvents.DATABASE_OPERATION_FAILED,ERROR,src/muxi/formation/overlord/chat_orchestrator.py:832,Long-term memory search failed: {str(e)},src/muxi/formation/overlord/chat_orchestrator.py,832
 ErrorEvents.DATABASE_OPERATION_FAILED,ERROR,src/muxi/services/scheduler/manager.py:237,Failed to create scheduled job: {e},src/muxi/services/scheduler/manager.py,237
 ErrorEvents.DATABASE_OPERATION_FAILED,ERROR,src/muxi/services/scheduler/manager.py:271,Failed to get active jobs: {e},src/muxi/services/scheduler/manager.py,271
 ErrorEvents.DATABASE_OPERATION_FAILED,ERROR,src/muxi/services/scheduler/manager.py:304,Failed to get user jobs: {e},src/muxi/services/scheduler/manager.py,304
@@ -372,8 +374,8 @@ ErrorEvents.DATABASE_OPERATION_FAILED,ERROR,src/muxi/services/scheduler/manager.
 ErrorEvents.DATABASE_OPERATION_FAILED,ERROR,src/muxi/services/scheduler/manager.py:1007,Failed to count active jobs: {e},src/muxi/services/scheduler/manager.py,1007
 ErrorEvents.DATABASE_OPERATION_FAILED,ERROR,src/muxi/services/scheduler/manager.py:1050,Failed to get active jobs batch: {e},src/muxi/services/scheduler/manager.py,1050
 ErrorEvents.DATABASE_OPERATION_FAILED,ERROR,src/muxi/services/scheduler/manager.py:1118,Failed to cleanup old jobs: {e},src/muxi/services/scheduler/manager.py,1118
-ErrorEvents.DATABASE_OPERATION_FAILED,WARNING,src/muxi/formation/formation.py:2760,Failed to dispose database engine: {db_error},src/muxi/formation/formation.py,2760
-ErrorEvents.DATABASE_OPERATION_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:3790,Failed to add content to long-term memory: {str(e)},src/muxi/formation/overlord/overlord.py,3790
+ErrorEvents.DATABASE_OPERATION_FAILED,WARNING,src/muxi/formation/formation.py:2753,Failed to dispose database engine: {db_error},src/muxi/formation/formation.py,2753
+ErrorEvents.DATABASE_OPERATION_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:3782,Failed to add content to long-term memory: {str(e)},src/muxi/formation/overlord/overlord.py,3782
 ErrorEvents.DATABASE_OPERATION_FAILED,WARNING,src/muxi/services/scheduler/manager.py:886,Failed to audit job action: {e},src/muxi/services/scheduler/manager.py,886
 ErrorEvents.DATABASE_TABLE_CREATION_FAILED,ERROR,src/muxi/services/db.py:408,Failed to create database tables: {e},src/muxi/services/db.py,408
 ErrorEvents.DATABASE_TABLE_CREATION_FAILED,ERROR,src/muxi/services/db.py:458,Failed to create database tables (async): {e},src/muxi/services/db.py,458
@@ -385,7 +387,7 @@ ErrorEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/documents/workfl
 ErrorEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/documents/workflow/cross_reference_manager.py:267,Failed to save document references to storage,src/muxi/formation/documents/workflow/cross_reference_manager.py,267
 ErrorEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/documents/workflow/cross_reference_manager.py:304,Failed to load document references from storage,src/muxi/formation/documents/workflow/cross_reference_manager.py,304
 ErrorEvents.FALLBACK_EXECUTION_FAILED,ERROR,src/muxi/formation/resilience/fallback_manager.py:78,Fallback execution failed for workflow '{workflow}': {str(fallback_error)},src/muxi/formation/resilience/fallback_manager.py,78
-ErrorEvents.GENERIC_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:4169,MarkItDown conversion failed for {filename}: {e},src/muxi/formation/overlord/overlord.py,4169
+ErrorEvents.GENERIC_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:4161,MarkItDown conversion failed for {filename}: {e},src/muxi/formation/overlord/overlord.py,4161
 ErrorEvents.INTERNAL_ERROR,DEBUG,src/muxi/services/llm/llm.py:316,"MIME type detection failed, using fallback",src/muxi/services/llm/llm.py,316
 ErrorEvents.INTERNAL_ERROR,DEBUG,src/muxi/services/llm/llm.py:709,API key set for provider {provider},src/muxi/services/llm/llm.py,709
 ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/agents/agent.py:425,Error in enhanced knowledge search: {str(e)},src/muxi/formation/agents/agent.py,425
@@ -410,18 +412,18 @@ ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/initialization.py:1157,Criti
 ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/memory/extraction_coordinator.py:121,Failed to extract data from conversation,src/muxi/formation/memory/extraction_coordinator.py,121
 ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/chat_orchestrator.py:697,Failed to store user message in buffer memory: {str(e)},src/muxi/formation/overlord/chat_orchestrator.py,697
 ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/chat_orchestrator.py:736,Failed to store assistant response in buffer memory: {str(e)},src/muxi/formation/overlord/chat_orchestrator.py,736
-ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/chat_orchestrator.py:1026,Failed to extract user information: {str(e)},src/muxi/formation/overlord/chat_orchestrator.py,1026
-ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:1673,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,1673
-ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:2555,Failed to initialize overlord routing model,src/muxi/formation/overlord/overlord.py,2555
-ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:3731,Coordinator call failed: {coord_error},src/muxi/formation/overlord/overlord.py,3731
-ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:5233,Error in async request {request_id}: {type(e).__name__}: {str(e)},src/muxi/formation/overlord/overlord.py,5233
-ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:5630,Failed to store credential: {str(e)},src/muxi/formation/overlord/overlord.py,5630
-ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:5788,Failed to process credential selection: {str(e)},src/muxi/formation/overlord/overlord.py,5788
-ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:6128,Failed to process workflow approval: {str(e)},src/muxi/formation/overlord/overlord.py,6128
-ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:6868,Failed to create scheduled job: {str(e)},src/muxi/formation/overlord/overlord.py,6868
-ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:7772,Failed to process workflow: {str(e)},src/muxi/formation/overlord/overlord.py,7772
-ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:9712,Failed to generate credential clarification: {str(e)},src/muxi/formation/overlord/overlord.py,9712
-ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:9820,Failed to process credential clarification response: {str(e)},src/muxi/formation/overlord/overlord.py,9820
+ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/chat_orchestrator.py:1027,Failed to extract user information: {str(e)},src/muxi/formation/overlord/chat_orchestrator.py,1027
+ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:1665,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,1665
+ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:2547,Failed to initialize overlord routing model,src/muxi/formation/overlord/overlord.py,2547
+ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:3723,Coordinator call failed: {coord_error},src/muxi/formation/overlord/overlord.py,3723
+ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:5225,Error in async request {request_id}: {type(e).__name__}: {str(e)},src/muxi/formation/overlord/overlord.py,5225
+ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:5622,Failed to store credential: {str(e)},src/muxi/formation/overlord/overlord.py,5622
+ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:5780,Failed to process credential selection: {str(e)},src/muxi/formation/overlord/overlord.py,5780
+ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:6120,Failed to process workflow approval: {str(e)},src/muxi/formation/overlord/overlord.py,6120
+ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:6860,Failed to create scheduled job: {str(e)},src/muxi/formation/overlord/overlord.py,6860
+ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:7764,Failed to process workflow: {str(e)},src/muxi/formation/overlord/overlord.py,7764
+ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:9704,Failed to generate credential clarification: {str(e)},src/muxi/formation/overlord/overlord.py,9704
+ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:9812,Failed to process credential clarification response: {str(e)},src/muxi/formation/overlord/overlord.py,9812
 ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/resilience/error_classifier.py:238,"Error classification failed, using fallback",src/muxi/formation/resilience/error_classifier.py,238
 ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/resilience/fallback_manager.py:269,Fallback cache cleanup failed: {str(cache_error)},src/muxi/formation/resilience/fallback_manager.py,269
 ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/resilience/recovery_strategist.py:219,"Recovery strategy selection failed, aborting workflow",src/muxi/formation/resilience/recovery_strategist.py,219
@@ -429,7 +431,7 @@ ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/server/middleware.py:89,API 
 ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/formation/workflow/executor.py:118,Error in workflow timeout monitor: {str(e)},src/muxi/formation/workflow/executor.py,118
 ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/services/a2a/client.py:101,Failed to initialize A2A SDK client: {e},src/muxi/services/a2a/client.py,101
 ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/services/a2a/client.py:446,Error closing httpx client: {e},src/muxi/services/a2a/client.py,446
-ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/services/a2a/registry_client.py:534,Failed to check registries with policy: {str(e)},src/muxi/services/a2a/registry_client.py,534
+ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/services/a2a/registry_client.py:530,Failed to check registries with policy: {str(e)},src/muxi/services/a2a/registry_client.py,530
 ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/services/intent/service.py:130,Intent detection failed: {str(e)},src/muxi/services/intent/service.py,130
 ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/services/llm/llm.py:297,File security validation failed: {str(e)},src/muxi/services/llm/llm.py,297
 ErrorEvents.INTERNAL_ERROR,ERROR,src/muxi/services/llm/llm.py:648,NO DESCRIPTION,src/muxi/services/llm/llm.py,648
@@ -480,29 +482,29 @@ ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/initialization.py:995,Fail
 ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/initialization.py:1009,Failed to initialize default embedding model: {str(e2)},src/muxi/formation/initialization.py,1009
 ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/initialization.py:1020,Failed to initialize default embedding model: {str(e)},src/muxi/formation/initialization.py,1020
 ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/initialization.py:1049,Failed to interpolate persistent memory secrets: {str(e)},src/muxi/formation/initialization.py,1049
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:1023,Failed to find relevant SOP: {str(e)},src/muxi/formation/overlord/overlord.py,1023
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:1093,SOP indexing failed (will retry on first search): {e},src/muxi/formation/overlord/overlord.py,1093
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:1239,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,1239
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:1342,Failed to create clarification LLM: {e},src/muxi/formation/overlord/overlord.py,1342
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:1944,"Failed to load persona file, using fallback",src/muxi/formation/overlord/overlord.py,1944
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:2233,Failed to apply persona to response,src/muxi/formation/overlord/overlord.py,2233
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:2261,No formation instance found during buffer memory initialization,src/muxi/formation/overlord/overlord.py,2261
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:2282,No formation instance found during persistent memory initialization,src/muxi/formation/overlord/overlord.py,2282
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:2772,Failed to register collection '{collection_name}': {str(e)},src/muxi/formation/overlord/overlord.py,2772
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:2806,Failed to initialize A2A ClientFactory: {str(e)},src/muxi/formation/overlord/overlord.py,2806
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:3284,Unexpected error updating task decomposer for agent '{agent_id}': {str(e)},src/muxi/formation/overlord/overlord.py,3284
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:3324,Unexpected error updating workflow executor for agent '{agent_id}': {str(e)},src/muxi/formation/overlord/overlord.py,3324
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:3403,Failed to deregister agent {agent_id} from external registry: {str(e)},src/muxi/formation/overlord/overlord.py,3403
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:3490,Error stopping scheduler service: {e},src/muxi/formation/overlord/overlord.py,3490
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:5351,Failed to get pending clarification: {e},src/muxi/formation/overlord/overlord.py,5351
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:5867,Failed to process clarification response: {e},src/muxi/formation/overlord/overlord.py,5867
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:6387,Unified clarification failed: {e},src/muxi/formation/overlord/overlord.py,6387
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:6393,Clarification analysis failed: {e},src/muxi/formation/overlord/overlord.py,6393
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:6778,Failed to analyze request for workflow: {type(e).__name__}: {str(e)},src/muxi/formation/overlord/overlord.py,6778
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:7217,Failed to handle credential error with unified system: {unified_error},src/muxi/formation/overlord/overlord.py,7217
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:9576,Failed to cache credential selection after clarification,src/muxi/formation/overlord/overlord.py,9576
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:10155,"Failed to serialize properties to JSON, using string representation",src/muxi/formation/overlord/overlord.py,10155
-ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/services/a2a/registry_client.py:1098,Failed to parse agent card from registry,src/muxi/services/a2a/registry_client.py,1098
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:1019,Failed to find relevant SOP: {str(e)},src/muxi/formation/overlord/overlord.py,1019
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:1089,SOP indexing failed (will retry on first search): {e},src/muxi/formation/overlord/overlord.py,1089
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:1231,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,1231
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:1334,Failed to create clarification LLM: {e},src/muxi/formation/overlord/overlord.py,1334
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:1936,"Failed to load persona file, using fallback",src/muxi/formation/overlord/overlord.py,1936
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:2225,Failed to apply persona to response,src/muxi/formation/overlord/overlord.py,2225
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:2253,No formation instance found during buffer memory initialization,src/muxi/formation/overlord/overlord.py,2253
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:2274,No formation instance found during persistent memory initialization,src/muxi/formation/overlord/overlord.py,2274
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:2764,Failed to register collection '{collection_name}': {str(e)},src/muxi/formation/overlord/overlord.py,2764
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:2798,Failed to initialize A2A ClientFactory: {str(e)},src/muxi/formation/overlord/overlord.py,2798
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:3276,Unexpected error updating task decomposer for agent '{agent_id}': {str(e)},src/muxi/formation/overlord/overlord.py,3276
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:3316,Unexpected error updating workflow executor for agent '{agent_id}': {str(e)},src/muxi/formation/overlord/overlord.py,3316
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:3395,Failed to deregister agent {agent_id} from external registry: {str(e)},src/muxi/formation/overlord/overlord.py,3395
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:3482,Error stopping scheduler service: {e},src/muxi/formation/overlord/overlord.py,3482
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:5343,Failed to get pending clarification: {e},src/muxi/formation/overlord/overlord.py,5343
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:5859,Failed to process clarification response: {e},src/muxi/formation/overlord/overlord.py,5859
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:6379,Unified clarification failed: {e},src/muxi/formation/overlord/overlord.py,6379
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:6385,Clarification analysis failed: {e},src/muxi/formation/overlord/overlord.py,6385
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:6770,Failed to analyze request for workflow: {type(e).__name__}: {str(e)},src/muxi/formation/overlord/overlord.py,6770
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:7209,Failed to handle credential error with unified system: {unified_error},src/muxi/formation/overlord/overlord.py,7209
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:9568,Failed to cache credential selection after clarification,src/muxi/formation/overlord/overlord.py,9568
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/formation/overlord/overlord.py:10147,"Failed to serialize properties to JSON, using string representation",src/muxi/formation/overlord/overlord.py,10147
+ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/services/a2a/registry_client.py:1094,Failed to parse agent card from registry,src/muxi/services/a2a/registry_client.py,1094
 ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/services/llm/llm.py:277,File size {file_size} exceeds limit,src/muxi/services/llm/llm.py,277
 ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/services/llm/llm.py:287,File blocked due to dangerous extension,src/muxi/services/llm/llm.py,287
 ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/services/llm/llm.py:674,NO DESCRIPTION,src/muxi/services/llm/llm.py,674
@@ -547,12 +549,12 @@ ErrorEvents.INTERNAL_ERROR,WARNING,src/muxi/services/scheduler/parser.py:1316,Us
 ErrorEvents.LLM_INITIALIZATION_FAILED,ERROR,src/muxi/services/memory/long_term.py:217,Failed to create LLM instance for embeddings: {e},src/muxi/services/memory/long_term.py,217
 ErrorEvents.LLM_INITIALIZATION_FAILED,WARNING,src/muxi/services/memory/working.py:217,Failed to create LLM instance for embeddings: {e},src/muxi/services/memory/working.py,217
 ErrorEvents.LLM_INITIALIZATION_FAILED,WARNING,src/muxi/services/scheduler/rewriter.py:79,Failed to initialize LLM for prompt rewriting,src/muxi/services/scheduler/rewriter.py,79
-ErrorEvents.MCP_SERVER_DISCONNECTION_FAILED,WARNING,src/muxi/formation/formation.py:2742,Failed to disconnect MCP servers: {mcp_error},src/muxi/formation/formation.py,2742
-ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,ERROR,src/muxi/formation/formation.py:4438,Built-in MCP registration failed: {e},src/muxi/formation/formation.py,4438
-ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,WARNING,src/muxi/formation/formation.py:4430,Built-in MCP registration timed out after {timeout} seconds,src/muxi/formation/formation.py,4430
+ErrorEvents.MCP_SERVER_DISCONNECTION_FAILED,WARNING,src/muxi/formation/formation.py:2735,Failed to disconnect MCP servers: {mcp_error},src/muxi/formation/formation.py,2735
+ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,ERROR,src/muxi/formation/formation.py:4431,Built-in MCP registration failed: {e},src/muxi/formation/formation.py,4431
+ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,WARNING,src/muxi/formation/formation.py:4423,Built-in MCP registration timed out after {timeout} seconds,src/muxi/formation/formation.py,4423
 ErrorEvents.NETWORK_ERROR,ERROR,src/muxi/utils/run_formation.py:144,MCP connection error while loading formation: {e},src/muxi/utils/run_formation.py,144
 ErrorEvents.PROCESSING_ERROR,WARNING,src/muxi/formation/overlord/chat_orchestrator.py:618,Failed to extract content for storage: {str(e)},src/muxi/formation/overlord/chat_orchestrator.py,618
-ErrorEvents.RESOURCE_NOT_FOUND,ERROR,src/muxi/formation/overlord/overlord.py:9864,Failed to load SOP resource: {sop_id},src/muxi/formation/overlord/overlord.py,9864
+ErrorEvents.RESOURCE_NOT_FOUND,ERROR,src/muxi/formation/overlord/overlord.py:9856,Failed to load SOP resource: {sop_id},src/muxi/formation/overlord/overlord.py,9856
 ErrorEvents.RESOURCE_NOT_FOUND,ERROR,src/muxi/utils/run_formation.py:102,Formation configuration not found: {e},src/muxi/utils/run_formation.py,102
 ErrorEvents.RESOURCE_NOT_FOUND,WARNING,src/muxi/formation/artifacts/processor.py:184,File does not exist: {file_path},src/muxi/formation/artifacts/processor.py,184
 ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/formation/agents/knowledge/handler.py:483,Failed to add knowledge source,src/muxi/formation/agents/knowledge/handler.py,483
@@ -567,13 +569,13 @@ ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:376,Fail
 ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:400,Failed to get secret {secret_name}: {str(e)},src/muxi/services/a2a/auth/inbound.py,400
 ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:432,Failed to get secret {secret_name}: {str(e)},src/muxi/services/a2a/auth/inbound.py,432
 ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:509,Failed to add client credential for {client_id}: {str(e)},src/muxi/services/a2a/auth/inbound.py,509
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:616,A2A inbound authentication error: {str(e)},src/muxi/services/a2a/auth/inbound.py,616
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:654,API key authentication error: {str(e)},src/muxi/services/a2a/auth/inbound.py,654
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:697,Bearer token authentication error: {str(e)},src/muxi/services/a2a/auth/inbound.py,697
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:749,Basic authentication error: {str(e)},src/muxi/services/a2a/auth/inbound.py,749
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:788,Failed to get auth requirements: {str(e)},src/muxi/services/a2a/auth/inbound.py,788
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:829,Failed to list clients: {str(e)},src/muxi/services/a2a/auth/inbound.py,829
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:886,Failed to remove client {client_id}: {str(e)},src/muxi/services/a2a/auth/inbound.py,886
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:612,A2A inbound authentication error: {str(e)},src/muxi/services/a2a/auth/inbound.py,612
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:650,API key authentication error: {str(e)},src/muxi/services/a2a/auth/inbound.py,650
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:693,Bearer token authentication error: {str(e)},src/muxi/services/a2a/auth/inbound.py,693
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:745,Basic authentication error: {str(e)},src/muxi/services/a2a/auth/inbound.py,745
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:784,Failed to get auth requirements: {str(e)},src/muxi/services/a2a/auth/inbound.py,784
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:825,Failed to list clients: {str(e)},src/muxi/services/a2a/auth/inbound.py,825
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/inbound.py:882,Failed to remove client {client_id}: {str(e)},src/muxi/services/a2a/auth/inbound.py,882
 ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/auth/outbound.py:343,Failed to load single A2A credential,src/muxi/services/a2a/auth/outbound.py,343
 ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/cache_manager.py:70,NO DESCRIPTION,src/muxi/services/a2a/cache_manager.py,70
 ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/cache_manager.py:207,NO DESCRIPTION,src/muxi/services/a2a/cache_manager.py,207
@@ -598,13 +600,13 @@ ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:118,F
 ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:156,Failed to close A2A Registry Client (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,156
 ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:210,Failed to add registry (SDK) {registry_url}: {str(e)},src/muxi/services/a2a/registry_client.py,210
 ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:262,Failed to remove registry (SDK) {registry_url}: {str(e)},src/muxi/services/a2a/registry_client.py,262
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:601,Failed to perform health check on all registries (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,601
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:837,Failed to register agent {agent_card.name} with all registries (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,837
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:994,Failed to deregister agent {agent_url} (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,994
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:1209,Failed to discover agents from all registries (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,1209
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:1241,Failed to get registry status (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,1241
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:1268,Failed to get registered agents (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,1268
-ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:1312,Failed to get registry client stats (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,1312
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:597,Failed to perform health check on all registries (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,597
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:833,Failed to register agent {agent_card.name} with all registries (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,833
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:990,Failed to deregister agent {agent_url} (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,990
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:1205,Failed to discover agents from all registries (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,1205
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:1237,Failed to get registry status (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,1237
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:1264,Failed to get registered agents (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,1264
+ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/registry_client.py:1308,Failed to get registry client stats (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,1308
 ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/server.py:289,Failed to create SDK A2A Formation Server app: {str(e)},src/muxi/services/a2a/server.py,289
 ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/a2a/server.py:752,Error stopping SDK A2A Formation Server: {str(e)},src/muxi/services/a2a/server.py,752
 ErrorEvents.RETRY_ATTEMPTED,ERROR,src/muxi/services/llm/service.py:435,Chat completion failed for {model}: {str(e)},src/muxi/services/llm/service.py,435
@@ -645,21 +647,23 @@ ErrorEvents.SERVICE_UNAVAILABLE,ERROR,src/muxi/utils/run_formation.py:172,Overlo
 ErrorEvents.SERVICE_UNAVAILABLE,WARNING,src/muxi/services/scheduler/manager.py:1305,LLM service not available for prompt comparison,src/muxi/services/scheduler/manager.py,1305
 ErrorEvents.SERVICE_UNAVAILABLE,WARNING,src/muxi/services/scheduler/rewriter.py:178,"LLM unavailable for prompt rewriting, using original prompt",src/muxi/services/scheduler/rewriter.py,178
 ErrorEvents.SERVICE_UNAVAILABLE,WARNING,src/muxi/services/scheduler/rewriter.py:266,"LLM unavailable for formation enhancement, returning original prompt",src/muxi/services/scheduler/rewriter.py,266
-ErrorEvents.TIMEOUT_ERROR,WARNING,src/muxi/formation/formation.py:2810,Agent deregistration timed out after {timeout} seconds,src/muxi/formation/formation.py,2810
-ErrorEvents.TIMEOUT_ERROR,WARNING,src/muxi/formation/formation.py:2862,Operation timed out after {timeout} seconds,src/muxi/formation/formation.py,2862
+ErrorEvents.TIMEOUT_ERROR,WARNING,src/muxi/formation/formation.py:2803,Agent deregistration timed out after {timeout} seconds,src/muxi/formation/formation.py,2803
+ErrorEvents.TIMEOUT_ERROR,WARNING,src/muxi/formation/formation.py:2855,Operation timed out after {timeout} seconds,src/muxi/formation/formation.py,2855
 ErrorEvents.TOOL_CALL_ERROR,ERROR,src/muxi/services/mcp/reconnect_handler.py:215,Failed to execute tool '{tool_name}' on server '{server_name}' after retries,src/muxi/services/mcp/reconnect_handler.py,215
 ErrorEvents.TOOL_PARSE_ERROR,WARNING,src/muxi/services/mcp/parser.py:216,Failed to parse JSON tool call block from LLM response,src/muxi/services/mcp/parser.py,216
 ErrorEvents.TOOL_PARSE_ERROR,WARNING,src/muxi/services/mcp/parser.py:295,Failed to parse function-style tool call from LLM response,src/muxi/services/mcp/parser.py,295
 ErrorEvents.TOOL_PARSE_ERROR,WARNING,src/muxi/services/mcp/parser.py:335,Failed to parse parameters for explicit tool call '{tool_name}',src/muxi/services/mcp/parser.py,335
 ErrorEvents.TOOL_PARSE_ERROR,WARNING,src/muxi/services/mcp/parser.py:357,Failed to parse explicit tool call from LLM response,src/muxi/services/mcp/parser.py,357
-ErrorEvents.UNEXPECTED_ERROR,WARNING,src/muxi/formation/formation.py:2817,Failed to deregister agents: {e},src/muxi/formation/formation.py,2817
-ErrorEvents.UNEXPECTED_ERROR,WARNING,src/muxi/formation/formation.py:2869,Operation failed: {e},src/muxi/formation/formation.py,2869
+ErrorEvents.UNEXPECTED_ERROR,WARNING,src/muxi/formation/formation.py:2810,Failed to deregister agents: {e},src/muxi/formation/formation.py,2810
+ErrorEvents.UNEXPECTED_ERROR,WARNING,src/muxi/formation/formation.py:2862,Operation failed: {e},src/muxi/formation/formation.py,2862
 ErrorEvents.VALIDATION_ERROR,ERROR,src/muxi/formation/agents/agent.py:1191,NO DESCRIPTION,src/muxi/formation/agents/agent.py,1191
 ErrorEvents.VALIDATION_ERROR,ERROR,src/muxi/formation/workflow/decomposer.py:1171,Workflow missing plan preview - raising ValueError,src/muxi/formation/workflow/decomposer.py,1171
 ErrorEvents.VALIDATION_FAILED,ERROR,src/muxi/formation/background/time_estimator.py:93,Time estimation failed: {type(e).__name__},src/muxi/formation/background/time_estimator.py,93
 ErrorEvents.VALIDATION_FAILED,ERROR,src/muxi/formation/background/time_estimator.py:154,"Historical time estimation failed: {type(e).__name__}, using base estimate",src/muxi/formation/background/time_estimator.py,154
-ErrorEvents.VALIDATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:9780,Invalid credential data structure for {service},src/muxi/formation/overlord/overlord.py,9780
+ErrorEvents.VALIDATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:9772,Invalid credential data structure for {service},src/muxi/formation/overlord/overlord.py,9772
 ErrorEvents.VALIDATION_FAILED,ERROR,src/muxi/utils/run_formation.py:116,Formation configuration validation failed: {e},src/muxi/utils/run_formation.py,116
+ErrorEvents.VALIDATION_FAILED,WARNING,src/muxi/utils/user_resolution.py:94,NO DESCRIPTION,src/muxi/utils/user_resolution.py,94
+ErrorEvents.VALIDATION_FAILED,WARNING,src/muxi/utils/user_resolution.py:304,NO DESCRIPTION,src/muxi/utils/user_resolution.py,304
 ErrorEvents.WARNING,DEBUG,src/muxi/formation/artifacts/extractor.py:270,Could not clean up temporary file {file_path}: {e},src/muxi/formation/artifacts/extractor.py,270
 ErrorEvents.WARNING,WARNING,src/muxi/formation/agents/knowledge/base.py:202,Failed to initialize MarkItDown,src/muxi/formation/agents/knowledge/base.py,202
 ErrorEvents.WARNING,WARNING,src/muxi/formation/agents/knowledge/base.py:317,Knowledge source path does not exist,src/muxi/formation/agents/knowledge/base.py,317
@@ -676,11 +680,11 @@ ErrorEvents.WARNING,WARNING,src/muxi/formation/memory/buffer_manager.py:176,Buff
 ErrorEvents.WARNING,WARNING,src/muxi/formation/memory/buffer_manager.py:212,Buffer memory clear failed,src/muxi/formation/memory/buffer_manager.py,212
 ErrorEvents.WARNING,WARNING,src/muxi/formation/memory/persistent_manager.py:297,Long-term memory retrieval failed,src/muxi/formation/memory/persistent_manager.py,297
 ErrorEvents.WARNING,WARNING,src/muxi/formation/memory/persistent_manager.py:344,Long-term memory clear failed,src/muxi/formation/memory/persistent_manager.py,344
-ErrorEvents.WARNING,WARNING,src/muxi/formation/overlord/overlord.py:961,Failed to initialize SOP system: {e},src/muxi/formation/overlord/overlord.py,961
-ErrorEvents.WARNING,WARNING,src/muxi/formation/overlord/overlord.py:1925,"Persona file not found, using fallback persona",src/muxi/formation/overlord/overlord.py,1925
-ErrorEvents.WARNING,WARNING,src/muxi/formation/overlord/overlord.py:2364,"Failed to interpolate API key from secrets, using original value",src/muxi/formation/overlord/overlord.py,2364
-ErrorEvents.WARNING,WARNING,src/muxi/formation/overlord/overlord.py:2899,"Failed to interpolate API key for agent model, using original value",src/muxi/formation/overlord/overlord.py,2899
-ErrorEvents.WARNING,WARNING,src/muxi/formation/overlord/overlord.py:3206,Failed to rollback workflow components for agent '{agent_id}',src/muxi/formation/overlord/overlord.py,3206
+ErrorEvents.WARNING,WARNING,src/muxi/formation/overlord/overlord.py:957,Failed to initialize SOP system: {e},src/muxi/formation/overlord/overlord.py,957
+ErrorEvents.WARNING,WARNING,src/muxi/formation/overlord/overlord.py:1917,"Persona file not found, using fallback persona",src/muxi/formation/overlord/overlord.py,1917
+ErrorEvents.WARNING,WARNING,src/muxi/formation/overlord/overlord.py:2356,"Failed to interpolate API key from secrets, using original value",src/muxi/formation/overlord/overlord.py,2356
+ErrorEvents.WARNING,WARNING,src/muxi/formation/overlord/overlord.py:2891,"Failed to interpolate API key for agent model, using original value",src/muxi/formation/overlord/overlord.py,2891
+ErrorEvents.WARNING,WARNING,src/muxi/formation/overlord/overlord.py:3198,Failed to rollback workflow components for agent '{agent_id}',src/muxi/formation/overlord/overlord.py,3198
 ErrorEvents.WARNING,WARNING,src/muxi/formation/workflow/sops.py:140,Failed to parse YAML front matter in {md_file.name},src/muxi/formation/workflow/sops.py,140
 ErrorEvents.WARNING,WARNING,src/muxi/formation/workflow/sops.py:156,Unexpected error parsing {md_file.name},src/muxi/formation/workflow/sops.py,156
 ErrorEvents.WARNING,WARNING,src/muxi/formation/workflow/sops.py:266,Failed to load SOP embeddings cache - will regenerate,src/muxi/formation/workflow/sops.py,266
@@ -699,71 +703,57 @@ ErrorEvents.WORKFLOW_EXECUTION_FAILED,ERROR,src/muxi/formation/workflow/executor
 ErrorEvents.WORKFLOW_EXECUTION_FAILED,ERROR,src/muxi/formation/workflow/executor.py:382,Workflow {workflow.id} failed during streaming: {str(e)},src/muxi/formation/workflow/executor.py,382
 ErrorEvents.WORKFLOW_EXECUTION_FAILED,ERROR,src/muxi/formation/workflow/executor.py:854,Task '{task.name}' execution failed,src/muxi/formation/workflow/executor.py,854
 ErrorEvents.WORKFLOW_EXECUTION_FAILED,ERROR,src/muxi/formation/workflow/executor.py:1296,Failed to execute task '{task.name}' with agent '{agent.agent_id}',src/muxi/formation/workflow/executor.py,1296
-STRING:MEMORY_WORKING_LOOKUP,MALFORMED,src/muxi/services/memory/sqlite.py:730,Retrieved {len(results)} recent memories with orders: {orders[:5]},src/muxi/services/memory/sqlite.py,730
-STRING:memory.long_term.search_failed,ERROR,src/muxi/formation/overlord/chat_orchestrator.py:832,Long-term memory search failed: {str(e)},src/muxi/formation/overlord/chat_orchestrator.py,832
-STRING:memory_extractor_duplicate_skipped,DEBUG,src/muxi/services/memory/extractor.py:513,NO DESCRIPTION,src/muxi/services/memory/extractor.py,513
-STRING:memory_extractor_similar_stored,DEBUG,src/muxi/services/memory/extractor.py:529,NO DESCRIPTION,src/muxi/services/memory/extractor.py,529
-STRING:service.initialized,INFO,src/muxi/formation/overlord/overlord.py:757,Clarification system initialized with unified components,src/muxi/formation/overlord/overlord.py,757
-STRING:service.started,INFO,src/muxi/formation/overlord/overlord.py:1335,Created LLM for clarification: {text_config['model']},src/muxi/formation/overlord/overlord.py,1335
-STRING:service.updated,INFO,src/muxi/formation/overlord/overlord.py:1352,Clarification system updated with actual services,src/muxi/formation/overlord/overlord.py,1352
-STRING:user_identifier.associated,INFO,src/muxi/utils/user_resolution.py:351,NO DESCRIPTION,src/muxi/utils/user_resolution.py,351
-STRING:user_identifier.association_conflict,WARNING,src/muxi/utils/user_resolution.py:302,NO DESCRIPTION,src/muxi/utils/user_resolution.py,302
-STRING:user_identifier.cache_corrupted,WARNING,src/muxi/utils/user_resolution.py:94,NO DESCRIPTION,src/muxi/utils/user_resolution.py,94
-STRING:user_identifier.cache_hit,DEBUG,src/muxi/utils/user_resolution.py:81,NO DESCRIPTION,src/muxi/utils/user_resolution.py,81
-STRING:user_identifier.cache_miss,DEBUG,src/muxi/utils/user_resolution.py:106,NO DESCRIPTION,src/muxi/utils/user_resolution.py,106
-STRING:user_identifier.resolved,INFO,src/muxi/utils/user_resolution.py:132,NO DESCRIPTION,src/muxi/utils/user_resolution.py,132
-STRING:user_identifier.resolved,INFO,src/muxi/utils/user_resolution.py:162,NO DESCRIPTION,src/muxi/utils/user_resolution.py,162
 ServerEvents.REQUEST_COMPLETED,INFO,src/muxi/formation/server/middleware.py:169,API request completed: {response.status_code},src/muxi/formation/server/middleware.py,169
-ServerEvents.REQUEST_RECEIVED,INFO,src/muxi/formation/overlord/overlord.py:6601,"Request analyzer returned: scheduling={getattr(analysis, 'is_scheduling_request', 'N/A')}",src/muxi/formation/overlord/overlord.py,6601
-ServerEvents.REQUEST_RECEIVED,INFO,src/muxi/formation/overlord/overlord.py:6792,"Checking scheduler routing - analysis: {analysis is not None}, scheduler: {self.scheduler_service is not None}",src/muxi/formation/overlord/overlord.py,6792
-ServerEvents.REQUEST_RECEIVED,INFO,src/muxi/formation/overlord/overlord.py:6813,Routing to scheduler service for scheduling request,src/muxi/formation/overlord/overlord.py,6813
+ServerEvents.REQUEST_RECEIVED,INFO,src/muxi/formation/overlord/overlord.py:6593,"Request analyzer returned: scheduling={getattr(analysis, 'is_scheduling_request', 'N/A')}",src/muxi/formation/overlord/overlord.py,6593
+ServerEvents.REQUEST_RECEIVED,INFO,src/muxi/formation/overlord/overlord.py:6784,"Checking scheduler routing - analysis: {analysis is not None}, scheduler: {self.scheduler_service is not None}",src/muxi/formation/overlord/overlord.py,6784
+ServerEvents.REQUEST_RECEIVED,INFO,src/muxi/formation/overlord/overlord.py:6805,Routing to scheduler service for scheduling request,src/muxi/formation/overlord/overlord.py,6805
 ServerEvents.REQUEST_RECEIVED,INFO,src/muxi/formation/server/middleware.py:141,API request received: {request.method} {request.url.path},src/muxi/formation/server/middleware.py,141
-ServerEvents.SERVER_STARTED,DEBUG,src/muxi/formation/overlord/overlord.py:6468,DEBUG: About to evaluate workflow conditions,src/muxi/formation/overlord/overlord.py,6468
-ServerEvents.SERVER_STARTED,DEBUG,src/muxi/formation/overlord/overlord.py:6485,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,6485
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:2587,Updated request_analyzer LLM: {self.request_analyzer.llm is not None},src/muxi/formation/overlord/overlord.py,2587
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:2630,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,2630
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:5470,"_process_sync_chat ENTRY: agent={agent_name}, session={session_id}",src/muxi/formation/overlord/overlord.py,5470
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:5927,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,5927
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:5947,"Before recalc: use_async={use_async}, webhook_url={webhook_url}",src/muxi/formation/overlord/overlord.py,5947
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:5972,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,5972
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:5989,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,5989
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:6006,Executing workflow ASYNCHRONOUSLY,src/muxi/formation/overlord/overlord.py,6006
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:6025,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,6025
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:6691,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,6691
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:6735,Skipping workflow for non-actionable message despite threshold,src/muxi/formation/overlord/overlord.py,6735
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:6752,Skipping workflow for simple question with low threshold,src/muxi/formation/overlord/overlord.py,6752
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:6850,Scheduled job created successfully,src/muxi/formation/overlord/overlord.py,6850
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7589,Starting task decomposition (LLM: {self.task_decomposer.llm is not None}),src/muxi/formation/overlord/overlord.py,7589
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7607,Task decomposition complete: {len(workflow.tasks) if workflow else 0} tasks,src/muxi/formation/overlord/overlord.py,7607
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7652,About to call workflow_manager.track_workflow,src/muxi/formation/overlord/overlord.py,7652
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7662,workflow_manager.track_workflow completed successfully,src/muxi/formation/overlord/overlord.py,7662
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7676,Routing to workflow approval handler,src/muxi/formation/overlord/overlord.py,7676
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7693,Executing workflow without approval,src/muxi/formation/overlord/overlord.py,7693
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7703,About to call _execute_workflow_async,src/muxi/formation/overlord/overlord.py,7703
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7720,About to call _execute_workflow,src/muxi/formation/overlord/overlord.py,7720
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7739,_execute_workflow completed successfully,src/muxi/formation/overlord/overlord.py,7739
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7809,Entered _handle_workflow_approval method,src/muxi/formation/overlord/overlord.py,7809
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7821,Validation completed successfully,src/muxi/formation/overlord/overlord.py,7821
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7832,Workflow stored for approval,src/muxi/formation/overlord/overlord.py,7832
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7840,About to call ApprovalManager.present_plan_for_approval,src/muxi/formation/overlord/overlord.py,7840
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7850,ApprovalManager.present_plan_for_approval completed successfully,src/muxi/formation/overlord/overlord.py,7850
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7881,About to return MuxiResponse with approval message,src/muxi/formation/overlord/overlord.py,7881
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7904,_handle_workflow_approval completed successfully,src/muxi/formation/overlord/overlord.py,7904
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7998,Async execution will use webhook URL: {webhook_url},src/muxi/formation/overlord/overlord.py,7998
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:8058,Starting background execution for request {request_id},src/muxi/formation/overlord/overlord.py,8058
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:8098,"Background execution completed for request {request_id}, sending webhook",src/muxi/formation/overlord/overlord.py,8098
-ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:8135,Webhook sent successfully for request {request_id},src/muxi/formation/overlord/overlord.py,8135
+ServerEvents.SERVER_STARTED,DEBUG,src/muxi/formation/overlord/overlord.py:6460,DEBUG: About to evaluate workflow conditions,src/muxi/formation/overlord/overlord.py,6460
+ServerEvents.SERVER_STARTED,DEBUG,src/muxi/formation/overlord/overlord.py:6477,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,6477
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:2579,Updated request_analyzer LLM: {self.request_analyzer.llm is not None},src/muxi/formation/overlord/overlord.py,2579
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:2622,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,2622
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:5462,"_process_sync_chat ENTRY: agent={agent_name}, session={session_id}",src/muxi/formation/overlord/overlord.py,5462
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:5919,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,5919
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:5939,"Before recalc: use_async={use_async}, webhook_url={webhook_url}",src/muxi/formation/overlord/overlord.py,5939
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:5964,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,5964
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:5981,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,5981
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:5998,Executing workflow ASYNCHRONOUSLY,src/muxi/formation/overlord/overlord.py,5998
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:6017,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,6017
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:6683,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,6683
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:6727,Skipping workflow for non-actionable message despite threshold,src/muxi/formation/overlord/overlord.py,6727
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:6744,Skipping workflow for simple question with low threshold,src/muxi/formation/overlord/overlord.py,6744
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:6842,Scheduled job created successfully,src/muxi/formation/overlord/overlord.py,6842
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7581,Starting task decomposition (LLM: {self.task_decomposer.llm is not None}),src/muxi/formation/overlord/overlord.py,7581
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7599,Task decomposition complete: {len(workflow.tasks) if workflow else 0} tasks,src/muxi/formation/overlord/overlord.py,7599
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7644,About to call workflow_manager.track_workflow,src/muxi/formation/overlord/overlord.py,7644
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7654,workflow_manager.track_workflow completed successfully,src/muxi/formation/overlord/overlord.py,7654
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7668,Routing to workflow approval handler,src/muxi/formation/overlord/overlord.py,7668
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7685,Executing workflow without approval,src/muxi/formation/overlord/overlord.py,7685
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7695,About to call _execute_workflow_async,src/muxi/formation/overlord/overlord.py,7695
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7712,About to call _execute_workflow,src/muxi/formation/overlord/overlord.py,7712
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7731,_execute_workflow completed successfully,src/muxi/formation/overlord/overlord.py,7731
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7801,Entered _handle_workflow_approval method,src/muxi/formation/overlord/overlord.py,7801
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7813,Validation completed successfully,src/muxi/formation/overlord/overlord.py,7813
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7824,Workflow stored for approval,src/muxi/formation/overlord/overlord.py,7824
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7832,About to call ApprovalManager.present_plan_for_approval,src/muxi/formation/overlord/overlord.py,7832
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7842,ApprovalManager.present_plan_for_approval completed successfully,src/muxi/formation/overlord/overlord.py,7842
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7873,About to return MuxiResponse with approval message,src/muxi/formation/overlord/overlord.py,7873
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7896,_handle_workflow_approval completed successfully,src/muxi/formation/overlord/overlord.py,7896
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:7990,Async execution will use webhook URL: {webhook_url},src/muxi/formation/overlord/overlord.py,7990
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:8050,Starting background execution for request {request_id},src/muxi/formation/overlord/overlord.py,8050
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:8090,"Background execution completed for request {request_id}, sending webhook",src/muxi/formation/overlord/overlord.py,8090
+ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:8127,Webhook sent successfully for request {request_id},src/muxi/formation/overlord/overlord.py,8127
 ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/server/server.py:154,Formation server started successfully,src/muxi/formation/server/server.py,154
 ServerEvents.SERVER_STARTED,INFO,src/muxi/formation/server/server.py:166,Formation API server started on http://{self.host}:{self.port},src/muxi/formation/server/server.py,166
 ServerEvents.SERVER_STARTED,INFO,src/muxi/utils/run_formation.py:77,Starting formation server...,src/muxi/utils/run_formation.py,77
-SystemEvents.A2A_AGENT_DEREGISTERED,INFO,src/muxi/formation/formation.py:2791,Starting agent deregistration from external registry,src/muxi/formation/formation.py,2791
+SystemEvents.A2A_AGENT_DEREGISTERED,INFO,src/muxi/formation/formation.py:2784,Starting agent deregistration from external registry,src/muxi/formation/formation.py,2784
 SystemEvents.A2A_AGENT_DEREGISTERED,INFO,src/muxi/formation/overlord/a2a_coordinator.py:499,Deregistered A2A agent '{agent_id}' from external registry,src/muxi/formation/overlord/a2a_coordinator.py,499
 SystemEvents.A2A_AGENT_REGISTERED,DEBUG,src/muxi/services/a2a/client.py:422,Registered internal handler for agent {agent_id},src/muxi/services/a2a/client.py,422
 SystemEvents.A2A_AGENT_REGISTERED,INFO,src/muxi/formation/overlord/a2a_coordinator.py:460,Registered A2A agent '{agent_id}' with external registry,src/muxi/formation/overlord/a2a_coordinator.py,460
 SystemEvents.A2A_AGENT_REGISTERED,INFO,src/muxi/services/a2a/discovery.py:223,A2A agent registered successfully,src/muxi/services/a2a/discovery.py,223
-SystemEvents.A2A_AGENT_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:630,Starting agent registration for {agent_card.name} (SDK),src/muxi/services/a2a/registry_client.py,630
-SystemEvents.A2A_AGENT_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:783,Registering agent {agent_card.name} with all {len(self.registries)} registries (SDK),src/muxi/services/a2a/registry_client.py,783
-SystemEvents.A2A_AGENT_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:883,Starting deregistration for agent (SDK): {agent_url},src/muxi/services/a2a/registry_client.py,883
+SystemEvents.A2A_AGENT_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:626,Starting agent registration for {agent_card.name} (SDK),src/muxi/services/a2a/registry_client.py,626
+SystemEvents.A2A_AGENT_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:779,Registering agent {agent_card.name} with all {len(self.registries)} registries (SDK),src/muxi/services/a2a/registry_client.py,779
+SystemEvents.A2A_AGENT_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:879,Starting deregistration for agent (SDK): {agent_url},src/muxi/services/a2a/registry_client.py,879
 SystemEvents.A2A_AGENT_REGISTRATIONS_COMPLETED,INFO,src/muxi/formation/overlord/a2a_coordinator.py:376,Completed bulk A2A agent registrations for {len(pending_agents)} agents,src/muxi/formation/overlord/a2a_coordinator.py,376
 SystemEvents.A2A_AGENT_REGISTRATION_FAILED,ERROR,src/muxi/formation/overlord/a2a_coordinator.py:384,Failed to register agents with external registry,src/muxi/formation/overlord/a2a_coordinator.py,384
 SystemEvents.A2A_AGENT_REGISTRATION_FAILED,WARNING,src/muxi/formation/overlord/a2a_coordinator.py:468,Failed to register agent '{agent_id}' with external registry,src/muxi/formation/overlord/a2a_coordinator.py,468
@@ -776,16 +766,16 @@ SystemEvents.A2A_AUTH_VALIDATED,DEBUG,src/muxi/services/a2a/auth/outbound.py:654
 SystemEvents.A2A_AUTH_VALIDATED,DEBUG,src/muxi/services/a2a/auth/outbound.py:719,A2A API key authentication applied successfully,src/muxi/services/a2a/auth/outbound.py,719
 SystemEvents.A2A_AUTH_VALIDATED,DEBUG,src/muxi/services/a2a/auth/outbound.py:730,A2A bearer token authentication applied successfully,src/muxi/services/a2a/auth/outbound.py,730
 SystemEvents.A2A_AUTH_VALIDATED,DEBUG,src/muxi/services/a2a/auth/outbound.py:744,A2A basic authentication applied successfully,src/muxi/services/a2a/auth/outbound.py,744
-SystemEvents.A2A_AUTH_VALIDATED,INFO,src/muxi/services/a2a/auth/inbound.py:635,API key authentication successful for client {client_id},src/muxi/services/a2a/auth/inbound.py,635
-SystemEvents.A2A_AUTH_VALIDATED,INFO,src/muxi/services/a2a/auth/inbound.py:678,Bearer token authentication successful for client {client_id},src/muxi/services/a2a/auth/inbound.py,678
-SystemEvents.A2A_AUTH_VALIDATED,INFO,src/muxi/services/a2a/auth/inbound.py:726,Basic authentication successful for user {username},src/muxi/services/a2a/auth/inbound.py,726
-SystemEvents.A2A_AUTH_VALIDATED,INFO,src/muxi/services/a2a/auth/inbound.py:871,Client {client_id} removed successfully,src/muxi/services/a2a/auth/inbound.py,871
+SystemEvents.A2A_AUTH_VALIDATED,INFO,src/muxi/services/a2a/auth/inbound.py:596,A2A inbound authentication {'successful' if authenticated else 'failed'},src/muxi/services/a2a/auth/inbound.py,596
+SystemEvents.A2A_AUTH_VALIDATED,INFO,src/muxi/services/a2a/auth/inbound.py:631,API key authentication successful for client {client_id},src/muxi/services/a2a/auth/inbound.py,631
+SystemEvents.A2A_AUTH_VALIDATED,INFO,src/muxi/services/a2a/auth/inbound.py:674,Bearer token authentication successful for client {client_id},src/muxi/services/a2a/auth/inbound.py,674
+SystemEvents.A2A_AUTH_VALIDATED,INFO,src/muxi/services/a2a/auth/inbound.py:722,Basic authentication successful for user {username},src/muxi/services/a2a/auth/inbound.py,722
+SystemEvents.A2A_AUTH_VALIDATED,INFO,src/muxi/services/a2a/auth/inbound.py:867,Client {client_id} removed successfully,src/muxi/services/a2a/auth/inbound.py,867
 SystemEvents.A2A_AUTH_VALIDATED,INFO,src/muxi/services/a2a/auth/outbound.py:100,A2A authentication credentials validated successfully,src/muxi/services/a2a/auth/outbound.py,100
-SystemEvents.A2A_AUTH_VALIDATED,MALFORMED,src/muxi/services/a2a/auth/inbound.py:596,A2A inbound authentication {'successful' if authenticated else 'failed'},src/muxi/services/a2a/auth/inbound.py,596
 SystemEvents.A2A_AUTH_VALIDATED,WARNING,src/muxi/services/a2a/auth/outbound.py:676,A2A authentication skipped - missing optional credentials,src/muxi/services/a2a/auth/outbound.py,676
 SystemEvents.A2A_AUTH_VALIDATING,DEBUG,src/muxi/services/a2a/auth/inbound.py:536,Starting A2A inbound authentication with mode: {self.auth_mode},src/muxi/services/a2a/auth/inbound.py,536
-SystemEvents.A2A_AUTH_VALIDATING,DEBUG,src/muxi/services/a2a/auth/inbound.py:774,A2A authentication requirements requested,src/muxi/services/a2a/auth/inbound.py,774
-SystemEvents.A2A_AUTH_VALIDATING,DEBUG,src/muxi/services/a2a/auth/inbound.py:818,A2A client list requested,src/muxi/services/a2a/auth/inbound.py,818
+SystemEvents.A2A_AUTH_VALIDATING,DEBUG,src/muxi/services/a2a/auth/inbound.py:770,A2A authentication requirements requested,src/muxi/services/a2a/auth/inbound.py,770
+SystemEvents.A2A_AUTH_VALIDATING,DEBUG,src/muxi/services/a2a/auth/inbound.py:814,A2A client list requested,src/muxi/services/a2a/auth/inbound.py,814
 SystemEvents.A2A_AUTH_VALIDATION_FAILED,ERROR,src/muxi/services/a2a/auth/inbound.py:586,NO DESCRIPTION,src/muxi/services/a2a/auth/inbound.py,586
 SystemEvents.A2A_AUTH_VALIDATION_FAILED,ERROR,src/muxi/services/a2a/auth/outbound.py:62,API key authentication validation failed,src/muxi/services/a2a/auth/outbound.py,62
 SystemEvents.A2A_AUTH_VALIDATION_FAILED,ERROR,src/muxi/services/a2a/auth/outbound.py:72,Bearer authentication validation failed,src/muxi/services/a2a/auth/outbound.py,72
@@ -796,10 +786,10 @@ SystemEvents.A2A_AUTH_VALIDATION_FAILED,ERROR,src/muxi/services/a2a/auth/outboun
 SystemEvents.A2A_AUTH_VALIDATION_FAILED,ERROR,src/muxi/services/a2a/auth/outbound.py:667,A2A authentication failed - missing required credentials,src/muxi/services/a2a/auth/outbound.py,667
 SystemEvents.A2A_AUTH_VALIDATION_FAILED,ERROR,src/muxi/services/a2a/auth/outbound.py:687,A2A authentication failed - credential type mismatch,src/muxi/services/a2a/auth/outbound.py,687
 SystemEvents.A2A_AUTH_VALIDATION_FAILED,ERROR,src/muxi/services/a2a/auth/outbound.py:755,A2A authentication failed with exception,src/muxi/services/a2a/auth/outbound.py,755
-SystemEvents.A2A_AUTH_VALIDATION_FAILED,WARNING,src/muxi/services/a2a/auth/inbound.py:644,API key authentication failed: invalid key,src/muxi/services/a2a/auth/inbound.py,644
-SystemEvents.A2A_AUTH_VALIDATION_FAILED,WARNING,src/muxi/services/a2a/auth/inbound.py:687,Bearer token authentication failed: invalid token,src/muxi/services/a2a/auth/inbound.py,687
-SystemEvents.A2A_AUTH_VALIDATION_FAILED,WARNING,src/muxi/services/a2a/auth/inbound.py:735,Basic authentication failed for user {username},src/muxi/services/a2a/auth/inbound.py,735
-SystemEvents.A2A_AUTH_VALIDATION_FAILED,WARNING,src/muxi/services/a2a/auth/inbound.py:842,Attempted to remove non-existent client: {client_id},src/muxi/services/a2a/auth/inbound.py,842
+SystemEvents.A2A_AUTH_VALIDATION_FAILED,WARNING,src/muxi/services/a2a/auth/inbound.py:640,API key authentication failed: invalid key,src/muxi/services/a2a/auth/inbound.py,640
+SystemEvents.A2A_AUTH_VALIDATION_FAILED,WARNING,src/muxi/services/a2a/auth/inbound.py:683,Bearer token authentication failed: invalid token,src/muxi/services/a2a/auth/inbound.py,683
+SystemEvents.A2A_AUTH_VALIDATION_FAILED,WARNING,src/muxi/services/a2a/auth/inbound.py:731,Basic authentication failed for user {username},src/muxi/services/a2a/auth/inbound.py,731
+SystemEvents.A2A_AUTH_VALIDATION_FAILED,WARNING,src/muxi/services/a2a/auth/inbound.py:838,Attempted to remove non-existent client: {client_id},src/muxi/services/a2a/auth/inbound.py,838
 SystemEvents.A2A_AUTH_VALIDATION_FAILED,WARNING,src/muxi/services/a2a/server.py:342,Untrusted client attempted A2A communication,src/muxi/services/a2a/server.py,342
 SystemEvents.A2A_AUTH_VALIDATION_FAILED,WARNING,src/muxi/services/a2a/server.py:557,Untrusted client attempted A2A communication,src/muxi/services/a2a/server.py,557
 SystemEvents.A2A_CARD_EXPORTED,INFO,src/muxi/services/a2a/card_generator.py:658,Exported A2A card for {agent_id},src/muxi/services/a2a/card_generator.py,658
@@ -834,7 +824,7 @@ SystemEvents.A2A_CREDENTIAL_LOADED,INFO,src/muxi/services/a2a/auth/outbound.py:1
 SystemEvents.A2A_CREDENTIAL_LOADED,INFO,src/muxi/services/a2a/auth/outbound.py:278,A2A default credentials loading completed,src/muxi/services/a2a/auth/outbound.py,278
 SystemEvents.A2A_CREDENTIAL_LOADED,INFO,src/muxi/services/a2a/auth/outbound.py:508,A2A credentials added successfully,src/muxi/services/a2a/auth/outbound.py,508
 SystemEvents.A2A_CREDENTIAL_REMOVED,INFO,src/muxi/services/a2a/auth/outbound.py:774,A2A credentials removed for agent,src/muxi/services/a2a/auth/outbound.py,774
-SystemEvents.A2A_DEREGISTERED,INFO,src/muxi/formation/formation.py:2802,Successfully deregistered all agents from external registry,src/muxi/formation/formation.py,2802
+SystemEvents.A2A_DEREGISTERED,INFO,src/muxi/formation/formation.py:2795,Successfully deregistered all agents from external registry,src/muxi/formation/formation.py,2795
 SystemEvents.A2A_DEREGISTERED,INFO,src/muxi/services/a2a/discovery.py:317,A2A agent unregistration completed,src/muxi/services/a2a/discovery.py,317
 SystemEvents.A2A_DEREGISTERED,INFO,src/muxi/services/a2a/discovery.py:718,A2A agent marked as unreachable due to timeout,src/muxi/services/a2a/discovery.py,718
 SystemEvents.A2A_DEREGISTERED,WARNING,src/muxi/services/a2a/discovery.py:326,A2A agent unregistration completed - agent not found,src/muxi/services/a2a/discovery.py,326
@@ -849,11 +839,11 @@ SystemEvents.A2A_DISCOVERY_COMPLETED,DEBUG,src/muxi/services/a2a/discovery.py:77
 SystemEvents.A2A_DISCOVERY_COMPLETED,DEBUG,src/muxi/services/a2a/discovery.py:852,A2A registry saving skipped - no registry file configured,src/muxi/services/a2a/discovery.py,852
 SystemEvents.A2A_DISCOVERY_COMPLETED,INFO,src/muxi/services/a2a/discovery.py:404,A2A agent discovery query completed,src/muxi/services/a2a/discovery.py,404
 SystemEvents.A2A_DISCOVERY_COMPLETED,INFO,src/muxi/services/a2a/discovery.py:825,A2A registry loaded successfully,src/muxi/services/a2a/discovery.py,825
-SystemEvents.A2A_DISCOVERY_COMPLETED,INFO,src/muxi/services/a2a/registry_client.py:1111,Agent discovery completed from {registry_url} (SDK),src/muxi/services/a2a/registry_client.py,1111
-SystemEvents.A2A_DISCOVERY_COMPLETED,INFO,src/muxi/services/a2a/registry_client.py:1190,Agent discovery completed from all registries (SDK),src/muxi/services/a2a/registry_client.py,1190
-SystemEvents.A2A_DISCOVERY_FAILED,ERROR,src/muxi/services/a2a/registry_client.py:1042,Agent discovery failed (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,1042
-SystemEvents.A2A_DISCOVERY_FAILED,ERROR,src/muxi/services/a2a/registry_client.py:1127,Agent discovery error from {registry_url} (SDK),src/muxi/services/a2a/registry_client.py,1127
-SystemEvents.A2A_DISCOVERY_FAILED,WARNING,src/muxi/services/a2a/registry_client.py:1147,No registries configured for discovery (SDK),src/muxi/services/a2a/registry_client.py,1147
+SystemEvents.A2A_DISCOVERY_COMPLETED,INFO,src/muxi/services/a2a/registry_client.py:1107,Agent discovery completed from {registry_url} (SDK),src/muxi/services/a2a/registry_client.py,1107
+SystemEvents.A2A_DISCOVERY_COMPLETED,INFO,src/muxi/services/a2a/registry_client.py:1186,Agent discovery completed from all registries (SDK),src/muxi/services/a2a/registry_client.py,1186
+SystemEvents.A2A_DISCOVERY_FAILED,ERROR,src/muxi/services/a2a/registry_client.py:1038,Agent discovery failed (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,1038
+SystemEvents.A2A_DISCOVERY_FAILED,ERROR,src/muxi/services/a2a/registry_client.py:1123,Agent discovery error from {registry_url} (SDK),src/muxi/services/a2a/registry_client.py,1123
+SystemEvents.A2A_DISCOVERY_FAILED,WARNING,src/muxi/services/a2a/registry_client.py:1143,No registries configured for discovery (SDK),src/muxi/services/a2a/registry_client.py,1143
 SystemEvents.A2A_DISCOVERY_STARTED,DEBUG,src/muxi/services/a2a/discovery.py:441,A2A agent info query started,src/muxi/services/a2a/discovery.py,441
 SystemEvents.A2A_DISCOVERY_STARTED,DEBUG,src/muxi/services/a2a/discovery.py:499,A2A formation status query started,src/muxi/services/a2a/discovery.py,499
 SystemEvents.A2A_DISCOVERY_STARTED,DEBUG,src/muxi/services/a2a/discovery.py:699,A2A cleanup loop iteration started,src/muxi/services/a2a/discovery.py,699
@@ -861,50 +851,50 @@ SystemEvents.A2A_DISCOVERY_STARTED,DEBUG,src/muxi/services/a2a/discovery.py:767,
 SystemEvents.A2A_DISCOVERY_STARTED,DEBUG,src/muxi/services/a2a/discovery.py:861,A2A registry saving started,src/muxi/services/a2a/discovery.py,861
 SystemEvents.A2A_DISCOVERY_STARTED,INFO,src/muxi/services/a2a/discovery.py:109,A2A Discovery Service started,src/muxi/services/a2a/discovery.py,109
 SystemEvents.A2A_DISCOVERY_STARTED,INFO,src/muxi/services/a2a/discovery.py:360,A2A agent discovery query started,src/muxi/services/a2a/discovery.py,360
-SystemEvents.A2A_DISCOVERY_STARTED,INFO,src/muxi/services/a2a/registry_client.py:1023,Starting agent discovery (SDK),src/muxi/services/a2a/registry_client.py,1023
-SystemEvents.A2A_DISCOVERY_STARTED,INFO,src/muxi/services/a2a/registry_client.py:1160,Discovering agents from all {len(self.registries)} registries (SDK),src/muxi/services/a2a/registry_client.py,1160
+SystemEvents.A2A_DISCOVERY_STARTED,INFO,src/muxi/services/a2a/registry_client.py:1019,Starting agent discovery (SDK),src/muxi/services/a2a/registry_client.py,1019
+SystemEvents.A2A_DISCOVERY_STARTED,INFO,src/muxi/services/a2a/registry_client.py:1156,Discovering agents from all {len(self.registries)} registries (SDK),src/muxi/services/a2a/registry_client.py,1156
 SystemEvents.A2A_DISCOVERY_STOPPED,INFO,src/muxi/services/a2a/discovery.py:160,A2A Discovery Service stopping,src/muxi/services/a2a/discovery.py,160
 SystemEvents.A2A_DISCOVERY_STOPPED,INFO,src/muxi/services/a2a/discovery.py:187,A2A Discovery Service stopped successfully,src/muxi/services/a2a/discovery.py,187
 SystemEvents.A2A_HEALTH_CHECK_COMPLETED,DEBUG,src/muxi/services/a2a/discovery.py:603,A2A agent health check completed successfully,src/muxi/services/a2a/discovery.py,603
 SystemEvents.A2A_HEALTH_CHECK_COMPLETED,DEBUG,src/muxi/services/a2a/discovery.py:673,A2A health check loop iteration completed,src/muxi/services/a2a/discovery.py,673
-SystemEvents.A2A_HEALTH_CHECK_COMPLETED,INFO,src/muxi/services/a2a/registry_client.py:584,Health check completed for all registries (SDK),src/muxi/services/a2a/registry_client.py,584
-SystemEvents.A2A_HEALTH_CHECK_COMPLETED,MALFORMED,src/muxi/formation/overlord/overlord.py:1208,Registry health check complete: {healthy_count}/{len(health_status)} healthy,src/muxi/formation/overlord/overlord.py,1208
-SystemEvents.A2A_HEALTH_CHECK_COMPLETED,MALFORMED,src/muxi/services/a2a/registry_client.py:342,Registry health check {'passed' if is_healthy else 'failed'} (SDK): {registry_url},src/muxi/services/a2a/registry_client.py,342
+SystemEvents.A2A_HEALTH_CHECK_COMPLETED,INFO,src/muxi/formation/overlord/overlord.py:1204,Registry health check complete: {healthy_count}/{len(health_status)} healthy,src/muxi/formation/overlord/overlord.py,1204
+SystemEvents.A2A_HEALTH_CHECK_COMPLETED,INFO,src/muxi/services/a2a/registry_client.py:342,Registry health check {'passed' if is_healthy else 'failed'} (SDK): {registry_url},src/muxi/services/a2a/registry_client.py,342
+SystemEvents.A2A_HEALTH_CHECK_COMPLETED,INFO,src/muxi/services/a2a/registry_client.py:580,Health check completed for all registries (SDK),src/muxi/services/a2a/registry_client.py,580
 SystemEvents.A2A_HEALTH_CHECK_COMPLETED,WARNING,src/muxi/services/a2a/discovery.py:620,A2A agent health check completed with non-200 status,src/muxi/services/a2a/discovery.py,620
-SystemEvents.A2A_HEALTH_CHECK_FAILED,ERROR,src/muxi/services/a2a/registry_client.py:361,Health check failed for registry (SDK): {registry_url},src/muxi/services/a2a/registry_client.py,361
+SystemEvents.A2A_HEALTH_CHECK_FAILED,ERROR,src/muxi/services/a2a/registry_client.py:357,Health check failed for registry (SDK): {registry_url},src/muxi/services/a2a/registry_client.py,357
 SystemEvents.A2A_HEALTH_CHECK_FAILED,WARNING,src/muxi/services/a2a/discovery.py:639,A2A agent health check failed,src/muxi/services/a2a/discovery.py,639
 SystemEvents.A2A_HEALTH_CHECK_STARTED,DEBUG,src/muxi/services/a2a/discovery.py:567,A2A agent health check started,src/muxi/services/a2a/discovery.py,567
 SystemEvents.A2A_HEALTH_CHECK_STARTED,DEBUG,src/muxi/services/a2a/discovery.py:657,A2A health check loop iteration started,src/muxi/services/a2a/discovery.py,657
 SystemEvents.A2A_HEALTH_CHECK_STARTED,DEBUG,src/muxi/services/a2a/registry_client.py:293,Starting health check for registry (SDK): {registry_url},src/muxi/services/a2a/registry_client.py,293
-SystemEvents.A2A_HEALTH_CHECK_STARTED,DEBUG,src/muxi/services/a2a/registry_client.py:1226,Registry status requested (SDK),src/muxi/services/a2a/registry_client.py,1226
-SystemEvents.A2A_HEALTH_CHECK_STARTED,DEBUG,src/muxi/services/a2a/registry_client.py:1301,Registry client stats requested (SDK),src/muxi/services/a2a/registry_client.py,1301
-SystemEvents.A2A_HEALTH_CHECK_STARTED,INFO,src/muxi/services/a2a/registry_client.py:562,Starting health check for all {len(self.registries)} registries (SDK),src/muxi/services/a2a/registry_client.py,562
-SystemEvents.A2A_HEALTH_CHECK_STARTED,WARNING,src/muxi/services/a2a/registry_client.py:553,No registries configured for health check (SDK),src/muxi/services/a2a/registry_client.py,553
+SystemEvents.A2A_HEALTH_CHECK_STARTED,DEBUG,src/muxi/services/a2a/registry_client.py:1222,Registry status requested (SDK),src/muxi/services/a2a/registry_client.py,1222
+SystemEvents.A2A_HEALTH_CHECK_STARTED,DEBUG,src/muxi/services/a2a/registry_client.py:1297,Registry client stats requested (SDK),src/muxi/services/a2a/registry_client.py,1297
+SystemEvents.A2A_HEALTH_CHECK_STARTED,INFO,src/muxi/services/a2a/registry_client.py:558,Starting health check for all {len(self.registries)} registries (SDK),src/muxi/services/a2a/registry_client.py,558
+SystemEvents.A2A_HEALTH_CHECK_STARTED,WARNING,src/muxi/services/a2a/registry_client.py:549,No registries configured for health check (SDK),src/muxi/services/a2a/registry_client.py,549
 SystemEvents.A2A_MESSAGE_FAILED,ERROR,src/muxi/formation/overlord/a2a_coordinator.py:923,Failed to route message to external agent: {str(e)},src/muxi/formation/overlord/a2a_coordinator.py,923
 SystemEvents.A2A_MESSAGE_PARSING,DEBUG,src/muxi/services/a2a/server.py:250,"Legacy message format parsing failed, attempting SDK format",src/muxi/services/a2a/server.py,250
-SystemEvents.A2A_REGISTERED,DEBUG,src/muxi/services/a2a/registry_client.py:1253,Registered agents list requested (SDK),src/muxi/services/a2a/registry_client.py,1253
-SystemEvents.A2A_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:705,Agent {agent_card.name} registered successfully with {registry_url} (SDK),src/muxi/services/a2a/registry_client.py,705
-SystemEvents.A2A_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:819,Agent registration completed for {agent_card.name} (SDK),src/muxi/services/a2a/registry_client.py,819
-SystemEvents.A2A_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:919,Agent deregistered successfully from {registry_url} (SDK),src/muxi/services/a2a/registry_client.py,919
-SystemEvents.A2A_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:977,Agent deregistration completed for {agent_url} (SDK),src/muxi/services/a2a/registry_client.py,977
+SystemEvents.A2A_REGISTERED,DEBUG,src/muxi/services/a2a/registry_client.py:1249,Registered agents list requested (SDK),src/muxi/services/a2a/registry_client.py,1249
+SystemEvents.A2A_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:701,Agent {agent_card.name} registered successfully with {registry_url} (SDK),src/muxi/services/a2a/registry_client.py,701
+SystemEvents.A2A_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:815,Agent registration completed for {agent_card.name} (SDK),src/muxi/services/a2a/registry_client.py,815
+SystemEvents.A2A_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:915,Agent deregistered successfully from {registry_url} (SDK),src/muxi/services/a2a/registry_client.py,915
+SystemEvents.A2A_REGISTERED,INFO,src/muxi/services/a2a/registry_client.py:973,Agent deregistration completed for {agent_url} (SDK),src/muxi/services/a2a/registry_client.py,973
 SystemEvents.A2A_REGISTRATION_COMPLETED,INFO,src/muxi/services/a2a/discovery.py:273,A2A agent registration completed,src/muxi/services/a2a/discovery.py,273
-SystemEvents.A2A_REGISTRATION_FAILED,ERROR,src/muxi/services/a2a/registry_client.py:650,Agent registration failed for {agent_card.name} (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,650
-SystemEvents.A2A_REGISTRATION_FAILED,ERROR,src/muxi/services/a2a/registry_client.py:745,Agent registration error for {agent_card.name} on {registry_url} (SDK),src/muxi/services/a2a/registry_client.py,745
-SystemEvents.A2A_REGISTRATION_FAILED,ERROR,src/muxi/services/a2a/registry_client.py:958,Agent deregistration error from {registry_url} (SDK),src/muxi/services/a2a/registry_client.py,958
-SystemEvents.A2A_REGISTRATION_FAILED,WARNING,src/muxi/services/a2a/registry_client.py:769,No registries configured for agent {agent_card.name} (SDK),src/muxi/services/a2a/registry_client.py,769
-SystemEvents.A2A_REGISTRATION_FAILED,WARNING,src/muxi/services/a2a/registry_client.py:870,No registrations found for agent (SDK): {agent_url},src/muxi/services/a2a/registry_client.py,870
+SystemEvents.A2A_REGISTRATION_FAILED,ERROR,src/muxi/services/a2a/registry_client.py:646,Agent registration failed for {agent_card.name} (SDK): {str(e)},src/muxi/services/a2a/registry_client.py,646
+SystemEvents.A2A_REGISTRATION_FAILED,ERROR,src/muxi/services/a2a/registry_client.py:741,Agent registration error for {agent_card.name} on {registry_url} (SDK),src/muxi/services/a2a/registry_client.py,741
+SystemEvents.A2A_REGISTRATION_FAILED,ERROR,src/muxi/services/a2a/registry_client.py:954,Agent deregistration error from {registry_url} (SDK),src/muxi/services/a2a/registry_client.py,954
+SystemEvents.A2A_REGISTRATION_FAILED,WARNING,src/muxi/services/a2a/registry_client.py:765,No registries configured for agent {agent_card.name} (SDK),src/muxi/services/a2a/registry_client.py,765
+SystemEvents.A2A_REGISTRATION_FAILED,WARNING,src/muxi/services/a2a/registry_client.py:866,No registrations found for agent (SDK): {agent_url},src/muxi/services/a2a/registry_client.py,866
 SystemEvents.A2A_REGISTRY_CLIENT_INITIALIZED,INFO,src/muxi/services/a2a/client.py:85,A2A SDK client initialized with URL: {url},src/muxi/services/a2a/client.py,85
-SystemEvents.A2A_REGISTRY_CONNECTED,INFO,src/muxi/formation/overlord/overlord.py:1120,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,1120
+SystemEvents.A2A_REGISTRY_CONNECTED,INFO,src/muxi/formation/overlord/overlord.py:1116,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,1116
 SystemEvents.A2A_REGISTRY_CONNECTED,INFO,src/muxi/services/a2a/registry_client.py:103,A2A Registry Client (SDK) initialized with {len(self.registries)} registries,src/muxi/services/a2a/registry_client.py,103
 SystemEvents.A2A_REGISTRY_CONNECTED,INFO,src/muxi/services/a2a/registry_client.py:186,Added registry (SDK): {registry_url},src/muxi/services/a2a/registry_client.py,186
-SystemEvents.A2A_REGISTRY_CONNECTED,INFO,src/muxi/services/a2a/registry_client.py:407,Checking registries with {startup_policy} policy,src/muxi/services/a2a/registry_client.py,407
-SystemEvents.A2A_REGISTRY_CONNECTED,INFO,src/muxi/services/a2a/registry_client.py:487,All required registries are healthy,src/muxi/services/a2a/registry_client.py,487
+SystemEvents.A2A_REGISTRY_CONNECTED,INFO,src/muxi/services/a2a/registry_client.py:403,Checking registries with {startup_policy} policy,src/muxi/services/a2a/registry_client.py,403
+SystemEvents.A2A_REGISTRY_CONNECTED,INFO,src/muxi/services/a2a/registry_client.py:483,All required registries are healthy,src/muxi/services/a2a/registry_client.py,483
 SystemEvents.A2A_REGISTRY_CONNECTED,WARNING,src/muxi/services/a2a/registry_client.py:198,Registry already exists (SDK): {registry_url},src/muxi/services/a2a/registry_client.py,198
-SystemEvents.A2A_REGISTRY_CONNECTED,WARNING,src/muxi/services/a2a/registry_client.py:524,"Unknown startup policy '{startup_policy}', defaulting to lenient",src/muxi/services/a2a/registry_client.py,524
+SystemEvents.A2A_REGISTRY_CONNECTED,WARNING,src/muxi/services/a2a/registry_client.py:520,"Unknown startup policy '{startup_policy}', defaulting to lenient",src/muxi/services/a2a/registry_client.py,520
 SystemEvents.A2A_REGISTRY_DISCONNECTED,INFO,src/muxi/services/a2a/registry_client.py:142,A2A Registry Client (SDK) closed,src/muxi/services/a2a/registry_client.py,142
 SystemEvents.A2A_REGISTRY_DISCONNECTED,INFO,src/muxi/services/a2a/registry_client.py:238,Removed registry (SDK): {registry_url},src/muxi/services/a2a/registry_client.py,238
 SystemEvents.A2A_REGISTRY_DISCONNECTED,WARNING,src/muxi/services/a2a/registry_client.py:250,Registry not found for removal (SDK): {registry_url},src/muxi/services/a2a/registry_client.py,250
-SystemEvents.A2A_REGISTRY_DISCONNECTED,WARNING,src/muxi/services/a2a/registry_client.py:427,Registry {registry_url} is unreachable (lenient mode - continuing),src/muxi/services/a2a/registry_client.py,427
+SystemEvents.A2A_REGISTRY_DISCONNECTED,WARNING,src/muxi/services/a2a/registry_client.py:423,Registry {registry_url} is unreachable (lenient mode - continuing),src/muxi/services/a2a/registry_client.py,423
 SystemEvents.A2A_SERVER_FAILED,ERROR,src/muxi/formation/overlord/a2a_coordinator.py:253,Failed to start A2A server: {str(e)},src/muxi/formation/overlord/a2a_coordinator.py,253
 SystemEvents.A2A_SERVER_FAILED,ERROR,src/muxi/services/a2a/server.py:133,Failed to initialize SDK A2A Formation Server: {str(e)},src/muxi/services/a2a/server.py,133
 SystemEvents.A2A_SERVER_FAILED,ERROR,src/muxi/services/a2a/server.py:717,Failed to start SDK A2A Formation Server: {str(e)},src/muxi/services/a2a/server.py,717
@@ -913,28 +903,28 @@ SystemEvents.A2A_SERVER_STARTED,INFO,src/muxi/services/a2a/server.py:118,Initial
 SystemEvents.A2A_SERVER_STARTED,INFO,src/muxi/services/a2a/server.py:276,SDK A2A Formation Server FastAPI app created,src/muxi/services/a2a/server.py,276
 SystemEvents.A2A_SERVER_STARTED,INFO,src/muxi/services/a2a/server.py:703,SDK A2A Formation Server started on {self.host}:{self.port},src/muxi/services/a2a/server.py,703
 SystemEvents.A2A_SERVER_STOPPED,INFO,src/muxi/services/a2a/server.py:744,SDK A2A Formation Server stopped,src/muxi/services/a2a/server.py,744
-SystemEvents.AGENT_ADDED,INFO,src/muxi/formation/overlord/overlord.py:3175,Agent '{agent_id}' successfully added to overlord at runtime,src/muxi/formation/overlord/overlord.py,3175
+SystemEvents.AGENT_ADDED,INFO,src/muxi/formation/overlord/overlord.py:3167,Agent '{agent_id}' successfully added to overlord at runtime,src/muxi/formation/overlord/overlord.py,3167
 SystemEvents.AGENT_ADDED,INFO,src/muxi/formation/server/routes/admin/agents.py:316,Agent '{agent_config['id']}' added via API,src/muxi/formation/server/routes/admin/agents.py,316
-SystemEvents.AGENT_DEREGISTRATION_COMPLETED,DEBUG,src/muxi/formation/overlord/overlord.py:3395,Successfully deregistered agent {agent_id} from external registry,src/muxi/formation/overlord/overlord.py,3395
-SystemEvents.AGENT_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:1593,Failed to load MUXI default agent from {agent_file.name}: {e},src/muxi/formation/overlord/overlord.py,1593
+SystemEvents.AGENT_DEREGISTRATION_COMPLETED,DEBUG,src/muxi/formation/overlord/overlord.py:3387,Successfully deregistered agent {agent_id} from external registry,src/muxi/formation/overlord/overlord.py,3387
+SystemEvents.AGENT_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:1585,Failed to load MUXI default agent from {agent_file.name}: {e},src/muxi/formation/overlord/overlord.py,1585
 SystemEvents.AGENT_INITIALIZATION_ERROR,ERROR,src/muxi/formation/agents/agent.py:321,Failed to initialize knowledge for agent {self.agent_id}: {str(e)},src/muxi/formation/agents/agent.py,321
 SystemEvents.AGENT_INITIALIZED,DEBUG,src/muxi/formation/initialization.py:885,Agent '{agent_id}' configuration processed,src/muxi/formation/initialization.py,885
-SystemEvents.AGENT_INITIALIZED,DEBUG,src/muxi/formation/overlord/overlord.py:1563,User-defined agent '{agent_id}' takes precedence over MUXI default,src/muxi/formation/overlord/overlord.py,1563
+SystemEvents.AGENT_INITIALIZED,DEBUG,src/muxi/formation/overlord/overlord.py:1555,User-defined agent '{agent_id}' takes precedence over MUXI default,src/muxi/formation/overlord/overlord.py,1555
 SystemEvents.AGENT_INITIALIZED,ERROR,src/muxi/formation/initialization.py:897,Failed to process agent configuration: {str(e)},src/muxi/formation/initialization.py,897
-SystemEvents.AGENT_INITIALIZED,ERROR,src/muxi/formation/overlord/overlord.py:1513,Failed to load agent: {str(e)},src/muxi/formation/overlord/overlord.py,1513
+SystemEvents.AGENT_INITIALIZED,ERROR,src/muxi/formation/overlord/overlord.py:1505,Failed to load agent: {str(e)},src/muxi/formation/overlord/overlord.py,1505
 SystemEvents.AGENT_INITIALIZED,INFO,src/muxi/formation/agents/agent.py:195,Agent initialized: {self.agent_id},src/muxi/formation/agents/agent.py,195
 SystemEvents.AGENT_INITIALIZED,INFO,src/muxi/formation/agents/agent.py:307,Knowledge handler initialized for agent {self.agent_id},src/muxi/formation/agents/agent.py,307
-SystemEvents.AGENT_INITIALIZED,INFO,src/muxi/formation/overlord/overlord.py:1501,Agent '{agent_id}' loaded successfully,src/muxi/formation/overlord/overlord.py,1501
-SystemEvents.AGENT_INITIALIZED,INFO,src/muxi/formation/overlord/overlord.py:1584,Loaded MUXI default agent: {agent_id},src/muxi/formation/overlord/overlord.py,1584
-SystemEvents.AGENT_INITIALIZED,INFO,src/muxi/formation/overlord/overlord.py:3460,Agent '{agent_id}' successfully deleted,src/muxi/formation/overlord/overlord.py,3460
+SystemEvents.AGENT_INITIALIZED,INFO,src/muxi/formation/overlord/overlord.py:1493,Agent '{agent_id}' loaded successfully,src/muxi/formation/overlord/overlord.py,1493
+SystemEvents.AGENT_INITIALIZED,INFO,src/muxi/formation/overlord/overlord.py:1576,Loaded MUXI default agent: {agent_id},src/muxi/formation/overlord/overlord.py,1576
+SystemEvents.AGENT_INITIALIZED,INFO,src/muxi/formation/overlord/overlord.py:3452,Agent '{agent_id}' successfully deleted,src/muxi/formation/overlord/overlord.py,3452
 SystemEvents.AGENT_INITIALIZED,WARNING,src/muxi/formation/initialization.py:871,Skipping agent without ID,src/muxi/formation/initialization.py,871
 SystemEvents.AGENT_REGISTRATION_FAILED,ERROR,src/muxi/formation/agents/agent.py:4147,Failed to register expertise: {str(e)},src/muxi/formation/agents/agent.py,4147
-SystemEvents.AGENT_REMOVED,INFO,src/muxi/formation/overlord/overlord.py:3373,Agent '{agent_id}' marked for deletion - will be removed when current request completes,src/muxi/formation/overlord/overlord.py,3373
-SystemEvents.AGENT_REMOVED,INFO,src/muxi/formation/overlord/overlord.py:3380,Agent '{agent_id}' removed immediately (not busy),src/muxi/formation/overlord/overlord.py,3380
+SystemEvents.AGENT_REMOVED,INFO,src/muxi/formation/overlord/overlord.py:3365,Agent '{agent_id}' marked for deletion - will be removed when current request completes,src/muxi/formation/overlord/overlord.py,3365
+SystemEvents.AGENT_REMOVED,INFO,src/muxi/formation/overlord/overlord.py:3372,Agent '{agent_id}' removed immediately (not busy),src/muxi/formation/overlord/overlord.py,3372
 SystemEvents.AGENT_REMOVED,INFO,src/muxi/formation/server/routes/admin/agents.py:481,Agent '{agent_id}' removed via API,src/muxi/formation/server/routes/admin/agents.py,481
 SystemEvents.AGENT_UPDATED,INFO,src/muxi/formation/server/routes/admin/agents.py:411,Agent '{agent_id}' updated via API,src/muxi/formation/server/routes/admin/agents.py,411
-SystemEvents.BUILTIN_MCP_INITIALIZATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:10125,Failed to initialize built-in MCP prompts: {e},src/muxi/formation/overlord/overlord.py,10125
-SystemEvents.BUILTIN_MCP_PROMPT_LOAD_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:10109,Failed to load system prompt for built-in MCP '{mcp_name}': {e},src/muxi/formation/overlord/overlord.py,10109
+SystemEvents.BUILTIN_MCP_INITIALIZATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:10117,Failed to initialize built-in MCP prompts: {e},src/muxi/formation/overlord/overlord.py,10117
+SystemEvents.BUILTIN_MCP_PROMPT_LOAD_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:10101,Failed to load system prompt for built-in MCP '{mcp_name}': {e},src/muxi/formation/overlord/overlord.py,10101
 SystemEvents.CIRCUIT_BREAKER_FAILURE_RECORDED,DEBUG,src/muxi/formation/resilience/error_classifier.py:224,Classified error: {error_type.value} (severity: {severity.value}),src/muxi/formation/resilience/error_classifier.py,224
 SystemEvents.CIRCUIT_BREAKER_FAILURE_RECORDED,WARNING,src/muxi/formation/resilience/circuit_breaker.py:214,"Circuit breaker '{self.name}' recorded failure: {error} (execution_time: {execution_time:.2f}s, failures: {self.state.failure_count})",src/muxi/formation/resilience/circuit_breaker.py,214
 SystemEvents.CIRCUIT_BREAKER_FALLBACK_TRIGGERED,WARNING,src/muxi/formation/resilience/circuit_breaker.py:75,Circuit breaker '{self.name}' triggered fallback (state: {self.state.state.value}),src/muxi/formation/resilience/circuit_breaker.py,75
@@ -943,9 +933,9 @@ SystemEvents.CIRCUIT_BREAKER_FORCED_OPEN,WARNING,src/muxi/formation/resilience/c
 SystemEvents.CIRCUIT_BREAKER_OPENED,WARNING,src/muxi/formation/resilience/circuit_breaker.py:234,Circuit breaker '{self.name}' opened due to {self.state.failure_count} failures. Will attempt recovery at {time.ctime(self.state.next_attempt_time)},src/muxi/formation/resilience/circuit_breaker.py,234
 SystemEvents.CLEANUP,DEBUG,src/muxi/formation/artifacts/extractor.py:263,Cleaned up temporary file: {file_path},src/muxi/formation/artifacts/extractor.py,263
 SystemEvents.CLEANUP,DEBUG,src/muxi/formation/artifacts/extractor.py:319,Cleaned up empty muxi_artifacts directory,src/muxi/formation/artifacts/extractor.py,319
-SystemEvents.CLEANUP,ERROR,src/muxi/formation/formation.py:3067,FORMATION KILLED - EMERGENCY EXIT WITH CODE {code},src/muxi/formation/formation.py,3067
-SystemEvents.CLEANUP,INFO,src/muxi/formation/formation.py:2753,Database engine disposed during Formation shutdown,src/muxi/formation/formation.py,2753
-SystemEvents.CLEANUP,INFO,src/muxi/formation/formation.py:3315,Stopping Formation API server during formation cleanup,src/muxi/formation/formation.py,3315
+SystemEvents.CLEANUP,ERROR,src/muxi/formation/formation.py:3060,FORMATION KILLED - EMERGENCY EXIT WITH CODE {code},src/muxi/formation/formation.py,3060
+SystemEvents.CLEANUP,INFO,src/muxi/formation/formation.py:2746,Database engine disposed during Formation shutdown,src/muxi/formation/formation.py,2746
+SystemEvents.CLEANUP,INFO,src/muxi/formation/formation.py:3308,Stopping Formation API server during formation cleanup,src/muxi/formation/formation.py,3308
 SystemEvents.CLEANUP,INFO,src/muxi/formation/server/server.py:247,Formation server shutting down - draining connections,src/muxi/formation/server/server.py,247
 SystemEvents.CLEANUP,INFO,src/muxi/formation/server/server.py:261,Waiting for {len(self._active_connections)} active connections to complete,src/muxi/formation/server/server.py,261
 SystemEvents.CLEANUP,INFO,src/muxi/formation/server/server.py:294,All connections drained successfully,src/muxi/formation/server/server.py,294
@@ -955,24 +945,24 @@ SystemEvents.CLEANUP,INFO,src/muxi/formation/server/server.py:683,Stopping Forma
 SystemEvents.CLEANUP,INFO,src/muxi/formation/server/server.py:720,Formation API server stopped successfully,src/muxi/formation/server/server.py,720
 SystemEvents.CLEANUP,INFO,src/muxi/utils/run_formation.py:91,Shutting down formation due to keyboard interrupt...,src/muxi/utils/run_formation.py,91
 SystemEvents.CLEANUP,INFO,src/muxi/utils/run_formation.py:233,Formation stopped successfully,src/muxi/utils/run_formation.py,233
-SystemEvents.CLEANUP,WARNING,src/muxi/formation/formation.py:3333,Error stopping Formation API server during cleanup: {e},src/muxi/formation/formation.py,3333
+SystemEvents.CLEANUP,WARNING,src/muxi/formation/formation.py:3326,Error stopping Formation API server during cleanup: {e},src/muxi/formation/formation.py,3326
 SystemEvents.CLEANUP,WARNING,src/muxi/formation/server/server.py:282,Shutdown timeout reached - {remaining_connections} connections still active,src/muxi/formation/server/server.py,282
 SystemEvents.CLEANUP,WARNING,src/muxi/formation/server/server.py:704,"Server shutdown timed out after 30 seconds, forcing cancellation",src/muxi/formation/server/server.py,704
 SystemEvents.COMPONENT_INITIALIZATION_FAILED,WARNING,src/muxi/formation/overlord/a2a_coordinator.py:77,A2A filtering enabled but missing dependencies,src/muxi/formation/overlord/a2a_coordinator.py,77
 SystemEvents.CONFIG_FORMATION_LOADED,DEBUG,src/muxi/formation/initialization.py:848,Processing {len(formation._agents_config)} agents from configuration,src/muxi/formation/initialization.py,848
-SystemEvents.CONFIG_FORMATION_LOADED,DEBUG,src/muxi/formation/overlord/overlord.py:1445,Starting agent loading from formation,src/muxi/formation/overlord/overlord.py,1445
-SystemEvents.CONFIG_FORMATION_LOADED,DEBUG,src/muxi/formation/overlord/overlord.py:1455,Found {len(agents_config)} agents in formation configuration,src/muxi/formation/overlord/overlord.py,1455
+SystemEvents.CONFIG_FORMATION_LOADED,DEBUG,src/muxi/formation/overlord/overlord.py:1437,Starting agent loading from formation,src/muxi/formation/overlord/overlord.py,1437
+SystemEvents.CONFIG_FORMATION_LOADED,DEBUG,src/muxi/formation/overlord/overlord.py:1447,Found {len(agents_config)} agents in formation configuration,src/muxi/formation/overlord/overlord.py,1447
 SystemEvents.CONFIG_FORMATION_LOADED,INFO,src/muxi/formation/config/document_processing.py:30,Using document model from formation config,src/muxi/formation/config/document_processing.py,30
 SystemEvents.CONFIG_FORMATION_LOADED,INFO,src/muxi/formation/config/document_processing.py:38,Using default document model configuration,src/muxi/formation/config/document_processing.py,38
 SystemEvents.CONFIG_FORMATION_LOADED,INFO,src/muxi/formation/initialization.py:857,No agents configured in formation,src/muxi/formation/initialization.py,857
 SystemEvents.CONFIG_FORMATION_LOADED,INFO,src/muxi/formation/initialization.py:905,Processed {processed_count} agent configurations,src/muxi/formation/initialization.py,905
-SystemEvents.CONFIG_FORMATION_LOADED,INFO,src/muxi/formation/overlord/overlord.py:1464,No agents configured in formation,src/muxi/formation/overlord/overlord.py,1464
-SystemEvents.CONFIG_FORMATION_LOADED,INFO,src/muxi/formation/overlord/overlord.py:1521,Loaded {loaded_count} agents from formation configuration,src/muxi/formation/overlord/overlord.py,1521
-SystemEvents.CONFIG_FORMATION_LOADED,INFO,src/muxi/formation/overlord/overlord.py:1625,Set muxi-generalist as default fallback agent,src/muxi/formation/overlord/overlord.py,1625
+SystemEvents.CONFIG_FORMATION_LOADED,INFO,src/muxi/formation/overlord/overlord.py:1456,No agents configured in formation,src/muxi/formation/overlord/overlord.py,1456
+SystemEvents.CONFIG_FORMATION_LOADED,INFO,src/muxi/formation/overlord/overlord.py:1513,Loaded {loaded_count} agents from formation configuration,src/muxi/formation/overlord/overlord.py,1513
+SystemEvents.CONFIG_FORMATION_LOADED,INFO,src/muxi/formation/overlord/overlord.py:1617,Set muxi-generalist as default fallback agent,src/muxi/formation/overlord/overlord.py,1617
 SystemEvents.CONFIG_FORMATION_LOADED,INFO,src/muxi/formation/server/routes/admin/secrets.py:119,Secret '{secret.key}' created successfully,src/muxi/formation/server/routes/admin/secrets.py,119
 SystemEvents.CONFIG_FORMATION_LOADED,INFO,src/muxi/formation/server/routes/admin/secrets.py:166,Secret '{key}' updated successfully,src/muxi/formation/server/routes/admin/secrets.py,166
 SystemEvents.CONFIG_FORMATION_LOADED,INFO,src/muxi/formation/server/routes/admin/secrets.py:223,Secret '{key}' deleted successfully,src/muxi/formation/server/routes/admin/secrets.py,223
-SystemEvents.CREDENTIAL_UPDATE,INFO,src/muxi/formation/overlord/overlord.py:9800,Successfully stored {service} credentials for user,src/muxi/formation/overlord/overlord.py,9800
+SystemEvents.CREDENTIAL_UPDATE,INFO,src/muxi/formation/overlord/overlord.py:9792,Successfully stored {service} credentials for user,src/muxi/formation/overlord/overlord.py,9792
 SystemEvents.CRON_EXPRESSION_FIXED,INFO,src/muxi/services/scheduler/parser.py:864,Fixed invalid cron expression from LLM,src/muxi/services/scheduler/parser.py,864
 SystemEvents.DATABASE_MANAGER_INITIALIZED,INFO,src/muxi/services/db.py:153,Database manager initialized with {self.database_type} (async support enabled),src/muxi/services/db.py,153
 SystemEvents.DATABASE_TABLES_CREATED,INFO,src/muxi/formation/initialization.py:516,All database tables created successfully,src/muxi/formation/initialization.py,516
@@ -987,19 +977,19 @@ SystemEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/documents/workf
 SystemEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/documents/workflow/workflow_integrator.py:266,Failed to enrich workflow with document insights,src/muxi/formation/documents/workflow/workflow_integrator.py,266
 SystemEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/documents/workflow/workflow_integrator.py:316,Failed to generate follow-up suggestions for document,src/muxi/formation/documents/workflow/workflow_integrator.py,316
 SystemEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/documents/workflow/workflow_integrator.py:354,Failed to generate {category} tasks for document,src/muxi/formation/documents/workflow/workflow_integrator.py,354
-SystemEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:4000,Document processing failed during upload phase,src/muxi/formation/overlord/overlord.py,4000
-SystemEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:4260,"Failed to process document '{attachment.get('filename', 'unknown')}'",src/muxi/formation/overlord/overlord.py,4260
-SystemEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:4305,Failed to generate document acknowledgment,src/muxi/formation/overlord/overlord.py,4305
-SystemEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:4392,Failed to integrate documents into workflow,src/muxi/formation/overlord/overlord.py,4392
+SystemEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:3992,Document processing failed during upload phase,src/muxi/formation/overlord/overlord.py,3992
+SystemEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:4252,"Failed to process document '{attachment.get('filename', 'unknown')}'",src/muxi/formation/overlord/overlord.py,4252
+SystemEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:4297,Failed to generate document acknowledgment,src/muxi/formation/overlord/overlord.py,4297
+SystemEvents.DOCUMENT_PROCESSING_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:4384,Failed to integrate documents into workflow,src/muxi/formation/overlord/overlord.py,4384
 SystemEvents.ERROR,ERROR,src/muxi/formation/server/routes/health.py:35,Error checking formation health,src/muxi/formation/server/routes/health.py,35
 SystemEvents.EXTENSION_FAILED,DEBUG,src/muxi/formation/credentials/handler.py:900,"LLM help generation failed, using inline fallback: {e}",src/muxi/formation/credentials/handler.py,900
 SystemEvents.EXTENSION_FAILED,DEBUG,src/muxi/formation/workflow/decomposer.py:382,Failed to serialize context for decomposition: {str(e)},src/muxi/formation/workflow/decomposer.py,382
-SystemEvents.EXTENSION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:2722,"Could not initialize any extraction model, disabling auto-extraction",src/muxi/formation/overlord/overlord.py,2722
+SystemEvents.EXTENSION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:2714,"Could not initialize any extraction model, disabling auto-extraction",src/muxi/formation/overlord/overlord.py,2714
 SystemEvents.EXTENSION_FAILED,ERROR,src/muxi/services/memory/extractor.py:263,Memory extractor failed to generate extraction response from model,src/muxi/services/memory/extractor.py,263
 SystemEvents.EXTENSION_FAILED,ERROR,src/muxi/services/memory/extractor.py:590,Memory extractor failed to store extracted information in long-term memory,src/muxi/services/memory/extractor.py,590
 SystemEvents.EXTENSION_FAILED,WARNING,src/muxi/formation/credentials/resolver.py:128,Failed to parse credential JSON for {credentials[0].name}: {str(e)},src/muxi/formation/credentials/resolver.py,128
 SystemEvents.EXTENSION_FAILED,WARNING,src/muxi/formation/credentials/resolver.py:154,Failed to parse credential JSON for {cred.name}: {str(e)},src/muxi/formation/credentials/resolver.py,154
-SystemEvents.EXTENSION_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:2663,"Failed to initialize extraction model, will try fallback: {str(e)}",src/muxi/formation/overlord/overlord.py,2663
+SystemEvents.EXTENSION_FAILED,WARNING,src/muxi/formation/overlord/overlord.py:2655,"Failed to initialize extraction model, will try fallback: {str(e)}",src/muxi/formation/overlord/overlord.py,2655
 SystemEvents.EXTENSION_LISTED,DEBUG,src/muxi/extensions/base.py:209,NO DESCRIPTION,src/muxi/extensions/base.py,209
 SystemEvents.EXTENSION_LISTING_FAILED,ERROR,src/muxi/extensions/base.py:178,Extension lookup failed for name: {name}: {str(e)},src/muxi/extensions/base.py,178
 SystemEvents.EXTENSION_LISTING_FAILED,ERROR,src/muxi/extensions/base.py:225,Extension listing failed: {str(e)},src/muxi/extensions/base.py,225
@@ -1012,15 +1002,15 @@ SystemEvents.FILE_OPERATION_FAILED,WARNING,src/muxi/formation/server/routes/admi
 SystemEvents.INITIALIZING,DEBUG,src/muxi/formation/artifacts/extractor.py:41,No tool results provided for artifact extraction,src/muxi/formation/artifacts/extractor.py,41
 SystemEvents.INITIALIZING,DEBUG,src/muxi/formation/initialization.py:277,Working memory configured in {config.mode} mode,src/muxi/formation/initialization.py,277
 SystemEvents.INITIALIZING,DEBUG,src/muxi/formation/initialization.py:765,Clarification configuration initialized,src/muxi/formation/initialization.py,765
-SystemEvents.INITIALIZING,DEBUG,src/muxi/formation/overlord/overlord.py:2746,Collection '{collection_name}' registered: {description},src/muxi/formation/overlord/overlord.py,2746
-SystemEvents.INITIALIZING,DEBUG,src/muxi/formation/overlord/overlord.py:2759,Collection '{collection_name}' registered: {description},src/muxi/formation/overlord/overlord.py,2759
-SystemEvents.INITIALIZING,DEBUG,src/muxi/formation/overlord/overlord.py:4196,Using fallback chunking for {filename},src/muxi/formation/overlord/overlord.py,4196
+SystemEvents.INITIALIZING,DEBUG,src/muxi/formation/overlord/overlord.py:2738,Collection '{collection_name}' registered: {description},src/muxi/formation/overlord/overlord.py,2738
+SystemEvents.INITIALIZING,DEBUG,src/muxi/formation/overlord/overlord.py:2751,Collection '{collection_name}' registered: {description},src/muxi/formation/overlord/overlord.py,2751
+SystemEvents.INITIALIZING,DEBUG,src/muxi/formation/overlord/overlord.py:4188,Using fallback chunking for {filename},src/muxi/formation/overlord/overlord.py,4188
 SystemEvents.INITIALIZING,DEBUG,src/muxi/services/memory/long_term.py:207,Lazily initialized embedding model: {self._embedding_model_name},src/muxi/services/memory/long_term.py,207
 SystemEvents.INITIALIZING,ERROR,src/muxi/formation/initialization.py:636,Failed to initialize MCP service: {str(e)},src/muxi/formation/initialization.py,636
 SystemEvents.INITIALIZING,INFO,src/muxi/formation/formation.py:1268,All Formation services initialized successfully,src/muxi/formation/formation.py,1268
-SystemEvents.INITIALIZING,INFO,src/muxi/formation/formation.py:3153,Replacing existing stopped server instance,src/muxi/formation/formation.py,3153
-SystemEvents.INITIALIZING,INFO,src/muxi/formation/formation.py:3184,Starting Formation API server on {actual_host}:{actual_port},src/muxi/formation/formation.py,3184
-SystemEvents.INITIALIZING,INFO,src/muxi/formation/formation.py:3199,Auto-starting overlord for Formation API server,src/muxi/formation/formation.py,3199
+SystemEvents.INITIALIZING,INFO,src/muxi/formation/formation.py:3146,Replacing existing stopped server instance,src/muxi/formation/formation.py,3146
+SystemEvents.INITIALIZING,INFO,src/muxi/formation/formation.py:3177,Starting Formation API server on {actual_host}:{actual_port},src/muxi/formation/formation.py,3177
+SystemEvents.INITIALIZING,INFO,src/muxi/formation/formation.py:3192,Auto-starting overlord for Formation API server,src/muxi/formation/formation.py,3192
 SystemEvents.INITIALIZING,INFO,src/muxi/formation/initialization.py:97,Observability initialized with file output: {event_logger.output_config.get('path')},src/muxi/formation/initialization.py,97
 SystemEvents.INITIALIZING,INFO,src/muxi/formation/initialization.py:234,NO DESCRIPTION,src/muxi/formation/initialization.py,234
 SystemEvents.INITIALIZING,INFO,src/muxi/formation/initialization.py:339,Buffer memory initialized with size {size},src/muxi/formation/initialization.py,339
@@ -1033,8 +1023,8 @@ SystemEvents.INITIALIZING,INFO,src/muxi/formation/initialization.py:813,Document
 SystemEvents.INITIALIZING,INFO,src/muxi/formation/initialization.py:1077,NO DESCRIPTION,src/muxi/formation/initialization.py,1077
 SystemEvents.INITIALIZING,INFO,src/muxi/formation/initialization.py:1120,NO DESCRIPTION,src/muxi/formation/initialization.py,1120
 SystemEvents.INITIALIZING,INFO,src/muxi/formation/overlord/overlord.py:482,Initialized encrypted credential resolver,src/muxi/formation/overlord/overlord.py,482
-SystemEvents.INITIALIZING,INFO,src/muxi/formation/overlord/overlord.py:2794,A2A ClientFactory initialized with AgentTransport,src/muxi/formation/overlord/overlord.py,2794
-SystemEvents.INITIALIZING,INFO,src/muxi/formation/overlord/overlord.py:4156,Successfully extracted {len(extracted_content)} chars from {filename},src/muxi/formation/overlord/overlord.py,4156
+SystemEvents.INITIALIZING,INFO,src/muxi/formation/overlord/overlord.py:2786,A2A ClientFactory initialized with AgentTransport,src/muxi/formation/overlord/overlord.py,2786
+SystemEvents.INITIALIZING,INFO,src/muxi/formation/overlord/overlord.py:4148,Successfully extracted {len(extracted_content)} chars from {filename},src/muxi/formation/overlord/overlord.py,4148
 SystemEvents.INITIALIZING,INFO,src/muxi/formation/server/server.py:130,Initializing Formation server on {self.host}:{self.port},src/muxi/formation/server/server.py,130
 SystemEvents.INITIALIZING,INFO,src/muxi/formation/server/server.py:226,API keys loaded from formation configuration,src/muxi/formation/server/server.py,226
 SystemEvents.INITIALIZING,INFO,src/muxi/formation/workflow/workflow_manager.py:51,WorkflowManager initialized,src/muxi/formation/workflow/workflow_manager.py,51
@@ -1088,7 +1078,7 @@ SystemEvents.MCP_SERVER_CONNECTION_FAILED,ERROR,src/muxi/services/mcp/transports
 SystemEvents.MCP_SERVER_CONNECTION_FAILED,ERROR,src/muxi/services/mcp/transports/streamable.py:147,Connection failed: {e},src/muxi/services/mcp/transports/streamable.py,147
 SystemEvents.MCP_SERVER_CONNECTION_LOST,WARNING,src/muxi/services/mcp/service.py:1314,Connection lost to MCP server: {server_id},src/muxi/services/mcp/service.py,1314
 SystemEvents.MCP_SERVER_DISCONNECTED,ERROR,src/muxi/services/mcp/service.py:1090,NO DESCRIPTION,src/muxi/services/mcp/service.py,1090
-SystemEvents.MCP_SERVER_DISCONNECTED,INFO,src/muxi/formation/formation.py:2735,All MCP servers disconnected during Formation shutdown,src/muxi/formation/formation.py,2735
+SystemEvents.MCP_SERVER_DISCONNECTED,INFO,src/muxi/formation/formation.py:2728,All MCP servers disconnected during Formation shutdown,src/muxi/formation/formation.py,2728
 SystemEvents.MCP_SERVER_DISCONNECTED,INFO,src/muxi/services/mcp/handler.py:201,Disconnected from MCP server '{self.name}',src/muxi/services/mcp/handler.py,201
 SystemEvents.MCP_SERVER_DISCONNECTED,INFO,src/muxi/services/mcp/service.py:1080,Unregistered MCP server: {server_id},src/muxi/services/mcp/service.py,1080
 SystemEvents.MCP_SERVER_DISCONNECTED,INFO,src/muxi/services/mcp/service.py:1546,Disconnected MCP server during shutdown: {server_id},src/muxi/services/mcp/service.py,1546
@@ -1103,13 +1093,13 @@ SystemEvents.MCP_SERVER_RECONNECTING,WARNING,src/muxi/services/mcp/handler.py:66
 SystemEvents.MCP_SERVER_REGISTERED,INFO,src/muxi/formation/formation.py:2351,MCP server registered: {server_id},src/muxi/formation/formation.py,2351
 SystemEvents.MCP_SERVER_REGISTERED,INFO,src/muxi/services/mcp/handler.py:694,Successfully registered MCP server '{name}' (total: {len(self.servers)}),src/muxi/services/mcp/handler.py,694
 SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,INFO,src/muxi/formation/formation.py:1552,Built-in MCP server added to configuration: {mcp_name},src/muxi/formation/formation.py,1552
-SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,INFO,src/muxi/formation/formation.py:2577,Formation has MCP servers - automatically enabled exit error suppression,src/muxi/formation/formation.py,2577
-SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,INFO,src/muxi/formation/overlord/overlord.py:1859,MCP server {server_id} registered for agent {agent_id},src/muxi/formation/overlord/overlord.py,1859
+SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,INFO,src/muxi/formation/formation.py:2570,Formation has MCP servers - automatically enabled exit error suppression,src/muxi/formation/formation.py,2570
+SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,INFO,src/muxi/formation/overlord/overlord.py:1851,MCP server {server_id} registered for agent {agent_id},src/muxi/formation/overlord/overlord.py,1851
 SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,INFO,src/muxi/services/mcp/service.py:250,MCP server registered: {server_id},src/muxi/services/mcp/service.py,250
 SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,INFO,src/muxi/services/mcp/service.py:941,"MCP server registration completed (tools discovered, connection closed): {server_id}",src/muxi/services/mcp/service.py,941
-SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,MALFORMED,src/muxi/formation/formation.py:2457,NO DESCRIPTION,src/muxi/formation/formation.py,2457
+SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,WARNING,src/muxi/formation/formation.py:2457,"MCP server registration completed: {len(successful_servers)} successful, {len(failed_servers)} failed, {len(skipped_servers)} skipped",src/muxi/formation/formation.py,2457
 SystemEvents.MCP_SERVER_REGISTRATION_FAILED,ERROR,src/muxi/formation/overlord/mcp_coordinator.py:385,MCP server '{server_id}' registration failed due to secret interpolation error,src/muxi/formation/overlord/mcp_coordinator.py,385
-SystemEvents.MCP_SERVER_REGISTRATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:1880,Cannot start formation: MCP server '{server_id}' failed for agent '{agent_id}',src/muxi/formation/overlord/overlord.py,1880
+SystemEvents.MCP_SERVER_REGISTRATION_FAILED,ERROR,src/muxi/formation/overlord/overlord.py:1872,Cannot start formation: MCP server '{server_id}' failed for agent '{agent_id}',src/muxi/formation/overlord/overlord.py,1872
 SystemEvents.MCP_SERVER_REGISTRATION_FAILED,ERROR,src/muxi/services/mcp/handler.py:707,Failed to register MCP server '{name}': {str(e)},src/muxi/services/mcp/handler.py,707
 SystemEvents.MCP_SERVER_REGISTRATION_FAILED,ERROR,src/muxi/services/mcp/service.py:961,MCP server registration failed: {server_id} - {e},src/muxi/services/mcp/service.py,961
 SystemEvents.MCP_SERVER_REGISTRATION_FAILED,WARNING,src/muxi/formation/formation.py:1528,Built-in MCP script not found: {mcp_path},src/muxi/formation/formation.py,1528
@@ -1121,7 +1111,7 @@ SystemEvents.MCP_SERVER_REGISTRATION_FAILED,WARNING,src/muxi/formation/initializ
 SystemEvents.MCP_SERVER_REGISTRATION_STARTED,INFO,src/muxi/formation/formation.py:2184,Registering {len(self._mcp_servers)} MCP servers in Formation,src/muxi/formation/formation.py,2184
 SystemEvents.MCP_SERVER_REGISTRATION_STARTED,INFO,src/muxi/formation/formation.py:2309,Registered in user credential server registry,src/muxi/formation/formation.py,2309
 SystemEvents.MCP_SERVER_REGISTRATION_STARTED,INFO,src/muxi/formation/formation.py:2322,Using formation secrets for initial connection,src/muxi/formation/formation.py,2322
-SystemEvents.MCP_SERVER_REGISTRATION_STARTED,INFO,src/muxi/formation/overlord/overlord.py:1774,Registering {len(mcp_servers)} MCP servers for agent {agent_id},src/muxi/formation/overlord/overlord.py,1774
+SystemEvents.MCP_SERVER_REGISTRATION_STARTED,INFO,src/muxi/formation/overlord/overlord.py:1766,Registering {len(mcp_servers)} MCP servers for agent {agent_id},src/muxi/formation/overlord/overlord.py,1766
 SystemEvents.MCP_SERVER_UNREGISTERED,INFO,src/muxi/services/mcp/handler.py:744,Unregistered MCP server '{name}' (remaining: {len(self.servers)}),src/muxi/services/mcp/handler.py,744
 SystemEvents.MCP_SERVER_UNREGISTRATION_FAILED,ERROR,src/muxi/services/mcp/handler.py:758,Failed to unregister MCP server '{name}': {str(e)},src/muxi/services/mcp/handler.py,758
 SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,INFO,src/muxi/formation/overlord/mcp_coordinator.py:479,MCP tool discovery completed for server '{server_id}',src/muxi/formation/overlord/mcp_coordinator.py,479
@@ -1145,18 +1135,26 @@ SystemEvents.MEMORY_CLEAR,INFO,src/muxi/services/memory/memobase.py:471,User mem
 SystemEvents.MEMORY_OPERATION_FAILED,WARNING,src/muxi/formation/overlord/clarification.py:382,Failed to store clarification state in buffer memory: {str(e)},src/muxi/formation/overlord/clarification.py,382
 SystemEvents.MEMORY_OPERATION_FAILED,WARNING,src/muxi/formation/overlord/clarification.py:606,Failed to get credentials for {mcp_service}: {e},src/muxi/formation/overlord/clarification.py,606
 SystemEvents.OPERATION_COMPLETED,DEBUG,src/muxi/services/a2a/client.py:456,A2A SDK client reference cleared,src/muxi/services/a2a/client.py,456
+SystemEvents.OPERATION_COMPLETED,DEBUG,src/muxi/services/memory/extractor.py:513,NO DESCRIPTION,src/muxi/services/memory/extractor.py,513
+SystemEvents.OPERATION_COMPLETED,DEBUG,src/muxi/services/memory/extractor.py:529,NO DESCRIPTION,src/muxi/services/memory/extractor.py,529
+SystemEvents.OPERATION_COMPLETED,DEBUG,src/muxi/utils/user_resolution.py:81,NO DESCRIPTION,src/muxi/utils/user_resolution.py,81
+SystemEvents.OPERATION_COMPLETED,DEBUG,src/muxi/utils/user_resolution.py:106,NO DESCRIPTION,src/muxi/utils/user_resolution.py,106
 SystemEvents.OPERATION_COMPLETED,INFO,src/muxi/formation/documents/workflow/cross_reference_manager.py:103,Initialized DocumentCrossReferenceManager with storage at {self.storage_path},src/muxi/formation/documents/workflow/cross_reference_manager.py,103
 SystemEvents.OPERATION_COMPLETED,INFO,src/muxi/formation/documents/workflow/cross_reference_manager.py:195,Added reference {reference_id} from {source_document_id} to {target_document_id},src/muxi/formation/documents/workflow/cross_reference_manager.py,195
 SystemEvents.OPERATION_COMPLETED,INFO,src/muxi/formation/documents/workflow/cross_reference_manager.py:290,Loaded {len(self._references)} document references from storage,src/muxi/formation/documents/workflow/cross_reference_manager.py,290
+SystemEvents.OPERATION_COMPLETED,INFO,src/muxi/formation/overlord/overlord.py:1344,Clarification system updated with actual services,src/muxi/formation/overlord/overlord.py,1344
 SystemEvents.OPERATION_COMPLETED,INFO,src/muxi/services/a2a/client.py:93,A2A SDK initialization skipped - no external registry URL,src/muxi/services/a2a/client.py,93
 SystemEvents.OPERATION_COMPLETED,INFO,src/muxi/services/a2a/client.py:439,A2A service httpx client closed successfully,src/muxi/services/a2a/client.py,439
 SystemEvents.OPERATION_COMPLETED,INFO,src/muxi/services/mcp/reconnection.py:416,Operation '{operation_name}' completed successfully in {elapsed_time:.2f}s,src/muxi/services/mcp/reconnection.py,416
+SystemEvents.OPERATION_COMPLETED,INFO,src/muxi/utils/user_resolution.py:132,NO DESCRIPTION,src/muxi/utils/user_resolution.py,132
+SystemEvents.OPERATION_COMPLETED,INFO,src/muxi/utils/user_resolution.py:163,NO DESCRIPTION,src/muxi/utils/user_resolution.py,163
+SystemEvents.OPERATION_COMPLETED,INFO,src/muxi/utils/user_resolution.py:353,NO DESCRIPTION,src/muxi/utils/user_resolution.py,353
 SystemEvents.OVERLORD_INITIALIZING,DEBUG,src/muxi/formation/formation.py:219,SecretsManager injected via dependency injection,src/muxi/formation/formation.py,219
 SystemEvents.OVERLORD_INITIALIZING,DEBUG,src/muxi/formation/formation.py:391,SecretsManager initialized with directory: {secrets_dir},src/muxi/formation/formation.py,391
 SystemEvents.OVERLORD_INITIALIZING,DEBUG,src/muxi/formation/formation.py:416,Using pre-injected SecretsManager instance,src/muxi/formation/formation.py,416
 SystemEvents.OVERLORD_INITIALIZING,INFO,src/muxi/formation/formation.py:1206,PromptLoader initialized successfully,src/muxi/formation/formation.py,1206
-SystemEvents.OVERLORD_SHUTDOWN,INFO,src/muxi/formation/overlord/overlord.py:3475,Waiting for {len(self._background_tasks)} background tasks to complete,src/muxi/formation/overlord/overlord.py,3475
-SystemEvents.OVERLORD_SHUTDOWN,INFO,src/muxi/formation/overlord/overlord.py:3497,Overlord shutdown complete - no active requests remaining,src/muxi/formation/overlord/overlord.py,3497
+SystemEvents.OVERLORD_SHUTDOWN,INFO,src/muxi/formation/overlord/overlord.py:3467,Waiting for {len(self._background_tasks)} background tasks to complete,src/muxi/formation/overlord/overlord.py,3467
+SystemEvents.OVERLORD_SHUTDOWN,INFO,src/muxi/formation/overlord/overlord.py:3489,Overlord shutdown complete - no active requests remaining,src/muxi/formation/overlord/overlord.py,3489
 SystemEvents.PERFORMANCE_DURATION_RECORDED,DEBUG,src/muxi/formation/background/time_estimator.py:77,Time estimation: {estimated_seconds:.1f}s,src/muxi/formation/background/time_estimator.py,77
 SystemEvents.PERFORMANCE_DURATION_RECORDED,DEBUG,src/muxi/formation/background/time_estimator.py:137,Adjusted time estimate: {adjusted_estimate:.1f}s (70% historical),src/muxi/formation/background/time_estimator.py,137
 SystemEvents.PERFORMANCE_OPTIMIZED,DEBUG,src/muxi/services/llm/service.py:254,Cache hit for LLM request,src/muxi/services/llm/service.py,254
@@ -1193,7 +1191,7 @@ SystemEvents.SECRET_LISTING_FAILED,ERROR,src/muxi/formation/overlord/secrets_man
 SystemEvents.SECRET_LISTING_FAILED,ERROR,src/muxi/services/secrets/secrets_manager.py:431,Secret listing failed: {str(e)},src/muxi/services/secrets/secrets_manager.py,431
 SystemEvents.SECRET_OPERATION_COMPLETED,INFO,src/muxi/formation/credentials/resolver.py:267,Updated credential name from '{service}' to '{smart_name}',src/muxi/formation/credentials/resolver.py,267
 SystemEvents.SECRET_OPERATION_COMPLETED,INFO,src/muxi/formation/formation.py:850,Secret interpolation completed successfully for formation configuration,src/muxi/formation/formation.py,850
-SystemEvents.SECRET_OPERATION_COMPLETED,MALFORMED,src/muxi/services/secrets/secrets_manager.py:578,NO DESCRIPTION,src/muxi/services/secrets/secrets_manager.py,578
+SystemEvents.SECRET_OPERATION_COMPLETED,INFO,src/muxi/services/secrets/secrets_manager.py:578,"Secret import completed: {imported_count} imported, {failed_count} failed",src/muxi/services/secrets/secrets_manager.py,578
 SystemEvents.SECRET_OPERATION_FAILED,ERROR,src/muxi/formation/overlord/secrets_manager.py:45,Failed to interpolate secrets in configuration,src/muxi/formation/overlord/secrets_manager.py,45
 SystemEvents.SECRET_OPERATION_FAILED,ERROR,src/muxi/formation/overlord/secrets_manager.py:71,Failed to initialize secrets manager encryption,src/muxi/formation/overlord/secrets_manager.py,71
 SystemEvents.SECRET_OPERATION_FAILED,ERROR,src/muxi/formation/overlord/secrets_manager.py:101,Failed to store secret '{name}',src/muxi/formation/overlord/secrets_manager.py,101
@@ -1206,26 +1204,29 @@ SystemEvents.SECRET_OPERATION_FAILED,ERROR,src/muxi/services/secrets/secrets_man
 SystemEvents.SECRET_OPERATION_FAILED,ERROR,src/muxi/services/secrets/secrets_manager.py:404,Secret deletion failed for {name}: {str(e)},src/muxi/services/secrets/secrets_manager.py,404
 SystemEvents.SECRET_OPERATION_FAILED,ERROR,src/muxi/services/secrets/secrets_manager.py:485,Secret interpolation failed: {str(e)},src/muxi/services/secrets/secrets_manager.py,485
 SystemEvents.SECRET_OPERATION_FAILED,ERROR,src/muxi/services/secrets/secrets_manager.py:542,Secret clearing failed: {str(e)},src/muxi/services/secrets/secrets_manager.py,542
-SystemEvents.SECRET_OPERATION_FAILED,ERROR,src/muxi/services/secrets/secrets_manager.py:599,Secret import failed: {str(e)},src/muxi/services/secrets/secrets_manager.py,599
-SystemEvents.SECRET_OPERATION_FAILED,ERROR,src/muxi/services/secrets/secrets_manager.py:631,Secret export failed: {str(e)},src/muxi/services/secrets/secrets_manager.py,631
-SystemEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:2689,Successfully initialized extraction model with fallback,src/muxi/formation/overlord/overlord.py,2689
-SystemEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:2708,Successfully initialized extraction model with fallback,src/muxi/formation/overlord/overlord.py,2708
-SystemEvents.SERVICE_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:1310,Failed to initialize artifact service: {e},src/muxi/formation/overlord/overlord.py,1310
+SystemEvents.SECRET_OPERATION_FAILED,ERROR,src/muxi/services/secrets/secrets_manager.py:597,Secret import failed: {str(e)},src/muxi/services/secrets/secrets_manager.py,597
+SystemEvents.SECRET_OPERATION_FAILED,ERROR,src/muxi/services/secrets/secrets_manager.py:629,Secret export failed: {str(e)},src/muxi/services/secrets/secrets_manager.py,629
+SystemEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:2681,Successfully initialized extraction model with fallback,src/muxi/formation/overlord/overlord.py,2681
+SystemEvents.SERVER_STARTED,INFO,src/muxi/formation/overlord/overlord.py:2700,Successfully initialized extraction model with fallback,src/muxi/formation/overlord/overlord.py,2700
+SystemEvents.SERVICE_ERROR,ERROR,src/muxi/formation/overlord/overlord.py:1302,Failed to initialize artifact service: {e},src/muxi/formation/overlord/overlord.py,1302
 SystemEvents.SERVICE_INITIALIZED,WARNING,src/muxi/formation/overlord/overlord.py:496,Using non-encrypted credential resolver (cryptography not installed),src/muxi/formation/overlord/overlord.py,496
-SystemEvents.SERVICE_STARTED,DEBUG,src/muxi/formation/formation.py:2841,Created async task in existing event loop,src/muxi/formation/formation.py,2841
-SystemEvents.SERVICE_STARTED,DEBUG,src/muxi/formation/formation.py:2850,Creating new event loop for async operation,src/muxi/formation/formation.py,2850
+SystemEvents.SERVICE_STARTED,DEBUG,src/muxi/formation/formation.py:2834,Created async task in existing event loop,src/muxi/formation/formation.py,2834
+SystemEvents.SERVICE_STARTED,DEBUG,src/muxi/formation/formation.py:2843,Creating new event loop for async operation,src/muxi/formation/formation.py,2843
 SystemEvents.SERVICE_STARTED,DEBUG,src/muxi/formation/overlord/overlord.py:833,Created tracked background task: {name or 'unnamed'},src/muxi/formation/overlord/overlord.py,833
-SystemEvents.SERVICE_STARTED,DEBUG,src/muxi/formation/overlord/overlord.py:6208,Clarification bypassed,src/muxi/formation/overlord/overlord.py,6208
+SystemEvents.SERVICE_STARTED,DEBUG,src/muxi/formation/overlord/overlord.py:860,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,860
+SystemEvents.SERVICE_STARTED,DEBUG,src/muxi/formation/overlord/overlord.py:6200,Clarification bypassed,src/muxi/formation/overlord/overlord.py,6200
 SystemEvents.SERVICE_STARTED,DEBUG,src/muxi/services/intent/service.py:93,Intent detection cache hit,src/muxi/services/intent/service.py,93
 SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/agents/knowledge/base.py:291,Scanning directory for knowledge files,src/muxi/formation/agents/knowledge/base.py,291
 SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/agents/knowledge/base.py:345,Discovered {len(self._files)} knowledge files,src/muxi/formation/agents/knowledge/base.py,345
 SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/initialization.py:667,Artifact generation service initialized successfully,src/muxi/formation/initialization.py,667
-SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:945,SOP system lazily initialized with {len(self.sop_system.sops)} SOPs,src/muxi/formation/overlord/overlord.py,945
-SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:1081,SOP system indexed for semantic search,src/muxi/formation/overlord/overlord.py,1081
-SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:1291,MCP service received from Formation,src/muxi/formation/overlord/overlord.py,1291
-SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:1303,Artifact service initialized,src/muxi/formation/overlord/overlord.py,1303
-SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:1417,Formation capabilities populated: {len(capabilities)} total,src/muxi/formation/overlord/overlord.py,1417
-SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:2431,SOP system initialization deferred (path={formation_path}),src/muxi/formation/overlord/overlord.py,2431
+SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:757,Clarification system initialized with unified components,src/muxi/formation/overlord/overlord.py,757
+SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:941,SOP system lazily initialized with {len(self.sop_system.sops)} SOPs,src/muxi/formation/overlord/overlord.py,941
+SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:1077,SOP system indexed for semantic search,src/muxi/formation/overlord/overlord.py,1077
+SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:1283,MCP service received from Formation,src/muxi/formation/overlord/overlord.py,1283
+SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:1295,Artifact service initialized,src/muxi/formation/overlord/overlord.py,1295
+SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:1327,Created LLM for clarification: {text_config['model']},src/muxi/formation/overlord/overlord.py,1327
+SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:1409,Formation capabilities populated: {len(capabilities)} total,src/muxi/formation/overlord/overlord.py,1409
+SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/overlord/overlord.py:2423,SOP system initialization deferred (path={formation_path}),src/muxi/formation/overlord/overlord.py,2423
 SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/workflow/sops.py:286,Migrated SOP embeddings cache from pickle to JSON format,src/muxi/formation/workflow/sops.py,286
 SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/workflow/workflow_manager.py:67,WorkflowManager.track_workflow - Entry,src/muxi/formation/workflow/workflow_manager.py,67
 SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/workflow/workflow_manager.py:77,WorkflowManager.track_workflow - Inside lock,src/muxi/formation/workflow/workflow_manager.py,77
@@ -1239,14 +1240,13 @@ SystemEvents.SERVICE_STARTED,INFO,src/muxi/formation/workflow/workflow_manager.p
 SystemEvents.SERVICE_STARTED,INFO,src/muxi/services/a2a/client.py:111,A2A service initialized for internal-only communication (no SDK needed),src/muxi/services/a2a/client.py,111
 SystemEvents.SERVICE_STARTED,INFO,src/muxi/services/intent/service.py:114,Intent detected: {result.intent} ({result.confidence:.2f}),src/muxi/services/intent/service.py,114
 SystemEvents.SERVICE_STARTED,INFO,src/muxi/services/mcp/service.py:1569,MCP service shutdown complete,src/muxi/services/mcp/service.py,1569
-SystemEvents.SERVICE_STARTED,MALFORMED,src/muxi/formation/overlord/overlord.py:860,NO DESCRIPTION,src/muxi/formation/overlord/overlord.py,860
 SystemEvents.SERVICE_STARTED,WARNING,src/muxi/formation/workflow/workflow_manager.py:137,Workflow complete called on non-active workflow,src/muxi/formation/workflow/workflow_manager.py,137
 SystemEvents.SERVICE_STARTED,WARNING,src/muxi/formation/workflow/workflow_manager.py:390,Workflow cancelled,src/muxi/formation/workflow/workflow_manager.py,390
 SystemEvents.SERVICE_WARNING,WARNING,src/muxi/formation/agents/agent.py:2184,Failed to decode binary content in document list: {type(e).__name__},src/muxi/formation/agents/agent.py,2184
 SystemEvents.SERVICE_WARNING,WARNING,src/muxi/formation/agents/agent.py:2204,Failed to decode binary file content: {type(e).__name__},src/muxi/formation/agents/agent.py,2204
 SystemEvents.SERVICE_WARNING,WARNING,src/muxi/formation/documents/storage/chunk_manager.py:98,Timeout loading spacy model '{model_name}' - using basic processing,src/muxi/formation/documents/storage/chunk_manager.py,98
 SystemEvents.SERVICE_WARNING,WARNING,src/muxi/formation/documents/storage/chunk_manager.py:106,spaCy model '{model_name}' not found - falling back to basic processing,src/muxi/formation/documents/storage/chunk_manager.py,106
-SystemEvents.SERVICE_WARNING,WARNING,src/muxi/formation/overlord/overlord.py:1318,Artifact service not initialized: formation instance not available,src/muxi/formation/overlord/overlord.py,1318
+SystemEvents.SERVICE_WARNING,WARNING,src/muxi/formation/overlord/overlord.py:1310,Artifact service not initialized: formation instance not available,src/muxi/formation/overlord/overlord.py,1310
 SystemEvents.SYSTEM_ACTION,WARNING,src/muxi/services/memory/extractor.py:228,purge_user_data called on legacy MemoryExtractor,src/muxi/services/memory/extractor.py,228
 SystemEvents.WEBHOOK_FAILED,DEBUG,src/muxi/formation/background/webhook_manager.py:501,Clarification webhook delivery failed with HTTP {response.status},src/muxi/formation/background/webhook_manager.py,501
 SystemEvents.WEBHOOK_FAILED,DEBUG,src/muxi/formation/background/webhook_manager.py:511,Clarification webhook delivery exception: {type(e).__name__},src/muxi/formation/background/webhook_manager.py,511

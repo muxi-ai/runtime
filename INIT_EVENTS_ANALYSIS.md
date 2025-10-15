@@ -379,12 +379,13 @@ Startup completed in 2.3s (8 services, 1 warning, 0 errors)
 ## Action Items
 
 1. ✅ **Analyze** - Document current state (this file)
-2. ⏭️ **Fix Duplicates** - Reduce scheduler's 11 duplicate events to 1
-3. ⏭️ **Delete Noise** - Remove 8+ granular MCP init events
-4. ⏭️ **Create Formatter** - Build InitEventFormatter
-5. ⏭️ **Implement** - Replace init events with formatted output
-6. ⏭️ **Test** - Verify startup logs are clean
-7. ⏭️ **Document** - Update observability docs
+2. 🚧 **Create Formatter** - Build InitEventFormatter with structured error support
+3. 🚧 **Create Error Dataclass** - Build InitFailureInfo for structured errors
+4. ⏭️ **Fix Duplicates** - Reduce scheduler's 11 duplicate events to 1
+5. ⏭️ **Delete Noise** - Remove 8+ granular MCP init events
+6. ⏭️ **Implement** - Replace init events with formatted output
+7. ⏭️ **Test** - Verify startup logs are clean
+8. ⏭️ **Document** - Update observability docs
 
 ---
 

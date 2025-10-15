@@ -511,7 +511,7 @@ class MemoryExtractor:
                             if score > score_threshold:
                                 # Memory is very similar to existing one - skip to avoid duplicate
                                 observability.observe(
-                                    event_type="memory_extractor_duplicate_skipped",
+                                    event_type=observability.SystemEvents.OPERATION_COMPLETED,
                                     level=observability.EventLevel.DEBUG,
                                     data={
                                         "new_content": memory_content[:100],
@@ -527,7 +527,7 @@ class MemoryExtractor:
                             else:
                                 # Log when we allow a similar memory through
                                 observability.observe(
-                                    event_type="memory_extractor_similar_stored",
+                                    event_type=observability.SystemEvents.OPERATION_COMPLETED,
                                     level=observability.EventLevel.DEBUG,
                                     data={
                                         "new_content": memory_content[:100],
