@@ -1922,10 +1922,12 @@ class Overlord:
                     # Fallback if file doesn't exist
                     fallback = "You are a friendly and helpful assistant."
                     self._default_persona = fallback
-                    msg = "Persona file not found: system_persona.md, using fallback"
-                    #  Warning - TODO: add observability
-                    # SystemEvents.FAILED_INITIALIZATION (persona)
-                    _ = msg  # remove this after implementing observability
+                    observability.observe(
+                        event_type=observability.ErrorEvents.WARNING,
+                        level=observability.EventLevel.WARNING,
+                        data={"file": "system_persona.md"},
+                        description="Persona file not found, using fallback persona",
+                    )
 
             # Append multilingual instruction
             self._default_persona += (
@@ -1939,9 +1941,16 @@ class Overlord:
                 "IMPORTANT: Always reply in the same language as the user's original request."
             )
             self._default_persona = fallback
-            #  Warning - TODO: add observability
-            # ErrorEvents.INTERNAL_ERROR
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "component": "persona_loader",
+                },
+                description="Failed to load persona file, using fallback",
+            )
 
     async def _is_actionable_message(self, message: str) -> bool:
         """
@@ -2345,9 +2354,16 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 interpolated_config = await self.interpolate_secrets({"api_key": final_api_key})
                 final_api_key = interpolated_config.get("api_key", final_api_key)
             except Exception as e:
-                #  Warning - TODO: add observability
-                # ErrorEvents.FAILED_INITIALIZATION (api_key)
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "component": "api_key_interpolation",
+                    },
+                    description="Failed to interpolate API key from secrets, using original value",
+                )
         # Create model instance
         model = LLM(model=model_name, api_key=final_api_key, **final_settings)
 
@@ -2529,9 +2545,16 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
         except Exception as e:
             # If initialization fails, log error and raise
-            #  Error - TODO: add observability
-            # ErrorEvents.FAILED_INITIALIZATION (overlord routing)
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "component": "routing_model_initialization",
+                },
+                description="Failed to initialize overlord routing model",
+            )
             raise RuntimeError("Failed to initialize routing model from overlord.llm config") from e
 
     async def _initialize_extraction_model(self):
@@ -2866,9 +2889,16 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 interpolated_config = await self.interpolate_secrets({"api_key": api_key})
                 final_api_key = interpolated_config.get("api_key", api_key)
             except Exception as e:
-                #  Warning - TODO: add observability
-                # ErrorEvents.FAILED_INITIALIZATION (api_key)
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "component": "agent_model_api_key_interpolation",
+                    },
+                    description="Failed to interpolate API key for agent model, using original value",
+                )
                 # Continue with original api_key
 
         # Apply global LLM settings with parameter overrides
@@ -3960,9 +3990,16 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             return to_return
 
         except Exception as e:
-            #  Error - TODO: add observability
-            # ConversationEvents.DOCUMENT_PROCESSING_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "document_upload",
+                },
+                description="Document processing failed during upload phase",
+            )
             if self.document_error_handler:
                 return await self.document_error_handler.handle_document_error(
                     e, "document_upload", context or {}
@@ -4213,11 +4250,17 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 )
 
             except Exception as e:
-                #  Error - TODO: add observability
-                # ConversationEvents.DOCUMENT_PROCESSING_FAILED
-                _ = e  # remove this after implementing observability
-                #     f"Error processing document {attachment.get('filename', 'unknown')}: {e}"
-                # )
+                observability.observe(
+                    event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "filename": attachment.get("filename", "unknown"),
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "operation": "document_storage",
+                    },
+                    description=f"Failed to process document '{attachment.get('filename', 'unknown')}'",
+                )
                 continue
 
         return processed_docs
@@ -4252,9 +4295,16 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             return acknowledgment
 
         except Exception as e:
-            #  Error - TODO: add observability
-            # ConversationEvents.DOCUMENT_PROCESSING_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "document_acknowledgment",
+                },
+                description="Failed to generate document acknowledgment",
+            )
             return (
                 "I've processed your documents, though I encountered some issues "
                 "with the acknowledgment generation."
@@ -4332,9 +4382,16 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 return f"{acknowledgment}\n\n{workflow_result}\n\n*Sources: {source_list}*"
 
         except Exception as e:
-            #  Error - TODO: add observability
-            # ConversationEvents.DOCUMENT_PROCESSING_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "document_workflow",
+                },
+                description="Failed to integrate documents into workflow",
+            )
             return f"{acknowledgment}\n\n{workflow_result}"
 
     def _is_document_processing_available(self) -> bool:
