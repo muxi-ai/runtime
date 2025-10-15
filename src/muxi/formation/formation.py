@@ -343,15 +343,12 @@ class Formation:
             # Import at start of method for availability everywhere
             from ..datatypes.observability import InitEventFormatter
             from ..services import observability
-            import pkg_resources
+            from ..utils.version import get_version
             
             # Disable observability during initialization (prevent JSON mixing with formatted output)
             observability.disable()
             
-            try:
-                version = pkg_resources.get_distribution("muxi").version
-            except Exception:
-                version = "dev"
+            version = get_version()
             print("\n" + "="*60)
             print(InitEventFormatter.format_ok(f"MUXI Runtime v{version}", "starting"))
             print("="*60 + "\n")
@@ -481,16 +478,50 @@ class Formation:
             # Initialize all services (observability first!)
             await self._initialize_services()
 
+        except ConfigurationNotFoundError as e:
+            # Clean up and show formatted error
+            self.config = None
+            self.secrets_manager = None
+            from ..datatypes.observability import InitFailureInfo
+            path = str(e).replace("Formation configuration not found: ", "")
+            failure = InitFailureInfo(
+                component="Formation loader",
+                problem="Configuration file not found",
+                context=f"Tried to load: {path}",
+                causes=[
+                    "File path is incorrect",
+                    "Formation directory doesn't exist",
+                    "formation.yaml file is missing"
+                ],
+                fixes=[
+                    f"Check that {path} exists",
+                    "Verify the path in your formation.load() call",
+                    "Make sure formation.yaml is in the specified directory"
+                ],
+                technical=str(e)
+            )
+            print("\n" + InitEventFormatter.format_fail(failure))
+            raise e
         except (
-            ConfigurationNotFoundError,
             ConfigurationValidationError,
             ConfigurationLoadError,
             DependencyValidationError,
             OverlordStateError,
         ) as e:
-            # Clean up on known failure types
+            # Clean up and show formatted error  
             self.config = None
             self.secrets_manager = None
+            from ..datatypes.observability import InitFailureInfo
+            error_msg = str(e).split('\n')[0].replace("❌ ", "")
+            failure = InitFailureInfo(
+                component="Formation initialization",
+                problem=error_msg,
+                context="Error during formation configuration loading",
+                causes=["Invalid configuration", "Missing required fields", "Validation failed"],
+                fixes=["Check formation.yaml syntax", "Verify all required fields are present"],
+                technical=str(e)
+            )
+            print("\n" + InitEventFormatter.format_fail(failure))
             raise e
         except Exception as e:
             # Clean up on failure - convert unexpected error to FormationError
@@ -2340,13 +2371,17 @@ class Formation:
                 )
 
                 # Print user-friendly error message
+                from ..datatypes.observability import InitEventFormatter
                 if is_auth_error:
-                    print(f"⚠️  MCP server '{server_id}' authentication failed")
-                    print("   💡 Check credentials or API keys for this service")
-                    print("   🚀 Formation will continue without this server")
+                    print(InitEventFormatter.format_warn(
+                        f"MCP server: {server_id}",
+                        "authentication failed - check credentials"
+                    ))
                 else:
-                    print(f"⚠️  MCP server '{server_id}' connection failed: {error_msg}")
-                    print("   🚀 Formation will continue without this server")
+                    print(InitEventFormatter.format_warn(
+                        f"MCP server: {server_id}",
+                        f"connection failed - {error_msg}"
+                    ))
 
                 failed_servers.append(server_id)
                 continue  # Continue with other servers instead of crashing
@@ -2367,9 +2402,11 @@ class Formation:
                 )
 
                 # Print user-friendly error message
-                print(f"⚠️  MCP server '{server_id}' configuration invalid: {str(e)}")
-                print("   💡 Check the server configuration in your formation")
-                print("   🚀 Formation will continue without this server")
+                from ..datatypes.observability import InitEventFormatter
+                print(InitEventFormatter.format_warn(
+                    f"MCP server: {server_id}",
+                    f"invalid configuration - {str(e)}"
+                ))
 
                 failed_servers.append(server_id)
                 continue  # Continue with other servers instead of crashing
@@ -2392,24 +2429,17 @@ class Formation:
                 )
 
                 # Print user-friendly error message
-                print(f"⚠️  MCP server '{server_id}' registration failed unexpectedly")
-                print(f"   Error: {error_msg}")
-                print("   🚀 Formation will continue without this server")
+                from ..datatypes.observability import InitEventFormatter
+                print(InitEventFormatter.format_warn(
+                    f"MCP server: {server_id}",
+                    f"registration failed - {error_msg}"
+                ))
 
                 failed_servers.append(server_id)
                 continue  # Continue with other servers instead of crashing
 
-        # Print user-friendly summary and add observability event
-        if successful_servers:
-            print(f"✅ {len(successful_servers)} MCP servers connected successfully")
-
+        # Add observability event for failed/skipped servers
         if failed_servers or skipped_servers:
-            if failed_servers:
-                print(f"⚠️  {len(failed_servers)} MCP servers failed to connect")
-                print(f"   Failed servers: {', '.join(failed_servers)}")
-            if skipped_servers:
-                print(f"ℹ️  {len(skipped_servers)} MCP servers were skipped (inactive)")
-
             observability.observe(
                 event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
                 level=(
@@ -2432,10 +2462,13 @@ class Formation:
                 ),
             )
 
-        # Only show additional guidance if there were failures
+        # Show info message if there were failures
         if failed_servers:
-            print("💡 Formation is ready to use with available MCP servers")
-            print("   To fix failed servers, check credentials and try again")
+            from ..datatypes.observability import InitEventFormatter
+            print(InitEventFormatter.format_info(
+                "MCP initialization complete",
+                f"{len(successful_servers)} succeeded, {len(failed_servers)} failed"
+            ))
 
     async def start_overlord(self):
         """
@@ -2472,8 +2505,11 @@ class Formation:
 
         # Return existing overlord if already running (one formation = one overlord)
         if self._is_running and self._overlord is not None:
-            print("⚠️  Warning: Overlord is already running. Returning existing instance.")
-            print("   Use stop_overlord() first if you need to restart with new configuration.")
+            from ..datatypes.observability import InitEventFormatter
+            print(InitEventFormatter.format_warn(
+                "Overlord already running",
+                "returning existing instance - use stop_overlord() to restart"
+            ))
             return self._overlord
 
         # Track startup time for summary
@@ -2670,11 +2706,13 @@ class Formation:
 
             try:
                 await wait_for_shutdown()
-                print("✅ Overlord shutdown gracefully - all agents finished their work")
+                # Shutdown message removed - observability events handle this
             except TimeoutError:
-                print(
-                    f"⚠️  Graceful shutdown timed out after {timeout_seconds}s - forcing termination"
-                )
+                from ..datatypes.observability import InitEventFormatter
+                print(InitEventFormatter.format_warn(
+                    "Graceful shutdown timeout",
+                    f"forcing termination after {timeout_seconds}s"
+                ))
 
             # Disconnect MCP servers before cleanup
             if hasattr(self, "_mcp_service") and self._mcp_service:
