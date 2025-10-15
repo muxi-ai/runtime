@@ -4,6 +4,7 @@ from enum import Enum
 
 from ...datatypes.workflow import RequestAnalysis
 from ...services.llm import LLM
+from ...services import observability
 import json
 
 
@@ -99,8 +100,16 @@ class RequestAnalyzer:
             return analysis
 
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_ANALYSIS_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "message_length": len(message),
+                },
+                description="Workflow request analysis failed, using fallback",
+            )
             # Return safe fallback analysis
             return RequestAnalysis(
                 complexity_score=5.0,
@@ -400,15 +409,23 @@ class RequestAnalyzer:
                 raise ValueError("No valid JSON found in response")
 
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_ANALYSIS_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "method": "llm_analysis",
+                },
+                description="LLM-based workflow analysis failed, using fallback",
+            )
             # Return fallback analysis
             return RequestAnalysis(
                 complexity_score=5.0,
                 requires_decomposition=False,
                 requires_approval=False,
                 implicit_subtasks=[],
-                required_capabilities=["general"],
+                required_capabilities=[\"general\"],
                 acceptance_criteria=[],
                 confidence_score=0.3,
                 is_scheduling_request=False,

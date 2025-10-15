@@ -470,6 +470,15 @@ class ConversationEvents(Enum):
     OVERLORD_WORKFLOW_CANCELLED = "overlord.workflow.cancelled"
     # When a workflow is cancelled by user or system
 
+    WORKFLOW_ANALYSIS_FAILED = "workflow.analysis.failed"
+    # When workflow request analysis fails
+
+    WORKFLOW_DECOMPOSITION_FAILED = "workflow.decomposition.failed"
+    # When workflow task decomposition fails
+
+    WORKFLOW_EXECUTION_FAILED = "workflow.execution.failed"
+    # When workflow task execution fails
+
     # ===================================================================
     # SOP (Standard Operating Procedures) EVENTS
     # ===================================================================
