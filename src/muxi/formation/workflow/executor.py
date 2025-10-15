@@ -804,7 +804,19 @@ class WorkflowExecutor:
                 )
 
             # Default: mark as failed
-            #  Error - TODO: add observability
+            observability.observe(
+                event_type=observability.ErrorEvents.WORKFLOW_EXECUTION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "task_id": task.id,
+                    "task_name": task.name,
+                    "assigned_agent_id": task.assigned_agent_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "workflow_id": getattr(task, 'workflow_id', None),
+                },
+                description=f"Task '{task.name}' execution failed",
+            )
             task.status = TaskStatus.FAILED
             task.error_message = str(e)
             task.end_time = datetime.now()
@@ -1234,7 +1246,18 @@ class WorkflowExecutor:
             )
 
         except Exception as e:
-            #  Error - TODO: add observability
+            observability.observe(
+                event_type=observability.ErrorEvents.WORKFLOW_EXECUTION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "task_id": task.id,
+                    "task_name": task.name,
+                    "agent_id": agent.agent_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description=f"Failed to execute task '{task.name}' with agent '{agent.agent_id}'",
+            )
             return TaskResult(
                 task_id=task.id,
                 agent_id=agent.agent_id,

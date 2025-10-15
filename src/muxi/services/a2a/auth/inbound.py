@@ -619,7 +619,6 @@ class A2AInboundAuthenticator:
                 description=f"A2A inbound authentication error: {str(e)}",
                 data={"auth_mode": self.auth_mode.value, "error": str(e)},
             )
-            #  A2A inbound auth error - TODO: add observability
             return False, None, f"Authentication error: {str(e)}"
 
     async def _authenticate_api_key(
