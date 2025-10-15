@@ -15,6 +15,7 @@ import aiohttp
 # Import unified response types
 from ...datatypes.response import MuxiUnifiedResponse, MuxiContentItem, MuxiErrorDetails
 from ...utils.response_converter import create_unified_response
+from ...datatypes import observability
 
 
 @dataclass
@@ -147,53 +148,67 @@ class WebhookManager:
                     webhook_url, unified_response, request_timeout
                 )
                 if success:
-                    if attempt > 0:
-                        #  Webhook info - TODO: add observability
-                        _ = None  # remove this after implementing observability
-                        #     f"✅ Webhook delivered successfully for request "
-                        #     f"{request_id} (succeeded on attempt {attempt + 1})"
-                        # )
-                        pass
-                    else:
-                        #  Webhook info - TODO: add observability
-                        _ = None  # remove this after implementing observability
-                        #     f"✅ Webhook delivered successfully for request "
-                        #     f"{request_id}"
-                        # )
-                        pass
+                    observability.observe(
+                        event_type=observability.SystemEvents.WEBHOOK_SENT,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "request_id": request_id,
+                            "attempt": attempt + 1,
+                            "max_retries": max_retries + 1,
+                        },
+                        description=f"Webhook delivered successfully for request {request_id}" +
+                                    (f" on attempt {attempt + 1}" if attempt > 0 else ""),
+                    )
                     return True
                 else:
                     if attempt < max_retries:
-                        #  Webhook warning - TODO: add observability
-                        _ = None  # remove this after implementing observability
-                        #     f"🔄 Webhook delivery attempt "
-                        #     f"{attempt + 1}/{max_retries + 1} failed "
-                        #     f"for request {request_id}, retrying..."
-                        # )
+                        observability.observe(
+                            event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "request_id": request_id,
+                                "attempt": attempt + 1,
+                                "max_retries": max_retries + 1,
+                            },
+                            description=f"Webhook delivery attempt {attempt + 1}/{max_retries + 1} failed, retrying",
+                        )
                     else:
-                        #  Webhook error - TODO: add observability
-                        _ = None  # remove this after implementing observability
-                        # f"❌ Webhook delivery failed permanently for "
-                        #     f"request {request_id} after {max_retries + 1} "
-                        #     f"attempts"
-                        # )
+                        observability.observe(
+                            event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                            level=observability.EventLevel.ERROR,
+                            data={
+                                "request_id": request_id,
+                                "attempts": max_retries + 1,
+                            },
+                            description=f"Webhook delivery failed permanently after {max_retries + 1} attempts",
+                        )
 
             except Exception as e:
                 # Provide elegant error messages instead of verbose HTTP details
-                _ = self._summarize_webhook_error(e)
+                error_summary = self._summarize_webhook_error(e)
                 if attempt < max_retries:
-                    #  Webhook warning - TODO: add observability
-                    _ = None  # remove this after implementing observability
-                    #     f"🔄 Webhook delivery attempt "
-                    #     f"{attempt + 1}/{max_retries + 1} failed "
-                    #     f"for request {request_id}: {error_summary}"
-                    # )
+                    observability.observe(
+                        event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "request_id": request_id,
+                            "attempt": attempt + 1,
+                            "max_retries": max_retries + 1,
+                            "error": error_summary,
+                        },
+                        description=f"Webhook delivery attempt {attempt + 1}/{max_retries + 1} failed: {error_summary}",
+                    )
                 else:
-                    #  Webhook error - TODO: add observability
-                    _ = None  # remove this after implementing observability
-                    #     f"❌ Webhook delivery failed permanently for "
-                    #     f"request {request_id}: {error_summary}"
-                    # )
+                    observability.observe(
+                        event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "request_id": request_id,
+                            "attempts": max_retries + 1,
+                            "error": error_summary,
+                        },
+                        description=f"Webhook delivery failed permanently: {error_summary}",
+                    )
 
             # Wait before retry (exponential backoff)
             if attempt < max_retries:
@@ -374,52 +389,71 @@ class WebhookManager:
                     webhook_url, payload, request_timeout
                 )
                 if success:
-                    if attempt > 0:
-                        #  Webhook info - TODO: add observability
-                        _ = None  # remove this after implementing observability
-                        #     f"✅ Clarification webhook delivered successfully "
-                        #     f"for request {request_id} (succeeded on attempt "
-                        #     f"{attempt + 1})"
-                        # )
-                    else:
-                        #  Webhook info - TODO: add observability
-                        _ = None  # remove this after implementing observability
-                        #     f"✅ Clarification webhook delivered successfully "
-                        #     f"for request {request_id}"
-                        # )
+                    observability.observe(
+                        event_type=observability.SystemEvents.WEBHOOK_SENT,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "request_id": request_id,
+                            "attempt": attempt + 1,
+                            "max_retries": max_retries + 1,
+                            "type": "clarification",
+                        },
+                        description=f"Clarification webhook delivered successfully for request {request_id}" +
+                                    (f" on attempt {attempt + 1}" if attempt > 0 else ""),
+                    )
                     return True
                 else:
                     if attempt < max_retries:
-                        #  Webhook warning - TODO: add observability
-                        _ = None  # remove this after implementing observability
-                        #     f"🔄 Clarification webhook delivery attempt "
-                        #     f"{attempt + 1}/{max_retries + 1} failed "
-                        #     f"for request {request_id}, retrying..."
-                        # )
+                        observability.observe(
+                            event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "request_id": request_id,
+                                "attempt": attempt + 1,
+                                "max_retries": max_retries + 1,
+                                "type": "clarification",
+                            },
+                            description=f"Clarification webhook delivery attempt {attempt + 1}/{max_retries + 1} failed, retrying",
+                        )
                     else:
-                        #  Webhook error - TODO: add observability
-                        _ = None  # remove this after implementing observability
-                        #     f"❌ Clarification webhook delivery failed "
-                        #     f"permanently for request {request_id} "
-                        #     f"after {max_retries + 1} attempts"
-                        # )
+                        observability.observe(
+                            event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                            level=observability.EventLevel.ERROR,
+                            data={
+                                "request_id": request_id,
+                                "attempts": max_retries + 1,
+                                "type": "clarification",
+                            },
+                            description=f"Clarification webhook delivery failed permanently after {max_retries + 1} attempts",
+                        )
 
             except Exception as e:
-                _ = self._summarize_webhook_error(e)
+                error_summary = self._summarize_webhook_error(e)
                 if attempt < max_retries:
-                    #  Webhook warning - TODO: add observability
-                    _ = None  # remove this after implementing observability
-                    #     f"🔄 Clarification webhook delivery attempt "
-                    #     f"{attempt + 1}/{max_retries + 1} failed "
-                    #     f"for request {request_id}: {error_summary}"
-                    # )
+                    observability.observe(
+                        event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "request_id": request_id,
+                            "attempt": attempt + 1,
+                            "max_retries": max_retries + 1,
+                            "type": "clarification",
+                            "error": error_summary,
+                        },
+                        description=f"Clarification webhook delivery attempt {attempt + 1}/{max_retries + 1} failed: {error_summary}",
+                    )
                 else:
-                    #  Webhook error - TODO: add observability
-                    _ = None  # remove this after implementing observability
-                    #     f"❌ Clarification webhook delivery failed "
-                    #     f"permanently for request {request_id}: "
-                    #     f"{error_summary}"
-                    # )
+                    observability.observe(
+                        event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "request_id": request_id,
+                            "attempts": max_retries + 1,
+                            "type": "clarification",
+                            "error": error_summary,
+                        },
+                        description=f"Clarification webhook delivery failed permanently: {error_summary}",
+                    )
 
             # Wait before retry (exponential backoff)
             if attempt < max_retries:
@@ -451,21 +485,23 @@ class WebhookManager:
             ) as response:
                 # Consider 2xx status codes as successful
                 if 200 <= response.status < 300:
-                    #  Webhook debug - TODO: add observability
-                    _ = None  # remove this after implementing observability
-                    #     f"Clarification webhook delivered successfully "
-                    #     f"(HTTP {response.status})"
-                    # )
                     return True
                 else:
-                    #  Webhook warning - TODO: add observability
-                    _ = None  # remove this after implementing observability
-                    #     f"Clarification webhook delivery failed with "
-                    #     f"HTTP {response.status}"
-                    # )
+                    # Log failed status code at DEBUG level (retry logic handles WARNING/ERROR)
+                    observability.observe(
+                        event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                        level=observability.EventLevel.DEBUG,
+                        data={"http_status": response.status},
+                        description=f"Clarification webhook delivery failed with HTTP {response.status}",
+                    )
                     return False
 
         except Exception as e:
-            #  Webhook debug - TODO: add observability
-            _ = e  # remove this after implementing observability
+            # Log exception at DEBUG level (retry logic handles WARNING/ERROR)
+            observability.observe(
+                event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                level=observability.EventLevel.DEBUG,
+                data={"error_type": type(e).__name__, "error": str(e)},
+                description=f"Clarification webhook delivery exception: {type(e).__name__}",
+            )
             return False
