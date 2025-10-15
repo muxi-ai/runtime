@@ -17,6 +17,8 @@ from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
+from ....services import observability
+
 
 @dataclass
 class DocumentMetadata:
@@ -435,8 +437,16 @@ class DocumentMetadataStore:
 
                 #  Info - TODO: add observability
         except Exception as e:
-            #  Warning - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "persist_metadata_cache",
+                },
+                description="Failed to persist metadata cache",
+            )
 
     async def _persist_metadata(self) -> None:
         """Persist metadata to storage file"""
@@ -464,5 +474,13 @@ class DocumentMetadataStore:
             Path(temp_path).rename(self.storage_path)
 
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "persist_metadata",
+                },
+                description="Failed to persist metadata to storage",
+            )
