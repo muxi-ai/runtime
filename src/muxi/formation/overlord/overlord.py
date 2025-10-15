@@ -1126,11 +1126,20 @@ class Overlord:
                             f"with {len(registry_urls)} registries"
                         ),
                     )
-                    
-                    # Print clean formatted line
+
+                    # Print one line per registry for traceability
                     from ...datatypes.observability import InitEventFormatter
-                    details = f"{len(registry_urls)} {'registry' if len(registry_urls) == 1 else 'registries'}"
-                    print(InitEventFormatter.format_ok("A2A registry client", details))
+                    for registry_url in registry_urls:
+                        # Extract just the host:port or domain from URL for display
+                        display_url = registry_url.replace("http://", "").replace("https://", "").rstrip("/")
+                        print(InitEventFormatter.format_ok(f"A2A registry: {display_url}", "connected"))
+                    
+                    # Optional summary line if multiple registries
+                    if len(registry_urls) > 1:
+                        print(InitEventFormatter.format_info(
+                            f"Connected to {len(registry_urls)} A2A registries",
+                            "ready for agent discovery"
+                        ))
 
                     # Check registry health according to startup policy
                     if hasattr(self.a2a_coordinator, "config") and self.a2a_coordinator.config:
