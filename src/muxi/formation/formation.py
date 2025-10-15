@@ -340,24 +340,21 @@ class Formation:
             )
 
         try:
-            # Print formation startup banner
+            # Import at start of method for availability everywhere
             from ..datatypes.observability import InitEventFormatter
+            from ..services import observability
             import pkg_resources
+            
+            # Disable observability during initialization (prevent JSON mixing with formatted output)
+            observability.disable()
+            
             try:
                 version = pkg_resources.get_distribution("muxi").version
-            except:
+            except Exception:
                 version = "dev"
             print("\n" + "="*60)
             print(InitEventFormatter.format_ok(f"MUXI Runtime v{version}", "starting"))
             print("="*60 + "\n")
-            
-            # Emit formation loading started event
-            observability.observe(
-                event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
-                level=observability.EventLevel.INFO,
-                data={"formation_path": config_path},
-                description=f"Starting formation loading from {config_path}",
-            )
 
             # Normalize and validate config path (file or directory)
             normalized_path = self._normalize_config_path(config_path)
@@ -2483,6 +2480,10 @@ class Formation:
         import time
         start_time = time.time()
 
+        # Import for formatted output
+        from ..datatypes.observability import InitEventFormatter
+        from ..services import observability
+
         try:
             # Import overlord when needed to avoid circular imports
             from .overlord.overlord import Overlord
@@ -2534,17 +2535,26 @@ class Formation:
             # No separate service initialization needed here
 
             # Print startup summary
-            from ..datatypes.observability import InitEventFormatter
             duration = time.time() - start_time
-            
+
             # Count services (rough estimate based on what's configured)
             service_count = 1  # overlord itself
             if self._configured_services:
-                service_count += len([s for s in self._configured_services.keys() if self._configured_services[s] is not None])
-            
+                service_count += len(
+                    [
+                        s
+                        for s in self._configured_services.keys()
+                        if self._configured_services[s] is not None
+                    ]
+                )
+
             # Count warnings/errors from observability (we'll use 0 for now as a placeholder)
             print("\n" + InitEventFormatter.format_ok("Formation ready", f"initialized in {duration:.1f}s"))
             print("="*60 + "\n")
+
+            # Enable observability now that init is complete
+            # This starts the flow of JSON observability events for runtime monitoring
+            observability.enable()
 
             return self._overlord
 

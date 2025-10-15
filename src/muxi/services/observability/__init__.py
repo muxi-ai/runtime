@@ -59,6 +59,9 @@ __all__ = [
     # Helper functions
     "emit_event",
     "observe",
+    "enable",
+    "disable",
+    "is_enabled",
     # Runtime logger management
     "get_runtime_event_logger",
     "set_runtime_event_logger",
@@ -95,6 +98,10 @@ except ValueError:
 _runtime_event_logger: Optional["EventLogger"] = None
 _runtime_event_logger_lock = threading.Lock()
 
+# Global flag to control observability event emission
+# Start disabled during init, enable after formation is ready
+_enabled = False
+
 
 def set_runtime_event_logger(logger: "EventLogger") -> None:
     """Set the runtime event logger for global access."""
@@ -121,12 +128,20 @@ def observe(
     This function captures the request context and configured logger before
     spawning a background thread to ensure context is properly passed to the thread.
 
+    Note: If observability is disabled (during init), this is a no-op.
+
     Args:
         event_type: The event type enum or string
         level: Event level (defaults to INFO)
         data: Additional event data
         description: Human-readable description
     """
+    global _enabled
+
+    # Skip if observability is disabled (during init)
+    if not _enabled:
+        return
+
     try:
         # Get the runtime event logger
         configured_logger = get_runtime_event_logger()
@@ -180,6 +195,39 @@ def emit_event(
         description: Human-readable description
     """
     observe(event_type, level, data, description)
+
+
+def enable() -> None:
+    """
+    Enable observability event emission.
+
+    Should be called after formation initialization is complete.
+    This starts the flow of JSON observability events.
+    """
+    global _enabled
+    _enabled = True
+
+
+def disable() -> None:
+    """
+    Disable observability event emission.
+
+    Used during initialization to suppress JSON events and show only
+    clean formatted output.
+    """
+    global _enabled
+    _enabled = False
+
+
+def is_enabled() -> bool:
+    """
+    Check if observability is currently enabled.
+
+    Returns:
+        True if observability events are being emitted, False otherwise
+    """
+    global _enabled
+    return _enabled
 
 
 # Create a module-like interface
