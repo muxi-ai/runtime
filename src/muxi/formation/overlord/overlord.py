@@ -2230,9 +2230,16 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
         except Exception as e:
             # Log error and return appropriate fallback
-            msg = f"Error applying persona: {e}"
-            # TODO: Add observability logging
-            _ = msg
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "component": "persona_application",
+                },
+                description="Failed to apply persona to response",
+            )
             if raw_response is None:
                 return clean_response_text("I understand. How can I help you?")
             return (

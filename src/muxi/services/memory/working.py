@@ -599,7 +599,17 @@ class WorkingMemory:
 
         # If we don't have a model, return most recent messages
         if not self.model:
-            #  Recency search fallback - TODO: add observability
+            # Fall back to recency search when no embedding model is available
+            observability.observe(
+                event_type=observability.ConversationEvents.MEMORY_WORKING_RETRIEVED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "search_type": "recency_fallback_no_model",
+                    "query_length": len(query),
+                    "buffer_size": len(self.buffer),
+                },
+                description="Working memory using recency search (no embedding model configured)",
+            )
             recency_results = self._recency_search(
                 limit,
                 filter_metadata,
@@ -643,7 +653,18 @@ class WorkingMemory:
                     query_vector = list(query_embedding)
 
             except Exception as e:
-                #  Query embedding error - TODO: add observability
+                # Log embedding generation failure and fallback
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "operation": "query_embedding_generation",
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "query_length": len(query),
+                    },
+                    description="Failed to generate query embedding for working memory search",
+                )
                 # Fallback to recency search if embedding generation fails
                 embedding_fallback_results = self._recency_search(
                     limit,
@@ -787,7 +808,17 @@ class WorkingMemory:
 
         except Exception as e:
             # Handle FAISS search errors gracefully
-            #  Vector search error - TODO: add observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "operation": "vector_search",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "buffer_size": len(self.buffer),
+                },
+                description="Vector search failed in working memory, falling back to recency search",
+            )
             fallback_results = self._recency_search(
                 limit, filter_metadata, use_entire_buffer=True, namespace=namespace
             )
@@ -1127,6 +1158,14 @@ def fifo_cleanup_task(buffer_memory: "WorkingMemory") -> None:
             time.sleep(buffer_memory.fifo_interval_min * 60)
 
         except Exception as e:
-            #  Cleanup task error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "buffer_memory_cleanup",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description="Failed to run buffer memory cleanup task",
+            )
             time.sleep(60)  # Wait a minute before retrying
