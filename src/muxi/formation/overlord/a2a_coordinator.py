@@ -11,6 +11,7 @@ import time
 from typing import Dict, List, Optional, Any
 
 from ...datatypes.schema import A2AServiceSchema
+from ...datatypes.observability import InitEventFormatter
 from ...services import observability
 from ...services.a2a.models import AgentCard
 from ...services.a2a.models_adapter import ModelsAdapter
@@ -230,6 +231,7 @@ class A2ACoordinator:
             await self.overlord.a2a_server.start()
 
             # Emit success event
+            auth_mode = self.config.auth_mode if self.config.auth_mode else "none"
             observability.observe(
                 event_type=observability.SystemEvents.A2A_SERVER_STARTED,
                 level=observability.EventLevel.INFO,
@@ -238,9 +240,13 @@ class A2ACoordinator:
                     "host": self.server_host,
                     "port": self.server_port,
                     "formation": self.overlord.formation_id,
-                    "auth_mode": self.config.auth_mode if self.config.auth_mode else "none"
+                    "auth_mode": auth_mode
                 }
             )
+            
+            # Print clean formatted line
+            details = f"{self.server_host}:{self.server_port}, auth={auth_mode}"
+            print(InitEventFormatter.format_ok("A2A server", details))
 
         except Exception as e:
             # Emit error event with full exception details

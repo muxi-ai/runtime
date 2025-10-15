@@ -1126,6 +1126,11 @@ class Overlord:
                             f"with {len(registry_urls)} registries"
                         ),
                     )
+                    
+                    # Print clean formatted line
+                    from ...datatypes.observability import InitEventFormatter
+                    details = f"{len(registry_urls)} {'registry' if len(registry_urls) == 1 else 'registries'}"
+                    print(InitEventFormatter.format_ok("A2A registry client", details))
 
                     # Check registry health according to startup policy
                     if hasattr(self.a2a_coordinator, "config") and self.a2a_coordinator.config:
