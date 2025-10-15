@@ -5281,9 +5281,12 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 #  Info - TODO: add observability
                 # ConversationEvents.WEBHOOK_DELIVERED + ConversationEvents.RESPONSE_DELIVERED
             else:
-                #  Error - TODO: add observability
-                # ConversationEvents.WEBHOOK_FAILED
-                _ = None  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ConversationEvents.WEBHOOK_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={"request_id": request_id},
+                    description=f"Webhook delivery failed for async request {request_id}",
+                )
 
         finally:
             # Keep completed requests in tracker for status checking
@@ -9851,9 +9854,17 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             return None
 
         except Exception as e:
-            #  Error - TODO: add observability
-            # ErrorEvents.RESOURCE_NOT_FOUND
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.RESOURCE_NOT_FOUND,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "resource_type": "sop",
+                    "resource_id": sop_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description=f"Failed to load SOP resource: {sop_id}",
+            )
             return None
 
     # Legacy function _check_clarification_needs_async removed
@@ -9968,26 +9979,32 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             user_id=request_state.user_id,
                         )
                         if success:
-                            #  Info - TODO: add observability
-                            # ConversationEvents.WEBHOOK_SENT + CLARIFICATION_REQUEST_SENT
-                            _ = None  # remove this after implementing observability
-                            #     f"Request {request_id}: Additional clarification question sent"
-                            # )
+                            observability.observe(
+                                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
+                                level=observability.EventLevel.INFO,
+                                data={"request_id": request_id, "type": "additional_clarification"},
+                                description=f"Additional clarification question sent for request {request_id}",
+                            )
                         else:
-                            #  Error - TODO: add observability
-                            # ConversationEvents.WEBHOOK_FAILED + CLARIFICATION_FAILED
-                            _ = None  # remove this after implementing observability
-                            #     f"Request {request_id}: Failed to send additional clarification"
-                            # )
+                            observability.observe(
+                                event_type=observability.ConversationEvents.CLARIFICATION_FAILED,
+                                level=observability.EventLevel.ERROR,
+                                data={"request_id": request_id, "operation": "webhook_delivery"},
+                                description=f"Failed to send additional clarification for request {request_id}",
+                            )
 
                     return True
 
                 else:
-                    #  Error - TODO: add observability
-                    # ConversationEvents.CLARIFICATION_FAILED
-                    _ = None  # remove this after implementing observability
-                    #     f"Request {request_id}: Clarification failed: {result.error_message}"
-                    # )
+                    observability.observe(
+                        event_type=observability.ConversationEvents.CLARIFICATION_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "request_id": request_id,
+                            "error": result.error_message if result else "Unknown error",
+                        },
+                        description=f"Clarification failed for request {request_id}",
+                    )
 
                     # Mark request as failed
                     await self.request_tracker.update_request(
@@ -10006,9 +10023,16 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             return False
 
         except Exception as e:
-            #  Error - TODO: add observability
-            # ConversationEvents.CLARIFICATION_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ConversationEvents.CLARIFICATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "request_id": request_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description=f"Exception during clarification processing for request {request_id}",
+            )
 
             # Mark request as failed on error
             try:
