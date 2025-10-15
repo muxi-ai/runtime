@@ -294,9 +294,17 @@ class PersistentMemoryManager:
             return results
 
         except Exception as e:
-            #  Warning - TODO: add observability
-            # ConversationEvents.MEMORY_LONG_TERM_RETRIEVAL_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "limit": limit,
+                    "user_id": str(user_id) if user_id else None,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description="Long-term memory retrieval failed",
+            )
             return []
 
     async def clear_long_term_memory(
@@ -333,9 +341,17 @@ class PersistentMemoryManager:
                     filter_metadata=filter_metadata if filter_metadata else None
                 )
         except Exception as e:
-            #  Warning - TODO: add observability
-            # ConversationEvents.MEMORY_LONG_TERM_DELETION_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": agent_id,
+                    "user_id": str(user_id) if user_id else None,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description="Long-term memory clear failed",
+            )
 
     async def add_message_to_long_term(
         self,

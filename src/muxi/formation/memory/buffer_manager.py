@@ -173,9 +173,17 @@ class BufferMemoryManager:
             return results
 
         except Exception as e:
-            #  Warning - TODO: add observability
-            # ConversationEvents.MEMORY_WORKING_RETRIEVAL_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "session_id": session_id,
+                    "limit": limit,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description="Buffer memory retrieval failed",
+            )
             return []
 
     async def clear_buffer_memory(
@@ -201,9 +209,16 @@ class BufferMemoryManager:
                 filter_metadata=filter_metadata if filter_metadata else None
             )
         except Exception as e:
-            #  Buffer memory clear error - TODO: add observability
-            #  MEMORY_WORKING_LOOKUP
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": agent_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description="Buffer memory clear failed",
+            )
 
     async def add_message_to_buffer(
         self,

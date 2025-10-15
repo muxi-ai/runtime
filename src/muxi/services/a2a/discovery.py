@@ -813,8 +813,16 @@ class LocalDiscoveryService:
                     self.agents[agent_data["agent_id"]] = registration
                     loaded_agents += 1
                 except Exception as e:
-                    #  A2A discovery error - TODO: add observability
-                    _ = e  # remove this after implementing observability
+                    observability.observe(
+                        event_type=observability.ErrorEvents.WARNING,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "agent_id": agent_data.get("agent_id", "unknown"),
+                            "error_type": type(e).__name__,
+                            "error": str(e),
+                        },
+                        description=f"Failed to load agent from registry: {str(e)}",
+                    )
                     failed_agents += 1
 
             #  A2A discovery info - TODO: add observability

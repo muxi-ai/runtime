@@ -118,9 +118,16 @@ class ExtractionCoordinator:
 
         except Exception as e:
             # Log the error but don't let it break the conversation flow
-            #  Error - TODO: add observability
-            # ErrorEvents.INTERNAL_ERROR
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": agent_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description="Failed to extract data from conversation",
+            )
             pass
 
     async def extract_user_information(
