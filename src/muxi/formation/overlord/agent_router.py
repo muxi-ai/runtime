@@ -120,9 +120,16 @@ class AgentRouter:
                 # ConversationEvents.OVERLORD_ROUTING_COMPLETED
             except Exception as e:
                 # Fall back to intelligent selection if model creation fails
-                #  Warning - TODO: add observability
-                # ConversationEvents.OVERLORD_ROUTING_FAILED
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ConversationEvents.OVERLORD_ROUTING_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "fallback": "intelligent_selection",
+                    },
+                    description="Routing model creation failed, falling back to intelligent selection",
+                )
                 return await self._select_best_available_agent(message, request_id)
 
         try:
@@ -138,13 +145,22 @@ class AgentRouter:
             # If parsing failed or the agent doesn't exist, use intelligent fallback
             if selected_agent_id is None or selected_agent_id not in self.overlord.agents:
                 selected_agent_id = await self._select_best_available_agent(message, request_id)
-                #  Warning - TODO: add observability
-                # ConversationEvents.OVERLORD_ROUTING_COMPLETED
-                # Routing model returned invalid agent. Selected best available agent
+                observability.observe(
+                    event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "selected_agent": selected_agent_id,
+                        "reason": "invalid_agent_from_model",
+                    },
+                    description="Routing model returned invalid agent, used intelligent selection",
+                )
             else:
-                #  Info - TODO: add observability
-                # ConversationEvents.OVERLORD_ROUTING_COMPLETED
-                _ = None  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={"selected_agent": selected_agent_id, "method": "llm_routing"},
+                    description="Agent selected via LLM routing model",
+                )
 
             # Cache the result for future identical messages (if caching is enabled)
             if caching_enabled:
@@ -160,9 +176,16 @@ class AgentRouter:
             raise
         except Exception as e:
             # If anything goes wrong, use intelligent selection
-            #  Warning - TODO: add observability
-            # ConversationEvents.OVERLORD_ROUTING_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ConversationEvents.OVERLORD_ROUTING_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "fallback": "intelligent_selection",
+                },
+                description="Agent routing failed, falling back to intelligent selection",
+            )
             return await self._select_best_available_agent(message, request_id)
 
     def _create_routing_prompt(self, message: str) -> str:
