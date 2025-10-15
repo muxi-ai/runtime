@@ -1088,15 +1088,53 @@ class InitEventFormatter:
     - Use formation IDs/names, not full URLs/connection strings
     - Fail-fast with structured error details
     - Show full technical details by default (init failures happen at dev/deployment time)
+    - Auto-detects color support (TTY, TERM, NO_COLOR env vars)
     """
 
-    # ANSI color codes
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    RED = "\033[91m"
-    BLUE = "\033[94m"
-    RESET = "\033[0m"
-    BOLD = "\033[1m"
+    @staticmethod
+    def _supports_color() -> bool:
+        """
+        Detect if the terminal supports ANSI colors.
+        
+        Checks multiple indicators:
+        - NO_COLOR env var (standard: https://no-color.org/)
+        - FORCE_COLOR env var (override for CI/testing)
+        - stdout is a TTY
+        - TERM env var indicates color support
+        - Not in dumb terminal
+        
+        Returns:
+            True if colors should be used, False otherwise
+        """
+        import sys
+        import os
+        
+        # Respect NO_COLOR standard (https://no-color.org/)
+        if os.environ.get('NO_COLOR'):
+            return False
+        
+        # Allow forcing colors (useful for CI/testing)
+        if os.environ.get('FORCE_COLOR'):
+            return True
+        
+        # Check if stdout is a TTY
+        if not hasattr(sys.stdout, 'isatty') or not sys.stdout.isatty():
+            return False
+        
+        # Check TERM environment variable
+        term = os.environ.get('TERM', '').lower()
+        if term == 'dumb':
+            return False
+        if 'color' in term or 'ansi' in term or 'xterm' in term:
+            return True
+        
+        # Default to True if stdout is a TTY
+        return True
+
+    @staticmethod
+    def _c(code: str) -> str:
+        """Get ANSI color code if supported, empty string otherwise."""
+        return code if InitEventFormatter._supports_color() else ""
 
     @staticmethod
     def format_ok(message: str, details: Optional[str] = None) -> str:
@@ -1109,7 +1147,9 @@ class InitEventFormatter:
         Returns:
             Formatted line: '[  OK  ] MCP server: filesystem (3 tools)'
         """
-        status = f"{InitEventFormatter.GREEN}[  OK  ]{InitEventFormatter.RESET}"
+        green = InitEventFormatter._c("\033[92m")
+        reset = InitEventFormatter._c("\033[0m")
+        status = f"{green}[  OK  ]{reset}"
         if details:
             return f"{status} {message} ({details})"
         return f"{status} {message}"
@@ -1125,7 +1165,9 @@ class InitEventFormatter:
         Returns:
             Formatted line: '[ WARN ] Vector memory: disabled'
         """
-        status = f"{InitEventFormatter.YELLOW}[ WARN ]{InitEventFormatter.RESET}"
+        yellow = InitEventFormatter._c("\033[93m")
+        reset = InitEventFormatter._c("\033[0m")
+        status = f"{yellow}[ WARN ]{reset}"
         if details:
             return f"{status} {message} ({details})"
         return f"{status} {message}"
@@ -1141,7 +1183,9 @@ class InitEventFormatter:
         Returns:
             Formatted line: '[ INFO ] Buffer memory: FIFO mode (100 messages)'
         """
-        status = f"{InitEventFormatter.BLUE}[ INFO ]{InitEventFormatter.RESET}"
+        blue = InitEventFormatter._c("\033[94m")
+        reset = InitEventFormatter._c("\033[0m")
+        status = f"{blue}[ INFO ]{reset}"
         if details:
             return f"{status} {message} ({details})"
         return f"{status} {message}"
@@ -1178,7 +1222,9 @@ class InitEventFormatter:
                   response = await client.connect(timeout=5.0)
               TimeoutError: Server did not respond within 5 seconds
         """
-        status = f"{InitEventFormatter.RED}[ FAIL ]{InitEventFormatter.RESET}"
+        red = InitEventFormatter._c("\033[91m")
+        reset = InitEventFormatter._c("\033[0m")
+        status = f"{red}[ FAIL ]{reset}"
 
         lines = [
             f"{status} {failure_info.component}",
