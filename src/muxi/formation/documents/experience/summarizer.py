@@ -15,6 +15,8 @@ import time
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 
+from ....services import observability
+
 
 @dataclass
 class SummaryConfig:
@@ -90,8 +92,17 @@ class DocumentSummarizer:
             return summary
 
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "document_id": document_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "summarize_document",
+                },
+                description="Failed to summarize document",
+            )
             raise
 
     def _extract_key_points(self, content: str) -> List[str]:
@@ -132,8 +143,17 @@ class DocumentSummarizer:
                 )
                 summaries[doc["id"]] = summary
             except Exception as e:
-                #  Error - TODO: add observability
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "document_id": doc.get("id", "unknown"),
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "operation": "summarize_multiple_documents",
+                    },
+                    description="Failed to summarize individual document in batch",
+                )
                 continue
 
         result = {"individual_summaries": summaries}
@@ -324,7 +344,16 @@ class DocumentSummarizer:
             }
 
         except Exception as e:
-            #  Error - TODO: add observability
+            observability.observe(
+                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "generate_cross_document_insights",
+                },
+                description="Failed to generate cross-document insights",
+            )
             return {"error": str(e)}
 
     async def _summarize_content_batch(self, content: str, batch_id: str) -> str:
@@ -342,8 +371,17 @@ class DocumentSummarizer:
             response = await self.llm_model.generate_response(prompt)
             return response.strip()
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "batch_id": batch_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "summarize_content_batch",
+                },
+                description=f"Failed to summarize content batch {batch_id}",
+            )
             return f"[Error summarizing batch {batch_id}]"
 
     def _extract_themes(self, insights_text: str) -> List[str]:

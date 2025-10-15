@@ -15,6 +15,8 @@ import time
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 
+from ....services import observability
+
 
 @dataclass
 class DocumentTask:
@@ -176,8 +178,17 @@ class DocumentWorkflowIntegrator:
                 )
                 all_tasks.extend(tasks)
             except Exception as e:
-                #  Error - TODO: add observability
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "document_id": doc_id,
+                        "category": category,
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                    },
+                    description=f"Failed to generate tasks for document category {category}",
+                )
                 continue
 
         # Store generated tasks
@@ -252,8 +263,18 @@ class DocumentWorkflowIntegrator:
             return enrichment
 
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "workflow_id": workflow_id,
+                    "document_id": document_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "enrich_workflow",
+                },
+                description="Failed to enrich workflow with document insights",
+            )
             raise
 
     async def generate_follow_up_suggestions(
@@ -292,8 +313,17 @@ class DocumentWorkflowIntegrator:
             return suggestions
 
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "document_id": document_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "generate_followup_suggestions",
+                },
+                description="Failed to generate follow-up suggestions for document",
+            )
             return []
 
     async def _generate_tasks_for_category(
@@ -321,8 +351,18 @@ class DocumentWorkflowIntegrator:
             return tasks
 
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "document_id": document_id,
+                    "category": category,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "generate_tasks_for_category",
+                },
+                description=f"Failed to generate {category} tasks for document",
+            )
             return []
 
     def _parse_task_response(
