@@ -377,9 +377,15 @@ class A2ACoordinator:
                 # SystemEvents.A2A_AGENT_REGISTRATIONS_COMPLETED
 
         except Exception as e:
-            #  Error - TODO: add observability
-            # SystemEvents.A2A_AGENT_REGISTRATION_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_AGENT_REGISTRATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description="Failed to register agents with external registry",
+            )
 
     async def _register_agent_with_external_registry(self, agent_id: str) -> None:
         """
@@ -451,9 +457,16 @@ class A2ACoordinator:
             # SystemEvents.A2A_AGENT_REGISTERED
 
         except Exception as e:
-            #  Warning - TODO: add observability
-            # SystemEvents.A2A_AGENT_REGISTRATION_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_AGENT_REGISTRATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": agent_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description=f"Failed to register agent '{agent_id}' with external registry",
+            )
 
     async def deregister_agent_from_external_registry(self, agent_id: str) -> None:
         """
@@ -479,9 +492,16 @@ class A2ACoordinator:
             # SystemEvents.A2A_AGENT_DEREGISTERED
 
         except Exception as e:
-            #  Warning - TODO: add observability
-            # SystemEvents.A2A_AGENT_DEREGISTRATION_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_DEREGISTRATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": agent_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description=f"Failed to deregister agent '{agent_id}' from external registry",
+            )
 
     def get_configuration(self) -> A2AServiceSchema:
         """
