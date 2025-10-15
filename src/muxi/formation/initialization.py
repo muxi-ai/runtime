@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional
 from ..datatypes.clarification import ClarificationConfig, QuestionStyle
 from ..datatypes.exceptions import ConfigurationValidationError
 from ..datatypes.memory import BufferMemoryConfig, WorkingMemoryConfig
-from ..datatypes.observability import EventLevel
+from ..datatypes.observability import EventLevel, InitEventFormatter
 from ..services import observability
 from ..services.memory.working import WorkingMemory
 from ..services.observability.context import set_event_logger
@@ -344,6 +344,12 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
             },
             description=f"Buffer memory initialized with size {size}",
         )
+        
+        # Print clean formatted line
+        details = f"{mode} mode, size={size}"
+        if vector_search:
+            details += ", vector search enabled"
+        print(InitEventFormatter.format_ok("Buffer memory", details))
 
     except Exception as e:
         observability.observe(
@@ -454,6 +460,10 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             },
             description=f"Persistent memory initialized with {memory_type}",
         )
+        
+        # Print clean formatted line
+        mode = "multi-user" if getattr(formation, "_is_multi_user", False) else "single-user"
+        print(InitEventFormatter.format_ok("Persistent memory", f"{memory_type}, {mode}"))
 
     except Exception as e:
         observability.observe(
@@ -492,18 +502,20 @@ def _create_all_database_tables(db_manager) -> None:
         # Create all tables using the database manager
         db_manager.create_tables(Base.metadata)
 
+        table_names = [
+            "users", "user_identifiers", "memories",  # Memory system tables
+            "credentials",  # Credential storage
+            "scheduled_jobs", "scheduled_job_audit"  # Scheduler tables
+        ]
         observability.observe(
             event_type=observability.SystemEvents.DATABASE_TABLES_CREATED,
             level=observability.EventLevel.INFO,
-            data={
-                "tables_created": [
-                    "users", "memories",  # Memory system tables
-                    "credentials",  # Credential storage
-                    "scheduled_jobs", "scheduled_job_audit"  # Scheduler tables
-                ]
-            },
+            data={"tables_created": table_names},
             description="All database tables created successfully",
         )
+        
+        # Print clean formatted line
+        print(InitEventFormatter.format_ok("Database tables", f"{len(table_names)} tables ready"))
 
     except Exception as e:
         observability.observe(
@@ -884,6 +896,14 @@ def load_agents_from_configuration(formation) -> None:
         data={"agent_count": processed_count},
         description=f"Processed {processed_count} agent configurations",
     )
+    
+    # Print clean formatted line for agent loading
+    if processed_count > 0:
+        agent_names = [agent_config.get("name", agent_config.get("id")) for agent_config in formation._agents_config if agent_config.get("id")]
+        details = f"{processed_count} agent{'s' if processed_count != 1 else ''}: {', '.join(agent_names[:3])}"
+        if processed_count > 3:
+            details += f", +{processed_count - 3} more"
+        print(InitEventFormatter.format_ok("Agents", details))
 
 
 async def initialize_buffer_memory(formation, overlord, buffer_config: Dict[str, Any]) -> None:

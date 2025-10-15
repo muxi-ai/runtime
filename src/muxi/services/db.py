@@ -24,6 +24,7 @@ from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 from . import observability
+from ..datatypes.observability import InitEventFormatter
 from ..utils.user_dirs import get_memory_dir
 
 # Create a shared base for all MUXI models
@@ -159,6 +160,14 @@ class DatabaseManager:
             },
             description=f"Database manager initialized with {self.database_type} (async support enabled)",
         )
+        
+        # Print clean formatted line
+        db_detail = self.database_type
+        if self.database_type == "sqlite":
+            # Extract just the filename from the path
+            db_path = self.connection_string.replace("sqlite:///", "")
+            db_detail = f"sqlite ({os.path.basename(db_path)})"
+        print(InitEventFormatter.format_ok("Database manager", db_detail))
 
     def _resolve_connection_string(self, connection_string: Optional[str]) -> str:
         """

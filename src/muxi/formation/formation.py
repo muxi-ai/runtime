@@ -340,6 +340,17 @@ class Formation:
             )
 
         try:
+            # Print formation startup banner
+            from ..datatypes.observability import InitEventFormatter
+            import pkg_resources
+            try:
+                version = pkg_resources.get_distribution("muxi").version
+            except:
+                version = "dev"
+            print("\n" + "="*60)
+            print(InitEventFormatter.format_ok(f"MUXI Runtime v{version}", "starting"))
+            print("="*60 + "\n")
+            
             # Emit formation loading started event
             observability.observe(
                 event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
@@ -2468,6 +2479,10 @@ class Formation:
             print("   Use stop_overlord() first if you need to restart with new configuration.")
             return self._overlord
 
+        # Track startup time for summary
+        import time
+        start_time = time.time()
+
         try:
             # Import overlord when needed to avoid circular imports
             from .overlord.overlord import Overlord
@@ -2517,6 +2532,19 @@ class Formation:
 
             # A2A initialization happens through the Overlord's A2ACoordinator
             # No separate service initialization needed here
+
+            # Print startup summary
+            from ..datatypes.observability import InitEventFormatter
+            duration = time.time() - start_time
+            
+            # Count services (rough estimate based on what's configured)
+            service_count = 1  # overlord itself
+            if self._configured_services:
+                service_count += len([s for s in self._configured_services.keys() if self._configured_services[s] is not None])
+            
+            # Count warnings/errors from observability (we'll use 0 for now as a placeholder)
+            print("\n" + InitEventFormatter.format_ok("Formation ready", f"initialized in {duration:.1f}s"))
+            print("="*60 + "\n")
 
             return self._overlord
 
