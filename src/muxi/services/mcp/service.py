@@ -949,10 +949,10 @@ class MCPService:
                     },
                     description=f"MCP server registration completed (tools discovered, connection closed): {server_id}",
                 )
-                
+
                 # Print clean formatted line
-                details = f"{tools_count} tools available via {transport_type}"
-                print(InitEventFormatter.format_ok(f"Connected to MCP server '{server_id}'", details))
+                details = f"{tools_count} tools available via {transport_type.replace('_', ' ')}"
+                print(InitEventFormatter.format_ok(f"Connected to MCP '{server_id}'", details))
 
                 return server_id
 

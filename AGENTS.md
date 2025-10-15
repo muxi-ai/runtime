@@ -12,6 +12,7 @@ Your fast-reference for building, debugging, and extending the MUXI Runtime with
 - Start CodeRabbit early (`coderabbit --prompt-only`), watch its feedback, and resolve every flagged issue before moving on.
 - Honor reflection protocol after complex engagements: offer to update CLAUDE.md when the task warrants it.
 - Never use emojies
+- Always obtain the current date and time from the system using the `date` command before writing any frontmatter or using dates in documents.
 
 ## Architecture Snapshot
 - **Formation-first**: YAML formations describe the entire AI system; runtime turns them into a live orchestration.

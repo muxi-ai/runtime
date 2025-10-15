@@ -54,26 +54,7 @@ Starting MUXI Runtime v{version}...
 
 ---
 
-## 3. Database Manager
-
-**Location:** `src/muxi/services/db.py:190`
-
-**Current:**
-```
-[  OK  ] Database manager ({type})
-```
-
-**Human-friendly alternative:**
-```
-[  OK  ] Connecting to database ({type})
-```
-
-**Variables:**
-- `{type}` - "postgresql" or "sqlite" or filename for SQLite
-
----
-
-## 4. Database Tables
+## 3. Database Tables
 
 **Location:** `src/muxi/formation/initialization.py:781`
 
@@ -92,7 +73,7 @@ Starting MUXI Runtime v{version}...
 
 ---
 
-## 5. Persistent Memory
+## 4. Persistent Memory
 
 **Location:** `src/muxi/formation/initialization.py:1117`
 
@@ -112,7 +93,7 @@ Starting MUXI Runtime v{version}...
 
 ---
 
-## 6. MCP Servers (one line per server)
+## 5. MCP Servers (one line per server)
 
 **Location:** `src/muxi/formation/initialization.py:549`
 
@@ -167,7 +148,7 @@ Starting MUXI Runtime v{version}...
 
 ---
 
-## 7. A2A Server
+## 6. A2A Server
 
 **Location:** `src/muxi/formation/overlord/a2a_coordinator.py` (needs verification)
 
@@ -187,7 +168,7 @@ Starting MUXI Runtime v{version}...
 
 ---
 
-## 8. A2A Registries (one line per registry)
+## 7. A2A Registries (one line per registry)
 
 **Location:** `src/muxi/formation/overlord/overlord.py:1133`
 
@@ -223,7 +204,7 @@ Starting MUXI Runtime v{version}...
 
 ---
 
-## 9. Scheduler Service
+## 8. Scheduler Service
 
 **Location:** `src/muxi/services/scheduler/service.py:114`
 
@@ -244,7 +225,7 @@ Starting MUXI Runtime v{version}...
 
 ---
 
-## 10. Agents (one line per agent)
+## 9. Agents (one line per agent)
 
 **Location:** `src/muxi/formation/initialization.py:919`
 
@@ -264,7 +245,7 @@ Starting MUXI Runtime v{version}...
 
 ---
 
-## 11. Formation Ready Summary
+## 10. Formation Ready Summary
 
 **Location:** `src/muxi/formation/formation.py:2558`
 

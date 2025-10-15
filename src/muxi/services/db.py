@@ -161,13 +161,8 @@ class DatabaseManager:
             description=f"Database manager initialized with {self.database_type} (async support enabled)",
         )
 
-        # Print clean formatted line
-        db_detail = self.database_type
-        if self.database_type == "sqlite":
-            # Extract just the filename from the path
-            db_path = self.connection_string.replace("sqlite:///", "")
-            db_detail = f"sqlite ({os.path.basename(db_path)})"
-        print(InitEventFormatter.format_ok("Connecting to database", db_detail))
+        # Don't print here - persistent memory init message already shows database type
+        # (Database only initializes when persistent memory is configured, so this message is redundant)
 
     def _resolve_connection_string(self, connection_string: Optional[str]) -> str:
         """
