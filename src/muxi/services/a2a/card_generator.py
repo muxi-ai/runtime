@@ -655,7 +655,12 @@ class AgentCardGenerator:
                 with open(card_file, "w", encoding="utf-8") as f:
                     f.write(card.to_json(indent=2))
                 successful_exports += 1
-                #  Info - TODO: add observability
+                observability.observe(
+                    event_type=observability.SystemEvents.A2A_CARD_EXPORTED,
+                    level=observability.EventLevel.INFO,
+                    data={"agent_id": agent_id, "card_file": str(card_file)},
+                    description=f"Exported A2A card for {agent_id}",
+                )
             except Exception as e:
                 failed_exports += 1
                 observability.observe(

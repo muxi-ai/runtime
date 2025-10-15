@@ -1229,7 +1229,6 @@ class KnowledgeHandler:
 
             except Exception as e:
                 source_path = source_config.get("path", "unknown")
-                #  Error - TODO: add observability
                 observability.observe(
                     event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_FAILED,
                     level=observability.EventLevel.ERROR,

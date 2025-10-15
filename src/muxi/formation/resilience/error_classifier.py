@@ -221,9 +221,16 @@ class ErrorClassifier:
             if hasattr(error, "context"):
                 error_context.context_data.update(error.context)
 
-            #  Debug - TODO: add observability
-            #   f"Classified error: {error_type.value} (severity: {severity.value}) - {str(error)}"
-            # )
+            observability.observe(
+                event_type=observability.SystemEvents.CIRCUIT_BREAKER_FAILURE_RECORDED,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "error_type": error_type.value,
+                    "severity": severity.value,
+                    "error_message": str(error)[:200],
+                },
+                description=f"Classified error: {error_type.value} (severity: {severity.value})",
+            )
 
             return error_context
 

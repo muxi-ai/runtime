@@ -213,7 +213,12 @@ class WebhookManager:
             # Wait before retry (exponential backoff)
             if attempt < max_retries:
                 wait_time = min(2**attempt, 60)  # Cap at 60 seconds
-                #  Webhook debug - TODO: add observability
+                observability.observe(
+                    event_type=observability.ConversationEvents.WEBHOOK_FAILED,
+                    level=observability.EventLevel.DEBUG,
+                    data={"request_id": request_id, "attempt": attempt, "wait_time": wait_time},
+                    description="Webhook retry with exponential backoff",
+                )
                 await asyncio.sleep(wait_time)
 
         return False
@@ -458,7 +463,12 @@ class WebhookManager:
             # Wait before retry (exponential backoff)
             if attempt < max_retries:
                 wait_time = min(2**attempt, 60)  # Cap at 60 seconds
-                #  Webhook debug - TODO: add observability
+                observability.observe(
+                    event_type=observability.ConversationEvents.WEBHOOK_FAILED,
+                    level=observability.EventLevel.DEBUG,
+                    data={"request_id": request_id, "attempt": attempt, "wait_time": wait_time},
+                    description="Webhook retry with exponential backoff",
+                )
                 await asyncio.sleep(wait_time)
 
         return False

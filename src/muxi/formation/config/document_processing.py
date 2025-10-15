@@ -27,10 +27,20 @@ class DocumentProcessingConfig:
         for model in models:
             if "documents" in model:
                 settings = model.get("settings", {})
-                #  Document model config - TODO: add observability
+                observability.observe(
+                    event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+                    level=observability.EventLevel.INFO,
+                    data={"document_model": "documents", "source": "formation_config"},
+                    description="Using document model from formation config",
+                )
                 return settings, True
 
-        #  Document model default - TODO: add observability
+        observability.observe(
+            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+            level=observability.EventLevel.INFO,
+            data={"document_model": "default", "source": "defaults"},
+            description="Using default document model configuration",
+        )
         return {}, False
 
     def _apply_defaults(self) -> None:

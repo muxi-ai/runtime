@@ -116,8 +116,12 @@ class AgentRouter:
             try:
                 # Try to get text model from formation
                 routing_model = await self.overlord.get_model_for_capability("text")
-                #  Info - TODO: add observability
-                # ConversationEvents.OVERLORD_ROUTING_COMPLETED
+                observability.observe(
+                    event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={"routing_model_acquired": True},
+                    description="Routing model acquired for agent selection",
+                )
             except Exception as e:
                 # Fall back to intelligent selection if model creation fails
                 observability.observe(
