@@ -6,6 +6,8 @@ This module handles secrets interpolation and management for formation configura
 
 from typing import Any, Dict, Optional
 
+from muxi.datatypes import observability
+
 
 class SecretsInterpolator:
     """
@@ -40,9 +42,16 @@ class SecretsInterpolator:
         try:
             return await self.secrets_manager.interpolate_secrets(config)
         except Exception as e:
-            #  Error - TODO: add observability
-            # SystemEvents.SECRET_OPERATION_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "interpolate",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description="Failed to interpolate secrets in configuration",
+            )
             return config
 
     async def ensure_secrets_manager(self) -> bool:
@@ -59,9 +68,16 @@ class SecretsInterpolator:
             await self.secrets_manager.initialize_encryption()
             return True
         except Exception as e:
-            #  Error - TODO: add observability
-            # SystemEvents.SECRET_OPERATION_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "initialize_encryption",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description="Failed to initialize secrets manager encryption",
+            )
             return False
 
     async def store_secret(self, name: str, value: str) -> bool:
@@ -82,9 +98,17 @@ class SecretsInterpolator:
             await self.secrets_manager.store_secret(name, value)
             return True
         except Exception as e:
-            #  Error - TODO: add observability
-            # SystemEvents.SECRET_OPERATION_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "store",
+                    "secret_name": name,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description=f"Failed to store secret '{name}'",
+            )
             return False
 
     async def get_secret(self, name: str) -> Optional[str]:
@@ -103,9 +127,17 @@ class SecretsInterpolator:
         try:
             return await self.secrets_manager.get_secret(name)
         except Exception as e:
-            #  Error - TODO: add observability
-            # SystemEvents.SECRET_OPERATION_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "retrieve",
+                    "secret_name": name,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description=f"Failed to retrieve secret '{name}'",
+            )
             return None
 
     async def list_secrets(self) -> list[str]:
@@ -121,9 +153,15 @@ class SecretsInterpolator:
         try:
             return await self.secrets_manager.list_secrets()
         except Exception as e:
-            #  Error - TODO: add observability
-            # SystemEvents.SECRET_LISTING_COMPLETED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_LISTING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description="Failed to list secrets",
+            )
             return []
 
     async def delete_secret(self, name: str) -> bool:
@@ -143,7 +181,15 @@ class SecretsInterpolator:
             await self.secrets_manager.delete_secret(name)
             return True
         except Exception as e:
-            #  Error - TODO: add observability
-            # SystemEvents.SECRET_OPERATION_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "delete",
+                    "secret_name": name,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description=f"Failed to delete secret '{name}'",
+            )
             return False
