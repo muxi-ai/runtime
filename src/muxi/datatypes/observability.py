@@ -23,11 +23,8 @@ class EventLevel(Enum):
 class SystemEvents(Enum):
     """System infrastructure events for server monitoring and operations (routed to stdout)."""
 
-    INITIALIZING = "service.initializing"
-    # When server starts initializing
-
-    SERVICE_STARTED = "service.started"
-    # When server is fully initialized and ready
+    # REMOVED: INITIALIZING - replaced by InitEventFormatter banner
+    # REMOVED: SERVICE_STARTED - replaced by InitEventFormatter completion message
 
     CLEANUP = "cleanup"
     # When server is cleaning up
@@ -38,8 +35,7 @@ class SystemEvents(Enum):
     # ===================================================================
     # MCP SYSTEM EVENTS
     # ===================================================================
-    MCP_SERVER_PROCESS_STARTED = "mcp.server.process.started"
-    # When MCP server subprocess is launched
+    # REMOVED: MCP_SERVER_PROCESS_STARTED - replaced by InitEventFormatter
 
     MCP_SERVER_PROCESS_FAILED = "mcp.server.process.failed"
     # When MCP server subprocess fails to start or crashes
@@ -50,21 +46,13 @@ class SystemEvents(Enum):
     MCP_SERVER_REGISTRATION_FAILED = "mcp.server.registration.failed"
     # When MCP server registration fails
 
-    MCP_SERVER_REGISTRATION_STARTED = "mcp.server.registration.started"
-    # When MCP server registration begins
+    # REMOVED: MCP_SERVER_REGISTRATION_STARTED - replaced by InitEventFormatter
+    # REMOVED: MCP_SERVER_REGISTRATION_COMPLETED - replaced by InitEventFormatter
+    # REMOVED: MCP_TOOL_DISCOVERY_COMPLETED - included in InitEventFormatter output
+    # REMOVED: MCP_SERVER_CONNECTING - replaced by InitEventFormatter
+    # REMOVED: MCP_SERVER_CONNECTED - replaced by InitEventFormatter
 
-    MCP_SERVER_REGISTRATION_COMPLETED = "mcp.server.registration.completed"
-    # When MCP server registration completes successfully
-
-    MCP_TOOL_DISCOVERY_COMPLETED = "mcp.tool.discovery.completed"
-    # When MCP server tool discovery finishes
-
-    # Connection lifecycle events
-    MCP_SERVER_CONNECTING = "mcp.server.connecting"
-    # When starting connection to MCP server
-
-    MCP_SERVER_CONNECTED = "mcp.server.connected"
-    # When MCP server connection is established
+    # Connection lifecycle events (runtime only)
 
     MCP_SERVER_CONNECTION_FAILED = "mcp.server.connection_failed"
     # When MCP server connection fails
@@ -101,14 +89,12 @@ class SystemEvents(Enum):
     # ===================================================================
     # MCP TRANSPORT EVENTS (Added for Streamable HTTP implementation)
     # ===================================================================
-    MCP_TRANSPORT_DETECTED = "mcp.transport.detected"
-    # When transport type is auto-detected for MCP server
+    # REMOVED: MCP_TRANSPORT_DETECTED - included in InitEventFormatter MCP output
 
     MCP_TRANSPORT_DETECTION_FAILED = "mcp.transport.detection.failed"
     # When transport auto-detection fails
 
-    MCP_TRANSPORT_ATTEMPT = "mcp.transport.attempt"
-    # When attempting to connect with specific transport type
+    # REMOVED: MCP_TRANSPORT_ATTEMPT - too granular, not useful
 
     MCP_TRANSPORT_FAILED = "mcp.transport.failed"
     # When specific transport connection fails
@@ -119,17 +105,13 @@ class SystemEvents(Enum):
     # ===================================================================
     # AGENT SYSTEM EVENTS
     # ===================================================================
-    AGENT_INITIALIZED = "agent.initialized"
-    # When agent instance is created and configured
+    # REMOVED: AGENT_INITIALIZED - replaced by InitEventFormatter per-agent output
 
     # ===================================================================
     # A2A SYSTEM EVENTS
     # ===================================================================
-    A2A_CONFIG_LOAD_STARTED = "a2a.config.load.started"
-    # When starting to load A2A configuration
-
-    A2A_CONFIG_LOAD_COMPLETED = "a2a.config.load.completed"
-    # When A2A configuration is successfully loaded
+    # REMOVED: A2A_CONFIG_LOAD_STARTED - replaced by InitEventFormatter
+    # REMOVED: A2A_CONFIG_LOAD_COMPLETED - replaced by InitEventFormatter
 
     A2A_CREDENTIAL_LOADED = "a2a.credential.loaded"
     # When A2A credentials are loaded from storage
@@ -185,8 +167,7 @@ class SystemEvents(Enum):
     A2A_DEREGISTRATION_FAILED = "a2a.deregistration.failed"
     # When agent deregistration from A2A registry fails
 
-    A2A_SERVER_STARTED = "a2a.server.started"
-    # When A2A server component starts
+    # REMOVED: A2A_SERVER_STARTED - replaced by InitEventFormatter
 
     A2A_SERVER_STOPPED = "a2a.server.stopped"
     # When A2A server component stops
@@ -239,26 +220,16 @@ class SystemEvents(Enum):
     CONFIG_A2A_LOADED = "config.a2a.loaded"
     # When A2A configuration is loaded
 
-    OVERLORD_INITIALIZING = "overlord.initializing"
-    # When overlord component starts initialization
-
-    OVERLORD_STARTED = "overlord.started"
-    # When overlord component is fully initialized and ready
-
-    CACHE_MANAGER_STARTED = "cache.manager.started"
-    # When cache management system starts
-
-    MEMORY_OPTIMIZER_STARTED = "memory.optimizer.started"
-    # When memory optimization system starts
+    # REMOVED: OVERLORD_INITIALIZING - replaced by InitEventFormatter banner
+    # REMOVED: OVERLORD_STARTED - replaced by InitEventFormatter
+    # REMOVED: CACHE_MANAGER_STARTED - too granular, internal detail
+    # REMOVED: MEMORY_OPTIMIZER_STARTED - too granular, internal detail
 
     # ===================================================================
     # AUTHENTICATION & SECURITY EVENTS
     # ===================================================================
-    AUTH_MANAGER_INITIALIZED = "auth.manager.initialized"
-    # When authentication manager is initialized
-
-    INBOUND_AUTH_INITIALIZED = "inbound.auth.initialized"
-    # When inbound authentication system is initialized
+    # REMOVED: AUTH_MANAGER_INITIALIZED - too granular, internal detail
+    # REMOVED: INBOUND_AUTH_INITIALIZED - too granular, internal detail
 
     # ===================================================================
     # EKNOWLEDGE SYSTEM EVENTS
@@ -342,32 +313,50 @@ class SystemEvents(Enum):
     # ===================================================================
     # SCHEDULER SYSTEM OPERATIONS
     # ===================================================================
-    SCHEDULER_SERVICE_INITIALIZED = "scheduler.service.initialized"
-    # When scheduler service is initialized
-
-    SCHEDULER_MANAGER_INITIALIZED = "scheduler.manager.initialized"
-    # When scheduler job manager is initialized
-
-    SCHEDULER_PARSER_INITIALIZED = "scheduler.parser.initialized"
-    # When scheduler parser is initialized
-
-    SCHEDULER_DATABASE_INITIALIZED = "scheduler.database.initialized"
-    # When scheduler database is initialized
-
-    DATABASE_MANAGER_INITIALIZED = "database.manager.initialized"
-    # When database manager is initialized
-
-    DATABASE_TABLES_CREATED = "database.tables.created"
-    # When database tables are created
+    # REMOVED: SCHEDULER_SERVICE_INITIALIZED - replaced by InitEventFormatter
+    # REMOVED: SCHEDULER_MANAGER_INITIALIZED - too granular, internal detail
+    # REMOVED: SCHEDULER_PARSER_INITIALIZED - too granular, internal detail
+    # REMOVED: SCHEDULER_DATABASE_INITIALIZED - too granular, internal detail
+    # REMOVED: DATABASE_MANAGER_INITIALIZED - replaced by InitEventFormatter persistent memory message
+    # REMOVED: DATABASE_TABLES_CREATED - replaced by InitEventFormatter schema ready message
 
     # ===================================================================
     # NETWORK/COMMUNICATION INFRASTRUCTURE
     # ===================================================================
-    NETWORK_INTERFACE_INITIALIZED = "network.interface.initialized"
-    # When network interface is initialized
+    # REMOVED: NETWORK_INTERFACE_INITIALIZED - too granular, not used
 
     NETWORK_INTERFACE_FAILED = "network.interface.failed"
     # When network interface initialization fails
+
+    # ===================================================================
+    # RESILIENCE SYSTEM EVENTS
+    # ===================================================================
+    CIRCUIT_BREAKER_OPENED = "circuit_breaker.opened"
+    # When circuit breaker opens due to failures
+
+    CIRCUIT_BREAKER_CLOSED = "circuit_breaker.closed"
+    # When circuit breaker closes after recovery
+
+    CIRCUIT_BREAKER_HALF_OPEN = "circuit_breaker.half_open"
+    # When circuit breaker enters half-open state for testing
+
+    CIRCUIT_BREAKER_FALLBACK_TRIGGERED = "circuit_breaker.fallback.triggered"
+    # When circuit breaker triggers fallback function
+
+    CIRCUIT_BREAKER_FAILURE_RECORDED = "circuit_breaker.failure.recorded"
+    # When circuit breaker records a failure
+
+    CIRCUIT_BREAKER_SUCCESS_RECORDED = "circuit_breaker.success.recorded"
+    # When circuit breaker records a success
+
+    CIRCUIT_BREAKER_FORCED_OPEN = "circuit_breaker.forced.open"
+    # When circuit breaker is manually forced open
+
+    CIRCUIT_BREAKER_FORCED_CLOSED = "circuit_breaker.forced.closed"
+    # When circuit breaker is manually forced closed
+
+    CIRCUIT_BREAKER_RESET = "circuit_breaker.reset"
+    # When circuit breaker state is reset
 
 
 class ConversationEvents(Enum):
@@ -955,6 +944,18 @@ class ErrorEvents(Enum):
 
     WARNING = "error.warning"
     # When we want to warn about something
+
+    # ===================================================================
+    # RESILIENCE ERRORS
+    # ===================================================================
+    CIRCUIT_BREAKER_FALLBACK_FAILED = "error.circuit_breaker.fallback.failed"
+    # When circuit breaker fallback execution fails
+
+    FALLBACK_EXECUTION_FAILED = "error.fallback.execution.failed"
+    # When fallback function execution fails
+
+    RECOVERY_STRATEGY_FAILED = "error.recovery.strategy.failed"
+    # When recovery strategy execution fails
 
 
 @dataclass

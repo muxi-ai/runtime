@@ -19,6 +19,7 @@ from ...datatypes.resilience import (
     ErrorType,
     ErrorSeverity,
 )
+from ...datatypes import observability
 
 T = TypeVar("T")
 
@@ -71,7 +72,16 @@ class CircuitBreaker(Generic[T]):
             # Check if we should allow the request
             if not await self._should_allow_request():
                 if fallback:
-                    #  Circuit breaker warning - TODO: add observability
+                    observability.observe(
+                        event_type=observability.SystemEvents.CIRCUIT_BREAKER_FALLBACK_TRIGGERED,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "circuit_breaker": self.name,
+                            "state": self.state.state.value,
+                            "failure_count": self.state.failure_count,
+                        },
+                        description=f"Circuit breaker '{self.name}' triggered fallback (state: {self.state.state.value})",
+                    )
                     return await self._execute_fallback(fallback, *args, **kwargs)
                 else:
                     estimated_recovery = self._get_estimated_recovery_time()
@@ -145,8 +155,16 @@ class CircuitBreaker(Generic[T]):
                 loop = asyncio.get_event_loop()
                 return await loop.run_in_executor(None, lambda: fallback(*args, **kwargs))
         except Exception as e:
-            #  Circuit breaker error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.CIRCUIT_BREAKER_FALLBACK_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "circuit_breaker": self.name,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                description=f"Circuit breaker '{self.name}' fallback execution failed: {str(e)}",
+            )
             raise WorkflowException(
                 f"Both primary function and fallback failed for circuit breaker '{self.name}'",
                 ErrorType.SYSTEM_OVERLOAD,
@@ -193,9 +211,18 @@ class CircuitBreaker(Generic[T]):
         ):
             await self._transition_to_open()
 
-        #  Circuit breaker warning - TODO: add observability
-        #     f"Circuit breaker '{self.name}' recorded failure: {error} "
-        #     f"(execution_time: {execution_time:.2f}s, failures: {self.state.failure_count})"
+        observability.observe(
+            event_type=observability.SystemEvents.CIRCUIT_BREAKER_FAILURE_RECORDED,
+            level=observability.EventLevel.WARNING,
+            data={
+                "circuit_breaker": self.name,
+                "error": str(error),
+                "execution_time": execution_time,
+                "failure_count": self.state.failure_count,
+                "threshold": self.config.failure_threshold,
+            },
+            description=f"Circuit breaker '{self.name}' recorded failure: {error} (execution_time: {execution_time:.2f}s, failures: {self.state.failure_count})",
+        )
         # )
 
     async def _transition_to_open(self) -> None:
@@ -204,9 +231,17 @@ class CircuitBreaker(Generic[T]):
         self.state.next_attempt_time = time.time() + self.config.recovery_timeout
         self.state.success_count = 0
 
-        #  Circuit breaker warning - TODO: add observability
-        #     f"Circuit breaker '{self.name}' opened due to {self.state.failure_count} failures. "
-        #     f"Will attempt recovery at {time.ctime(self.state.next_attempt_time)}"
+        observability.observe(
+            event_type=observability.SystemEvents.CIRCUIT_BREAKER_OPENED,
+            level=observability.EventLevel.WARNING,
+            data={
+                "circuit_breaker": self.name,
+                "failure_count": self.state.failure_count,
+                "next_attempt_time": self.state.next_attempt_time,
+                "recovery_timeout": self.config.recovery_timeout,
+            },
+            description=f"Circuit breaker '{self.name}' opened due to {self.state.failure_count} failures. Will attempt recovery at {time.ctime(self.state.next_attempt_time)}",
+        )
         # )
 
     async def _transition_to_half_open(self) -> None:
@@ -274,7 +309,12 @@ class CircuitBreaker(Generic[T]):
         """Force circuit breaker to OPEN state."""
         async with self._lock:
             await self._transition_to_open()
-            #  Circuit breaker warning - TODO: add observability
+            observability.observe(
+                event_type=observability.SystemEvents.CIRCUIT_BREAKER_FORCED_OPEN,
+                level=observability.EventLevel.WARNING,
+                data={"circuit_breaker": self.name},
+                description=f"Circuit breaker '{self.name}' was manually forced open",
+            )
 
     async def force_close(self) -> None:
         """Force circuit breaker to CLOSED state."""

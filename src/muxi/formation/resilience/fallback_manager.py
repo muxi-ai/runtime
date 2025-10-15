@@ -12,6 +12,7 @@ from ...datatypes.resilience import (
     ErrorType,
     FallbackFunction,
 )
+from ...datatypes import observability
 
 
 class FallbackManager:
@@ -65,8 +66,16 @@ class FallbackManager:
             return error_response
 
         except Exception as fallback_error:
-            #  Fallback manager error - TODO: add observability
-            _ = fallback_error  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.FALLBACK_EXECUTION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "workflow_id": workflow,
+                    "error_type": error_type.value,
+                    "fallback_error": str(fallback_error),
+                },
+                description=f"Fallback execution failed for workflow '{workflow}': {str(fallback_error)}",
+            )
             return self._get_emergency_response(workflow, error_type)
 
     async def _get_cached_fallback(
@@ -248,8 +257,16 @@ class FallbackManager:
             #  Fallback manager debug - TODO: add observability
 
         except Exception as cache_error:
-            #  Fallback manager error - TODO: add observability
-            _ = cache_error  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "component": "fallback_manager",
+                    "operation": "cache_cleanup",
+                    "error": str(cache_error),
+                },
+                description=f"Fallback cache cleanup failed: {str(cache_error)}",
+            )
 
     def register_fallback_function(self, name: str, function: FallbackFunction) -> None:
         """Register a custom fallback function."""
