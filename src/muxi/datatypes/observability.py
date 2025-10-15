@@ -305,6 +305,18 @@ class SystemEvents(Enum):
     # When secret listing operation fails
 
     # ===================================================================
+    # AGENT MANAGEMENT OPERATIONS
+    # ===================================================================
+    AGENT_ADDED = "agent.added"
+    # When agent is dynamically added via API
+
+    AGENT_UPDATED = "agent.updated"
+    # When agent configuration is updated via API
+
+    AGENT_REMOVED = "agent.removed"
+    # When agent is removed via API
+
+    # ===================================================================
     # GENERAL OPERATIONS
     # ===================================================================
     OPERATION_COMPLETED = "operation.completed"

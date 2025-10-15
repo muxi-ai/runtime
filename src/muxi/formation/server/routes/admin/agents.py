@@ -312,7 +312,17 @@ async def create_agent(request: Request, agent: AgentCreate) -> JSONResponse:
         )
         return JSONResponse(content=response.model_dump(), status_code=500)
 
-    # TODO: Add observability event for agent added
+    # Log agent addition
+    observability.observe(
+        event_type=observability.SystemEvents.AGENT_ADDED,
+        level=observability.EventLevel.INFO,
+        data={
+            "agent_id": agent_config["id"],
+            "agent_name": agent_config["name"],
+            "source": "api",
+            "description": f"Agent '{agent_config['id']}' added via API"
+        }
+    )
 
     response = create_success_response(
         APIObjectType.AGENT, APIEventType.AGENT_CREATED, agent_config, request_id
@@ -397,7 +407,17 @@ async def update_agent(request: Request, agent_id: str, updates: AgentUpdate) ->
         )
         return JSONResponse(content=response.model_dump(), status_code=500)
 
-    # TODO: Add observability event for agent updated
+    # Log agent update
+    observability.observe(
+        event_type=observability.SystemEvents.AGENT_UPDATED,
+        level=observability.EventLevel.INFO,
+        data={
+            "agent_id": agent_id,
+            "updated_fields": list(update_data.keys()),
+            "source": "api",
+            "description": f"Agent '{agent_id}' updated via API"
+        }
+    )
 
     response = create_success_response(
         APIObjectType.AGENT, APIEventType.AGENT_UPDATED, agent, request_id
@@ -457,7 +477,16 @@ async def delete_agent(request: Request, agent_id: str) -> JSONResponse:
         # Delete the YAML file
         _delete_agent_file_safe(formation, agent_id)
 
-        # TODO: Add observability event for agent removed
+        # Log agent removal
+        observability.observe(
+            event_type=observability.SystemEvents.AGENT_REMOVED,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": agent_id,
+                "source": "api",
+                "description": f"Agent '{agent_id}' removed via API"
+            }
+        )
 
     except ValueError as e:
         # This shouldn't happen since we already checked, but handle it

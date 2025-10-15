@@ -377,7 +377,18 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
         handler = _get_tool_handler(tool_def["handler"])
         result = await handler(formation, **tool_call.arguments)
 
-        # TODO: Add observability event for MCP tool called
+        # Log successful tool execution
+        from .....services import observability
+        observability.observe(
+            event_type=observability.ConversationEvents.MCP_TOOL_CALLED,
+            level=observability.EventLevel.INFO,
+            data={
+                "tool": tool_call.tool,
+                "access_level": tool_def["access"],
+                "arguments": tool_call.arguments,
+                "description": f"MCP tool '{tool_call.tool}' executed successfully via API"
+            }
+        )
 
         response = create_success_response(
             APIObjectType.MCP_TOOL_RESULT,
@@ -389,13 +400,33 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
 
     except ValueError as e:
         # Handle expected validation errors with specific messages
-        # TODO: Add observability event for MCP tool validation error
+        from .....services import observability
+        observability.observe(
+            event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={
+                "tool": tool_call.tool,
+                "error_type": "validation",
+                "error": str(e),
+                "description": f"MCP tool '{tool_call.tool}' validation error: {str(e)}"
+            }
+        )
         response = create_error_response("INVALID_PARAMS", str(e), None, request_id)
         return JSONResponse(content=response.model_dump(), status_code=400)
 
-    except AttributeError:
+    except AttributeError as e:
         # Handle missing attributes/methods (e.g., formation components not available)
-        # TODO: Add observability event for MCP tool configuration error
+        from .....services import observability
+        observability.observe(
+            event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
+            level=observability.EventLevel.ERROR,
+            data={
+                "tool": tool_call.tool,
+                "error_type": "configuration",
+                "error": str(e),
+                "description": f"MCP tool '{tool_call.tool}' configuration error: required component not available"
+            }
+        )
         response = create_error_response(
             "TOOL_EXECUTION_ERROR",
             "Tool configuration error: required component not available",
@@ -406,16 +437,39 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
 
     except KeyError as e:
         # Handle missing required arguments
-        # TODO: Add observability event for MCP tool argument error
+        from .....services import observability
+        observability.observe(
+            event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={
+                "tool": tool_call.tool,
+                "error_type": "missing_argument",
+                "error": str(e),
+                "description": f"MCP tool '{tool_call.tool}' missing required argument: {str(e)}"
+            }
+        )
         response = create_error_response(
             "INVALID_PARAMS", f"Missing required argument: {str(e)}", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=400)
 
-    except Exception:
+    except Exception as e:
         # Handle unexpected errors without exposing internal details
-        # TODO: Add observability event for MCP tool unexpected error with full details
         # Log the actual error internally but return generic message to client
+        from .....services import observability
+        import traceback
+        observability.observe(
+            event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
+            level=observability.EventLevel.ERROR,
+            data={
+                "tool": tool_call.tool,
+                "error_type": "unexpected",
+                "error": str(e),
+                "error_class": type(e).__name__,
+                "traceback": traceback.format_exc(),
+                "description": f"MCP tool '{tool_call.tool}' unexpected error: {type(e).__name__}"
+            }
+        )
         response = create_error_response(
             "TOOL_EXECUTION_ERROR",
             "An unexpected error occurred during tool execution",
