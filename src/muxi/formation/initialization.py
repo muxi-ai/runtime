@@ -94,16 +94,10 @@ def initialize_observability(formation) -> None:
         # CRITICAL: Set the logger in context so observe() uses it
         set_event_logger(event_logger)
 
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "observability",
-                "output": "file",
-                "path": event_logger.output_config.get("path"),
-            },
-            description=f"Observability initialized with file output: {event_logger.output_config.get('path')}",
-        )
+        # Convert to InitEventFormatter
+        print(observability.InitEventFormatter.format_info(
+            f"Observability logging to: {event_logger.output_config.get('path')}"
+        ))
     else:
         # Use default stdout logger
         formation._observability_manager = observability.ObservabilityManager({})
@@ -231,12 +225,7 @@ def initialize_llm_config(formation) -> None:
     else:
         description = f"LLM configuration initialized with {len(capabilities)} capabilities"
 
-    observability.observe(
-        event_type=observability.SystemEvents.INITIALIZING,
-        level=observability.EventLevel.INFO,
-        data=log_data,
-        description=description,
-    )
+    # REMOVE - line 234 (user: remove)
 
 
 def initialize_memory_systems(formation) -> None:
@@ -274,17 +263,10 @@ def _initialize_working_memory(formation, working_config: Dict[str, Any]) -> Non
         # Store the working memory configuration
         formation._working_memory_config = config
 
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.DEBUG,
-            data={
-                "service": "working_memory",
-                "mode": config.mode,
-                "max_memory_mb": str(config.max_memory_mb),
-                "vector_dimension": config.vector_dimension,
-            },
-            description=f"Working memory configured in {config.mode} mode",
-        )
+        # Convert to InitEventFormatter
+        print(observability.InitEventFormatter.format_ok(
+            f"Working memory ({config.mode} mode)"
+        ))
 
     except Exception as e:
         observability.observe(
@@ -336,18 +318,7 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
             remote=remote_config.model_dump() if remote_config and mode == "remote" else None,
         )
 
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "buffer_memory",
-                "size": size,
-                "multiplier": multiplier,
-                "vector_search": vector_search,
-                "mode": mode,
-            },
-            description=f"Buffer memory initialized with size {size}",
-        )
+        # REMOVE - line 339 (redundant with InitEventFormatter)
 
         # Print clean formatted line
         search_status = "enabled" if vector_search else "disabled"
@@ -453,16 +424,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             formation._is_multi_user = True  # PostgreSQL/Memobase is multi-user mode
             memory_type = "Memobase"
 
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "persistent_memory",
-                "type": memory_type,
-                "multi_user": getattr(formation, "_is_multi_user", False),
-            },
-            description=f"Persistent memory initialized with {memory_type}",
-        )
+        # REMOVE - line 456 (redundant with InitEventFormatter)
 
         # Print clean formatted line
         mode = "multi-user" if getattr(formation, "_is_multi_user", False) else "single-user"
@@ -550,17 +512,7 @@ def initialize_document_processing(formation) -> None:
         # Initialize document chunk manager
         formation._document_chunk_manager = DocumentChunkManager(document_config=config)
 
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "document_processing",
-                "chunk_size": config.get_chunk_size(),
-                "chunk_overlap": config.get_chunk_overlap(),
-                "enabled": config.is_enabled(),
-            },
-            description="Document processing initialized",
-        )
+        # REMOVE - line 553 (user: feels pointless)
 
     except Exception as e:
         observability.observe(
@@ -601,16 +553,7 @@ async def initialize_mcp_services(formation) -> None:
             formation.suppress_mcp_errors_on_exit()
 
         # Log MCP server configuration
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "mcp",
-                "server_count": len(servers),
-                "user_configured": len(servers),
-            },
-            description=f"Found {len(servers)} MCP servers to configure",
-        )
+        # REMOVE - line 604 (redundant with InitEventFormatter per-server lines)
 
         # Register MCP servers immediately so agents can see which use user credentials
         try:
@@ -633,27 +576,31 @@ async def initialize_mcp_services(formation) -> None:
             )
 
     except Exception as e:
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.ERROR,
-            data={
-                "service": "mcp",
-                "error": str(e),
-            },
-            description=f"Failed to initialize MCP service: {str(e)}",
+        # MCP catastrophic failure - fail fast with init print
+        failure_info = observability.InitFailureInfo(
+            component="MCP initialization",
+            problem=f"Failed to initialize MCP service: {str(e)}",
+            context="MCP service initialization",
+            causes=[
+                "MCP service wrapper encountered an unexpected error",
+                "This is different from individual server failures",
+                "Could indicate a system-level issue"
+            ],
+            fixes=[
+                "Check the full error trace below",
+                "Verify MCP configuration in formation.yaml",
+                "Check system dependencies are installed"
+            ],
+            technical=str(e)
         )
-        # Don't raise - MCP is optional functionality
+        print("\n" + observability.InitEventFormatter.format_fail(failure_info))
+        raise  # Fail fast - re-raise exception
 
 
 async def initialize_artifact_service(formation, overlord) -> None:
     """Initialize the artifact generation service."""
     try:
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.INFO,
-            data={"service": "artifact"},
-            description="Initializing artifact generation service",
-        )
+        # REMOVE - line 651 (user: feels pointless)
 
         # Import and initialize the artifact service
         from .artifacts.artifact_service import get_artifact_service
@@ -705,12 +652,7 @@ def initialize_background_services(formation) -> None:
             default_timeout=webhook_config.get("webhook_timeout", 30),
         )
 
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.INFO,
-            data={"services": ["request_tracker", "webhook_manager"]},
-            description="Background services initialized",
-        )
+        # REMOVE - line 708 (redundant with InitEventFormatter Scheduler)
 
     except Exception as e:
         observability.observe(
@@ -762,18 +704,7 @@ def initialize_clarification_config(formation) -> None:
             reasoning_requirements=clarification_config.get("reasoning_requirements", True),
         )
 
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.DEBUG,
-            data={
-                "service": "clarification",
-                "enabled": formation._clarification_config_obj.enabled,
-                "max_questions": formation._clarification_config_obj.max_questions,
-                "max_rounds": formation._clarification_config_obj.max_rounds,
-                "style": formation._clarification_config_obj.style.value,
-            },
-            description="Clarification configuration initialized",
-        )
+        # REMOVE - line 765 (user: feels pointless)
 
     except ValueError:
         # Re-raise ValueError for configuration validation errors
@@ -810,16 +741,7 @@ def initialize_document_processing_config(formation) -> None:
         # Log the configuration details
         enabled = formation._document_processing_config.is_enabled()
         if enabled:
-            observability.observe(
-                event_type=observability.SystemEvents.INITIALIZING,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "document_processing",
-                    "enabled": enabled,
-                    "settings": formation._document_processing_config.get_settings(),
-                },
-                description="Document processing configuration initialized",
-            )
+            # REMOVE - line 813 (user: feels pointless)
 
         # Initialize DocumentChunkManager with the configuration
         formation._document_chunker = DocumentChunkManager(formation._document_processing_config)
@@ -1074,19 +996,7 @@ async def initialize_persistent_memory(
         if connection_string.startswith("postgresql://") or connection_string.startswith(
             "postgres://"
         ):
-            observability.observe(
-                event_type=observability.SystemEvents.INITIALIZING,
-                level=observability.EventLevel.INFO,
-                data={
-                    "database_type": "postgresql",
-                    "memory_type": "persistent",
-                    "multi_user": is_multi_user,
-                },
-                description=(
-                    "Initializing persistent memory with PostgreSQL backend "
-                    f"(multi-user: {is_multi_user})"
-                ),
-            )
+            # REMOVE - line 1077 (redundant with InitEventFormatter)
             from ..services.memory.memobase import Memobase
             from ..services.memory.long_term import LongTermMemory
             from ..services.db import get_database_manager
@@ -1117,19 +1027,7 @@ async def initialize_persistent_memory(
             await overlord._initialize_collections()
 
         elif connection_string.startswith("sqlite://") or connection_string.endswith(".db"):
-            observability.observe(
-                event_type=observability.SystemEvents.INITIALIZING,
-                level=observability.EventLevel.INFO,
-                data={
-                    "database_type": "sqlite",
-                    "memory_type": "persistent",
-                    "multi_user": is_multi_user,
-                },
-                description=(
-                    "Initializing persistent memory with SQLite backend "
-                    f"(multi-user: {is_multi_user})"
-                ),
-            )
+            # REMOVE - line 1120 (redundant with InitEventFormatter)
             from ..services.memory.sqlite import SQLiteMemory
             from ..services.db import get_database_manager
 

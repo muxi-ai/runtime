@@ -148,12 +148,8 @@ def initialize_onellm_cache(cache_config: Optional[Dict[str, Any]] = None) -> bo
 
     # Check if caching is enabled (default: True)
     if not cache_config.get("enabled", True):
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.INFO,
-            data={"service": "onellm_cache", "enabled": False},
-            description="OneLLM cache is disabled in configuration",
-        )
+        # Convert to InitEventFormatter
+        print(observability.InitEventFormatter.format_info("LLM cache: disabled"))
         _cache_initialized = True  # Mark as initialized to prevent retry
         return False
 
@@ -170,19 +166,11 @@ def initialize_onellm_cache(cache_config: Optional[Dict[str, Any]] = None) -> bo
     # Initialize OneLLM cache
     onellm_init_cache(**cache_params)
 
-    observability.observe(
-        event_type=observability.SystemEvents.INITIALIZING,
-        level=observability.EventLevel.INFO,
-        data={
-            "service": "onellm_cache",
-            "enabled": True,
-            **cache_params,
-        },
-        description=(
-            f"OneLLM cache initialized with {cache_params['max_entries']} max entries, "
-            f"{cache_params['p']} similarity threshold, {cache_params['ttl']}s TTL"
-        ),
-    )
+    # Convert to InitEventFormatter (user: say "LLM cache" not "OneLLM cache")
+    print(observability.InitEventFormatter.format_info(
+        f"LLM cache: {cache_params['max_entries']} max entries, "
+        f"{cache_params['p']} similarity, {cache_params['ttl']}s TTL"
+    ))
 
     _cache_initialized = True
     return True

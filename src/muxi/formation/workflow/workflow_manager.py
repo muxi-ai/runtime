@@ -48,11 +48,7 @@ class WorkflowManager:
         # Thread safety
         self._lock = threading.Lock()
 
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.INFO,
-            description="WorkflowManager initialized"
-        )
+        # REMOVE - line 51 (user: feels pointless)
 
     def track_workflow(self, workflow: Workflow, user_id: Optional[str] = None) -> None:
         """

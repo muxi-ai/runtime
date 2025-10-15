@@ -204,15 +204,7 @@ class LongTermMemory:
                 from ..llm import LLM as LLMClass
 
                 self._embedding_model = LLMClass(model=self._embedding_model_name)
-                observability.observe(
-                    event_type=observability.SystemEvents.INITIALIZING,
-                    level=observability.EventLevel.DEBUG,
-                    data={
-                        "model_name": self._embedding_model_name,
-                        "service": "long_term_memory_embedding",
-                    },
-                    description=f"Lazily initialized embedding model: {self._embedding_model_name}",
-                )
+                # REMOVE - line 207 (DEBUG runtime trace: lazy loading)
             except Exception as e:
                 observability.observe(
                     event_type=observability.ErrorEvents.LLM_INITIALIZATION_FAILED,
@@ -255,16 +247,7 @@ class LongTermMemory:
                 conn.commit()
 
             # Successfully created - log at INFO level
-            observability.observe(
-                event_type=observability.SystemEvents.INITIALIZING,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "pgvector",
-                    "extension": "vector",
-                    "database_type": self.db_manager.database_type,
-                },
-                description="pgvector extension created successfully",
-            )
+            # REMOVE - line 258 (DEBUG runtime trace: internal detail)
         except Exception as e:
             # Check if the error is because extension already exists (shouldn't happen, but be safe)
             error_str = str(e).lower()

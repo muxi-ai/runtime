@@ -38,12 +38,7 @@ async def extract_artifacts_from_tool_results(
 
     # Return empty list if no tool results provided
     if not tool_results:
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.DEBUG,
-            data={"service": "artifact", "action": "extract_from_tools"},
-            description="No tool results provided for artifact extraction"
-        )
+        # REMOVE - line 41 (DEBUG runtime trace: not initialization)
         return artifacts
 
     # Process each tool result

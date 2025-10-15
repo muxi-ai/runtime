@@ -1265,15 +1265,7 @@ class Formation:
             }
         )
 
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.INFO,
-            data={
-                "formation_id": self.formation_id,
-                "services_initialized": list(self._configured_services.keys()),
-            },
-            description="All Formation services initialized successfully",
-        )
+        # REMOVE - line 1268 (redundant with InitEventFormatter section 10: Formation ready)
 
     def _setup_auth(self) -> None:
         """
@@ -3144,7 +3136,7 @@ class Formation:
             else:
                 # Server exists but not running, we can reuse or replace it
                 observability.observe(
-                    event_type=observability.SystemEvents.INITIALIZING,
+                    event_type=observability.ServerEvents.SERVER_RESTARTING,
                     level=observability.EventLevel.INFO,
                     data={
                         "service": "formation_api_server",
@@ -3175,7 +3167,7 @@ class Formation:
         )
 
         observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
+            event_type=observability.ServerEvents.SERVER_STARTING,
             level=observability.EventLevel.INFO,
             data={
                 "service": "formation_api_server",
@@ -3190,7 +3182,7 @@ class Formation:
         # Auto-start overlord if not already running
         if not hasattr(self, "_overlord") or self._overlord is None:
             observability.observe(
-                event_type=observability.SystemEvents.INITIALIZING,
+                event_type=observability.ServerEvents.OVERLORD_STARTING,
                 level=observability.EventLevel.INFO,
                 data={
                     "service": "formation_api_server",

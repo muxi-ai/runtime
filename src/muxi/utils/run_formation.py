@@ -61,15 +61,7 @@ async def run_formation(formation_path: str):
     formation_loaded = False
 
     try:
-        observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "run_formation",
-                "formation_path": formation_path,
-            },
-            description=f"Loading formation from: {formation_path}",
-        )
+        # REMOVE - line 64 (redundant with InitEventFormatter section 1: Formation banner)
 
         await formation.load(formation_path)
         formation_loaded = True
@@ -268,15 +260,7 @@ def main():
     formation_path = sys.argv[1]
 
     # Initialize observability system
-    observability.observe(
-        event_type=observability.SystemEvents.INITIALIZING,
-        level=observability.EventLevel.INFO,
-        data={
-            "service": "run_formation",
-            "formation_path": formation_path,
-        },
-        description=f"Starting formation runner with path: {formation_path}",
-    )
+    # REMOVE - line 271 (redundant with InitEventFormatter section 1: Formation banner)
 
     # Run the formation - file existence will be checked during loading
     asyncio.run(run_formation(formation_path))

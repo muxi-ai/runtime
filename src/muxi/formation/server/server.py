@@ -128,7 +128,7 @@ class FormationServer:
 
         # Log server configuration
         observability.observe(
-            event_type=observability.SystemEvents.INITIALIZING,
+            event_type=observability.ServerEvents.SERVER_INITIALIZING,
             level=observability.EventLevel.INFO,
             data={
                 "service": "formation_server",
@@ -182,20 +182,10 @@ class FormationServer:
 
         if generated_keys:
             # Log warning about auto-generated keys
-            observability.observe(
-                event_type=observability.SystemEvents.INITIALIZING,
-                level=observability.EventLevel.WARNING,
-                data={
-                    "service": "formation_api_server",
-                    "generated_keys": list(generated_keys.keys()),
-                    "admin_key_generated": "admin" in generated_keys,
-                    "client_key_generated": "client" in generated_keys,
-                    "warning": "Auto-generated API keys are for development only",
-                    "admin_key": "••••••••" if "admin" in generated_keys else None,
-                    "client_key": "••••••••" if "client" in generated_keys else None,
-                },
-                description="Auto-generated API keys created - NOT recommended for production use",
-            )
+            # Convert to InitEventFormatter
+            print(observability.InitEventFormatter.format_warn(
+                "API keys auto-generated (NOT for production)"
+            ))
 
             # Still print to console for development visibility
             print(f"\n✅ Formation server started on http://{self.host}:{self.port}")
@@ -224,7 +214,7 @@ class FormationServer:
         else:
             # Log that keys were loaded from configuration
             observability.observe(
-                event_type=observability.SystemEvents.INITIALIZING,
+                event_type=observability.ServerEvents.API_KEYS_LOADED,
                 level=observability.EventLevel.INFO,
                 data={
                     "service": "formation_api_server",

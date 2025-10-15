@@ -841,6 +841,21 @@ class ServerEvents(Enum):
     SERVER_FAILED = "server.failed"
     # When server fails
 
+    SERVER_INITIALIZING = "server.initializing"
+    # When server initialization begins
+
+    SERVER_STARTING = "server.starting"
+    # When server is starting up
+
+    SERVER_RESTARTING = "server.restarting"
+    # When server is restarting (replacing stopped instance)
+
+    OVERLORD_STARTING = "server.overlord.starting"
+    # When overlord is starting for the server
+
+    API_KEYS_LOADED = "server.api_keys.loaded"
+    # When API keys are loaded from configuration
+
     REQUEST_RECEIVED = "server.request.received"
     # When server receives an HTTP request
 

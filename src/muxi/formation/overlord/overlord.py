@@ -479,11 +479,7 @@ class Overlord:
                         db_manager=db_manager,
                         encryption_key=encryption_key,  # Optional custom key
                     )
-                    observability.observe(
-                        event_type=observability.SystemEvents.INITIALIZING,
-                        level=observability.EventLevel.INFO,
-                        description="Initialized encrypted credential resolver",
-                    )
+                    # REMOVE - line 482 (user: feels pointless)
                 except ImportError:
                     # Fall back to non-encrypted resolver if cryptography not available
                     self.credential_resolver = CredentialResolver(
@@ -2735,30 +2731,10 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         # The LongTermMemory class ensures collections exist when adding memories
                         # For PostgreSQL/SQLite backends, collections are created on first use
                         # We'll log the intended collections for visibility
-                        observability.observe(
-                            event_type=observability.SystemEvents.INITIALIZING,
-                            level=observability.EventLevel.DEBUG,
-                            data={
-                                "collection_name": collection_name,
-                                "description": description,
-                                "memory_type": "long_term",
-                                "backend": type(ltm).__name__,
-                            },
-                            description=f"Collection '{collection_name}' registered: {description}",
-                        )
+                        # REMOVE - line 2738 (DEBUG runtime trace: collection registration)
                     else:
                         # Direct LongTermMemory instance (SQLite)
-                        observability.observe(
-                            event_type=observability.SystemEvents.INITIALIZING,
-                            level=observability.EventLevel.DEBUG,
-                            data={
-                                "collection_name": collection_name,
-                                "description": description,
-                                "memory_type": "sqlite",
-                                "backend": type(self.long_term_memory).__name__,
-                            },
-                            description=f"Collection '{collection_name}' registered: {description}",
-                        )
+                        # REMOVE - line 2751 (DEBUG runtime trace: collection registration)
 
                 except Exception as e:
                     observability.observe(
@@ -2783,15 +2759,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             self.client_factory.register("agent", agent_transport)
 
             # Log successful initialization
-            observability.observe(
-                event_type=observability.SystemEvents.INITIALIZING,
-                level=observability.EventLevel.INFO,
-                data={
-                    "factory": "ClientFactory",
-                    "transports": ["agent", "jsonrpc", "rest", "grpc"],
-                },
-                description="A2A ClientFactory initialized with AgentTransport",
-            )
+            # REMOVE - line 2786 (user: remove)
 
         except Exception as e:
             # Log error but don't fail - A2A is optional
@@ -4145,17 +4113,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                     }
                                 ]
 
-                            observability.observe(
-                                event_type=observability.SystemEvents.INITIALIZING,
-                                level=observability.EventLevel.INFO,
-                                data={
-                                    "service": "document_processing",
-                                    "filename": filename,
-                                    "extracted_chars": len(extracted_content),
-                                    "file_extension": file_ext,
-                                },
-                                description=f"Successfully extracted {len(extracted_content)} chars from {filename}",
-                            )
+                            # REMOVE - line 4148 (DEBUG runtime trace: file processing)
 
                         except Exception as e:
                             observability.observe(
@@ -4185,17 +4143,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             ]
                         else:
                             # Fallback simple chunking
-                            observability.observe(
-                                event_type=observability.SystemEvents.INITIALIZING,
-                                level=observability.EventLevel.DEBUG,
-                                data={
-                                    "service": "document_processing",
-                                    "filename": filename,
-                                    "reason": "document_chunker_not_available",
-                                    "fallback": "simple_chunking",
-                                },
-                                description=f"Using fallback chunking for {filename}",
-                            )
+                            # REMOVE - line 4188 (DEBUG runtime trace: file processing)
                             chunks = [{"content": content, "metadata": {"filename": filename}}]
 
                 # Store metadata
