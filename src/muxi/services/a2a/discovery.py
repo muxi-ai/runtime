@@ -236,7 +236,6 @@ class LocalDiscoveryService:
                 try:
                     agent_card = await self._fetch_agent_card(endpoint)
                 except Exception as e:
-                    #  A2A discovery error - TODO: add observability
                     observability.observe(
                         event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                         level=observability.EventLevel.ERROR,
@@ -684,8 +683,6 @@ class LocalDiscoveryService:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                #  A2A discovery error - TODO: add observability
-
                 observability.observe(
                     event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
@@ -746,8 +743,6 @@ class LocalDiscoveryService:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                #  A2A discovery error - TODO: add observability
-
                 observability.observe(
                     event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
@@ -840,8 +835,6 @@ class LocalDiscoveryService:
             )
 
         except Exception as e:
-            #  A2A discovery error - TODO: add observability
-
             observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
@@ -913,8 +906,6 @@ class LocalDiscoveryService:
             )
 
         except Exception as e:
-            #  A2A discovery error - TODO: add observability
-
             observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,

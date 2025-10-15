@@ -62,7 +62,16 @@ class FallbackManager:
 
             # Generate error message as last resort
             error_response = await self._generate_error_message(workflow, error_type, context)
-            #  Fallback manager warning - TODO: add observability
+            observability.observe(
+                event_type=observability.SystemEvents.CIRCUIT_BREAKER_FALLBACK_TRIGGERED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "workflow_id": workflow,
+                    "error_type": error_type.value,
+                    "fallback_strategy": "error_message_generation",
+                },
+                description=f"Generated error message as final fallback for workflow '{workflow}'",
+            )
             return error_response
 
         except Exception as fallback_error:
