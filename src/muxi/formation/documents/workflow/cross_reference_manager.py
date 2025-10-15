@@ -100,9 +100,15 @@ class DocumentCrossReferenceManager:
         # Load existing data
         self._load_references()
 
-        #  Info - TODO: add observability
-        #     f"Initialized DocumentCrossReferenceManager with storage at {self.storage_path}"
-        # )
+        observability.observe(
+            event_type=observability.SystemEvents.OPERATION_COMPLETED,
+            level=observability.EventLevel.INFO,
+            data={
+                "operation": "cross_reference_manager_init",
+                "storage_path": str(self.storage_path),
+                "description": f"Initialized DocumentCrossReferenceManager with storage at {self.storage_path}"
+            }
+        )
 
     def _default_citation_styles(self) -> Dict[str, CitationStyle]:
         """Initialize default citation styles"""
@@ -186,9 +192,18 @@ class DocumentCrossReferenceManager:
         # Save to storage
         await self._save_references()
 
-        #  Info - TODO: add observability
-        #     f"Added reference {reference_id} from {source_document_id} to {target_document_id}"
-        # )
+        observability.observe(
+            event_type=observability.SystemEvents.OPERATION_COMPLETED,
+            level=observability.EventLevel.INFO,
+            data={
+                "operation": "add_reference",
+                "reference_id": reference_id,
+                "source_document_id": source_document_id,
+                "target_document_id": target_document_id,
+                "reference_type": reference_type,
+                "description": f"Added reference {reference_id} from {source_document_id} to {target_document_id}"
+            }
+        )
         return reference_id
 
     def get_references_for_document(
@@ -272,7 +287,15 @@ class DocumentCrossReferenceManager:
                 for ref_id, ref_data in references_data.items():
                     self._references[ref_id] = DocumentReference(**ref_data)
 
-                #  Info - TODO: add observability
+                observability.observe(
+                    event_type=observability.SystemEvents.OPERATION_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "operation": "load_references",
+                        "references_count": len(self._references),
+                        "description": f"Loaded {len(self._references)} document references from storage"
+                    }
+                )
 
             # Rebuild document graph
             self._rebuild_document_graph()
