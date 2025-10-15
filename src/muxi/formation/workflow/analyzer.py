@@ -425,7 +425,7 @@ class RequestAnalyzer:
                 requires_decomposition=False,
                 requires_approval=False,
                 implicit_subtasks=[],
-                required_capabilities=[\"general\"],
+                required_capabilities=["general"],
                 acceptance_criteria=[],
                 confidence_score=0.3,
                 is_scheduling_request=False,
