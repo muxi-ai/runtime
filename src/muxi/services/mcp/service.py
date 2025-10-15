@@ -44,6 +44,7 @@ from .sampling.creator import MCPSamplingCreator
 from .templates.discovery import MCPTemplateDiscovery
 from .health.monitor import MCPHealthMonitor, MCPCapabilitiesNegotiator
 from .. import observability, streaming
+from ...datatypes.observability import InitEventFormatter
 from ...formation.credentials import (
     MissingCredentialError,
     AmbiguousCredentialError,
@@ -318,22 +319,6 @@ class MCPService:
         # Create lock for this handler
         self.locks[server_id] = asyncio.Lock()
 
-        # Emit MCP server registration started event
-        observability.observe(
-            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
-            level=observability.EventLevel.INFO,
-            data={
-                "server_id": server_id,
-                "url": url,
-                "command": command,
-                "transport_type": transport_type,
-                "has_credentials": bool(credentials),
-                "request_timeout": request_timeout,
-                "agent_id": agent_id,
-            },
-            description=f"MCP server registration started: {server_id} for agent: {agent_id}",
-        )
-
         # Handle command-line transport directly
         if command or transport_type == "command":
             return await self._connect_single_transport(
@@ -361,23 +346,6 @@ class MCPService:
                     timeout=min(request_timeout // 2, 30),
                     use_cache=True,
                     credentials=credentials,
-                )
-
-                observability.observe(
-                    event_type=observability.SystemEvents.MCP_TRANSPORT_DETECTED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "server_id": server_id,
-                        "detected_transport": detected_transport,
-                        "url": url,
-                        "cache_used": detection_metadata.get("cache_used", False),
-                        "detection_method": (
-                            detection_metadata.get("metadata", {}).get(
-                                "detection_method", "unknown"
-                            )
-                        ),
-                    },
-                    description=f"MCP transport detected: {detected_transport} for {server_id}",
                 )
 
                 # Get recommended URL for the detected transport
@@ -762,17 +730,6 @@ class MCPService:
 
         for transport_type in transports_to_try:
             try:
-                observability.observe(
-                    event_type=observability.SystemEvents.MCP_TRANSPORT_ATTEMPT,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "server_id": server_id,
-                        "transport_type": transport_type,
-                        "attempt_number": transports_to_try.index(transport_type) + 1,
-                    },
-                    description=f"Attempting {transport_type} transport for {server_id}",
-                )
-
                 result = await self._connect_single_transport(
                     server_id,
                     url,
@@ -903,17 +860,6 @@ class MCPService:
                         if agent_id not in self.agent_tool_registry:
                             self.agent_tool_registry[agent_id] = {}
                         self.agent_tool_registry[agent_id][server_id] = {}
-
-                        observability.observe(
-                            event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
-                            level=observability.EventLevel.INFO,
-                            data={
-                                "agent_id": agent_id,
-                                "server_id": server_id,
-                                "tools_count": len(tools),
-                            },
-                            description=f"Registering {len(tools)} tools for agent {agent_id} from server {server_id}"
-                        )
                     else:
                         # Register in shared registry if no agent_id
                         self.agent_tool_registry["_shared"][server_id] = {}
@@ -939,36 +885,6 @@ class MCPService:
                         else:
                             self.agent_tool_registry["_shared"][server_id][tool_name] = tool_data
 
-                    # Enhanced observability with modern features
-                    observability.observe(
-                        event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "server_id": server_id,
-                            "agent_id": agent_id,
-                            "tools_count": len(tools),
-                            "transport_type": transport_type,
-                            "protocol_features": {
-                                "structured_output": True,
-                                "elicitation": True,
-                                "resource_links": True,
-                                "title_fields": True,
-                            },
-                            "tools": [
-                                {
-                                    "name": tool.get("name", f"unknown_{i}"),
-                                    "display_name": (
-                                        ModernProtocolFeatures.extract_display_name(tool)
-                                    ),
-                                }
-                                for i, tool in enumerate(tools)
-                            ],
-                        },
-                        description=(
-                            f"Discovered {len(tools)} tools with modern protocol "
-                            f"features from {server_id}"
-                        ),
-                    )
                 except Exception as e:
                     # Emit tool discovery failed event
                     observability.observe(
@@ -1021,17 +937,22 @@ class MCPService:
                 del self.handlers[server_id]
 
                 # Emit MCP server registration completed event
+                tools_count = len(self.tool_registry.get(server_id, {}))
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
                     level=observability.EventLevel.INFO,
                     data={
                         "server_id": server_id,
                         "transport_type": transport_type,
-                        "tools_discovered": len(self.tool_registry.get(server_id, {})),
+                        "tools_discovered": tools_count,
                         "connection_status": "disconnected",  # Changed to disconnected
                     },
                     description=f"MCP server registration completed (tools discovered, connection closed): {server_id}",
                 )
+                
+                # Print clean formatted line
+                details = f"{tools_count} tool{'s' if tools_count != 1 else ''}, {transport_type} transport"
+                print(InitEventFormatter.format_ok(f"MCP server: {server_id}", details))
 
                 return server_id
 

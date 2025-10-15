@@ -34,6 +34,7 @@ import pytz
 from croniter import croniter
 
 from .. import observability
+from ...datatypes.observability import InitEventFormatter
 from ..db import get_database_manager
 from .manager import JobManager
 from .parser import ScheduleParser
@@ -142,6 +143,16 @@ class SchedulerService:
             "batch_processing_time": 0.0,
         }
 
+        # Initialization event will be emitted in _initialize() after components are ready
+
+    async def _initialize(self):
+        """Initialize service components."""
+        await self.job_manager.initialize()
+        
+        # Emit single formatted initialization event
+        details = f"interval={self.check_interval_minutes}m, max_concurrent={self.max_concurrent_jobs}, tz={self.formation_timezone}"
+        print(InitEventFormatter.format_ok("Scheduler service", details))
+        
         observability.observe(
             event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
             level=observability.EventLevel.INFO,
@@ -152,16 +163,7 @@ class SchedulerService:
                 "max_concurrent_jobs": self.max_concurrent_jobs,
                 "formation_timezone": self.formation_timezone,
             },
-            description=f"Scheduler service initialized with {self.db_manager.database_type} database",
-        )
-
-    async def _initialize(self):
-        """Initialize service components."""
-        await self.job_manager.initialize()
-        observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
-            level=observability.EventLevel.INFO,
-            description="Scheduler service components initialized",
+            description="Scheduler service initialized",
         )
 
     def _get_scheduler_config(self) -> Dict[str, Any]:
@@ -187,11 +189,6 @@ class SchedulerService:
 
         # Check if scheduler is enabled in formation config
         if not self._config.get("enabled", False):
-            observability.observe(
-                event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
-                level=observability.EventLevel.INFO,
-                description="Scheduler service disabled in formation config",
-            )
             return {"status": "disabled", "service": "SchedulerService"}
 
         self._running = True
@@ -200,17 +197,6 @@ class SchedulerService:
         self.process_due_jobs_continuously()
 
         active_jobs_count = await self.job_manager.count_active_jobs()
-
-        observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "SchedulerService",
-                "active_jobs": active_jobs_count,
-                "check_interval_minutes": self.check_interval_minutes,
-            },
-            description="Scheduler service started successfully",
-        )
 
         return {
             "status": "started",
@@ -236,16 +222,6 @@ class SchedulerService:
         start_time = time.time()
         while self._active_executions and (time.time() - start_time) < timeout:
             await asyncio.sleep(1)
-
-        observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "SchedulerService",
-                "active_executions_remaining": len(self._active_executions),
-            },
-            description="Scheduler service stopped",
-        )
 
         return {
             "status": "stopped",
@@ -281,12 +257,6 @@ class SchedulerService:
         Runs continuously checking for due jobs and executing them through
         the formation's overlord. Uses map/reduce pattern without next_run_at calculations.
         """
-        observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
-            level=observability.EventLevel.INFO,
-            description="Scheduler background worker started",
-        )
-
         # Create event loop for this thread if needed
         try:
             loop = asyncio.get_event_loop()
@@ -320,16 +290,6 @@ class SchedulerService:
             formation_tz = pytz.timezone(self.formation_timezone)
             current_time = datetime.now(formation_tz)
 
-            observability.observe(
-                event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "current_time": current_time.isoformat(),
-                    "timezone": self.formation_timezone,
-                },
-                description="Scheduler checking for due jobs",
-            )
-
             # MAP/REDUCE: Get jobs due for execution
             due_jobs = await self.get_due_jobs_map_reduce(current_time)
         except Exception as e:
@@ -360,18 +320,6 @@ class SchedulerService:
 
         # Update performance stats
         self._performance_stats["cycles_completed"] += 1
-
-        observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
-            level=observability.EventLevel.DEBUG,
-            data={
-                "jobs_processed": len(due_jobs),
-                "active_executions": len(self._active_executions),
-                "component": "scheduler_worker",
-                "status": "cycle_completed"
-            },
-            description="Scheduler cycle completed",
-        )
 
     async def get_due_jobs_map_reduce(self, current_time: datetime) -> List[Dict[str, Any]]:
         """
@@ -411,17 +359,6 @@ class SchedulerService:
         batch_time = time.time() - start_time
         self._performance_stats["batch_processing_time"] = batch_time
         self._performance_stats["jobs_processed"] += len(due_jobs)
-
-        observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
-            level=observability.EventLevel.DEBUG,
-            data={
-                "due_jobs_count": len(due_jobs),
-                "processing_time": batch_time,
-                "batch_size": self.batch_processor.get_batch_size(),
-            },
-            description=f"Batch processing completed in {batch_time:.2f}s",
-        )
 
         return due_jobs
 
@@ -702,16 +639,6 @@ class SchedulerService:
         for job in due_jobs:
             # Check concurrency limit
             if len(self._active_executions) >= self.max_concurrent_jobs:
-                observability.observe(
-                    event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
-                    level=observability.EventLevel.WARNING,
-                    data={
-                        "active_executions": len(self._active_executions),
-                        "max_concurrent": self.max_concurrent_jobs,
-                        "deferred_job": job["id"],
-                    },
-                    description=f"Concurrency limit reached, deferring job {job['id']}",
-                )
                 break
 
             # Execute job asynchronously
@@ -757,19 +684,6 @@ class SchedulerService:
                 # Fallback to overlord's attribute if not in config
                 if not webhook_url:
                     webhook_url = getattr(self.overlord, 'async_webhook_url', None)
-
-                # Log webhook availability
-                observability.observe(
-                    event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "job_id": job_id,
-                        "has_webhook": webhook_url is not None,
-                        "webhook_url": webhook_url[:50] if webhook_url else None,
-                        "will_run_async": webhook_url is not None,
-                    },
-                    description=f"Scheduler execution mode: {'async' if webhook_url else 'sync (no webhook)'}",
-                )
 
                 response = await self.overlord.chat(
                     message=execution_prompt,
@@ -1165,13 +1079,6 @@ class SchedulerService:
         retention_days = self._config.get("retention_days", 30)
         jobs_cleaned = await self.batch_processor.cleanup_old_jobs(retention_days)
 
-        observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
-            level=observability.EventLevel.INFO,
-            data={"cache_entries_removed": cache_cleaned, "old_jobs_removed": jobs_cleaned},
-            description=f"Scheduler cleanup completed: {cache_cleaned} cache entries, {jobs_cleaned} old jobs",
-        )
-
         return {"cache_entries_removed": cache_cleaned, "old_jobs_removed": jobs_cleaned}
 
     def reset_circuit_breaker(self) -> None:
@@ -1182,8 +1089,3 @@ class SchedulerService:
         """
         if self.llm_circuit_breaker:
             self.llm_circuit_breaker.reset()
-            observability.observe(
-                event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
-                level=observability.EventLevel.INFO,
-                description="LLM circuit breaker manually reset",
-            )
