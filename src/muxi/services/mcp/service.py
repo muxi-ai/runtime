@@ -951,8 +951,8 @@ class MCPService:
                 )
                 
                 # Print clean formatted line
-                details = f"{tools_count} tool{'s' if tools_count != 1 else ''}, {transport_type} transport"
-                print(InitEventFormatter.format_ok(f"MCP server: {server_id}", details))
+                details = f"{tools_count} tools available via {transport_type}"
+                print(InitEventFormatter.format_ok(f"Connected to MCP server '{server_id}'", details))
 
                 return server_id
 

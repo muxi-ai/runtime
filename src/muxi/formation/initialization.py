@@ -350,10 +350,9 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
         )
 
         # Print clean formatted line
-        details = f"{mode} mode, size={size}"
-        if vector_search:
-            details += ", vector search enabled"
-        print(InitEventFormatter.format_ok("Buffer memory", details))
+        search_status = "enabled" if vector_search else "disabled"
+        details = f"{mode}, {size} messages, contextual search {search_status}"
+        print(InitEventFormatter.format_ok("Initializing buffer memory", details))
 
     except Exception as e:
         observability.observe(
@@ -467,7 +466,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
         # Print clean formatted line
         mode = "multi-user" if getattr(formation, "_is_multi_user", False) else "single-user"
-        print(InitEventFormatter.format_ok("Persistent memory", f"{memory_type}, {mode}"))
+        print(InitEventFormatter.format_ok("Initializing persistent memory", f"{memory_type} / {mode} mode"))
 
     except Exception as e:
         observability.observe(
@@ -522,7 +521,7 @@ def _create_all_database_tables(db_manager) -> None:
         )
 
         # Print clean formatted line
-        print(InitEventFormatter.format_ok("Database tables", f"{len(table_names)} tables ready"))
+        print(InitEventFormatter.format_ok("Database schema ready", f"{len(table_names)} tables initialized"))
 
     except Exception as e:
         observability.observe(
@@ -916,7 +915,7 @@ def load_agents_from_configuration(formation) -> None:
             if agent_config.get("id"):
                 agent_name = agent_config.get("name", agent_config.get("id"))
                 agent_role = agent_config.get("role", "general")
-                print(InitEventFormatter.format_ok(f"Agent: {agent_name}", agent_role))
+                print(InitEventFormatter.format_ok(f"Loaded agent '{agent_name}'", f"role: {agent_role}"))
 
 
 async def initialize_buffer_memory(formation, overlord, buffer_config: Dict[str, Any]) -> None:

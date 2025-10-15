@@ -1132,13 +1132,13 @@ class Overlord:
                     for registry_url in registry_urls:
                         # Extract just the host:port or domain from URL for display
                         display_url = registry_url.replace("http://", "").replace("https://", "").rstrip("/")
-                        print(InitEventFormatter.format_ok(f"A2A registry: {display_url}", "connected"))
+                        print(InitEventFormatter.format_ok(f"Connected to A2A registry at {display_url}", ""))
                     
                     # Optional summary line if multiple registries
                     if len(registry_urls) > 1:
                         print(InitEventFormatter.format_info(
-                            f"Connected to {len(registry_urls)} A2A registries",
-                            "ready for agent discovery"
+                            f"{len(registry_urls)} A2A registries connected and ready",
+                            ""
                         ))
 
                     # Check registry health according to startup policy

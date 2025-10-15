@@ -1095,39 +1095,39 @@ class InitEventFormatter:
     def _supports_color() -> bool:
         """
         Detect if the terminal supports ANSI colors.
-        
+
         Checks multiple indicators:
         - NO_COLOR env var (standard: https://no-color.org/)
         - FORCE_COLOR env var (override for CI/testing)
         - stdout is a TTY
         - TERM env var indicates color support
         - Not in dumb terminal
-        
+
         Returns:
             True if colors should be used, False otherwise
         """
         import sys
         import os
-        
+
         # Respect NO_COLOR standard (https://no-color.org/)
         if os.environ.get('NO_COLOR'):
             return False
-        
+
         # Allow forcing colors (useful for CI/testing)
         if os.environ.get('FORCE_COLOR'):
             return True
-        
+
         # Check if stdout is a TTY
         if not hasattr(sys.stdout, 'isatty') or not sys.stdout.isatty():
             return False
-        
+
         # Check TERM environment variable
         term = os.environ.get('TERM', '').lower()
         if term == 'dumb':
             return False
         if 'color' in term or 'ansi' in term or 'xterm' in term:
             return True
-        
+
         # Default to True if stdout is a TTY
         return True
 

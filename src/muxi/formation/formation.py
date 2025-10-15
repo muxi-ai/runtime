@@ -344,14 +344,20 @@ class Formation:
             from ..datatypes.observability import InitEventFormatter
             from ..services import observability
             from ..utils.version import get_version
-            
+
             # Disable observability during initialization (prevent JSON mixing with formatted output)
             observability.disable()
-            
+
             version = get_version()
-            print("\n" + "="*60)
-            print(InitEventFormatter.format_ok(f"MUXI Runtime v{version}", "starting"))
-            print("="*60 + "\n")
+            print("\n" + "="*68)
+            print(" __  __ _    ___   _______   ____             _   _")
+            print("|  \\/  | |  | \\ \\ / /_   _| |    \\_   _ _ __ | | (_)_ __ ___   ___")
+            print("| \\  / | |  | |\\ V /  | |   | [ ] || | | '_ \\| __| | '_ ` _ \\ / _ \\")
+            print("| |\\/| | |__| |/ . \\ _| |_  |  _ / |_| | | | | |_| | | | | | |  __/")
+            print("|_|  |_|\\____//_/ \\_\\_____| |_| \\_\\__/_| |_|\\__|_|_| |_| |_|\\___|")
+            print(" ")
+            print(f"Starting MUXI Runtime v{version}...")
+            print("="*68 + "\n")
 
             # Normalize and validate config path (file or directory)
             normalized_path = self._normalize_config_path(config_path)
@@ -485,18 +491,18 @@ class Formation:
             from ..datatypes.observability import InitFailureInfo
             path = str(e).replace("Formation configuration not found: ", "")
             failure = InitFailureInfo(
-                component="Formation loader",
-                problem="Configuration file not found",
-                context=f"Tried to load: {path}",
+                component="Could not load formation configuration",
+                problem=f"Configuration file not found at: {path}",
+                context="",
                 causes=[
-                    "File path is incorrect",
-                    "Formation directory doesn't exist",
-                    "formation.yaml file is missing"
+                    "The file path is incorrect or misspelled",
+                    "The formation directory doesn't exist yet",
+                    "The formation.yaml file is missing from the directory"
                 ],
                 fixes=[
-                    f"Check that {path} exists",
-                    "Verify the path in your formation.load() call",
-                    "Make sure formation.yaml is in the specified directory"
+                    f"Double-check the path: {path}",
+                    "Verify the path you passed to formation.load()",
+                    "Make sure formation.yaml exists in that directory"
                 ],
                 technical=str(e)
             )
@@ -508,17 +514,25 @@ class Formation:
             DependencyValidationError,
             OverlordStateError,
         ) as e:
-            # Clean up and show formatted error  
+            # Clean up and show formatted error
             self.config = None
             self.secrets_manager = None
             from ..datatypes.observability import InitFailureInfo
             error_msg = str(e).split('\n')[0].replace("❌ ", "")
             failure = InitFailureInfo(
-                component="Formation initialization",
+                component="Formation configuration is invalid",
                 problem=error_msg,
-                context="Error during formation configuration loading",
-                causes=["Invalid configuration", "Missing required fields", "Validation failed"],
-                fixes=["Check formation.yaml syntax", "Verify all required fields are present"],
+                context="",
+                causes=[
+                    "The YAML syntax is incorrect",
+                    "Required fields are missing from your configuration",
+                    "Field values don't match expected format"
+                ],
+                fixes=[
+                    "Check your formation.yaml for syntax errors (indentation, colons, quotes)",
+                    "Compare with a working example formation",
+                    "Make sure all required fields are present (llm, agents, etc.)"
+                ],
                 technical=str(e)
             )
             print("\n" + InitEventFormatter.format_fail(failure))
@@ -2467,7 +2481,7 @@ class Formation:
             from ..datatypes.observability import InitEventFormatter
             print(InitEventFormatter.format_info(
                 "MCP initialization complete",
-                f"{len(successful_servers)} succeeded, {len(failed_servers)} failed"
+                f"{len(successful_servers)} server(s) connected, {len(failed_servers)} failed"
             ))
 
     async def start_overlord(self):
@@ -2507,8 +2521,8 @@ class Formation:
         if self._is_running and self._overlord is not None:
             from ..datatypes.observability import InitEventFormatter
             print(InitEventFormatter.format_warn(
-                "Overlord already running",
-                "returning existing instance - use stop_overlord() to restart"
+                "Formation is already running",
+                "returning existing instance (call stop_overlord() first to restart)"
             ))
             return self._overlord
 
@@ -2585,7 +2599,7 @@ class Formation:
                 )
 
             # Count warnings/errors from observability (we'll use 0 for now as a placeholder)
-            print("\n" + InitEventFormatter.format_ok("Formation ready", f"initialized in {duration:.1f}s"))
+            print("\n" + InitEventFormatter.format_ok("Formation initialized successfully", f"in {duration:.1f}s"))
             print("="*60 + "\n")
 
             # Enable observability now that init is complete
@@ -2710,8 +2724,8 @@ class Formation:
             except TimeoutError:
                 from ..datatypes.observability import InitEventFormatter
                 print(InitEventFormatter.format_warn(
-                    "Graceful shutdown timeout",
-                    f"forcing termination after {timeout_seconds}s"
+                    "Shutdown taking too long",
+                    f"forcing termination after {timeout_seconds} seconds"
                 ))
 
             # Disconnect MCP servers before cleanup

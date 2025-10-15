@@ -109,7 +109,11 @@ class SchedulerService:
             # Fallback to creating own database manager
             self.db_manager = get_database_manager()
         # Get formation_id from overlord
-        formation_id = overlord.formation_id if overlord and hasattr(overlord, 'formation_id') else "default-formation"
+        formation_id = (
+            overlord.formation_id
+            if overlord and hasattr(overlord, "formation_id")
+            else "default-formation"
+        )
 
         self.job_manager = JobManager(self.db_manager, formation_id=formation_id)
 
@@ -148,11 +152,15 @@ class SchedulerService:
     async def _initialize(self):
         """Initialize service components."""
         await self.job_manager.initialize()
-        
+
         # Emit single formatted initialization event
-        details = f"interval={self.check_interval_minutes}m, max_concurrent={self.max_concurrent_jobs}, tz={self.formation_timezone}"
-        print(InitEventFormatter.format_ok("Scheduler service", details))
-        
+        details = (
+            f"checks every {self.check_interval_minutes}m, "
+            f"up to {self.max_concurrent_jobs} concurrent jobs, "
+            f"{self.formation_timezone}"
+        )
+        print(InitEventFormatter.format_ok("Background scheduler initialized", details))
+
         observability.observe(
             event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
             level=observability.EventLevel.INFO,
@@ -678,12 +686,12 @@ class SchedulerService:
             if self.overlord:
                 # Get webhook URL from formation configuration
                 webhook_url = None
-                if hasattr(self.overlord, 'formation_config'):
-                    webhook_url = self.overlord.formation_config.get('async', {}).get('webhook_url')
+                if hasattr(self.overlord, "formation_config"):
+                    webhook_url = self.overlord.formation_config.get("async", {}).get("webhook_url")
 
                 # Fallback to overlord's attribute if not in config
                 if not webhook_url:
-                    webhook_url = getattr(self.overlord, 'async_webhook_url', None)
+                    webhook_url = getattr(self.overlord, "async_webhook_url", None)
 
                 response = await self.overlord.chat(
                     message=execution_prompt,
@@ -691,7 +699,7 @@ class SchedulerService:
                     session_id=session_id,
                     use_async=True,  # CRITICAL: Must be async since user is not waiting
                     webhook_url=webhook_url,  # Required for async execution
-                    stream=False     # No streaming needed for scheduled jobs
+                    stream=False,  # No streaming needed for scheduled jobs
                 )
 
                 # Log that async execution has been initiated
@@ -701,7 +709,9 @@ class SchedulerService:
                     data={
                         "job_id": job_id,
                         "session_id": session_id,
-                        "response_id": response.id if hasattr(response, 'id') else str(response)[:50],
+                        "response_id": (
+                            response.id if hasattr(response, "id") else str(response)[:50]
+                        ),
                     },
                     description=f"Async execution initiated for job: {job['title']}",
                 )
@@ -774,9 +784,7 @@ class SchedulerService:
             Job ID of created job
         """
         # Parse schedule (returns either cron expression or dict for one-off job)
-        parse_result = await self.schedule_parser.parse_schedule(
-            schedule, self.formation_timezone
-        )
+        parse_result = await self.schedule_parser.parse_schedule(schedule, self.formation_timezone)
 
         # Check if it's a one-off job (dict) or recurring (string cron expression)
         cron_expression = None
@@ -876,7 +884,9 @@ class SchedulerService:
             return False
 
         if success:
-            await self.job_manager.mark_job_execution_success(job_id, result[:1000] if result else "")
+            await self.job_manager.mark_job_execution_success(
+                job_id, result[:1000] if result else ""
+            )
 
             # For one-time jobs, mark as completed
             if not job.get("is_recurring", True):
@@ -904,7 +914,9 @@ class SchedulerService:
                     description=f"Recurring job completed via webhook: {job['title']}",
                 )
         else:
-            await self.job_manager.mark_job_execution_failure(job_id, error[:1000] if error else "Unknown error")
+            await self.job_manager.mark_job_execution_failure(
+                job_id, error[:1000] if error else "Unknown error"
+            )
 
             # Check if job should be auto-paused
             consecutive_failures = await self.job_manager.get_consecutive_failures(job_id)
