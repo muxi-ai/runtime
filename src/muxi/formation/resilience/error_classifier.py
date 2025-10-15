@@ -15,6 +15,7 @@ from ...datatypes.resilience import (
     ErrorContext,
     WorkflowException,
 )
+from ...services import observability
 
 
 class ErrorClassifier:
@@ -227,9 +228,16 @@ class ErrorClassifier:
             return error_context
 
         except Exception as classification_error:
-            #  Error - TODO: add observability
-            _ = classification_error  # remove this after implementing observability
-
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "component": "error_classifier",
+                    "error_type": type(classification_error).__name__,
+                    "error": str(classification_error),
+                },
+                description="Error classification failed, using fallback",
+            )
             # Fallback classification
             return ErrorContext(
                 error=error,

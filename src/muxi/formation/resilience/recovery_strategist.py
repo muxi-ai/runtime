@@ -14,6 +14,7 @@ from ...datatypes.resilience import (
     ErrorContext,
     ResilienceConfig,
 )
+from ...services import observability
 
 
 class RecoveryStrategist:
@@ -215,8 +216,16 @@ class RecoveryStrategist:
             return selected_strategy
 
         except Exception as selection_error:
-            #  Error - TODO: add observability
-            _ = selection_error  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "component": "recovery_strategist",
+                    "error_type": type(selection_error).__name__,
+                    "error": str(selection_error),
+                },
+                description="Recovery strategy selection failed, aborting workflow",
+            )
             return RecoveryStrategy.ABORT_WORKFLOW
 
     def _get_candidate_strategies(self, error_context: ErrorContext) -> List[RecoveryStrategy]:
