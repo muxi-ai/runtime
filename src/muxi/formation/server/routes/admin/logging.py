@@ -67,7 +67,7 @@ async def update_logging_stream(
 
     # Define valid logging stream names
     VALID_LOGGING_STREAMS = {"console", "file", "syslog"}
-    
+
     # Validate the stream name
     if name not in VALID_LOGGING_STREAMS:
         response = create_error_response(

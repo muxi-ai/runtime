@@ -169,8 +169,8 @@ async def rephrase_with_llm(
 
     Returns rephrased content as internal monologue in user's language.
 
-    TODO: Future enhancement - stream LLM tokens as they arrive instead of
-    waiting for complete response. This would make the system feel more
+    TODO: Future enhancement - consider streaming LLM tokens as they arrive instead
+    of waiting for complete response. This would make the system feel more
     responsive, especially for longer rephrased messages. Would require:
     - Switching to streaming LLM generation
     - Emitting incremental events for each token chunk
