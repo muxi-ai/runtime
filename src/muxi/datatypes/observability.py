@@ -1019,12 +1019,12 @@ class RequestContext:
     status: str = "processing"
     started: float = field(default_factory=lambda: time.time() * 1000)  # milliseconds
     formation_id: Optional[str] = None
-    
+
     # User identity (three aspects for multi-identity support)
     internal_user_id: Optional[int] = None      # Database ID (for queries) - NEVER exposed externally
     muxi_user_id: Optional[str] = None          # MUXI's canonical public_id (e.g., "usr_abc123") for observability
     user_id: Optional[str] = None               # What developer provided (e.g., "alice@email.com") - channel context
-    
+
     session_id: Optional[str] = None
     tokens: TokenUsage = field(default_factory=TokenUsage)
     _parent_events: Set[str] = field(default_factory=set, init=False)
@@ -1050,46 +1050,46 @@ class RequestContext:
 @dataclass
 class InitFailureInfo:
     """Structured error information for initialization failures.
-    
+
     Provides operational guidance instead of raw stack traces for better
     debugging experience during formation startup.
     """
-    
+
     component: str
     """Component that failed (e.g., 'MCP server: filesystem')"""
-    
+
     problem: str
     """Plain English summary of what went wrong"""
-    
+
     context: str
     """Where in formation config (e.g., 'formation.yaml:45 (mcp.servers.filesystem)')"""
-    
+
     causes: list[str]
     """List of likely reasons for the failure"""
-    
+
     fixes: list[str]
     """Actionable steps to resolve the issue"""
-    
+
     technical: str
     """Original exception with full traceback for debugging"""
 
 
 class InitEventFormatter:
     """Linux systemd-style formatter for initialization events.
-    
+
     Provides clean, consistent startup output with clear status indicators:
     - [  OK  ] for successful initialization
     - [ WARN ] for warnings (non-blocking issues)
     - [ FAIL ] for failures (blocking issues that require intervention)
     - [ INFO ] for informational messages
-    
+
     Design principles:
     - One line per distributed service (MCP, A2A, database)
     - Use formation IDs/names, not full URLs/connection strings
     - Fail-fast with structured error details
     - Show full technical details by default (init failures happen at dev/deployment time)
     """
-    
+
     # ANSI color codes
     GREEN = "\033[92m"
     YELLOW = "\033[93m"
@@ -1097,15 +1097,15 @@ class InitEventFormatter:
     BLUE = "\033[94m"
     RESET = "\033[0m"
     BOLD = "\033[1m"
-    
+
     @staticmethod
     def format_ok(message: str, details: Optional[str] = None) -> str:
         """Format successful initialization event.
-        
+
         Args:
             message: Main success message (e.g., 'MCP server: filesystem')
             details: Optional details to append (e.g., '3 tools')
-        
+
         Returns:
             Formatted line: '[  OK  ] MCP server: filesystem (3 tools)'
         """
@@ -1113,15 +1113,15 @@ class InitEventFormatter:
         if details:
             return f"{status} {message} ({details})"
         return f"{status} {message}"
-    
+
     @staticmethod
     def format_warn(message: str, details: Optional[str] = None) -> str:
         """Format warning event (non-blocking issue).
-        
+
         Args:
             message: Main warning message (e.g., 'Vector memory: disabled')
             details: Optional details to append
-        
+
         Returns:
             Formatted line: '[ WARN ] Vector memory: disabled'
         """
@@ -1129,15 +1129,15 @@ class InitEventFormatter:
         if details:
             return f"{status} {message} ({details})"
         return f"{status} {message}"
-    
+
     @staticmethod
     def format_info(message: str, details: Optional[str] = None) -> str:
         """Format informational event.
-        
+
         Args:
             message: Main info message (e.g., 'Buffer memory: FIFO mode')
             details: Optional details to append (e.g., '100 messages')
-        
+
         Returns:
             Formatted line: '[ INFO ] Buffer memory: FIFO mode (100 messages)'
         """
@@ -1145,98 +1145,98 @@ class InitEventFormatter:
         if details:
             return f"{status} {message} ({details})"
         return f"{status} {message}"
-    
+
     @staticmethod
     def format_fail(failure_info: InitFailureInfo) -> str:
         """Format failure event with structured error details.
-        
+
         Args:
             failure_info: Structured failure information
-        
+
         Returns:
             Multi-line formatted error with operational guidance and technical details
-        
+
         Example output:
             [ FAIL ] MCP server: filesystem
-            
+
               Connection timeout after 5 seconds
-              
+
               The server didn't respond during startup. Common causes:
                 • Server executable not installed or not in PATH
                 • Incorrect command in formation config
                 • Server crashed on launch
-                
+
               To fix:
                 1. Test manually: npx @modelcontextprotocol/server-filesystem
                 2. Install if needed: npm install -g @modelcontextprotocol/server-filesystem
                 3. Check formation.yaml → mcp.servers.filesystem.command
-              
+
               Config: formation.yaml:45 (mcp.servers.filesystem)
-              
+
               Traceback (most recent call last):
                 File "src/muxi/services/mcp/registry.py", line 156, in register_server
                   response = await client.connect(timeout=5.0)
               TimeoutError: Server did not respond within 5 seconds
         """
         status = f"{InitEventFormatter.RED}[ FAIL ]{InitEventFormatter.RESET}"
-        
+
         lines = [
             f"{status} {failure_info.component}",
             "",
             f"  {failure_info.problem}",
             "",
         ]
-        
+
         # Add causes if provided
         if failure_info.causes:
             lines.append("  Common causes:")
             for cause in failure_info.causes:
                 lines.append(f"    • {cause}")
             lines.append("")
-        
+
         # Add fixes if provided
         if failure_info.fixes:
             lines.append("  To fix:")
             for i, fix in enumerate(failure_info.fixes, 1):
                 lines.append(f"    {i}. {fix}")
             lines.append("")
-        
+
         # Add config location
         lines.append(f"  Config: {failure_info.context}")
         lines.append("")
-        
+
         # Add technical details (indented for readability)
         if failure_info.technical:
             technical_lines = failure_info.technical.split("\n")
             for line in technical_lines:
                 lines.append(f"  {line}")
-        
+
         return "\n".join(lines)
-    
+
     @staticmethod
     def format_summary(duration_s: float, service_count: int, warning_count: int, error_count: int) -> str:
         """Format startup summary line.
-        
+
         Args:
             duration_s: Total startup duration in seconds
             service_count: Number of services initialized
             warning_count: Number of warnings encountered
             error_count: Number of errors encountered
-        
+
         Returns:
             Summary line: 'Startup completed in 2.3s (8 services, 1 warning, 0 errors)'
         """
         summary = f"Startup completed in {duration_s:.1f}s ({service_count} services"
-        
+
         if warning_count > 0:
             summary += f", {warning_count} warning{'s' if warning_count != 1 else ''}"
         else:
             summary += ", 0 warnings"
-        
+
         if error_count > 0:
             summary += f", {error_count} error{'s' if error_count != 1 else ''}"
         else:
             summary += ", 0 errors"
-        
+
         summary += ")"
         return summary
