@@ -66,6 +66,9 @@ class SystemEvents(Enum):
     MCP_SERVER_RECONNECTING = "mcp.server.reconnecting"
     # When attempting to reconnect to MCP server
 
+    MCP_SERVER_RECONNECTED = "mcp.server.reconnected"
+    # When MCP server successfully reconnects after disconnection
+
     MCP_SERVER_CONNECTION_LOST = "mcp.server.connection_lost"
     # When connection to MCP server is lost
 

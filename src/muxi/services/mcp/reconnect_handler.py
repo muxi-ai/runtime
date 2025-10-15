@@ -96,8 +96,8 @@ class ReconnectingMCPHandler(MCPHandler):
         if not url and not command:
             raise ValueError("Either url or command must be provided")
 
-        #  Info - TODO: add observability
-        #  MCP_SERVER_CONNECTING - Connecting to MCP server {name} at {url or command} with reconnection support
+        # Note: Initial connection events are handled by InitEventFormatter
+        # This handler provides reconnection support for runtime failures
 
         # Use the retry mechanism for connection
         try:
@@ -260,8 +260,6 @@ class ReconnectingMCPHandler(MCPHandler):
             if server_name not in self._reconnection_in_progress:
                 self._reconnection_in_progress[server_name] = True
                 try:
-                    #  Info - TODO: add observability
-                    #  MCP_SERVER_CONNECTING
                     server_info = self.server_info.get(server_name, {})
                     url = server_info.get("url")
                     command = server_info.get("command")
@@ -275,6 +273,17 @@ class ReconnectingMCPHandler(MCPHandler):
                         )
                         raise MCPConnectionError(error_msg)
 
+                    observability.observe(
+                        event_type=observability.SystemEvents.MCP_SERVER_RECONNECTING,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "server_name": server_name,
+                            "url": url,
+                            "command": command,
+                        },
+                        description=f"Attempting to reconnect to MCP server '{server_name}'",
+                    )
+
                     await super().connect_server(
                         name=server_name,
                         url=url,
@@ -282,8 +291,17 @@ class ReconnectingMCPHandler(MCPHandler):
                         credentials=credentials,
                         request_timeout=request_timeout,
                     )
-                    #  Info - TODO: add observability
-                    #  MCP_SERVER_CONNECTING
+
+                    observability.observe(
+                        event_type=observability.SystemEvents.MCP_SERVER_RECONNECTED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "server_name": server_name,
+                            "url": url,
+                            "command": command,
+                        },
+                        description=f"Successfully reconnected to MCP server '{server_name}'",
+                    )
                 finally:
                     self._reconnection_in_progress[server_name] = False
             else:
