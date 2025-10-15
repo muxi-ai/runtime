@@ -88,10 +88,16 @@ class TaskDecomposer:
             # Validate workflow structure
             validated_workflow = self._validate_workflow(workflow)
 
-            #  Decomposer info - TODO: add observability
-            #     f"Decomposed request into workflow {workflow_id} with "
-            #     f"{len(validated_workflow.tasks)} tasks"
-            # )
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "workflow_id": workflow_id,
+                    "task_count": len(validated_workflow.tasks),
+                    "requires_approval": validated_workflow.requires_approval,
+                },
+                description=f"Decomposed request into workflow {workflow_id} with {len(validated_workflow.tasks)} tasks",
+            )
 
             return validated_workflow
 
@@ -284,10 +290,22 @@ class TaskDecomposer:
             return self._heuristic_decompose_request(workflow_id, request, analysis)
 
         except Exception as e:
-            # TODO: Add observability for decomposition failures
-            # For now, log to stderr for visibility
+            # Log decomposition failure and fall back to heuristic
+            observability.observe(
+                event_type=observability.ErrorEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "workflow_id": workflow_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e)[:200],  # Truncate long errors
+                    "fallback": "heuristic_decomposition",
+                    "request_length": len(request),
+                },
+                description="LLM-based workflow decomposition failed, falling back to heuristic decomposition",
+            )
+            
+            # Keep stderr output for immediate visibility
             import sys
-
             sys.stderr.write(f"\n⚠️  LLM decomposition failed: {type(e).__name__}\n")
             sys.stderr.write("   Falling back to heuristic decomposition\n")
             sys.stderr.flush()
@@ -1037,7 +1055,16 @@ Would you like me to proceed with this plan?
             else:
                 task.dependencies = [task_ids[i - 1]]
 
-        #  Decomposer info - TODO: add observability
+        observability.observe(
+            event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_COMPLETED,
+            level=observability.EventLevel.INFO,
+            data={
+                "workflow_id": workflow.id,
+                "task_count": len(workflow.tasks),
+                "method": "fix_circular_dependencies",
+            },
+            description=f"Fixed circular dependencies in workflow {workflow.id}",
+        )
         return workflow
 
     def _create_fallback_workflow(self, request: str) -> Workflow:
@@ -1086,7 +1113,15 @@ Would you like me to proceed with this plan?
         """
         # This is a placeholder for LLM-based workflow modification
         # For now, return the original workflow
-        #  Decomposer info - TODO: add observability
+        observability.observe(
+            event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_COMPLETED,
+            level=observability.EventLevel.INFO,
+            data={
+                "workflow_id": workflow.id,
+                "method": "llm_modify_workflow",
+            },
+            description=f"Modified workflow {workflow.id} using LLM",
+        )
         return workflow
 
     def _heuristic_modify_workflow(
@@ -1103,7 +1138,15 @@ Would you like me to proceed with this plan?
             Modified workflow (currently just returns original)
         """
         # Simple heuristic modification - just return original for now
-        #  Decomposer info - TODO: add observability
+        observability.observe(
+            event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_COMPLETED,
+            level=observability.EventLevel.INFO,
+            data={
+                "workflow_id": workflow.id,
+                "method": "heuristic_modify_workflow",
+            },
+            description=f"Modified workflow {workflow.id} using heuristic approach",
+        )
         return workflow
 
 

@@ -479,10 +479,17 @@ class AdvancedResponseSynthesizer:
                 enhancement_applied=self._get_applied_enhancements(mode),
             )
 
-            #  Info - TODO: add observability
-            #     f"Response synthesis completed: {quality_assessment.overall_quality.value} "
-            #     f"quality in {iterations} iterations"
-            # )
+            observability.observe(
+                event_type=observability.ConversationEvents.RESPONSE_SYNTHESIZED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "quality": quality_assessment.overall_quality.value,
+                    "iterations": iterations,
+                    "mode": mode.value,
+                    "synthesis_time_ms": (time.time() - start_time) * 1000,
+                },
+                description=f"Response synthesis completed: {quality_assessment.overall_quality.value} quality in {iterations} iterations",
+            )
 
             return result
 
@@ -633,7 +640,16 @@ Provide the synthesized response:
             ) / 6
 
             if average_score >= target_quality:
-                #  Debug - TODO: add observability
+                observability.observe(
+                    event_type=observability.ConversationEvents.RESPONSE_SYNTHESIZED,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "iteration": iterations,
+                        "average_score": average_score,
+                        "target_quality": target_quality,
+                    },
+                    description=f"Quality target reached in iteration {iterations}",
+                )
                 return current_content, quality_assessment, iterations
 
             # Generate improvement prompt

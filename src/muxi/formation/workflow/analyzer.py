@@ -320,8 +320,17 @@ class RequestAnalyzer:
 
         except Exception as e:
             # Log error and fall back to heuristic
-            # TODO: add proper observability here
-            _ = e  # Suppress unused variable warning
+            observability.observe(
+                event_type=observability.ErrorEvents.WORKFLOW_ANALYSIS_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "fallback": "heuristic_analysis",
+                    "message_length": len(user_message),
+                },
+                description="LLM-based request analysis failed, falling back to heuristic analysis",
+            )
             return self._heuristic_analyze_request(user_message)
 
     def _create_analysis_prompt(

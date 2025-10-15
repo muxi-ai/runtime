@@ -192,11 +192,29 @@ class WorkflowExecutor:
         try:
             # Build execution phases
             phases = build_execution_phases(workflow)
-            #  Info - TODO: add observability
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_EXECUTION_STARTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "workflow_id": workflow.id,
+                    "total_phases": len(phases),
+                    "total_tasks": len(workflow.tasks),
+                },
+                description=f"Starting workflow {workflow.id} execution with {len(phases)} phases",
+            )
 
             # Execute each phase
             for phase_num, task_ids in enumerate(phases, 1):
-                #  Info - TODO: add observability
+                observability.observe(
+                    event_type=observability.ConversationEvents.WORKFLOW_EXECUTION_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "workflow_id": workflow.id,
+                        "phase_number": phase_num,
+                        "tasks_in_phase": len(task_ids),
+                    },
+                    description=f"Executing phase {phase_num}/{len(phases)} with {len(task_ids)} tasks",
+                )
 
                 # Apply phase timeout if configured
                 phase_timeout = self.config.timeout_config.phase_timeout
@@ -228,7 +246,17 @@ class WorkflowExecutor:
             workflow.completed_at = datetime.now()
             workflow.status = self._determine_final_status(workflow)
 
-            #  Info - TODO: add observability
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_EXECUTION_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "workflow_id": workflow.id,
+                    "status": workflow.status.value,
+                    "total_tasks": len(workflow.tasks),
+                    "execution_time_ms": (datetime.now() - workflow.created_at).total_seconds() * 1000,
+                },
+                description=f"Workflow {workflow.id} completed with status {workflow.status.value}",
+            )
 
         except Exception as e:
             #  Error - add observability
@@ -722,7 +750,16 @@ class WorkflowExecutor:
             state.assigned_agent_id = agent.agent_id
             task.assigned_agent_id = agent.agent_id
 
-            #  Info - TODO: add observability
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_TASK_ASSIGNED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "task_id": task.id,
+                    "task_name": task.name,
+                    "agent_id": agent.agent_id,
+                },
+                description=f"Task '{task.name}' assigned to agent '{agent.agent_id}'",
+            )
 
             # Calculate task timeout
             task_timeout = self._calculate_task_timeout(task)
@@ -764,7 +801,17 @@ class WorkflowExecutor:
             if result:
                 self.task_results[task.id] = result
 
-            #  Info - TODO: add observability
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_TASK_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "task_id": task.id,
+                    "task_name": task.name,
+                    "agent_id": task.assigned_agent_id,
+                    "status": result.status.value if result else "unknown",
+                },
+                description=f"Task '{task.name}' completed by agent '{task.assigned_agent_id}'",
+            )
             return result
 
         except Exception as e:
@@ -1734,10 +1781,17 @@ class ProgressTracker:
 
         self.workflow_progress[workflow_id] = progress_info
 
-        # #  Info - TODO: add observability
-        #     f"Workflow {workflow_id} progress: {completed_tasks}/{total_tasks} tasks completed "
-        #     f"({progress_info['progress_percentage']:.1f}%)"
-        # )
+        observability.observe(
+            event_type=observability.ConversationEvents.WORKFLOW_EXECUTION_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "workflow_id": workflow_id,
+                "completed_tasks": completed_tasks,
+                "total_tasks": total_tasks,
+                "progress_percentage": progress_info['progress_percentage'],
+            },
+            description=f"Workflow {workflow_id} progress: {completed_tasks}/{total_tasks} tasks ({progress_info['progress_percentage']:.1f}%)",
+        )
 
     def get_progress(self, workflow_id: str) -> Optional[Dict[str, Any]]:
         """

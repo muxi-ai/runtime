@@ -10,6 +10,7 @@ from datetime import datetime
 import asyncio
 
 from ...datatypes.schema import SchedulerServiceSchema
+from .. import observability
 
 
 class JobBatchProcessor:
@@ -135,9 +136,19 @@ class JobBatchProcessor:
                         return job
             except Exception as e:
                 # Log error but don't fail entire batch
-                # TODO: Add observability event for job check failures
-                print(f"Error checking job {job.get('id', 'unknown')}: {str(e)}", flush=True)
-                pass
+                job_id = job.get('id', 'unknown')
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "operation": "job_check",
+                        "job_id": job_id,
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                    },
+                    description=f"Failed to check if job '{job_id}' is due",
+                )
+                print(f"Error checking job {job_id}: {str(e)}", flush=True)
             return None
 
         # Check all jobs in batch concurrently
