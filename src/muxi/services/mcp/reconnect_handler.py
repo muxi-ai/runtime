@@ -33,6 +33,7 @@
 import asyncio
 from typing import Any, Dict, List, Optional
 
+from ...datatypes import observability
 from .handler import MCPHandler, MCPConnectionError
 from .reconnection import RetryConfiguration, with_retries
 
@@ -112,9 +113,18 @@ class ReconnectingMCPHandler(MCPHandler):
                 request_timeout=request_timeout,
             )
             return result
-        except MCPConnectionError:
-            #  Error - TODO: add observability
-            #  MCP_SERVER_CONNECTING - Failed to connect to MCP server {name} after retries
+        except MCPConnectionError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.CONNECTION_REFUSED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "server_name": name,
+                    "url": url,
+                    "command": command,
+                    "error": str(e),
+                },
+                description=f"Failed to connect to MCP server '{name}' after retries",
+            )
             raise
 
     async def _connect_server_impl(
@@ -201,9 +211,17 @@ class ReconnectingMCPHandler(MCPHandler):
                 cancellation_token=cancellation_token,
             )
             return result
-        except MCPConnectionError:
-            #  Error - TODO: add observability
-            #  MCP_SERVER_CONNECTING - Failed to execute tool {tool_name} after retries
+        except MCPConnectionError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.TOOL_CALL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "server_name": server_name,
+                    "tool_name": tool_name,
+                    "error": str(e),
+                },
+                description=f"Failed to execute tool '{tool_name}' on server '{server_name}' after retries",
+            )
             raise
 
     async def _execute_tool_impl(
@@ -314,8 +332,17 @@ class ReconnectingMCPHandler(MCPHandler):
                 refresh=refresh,
             )
             return result
-        except MCPConnectionError:
-            #  Error - TODO: add observability
+        except MCPConnectionError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.CONNECTION_TIMEOUT,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "server_name": self.name,
+                    "operation": "list_tools",
+                    "error": str(e),
+                },
+                description=f"Failed to list tools from MCP server '{self.name}' after retries",
+            )
             # Return empty list instead of raising to avoid breaking clients
             return []
 

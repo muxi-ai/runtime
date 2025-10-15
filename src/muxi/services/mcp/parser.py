@@ -37,6 +37,8 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from muxi.datatypes import observability
+
 
 class ToolCall:
     """
@@ -211,9 +213,17 @@ class ToolParser:
                         )
                     )
             except Exception as e:
-                #  Warning - TODO: add observability
-                #  MCP_SERVER_CONNECTING
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ErrorEvents.TOOL_PARSE_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "format": "json_block",
+                        "json_str": match.group(1)[:200],  # First 200 chars for context
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                    },
+                    description="Failed to parse JSON tool call block from LLM response",
+                )
 
         return tool_calls
 
@@ -282,9 +292,17 @@ class ToolParser:
                     )
                 )
             except Exception as e:
-                #  Warning - TODO: add observability
-                #  MCP_SERVER_CONNECTING
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ErrorEvents.TOOL_PARSE_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "format": "function_call",
+                        "function_name": match.group(1) if match.lastindex >= 1 else "unknown",
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                    },
+                    description="Failed to parse function-style tool call from LLM response",
+                )
 
         return tool_calls
 
@@ -313,10 +331,18 @@ class ToolParser:
                 params = {}
                 try:
                     params = json.loads(params_str)
-                except json.JSONDecodeError:
-                    #  Warning - TODO: add observability
-                    #  MCP_SERVER_CONNECTING
-                    _ = None  # remove this after implementing observability
+                except json.JSONDecodeError as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.TOOL_PARSE_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "format": "explicit_tool_call",
+                            "tool_name": tool_name,
+                            "params_str": params_str[:200],  # First 200 chars
+                            "error": str(e),
+                        },
+                        description=f"Failed to parse parameters for explicit tool call '{tool_name}'",
+                    )
 
                 tool_calls.append(
                     ToolCall(
@@ -328,9 +354,17 @@ class ToolParser:
                     )
                 )
             except Exception as e:
-                #  Warning - TODO: add observability
-                #  MCP_SERVER_CONNECTING
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ErrorEvents.TOOL_PARSE_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "format": "explicit_tool_call",
+                        "match_text": match.group(0)[:200] if match else "unknown",
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                    },
+                    description="Failed to parse explicit tool call from LLM response",
+                )
 
         return tool_calls
 

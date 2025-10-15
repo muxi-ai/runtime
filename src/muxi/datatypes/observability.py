@@ -302,6 +302,12 @@ class SystemEvents(Enum):
     # When secret listing operation fails
 
     # ===================================================================
+    # GENERAL OPERATIONS
+    # ===================================================================
+    OPERATION_COMPLETED = "operation.completed"
+    # When a named operation completes successfully (with timing)
+
+    # ===================================================================
     # DATABASE/STORAGE OPERATIONS
     # ===================================================================
     DB_CONNECTION_STARTED = "db.connection.started"
@@ -956,6 +962,18 @@ class ErrorEvents(Enum):
 
     RECOVERY_STRATEGY_FAILED = "error.recovery.strategy.failed"
     # When recovery strategy execution fails
+
+    # ===================================================================
+    # MCP ERRORS
+    # ===================================================================
+    TOOL_CALL_ERROR = "error.mcp.tool.call.failed"
+    # When MCP tool execution fails after retries
+
+    TOOL_PARSE_ERROR = "error.mcp.tool.parse.failed"
+    # When parsing tool calls from LLM response fails
+
+    RETRY_FAILED = "error.retry.failed"
+    # When operation fails after all retry attempts exhausted
 
 
 @dataclass

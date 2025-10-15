@@ -45,6 +45,8 @@ import time
 from datetime import datetime
 from typing import Any, Callable, Dict, TypeVar, Union
 
+from muxi.datatypes import observability
+
 # Type variables
 T = TypeVar("T")  # Return type for retried functions
 ExceptionType = TypeVar("ExceptionType", bound=Exception)  # Type of exception to retry on
@@ -290,9 +292,16 @@ async def retry_async(
 
             # If this was the last attempt, don't retry
             if attempt > config.max_retries:
-                # Construct a detailed error message
-                #  Warning - TODO: add observability -Operation failed after {config.max_retries + 1} attempts: {str(e)}
-
+                observability.observe(
+                    event_type=observability.ErrorEvents.RETRY_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "attempts": config.max_retries + 1,
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                    },
+                    description=f"Operation failed after {config.max_retries + 1} retry attempts",
+                )
                 # Re-raise the last exception to signal failure to caller
                 raise
 
@@ -306,11 +315,18 @@ async def retry_async(
             if on_retry:
                 on_retry(attempt, e, delay)
 
-            # Log the retry attempt with details
-            #  Info - TODO: add observability
-            #     f"Retry {attempt}/{config.max_retries} after error: {str(e)}. "
-            #     f"Retrying in {delay:.2f} seconds..."
-            # )
+            observability.observe(
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "attempt": attempt,
+                    "max_retries": config.max_retries,
+                    "delay": delay,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description=f"Retry {attempt}/{config.max_retries} after error, retrying in {delay:.2f}s",
+            )
 
             # Wait before retrying - using asyncio.sleep to not block the event loop
             # This allows other tasks to run during the delay period
@@ -367,11 +383,19 @@ async def with_retries(
             exception: The exception that triggered the retry
             delay: The delay before the next retry attempt
         """
-        # Log at warning level to highlight the retry event
-        #  Warning - TODO: add observability - Retry attempt with details
+        observability.observe(
+            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+            level=observability.EventLevel.WARNING,
+            data={
+                "operation": operation_name,
+                "attempt": attempt,
+                "error_type": type(exception).__name__,
+                "error": str(exception),
+                "delay": delay,
+            },
+            description=f"Retry attempt {attempt} for '{operation_name}' after error",
+        )
 
-    # Log the start of the operation
-    #  Info - TODO: add observability
     # Record the start time for calculating total operation duration
     start_time = time.time()
 
@@ -388,16 +412,32 @@ async def with_retries(
         )
 
         # Calculate and log the total elapsed time on success
-        #  Info - TODO: add observability
-        _ = time.time() - start_time  # use this in observability
+        elapsed_time = time.time() - start_time
+        observability.observe(
+            event_type=observability.SystemEvents.OPERATION_COMPLETED,
+            level=observability.EventLevel.INFO,
+            data={
+                "operation": operation_name,
+                "elapsed_time": f"{elapsed_time:.2f}s",
+            },
+            description=f"Operation '{operation_name}' completed successfully in {elapsed_time:.2f}s",
+        )
         # Return the successful result to the caller
         return result
 
     except Exception as e:
         # If all retries failed, we'll end up here
         # Calculate and log the total elapsed time on failure
-        # Log at error level since this is a complete failure after all retries
-        _ = time.time() - start_time  # use this in observability
-        _ = e  # use this in observability
-        #  Error - TODO: add observability - Operation failed after retries
+        elapsed_time = time.time() - start_time
+        observability.observe(
+            event_type=observability.ErrorEvents.RETRY_FAILED,
+            level=observability.EventLevel.ERROR,
+            data={
+                "operation": operation_name,
+                "elapsed_time": f"{elapsed_time:.2f}s",
+                "error_type": type(e).__name__,
+                "error": str(e),
+            },
+            description=f"Operation '{operation_name}' failed after all retries in {elapsed_time:.2f}s",
+        )
         raise  # Re-raise the exception to the caller
