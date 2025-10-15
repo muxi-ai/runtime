@@ -4,11 +4,11 @@
 Comprehensive observability implementation across ALL priority levels (HIGH/MEDIUM/LOW) covering System/Error/Warning/Info/Debug events across all subsystems.
 
 ## Final Session Statistics
-- **Total Commits**: 15 (10 new in continuation session)
-- **New Events Implemented**: 74 events total (57 new in continuation)
+- **Total Commits**: 19 (14 new in continuation sessions)
+- **New Events Implemented**: 103 events total (86 new in continuation)
 - **Redundant TODOs Cleaned**: 6
-- **Total TODOs Processed**: 55 (from 246 → 191 remaining)
-- **Remaining TODOs**: 191 (mostly INFO/DEBUG events in large subsystems)
+- **Total TODOs Processed**: 84 (from 246 → 162 remaining)
+- **Remaining TODOs**: 162 (mostly INFO/DEBUG events in large subsystems)
 
 ## Commits Summary
 
@@ -159,12 +159,76 @@ Comprehensive observability implementation across ALL priority levels (HIGH/MEDI
 - Quality assessment (WARNING)
 - Unified synthesis (WARNING)
 
+### 11. Admin Routes API Observability (4fc0ea94)
+**Events: 8 (3 INFO + 5 mixed)**
+
+**Agent Management (3 INFO):**
+- AGENT_ADDED: Agent dynamically added via API with metadata
+- AGENT_UPDATED: Agent configuration updated with field tracking
+- AGENT_REMOVED: Agent removed via API
+
+**MCP Tool Execution (5 events):**
+- MCP_TOOL_CALLED: Successful tool execution via API (INFO)
+- MCP_TOOL_CALL_FAILED: 4 error types with severity levels
+  - Validation errors (WARNING)
+  - Configuration errors (ERROR)
+  - Missing argument errors (WARNING)
+  - Unexpected errors with traceback (ERROR)
+
+Files: `src/muxi/formation/server/routes/admin/agents.py`, `src/muxi/formation/server/routes/admin/mcp.py`
+
+### 12. Formation Loader Configuration Events (233cb3d9)
+**Events: 14 (6 INFO + 3 DEBUG + 3 ERROR)**
+
+**Formation Loading (2 INFO):**
+- CONFIG_FORMATION_LOADED: Flattened and modular formations with component counts
+
+**Agent Discovery (5 events):**
+- CONFIG_AGENT_LOADED: Success (INFO), disabled (DEBUG) for discovery and inline agents
+- CONFIGURATION_ERROR: Agent config loading failures (ERROR)
+
+**MCP Discovery (5 events):**
+- CONFIG_MCP_LOADED: Success (INFO), disabled (DEBUG) for discovery and inline servers
+- CONFIGURATION_ERROR: MCP config loading failures (ERROR)
+
+**A2A Discovery (2 events):**
+- CONFIG_A2A_LOADED: Service loading (INFO)
+- CONFIGURATION_ERROR: A2A config loading failures (ERROR)
+
+Note: Skipped 14 low-priority DEBUG events for early returns and loop starts.
+
+File: `src/muxi/formation/config/formation_loader.py`
+
+### 13. Time Estimator Performance Tracking (243c4338)
+**Events: 4 (2 DEBUG + 2 ERROR)**
+
+**Performance Tracking (2 DEBUG):**
+- PERFORMANCE_DURATION_RECORDED: Base time estimation with complexity factors
+- PERFORMANCE_DURATION_RECORDED: Historical-adjusted estimation with blending
+
+**Error Handling (2 ERROR):**
+- VALIDATION_FAILED: Time estimation failures
+- VALIDATION_FAILED: Historical estimation failures with graceful fallback
+
+File: `src/muxi/formation/background/time_estimator.py`
+
+### 14. Cross-Reference Manager Operations (dac7b9fc)
+**Events: 3 (3 INFO)**
+
+**Operation Tracking:**
+- OPERATION_COMPLETED: Manager initialization with storage path
+- OPERATION_COMPLETED: Reference addition with source/target tracking
+- OPERATION_COMPLETED: References loading with count
+
+File: `src/muxi/formation/documents/workflow/cross_reference_manager.py`
+
 ## Files Modified Summary
 **Initial Session: 11 files**
-**Continuation: 13 additional files**
-**Total: 24 files with observability implementations**
+**Continuation Session I: 13 additional files**
+**Continuation Session II: 4 additional files**
+**Total: 28 files with observability implementations**
 
-New files in continuation:
+Continuation Session I files:
 1. src/muxi/formation/workflow/analyzer.py
 2. src/muxi/formation/workflow/decomposer.py
 3. src/muxi/formation/workflow/executor.py
@@ -179,25 +243,32 @@ New files in continuation:
 12. src/muxi/formation/server/routes/admin/secrets.py
 13. src/muxi/services/multimodal/fusion_engine.py ✅ COMPLETE
 
+Continuation Session II files:
+1. src/muxi/formation/server/routes/admin/agents.py
+2. src/muxi/formation/server/routes/admin/mcp.py
+3. src/muxi/formation/config/formation_loader.py
+4. src/muxi/formation/background/time_estimator.py
+5. src/muxi/formation/documents/workflow/cross_reference_manager.py
+
 ## Next Steps
-**191 TODOs Remaining** across 32 files:
-1. Multimodal integration.py (12 events)
-2. Formation loader (28 events - INFO for config loading)
-3. Overlord.py (17 events - INFO/WARNING)
-4. Document processing subsystem (~50 events - INFO)
-5. Memory working.py (7 events)
-6. A2A auth/discovery (20 events - INFO/DEBUG)
+**162 TODOs Remaining** across ~30 files:
+1. Overlord.py (17 events - INFO/WARNING)
+2. Formation loader (14 low-priority DEBUG events - early returns, loop starts)
+3. Multimodal integration.py (12 events)
+4. A2A auth/inbound.py (11 events - INFO/DEBUG)
+5. Document processing subsystem (~50 events - INFO)
+6. Memory working.py (7 events)
 7. Resilience subsystem (~30 events - DEBUG/INFO)
-8. Server admin routes (8 events)
-9. Extensions sqlite_vec (11 events)
-10. Smaller files with 3-5 TODOs each
+8. Extensions sqlite_vec (11 events)
+9. Smaller files with 3-5 TODOs each
 
 ## Metrics
-- **Total Coverage**: 74 events implemented across 24 files
+- **Total Coverage**: 103 events implemented across 28 files
+- **TODOs Processed**: 84 cleared (246 → 162 remaining, 34% reduction)
 - **Priority Distribution**: 
   - HIGH: 100% complete (ERROR events)
-  - MEDIUM: 90% complete (WARNING events)
-  - LOW: 30% complete (INFO/DEBUG events)
+  - MEDIUM: 95% complete (WARNING events)
+  - LOW: 35% complete (INFO/DEBUG events)
 - **Quality**: All events include comprehensive context (operation, error_type, relevant IDs, fallback strategies)
 - **Testing**: All imports verified successful before each commit
 - **Approach**: Manual, careful implementation (no automated scripts)
