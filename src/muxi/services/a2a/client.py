@@ -83,7 +83,7 @@ class A2AService:
                 if url:
                     self.sdk_client = A2AClient(httpx_client=self.httpx_client, url=url)
                     observability.observe(
-                        event_type="a2a.sdk.initialized",
+                        event_type=observability.SystemEvents.A2A_REGISTRY_CLIENT_INITIALIZED,
                         level=observability.EventLevel.INFO,
                         data={"url": url},
                         description=f"A2A SDK client initialized with URL: {url}",
@@ -91,17 +91,17 @@ class A2AService:
                 else:
                     # For now, skip SDK initialization if no URL provided
                     observability.observe(
-                        event_type="a2a.sdk.skipped",
+                        event_type=observability.SystemEvents.OPERATION_COMPLETED,
                         level=observability.EventLevel.INFO,
-                        data={},
+                        data={"operation": "a2a_sdk_init", "skipped": True},
                         description="A2A SDK initialization skipped - no external registry URL",
                     )
                     self.sdk_client = None
             except Exception as e:
                 observability.observe(
-                    event_type="a2a.sdk.error",
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.ERROR,
-                    data={"error": str(e)},
+                    data={"error": str(e), "component": "a2a_sdk"},
                     description=f"Failed to initialize A2A SDK client: {e}",
                 )
                 # Don't raise - internal A2A can still work
@@ -109,9 +109,9 @@ class A2AService:
         else:
             # Internal-only A2A doesn't need SDK
             observability.observe(
-                event_type="a2a.service.initialized",
+                event_type=observability.SystemEvents.SERVICE_STARTED,
                 level=observability.EventLevel.INFO,
-                data={"mode": "internal_only"},
+                data={"service": "a2a", "mode": "internal_only"},
                 description="A2A service initialized for internal-only communication (no SDK needed)",
             )
             self.sdk_client = None
@@ -151,9 +151,9 @@ class A2AService:
             # Check if internal or external routing
             if self._is_internal(target_agent_id):
                 observability.observe(
-                    event_type="a2a.routing.internal",
+                    event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
                     level=observability.EventLevel.DEBUG,
-                    data={"target_agent_id": target_agent_id},
+                    data={"target_agent_id": target_agent_id, "routing": "internal"},
                     description=f"Routing internally to {target_agent_id}",
                 )
                 return await self._send_internal(
@@ -167,9 +167,9 @@ class A2AService:
 
             # For external agents, check if SDK is initialized
             observability.observe(
-                event_type="a2a.routing.external",
+                event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
                 level=observability.EventLevel.DEBUG,
-                data={"target_agent_id": target_agent_id},
+                data={"target_agent_id": target_agent_id, "routing": "external"},
                 description=f"External agent {target_agent_id} requested",
             )
 
@@ -200,7 +200,7 @@ class A2AService:
             # Track metrics
             duration = asyncio.get_event_loop().time() - start_time
             observability.observe(
-                event_type="a2a_message_sent",
+                event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
                 level=observability.EventLevel.INFO,
                 data={
                     "source_agent_id": source_agent_id,
@@ -225,7 +225,7 @@ class A2AService:
 
         except Exception as e:
             observability.observe(
-                event_type="a2a.message.error",
+                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={"error": str(e)},
                 description=f"Error sending A2A message: {e}",
@@ -234,7 +234,7 @@ class A2AService:
             # Track error metrics
             duration = asyncio.get_event_loop().time() - start_time
             observability.observe(
-                event_type="a2a_message_error",
+                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "source_agent_id": source_agent_id,
@@ -280,9 +280,9 @@ class A2AService:
             )
         except Exception as e:
             observability.observe(
-                event_type="a2a.handler.error",
+                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
                 level=observability.EventLevel.ERROR,
-                data={"error": str(e)},
+                data={"error": str(e), "context": "message_handler"},
                 description=f"Error handling A2A message: {e}",
             )
             return {
@@ -420,9 +420,9 @@ class A2AService:
         """
         self._internal_handlers[agent_id] = handler
         observability.observe(
-            event_type="a2a.handler.registered",
+            event_type=observability.SystemEvents.A2A_AGENT_REGISTERED,
             level=observability.EventLevel.DEBUG,
-            data={"agent_id": agent_id},
+            data={"agent_id": agent_id, "type": "internal_handler"},
             description=f"Registered internal handler for agent {agent_id}",
         )
 
@@ -437,15 +437,16 @@ class A2AService:
                 await self.httpx_client.aclose()
                 self.httpx_client = None
                 observability.observe(
-                    event_type="a2a.cleanup.success",
+                    event_type=observability.SystemEvents.OPERATION_COMPLETED,
                     level=observability.EventLevel.INFO,
+                    data={"operation": "a2a_httpx_cleanup"},
                     description="A2A service httpx client closed successfully",
                 )
             except Exception as e:
                 observability.observe(
-                    event_type="a2a.cleanup.error",
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.ERROR,
-                    data={"error": str(e)},
+                    data={"error": str(e), "component": "a2a_httpx_cleanup"},
                     description=f"Error closing httpx client: {e}",
                 )
 
@@ -453,7 +454,8 @@ class A2AService:
         if self.sdk_client:
             self.sdk_client = None
             observability.observe(
-                event_type="a2a.cleanup.complete",
+                event_type=observability.SystemEvents.OPERATION_COMPLETED,
                 level=observability.EventLevel.DEBUG,
+                data={"operation": "a2a_sdk_cleanup"},
                 description="A2A SDK client reference cleared",
             )
