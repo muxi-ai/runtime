@@ -2600,7 +2600,7 @@ class Formation:
 
             # Count warnings/errors from observability (we'll use 0 for now as a placeholder)
             print("\n" + InitEventFormatter.format_ok("Formation initialized successfully", f"in {duration:.1f}s"))
-            print("="*60 + "\n")
+            print("="*68 + "\n")
 
             # Enable observability now that init is complete
             # This starts the flow of JSON observability events for runtime monitoring
