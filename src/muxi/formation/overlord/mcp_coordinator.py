@@ -425,8 +425,12 @@ class MCPCoordinator:
                     f"MCP server '{server_id}' registration failed - server not found after registration"
                 )
 
-            #  Info - TODO: add observability
-            # ConversationEvents.MCP_SERVER_REGISTERED
+            observability.observe(
+                event_type=observability.ConversationEvents.MCP_SERVER_REGISTERED,
+                level=observability.EventLevel.INFO,
+                data={"server_id": server_id, "tool_count": len(res.get('tools', []))},
+                description=f"MCP server '{server_id}' registered successfully",
+            )
             return res
 
         except Exception as e:
@@ -472,8 +476,12 @@ class MCPCoordinator:
         """
         res = await self.mcp_service.list_tools(server_id=server_id)
 
-        # Info - TODO: add observability
-        # SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED
+        observability.observe(
+            event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
+            level=observability.EventLevel.INFO,
+            data={"server_id": server_id, "tool_count": len(res) if isinstance(res, list) else 0},
+            description=f"MCP tool discovery completed for server '{server_id}'",
+        )
         return res
 
     def get_mcp_service(self) -> MCPService:
@@ -528,8 +536,12 @@ class MCPCoordinator:
         """
         await self.mcp_service.unregister_server(server_id)
 
-        #  Info - TODO: add observability
-        # ConversationEvents.MCP_SERVER_UNREGISTERED
+        observability.observe(
+            event_type=observability.ConversationEvents.MCP_SERVER_UNREGISTERED,
+            level=observability.EventLevel.INFO,
+            data={"server_id": server_id},
+            description=f"MCP server '{server_id}' unregistered successfully",
+        )
 
     async def get_server_status(self, server_id: str) -> Dict[str, Any]:
         """

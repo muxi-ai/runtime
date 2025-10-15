@@ -373,8 +373,12 @@ class A2ACoordinator:
                 # Clear the pending registrations set now that processing is complete
                 self.overlord.pending_external_registrations.clear()
 
-                #  Info - TODO: add observability
-                # SystemEvents.A2A_AGENT_REGISTRATIONS_COMPLETED
+                observability.observe(
+                    event_type=observability.SystemEvents.A2A_AGENT_REGISTRATIONS_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={"registration_count": len(pending_agents)},
+                    description=f"Completed bulk A2A agent registrations for {len(pending_agents)} agents",
+                )
 
         except Exception as e:
             observability.observe(
@@ -453,8 +457,12 @@ class A2ACoordinator:
             # Send registration request to external registry
             await self.overlord.inbound_registry_client.register_agent(agent_card)
 
-            #  Info - TODO: add observability
-            # SystemEvents.A2A_AGENT_REGISTERED
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_AGENT_REGISTERED,
+                level=observability.EventLevel.INFO,
+                data={"agent_id": agent_id},
+                description=f"Registered A2A agent '{agent_id}' with external registry",
+            )
 
         except Exception as e:
             observability.observe(
@@ -488,8 +496,12 @@ class A2ACoordinator:
 
             await self.overlord.inbound_registry_client.deregister_agent(agent_url)
 
-            #  Info - TODO: add observability
-            # SystemEvents.A2A_AGENT_DEREGISTERED
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_AGENT_DEREGISTERED,
+                level=observability.EventLevel.INFO,
+                data={"agent_id": agent_id},
+                description=f"Deregistered A2A agent '{agent_id}' from external registry",
+            )
 
         except Exception as e:
             observability.observe(

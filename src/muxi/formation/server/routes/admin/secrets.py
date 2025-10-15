@@ -116,7 +116,12 @@ async def create_secret(request: Request, secret: SecretCreate) -> JSONResponse:
     # Create secret
     await formation.secrets_manager.store_secret(secret.key, secret.value)
 
-    # TODO: Add observability event for secret created
+    observability.observe(
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        level=observability.EventLevel.INFO,
+        data={"secret_key": secret.key, "operation": "create"},
+        description=f"Secret '{secret.key}' created successfully",
+    )
 
     response = create_success_response(
         APIObjectType.SECRET,
@@ -158,7 +163,12 @@ async def update_secret(request: Request, key: str, secret: SecretUpdate) -> JSO
     # Update secret
     await formation.secrets_manager.store_secret(key, secret.value, overwrite=True)
 
-    # TODO: Add observability event for secret updated
+    observability.observe(
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        level=observability.EventLevel.INFO,
+        data={"secret_key": key, "operation": "update"},
+        description=f"Secret '{key}' updated successfully",
+    )
 
     # Return standardized response format
     response = create_success_response(
@@ -210,7 +220,12 @@ async def delete_secret(request: Request, key: str) -> JSONResponse:
     # Delete secret
     await formation.secrets_manager.delete_secret(key)
 
-    # TODO: Add observability event for secret deleted
+    observability.observe(
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        level=observability.EventLevel.INFO,
+        data={"secret_key": key, "operation": "delete"},
+        description=f"Secret '{key}' deleted successfully",
+    )
 
     # Return standardized response format
     response = create_success_response(
