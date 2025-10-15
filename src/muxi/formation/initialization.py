@@ -128,6 +128,7 @@ def initialize_llm_config(formation) -> None:
     # Initialize OneLLM cache if configured
     # Import here to avoid circular dependency
     from ..services.llm.llm import initialize_onellm_cache
+
     settings = llm_config.get("settings", {})
     cache_config = settings.get("caching", {})
     initialize_onellm_cache(cache_config)
@@ -183,6 +184,7 @@ def initialize_llm_config(formation) -> None:
 
     # Configure streaming service with LLM configuration
     from ..services.streaming import set_streaming_llm_config
+
     streaming_config = formation._capability_models.get("streaming", text_model_config)
 
     # Check if streaming model was explicitly configured
@@ -199,13 +201,15 @@ def initialize_llm_config(formation) -> None:
     response_config = overlord_config.get("response", {})
     enable_progress = response_config.get("progress", True)  # Default to True
 
-    set_streaming_llm_config({
-        "model": streaming_config["model"],
-        "api_key": streaming_config.get("api_key"),
-        "settings": streaming_config.get("settings", {}),
-        "enabled": enable_rephrasing,
-        "progress": enable_progress  # Pass progress setting to streaming service
-    })
+    set_streaming_llm_config(
+        {
+            "model": streaming_config["model"],
+            "api_key": streaming_config.get("api_key"),
+            "settings": streaming_config.get("settings", {}),
+            "enabled": enable_rephrasing,
+            "progress": enable_progress,  # Pass progress setting to streaming service
+        }
+    )
 
     capabilities = list(formation._capability_models.keys())
 
@@ -344,7 +348,7 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
             },
             description=f"Buffer memory initialized with size {size}",
         )
-        
+
         # Print clean formatted line
         details = f"{mode} mode, size={size}"
         if vector_search:
@@ -460,7 +464,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             },
             description=f"Persistent memory initialized with {memory_type}",
         )
-        
+
         # Print clean formatted line
         mode = "multi-user" if getattr(formation, "_is_multi_user", False) else "single-user"
         print(InitEventFormatter.format_ok("Persistent memory", f"{memory_type}, {mode}"))
@@ -503,9 +507,12 @@ def _create_all_database_tables(db_manager) -> None:
         db_manager.create_tables(Base.metadata)
 
         table_names = [
-            "users", "user_identifiers", "memories",  # Memory system tables
+            "users",
+            "user_identifiers",
+            "memories",  # Memory system tables
             "credentials",  # Credential storage
-            "scheduled_jobs", "scheduled_job_audit"  # Scheduler tables
+            "scheduled_jobs",
+            "scheduled_job_audit",  # Scheduler tables
         ]
         observability.observe(
             event_type=observability.SystemEvents.DATABASE_TABLES_CREATED,
@@ -513,7 +520,7 @@ def _create_all_database_tables(db_manager) -> None:
             data={"tables_created": table_names},
             description="All database tables created successfully",
         )
-        
+
         # Print clean formatted line
         print(InitEventFormatter.format_ok("Database tables", f"{len(table_names)} tables ready"))
 
@@ -733,11 +740,17 @@ def initialize_clarification_config(formation) -> None:
             # Validate max_rounds values
             for mode, rounds in max_rounds.items():
                 if not isinstance(rounds, int) or rounds < 1 or rounds > MAX_CLARIFICATION_ROUNDS:
-                    raise ValueError(f"max_rounds.{mode} must be integer 1-{MAX_CLARIFICATION_ROUNDS}, got {rounds}")
+                    raise ValueError(
+                        f"max_rounds.{mode} must be integer 1-{MAX_CLARIFICATION_ROUNDS}, got {rounds}"
+                    )
 
         # Create ClarificationConfig from formation config
         # Only set max_questions if explicitly provided for better hierarchy logic
-        max_questions = clarification_config.get("max_questions") if "max_questions" in clarification_config else None
+        max_questions = (
+            clarification_config.get("max_questions")
+            if "max_questions" in clarification_config
+            else None
+        )
 
         formation._clarification_config_obj = ClarificationConfig(
             enabled=clarification_config.get("enabled", True),
@@ -896,14 +909,14 @@ def load_agents_from_configuration(formation) -> None:
         data={"agent_count": processed_count},
         description=f"Processed {processed_count} agent configurations",
     )
-    
-    # Print clean formatted line for agent loading
+
+    # Print one line per agent for traceability
     if processed_count > 0:
-        agent_names = [agent_config.get("name", agent_config.get("id")) for agent_config in formation._agents_config if agent_config.get("id")]
-        details = f"{processed_count} agent{'s' if processed_count != 1 else ''}: {', '.join(agent_names[:3])}"
-        if processed_count > 3:
-            details += f", +{processed_count - 3} more"
-        print(InitEventFormatter.format_ok("Agents", details))
+        for agent_config in formation._agents_config:
+            if agent_config.get("id"):
+                agent_name = agent_config.get("name", agent_config.get("id"))
+                agent_role = agent_config.get("role", "general")
+                print(InitEventFormatter.format_ok(f"Agent: {agent_name}", agent_role))
 
 
 async def initialize_buffer_memory(formation, overlord, buffer_config: Dict[str, Any]) -> None:
