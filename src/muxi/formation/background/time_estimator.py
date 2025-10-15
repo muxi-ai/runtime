@@ -7,6 +7,8 @@ determine if requests should be processed asynchronously.
 
 from typing import Optional, Dict
 
+from ...services import observability
+
 
 class TimeEstimator:
     """Estimates processing time using request analysis."""
@@ -72,19 +74,32 @@ class TimeEstimator:
             # Cap at 1 hour maximum
             estimated_seconds = min(estimated_seconds, 3600)
 
-            #  Debug - TODO: add observability
-            #     f"Time estimation for request: {estimated_seconds:.1f}s "
-            #     f"(complexity: {analysis.complexity_score}, "
-            #     f"capabilities: {len(required_capabilities)}, "
-            #     f"decomposition: {getattr(analysis, 'requires_decomposition', False)}, "
-            #     f"multi-agent: {getattr(analysis, 'requires_multi_agent', False)})"
-            # )
+            observability.observe(
+                event_type=observability.SystemEvents.PERFORMANCE_DURATION_RECORDED,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "estimated_seconds": round(estimated_seconds, 1),
+                    "complexity_score": analysis.complexity_score,
+                    "capabilities_count": len(required_capabilities),
+                    "requires_decomposition": getattr(analysis, 'requires_decomposition', False),
+                    "requires_multi_agent": getattr(analysis, 'requires_multi_agent', False),
+                    "description": f"Time estimation: {estimated_seconds:.1f}s"
+                }
+            )
 
             return estimated_seconds
 
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.VALIDATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "time_estimation",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "description": f"Time estimation failed: {type(e).__name__}"
+                }
+            )
             return None
 
     async def estimate_with_historical_data(
@@ -119,18 +134,33 @@ class TimeEstimator:
                 # Blend base estimate with historical data (70% historical, 30% analysis)
                 adjusted_estimate = 0.7 * historical_average + 0.3 * base_estimate
 
-                #  Debug - TODO: add observability
-                #     f"Adjusted time estimate using history: {adjusted_estimate:.1f}s "
-                #     f"(base: {base_estimate:.1f}s, historical: {historical_average:.1f}s)"
-                # )
+                observability.observe(
+                    event_type=observability.SystemEvents.PERFORMANCE_DURATION_RECORDED,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "adjusted_seconds": round(adjusted_estimate, 1),
+                        "base_estimate": round(base_estimate, 1),
+                        "historical_average": round(historical_average, 1),
+                        "request_type": request_type,
+                        "description": f"Adjusted time estimate: {adjusted_estimate:.1f}s (70% historical)"
+                    }
+                )
 
                 return adjusted_estimate
             else:
                 return base_estimate
 
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.VALIDATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "historical_time_estimation",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "description": f"Historical time estimation failed: {type(e).__name__}, using base estimate"
+                }
+            )
             return base_estimate
 
     async def _classify_request_type(self, request: str) -> str:
