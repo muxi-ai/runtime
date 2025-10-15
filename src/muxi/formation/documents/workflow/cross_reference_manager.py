@@ -18,6 +18,8 @@ from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass
 from pathlib import Path
 
+from ....datatypes import observability
+
 
 @dataclass
 class DocumentReference:
@@ -247,8 +249,17 @@ class DocumentCrossReferenceManager:
                 json.dump(references_data, f, indent=2)
 
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "save_references",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "references_count": len(self._references),
+                },
+                description="Failed to save document references to storage",
+            )
 
     def _load_references(self):
         """Load references from storage"""
@@ -267,8 +278,16 @@ class DocumentCrossReferenceManager:
             self._rebuild_document_graph()
 
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "load_references",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description="Failed to load document references from storage",
+            )
 
     def _rebuild_document_graph(self):
         """Rebuild document graph from references"""

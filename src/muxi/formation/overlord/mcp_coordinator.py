@@ -11,6 +11,7 @@ import re
 from ...services.mcp.service import MCPService
 from ...services.llm import LLM
 from ...datatypes.schema import MCPServiceSchema
+from ...datatypes import observability
 from ..credentials import MissingCredentialError
 
 
@@ -380,9 +381,19 @@ class MCPCoordinator:
             except Exception as e:
                 # Log secret interpolation failure - this is critical for auth debugging
                 error_msg = f"Secret interpolation failed for MCP server {server_id}: {str(e)}"
-                # Error logged via observability
-
-                # TODO: Add observability event - SystemEvents.MCP_SERVER_REGISTRATION_FAILED
+                
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "server_id": server_id,
+                        "url": url,
+                        "command": command,
+                        "error_type": "secret_interpolation_failed",
+                        "error": str(e),
+                    },
+                    description=f"MCP server '{server_id}' registration failed due to secret interpolation error",
+                )
 
                 # Do NOT continue with original auth - this would cause silent auth failures
                 # Instead, raise the error so the caller knows secrets interpolation failed

@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from collections import defaultdict
 
+from ....datatypes import observability
+
 
 @dataclass
 class DocumentContext:
@@ -448,8 +450,18 @@ class DocumentContextPreserver:
             return [contexts[i] for i in relevant_indices]
 
         except Exception as e:
-            #  Context preserver error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "select_relevant_contexts",
+                    "conversation_id": conversation_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "contexts_count": len(contexts),
+                },
+                description="Failed to select relevant contexts using LLM",
+            )
             return contexts
 
     async def _cleanup_snapshots(self):
@@ -523,8 +535,17 @@ class DocumentContextPreserver:
                 json.dump(conv_contexts_data, f, indent=2)
 
         except Exception as e:
-            #  Context preserver error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "save_conversation_contexts",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "contexts_count": len(self._conversation_contexts),
+                },
+                description="Failed to save conversation contexts to storage",
+            )
 
     async def _save_snapshots(self):
         """Save context snapshots to storage"""
@@ -560,8 +581,17 @@ class DocumentContextPreserver:
                 json.dump(snapshots_data, f, indent=2)
 
         except Exception as e:
-            #  Context preserver error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "save_context_snapshots",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "snapshots_count": len(self._context_snapshots),
+                },
+                description="Failed to save context snapshots to storage",
+            )
 
     def _load_contexts(self):
         """Load contexts from storage"""
@@ -610,5 +640,13 @@ class DocumentContextPreserver:
                 self._conversation_document_map[conv_id] = ctx.documents_referenced
 
         except Exception as e:
-            #  Context preserver error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "load_contexts",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description="Failed to load context data from storage",
+            )
