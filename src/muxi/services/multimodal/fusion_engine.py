@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 import re
 
+from .. import observability
+
 if TYPE_CHECKING:
     from ...services.llm import LLM
 
@@ -152,7 +154,12 @@ class TextProcessor(ModalityProcessor):
             return result
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "process_text_content", "error_type": type(e).__name__, "error": str(e)},
+                description="Text content processing failed in multimodal fusion",
+            )
             return {"error": str(e), "processed_text": content.content}
 
     async def extract_features(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -184,8 +191,12 @@ Extract features as JSON:
             return self._parse_json_response(response)
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "extract_features", "error_type": type(e).__name__, "error": str(e)},
+                description="Feature extraction failed in multimodal fusion",
+            )
             return {
                 "language": "unknown",
                 "tone": "neutral",
@@ -218,8 +229,12 @@ Analyze and provide as JSON:
             return self._parse_json_response(response)
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "extract_concepts", "error_type": type(e).__name__, "error": str(e)},
+                description="Concept extraction failed in multimodal fusion",
+            )
             return {"main_concepts": [], "domain": "general"}
 
     async def _generate_embedding(self, text: str) -> List[float]:
@@ -233,8 +248,12 @@ Analyze and provide as JSON:
                 return self._generate_semantic_fallback_embedding(text)
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "generate_embedding", "error_type": type(e).__name__, "error": str(e)},
+                description="Embedding generation failed in multimodal fusion",
+            )
             return [0.0] * 512  # Zero embedding as fallback
 
     def _generate_semantic_fallback_embedding(self, text: str) -> List[float]:
@@ -420,7 +439,12 @@ Analyze and provide as JSON:
             if json_match:
                 json_str = json_match.group(0).strip()
             else:
-                # TODO: Log via observability system that no JSON was found in response
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"operation": "parse_json_response", "error": "no_json_found"},
+                    description="No JSON found in LLM response",
+                )
                 return {}
 
         try:
@@ -428,15 +452,28 @@ Analyze and provide as JSON:
             if isinstance(parsed, dict):
                 return parsed
             else:
-                # TODO: Log via observability that JSON was not a dict
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"operation": "parse_json_response", "error": "json_not_dict"},
+                    description="JSON in LLM response was not a dictionary",
+                )
                 return {}
-        except json.JSONDecodeError:
-            # TODO: Log JSON parsing error via observability system
-            # Include: json_str[:100], error details, response context
+        except json.JSONDecodeError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "parse_json_response", "error": "json_decode_error", "error_details": str(e)},
+                description="JSON decode error in LLM response",
+            )
             return {}
-        except Exception:
-            # TODO: Log unexpected error via observability system
-            # Include: error type, error details, response context
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "parse_json_response", "error": "unexpected_error", "error_type": type(e).__name__, "error_details": str(e)},
+                description="Unexpected error parsing JSON in LLM response",
+            )
             return {}
 
 
@@ -1109,7 +1146,12 @@ Create a comprehensive fusion analysis as JSON:
             if json_match:
                 json_str = json_match.group(0).strip()
             else:
-                # TODO: Log via observability system that no JSON was found in response
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"operation": "parse_json_response", "error": "no_json_found"},
+                    description="No JSON found in LLM response",
+                )
                 return {}
 
         try:
@@ -1117,15 +1159,28 @@ Create a comprehensive fusion analysis as JSON:
             if isinstance(parsed, dict):
                 return parsed
             else:
-                # TODO: Log via observability that JSON was not a dict
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"operation": "parse_json_response", "error": "json_not_dict"},
+                    description="JSON in LLM response was not a dictionary",
+                )
                 return {}
-        except json.JSONDecodeError:
-            # TODO: Log JSON parsing error via observability system
-            # Include: json_str[:100], error details, response context
+        except json.JSONDecodeError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "parse_json_response", "error": "json_decode_error", "error_details": str(e)},
+                description="JSON decode error in LLM response",
+            )
             return {}
-        except Exception:
-            # TODO: Log unexpected error via observability system
-            # Include: error type, error details, response context
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "parse_json_response", "error": "unexpected_error", "error_type": type(e).__name__, "error_details": str(e)},
+                description="Unexpected error parsing JSON in LLM response",
+            )
             return {}
 
     def _create_fallback_result(
