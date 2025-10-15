@@ -509,8 +509,12 @@ class ImageProcessor(ModalityProcessor):
             return result
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "process_image_content", "error_type": type(e).__name__, "error": str(e)},
+                description="Image content processing failed in multimodal fusion",
+            )
             return {"error": str(e)}
 
     async def extract_features(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -527,8 +531,12 @@ class ImageProcessor(ModalityProcessor):
             return features
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "extract_image_features", "error_type": type(e).__name__, "error": str(e)},
+                description="Image feature extraction failed in multimodal fusion",
+            )
             return {}
 
     async def _extract_image_metadata(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -549,8 +557,12 @@ class ImageProcessor(ModalityProcessor):
             return metadata
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "extract_image_features", "error_type": type(e).__name__, "error": str(e)},
+                description="Image feature extraction failed in multimodal fusion",
+            )
             return {}
 
     async def _perform_vision_analysis(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -570,8 +582,12 @@ class ImageProcessor(ModalityProcessor):
                 }
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "analyze_image_with_vision", "error_type": type(e).__name__, "error": str(e)},
+                description="Vision analysis failed in multimodal fusion",
+            )
             return {"description": "Vision analysis unavailable"}
 
     def _categorize_size(self, dimensions: Optional[Tuple[int, int]]) -> str:
@@ -650,8 +666,12 @@ class AudioProcessor(ModalityProcessor):
             return result
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "process_image_content", "error_type": type(e).__name__, "error": str(e)},
+                description="Image content processing failed in multimodal fusion",
+            )
             return {"error": str(e)}
 
     async def extract_features(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -667,8 +687,12 @@ class AudioProcessor(ModalityProcessor):
             return features
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "extract_image_features", "error_type": type(e).__name__, "error": str(e)},
+                description="Image feature extraction failed in multimodal fusion",
+            )
             return {}
 
     async def _extract_audio_metadata(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -683,8 +707,12 @@ class AudioProcessor(ModalityProcessor):
             return metadata
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "extract_image_features", "error_type": type(e).__name__, "error": str(e)},
+                description="Image feature extraction failed in multimodal fusion",
+            )
             return {}
 
     async def _perform_audio_analysis(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -699,8 +727,12 @@ class AudioProcessor(ModalityProcessor):
                 return {"transcription": "", "has_speech": False, "confidence": 0.5}
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "transcribe_audio", "error_type": type(e).__name__, "error": str(e)},
+                description="Audio transcription failed in multimodal fusion",
+            )
             return {"transcription": "", "has_speech": False}
 
     def _categorize_duration(self, duration: Optional[float]) -> str:
@@ -810,16 +842,26 @@ class MultiModalFusionEngine:
                 redundancy_score=self._calculate_redundancy_score(modality_results),
             )
 
-            #  Multimodal info - TODO: add observability
-            #     f"Multi-modal processing completed: {len(content_items)} modalities, "
-            #     f"fusion quality {fusion_quality:.2f}"
-            # )
+            observability.observe(
+                event_type=observability.ConversationEvents.RESPONSE_SYNTHESIZED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "modality_count": len(content_items),
+                    "fusion_quality": fusion_quality,
+                    "processing_time_ms": sum(item.processing_time_ms for item in content_items if item.processing_time_ms),
+                },
+                description=f"Multi-modal processing completed: {len(content_items)} modalities, fusion quality {fusion_quality:.2f}",
+            )
 
             return result
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={"operation": "fuse_multi_modal_content", "error_type": type(e).__name__, "error": str(e), "modality_count": len(content_items)},
+                description="Multi-modal fusion failed, using fallback",
+            )
             return self._create_fallback_result(content_items)
 
     async def _process_individual_modalities(
@@ -909,8 +951,12 @@ class MultiModalFusionEngine:
             )
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "compute_cross_modal_attention", "error_type": type(e).__name__, "error": str(e)},
+                description="Cross-modal attention computation failed",
+            )
             return CrossModalAttention(
                 source_modality=source_modality,
                 target_modality=target_modality,
@@ -953,8 +999,12 @@ Provide only the numerical score:
                 return 0.5
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "assess_fusion_quality", "error_type": type(e).__name__, "error": str(e)},
+                description="Fusion quality assessment failed",
+            )
             return 0.5
 
     def _extract_semantic_description(self, result: Dict[str, Any]) -> str:
@@ -1045,8 +1095,12 @@ Create a comprehensive fusion analysis as JSON:
             return fusion_result
 
         except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"operation": "synthesize_unified_representation", "error_type": type(e).__name__, "error": str(e)},
+                description="Unified representation synthesis failed",
+            )
             return {
                 "unified_summary": "Multi-modal content processed",
                 "modality_count": len(modality_results),
