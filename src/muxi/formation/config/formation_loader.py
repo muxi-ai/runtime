@@ -50,7 +50,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ...services import observability
+
 from .loader import ConfigLoader
 
 
@@ -168,18 +168,6 @@ class FormationLoader:
 
         config = self._resolve_knowledge_paths(config, formation_dir)
 
-        # Log formation loaded
-        observability.observe(
-            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
-            level=observability.EventLevel.INFO,
-            data={
-                "source": "file",
-                "path": file_path,
-                "agents_count": len(config.get("agents", [])),
-                "mcp_servers_count": len(config.get("mcp", {}).get("servers", [])),
-                "description": f"Flattened formation loaded from {file_path}"
-            }
-        )
         return config, secrets_in_use, placeholder_registry
 
     async def _load_modular_formation(
@@ -248,18 +236,6 @@ class FormationLoader:
         # Resolve knowledge paths relative to formation directory
         main_config = self._resolve_knowledge_paths(main_config, str(formation_dir))
 
-        # Log formation loaded
-        observability.observe(
-            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
-            level=observability.EventLevel.INFO,
-            data={
-                "source": "directory",
-                "path": str(directory_path),
-                "agents_count": len(main_config.get("agents", [])),
-                "mcp_servers_count": len(main_config.get("mcp", {}).get("servers", [])),
-                "description": f"Modular formation loaded from {directory_path}"
-            }
-        )
         return main_config, secrets_in_use, placeholder_registry
 
     async def _discover_and_merge_agents(
@@ -339,40 +315,8 @@ class FormationLoader:
                 if is_active:
                     agent_config["source"] = "formation"
                     config["agents"].append(agent_config)
-                    observability.observe(
-                        event_type=observability.SystemEvents.CONFIG_AGENT_LOADED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "agent_id": agent_config.get("id"),
-                            "file": agent_file.name,
-                            "source": "formation",
-                            "description": f"Agent '{agent_config.get('id')}' loaded from {agent_file.name}"
-                        }
-                    )
-                else:
-                    observability.observe(
-                        event_type=observability.SystemEvents.CONFIG_AGENT_LOADED,
-                        level=observability.EventLevel.DEBUG,
-                        data={
-                            "agent_id": agent_config.get("id"),
-                            "file": agent_file.name,
-                            "active": False,
-                            "description": f"Agent '{agent_config.get('id')}' skipped (disabled)"
-                        }
-                    )
 
             except Exception as e:
-                observability.observe(
-                    event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "config_type": "agent",
-                        "file": agent_file.name,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                        "description": f"Failed to load agent file '{agent_file.name}': {type(e).__name__}"
-                    }
-                )
                 print(
                     f"⚠️  Warning: Failed to load agent file '{agent_file.name}': {type(e).__name__}: {str(e)}"
                 )
@@ -404,26 +348,6 @@ class FormationLoader:
             if is_active:
                 agent_config["source"] = "formation"
                 filtered_agents.append(agent_config)
-                observability.observe(
-                    event_type=observability.SystemEvents.CONFIG_AGENT_LOADED,
-                    level=observability.EventLevel.DEBUG,
-                    data={
-                        "agent_id": agent_config.get("id"),
-                        "source": "inline",
-                        "description": f"Inline agent '{agent_config.get('id')}' loaded"
-                    }
-                )
-            else:
-                observability.observe(
-                    event_type=observability.SystemEvents.CONFIG_AGENT_LOADED,
-                    level=observability.EventLevel.DEBUG,
-                    data={
-                        "agent_id": agent_config.get("id"),
-                        "source": "inline",
-                        "active": False,
-                        "description": f"Inline agent '{agent_config.get('id')}' skipped (disabled)"
-                    }
-                )
 
         config["agents"] = filtered_agents
 
@@ -451,26 +375,6 @@ class FormationLoader:
             if is_active:
                 server_config["source"] = "formation"
                 filtered_servers.append(server_config)
-                observability.observe(
-                    event_type=observability.SystemEvents.CONFIG_MCP_LOADED,
-                    level=observability.EventLevel.DEBUG,
-                    data={
-                        "server_id": server_config.get("id"),
-                        "source": "inline",
-                        "description": f"Inline MCP server '{server_config.get('id')}' loaded"
-                    }
-                )
-            else:
-                observability.observe(
-                    event_type=observability.SystemEvents.CONFIG_MCP_LOADED,
-                    level=observability.EventLevel.DEBUG,
-                    data={
-                        "server_id": server_config.get("id"),
-                        "source": "inline",
-                        "active": False,
-                        "description": f"Inline MCP server '{server_config.get('id')}' skipped (disabled)"
-                    }
-                )
 
         config["mcp"]["servers"] = filtered_servers
 
@@ -555,40 +459,8 @@ class FormationLoader:
                 if is_active:
                     mcp_config["source"] = "formation"
                     config["mcp"]["servers"].append(mcp_config)
-                    observability.observe(
-                        event_type=observability.SystemEvents.CONFIG_MCP_LOADED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "server_id": mcp_config.get("id"),
-                            "file": mcp_file.name,
-                            "source": "formation",
-                            "description": f"MCP server '{mcp_config.get('id')}' loaded from {mcp_file.name}"
-                        }
-                    )
-                else:
-                    observability.observe(
-                        event_type=observability.SystemEvents.CONFIG_MCP_LOADED,
-                        level=observability.EventLevel.DEBUG,
-                        data={
-                            "server_id": mcp_config.get("id"),
-                            "file": mcp_file.name,
-                            "active": False,
-                            "description": f"MCP server '{mcp_config.get('id')}' skipped (disabled)"
-                        }
-                    )
 
             except Exception as e:
-                observability.observe(
-                    event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "config_type": "mcp",
-                        "file": mcp_file.name,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                        "description": f"Failed to load MCP file '{mcp_file.name}': {type(e).__name__}"
-                    }
-                )
                 print(
                     f"⚠️  Warning: Failed to load MCP file '{mcp_file.name}': {type(e).__name__}: {str(e)}"
                 )
@@ -677,29 +549,8 @@ class FormationLoader:
                     a2a_config["id"] = a2a_file.stem
 
                 config["a2a"]["outbound"]["services"].append(a2a_config)
-                observability.observe(
-                    event_type=observability.SystemEvents.CONFIG_A2A_LOADED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "service_id": a2a_config.get("id"),
-                        "file": a2a_file.name,
-                        "source": "formation",
-                        "description": f"A2A service '{a2a_config.get('id')}' loaded from {a2a_file.name}"
-                    }
-                )
 
             except Exception as e:
-                observability.observe(
-                    event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "config_type": "a2a",
-                        "file": a2a_file.name,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                        "description": f"Failed to load A2A file '{a2a_file.name}': {type(e).__name__}"
-                    }
-                )
                 print(
                     f"⚠️  Warning: Failed to load A2A file '{a2a_file.name}': {type(e).__name__}: {str(e)}"
                 )
