@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Set
 
+from ....services import observability
+
 
 @dataclass
 class DocumentReference:
@@ -462,8 +464,16 @@ class DocumentReferenceSystem:
                 #  Info - TODO: add observability
 
         except Exception as e:
-            #  Warning - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "persist_reference_cache",
+                },
+                description="Failed to persist reference cache",
+            )
 
     async def _persist_references(self) -> None:
         """Persist references to storage"""
@@ -505,6 +515,14 @@ class DocumentReferenceSystem:
             Path(temp_path).rename(self.storage_path)
 
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "persist_references",
+                },
+                description="Failed to persist references to storage",
+            )
             raise
