@@ -1555,8 +1555,17 @@ class WorkflowExecutor:
             try:
                 callback(workflow_id, workflow)
             except Exception as e:
-                #  Error - TODO: add observability
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ConversationEvents.WORKFLOW_EXECUTION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "workflow_id": workflow_id,
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "operation": "completion_callback",
+                    },
+                    description="Workflow completion callback failed",
+                )
 
     # Public methods for workflow management
 

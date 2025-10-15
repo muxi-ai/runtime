@@ -96,8 +96,16 @@ class TaskDecomposer:
             return validated_workflow
 
         except Exception as e:
-            #  Decomposer error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "decompose_request",
+                },
+                description="Workflow decomposition failed, using fallback workflow",
+            )
             # Return minimal fallback workflow
             return self._create_fallback_workflow(request)
 
@@ -138,8 +146,16 @@ class TaskDecomposer:
             return self._validate_workflow(modified_workflow)
 
         except Exception as e:
-            #  Decomposer error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "modify_workflow",
+                },
+                description="Workflow modification failed, returning original",
+            )
             return workflow  # Return original on error
 
     async def _generate_plan_preview(self, workflow: Workflow, original_request: str) -> str:
@@ -589,8 +605,16 @@ Analysis Results:
                     if task:
                         tasks[task.id] = task
                 except Exception as e:
-                    #  Decomposer warning - TODO: add observability
-                    _ = e  # remove this after implementing observability
+                    observability.observe(
+                        event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "error_type": type(e).__name__,
+                            "error": str(e),
+                            "operation": "parse_task_block",
+                        },
+                        description="Failed to parse individual task block, skipping",
+                    )
                     continue
 
             if not tasks:
@@ -608,8 +632,16 @@ Analysis Results:
             return workflow
 
         except Exception as e:
-            #  Decomposer error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "llm_decompose",
+                },
+                description="LLM decomposition failed, using heuristic fallback",
+            )
             return self._heuristic_decompose_request(workflow_id, request)
 
     def _parse_task_block(self, block: str) -> Optional[SubTask]:
@@ -674,8 +706,16 @@ Analysis Results:
             )
 
         except Exception as e:
-            #  Decomposer error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "parse_task",
+                },
+                description="Failed to parse task from block",
+            )
             return None
 
     def _heuristic_decompose_request(
@@ -807,8 +847,16 @@ Analysis Results:
             return plan_preview
 
         except Exception as e:
-            #  Decomposer error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "generate_plan_preview",
+                },
+                description="LLM plan preview generation failed, using heuristic",
+            )
             return self._heuristic_generate_plan_preview(workflow, original_request)
 
     def _heuristic_generate_plan_preview(self, workflow: Workflow, original_request: str) -> str:
@@ -873,8 +921,16 @@ Analysis Results:
             return "\n".join(plan_lines)
 
         except Exception as e:
-            #  Decomposer error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "heuristic_plan_preview",
+                },
+                description="Heuristic plan preview generation failed",
+            )
             return f"""
 I'll work on your request: "{original_request}"
 
@@ -918,21 +974,47 @@ Would you like me to proceed with this plan?
         try:
             # Validate DAG structure
             if not validate_workflow_dag(workflow):
-                #  Decomposer warning - TODO: add observability
+                observability.observe(
+                    event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "workflow_id": workflow.id,
+                        "operation": "validate_dag",
+                    },
+                    description="Workflow contains cycles, attempting to fix",
+                )
                 workflow = self._fix_workflow_cycles(workflow)
 
             # Build execution phases
             try:
                 build_execution_phases(workflow)
             except Exception as e:
-                #  Decomposer warning - TODO: add observability
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "workflow_id": workflow.id,
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "operation": "build_execution_phases",
+                    },
+                    description="Failed to build execution phases for workflow",
+                )
 
             return workflow
 
         except Exception as e:
-            #  Decomposer error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "workflow_id": workflow.id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "operation": "validate_workflow",
+                },
+                description="Workflow validation failed, returning unvalidated workflow",
+            )
             return workflow
 
     def _fix_workflow_cycles(self, workflow: Workflow) -> Workflow:
