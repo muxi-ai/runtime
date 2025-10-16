@@ -9,7 +9,11 @@ synchronously even for complex or long-running tasks.
 import sys
 from pathlib import Path
 
-from .base_async_test import BaseAsyncTest
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from base_async_test import BaseAsyncTest
 
 
 def main():
