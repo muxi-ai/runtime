@@ -87,6 +87,7 @@ async def resolve_user_identifier(
                         "identifier": identifier,
                         "formation_id": formation_id,
                     },
+                    description=f"User identifier resolved from cache: {identifier}",
                 )
                 return (int(internal_id_str), muxi_id)
             except (ValueError, AttributeError) as e:
@@ -99,6 +100,7 @@ async def resolve_user_identifier(
                         "cache_key": cache_key,
                         "error": str(e),
                     },
+                    description=f"Corrupted cache entry for user identifier {identifier}: {str(e)}",
                 )
                 await kv_cache.delete(cache_key)
 
@@ -112,6 +114,7 @@ async def resolve_user_identifier(
             "identifier": identifier,
             "formation_id": formation_id,
         },
+        description=f"User identifier cache miss, querying database: {identifier}",
     )
 
     async with db_manager.get_async_session() as session:
@@ -140,6 +143,7 @@ async def resolve_user_identifier(
                     "source": "database",
                     "formation_id": formation_id,
                 },
+                description=f"Resolved user identifier '{identifier}' to {muxi_id} (internal ID: {internal_id})",
             )
         else:
             # Create new user + identifier
@@ -172,6 +176,7 @@ async def resolve_user_identifier(
                     "formation_id": formation_id,
                     "identifier_type": identifier_type,
                 },
+                description=f"Created new user {muxi_id} for identifier '{identifier}' (type: {identifier_type or 'unspecified'})",
             )
 
     # Step 3: Cache result (1 hour TTL) - if cache available
@@ -310,6 +315,7 @@ async def associate_user_identifiers(
                     "conflicts": conflicts,
                     "formation_id": formation_id,
                 },
+                description=f"Cannot associate identifiers to {user_public_id}: {len(conflicts)} conflict(s) detected",
             )
             raise IntegrityError(
                 f"Identifier conflicts detected: {conflicts}",
@@ -361,6 +367,7 @@ async def associate_user_identifiers(
                 "existing_identifiers": existing_identifiers,
                 "formation_id": formation_id,
             },
+            description=f"Associated {len(new_identifiers)} new identifier(s) to user {user_public_id} ({len(existing_identifiers)} already existed)",
         )
 
         return {
