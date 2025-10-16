@@ -343,13 +343,13 @@ def create_error_response(exception: Exception, include_trace: bool = False) -> 
 
     except Exception as e:
         observability.observe(
-            observability.ErrorEvents.RETRY_ATTEMPTED,
-            observability.EventLevel.ERROR,
-            f"Error response creation failed: {str(e)}",
+            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+            level=observability.EventLevel.ERROR,
             data={
                 "error_type": type(e).__name__,
                 "original_exception_type": type(exception).__name__,
                 "conversion_type": "error_response_creation",
             },
+            description=f"Error response creation failed: {str(e)}",
         )
         raise
