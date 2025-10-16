@@ -320,8 +320,8 @@ async def create_agent(request: Request, agent: AgentCreate) -> JSONResponse:
             "agent_id": agent_config["id"],
             "agent_name": agent_config["name"],
             "source": "api",
-            "description": f"Agent '{agent_config['id']}' added via API"
-        }
+        },
+        description=f"Agent '{agent_config['id']}' (name: {agent_config['name']}) added via API",
     )
 
     response = create_success_response(
@@ -415,8 +415,8 @@ async def update_agent(request: Request, agent_id: str, updates: AgentUpdate) ->
             "agent_id": agent_id,
             "updated_fields": list(update_data.keys()),
             "source": "api",
-            "description": f"Agent '{agent_id}' updated via API"
-        }
+        },
+        description=f"Agent '{agent_id}' updated via API (fields: {', '.join(list(update_data.keys()))})",
     )
 
     response = create_success_response(
@@ -484,8 +484,8 @@ async def delete_agent(request: Request, agent_id: str) -> JSONResponse:
             data={
                 "agent_id": agent_id,
                 "source": "api",
-                "description": f"Agent '{agent_id}' removed via API"
-            }
+            },
+            description=f"Agent '{agent_id}' removed via API",
         )
 
     except ValueError as e:

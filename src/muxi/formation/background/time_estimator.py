@@ -83,8 +83,8 @@ class TimeEstimator:
                     "capabilities_count": len(required_capabilities),
                     "requires_decomposition": getattr(analysis, 'requires_decomposition', False),
                     "requires_multi_agent": getattr(analysis, 'requires_multi_agent', False),
-                    "description": f"Time estimation: {estimated_seconds:.1f}s"
-                }
+                },
+                description=f"Time estimation completed: {estimated_seconds:.1f}s (complexity: {analysis.complexity_score}, capabilities: {len(required_capabilities)})",
             )
 
             return estimated_seconds
@@ -97,8 +97,8 @@ class TimeEstimator:
                     "operation": "time_estimation",
                     "error": str(e),
                     "error_type": type(e).__name__,
-                    "description": f"Time estimation failed: {type(e).__name__}"
-                }
+                },
+                description=f"Time estimation failed: {type(e).__name__} - {str(e)}",
             )
             return None
 
@@ -142,8 +142,8 @@ class TimeEstimator:
                         "base_estimate": round(base_estimate, 1),
                         "historical_average": round(historical_average, 1),
                         "request_type": request_type,
-                        "description": f"Adjusted time estimate: {adjusted_estimate:.1f}s (70% historical)"
-                    }
+                    },
+                    description=f"Adjusted time estimate: {adjusted_estimate:.1f}s (70% historical: {historical_average:.1f}s, 30% analysis: {base_estimate:.1f}s)",
                 )
 
                 return adjusted_estimate
@@ -158,8 +158,8 @@ class TimeEstimator:
                     "operation": "historical_time_estimation",
                     "error": str(e),
                     "error_type": type(e).__name__,
-                    "description": f"Historical time estimation failed: {type(e).__name__}, using base estimate"
-                }
+                },
+                description=f"Historical time estimation failed ({type(e).__name__}: {str(e)}), falling back to base estimate",
             )
             return base_estimate
 
