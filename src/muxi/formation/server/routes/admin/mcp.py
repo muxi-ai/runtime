@@ -386,8 +386,8 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
                 "tool": tool_call.tool,
                 "access_level": tool_def["access"],
                 "arguments": tool_call.arguments,
-                "description": f"MCP tool '{tool_call.tool}' executed successfully via API"
-            }
+            },
+            description=f"MCP tool '{tool_call.tool}' executed successfully via API (access: {tool_def['access']})",
         )
 
         response = create_success_response(
@@ -408,8 +408,8 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
                 "tool": tool_call.tool,
                 "error_type": "validation",
                 "error": str(e),
-                "description": f"MCP tool '{tool_call.tool}' validation error: {str(e)}"
-            }
+            },
+            description=f"MCP tool '{tool_call.tool}' validation error: {str(e)}",
         )
         response = create_error_response("INVALID_PARAMS", str(e), None, request_id)
         return JSONResponse(content=response.model_dump(), status_code=400)
@@ -424,8 +424,8 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
                 "tool": tool_call.tool,
                 "error_type": "configuration",
                 "error": str(e),
-                "description": f"MCP tool '{tool_call.tool}' configuration error: required component not available"
-            }
+            },
+            description=f"MCP tool '{tool_call.tool}' configuration error - required component not available: {str(e)}",
         )
         response = create_error_response(
             "TOOL_EXECUTION_ERROR",
@@ -445,8 +445,8 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
                 "tool": tool_call.tool,
                 "error_type": "missing_argument",
                 "error": str(e),
-                "description": f"MCP tool '{tool_call.tool}' missing required argument: {str(e)}"
-            }
+            },
+            description=f"MCP tool '{tool_call.tool}' missing required argument: {str(e)}",
         )
         response = create_error_response(
             "INVALID_PARAMS", f"Missing required argument: {str(e)}", None, request_id
@@ -467,8 +467,9 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
                 "error": str(e),
                 "error_class": type(e).__name__,
                 "traceback": traceback.format_exc(),
-                "description": f"MCP tool '{tool_call.tool}' unexpected error: {type(e).__name__}"
-            }
+            },
+            description=f"MCP tool '{tool_call.tool}' unexpected error: {type(e).__name__} - {str(e)}",
+        }
         )
         response = create_error_response(
             "TOOL_EXECUTION_ERROR",
