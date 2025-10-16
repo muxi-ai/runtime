@@ -1125,7 +1125,7 @@ class Overlord:
                         # Extract just the host:port or domain from URL for display
                         display_url = registry_url.replace("http://", "").replace("https://", "").rstrip("/")
                         print(InitEventFormatter.format_ok(f"Connected to A2A registry at {display_url}", ""))
-                    
+
                     # Optional summary line if multiple registries
                     if len(registry_urls) > 1:
                         print(InitEventFormatter.format_info(
@@ -2725,9 +2725,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 try:
                     # Check if this is a Memobase instance (wraps LongTermMemory)
                     if hasattr(self.long_term_memory, "long_term_memory"):
-                        # Access the underlying LongTermMemory instance
-                        ltm = self.long_term_memory.long_term_memory
-
                         # The LongTermMemory class ensures collections exist when adding memories
                         # For PostgreSQL/SQLite backends, collections are created on first use
                         # We'll log the intended collections for visibility
@@ -9805,12 +9802,12 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 event_type=observability.ErrorEvents.RESOURCE_NOT_FOUND,
                 level=observability.EventLevel.ERROR,
                 data={
-                    "resource_type": "sop",
-                    "resource_id": sop_id,
+                    "resource_type": "async_request",
+                    "resource_id": request_id,
                     "error_type": type(e).__name__,
                     "error": str(e),
                 },
-                description=f"Failed to load SOP resource: {sop_id}",
+                description=f"Failed to get async request status: {request_id}",
             )
             return None
 
