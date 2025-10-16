@@ -27,6 +27,8 @@ from ...datatypes.observability import (
     ConversationEvents,
     ErrorEvents,
     EventLevel,
+    InitEventFormatter,
+    InitFailureInfo,
     RequestContext,
     ServerEvents,
     SystemEvents,
@@ -47,6 +49,8 @@ __all__ = [
     "ServerEvents",
     "SystemEvents",
     # Data classes
+    "InitEventFormatter",
+    "InitFailureInfo",
     "RequestContext",
     "TokenUsage",
     # Context management

@@ -216,12 +216,7 @@ class Formation:
             secrets_manager: Pre-configured SecretsManager instance
         """
         self.secrets_manager = secrets_manager
-        observability.observe(
-            event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
-            level=observability.EventLevel.DEBUG,
-            data={"operation": "secrets_manager_injection"},
-            description="SecretsManager injected via dependency injection",
-        )
+        # Init event - no observability emission during init phase (replaced by InitEventFormatter)
 
     def _get_primary_registry_url(self, a2a_config: Dict[str, Any]) -> Optional[str]:
         """
@@ -387,13 +382,8 @@ class Formation:
                     # Initialize encryption immediately so secrets can be used during config loading
                     await self.secrets_manager.initialize_encryption()
 
-                    # Emit observability event for successful SecretsManager initialization
-                    observability.observe(
-                        event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
-                        level=observability.EventLevel.DEBUG,
-                        data={"secrets_dir": secrets_dir, "operation": "secrets_manager_init"},
-                        description=f"SecretsManager initialized with directory: {secrets_dir}",
-                    )
+                    # Init event - no observability emission during init phase (replaced by InitEventFormatter)
+                    pass
 
                 except Exception as e:
                     # Log the SecretsManager initialization failure
@@ -413,12 +403,8 @@ class Formation:
                     )
             else:
                 # SecretsManager was already injected
-                observability.observe(
-                    event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
-                    level=observability.EventLevel.DEBUG,
-                    data={"operation": "secrets_manager_injected"},
-                    description="Using pre-injected SecretsManager instance",
-                )
+                # Init event - no observability emission during init phase (replaced by InitEventFormatter)
+                pass
 
             # Validate configuration (fail fast with detailed messages)
             validation_result = self._validate_config(normalized_path)
@@ -1203,11 +1189,7 @@ class Formation:
         from .prompts.loader import PromptLoader
         try:
             PromptLoader.initialize()
-            observability.observe(
-                event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
-                level=observability.EventLevel.INFO,
-                description="PromptLoader initialized successfully",
-            )
+            # Init event - no observability emission during init phase (replaced by InitEventFormatter)
         except FileNotFoundError as e:
             observability.observe(
                 event_type=observability.ErrorEvents.FORMATION_INITIALIZATION_FAILED,
