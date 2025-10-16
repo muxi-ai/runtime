@@ -2731,10 +2731,10 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         # The LongTermMemory class ensures collections exist when adding memories
                         # For PostgreSQL/SQLite backends, collections are created on first use
                         # We'll log the intended collections for visibility
-                        # REMOVE - line 2738 (DEBUG runtime trace: collection registration)
+                        pass  # REMOVE - line 2738 (DEBUG runtime trace: collection registration)
                     else:
                         # Direct LongTermMemory instance (SQLite)
-                        # REMOVE - line 2751 (DEBUG runtime trace: collection registration)
+                        pass  # REMOVE - line 2751 (DEBUG runtime trace: collection registration)
 
                 except Exception as e:
                     observability.observe(

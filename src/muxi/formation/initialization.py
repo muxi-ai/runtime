@@ -217,15 +217,8 @@ def initialize_llm_config(formation) -> None:
 
     if capabilities_using_text_fallback:
         log_data["capabilities_using_text_fallback"] = capabilities_using_text_fallback
-        description = (
-            f"LLM configuration initialized with {len(capabilities)} capabilities. "
-            f"Using text model '{text_model_config['model']}' as fallback for: "
-            f"{', '.join(capabilities_using_text_fallback)}"
-        )
-    else:
-        description = f"LLM configuration initialized with {len(capabilities)} capabilities"
 
-    # REMOVE - line 234 (user: remove)
+    # Note: description variable removed as observability call was removed
 
 
 def initialize_memory_systems(formation) -> None:
@@ -739,9 +732,7 @@ def initialize_document_processing_config(formation) -> None:
         formation._document_processing_config = DocumentProcessingConfig(llm_config)
 
         # Log the configuration details
-        enabled = formation._document_processing_config.is_enabled()
-        if enabled:
-            # REMOVE - line 813 (user: feels pointless)
+        # enabled = formation._document_processing_config.is_enabled()
 
         # Initialize DocumentChunkManager with the configuration
         formation._document_chunker = DocumentChunkManager(formation._document_processing_config)

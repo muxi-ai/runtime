@@ -2,6 +2,8 @@
 
 from typing import Any, Dict, List, Tuple
 
+from ...services import observability
+
 
 class DocumentProcessingConfig:
     """Document processing configuration manager for unified LLM model schema."""
