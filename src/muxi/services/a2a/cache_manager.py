@@ -75,6 +75,7 @@ class A2ACacheManager:
                     "error": str(e),
                     "entries_attempted": len(self.metadata),
                 },
+                description=f"Failed to save A2A cache metadata ({len(self.metadata)} entries): {str(e)}",
             )
 
     def _compute_config_hash(
@@ -171,6 +172,7 @@ class A2ACacheManager:
                     "error": str(e),
                     "action": "removed_invalid_cache",
                 },
+                description=f"Failed to load cached card for agent '{agent_id}', removed invalid cache: {str(e)}",
             )
 
             return None
@@ -213,6 +215,7 @@ class A2ACacheManager:
                     "error": str(e),
                     "cache_path": str(cache_path),
                 },
+                description=f"Failed to cache agent card for '{agent_id}': {str(e)}",
             )
 
     def _remove_cache_entry(self, agent_id: str) -> None:
@@ -269,6 +272,7 @@ class A2ACacheManager:
                     "error": str(e),
                     "files_removed": files_removed,
                 },
+                description=f"Failed to clear all A2A cache ({files_removed} files removed before error): {str(e)}",
             )
 
     def get_cache_stats(self) -> Dict[str, Any]:
@@ -329,6 +333,7 @@ class A2ACacheManager:
                     "error": str(e),
                     "files_removed_before_error": removed_count,
                 },
+                description=f"Failed during A2A cache cleanup ({removed_count} files removed before error): {str(e)}",
             )
 
         return removed_count
@@ -366,6 +371,7 @@ class A2ACacheManager:
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.WARNING,
                 data={"operation": "set_filtered_agents", "error": str(e)},
+                description=f"Failed to cache filtered agents list: {str(e)}",
             )
 
     def cleanup_expired_filtering_cache(self) -> int:
