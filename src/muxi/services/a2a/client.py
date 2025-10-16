@@ -196,6 +196,7 @@ class A2AService:
             observability.observe(
                 event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
                 level=observability.EventLevel.INFO,
+                description=f"A2A message sent from {source_agent_id} to {target_agent_id} ({message_type})",
                 data={
                     "source_agent_id": source_agent_id,
                     "target_agent_id": target_agent_id,
@@ -230,6 +231,7 @@ class A2AService:
             observability.observe(
                 event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
                 level=observability.EventLevel.ERROR,
+                description=f"A2A message failed from {source_agent_id} to {target_agent_id}: {str(e)}",
                 data={
                     "source_agent_id": source_agent_id,
                     "target_agent_id": target_agent_id,

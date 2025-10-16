@@ -785,6 +785,7 @@ class WorkingMemory:
             observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_WORKING_RETRIEVED,
                 level=observability.EventLevel.INFO,
+                description=f"Working memory vector search completed: {len(final_results)} results",
                 data={
                     "results_count": len(final_results),
                     "search_type": "vector_hybrid",

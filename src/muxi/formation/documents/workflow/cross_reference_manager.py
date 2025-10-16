@@ -103,10 +103,10 @@ class DocumentCrossReferenceManager:
         observability.observe(
             event_type=observability.SystemEvents.CROSS_REFERENCE_MANAGER_INITIALIZED,
             level=observability.EventLevel.DEBUG,
+            description=f"Cross-reference manager initialized with storage at {self.storage_path}",
             data={
                 "operation": "cross_reference_manager_init",
                 "storage_path": str(self.storage_path),
-                "description": f"Initialized DocumentCrossReferenceManager with storage at {self.storage_path}"
             }
         )
 
@@ -195,13 +195,13 @@ class DocumentCrossReferenceManager:
         observability.observe(
             event_type=observability.SystemEvents.CROSS_REFERENCE_ADDED,
             level=observability.EventLevel.DEBUG,
+            description=f"Added cross-reference {reference_id} from {source_document_id} to {target_document_id}",
             data={
                 "operation": "add_reference",
                 "reference_id": reference_id,
                 "source_document_id": source_document_id,
                 "target_document_id": target_document_id,
                 "reference_type": reference_type,
-                "description": f"Added reference {reference_id} from {source_document_id} to {target_document_id}"
             }
         )
         return reference_id
@@ -290,10 +290,10 @@ class DocumentCrossReferenceManager:
                 observability.observe(
                     event_type=observability.SystemEvents.CROSS_REFERENCES_LOADED,
                     level=observability.EventLevel.DEBUG,
+                    description=f"Loaded {len(self._references)} document cross-references from storage",
                     data={
                         "operation": "load_references",
                         "references_count": len(self._references),
-                        "description": f"Loaded {len(self._references)} document references from storage"
                     }
                 )
 

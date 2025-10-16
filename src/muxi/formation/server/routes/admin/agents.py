@@ -204,12 +204,12 @@ def _delete_agent_file_safe(formation: Any, agent_id: str) -> None:
             observability.observe(
                 event_type=observability.SystemEvents.FILE_OPERATION_FAILED,
                 level=observability.EventLevel.WARNING,
+                description=f"Failed to delete agent file for '{agent_id}', but agent was removed from config",
                 data={
                     "operation": "delete_agent_file",
                     "agent_id": agent_id,
                     "error": str(e),
                     "error_type": type(e).__name__,
-                    "description": f"Failed to delete agent file for '{agent_id}', but agent was removed from config"
                 }
             )
 

@@ -590,6 +590,7 @@ class MemoryExtractor:
                     observability.observe(
                         event_type=observability.SystemEvents.EXTENSION_FAILED,
                         level=observability.EventLevel.ERROR,
+                        description=f"Failed to store extracted memory in long-term memory: {str(e)}",
                         data={
                             "error": str(e),
                             "error_type": type(e).__name__,
@@ -603,7 +604,6 @@ class MemoryExtractor:
                             "component": "memory_extractor",
                             "operation": "long_term_memory_add",
                         },
-                        description="Memory extractor failed to store extracted information in long-term memory",
                     )
 
     def _is_sensitive_information(self, key: str, value: Any) -> bool:
