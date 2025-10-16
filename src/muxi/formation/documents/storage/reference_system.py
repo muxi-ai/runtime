@@ -516,7 +516,7 @@ class DocumentReferenceSystem:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.REFERENCE_PERSISTENCE_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "error_type": type(e).__name__,

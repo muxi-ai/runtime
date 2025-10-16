@@ -1225,7 +1225,7 @@ class Overlord:
                 except Exception as e:
                     # Log error but don't fail startup - formation can work without external registry
                     observability.observe(
-                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        event_type=observability.ErrorEvents.A2A_MESSAGE_HANDLING_FAILED,
                         level=observability.EventLevel.WARNING,
                         data={
                             "error": str(e),
@@ -1328,7 +1328,7 @@ class Overlord:
                     )
                 except Exception as e:
                     observability.observe(
-                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                         level=observability.EventLevel.WARNING,
                         data={"error": str(e)},
                         description=f"Failed to create clarification LLM: {e}",
@@ -1659,7 +1659,7 @@ class Overlord:
         except Exception as e:
             # Configuration error - text capability must be properly configured
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.ERROR,
                 data={
                     "error": str(e),
@@ -1930,7 +1930,7 @@ class Overlord:
             )
             self._default_persona = fallback
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={
                     "error_type": type(e).__name__,
@@ -2247,7 +2247,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # If no formation instance, create a minimal one for initialization
             # This is a fallback scenario that shouldn't normally happen
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.FORMATION_INITIALIZATION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={"config_type": "buffer_memory"},
                 description="No formation instance found during buffer memory initialization",
@@ -2268,7 +2268,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # If no formation instance, create a minimal one for initialization
             # This is a fallback scenario that shouldn't normally happen
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.FORMATION_INITIALIZATION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={"config_type": "persistent_memory"},
                 description="No formation instance found during persistent memory initialization",
@@ -2541,7 +2541,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         except Exception as e:
             # If initialization fails, log error and raise
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.ERROR,
                 data={
                     "error_type": type(e).__name__,
@@ -2764,7 +2764,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         except Exception as e:
             # Log error but don't fail - A2A is optional
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.A2A_MESSAGE_HANDLING_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={"error": str(e)},
                 description=f"Failed to initialize A2A ClientFactory: {str(e)}",
@@ -3361,7 +3361,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 except Exception as e:
                     # Log error but don't fail the removal
                     observability.observe(
-                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        event_type=observability.ErrorEvents.A2A_MESSAGE_HANDLING_FAILED,
                         level=observability.EventLevel.WARNING,
                         data={
                             "agent_id": agent_id,
@@ -10093,7 +10093,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             except (TypeError, ValueError) as e:
                 # Fallback to string representation if JSON serialization fails
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "properties_type": type(properties).__name__},
                     description="Failed to serialize properties to JSON, using string representation",

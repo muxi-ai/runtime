@@ -475,7 +475,7 @@ class DocumentMetadataStore:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.METADATA_PERSISTENCE_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "error_type": type(e).__name__,
