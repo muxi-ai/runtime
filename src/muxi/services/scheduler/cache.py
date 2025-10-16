@@ -209,7 +209,7 @@ class SchedulerCache:
         except (ValueError, TypeError) as e:
             # Log the specific error for debugging
             observability.observe(
-                event_type=observability.SystemEvents.SCHEDULER_CRON_PARSE_ERROR,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.DEBUG,
                 data={
                     "expression": expr,

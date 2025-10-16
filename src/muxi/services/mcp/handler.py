@@ -340,7 +340,7 @@ class MCPServerClient:
                 cancel_data["tool_name"] = params["name"]
 
             observability.observe(
-                event_type=observability.SystemEvents.MCP_MESSAGE_CANCELLED,
+                event_type=observability.SystemEvents.OPERATION_COMPLETED,
                 level=observability.EventLevel.INFO,
                 description=f"MCP request '{method}' was cancelled for server '{self.name}'",
                 data=cancel_data,
@@ -443,7 +443,7 @@ class MCPServerClient:
                 cancelled_count += 1
 
         observability.observe(
-            event_type=observability.SystemEvents.MCP_ALL_REQUESTS_CANCELLED,
+            event_type=observability.SystemEvents.OPERATION_COMPLETED,
             level=observability.EventLevel.INFO,
             description=f"Cancelled {cancelled_count} pending requests for server '{self.name}'",
             data={
@@ -485,7 +485,7 @@ class MCPServerClient:
             cancellation_token.cancel()
 
         observability.observe(
-            event_type=observability.SystemEvents.MCP_REQUEST_CANCELLED,
+            event_type=observability.SystemEvents.OPERATION_COMPLETED,
             level=observability.EventLevel.INFO,
             description=f"Cancelled request {tracking_id} on server '{self.name}'",
             data={
@@ -530,7 +530,7 @@ class MCPServerClient:
 
         if cancelled_count > 0:
             observability.observe(
-                event_type=observability.SystemEvents.MCP_OVERLORD_REQUEST_CANCELLED,
+                event_type=observability.SystemEvents.OPERATION_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 description=(
                     f"Cancelled {cancelled_count} MCP requests for overlord "
@@ -905,7 +905,7 @@ class MCPHandler:
                 # If explicit mapping failed, log warning and continue searching
                 if server_name:
                     observability.observe(
-                        event_type=observability.SystemEvents.MCP_SERVER_MAPPING_FAILED,
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
                         level=observability.EventLevel.WARNING,
                         description=(
                             f"Server '{server_name}' (ID: {server_id}) found in registry "
@@ -1021,7 +1021,7 @@ class MCPHandler:
             if cancelled > 0:
                 total_cancelled += cancelled
                 observability.observe(
-                    event_type=observability.SystemEvents.MCP_SERVER_OPERATIONS_CANCELLED,
+                    event_type=observability.SystemEvents.OPERATION_COMPLETED,
                     level=observability.EventLevel.DEBUG,
                     description=(
                         f"Cancelled {cancelled} operations on server '{server_name}' "

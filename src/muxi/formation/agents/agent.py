@@ -295,18 +295,12 @@ class Agent:
             pass  # REMOVED: init-phase observe() call
 
         except Exception as e:
-            # Log error but don't fail agent initialization
-            observability.observe(
-                event_type=observability.SystemEvents.AGENT_INITIALIZATION_ERROR,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "agent_id": self.agent_id,
-                    "error": str(e),
-                    "phase": "knowledge_initialization",
-                },
-                description=f"Failed to initialize knowledge for agent {self.agent_id}: {str(e)}",
-            )
-            self.knowledge_handler = None
+            # Fail fast: If knowledge is configured, it must work
+            # InitEventFormatter will display the error clearly during init
+            raise RuntimeError(
+                f"Failed to initialize knowledge for agent '{self.agent_id}'. "
+                f"Knowledge is configured but could not be loaded: {str(e)}"
+            ) from e
 
     async def _ensure_knowledge_initialized(self) -> None:
         """
@@ -4123,7 +4117,7 @@ class Agent:
                 return True
         except Exception as e:
             observability.observe(
-                event_type=observability.SystemEvents.AGENT_REGISTRATION_FAILED,
+                event_type=observability.ErrorEvents.AGENT_REGISTRATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "agent_id": self.agent_id,

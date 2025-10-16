@@ -1296,7 +1296,7 @@ class Overlord:
                 )
             except Exception as e:
                 observability.observe(
-                    event_type=observability.SystemEvents.SERVICE_ERROR,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.ERROR,
                     data={"service": "artifact", "error": str(e)},
                     description=f"Failed to initialize artifact service: {e}",
@@ -1559,7 +1559,7 @@ class Overlord:
             except Exception as e:
                 # Log warning but continue - don't fail formation load
                 observability.observe(
-                    event_type=observability.SystemEvents.AGENT_FAILED,
+                    event_type=observability.ErrorEvents.AGENT_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={"file": str(agent_file), "error": str(e)},
                     description=f"Failed to load MUXI default agent from {agent_file.name}: {e}"
@@ -8830,7 +8830,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         except Exception as e:
             # Log error but don't block processing
             observability.observe(
-                event_type=observability.ConversationEvents.OVERLORD_PROCESSING_ERROR,
+                event_type=observability.ErrorEvents.OVERLORD_PROCESSING_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={
                     "error": str(e),
@@ -9632,7 +9632,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     except Exception as e:
                         # Log warning about failed prompt loading
                         observability.observe(
-                            event_type=observability.SystemEvents.BUILTIN_MCP_PROMPT_LOAD_FAILED,
+                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
                             level=observability.EventLevel.WARNING,
                             data={
                                 "mcp_name": mcp_name,
@@ -9646,14 +9646,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             return "\n\n".join(prompts)
 
         except Exception as e:
-            # Log error and return empty string to not break startup
-            observability.observe(
-                event_type=observability.SystemEvents.BUILTIN_MCP_INITIALIZATION_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={"error": str(e), "builtin_mcps_config": str(builtin_mcps_config)},
-                description=f"Failed to initialize built-in MCP prompts: {e}",
-            )
-            return ""
+            # Fail fast: If built-in MCPs are configured, they must work
+            # InitEventFormatter will display the error clearly during init
+            raise RuntimeError(
+                f"Failed to initialize built-in MCP prompts: {str(e)}"
+            ) from e
 
     async def remember_user_info(
         self,

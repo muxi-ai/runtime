@@ -1086,7 +1086,7 @@ Return only valid JSON, no explanation.
                 converted_cron = " ".join(parts)
 
                 observability.observe(
-                    event_type=observability.ConversationEvents.CRON_TIMEZONE_CONVERTED,
+                    event_type=observability.SystemEvents.CRON_TIMEZONE_CONVERTED,
                     level=observability.EventLevel.INFO,
                     data={
                         "original_cron": cron_expr,

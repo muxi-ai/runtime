@@ -55,7 +55,7 @@ class BufferMemoryManager:
         """
         if self.overlord.buffer_memory is None:
             observability.observe(
-                event_type=observability.SystemEvents.MEMORY_BUFFER_UPDATE_FAILED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={
                     "reason": "No buffer memory available",

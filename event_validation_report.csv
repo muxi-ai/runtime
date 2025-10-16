@@ -1,66 +1,15 @@
 event_name,enum_category,exists_in_enum,recommendation,file,line,context
-A2A_AGENT_REGISTRATIONS_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,366,observability.observe(
-A2A_AGENT_REGISTRATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,374,observability.observe(
-A2A_AGENT_REGISTRATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,458,observability.observe(
-A2A_CREDENTIAL_REMOVED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,774,observability.observe(
-A2A_DEREGISTRATION_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,292,observability.observe(
-A2A_MESSAGE_PARSING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/server.py,239,observability.observe(
-A2A_REGISTRATION_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,263,observability.observe(
-AGENT_CREATION_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/overlord/overlord.py,3127,observability.observe(
-AGENT_DEREGISTRATION_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,3296,observability.observe(
-AGENT_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,1561,observability.observe(
-AGENT_INITIALIZATION_ERROR,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/agents/agent.py,299,observability.observe(
-AGENT_REGISTRATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/agents/agent.py,4125,observability.observe(
-BUILTIN_MCP_INITIALIZATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,9650,observability.observe(
-BUILTIN_MCP_PROMPT_LOAD_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,9634,observability.observe(
-CLARIFICATION_REQUEST_GENERATED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/overlord/overlord.py,8890,observability.observe(
-CLARIFICATION_SKIPPED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/overlord/overlord.py,9177,observability.observe(
-COMPONENT_INITIALIZATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,77,observability.observe(
-CREDENTIAL_CONFIGURED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/llm/llm.py,701,observability.observe(
-CREDENTIAL_UPDATE,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,9325,observability.observe(
-CRON_EXPRESSION_FIXED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/parser.py,826,observability.observe(
-CRON_TIMEZONE_CONVERTED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/scheduler/parser.py,1088,observability.observe(
-DATABASE_TYPE_FALLBACK,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/db.py,205,observability.observe(
-EXCLUSION_RULES_GENERATED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/scheduler/parser.py,926,observability.observe(
-EXCLUSION_RULES_GENERATION_STARTED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/scheduler/parser.py,900,observability.observe(
-FILE_OPERATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/server/routes/admin/agents.py,204,observability.observe(
-GENERAL,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/overlord/chat_orchestrator.py,383,observability.observe(
-GENERIC_ERROR,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/overlord/overlord.py,4055,observability.observe(
-MCP_ALL_REQUESTS_CANCELLED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/handler.py,445,observability.observe(
-MCP_MESSAGE_CANCELLED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/handler.py,342,observability.observe(
-MCP_OVERLORD_REQUEST_CANCELLED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/handler.py,532,observability.observe(
-MCP_REQUEST_CANCELLED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/handler.py,487,observability.observe(
-MCP_SERVER_MAPPING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/handler.py,907,observability.observe(
-MCP_SERVER_MAPPING_INCONSISTENT,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/handler.py,958,observability.observe(
-MCP_SERVER_OPERATIONS_CANCELLED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/handler.py,1023,observability.observe(
-MCP_TOOL_FALLBACK_USED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/handler.py,923,observability.observe(
-MCP_TRANSPORT_ATTEMPT,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/transports/factory.py,170,observability.observe(
-MCP_TRANSPORT_CACHE_CLEARED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/service.py,1367,observability.observe(
-MEMORY_BUFFER_UPDATE_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/memory/buffer_manager.py,57,observability.observe(
-OVERLORD_PROCESSING_ERROR,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/overlord/overlord.py,8832,observability.observe(
-PROCESSING_ERROR,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/overlord/chat_orchestrator.py,618,observability.observe(
-PROMPT_FORMATION_ENHANCED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/scheduler/rewriter.py,288,observability.observe(
-PROMPT_FORMATION_ENHANCEMENT_STARTED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/scheduler/rewriter.py,225,observability.observe(
-PROMPT_VALIDATION_COMPLETED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/scheduler/rewriter.py,403,observability.observe(
-RESOURCE_ERROR,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/memory/working.py,1018,observability.observe(
-SCHEDULER_CACHE_CLEANUP,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/cache.py,296,observability.observe(
-SCHEDULER_CIRCUIT_BREAKER_ACTIVATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/parser.py,386,observability.observe(
-SCHEDULER_CIRCUIT_BREAKER_STATE_CHANGE,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/circuit_breaker.py,101,observability.observe(
-SCHEDULER_CLEANUP_BATCH,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/manager.py,1091,observability.observe(
-SCHEDULER_CRON_PARSE_ERROR,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/cache.py,211,observability.observe(
-SCHEDULER_PROMPT_COMPARISON,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/manager.py,1311,observability.observe(
-SERVICE_ERROR,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,1298,observability.observe(
-SYSTEM_ACTION,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/memory/extractor.py,228,observability.observe(
-WORKFLOW_ANALYSIS_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/workflow/analyzer.py,323,observability.observe(
-WORKFLOW_DECOMPOSITION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/workflow/decomposer.py,297,observability.observe(
 A2A_AGENT_DEREGISTERED,SystemEvents,YES,,src/muxi/formation/formation.py,2701,observability.observe(
-A2A_AGENT_DEREGISTERED,SystemEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,489,observability.observe(
-A2A_AGENT_REGISTERED,SystemEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,450,observability.observe(
+A2A_AGENT_DEREGISTERED,SystemEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,486,observability.observe(
+A2A_AGENT_REGISTERED,SystemEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,447,observability.observe(
 A2A_AGENT_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/client.py,418,observability.observe(
 A2A_AGENT_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,213,observability.observe(
 A2A_AGENT_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,626,observability.observe(
 A2A_AGENT_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,779,observability.observe(
 A2A_AGENT_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,879,observability.observe(
+A2A_AGENT_REGISTRATIONS_COMPLETED,SystemEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,363,observability.observe(
+A2A_AGENT_REGISTRATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,371,observability.observe(
+A2A_AGENT_REGISTRATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,455,observability.observe(
 A2A_AUTH_INITIALIZED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,70,observability.observe(
 A2A_AUTH_INITIALIZED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,132,observability.observe(
 A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,551,observability.observe(
@@ -136,11 +85,13 @@ A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,2
 A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,318,observability.observe(
 A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,472,observability.observe(
 A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,508,observability.observe(
+A2A_CREDENTIAL_REMOVED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,774,observability.observe(
 A2A_DEREGISTERED,SystemEvents,YES,,src/muxi/formation/formation.py,2712,observability.observe(
 A2A_DEREGISTERED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,307,observability.observe(
 A2A_DEREGISTERED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,316,observability.observe(
 A2A_DEREGISTERED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,708,observability.observe(
-A2A_DEREGISTRATION_FAILED,SystemEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,497,observability.observe(
+A2A_DEREGISTRATION_FAILED,SystemEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,494,observability.observe(
+A2A_DEREGISTRATION_STARTED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,292,observability.observe(
 A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,126,observability.observe(
 A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,394,observability.observe(
 A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,442,observability.observe(
@@ -184,28 +135,29 @@ A2A_HEALTH_CHECK_STARTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client
 A2A_HEALTH_CHECK_STARTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,1222,observability.observe(
 A2A_HEALTH_CHECK_STARTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,1297,observability.observe(
 A2A_HTTPX_CLEANUP,SystemEvents,YES,,src/muxi/services/a2a/client.py,435,observability.observe(
-A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3773,observability.observe(
-A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4020,observability.observe(
-A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,913,observability.observe(
+A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3767,observability.observe(
+A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4014,observability.observe(
+A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,910,observability.observe(
 A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/services/a2a/client.py,222,observability.observe(
 A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/services/a2a/client.py,231,observability.observe(
 A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/services/a2a/client.py,278,observability.observe(
 A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/services/a2a/server.py,498,observability.observe(
 A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,208,observability.observe(
-A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,2989,observability.observe(
-A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3265,observability.observe(
-A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3327,observability.observe(
-A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3642,observability.observe(
+A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,2983,observability.observe(
+A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3259,observability.observe(
+A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3321,observability.observe(
+A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3636,observability.observe(
 A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,1227,observability.observe(
 A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,2707,observability.observe(
 A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,3304,observability.observe(
 A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/services/a2a/client.py,95,observability.observe(
-A2A_MESSAGE_PROCESSED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3759,observability.observe(
-A2A_MESSAGE_RECEIVED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3201,observability.observe(
-A2A_MESSAGE_RECEIVED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3906,observability.observe(
-A2A_MESSAGE_RECEIVED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4004,observability.observe(
-A2A_MESSAGE_SENT,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3099,observability.observe(
-A2A_MESSAGE_SENT,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3133,observability.observe(
+A2A_MESSAGE_PARSING,SystemEvents,YES,,src/muxi/services/a2a/server.py,239,observability.observe(
+A2A_MESSAGE_PROCESSED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3753,observability.observe(
+A2A_MESSAGE_RECEIVED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3195,observability.observe(
+A2A_MESSAGE_RECEIVED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3900,observability.observe(
+A2A_MESSAGE_RECEIVED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3998,observability.observe(
+A2A_MESSAGE_SENT,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3093,observability.observe(
+A2A_MESSAGE_SENT,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3127,observability.observe(
 A2A_MESSAGE_SENT,ConversationEvents,YES,,src/muxi/services/a2a/client.py,147,observability.observe(
 A2A_MESSAGE_SENT,ConversationEvents,YES,,src/muxi/services/a2a/client.py,163,observability.observe(
 A2A_MESSAGE_SENT,ConversationEvents,YES,,src/muxi/services/a2a/client.py,196,observability.observe(
@@ -214,6 +166,7 @@ A2A_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,815,ob
 A2A_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,915,observability.observe(
 A2A_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,973,observability.observe(
 A2A_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,1249,observability.observe(
+A2A_REGISTRATION_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,263,observability.observe(
 A2A_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,646,observability.observe(
 A2A_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,741,observability.observe(
 A2A_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,765,observability.observe(
@@ -231,50 +184,54 @@ A2A_REGISTRY_DISCONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_clien
 A2A_REGISTRY_DISCONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,238,observability.observe(
 A2A_REGISTRY_DISCONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,250,observability.observe(
 A2A_REGISTRY_DISCONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,423,observability.observe(
-A2A_SERVER_FAILED,SystemEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,243,observability.observe(
+A2A_SERVER_FAILED,SystemEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,240,observability.observe(
 A2A_SERVER_FAILED,SystemEvents,YES,,src/muxi/services/a2a/server.py,122,observability.observe(
 A2A_SERVER_FAILED,SystemEvents,YES,,src/muxi/services/a2a/server.py,685,observability.observe(
 A2A_SERVER_STOPPED,SystemEvents,YES,,src/muxi/services/a2a/server.py,712,observability.observe(
-A2A_TASK_HANDOFF,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3838,observability.observe(
-AGENT_A2A,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1578,observability.observe(
-AGENT_A2A,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1603,observability.observe(
-AGENT_A2A,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2973,observability.observe(
-AGENT_A2A_MESSAGE_RECEIVED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3605,observability.observe(
+A2A_TASK_HANDOFF,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3832,observability.observe(
+AGENT_A2A,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1572,observability.observe(
+AGENT_A2A,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1597,observability.observe(
+AGENT_A2A,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2967,observability.observe(
+AGENT_A2A_MESSAGE_RECEIVED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3599,observability.observe(
 AGENT_ADDED,SystemEvents,YES,,src/muxi/formation/overlord/overlord.py,3076,observability.observe(
 AGENT_ADDED,SystemEvents,YES,,src/muxi/formation/server/routes/admin/agents.py,316,observability.observe(
-AGENT_MESSAGE_PROCESSING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,813,observability.observe(
-AGENT_MESSAGE_PROCESSING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,861,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1010,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1042,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1064,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1075,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1132,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1145,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1452,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3299,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3442,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3498,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4208,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4375,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4388,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4401,observability.observe(
-AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4413,observability.observe(
+AGENT_CREATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,3127,observability.observe(
+AGENT_DEREGISTRATION_COMPLETED,SystemEvents,YES,,src/muxi/formation/overlord/overlord.py,3296,observability.observe(
+AGENT_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,1561,observability.observe(
+AGENT_MESSAGE_PROCESSING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,807,observability.observe(
+AGENT_MESSAGE_PROCESSING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,855,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1004,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1036,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1058,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1069,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1126,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1139,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1446,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3293,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3436,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3492,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4202,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4369,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4382,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4395,observability.observe(
+AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4407,observability.observe(
 AGENT_PLANNING_STARTED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,1162,observability.observe(
-AGENT_PROCESSING_ERROR,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,880,observability.observe(
-AGENT_PROCESSING_ERROR,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2447,observability.observe(
+AGENT_PROCESSING_ERROR,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,874,observability.observe(
+AGENT_PROCESSING_ERROR,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2441,observability.observe(
+AGENT_REGISTRATION_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,4119,observability.observe(
 AGENT_REMOVED,SystemEvents,YES,,src/muxi/formation/overlord/overlord.py,3274,observability.observe(
 AGENT_REMOVED,SystemEvents,YES,,src/muxi/formation/overlord/overlord.py,3281,observability.observe(
 AGENT_REMOVED,SystemEvents,YES,,src/muxi/formation/server/routes/admin/agents.py,481,observability.observe(
-AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1328,observability.observe(
-AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1425,observability.observe(
-AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1696,observability.observe(
-AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1828,observability.observe(
-AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2089,observability.observe(
-AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2741,observability.observe(
-AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2777,observability.observe(
-AGENT_TOOL_CHAIN_COMPLETED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2112,observability.observe(
-AGENT_TOOL_CHAIN_ITERATION_COMPLETED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2058,observability.observe(
-AGENT_TOOL_CHAIN_ITERATION_STARTED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1756,observability.observe(
+AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1322,observability.observe(
+AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1419,observability.observe(
+AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1690,observability.observe(
+AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1822,observability.observe(
+AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2083,observability.observe(
+AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2735,observability.observe(
+AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2771,observability.observe(
+AGENT_TOOL_CHAIN_COMPLETED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2106,observability.observe(
+AGENT_TOOL_CHAIN_ITERATION_COMPLETED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2052,observability.observe(
+AGENT_TOOL_CHAIN_ITERATION_STARTED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1750,observability.observe(
 AGENT_UPDATED,SystemEvents,YES,,src/muxi/formation/server/routes/admin/agents.py,411,observability.observe(
 API_KEYS_LOADED,ServerEvents,YES,,src/muxi/formation/server/server.py,216,observability.observe(
 API_REQUEST,APIEvents,YES,,src/muxi/formation/server/middleware.py,207,observability.observe(
@@ -312,6 +269,7 @@ CLARIFICATION_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/overlor
 CLARIFICATION_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,9521,observability.observe(
 CLARIFICATION_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,9531,observability.observe(
 CLARIFICATION_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,9558,observability.observe(
+CLARIFICATION_REQUEST_GENERATED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,8890,observability.observe(
 CLARIFICATION_REQUEST_SENT,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,5378,observability.observe(
 CLARIFICATION_REQUEST_SENT,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,5742,observability.observe(
 CLARIFICATION_REQUEST_SENT,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,5759,observability.observe(
@@ -321,6 +279,7 @@ CLARIFICATION_REQUEST_SENT,ConversationEvents,YES,,src/muxi/formation/overlord/o
 CLARIFICATION_REQUEST_SENT,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,9222,observability.observe(
 CLARIFICATION_REQUEST_SENT,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,9514,observability.observe(
 CLARIFICATION_RESPONSE_RECEIVED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,5670,observability.observe(
+CLARIFICATION_SKIPPED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,9177,observability.observe(
 CLEANUP,SystemEvents,YES,,src/muxi/formation/artifacts/extractor.py,258,observability.observe(
 CLEANUP,SystemEvents,YES,,src/muxi/formation/artifacts/extractor.py,265,observability.observe(
 CLEANUP,SystemEvents,YES,,src/muxi/formation/artifacts/extractor.py,314,observability.observe(
@@ -388,6 +347,10 @@ CONTENT_RETRIEVED,ConversationEvents,YES,,src/muxi/formation/agents/knowledge/ha
 CONTENT_RETRIEVED,ConversationEvents,YES,,src/muxi/formation/agents/knowledge/handler.py,511,observability.observe(
 CONTENT_RETRIEVED,ConversationEvents,YES,,src/muxi/formation/agents/knowledge/handler.py,578,observability.observe(
 CONTENT_RETRIEVED,ConversationEvents,YES,,src/muxi/formation/agents/knowledge/handler.py,1442,observability.observe(
+CREDENTIAL_CONFIGURED,SystemEvents,YES,,src/muxi/services/llm/llm.py,701,observability.observe(
+CREDENTIAL_UPDATE,SystemEvents,YES,,src/muxi/formation/overlord/overlord.py,9325,observability.observe(
+CRON_EXPRESSION_FIXED,SystemEvents,YES,,src/muxi/services/scheduler/parser.py,826,observability.observe(
+CRON_TIMEZONE_CONVERTED,SystemEvents,YES,,src/muxi/services/scheduler/parser.py,1088,observability.observe(
 CROSS_REFERENCES_LOADED,SystemEvents,YES,,src/muxi/formation/documents/workflow/cross_reference_manager.py,290,observability.observe(
 CROSS_REFERENCE_ADDED,SystemEvents,YES,,src/muxi/formation/documents/workflow/cross_reference_manager.py,195,observability.observe(
 CROSS_REFERENCE_MANAGER_INITIALIZED,SystemEvents,YES,,src/muxi/formation/documents/workflow/cross_reference_manager.py,103,observability.observe(
@@ -423,6 +386,7 @@ DATABASE_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/services/scheduler/manager.p
 DATABASE_TABLE_CREATION_FAILED,ErrorEvents,YES,,src/muxi/formation/initialization.py,477,observability.observe(
 DATABASE_TABLE_CREATION_FAILED,ErrorEvents,YES,,src/muxi/services/db.py,393,observability.observe(
 DATABASE_TABLE_CREATION_FAILED,ErrorEvents,YES,,src/muxi/services/db.py,438,observability.observe(
+DATABASE_TYPE_FALLBACK,SystemEvents,YES,,src/muxi/services/db.py,205,observability.observe(
 DEPENDENCY_ERROR,ErrorEvents,YES,,src/muxi/utils/run_formation.py,122,observability.observe(
 DOCUMENT_PROCESSING_COMPLETED,ConversationEvents,YES,,src/muxi/formation/artifacts/extractor.py,213,observability.observe(
 DOCUMENT_PROCESSING_COMPLETED,ConversationEvents,YES,,src/muxi/formation/artifacts/extractor.py,246,observability.observe(
@@ -431,8 +395,8 @@ DOCUMENT_PROCESSING_COMPLETED,ConversationEvents,YES,,src/muxi/services/llm/llm.
 DOCUMENT_PROCESSING_COMPLETED,ConversationEvents,YES,,src/muxi/utils/document.py,53,observability.observe(
 DOCUMENT_PROCESSING_COMPLETED,ConversationEvents,YES,,src/muxi/utils/document.py,109,observability.observe(
 DOCUMENT_PROCESSING_COMPLETED,ConversationEvents,YES,,src/muxi/utils/document.py,149,observability.observe(
-DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1437,observability.observe(
-DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2100,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1431,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2094,observability.observe(
 DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/knowledge/base.py,263,observability.observe(
 DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/knowledge/handler.py,802,observability.observe(
 DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/knowledge/handler.py,892,observability.observe(
@@ -477,6 +441,8 @@ EMBEDDINGS_GENERATION_FAILED,ErrorEvents,YES,,src/muxi/formation/initialization.
 EMBEDDINGS_GENERATION_FAILED,ErrorEvents,YES,,src/muxi/formation/initialization.py,909,observability.observe(
 EMBEDDINGS_GENERATION_FAILED,ErrorEvents,YES,,src/muxi/formation/workflow/sops.py,684,observability.observe(
 EMBEDDINGS_GENERATION_FAILED,ErrorEvents,YES,,src/muxi/services/memory/working.py,657,observability.observe(
+EXCLUSION_RULES_GENERATED,ConversationEvents,YES,,src/muxi/services/scheduler/parser.py,926,observability.observe(
+EXCLUSION_RULES_GENERATION_STARTED,ConversationEvents,YES,,src/muxi/services/scheduler/parser.py,900,observability.observe(
 EXTENSION_FAILED,SystemEvents,YES,,src/muxi/formation/credentials/handler.py,900,observability.observe(
 EXTENSION_FAILED,SystemEvents,YES,,src/muxi/formation/credentials/resolver.py,128,observability.observe(
 EXTENSION_FAILED,SystemEvents,YES,,src/muxi/formation/credentials/resolver.py,154,observability.observe(
@@ -497,18 +463,21 @@ FALLBACK_EXECUTION_FAILED,ErrorEvents,YES,,src/muxi/formation/resilience/fallbac
 FORMATION_INITIALIZATION_FAILED,ErrorEvents,YES,,src/muxi/formation/formation.py,1189,observability.observe(
 FORMATION_INITIALIZATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,2219,observability.observe(
 FORMATION_INITIALIZATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,2240,observability.observe(
-INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,1481,observability.observe(
-INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3517,observability.observe(
+GENERIC_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,4055,observability.observe(
+INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,1475,observability.observe(
+INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3511,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/agents/knowledge/handler.py,725,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/agents/knowledge/handler.py,1051,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/formation.py,2727,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/formation.py,2779,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/initialization.py,610,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/initialization.py,646,observability.observe(
+INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/memory/buffer_manager.py,57,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/memory/extraction_coordinator.py,122,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/chat_orchestrator.py,1027,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,1011,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,1081,observability.observe(
+INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,1298,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,2191,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,2681,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,3107,observability.observe(
@@ -529,10 +498,12 @@ INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,7398,obs
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,9101,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,9237,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,9345,observability.observe(
+INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,9634,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/resilience/error_classifier.py,238,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/resilience/fallback_manager.py,269,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/resilience/recovery_strategist.py,219,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/server/middleware.py,89,observability.observe(
+INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/server/routes/admin/agents.py,204,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/server/routes/health.py,35,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/formation/workflow/executor.py,118,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/a2a/auth/inbound.py,784,observability.observe(
@@ -563,7 +534,9 @@ INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/llm/llm.py,308,observability.o
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/llm/llm.py,640,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/llm/llm.py,666,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/llm/llm.py,1260,observability.observe(
+INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/mcp/handler.py,907,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/memory/working.py,811,observability.observe(
+INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/memory/working.py,1018,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/memory/working.py,1161,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/multimodal/fusion_engine.py,157,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/multimodal/fusion_engine.py,194,observability.observe(
@@ -582,6 +555,7 @@ INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/multimodal/fusion_engine.py,97
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/multimodal/fusion_engine.py,1019,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/multimodal/fusion_engine.py,1115,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/scheduler/batch_processor.py,147,observability.observe(
+INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/scheduler/cache.py,211,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/scheduler/manager.py,1326,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/scheduler/parser.py,116,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/services/scheduler/parser.py,227,observability.observe(
@@ -607,7 +581,7 @@ INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/utils/run_formation.py,207,observabilit
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/utils/run_formation.py,236,observability.observe(
 JSON_PARSE_FAILED,ErrorEvents,YES,,src/muxi/formation/artifacts/extractor.py,120,observability.observe(
 JSON_PARSE_FAILED,ErrorEvents,YES,,src/muxi/formation/artifacts/extractor.py,146,observability.observe(
-KNOWLEDGE_SEARCH_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,403,observability.observe(
+KNOWLEDGE_SEARCH_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,397,observability.observe(
 KNOWLEDGE_SEARCH_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/knowledge/handler.py,594,observability.observe(
 KNOWLEDGE_SEARCH_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/knowledge/handler.py,1459,observability.observe(
 KNOWLEDGE_SOURCE_FAILED,SystemEvents,YES,,src/muxi/formation/agents/knowledge/base.py,463,observability.observe(
@@ -660,6 +634,7 @@ MCP_SERVER_DISCONNECTED,SystemEvents,YES,,src/muxi/services/mcp/service.py,1514,
 MCP_SERVER_DISCONNECTION_FAILED,SystemEvents,YES,,src/muxi/formation/formation.py,2652,observability.observe(
 MCP_SERVER_DISCONNECTION_FAILED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,201,observability.observe(
 MCP_SERVER_DISCONNECTION_FAILED,SystemEvents,YES,,src/muxi/services/mcp/service.py,1525,observability.observe(
+MCP_SERVER_MAPPING_INCONSISTENT,SystemEvents,YES,,src/muxi/services/mcp/handler.py,958,observability.observe(
 MCP_SERVER_RECONNECTED,SystemEvents,YES,,src/muxi/services/mcp/reconnect_handler.py,295,observability.observe(
 MCP_SERVER_RECONNECTING,SystemEvents,YES,,src/muxi/services/mcp/handler.py,649,observability.observe(
 MCP_SERVER_RECONNECTING,SystemEvents,YES,,src/muxi/services/mcp/reconnect_handler.py,276,observability.observe(
@@ -682,11 +657,11 @@ MCP_SERVER_UNREGISTERED,SystemEvents,YES,,src/muxi/formation/overlord/mcp_coordi
 MCP_SERVER_UNREGISTERED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,729,observability.observe(
 MCP_SERVER_UNREGISTRATION_FAILED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,743,observability.observe(
 MCP_TOOL_CALLED,ConversationEvents,YES,,src/muxi/formation/server/routes/admin/mcp.py,382,observability.observe(
-MCP_TOOL_CALL_COMPLETED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1212,observability.observe(
-MCP_TOOL_CALL_COMPLETED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2877,observability.observe(
+MCP_TOOL_CALL_COMPLETED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1206,observability.observe(
+MCP_TOOL_CALL_COMPLETED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2871,observability.observe(
 MCP_TOOL_CALL_COMPLETED,ConversationEvents,YES,,src/muxi/services/mcp/service.py,664,observability.observe(
-MCP_TOOL_CALL_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1889,observability.observe(
-MCP_TOOL_CALL_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2922,observability.observe(
+MCP_TOOL_CALL_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1883,observability.observe(
+MCP_TOOL_CALL_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2916,observability.observe(
 MCP_TOOL_CALL_FAILED,ConversationEvents,YES,,src/muxi/formation/artifacts/extractor.py,292,observability.observe(
 MCP_TOOL_CALL_FAILED,ConversationEvents,YES,,src/muxi/formation/server/routes/admin/mcp.py,404,observability.observe(
 MCP_TOOL_CALL_FAILED,ConversationEvents,YES,,src/muxi/formation/server/routes/admin/mcp.py,420,observability.observe(
@@ -694,10 +669,13 @@ MCP_TOOL_CALL_FAILED,ConversationEvents,YES,,src/muxi/formation/server/routes/ad
 MCP_TOOL_CALL_FAILED,ConversationEvents,YES,,src/muxi/formation/server/routes/admin/mcp.py,461,observability.observe(
 MCP_TOOL_CALL_FAILED,ConversationEvents,YES,,src/muxi/services/mcp/service.py,638,observability.observe(
 MCP_TOOL_CALL_FAILED,ConversationEvents,YES,,src/muxi/services/mcp/service.py,689,observability.observe(
-MCP_TOOL_CALL_STARTED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2797,observability.observe(
+MCP_TOOL_CALL_STARTED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2791,observability.observe(
 MCP_TOOL_CALL_STARTED,ConversationEvents,YES,,src/muxi/formation/artifacts/extractor.py,49,observability.observe(
 MCP_TOOL_CALL_STARTED,ConversationEvents,YES,,src/muxi/services/mcp/service.py,450,observability.observe(
 MCP_TOOL_CALL_STARTED,ConversationEvents,YES,,src/muxi/services/mcp/service.py,584,observability.observe(
+MCP_TOOL_FALLBACK_USED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,923,observability.observe(
+MCP_TRANSPORT_ATTEMPT,SystemEvents,YES,,src/muxi/services/mcp/transports/factory.py,170,observability.observe(
+MCP_TRANSPORT_CACHE_CLEARED,SystemEvents,YES,,src/muxi/services/mcp/service.py,1367,observability.observe(
 MCP_TRANSPORT_DETECTION_FAILED,SystemEvents,YES,,src/muxi/services/mcp/service.py,358,observability.observe(
 MCP_TRANSPORT_FAILED,SystemEvents,YES,,src/muxi/services/mcp/service.py,741,observability.observe(
 MCP_TRANSPORT_FAILED,SystemEvents,YES,,src/muxi/services/mcp/transports/factory.py,162,observability.observe(
@@ -779,6 +757,11 @@ ONETIME_JOB_COMPLETED,ConversationEvents,YES,,src/muxi/services/scheduler/servic
 ONETIME_JOB_MARKED_COMPLETED,ConversationEvents,YES,,src/muxi/services/scheduler/manager.py,555,observability.observe(
 OPERATION_COMPLETED,SystemEvents,YES,,src/muxi/formation/overlord/overlord.py,1340,observability.observe(
 OPERATION_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/client.py,452,observability.observe(
+OPERATION_COMPLETED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,342,observability.observe(
+OPERATION_COMPLETED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,445,observability.observe(
+OPERATION_COMPLETED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,487,observability.observe(
+OPERATION_COMPLETED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,532,observability.observe(
+OPERATION_COMPLETED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,1023,observability.observe(
 OPERATION_COMPLETED,SystemEvents,YES,,src/muxi/services/mcp/reconnection.py,416,observability.observe(
 OPERATION_COMPLETED,SystemEvents,YES,,src/muxi/services/memory/extractor.py,513,observability.observe(
 OPERATION_COMPLETED,SystemEvents,YES,,src/muxi/services/memory/extractor.py,529,observability.observe(
@@ -786,6 +769,7 @@ OPERATION_COMPLETED,SystemEvents,YES,,src/muxi/utils/user_resolution.py,81,obser
 OPERATION_COMPLETED,SystemEvents,YES,,src/muxi/utils/user_resolution.py,108,observability.observe(
 OVERLORD_AGENT_SELECTED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,6652,observability.observe(
 OVERLORD_AGENT_SELECTION_STARTED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,6608,observability.observe(
+OVERLORD_PROCESSING_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,8832,observability.observe(
 OVERLORD_ROUTING_COMPLETED,ConversationEvents,YES,,src/muxi/formation/overlord/agent_router.py,119,observability.observe(
 OVERLORD_ROUTING_COMPLETED,ConversationEvents,YES,,src/muxi/formation/overlord/agent_router.py,152,observability.observe(
 OVERLORD_ROUTING_COMPLETED,ConversationEvents,YES,,src/muxi/formation/overlord/agent_router.py,162,observability.observe(
@@ -802,7 +786,7 @@ OVERLORD_STARTING,ServerEvents,YES,,src/muxi/formation/formation.py,3109,observa
 OVERLORD_TASK_DECOMPOSED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,7936,observability.observe(
 OVERLORD_WORKFLOW_CANCELLED,ConversationEvents,YES,,src/muxi/formation/workflow/executor.py,1696,observability.observe(
 OVERLORD_WORKFLOW_STARTED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,7153,observability.observe(
-PARAMETER_VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,4284,observability.observe(
+PARAMETER_VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,4278,observability.observe(
 PERFORMANCE_DURATION_RECORDED,SystemEvents,YES,,src/muxi/formation/background/time_estimator.py,77,observability.observe(
 PERFORMANCE_DURATION_RECORDED,SystemEvents,YES,,src/muxi/formation/background/time_estimator.py,141,observability.observe(
 PERFORMANCE_OPTIMIZED,SystemEvents,YES,,src/muxi/services/llm/service.py,254,observability.observe(
@@ -812,7 +796,11 @@ PERFORMANCE_OPTIMIZED,SystemEvents,YES,,src/muxi/services/llm/service.py,616,obs
 PERFORMANCE_OPTIMIZED,SystemEvents,YES,,src/muxi/services/llm/service.py,632,observability.observe(
 PERFORMANCE_OPTIMIZED,SystemEvents,YES,,src/muxi/services/llm/service.py,651,observability.observe(
 PERSONA_FILE_MISSING,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,1883,observability.observe(
-PLANNING_TEMPLATE_MISSING,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3394,observability.observe(
+PLANNING_TEMPLATE_MISSING,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3388,observability.observe(
+PROCESSING_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/chat_orchestrator.py,618,observability.observe(
+PROMPT_FORMATION_ENHANCED,ConversationEvents,YES,,src/muxi/services/scheduler/rewriter.py,288,observability.observe(
+PROMPT_FORMATION_ENHANCEMENT_STARTED,ConversationEvents,YES,,src/muxi/services/scheduler/rewriter.py,225,observability.observe(
+PROMPT_VALIDATION_COMPLETED,ConversationEvents,YES,,src/muxi/services/scheduler/rewriter.py,403,observability.observe(
 REFERENCE_PERSISTENCE_FAILED,ErrorEvents,YES,,src/muxi/formation/documents/storage/reference_system.py,518,observability.observe(
 REQUEST_COMPLETED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,5019,observability.observe(
 REQUEST_COMPLETED,ServerEvents,YES,,src/muxi/formation/server/middleware.py,169,observability.observe(
@@ -915,6 +903,11 @@ SCHEDULED_JOB_RESUMED,ConversationEvents,YES,,src/muxi/services/scheduler/servic
 SCHEDULED_JOB_STARTED,ConversationEvents,YES,,src/muxi/services/scheduler/service.py,662,observability.observe(
 SCHEDULED_JOB_UPDATED,ConversationEvents,YES,,src/muxi/services/scheduler/manager.py,1255,observability.observe(
 SCHEDULED_JOB_WEBHOOK_RECEIVED,ConversationEvents,YES,,src/muxi/services/scheduler/service.py,939,observability.observe(
+SCHEDULER_CACHE_CLEANUP,SystemEvents,YES,,src/muxi/services/scheduler/cache.py,296,observability.observe(
+SCHEDULER_CIRCUIT_BREAKER_ACTIVATED,SystemEvents,YES,,src/muxi/services/scheduler/parser.py,386,observability.observe(
+SCHEDULER_CIRCUIT_BREAKER_STATE_CHANGE,SystemEvents,YES,,src/muxi/services/scheduler/circuit_breaker.py,101,observability.observe(
+SCHEDULER_CLEANUP_BATCH,SystemEvents,YES,,src/muxi/services/scheduler/manager.py,1091,observability.observe(
+SCHEDULER_PROMPT_COMPARISON,SystemEvents,YES,,src/muxi/services/scheduler/manager.py,1311,observability.observe(
 SECRET_INTERPOLATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,2322,observability.observe(
 SECRET_INTERPOLATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,2800,observability.observe(
 SECRET_LISTING_FAILED,SystemEvents,YES,,src/muxi/formation/overlord/secrets_manager.py,156,observability.observe(
@@ -938,7 +931,7 @@ SECRET_OPERATION_FAILED,SystemEvents,YES,,src/muxi/services/secrets/secrets_mana
 SECRET_OPERATION_FAILED,SystemEvents,YES,,src/muxi/services/secrets/secrets_manager.py,629,observability.observe(
 SECURITY_VIOLATION,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,6300,observability.observe(
 SECURITY_VIOLATION,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,6624,observability.observe(
-SERIALIZATION_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,9680,observability.observe(
+SERIALIZATION_ERROR,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,9677,observability.observe(
 SERIALIZATION_ERROR,ErrorEvents,YES,,src/muxi/formation/workflow/sops.py,142,observability.observe(
 SERIALIZATION_ERROR,ErrorEvents,YES,,src/muxi/formation/workflow/sops.py,158,observability.observe(
 SERIALIZATION_ERROR,ErrorEvents,YES,,src/muxi/services/a2a/registry_client.py,1094,observability.observe(
@@ -992,10 +985,10 @@ SERVICE_STARTED,SystemEvents,YES,,src/muxi/services/a2a/client.py,105,observabil
 SERVICE_STARTED,SystemEvents,YES,,src/muxi/services/intent/service.py,93,observability.observe(
 SERVICE_STARTED,SystemEvents,YES,,src/muxi/services/intent/service.py,114,observability.observe(
 SERVICE_STARTED,SystemEvents,YES,,src/muxi/services/mcp/service.py,1537,observability.observe(
-SERVICE_UNAVAILABLE,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,466,observability.observe(
-SERVICE_UNAVAILABLE,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,958,observability.observe(
-SERVICE_UNAVAILABLE,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,1560,observability.observe(
-SERVICE_UNAVAILABLE,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,2525,observability.observe(
+SERVICE_UNAVAILABLE,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,460,observability.observe(
+SERVICE_UNAVAILABLE,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,952,observability.observe(
+SERVICE_UNAVAILABLE,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,1554,observability.observe(
+SERVICE_UNAVAILABLE,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,2519,observability.observe(
 SERVICE_UNAVAILABLE,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,1330,observability.observe(
 SERVICE_UNAVAILABLE,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,1641,observability.observe(
 SERVICE_UNAVAILABLE,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,2513,observability.observe(
@@ -1028,8 +1021,10 @@ SOP_EXECUTED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,722
 SOP_INITIALIZATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,949,observability.observe(
 SOP_MATCHED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,994,observability.observe(
 SOP_MATCHED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,6395,observability.observe(
+SYSTEM_ACTION,SystemEvents,YES,,src/muxi/formation/overlord/chat_orchestrator.py,383,observability.observe(
+SYSTEM_ACTION,SystemEvents,YES,,src/muxi/services/memory/extractor.py,228,observability.observe(
 THUMBNAIL_GENERATION_FAILED,ErrorEvents,YES,,src/muxi/formation/artifacts/processor.py,124,observability.observe(
-TOOL_CALL_ERROR,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,1248,observability.observe(
+TOOL_CALL_ERROR,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,1242,observability.observe(
 TOOL_CALL_ERROR,ErrorEvents,YES,,src/muxi/services/mcp/reconnect_handler.py,215,observability.observe(
 TOOL_PARSE_ERROR,ErrorEvents,YES,,src/muxi/services/mcp/parser.py,216,observability.observe(
 TOOL_PARSE_ERROR,ErrorEvents,YES,,src/muxi/services/mcp/parser.py,295,observability.observe(
@@ -1038,7 +1033,7 @@ TOOL_PARSE_ERROR,ErrorEvents,YES,,src/muxi/services/mcp/parser.py,357,observabil
 USER_CREATED,SystemEvents,YES,,src/muxi/utils/user_resolution.py,167,observability.observe(
 USER_IDENTIFIERS_ASSOCIATED,SystemEvents,YES,,src/muxi/utils/user_resolution.py,362,observability.observe(
 USER_RESOLVED,SystemEvents,YES,,src/muxi/utils/user_resolution.py,135,observability.observe(
-VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,1169,observability.observe(
+VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,1163,observability.observe(
 VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/formation/artifacts/extractor.py,160,observability.observe(
 VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/formation/background/time_estimator.py,97,observability.observe(
 VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/formation/background/time_estimator.py,162,observability.observe(
@@ -1049,8 +1044,8 @@ VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/services/scheduler/parser.py,955,obs
 VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/utils/run_formation.py,108,observability.observe(
 VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/utils/user_resolution.py,95,observability.observe(
 VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/utils/user_resolution.py,312,observability.observe(
-WARNING,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,2162,observability.observe(
-WARNING,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,2182,observability.observe(
+WARNING,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,2156,observability.observe(
+WARNING,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,2176,observability.observe(
 WARNING,ErrorEvents,YES,,src/muxi/formation/agents/knowledge/handler.py,1738,observability.observe(
 WARNING,ErrorEvents,YES,,src/muxi/formation/documents/storage/chunk_manager.py,98,observability.observe(
 WARNING,ErrorEvents,YES,,src/muxi/formation/documents/storage/chunk_manager.py,106,observability.observe(
@@ -1103,6 +1098,7 @@ WEBHOOK_SENT,ConversationEvents,YES,,src/muxi/formation/background/webhook_manag
 WEBHOOK_SENT,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,5052,observability.observe(
 WEBHOOK_SENT,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,5075,observability.observe(
 WORKFLOW_ANALYSIS_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/analyzer.py,103,observability.observe(
+WORKFLOW_ANALYSIS_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/analyzer.py,323,observability.observe(
 WORKFLOW_ANALYSIS_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/analyzer.py,421,observability.observe(
 WORKFLOW_DECOMPOSITION_COMPLETED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,91,observability.observe(
 WORKFLOW_DECOMPOSITION_COMPLETED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,1061,observability.observe(
@@ -1110,6 +1106,7 @@ WORKFLOW_DECOMPOSITION_COMPLETED,ConversationEvents,YES,,src/muxi/formation/work
 WORKFLOW_DECOMPOSITION_COMPLETED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,1144,observability.observe(
 WORKFLOW_DECOMPOSITION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,108,observability.observe(
 WORKFLOW_DECOMPOSITION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,158,observability.observe(
+WORKFLOW_DECOMPOSITION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,297,observability.observe(
 WORKFLOW_DECOMPOSITION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,629,observability.observe(
 WORKFLOW_DECOMPOSITION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,656,observability.observe(
 WORKFLOW_DECOMPOSITION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,730,observability.observe(

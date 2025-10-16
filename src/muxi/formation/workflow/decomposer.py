@@ -295,7 +295,7 @@ class TaskDecomposer:
         except Exception as e:
             # Log decomposition failure and fall back to heuristic
             observability.observe(
-                event_type=observability.SystemEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "workflow_id": workflow_id,

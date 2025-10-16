@@ -381,7 +381,7 @@ class ChatOrchestrator:
             # FAIL-SAFE: Force sync mode if no webhook URL is available
             if use_async is not False and webhook_url is None:
                 observability.observe(
-                    event_type=observability.ConversationEvents.GENERAL,
+                    event_type=observability.SystemEvents.SYSTEM_ACTION,
                     level=observability.EventLevel.WARNING,
                     data={
                         "forced_sync": True,

@@ -1,0 +1,55 @@
+event_name,enum_category,file,line,description,data_keys,context
+A2A_AGENT_REGISTRATIONS_COMPLETED,SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,366,(no description),registration_count,observability.observe(
+A2A_AGENT_REGISTRATION_FAILED,SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,374,Failed to register agents with external registry,"error_type, error",observability.observe(
+A2A_AGENT_REGISTRATION_FAILED,SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,458,(no description),"agent_id, error_type, error",observability.observe(
+A2A_CREDENTIAL_REMOVED,SystemEvents,src/muxi/services/a2a/auth/outbound.py,774,A2A credentials removed for agent,"agent_id, auth_type",observability.observe(
+A2A_DEREGISTRATION_STARTED,SystemEvents,src/muxi/services/a2a/discovery.py,292,A2A agent unregistration started,"agent_id, formation_name",observability.observe(
+A2A_MESSAGE_PARSING,SystemEvents,src/muxi/services/a2a/server.py,239,"Legacy message format parsing failed, attempting SDK format","agent_id, error, error_type, body_keys",observability.observe(
+A2A_REGISTRATION_COMPLETED,SystemEvents,src/muxi/services/a2a/discovery.py,263,A2A agent registration completed,,observability.observe(
+AGENT_CREATION_FAILED,ErrorEvents,src/muxi/formation/overlord/overlord.py,3127,(no description),"agent_id, error, error_type",observability.observe(
+AGENT_DEREGISTRATION_COMPLETED,SystemEvents,src/muxi/formation/overlord/overlord.py,3296,(no description),"agent_id, registry",observability.observe(
+AGENT_FAILED,SystemEvents,src/muxi/formation/overlord/overlord.py,1561,(no description),"file, error",observability.observe(
+AGENT_INITIALIZATION_ERROR,SystemEvents,src/muxi/formation/agents/agent.py,299,(no description),"agent_id, error, phase",observability.observe(
+AGENT_REGISTRATION_FAILED,SystemEvents,src/muxi/formation/agents/agent.py,4125,(no description),"agent_id, expertise_areas, error",observability.observe(
+BUILTIN_MCP_INITIALIZATION_FAILED,SystemEvents,src/muxi/formation/overlord/overlord.py,9650,(no description),"error, builtin_mcps_config",observability.observe(
+BUILTIN_MCP_PROMPT_LOAD_FAILED,SystemEvents,src/muxi/formation/overlord/overlord.py,9634,(no description),"mcp_name, prompt_path, error",observability.observe(
+CLARIFICATION_REQUEST_GENERATED,ConversationEvents,src/muxi/formation/overlord/overlord.py,8890,(no description),"agent_name, required_info_categories, clarification_source",observability.observe(
+CLARIFICATION_SKIPPED,ConversationEvents,src/muxi/formation/overlord/overlord.py,9177,Clarification disabled - cannot request missing credential,"service, user_id, reason",observability.observe(
+COMPONENT_INITIALIZATION_FAILED,SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,77,A2A filtering enabled but missing dependencies,"missing_dependencies, filtering_enabled",observability.observe(
+CREDENTIAL_CONFIGURED,SystemEvents,src/muxi/services/llm/llm.py,701,(no description),provider,observability.observe(
+CREDENTIAL_UPDATE,SystemEvents,src/muxi/formation/overlord/overlord.py,9325,(no description),"service, user_id, credential_type",observability.observe(
+CRON_EXPRESSION_FIXED,SystemEvents,src/muxi/services/scheduler/parser.py,826,Fixed invalid cron expression from LLM,"original_cron, fixed_cron",observability.observe(
+CRON_TIMEZONE_CONVERTED,ConversationEvents,src/muxi/services/scheduler/parser.py,1088,Cron expression timezone converted,"original_cron, converted_cron, from_timezone, to_timezone",observability.observe(
+DATABASE_TYPE_FALLBACK,SystemEvents,src/muxi/services/db.py,205,(no description),"connection_string, detected_scheme, fallback_to",observability.observe(
+EXCLUSION_RULES_GENERATED,ConversationEvents,src/muxi/services/scheduler/parser.py,926,Exclusion rules generation completed,"rules_generated, original_descriptions",observability.observe(
+EXCLUSION_RULES_GENERATION_STARTED,ConversationEvents,src/muxi/services/scheduler/parser.py,900,Starting exclusion rules generation,exclusion_count,observability.observe(
+FILE_OPERATION_FAILED,SystemEvents,src/muxi/formation/server/routes/admin/agents.py,204,(no description),"operation, agent_id, error, error_type",observability.observe(
+GENERAL,ConversationEvents,src/muxi/formation/overlord/chat_orchestrator.py,383,Forcing sync mode: No webhook URL configured or provided,"forced_sync, reason, use_async_requested",observability.observe(
+GENERIC_ERROR,ErrorEvents,src/muxi/formation/overlord/overlord.py,4055,(no description),"service, filename, file_extension, error, fallback",observability.observe(
+MCP_ALL_REQUESTS_CANCELLED,SystemEvents,src/muxi/services/mcp/handler.py,445,(no description),"server_name, cancelled_count, total_requests",observability.observe(
+MCP_MESSAGE_CANCELLED,SystemEvents,src/muxi/services/mcp/handler.py,342,(no description),,observability.observe(
+MCP_OVERLORD_REQUEST_CANCELLED,SystemEvents,src/muxi/services/mcp/handler.py,532,(no description),"server_name, request_id, cancelled_count",observability.observe(
+MCP_REQUEST_CANCELLED,SystemEvents,src/muxi/services/mcp/handler.py,487,(no description),"server_name, tracking_id, request_id, json_rpc_id, method",observability.observe(
+MCP_SERVER_MAPPING_FAILED,SystemEvents,src/muxi/services/mcp/handler.py,907,(no description),"server_id, server_name, tool_name",observability.observe(
+MCP_SERVER_MAPPING_INCONSISTENT,SystemEvents,src/muxi/services/mcp/handler.py,958,(no description),"server_name, expected_id, actual_id",observability.observe(
+MCP_SERVER_OPERATIONS_CANCELLED,SystemEvents,src/muxi/services/mcp/handler.py,1023,(no description),"server_name, cancelled_count, request_id",observability.observe(
+MCP_TOOL_FALLBACK_USED,SystemEvents,src/muxi/services/mcp/handler.py,923,(no description),"tool_name, connected_servers",observability.observe(
+MCP_TRANSPORT_ATTEMPT,SystemEvents,src/muxi/services/mcp/transports/factory.py,170,(no description),"service, action, url",observability.observe(
+MCP_TRANSPORT_CACHE_CLEARED,SystemEvents,src/muxi/services/mcp/service.py,1367,MCP transport cache cleared manually,"cleared_entries, reason",observability.observe(
+MEMORY_BUFFER_UPDATE_FAILED,SystemEvents,src/muxi/formation/memory/buffer_manager.py,57,"[BufferManager] No buffer memory available, returning False","reason, operation",observability.observe(
+OVERLORD_PROCESSING_ERROR,ConversationEvents,src/muxi/formation/overlord/overlord.py,8832,(no description),"error, phase",observability.observe(
+PROCESSING_ERROR,ErrorEvents,src/muxi/formation/overlord/chat_orchestrator.py,618,(no description),"error, content_type, content_repr, user_id, session_id",observability.observe(
+PROMPT_FORMATION_ENHANCED,ConversationEvents,src/muxi/services/scheduler/rewriter.py,288,Prompt enhanced for formation capabilities,"original_prompt, enhanced_prompt, capabilities_count",observability.observe(
+PROMPT_FORMATION_ENHANCEMENT_STARTED,ConversationEvents,src/muxi/services/scheduler/rewriter.py,225,Starting formation-specific prompt enhancement,original_length,observability.observe(
+PROMPT_VALIDATION_COMPLETED,ConversationEvents,src/muxi/services/scheduler/rewriter.py,403,Execution prompt validation completed,"prompt_length, valid, issues_count, suggestions_count, score",observability.observe(
+RESOURCE_ERROR,SystemEvents,src/muxi/services/memory/working.py,1018,Failed to add pre-computed embedding to FAISS index,"error, text_length, embedding_dimension, namespace",observability.observe(
+SCHEDULER_CACHE_CLEANUP,SystemEvents,src/muxi/services/scheduler/cache.py,296,(no description),removed_entries,observability.observe(
+SCHEDULER_CIRCUIT_BREAKER_ACTIVATED,SystemEvents,src/muxi/services/scheduler/parser.py,386,"Circuit breaker open, using fallback job type","error, fallback",observability.observe(
+SCHEDULER_CIRCUIT_BREAKER_STATE_CHANGE,SystemEvents,src/muxi/services/scheduler/circuit_breaker.py,101,(no description),"old_state, new_state, failure_count, success_count",observability.observe(
+SCHEDULER_CLEANUP_BATCH,SystemEvents,src/muxi/services/scheduler/manager.py,1091,(no description),"deleted_count, retention_days, batch_offset",observability.observe(
+SCHEDULER_CRON_PARSE_ERROR,SystemEvents,src/muxi/services/scheduler/cache.py,211,(no description),"expression, error_type, error_message",observability.observe(
+SCHEDULER_PROMPT_COMPARISON,SystemEvents,src/muxi/services/scheduler/manager.py,1311,Prompt change comparison completed,"old_prompt, new_prompt, different_task, reason",observability.observe(
+SERVICE_ERROR,SystemEvents,src/muxi/formation/overlord/overlord.py,1298,(no description),"service, error",observability.observe(
+SYSTEM_ACTION,SystemEvents,src/muxi/services/memory/extractor.py,228,purge_user_data called on legacy MemoryExtractor,"user_id, note",observability.observe(
+WORKFLOW_ANALYSIS_FAILED,SystemEvents,src/muxi/formation/workflow/analyzer.py,323,"LLM-based request analysis failed, falling back to heuristic analysis","error_type, error, fallback, message_length",observability.observe(
+WORKFLOW_DECOMPOSITION_FAILED,SystemEvents,src/muxi/formation/workflow/decomposer.py,297,"LLM-based workflow decomposition failed, falling back to heuristic decomposition","workflow_id, error_type, error, fallback, request_length",observability.observe(

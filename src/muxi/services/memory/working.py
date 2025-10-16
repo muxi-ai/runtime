@@ -1016,7 +1016,7 @@ class WorkingMemory:
             except Exception as e:
                 # If FAISS fails, keep the item in buffer but disable vector search for this item
                 observability.observe(
-                    event_type=observability.SystemEvents.RESOURCE_ERROR,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     description="Failed to add pre-computed embedding to FAISS index",
                     data={

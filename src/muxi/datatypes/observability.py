@@ -140,6 +140,15 @@ class SystemEvents(Enum):
     MCP_MESSAGE_FAILED = "mcp.message.failed"
     # When MCP message handling fails
 
+    MCP_SERVER_MAPPING_INCONSISTENT = "mcp.server.mapping.inconsistent"
+    # When MCP server name mapping is inconsistent
+
+    MCP_TOOL_FALLBACK_USED = "mcp.tool.fallback.used"
+    # When MCP tool execution falls back to alternative
+
+    MCP_TRANSPORT_CACHE_CLEARED = "mcp.transport.cache.cleared"
+    # When MCP transport cache is cleared
+
     # ===================================================================
     # MCP TRANSPORT EVENTS (Added for Streamable HTTP implementation)
     # ===================================================================
@@ -148,7 +157,8 @@ class SystemEvents(Enum):
     MCP_TRANSPORT_DETECTION_FAILED = "mcp.transport.detection.failed"
     # When transport auto-detection fails
 
-    # REMOVED: MCP_TRANSPORT_ATTEMPT - too granular, not useful
+    MCP_TRANSPORT_ATTEMPT = "mcp.transport.attempt"
+    # When attempting to connect with a specific transport
 
     MCP_TRANSPORT_FAILED = "mcp.transport.failed"
     # When specific transport connection fails
@@ -258,6 +268,36 @@ class SystemEvents(Enum):
 
     A2A_CARD_EXPORTED = "a2a.card.exported"
     # When A2A agent card export completes
+
+    A2A_AGENT_REGISTRATIONS_COMPLETED = "a2a.agent.registrations.completed"
+    # When bulk A2A agent registrations complete
+
+    A2A_REGISTRATION_COMPLETED = "a2a.registration.completed"
+    # When individual A2A agent registration completes
+
+    A2A_DEREGISTRATION_STARTED = "a2a.deregistration.started"
+    # When A2A agent deregistration begins
+
+    A2A_CREDENTIAL_REMOVED = "a2a.credential.removed"
+    # When A2A credentials are removed for an agent
+
+    A2A_MESSAGE_PARSING = "a2a.message.parsing"
+    # When A2A message format parsing/fallback occurs
+
+    # ===================================================================
+    # CREDENTIAL MANAGEMENT
+    # ===================================================================
+    CREDENTIAL_CONFIGURED = "credential.configured"
+    # When credentials are configured for a service
+
+    CREDENTIAL_UPDATE = "credential.update"
+    # When credentials are updated for a user/service
+
+    # ===================================================================
+    # AGENT LIFECYCLE EVENTS
+    # ===================================================================
+    AGENT_DEREGISTRATION_COMPLETED = "agent.deregistration.completed"
+    # When agent is successfully deregistered/removed
 
     # ===================================================================
     # CONFIGURATION & STARTUP EVENTS
@@ -376,6 +416,9 @@ class SystemEvents(Enum):
     OPERATION_COMPLETED = "operation.completed"
     # When a named operation completes successfully (with timing)
 
+    SYSTEM_ACTION = "system.action"
+    # Generic system action event for various operations
+
     # ===================================================================
     # DATABASE/STORAGE OPERATIONS
     # ===================================================================
@@ -384,6 +427,9 @@ class SystemEvents(Enum):
 
     DB_CONNECTION_FAILED = "db.connection.failed"
     # When database connection fails
+
+    DATABASE_TYPE_FALLBACK = "db.type.fallback"
+    # When database falls back to different type/mode
 
     # ===================================================================
     # SCHEDULER SYSTEM OPERATIONS
@@ -394,6 +440,27 @@ class SystemEvents(Enum):
     # REMOVED: SCHEDULER_DATABASE_INITIALIZED - too granular, internal detail
     # REMOVED: DATABASE_MANAGER_INITIALIZED - replaced by InitEventFormatter persistent memory message
     # REMOVED: DATABASE_TABLES_CREATED - replaced by InitEventFormatter schema ready message
+
+    SCHEDULER_CACHE_CLEANUP = "scheduler.cache.cleanup"
+    # When scheduler cache is cleaned up
+
+    SCHEDULER_CIRCUIT_BREAKER_ACTIVATED = "scheduler.circuit_breaker.activated"
+    # When scheduler circuit breaker is activated
+
+    SCHEDULER_CIRCUIT_BREAKER_STATE_CHANGE = "scheduler.circuit_breaker.state_change"
+    # When scheduler circuit breaker changes state
+
+    SCHEDULER_CLEANUP_BATCH = "scheduler.cleanup.batch"
+    # When scheduler performs batch cleanup
+
+    SCHEDULER_PROMPT_COMPARISON = "scheduler.prompt.comparison"
+    # When scheduler compares prompts for deduplication
+
+    CRON_EXPRESSION_FIXED = "scheduler.cron.expression.fixed"
+    # When invalid cron expression is automatically fixed
+
+    CRON_TIMEZONE_CONVERTED = "scheduler.cron.timezone.converted"
+    # When cron expression timezone is converted
 
     # ===================================================================
     # NETWORK/COMMUNICATION INFRASTRUCTURE
@@ -661,6 +728,27 @@ class ConversationEvents(Enum):
     AGENT_PLANNING = "agent.planning"
     # When agent creates execution plan
 
+    # ===================================================================
+    # PROMPT FORMATION & ENHANCEMENT
+    # ===================================================================
+    PROMPT_FORMATION_ENHANCEMENT_STARTED = "prompt.formation.enhancement.started"
+    # When prompt formation enhancement begins
+
+    PROMPT_FORMATION_ENHANCED = "prompt.formation.enhanced"
+    # When prompt is enhanced with formation context
+
+    PROMPT_VALIDATION_COMPLETED = "prompt.validation.completed"
+    # When prompt validation completes
+
+    # ===================================================================
+    # EXCLUSION RULES GENERATION
+    # ===================================================================
+    EXCLUSION_RULES_GENERATION_STARTED = "exclusion_rules.generation.started"
+    # When exclusion rules generation begins
+
+    EXCLUSION_RULES_GENERATED = "exclusion_rules.generated"
+    # When exclusion rules are generated
+
     AGENT_PROCESSING_ERROR = "agent.processing.error"
     # When agent encounters an error during processing
 
@@ -849,6 +937,12 @@ class ConversationEvents(Enum):
     CLARIFICATION_COMPLETED = "clarification.completed"
     # When clarification completes
 
+    CLARIFICATION_REQUEST_GENERATED = "clarification.request.generated"
+    # When clarification request is generated for user
+
+    CLARIFICATION_SKIPPED = "clarification.skipped"
+    # When clarification is skipped (disabled or not needed)
+
     # ===================================================================
     # REQUEST ANALYSIS & CLASSIFICATION
     # ===================================================================
@@ -1023,6 +1117,15 @@ class ErrorEvents(Enum):
     INTERNAL_ERROR = "error.internal.error"
     # When unexpected internal system error occurs
 
+    GENERIC_ERROR = "error.generic"
+    # Generic error for uncategorized failures
+
+    PROCESSING_ERROR = "error.processing"
+    # When general processing operation fails
+
+    OVERLORD_PROCESSING_ERROR = "error.overlord.processing"
+    # When overlord encounters processing error
+
     SERVICE_UNAVAILABLE = "error.service.unavailable"
     # When required service is unavailable
 
@@ -1097,6 +1200,24 @@ class ErrorEvents(Enum):
 
     EMBEDDINGS_GENERATION_FAILED = "error.embeddings.generation.failed"
     # When embedding generation for text fails
+
+    # ===================================================================
+    # AGENT LIFECYCLE ERRORS
+    # ===================================================================
+    AGENT_CREATION_FAILED = "error.agent.creation.failed"
+    # When dynamic agent creation via API fails
+
+    AGENT_REGISTRATION_FAILED = "error.agent.registration.failed"
+    # When agent capability registration fails
+
+    AGENT_FAILED = "error.agent.failed"
+    # When agent loading or initialization fails
+
+    # ===================================================================
+    # A2A (AGENT-TO-AGENT) ERRORS
+    # ===================================================================
+    A2A_AGENT_REGISTRATION_FAILED = "error.a2a.agent.registration.failed"
+    # When A2A external registry registration fails
 
     A2A_MESSAGE_HANDLING_FAILED = "error.a2a.message.handling.failed"
     # When Agent-to-Agent message handling fails

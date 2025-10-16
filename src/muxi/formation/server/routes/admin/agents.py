@@ -202,7 +202,7 @@ def _delete_agent_file_safe(formation: Any, agent_id: str) -> None:
             # The agent is already removed from config/overlord
             logger.warning(f"Failed to delete agent file for '{agent_id}': {str(e)}")
             observability.observe(
-                event_type=observability.SystemEvents.FILE_OPERATION_FAILED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
                 description=f"Failed to delete agent file for '{agent_id}', but agent was removed from config",
                 data={

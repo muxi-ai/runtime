@@ -74,14 +74,11 @@ class A2ACoordinator:
                 if not hasattr(self.overlord, "request_analyzer"):
                     missing.append("request_analyzer")
                 if missing:
-                    observability.observe(
-                        event_type=observability.SystemEvents.COMPONENT_INITIALIZATION_FAILED,
-                        level=observability.EventLevel.WARNING,
-                        description="A2A filtering enabled but missing dependencies",
-                        data={
-                            "missing_dependencies": missing,
-                            "filtering_enabled": True
-                        }
+                    # Fail fast: A2A filtering is configured but dependencies are missing
+                    # This indicates a configuration or initialization order problem
+                    raise RuntimeError(
+                        f"A2A filtering is enabled but required components are missing: {', '.join(missing)}. "
+                        f"Check that these components are initialized before A2A coordinator."
                     )
 
     def _apply_configuration(self) -> None:
@@ -372,7 +369,7 @@ class A2ACoordinator:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.SystemEvents.A2A_AGENT_REGISTRATION_FAILED,
+                event_type=observability.ErrorEvents.A2A_AGENT_REGISTRATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "error_type": type(e).__name__,
@@ -456,7 +453,7 @@ class A2ACoordinator:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.SystemEvents.A2A_AGENT_REGISTRATION_FAILED,
+                event_type=observability.ErrorEvents.A2A_AGENT_REGISTRATION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "agent_id": agent_id,
