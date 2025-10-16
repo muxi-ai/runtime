@@ -789,7 +789,7 @@ Return only valid JSON, no explanation.
         if not llm:
             # Fallback to pattern matching if LLM unavailable
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.WARNING,
                 level=observability.EventLevel.WARNING,
                 description="LLM unavailable, using pattern fallback for schedule parsing",
             )
@@ -1254,7 +1254,7 @@ Return only valid JSON, no explanation.
 
         # Ultimate fallback - daily at 9 AM
         observability.observe(
-            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            event_type=observability.ErrorEvents.WARNING,
             level=observability.EventLevel.WARNING,
             data={"original_text": schedule_text},
             description="Using ultimate fallback schedule (daily at 9 AM)",
@@ -1314,7 +1314,7 @@ Return only valid JSON, no explanation.
 
         # If no pattern matched, create a basic rule
         observability.observe(
-            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            event_type=observability.ErrorEvents.WARNING,
             level=observability.EventLevel.WARNING,
             data={"description": description},
             description="Using generic exclusion rule for unrecognized description",

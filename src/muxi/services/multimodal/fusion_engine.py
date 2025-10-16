@@ -440,7 +440,7 @@ Analyze and provide as JSON:
                 json_str = json_match.group(0).strip()
             else:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"operation": "parse_json_response", "error": "no_json_found"},
                     description="No JSON found in LLM response",
@@ -453,7 +453,7 @@ Analyze and provide as JSON:
                 return parsed
             else:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"operation": "parse_json_response", "error": "json_not_dict"},
                     description="JSON in LLM response was not a dictionary",
@@ -461,7 +461,7 @@ Analyze and provide as JSON:
                 return {}
         except json.JSONDecodeError as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"operation": "parse_json_response", "error": "json_decode_error", "error_details": str(e)},
                 description="JSON decode error in LLM response",
@@ -469,7 +469,7 @@ Analyze and provide as JSON:
             return {}
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"operation": "parse_json_response", "error": "unexpected_error", "error_type": type(e).__name__, "error_details": str(e)},
                 description="Unexpected error parsing JSON in LLM response",
@@ -1201,7 +1201,7 @@ Create a comprehensive fusion analysis as JSON:
                 json_str = json_match.group(0).strip()
             else:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"operation": "parse_json_response", "error": "no_json_found"},
                     description="No JSON found in LLM response",
@@ -1214,7 +1214,7 @@ Create a comprehensive fusion analysis as JSON:
                 return parsed
             else:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"operation": "parse_json_response", "error": "json_not_dict"},
                     description="JSON in LLM response was not a dictionary",
@@ -1222,7 +1222,7 @@ Create a comprehensive fusion analysis as JSON:
                 return {}
         except json.JSONDecodeError as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"operation": "parse_json_response", "error": "json_decode_error", "error_details": str(e)},
                 description="JSON decode error in LLM response",
@@ -1230,7 +1230,7 @@ Create a comprehensive fusion analysis as JSON:
             return {}
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"operation": "parse_json_response", "error": "unexpected_error", "error_type": type(e).__name__, "error_details": str(e)},
                 description="Unexpected error parsing JSON in LLM response",

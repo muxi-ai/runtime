@@ -263,20 +263,20 @@ class FileProcessor:
             file_size = file_path.stat().st_size
             if file_size > FILE_SIZE_LIMITS["default"]:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.RESOURCE_EXHAUSTED,
                     level=observability.EventLevel.WARNING,
-                    data={"file_path": str(file_path), "file_size": file_size},
-                    description=f"File size {file_size} exceeds limit",
+                    data={"file_path": str(file_path), "file_size": file_size, "limit": FILE_SIZE_LIMITS["default"]},
+                    description=f"File size {file_size} exceeds limit {FILE_SIZE_LIMITS['default']}",
                 )
                 return False
 
             # Basic security check - avoid obviously dangerous files
             if file_path.suffix.lower() in [".exe", ".bat", ".sh", ".scr"]:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.VALIDATION_ERROR,
                     level=observability.EventLevel.WARNING,
-                    data={"file_path": str(file_path), "extension": file_path.suffix.lower()},
-                    description="File blocked due to dangerous extension",
+                    data={"file_path": str(file_path), "extension": file_path.suffix.lower(), "blocked_extensions": [".exe", ".bat", ".sh", ".scr"]},
+                    description="File blocked due to dangerous extension (security policy)",
                 )
                 return False
 
@@ -1345,12 +1345,8 @@ class LLM:
                 description=" ".join(context_parts),
             )
         except Exception as e:
-            observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                level=observability.EventLevel.WARNING,
-                data={"error": str(e)},
-                description="Failed to emit LLM request started event",
-            )
+            # Observability failure - continue gracefully
+            pass  # Don't emit error event about failing to emit an event (circular)
 
         # Handle text-only conversations
         if not files:
