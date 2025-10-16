@@ -316,7 +316,7 @@ async def retry_async(
                 on_retry(attempt, e, delay)
 
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.SystemEvents.MCP_RETRY_ATTEMPTED,
                 level=observability.EventLevel.INFO,
                 data={
                     "attempt": attempt,
@@ -415,7 +415,7 @@ async def with_retries(
         elapsed_time = time.time() - start_time
         observability.observe(
             event_type=observability.SystemEvents.OPERATION_COMPLETED,
-            level=observability.EventLevel.INFO,
+            level=observability.EventLevel.DEBUG,
             data={
                 "operation": operation_name,
                 "elapsed_time": f"{elapsed_time:.2f}s",

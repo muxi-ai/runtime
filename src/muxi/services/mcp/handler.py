@@ -546,7 +546,7 @@ class MCPServerClient:
         if cancelled_count > 0:
             observability.observe(
                 event_type=observability.SystemEvents.MCP_OVERLORD_REQUEST_CANCELLED,
-                level=observability.EventLevel.INFO,
+                level=observability.EventLevel.DEBUG,
                 description=(
                     f"Cancelled {cancelled_count} MCP requests for overlord "
                     f"request {request_id} on server '{self.name}'"
@@ -1037,7 +1037,7 @@ class MCPHandler:
                 total_cancelled += cancelled
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_OPERATIONS_CANCELLED,
-                    level=observability.EventLevel.INFO,
+                    level=observability.EventLevel.DEBUG,
                     description=(
                         f"Cancelled {cancelled} operations on server '{server_name}' "
                         f"for overlord request {request_id}"

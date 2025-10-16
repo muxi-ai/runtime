@@ -144,7 +144,7 @@ class ScheduleParser:
 
         observability.observe(
             event_type=observability.SystemEvents.SCHEDULER_PARSER_INITIALIZED,
-            level=observability.EventLevel.INFO,
+            level=observability.EventLevel.DEBUG,
             data={"original_text": schedule_text, "timezone": timezone},
             description="Starting schedule parsing",
         )

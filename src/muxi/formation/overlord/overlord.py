@@ -1339,7 +1339,7 @@ class Overlord:
 
         observability.observe(
             event_type=observability.SystemEvents.OPERATION_COMPLETED,
-            level=observability.EventLevel.INFO,
+            level=observability.EventLevel.DEBUG,
             data={"operation": "clarification_service_update", "service": "clarification", "updated_components": ["llm", "managers"]},
             description="Clarification system updated with actual services",
         )

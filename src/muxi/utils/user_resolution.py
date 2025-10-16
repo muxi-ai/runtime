@@ -130,8 +130,8 @@ async def resolve_user_identifier(
             # Found existing user
             internal_id, muxi_id = row
             observability.observe(
-                event_type=observability.SystemEvents.OPERATION_COMPLETED,
-                level=observability.EventLevel.INFO,
+                event_type=observability.SystemEvents.USER_RESOLVED,
+                level=observability.EventLevel.DEBUG,
                 data={
                     "operation": "user_identifier_resolved",
                     "identifier": identifier,
@@ -161,8 +161,8 @@ async def resolve_user_identifier(
             internal_id, muxi_id = new_user.id, new_user.public_id
 
             observability.observe(
-                event_type=observability.SystemEvents.OPERATION_COMPLETED,
-                level=observability.EventLevel.INFO,
+                event_type=observability.SystemEvents.USER_CREATED,
+                level=observability.EventLevel.DEBUG,
                 data={
                     "operation": "user_identifier_resolved",
                     "identifier": identifier,
@@ -351,8 +351,8 @@ async def associate_user_identifiers(
 
         # Step 4: Log event
         observability.observe(
-            event_type=observability.SystemEvents.OPERATION_COMPLETED,
-            level=observability.EventLevel.INFO,
+            event_type=observability.SystemEvents.USER_IDENTIFIERS_ASSOCIATED,
+            level=observability.EventLevel.DEBUG,
             data={
                 "muxi_user_id": user_public_id,
                 "internal_user_id": user_id,

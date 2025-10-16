@@ -90,12 +90,6 @@ class A2AService:
                     )
                 else:
                     # For now, skip SDK initialization if no URL provided
-                    observability.observe(
-                        event_type=observability.SystemEvents.OPERATION_COMPLETED,
-                        level=observability.EventLevel.INFO,
-                        data={"operation": "a2a_sdk_init", "skipped": True},
-                        description="A2A SDK initialization skipped - no external registry URL",
-                    )
                     self.sdk_client = None
             except Exception as e:
                 observability.observe(
@@ -437,8 +431,8 @@ class A2AService:
                 await self.httpx_client.aclose()
                 self.httpx_client = None
                 observability.observe(
-                    event_type=observability.SystemEvents.OPERATION_COMPLETED,
-                    level=observability.EventLevel.INFO,
+                    event_type=observability.SystemEvents.A2A_HTTPX_CLEANUP,
+                    level=observability.EventLevel.DEBUG,
                     data={"operation": "a2a_httpx_cleanup"},
                     description="A2A service httpx client closed successfully",
                 )

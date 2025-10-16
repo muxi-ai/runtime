@@ -101,8 +101,8 @@ class DocumentCrossReferenceManager:
         self._load_references()
 
         observability.observe(
-            event_type=observability.SystemEvents.OPERATION_COMPLETED,
-            level=observability.EventLevel.INFO,
+            event_type=observability.SystemEvents.CROSS_REFERENCE_MANAGER_INITIALIZED,
+            level=observability.EventLevel.DEBUG,
             data={
                 "operation": "cross_reference_manager_init",
                 "storage_path": str(self.storage_path),
@@ -193,8 +193,8 @@ class DocumentCrossReferenceManager:
         await self._save_references()
 
         observability.observe(
-            event_type=observability.SystemEvents.OPERATION_COMPLETED,
-            level=observability.EventLevel.INFO,
+            event_type=observability.SystemEvents.CROSS_REFERENCE_ADDED,
+            level=observability.EventLevel.DEBUG,
             data={
                 "operation": "add_reference",
                 "reference_id": reference_id,
@@ -288,8 +288,8 @@ class DocumentCrossReferenceManager:
                     self._references[ref_id] = DocumentReference(**ref_data)
 
                 observability.observe(
-                    event_type=observability.SystemEvents.OPERATION_COMPLETED,
-                    level=observability.EventLevel.INFO,
+                    event_type=observability.SystemEvents.CROSS_REFERENCES_LOADED,
+                    level=observability.EventLevel.DEBUG,
                     data={
                         "operation": "load_references",
                         "references_count": len(self._references),

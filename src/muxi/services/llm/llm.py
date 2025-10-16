@@ -789,8 +789,8 @@ class LLM:
             set_llm_api_key(api_key, self._provider)
 
         observability.observe(
-            event_type=observability.ErrorEvents.INTERNAL_ERROR,
-            level=observability.EventLevel.INFO,
+            event_type=observability.SystemEvents.LLM_INITIALIZED,
+            level=observability.EventLevel.DEBUG,
             data={
                 "provider": self._provider,
                 "model": self._model,
@@ -1822,8 +1822,8 @@ def clear_llm_cache():
     global _response_cache
     _response_cache.clear()
     observability.observe(
-        event_type=observability.ErrorEvents.INTERNAL_ERROR,
-        level=observability.EventLevel.INFO,
+        event_type=observability.SystemEvents.LLM_CACHE_CLEARED,
+        level=observability.EventLevel.DEBUG,
         data={"action": "cache_cleared"},
         description="LLM response cache cleared",
     )
@@ -1834,8 +1834,8 @@ def set_cache_ttl(ttl: int):
     global _cache_ttl
     _cache_ttl = ttl
     observability.observe(
-        event_type=observability.ErrorEvents.INTERNAL_ERROR,
-        level=observability.EventLevel.INFO,
+        event_type=observability.SystemEvents.LLM_CACHE_CONFIGURED,
+        level=observability.EventLevel.DEBUG,
         data={"action": "cache_ttl_set", "ttl": ttl},
         description=f"Cache TTL set to {ttl} seconds",
     )
@@ -1895,7 +1895,7 @@ def reset_all_stats():
     _circuit_breakers.clear()
     clear_llm_cache()
     observability.observe(
-        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+        event_type=observability.SystemEvents.LLM_STATISTICS_RESET,
         level=observability.EventLevel.INFO,
         data={"action": "stats_reset"},
         description="LLM statistics and circuit breakers reset",
