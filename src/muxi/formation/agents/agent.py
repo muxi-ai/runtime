@@ -1777,7 +1777,7 @@ class Agent:
             # Emit tool chain iteration started event
             observability.observe(
                 event_type=observability.ConversationEvents.AGENT_TOOL_CHAIN_ITERATION_STARTED,
-                level=observability.EventLevel.INFO,
+                level=observability.EventLevel.DEBUG,
                 data={
                     "agent_id": self.agent_id,
                     "chain_id": chain_id,
@@ -2079,7 +2079,7 @@ class Agent:
             # Emit tool chain iteration completed event
             observability.observe(
                 event_type=observability.ConversationEvents.AGENT_TOOL_CHAIN_ITERATION_COMPLETED,
-                level=observability.EventLevel.INFO,
+                level=observability.EventLevel.DEBUG,
                 data={
                     "agent_id": self.agent_id,
                     "chain_id": chain_id,
@@ -2133,7 +2133,7 @@ class Agent:
         if iteration > 0:  # Only emit if we actually did tool chaining
             observability.observe(
                 event_type=observability.ConversationEvents.AGENT_TOOL_CHAIN_COMPLETED,
-                level=observability.EventLevel.INFO,
+                level=observability.EventLevel.DEBUG,
                 data={
                     "agent_id": self.agent_id,
                     "chain_id": chain_id,
