@@ -29,8 +29,8 @@ class MemoryCreate(BaseModel):
 
 @router.get("/memories/{user_id}", response_model=APIResponse)
 async def get_user_memories(
-    request: Request, 
-    user_id: str, 
+    request: Request,
+    user_id: str,
     limit: int = Query(10, ge=1, le=100, description="Maximum number of memories to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination")
 ) -> JSONResponse:

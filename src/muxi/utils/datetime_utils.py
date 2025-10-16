@@ -22,7 +22,7 @@ def utc_now() -> datetime:
 def utc_now_iso() -> str:
     """
     Return the current UTC datetime as an ISO 8601 string with a 'Z' suffix to indicate UTC.
-    
+
     Returns:
         str: ISO 8601 formatted UTC datetime string ending with 'Z'.
     """
@@ -32,9 +32,10 @@ def utc_now_iso() -> str:
 def utc_now_naive() -> datetime:
     """
     Return the current UTC datetime as a naive (timezone-unaware) object.
-    
-    Intended for use with databases that require TIMESTAMP WITHOUT TIME ZONE columns, such as PostgreSQL when accessed via asyncpg.
-    
+
+    Intended for use with databases that require TIMESTAMP WITHOUT TIME ZONE
+    columns, such as PostgreSQL when accessed via asyncpg.
+
     Returns:
         datetime: Current UTC time without timezone information.
     """

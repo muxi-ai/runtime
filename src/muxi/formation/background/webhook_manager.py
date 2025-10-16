@@ -418,7 +418,10 @@ class WebhookManager:
                                 "max_retries": max_retries + 1,
                                 "type": "clarification",
                             },
-                            description=f"Clarification webhook delivery attempt {attempt + 1}/{max_retries + 1} failed, retrying",
+                            description=(
+                                f"Clarification webhook delivery attempt "
+                                f"{attempt + 1}/{max_retries + 1} failed, retrying"
+                            ),
                         )
                     else:
                         observability.observe(
@@ -429,7 +432,10 @@ class WebhookManager:
                                 "attempts": max_retries + 1,
                                 "type": "clarification",
                             },
-                            description=f"Clarification webhook delivery failed permanently after {max_retries + 1} attempts",
+                            description=(
+                                f"Clarification webhook delivery failed permanently "
+                                f"after {max_retries + 1} attempts"
+                            ),
                         )
 
             except Exception as e:
@@ -445,7 +451,10 @@ class WebhookManager:
                             "type": "clarification",
                             "error": error_summary,
                         },
-                        description=f"Clarification webhook delivery attempt {attempt + 1}/{max_retries + 1} failed: {error_summary}",
+                        description=(
+                            f"Clarification webhook delivery attempt "
+                            f"{attempt + 1}/{max_retries + 1} failed: {error_summary}"
+                        ),
                     )
                 else:
                     observability.observe(

@@ -1790,7 +1790,10 @@ class ProgressTracker:
                 "total_tasks": total_tasks,
                 "progress_percentage": progress_info['progress_percentage'],
             },
-            description=f"Workflow {workflow_id} progress: {completed_tasks}/{total_tasks} tasks ({progress_info['progress_percentage']:.1f}%)",
+            description=(
+                f"Workflow {workflow_id} progress: {completed_tasks}/{total_tasks} tasks "
+                f"({progress_info['progress_percentage']:.1f}%)"
+            ),
         )
 
     def get_progress(self, workflow_id: str) -> Optional[Dict[str, Any]]:

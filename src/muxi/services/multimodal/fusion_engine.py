@@ -471,7 +471,12 @@ Analyze and provide as JSON:
             observability.observe(
                 event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "parse_json_response", "error": "unexpected_error", "error_type": type(e).__name__, "error_details": str(e)},
+                data={
+                    "operation": "parse_json_response",
+                    "error": "unexpected_error",
+                    "error_type": type(e).__name__,
+                    "error_details": str(e)
+                },
                 description="Unexpected error parsing JSON in LLM response",
             )
             return {}
@@ -848,9 +853,16 @@ class MultiModalFusionEngine:
                 data={
                     "modality_count": len(content_items),
                     "fusion_quality": fusion_quality,
-                    "processing_time_ms": sum(item.processing_time_ms for item in content_items if item.processing_time_ms),
+                    "processing_time_ms": sum(
+                        item.processing_time_ms
+                        for item in content_items
+                        if item.processing_time_ms
+                    ),
                 },
-                description=f"Multi-modal processing completed: {len(content_items)} modalities, fusion quality {fusion_quality:.2f}",
+                description=(
+                    f"Multi-modal processing completed: {len(content_items)} modalities, "
+                    f"fusion quality {fusion_quality:.2f}"
+                ),
             )
 
             return result
@@ -859,7 +871,12 @@ class MultiModalFusionEngine:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
-                data={"operation": "fuse_multi_modal_content", "error_type": type(e).__name__, "error": str(e), "modality_count": len(content_items)},
+                data={
+                    "operation": "fuse_multi_modal_content",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "modality_count": len(content_items)
+                },
                 description="Multi-modal fusion failed, using fallback",
             )
             return self._create_fallback_result(content_items)
@@ -1098,7 +1115,11 @@ Create a comprehensive fusion analysis as JSON:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "synthesize_unified_representation", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "synthesize_unified_representation",
+                    "error_type": type(e).__name__,
+                    "error": str(e)
+                },
                 description="Unified representation synthesis failed",
             )
             return {
@@ -1232,7 +1253,12 @@ Create a comprehensive fusion analysis as JSON:
             observability.observe(
                 event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "parse_json_response", "error": "unexpected_error", "error_type": type(e).__name__, "error_details": str(e)},
+                data={
+                    "operation": "parse_json_response",
+                    "error": "unexpected_error",
+                    "error_type": type(e).__name__,
+                    "error_details": str(e)
+                },
                 description="Unexpected error parsing JSON in LLM response",
             )
             return {}

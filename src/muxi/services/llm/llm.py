@@ -275,7 +275,11 @@ class FileProcessor:
                 observability.observe(
                     event_type=observability.ErrorEvents.VALIDATION_ERROR,
                     level=observability.EventLevel.WARNING,
-                    data={"file_path": str(file_path), "extension": file_path.suffix.lower(), "blocked_extensions": [".exe", ".bat", ".sh", ".scr"]},
+                    data={
+                        "file_path": str(file_path),
+                        "extension": file_path.suffix.lower(),
+                        "blocked_extensions": [".exe", ".bat", ".sh", ".scr"]
+                    },
                     description="File blocked due to dangerous extension (security policy)",
                 )
                 return False

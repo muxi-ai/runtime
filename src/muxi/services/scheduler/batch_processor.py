@@ -100,11 +100,18 @@ class JobBatchProcessor:
             total_processed += len(batch)
 
             # Respect concurrent job limits
-            max_concurrent = self.config.get('max_concurrent_jobs', 10) if isinstance(self.config, dict) else getattr(self.config, 'max_concurrent_jobs', 10)
+            if isinstance(self.config, dict):
+                max_concurrent = self.config.get('max_concurrent_jobs', 10)
+            else:
+                max_concurrent = getattr(self.config, 'max_concurrent_jobs', 10)
+
             if len(due_jobs) >= max_concurrent:
                 break
 
-        max_concurrent = self.config.get('max_concurrent_jobs', 10) if isinstance(self.config, dict) else getattr(self.config, 'max_concurrent_jobs', 10)
+        if isinstance(self.config, dict):
+            max_concurrent = self.config.get('max_concurrent_jobs', 10)
+        else:
+            max_concurrent = getattr(self.config, 'max_concurrent_jobs', 10)
         return due_jobs[:max_concurrent]
 
     async def _process_batch(

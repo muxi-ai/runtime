@@ -176,7 +176,10 @@ async def resolve_user_identifier(
                     "formation_id": formation_id,
                     "identifier_type": identifier_type,
                 },
-                description=f"Created new user {muxi_id} for identifier '{identifier}' (type: {identifier_type or 'unspecified'})",
+                description=(
+                    f"User resolution: Resolved identifier '{identifier}' "
+                    f"to muxi_user_id={muxi_id}"
+                ),
             )
 
     # Step 3: Cache result (1 hour TTL) - if cache available
@@ -337,10 +340,10 @@ async def associate_user_identifiers(
                     identifier_type=identifier_type,
                     formation_id=formation_id,
                 )
-                
+
                 # Commit immediately to preserve this success even if later ones fail
                 await session.commit()
-                
+
                 # Track successful creation
                 new_identifiers.append(identifier)
 
@@ -367,7 +370,10 @@ async def associate_user_identifiers(
                 "existing_identifiers": existing_identifiers,
                 "formation_id": formation_id,
             },
-            description=f"Associated {len(new_identifiers)} new identifier(s) to user {user_public_id} ({len(existing_identifiers)} already existed)",
+            description=(
+                f"User resolution: Created new user "
+                f"(muxi_user_id={user_public_id}, identifier='{identifier}')"
+            ),
         )
 
         return {

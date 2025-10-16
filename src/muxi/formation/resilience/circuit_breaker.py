@@ -80,7 +80,10 @@ class CircuitBreaker(Generic[T]):
                             "state": self.state.state.value,
                             "failure_count": self.state.failure_count,
                         },
-                        description=f"Circuit breaker '{self.name}' triggered fallback (state: {self.state.state.value})",
+                        description=(
+                            f"Circuit breaker '{self.name}' triggered fallback "
+                            f"(state: {self.state.state.value})"
+                        ),
                     )
                     return await self._execute_fallback(fallback, *args, **kwargs)
                 else:
@@ -221,7 +224,11 @@ class CircuitBreaker(Generic[T]):
                 "failure_count": self.state.failure_count,
                 "threshold": self.config.failure_threshold,
             },
-            description=f"Circuit breaker '{self.name}' recorded failure: {error} (execution_time: {execution_time:.2f}s, failures: {self.state.failure_count})",
+            description=(
+                f"Circuit breaker '{self.name}' recorded failure: {error} "
+                f"(execution_time: {execution_time:.2f}s, "
+                f"failures: {self.state.failure_count})"
+            ),
         )
         # )
 
@@ -240,7 +247,11 @@ class CircuitBreaker(Generic[T]):
                 "next_attempt_time": self.state.next_attempt_time,
                 "recovery_timeout": self.config.recovery_timeout,
             },
-            description=f"Circuit breaker '{self.name}' opened due to {self.state.failure_count} failures. Will attempt recovery at {time.ctime(self.state.next_attempt_time)}",
+            description=(
+                f"Circuit breaker '{self.name}' opened due to "
+                f"{self.state.failure_count} failures. "
+                f"Will attempt recovery at {time.ctime(self.state.next_attempt_time)}"
+            ),
         )
         # )
 

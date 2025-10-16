@@ -381,7 +381,7 @@ class MCPCoordinator:
             except Exception as e:
                 # Log secret interpolation failure - this is critical for auth debugging
                 error_msg = f"Secret interpolation failed for MCP server {server_id}: {str(e)}"
-                
+
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
                     level=observability.EventLevel.ERROR,

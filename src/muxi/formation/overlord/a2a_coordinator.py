@@ -243,7 +243,7 @@ class A2ACoordinator:
                     "auth_mode": auth_mode
                 }
             )
-            
+
             # Print clean formatted line
             details = f"{self.server_host}:{self.server_port}, auth={auth_mode}"
             print(InitEventFormatter.format_ok("A2A server", details))

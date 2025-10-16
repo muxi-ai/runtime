@@ -84,7 +84,11 @@ class TimeEstimator:
                     "requires_decomposition": getattr(analysis, 'requires_decomposition', False),
                     "requires_multi_agent": getattr(analysis, 'requires_multi_agent', False),
                 },
-                description=f"Time estimation completed: {estimated_seconds:.1f}s (complexity: {analysis.complexity_score}, capabilities: {len(required_capabilities)})",
+                description=(
+                    f"Time estimation completed: {estimated_seconds:.1f}s "
+                    f"(complexity: {analysis.complexity_score}, "
+                    f"capabilities: {len(required_capabilities)})"
+                ),
             )
 
             return estimated_seconds
@@ -143,7 +147,11 @@ class TimeEstimator:
                         "historical_average": round(historical_average, 1),
                         "request_type": request_type,
                     },
-                    description=f"Adjusted time estimate: {adjusted_estimate:.1f}s (70% historical: {historical_average:.1f}s, 30% analysis: {base_estimate:.1f}s)",
+                    description=(
+                        f"Adjusted time estimate: {adjusted_estimate:.1f}s "
+                        f"(70% historical: {historical_average:.1f}s, "
+                        f"30% analysis: {base_estimate:.1f}s)"
+                    ),
                 )
 
                 return adjusted_estimate
@@ -159,7 +167,11 @@ class TimeEstimator:
                     "error": str(e),
                     "error_type": type(e).__name__,
                 },
-                description=f"Historical time estimation failed ({type(e).__name__}: {str(e)}), falling back to base estimate",
+                description=(
+                    f"Historical time estimation failed "
+                    f"({type(e).__name__}: {str(e)}), "
+                    f"falling back to base estimate"
+                ),
             )
             return base_estimate
 

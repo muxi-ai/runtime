@@ -96,7 +96,10 @@ class TaskDecomposer:
                     "task_count": len(validated_workflow.tasks),
                     "requires_approval": validated_workflow.requires_approval,
                 },
-                description=f"Decomposed request into workflow {workflow_id} with {len(validated_workflow.tasks)} tasks",
+                description=(
+                    f"Decomposed request into workflow {workflow_id} with "
+                    f"{len(validated_workflow.tasks)} tasks"
+                ),
             )
 
             return validated_workflow
@@ -303,7 +306,7 @@ class TaskDecomposer:
                 },
                 description="LLM-based workflow decomposition failed, falling back to heuristic decomposition",
             )
-            
+
             # Keep stderr output for immediate visibility
             import sys
             sys.stderr.write(f"\n⚠️  LLM decomposition failed: {type(e).__name__}\n")

@@ -489,7 +489,11 @@ class AdvancedResponseSynthesizer:
                     "mode": mode.value,
                     "synthesis_time_ms": (time.time() - start_time) * 1000,
                 },
-                description=f"Response synthesis completed: {quality_assessment.overall_quality.value} quality in {iterations} iterations",
+                description=(
+                    f"Response synthesis completed: "
+                    f"{quality_assessment.overall_quality.value} quality "
+                    f"in {iterations} iterations"
+                ),
             )
 
             return result

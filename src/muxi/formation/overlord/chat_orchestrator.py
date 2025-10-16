@@ -242,13 +242,13 @@ class ChatOrchestrator:
         muxi_user_id = None
         if user_id is not None:
             from ...utils.user_resolution import resolve_user_identifier
-            
+
             # Use long_term_memory's db_manager if overlord's is not available
             db_mgr = self.overlord.db_manager or (
-                self.overlord.long_term_memory.db_manager 
+                self.overlord.long_term_memory.db_manager
                 if self.overlord.long_term_memory else None
             )
-            
+
             # Only resolve if db_manager is available
             if db_mgr is not None:
                 internal_user_id, muxi_user_id = await resolve_user_identifier(
@@ -827,7 +827,7 @@ class ChatOrchestrator:
                     if memory_parts:
                         long_term_memories = "\n".join(memory_parts[:3])  # Limit to top 3
             except Exception as e:
-                # Log error but continue without long-term memories  
+                # Log error but continue without long-term memories
                 from ...services import observability
                 observability.observe(
                     event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,

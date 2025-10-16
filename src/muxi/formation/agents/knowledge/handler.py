@@ -1236,7 +1236,7 @@ class KnowledgeHandler:
             details = f"{processed_count} processed, {skipped_count} cached"
             if cleanup_count > 0:
                 details += f", {cleanup_count} removed"
-            
+
             print(InitEventFormatter.format_ok(
                 f"Knowledge sources: {total} loaded",
                 details
@@ -1249,7 +1249,10 @@ class KnowledgeHandler:
                 f"{len(knowledge_sources)} sources configured but all failed"
             ))
             # Fail fast - knowledge sources configured but broken
-            raise RuntimeError(f"Knowledge source initialization failed: {len(knowledge_sources)} sources configured but failed")
+            raise RuntimeError(
+                f"Knowledge source initialization failed: "
+                f"{len(knowledge_sources)} sources configured but failed"
+            )
 
     async def _inject_knowledge_into_memory(
         self,
