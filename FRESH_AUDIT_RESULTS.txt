@@ -1,0 +1,69 @@
+Fresh Observability Audit Results
+================================================================================
+
+Files scanned: 276
+Total issues: 57
+
+
+INTERNAL_ERROR_GENERIC: 45 issues
+--------------------------------------------------------------------------------
+src/muxi/formation/initialization.py:616 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/formation/initialization.py:652 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/formation/overlord/overlord.py:1085 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/formation/overlord/overlord.py:2722 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/formation/overlord/overlord.py:3432 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/formation/overlord/overlord.py:5273 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: MEMORY_RETRIEVAL_FAILED, MEMORY_OPERATION_FAILED
+src/muxi/formation/overlord/overlord.py:5538 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE, AUTHENTICATION_FAILED
+src/muxi/formation/overlord/overlord.py:5696 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE, AUTHENTICATION_FAILED
+src/muxi/formation/overlord/overlord.py:6609 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/formation/overlord/overlord.py:6958 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE, AUTHENTICATION_FAILED
+src/muxi/formation/overlord/overlord.py:9147 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE, AUTHENTICATION_FAILED
+src/muxi/formation/overlord/overlord.py:9283 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE, AUTHENTICATION_FAILED
+src/muxi/formation/overlord/overlord.py:9391 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE, AUTHENTICATION_FAILED
+src/muxi/formation/agents/knowledge/handler.py:1052 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: MEMORY_RETRIEVAL_FAILED, MEMORY_OPERATION_FAILED
+src/muxi/formation/server/middleware.py:90 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/formation/workflow/executor.py:119 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: NETWORK_ERROR
+src/muxi/utils/run_formation.py:179 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/utils/run_formation.py:208 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/utils/run_formation.py:237 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/utils/document.py:171 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: RESOURCE_EXHAUSTED
+src/muxi/services/llm/service.py:436 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/services/llm/service.py:575 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/services/memory/working.py:658 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: MEMORY_RETRIEVAL_FAILED, MEMORY_OPERATION_FAILED
+src/muxi/services/memory/working.py:812 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: MEMORY_RETRIEVAL_FAILED, RESOURCE_EXHAUSTED, MEMORY_OPERATION_FAILED
+src/muxi/services/memory/working.py:1162 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: MEMORY_RETRIEVAL_FAILED, MEMORY_OPERATION_FAILED
+src/muxi/services/a2a/discovery.py:147 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/services/a2a/discovery.py:196 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE
+src/muxi/services/a2a/discovery.py:547 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERIALIZATION_ERROR
+src/muxi/services/a2a/client.py:441 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE, NETWORK_ERROR
+src/muxi/services/a2a/registry_client.py:1095 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERIALIZATION_ERROR
+src/muxi/services/a2a/auth/inbound.py:785 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: AUTHENTICATION_FAILED
+src/muxi/services/a2a/auth/inbound.py:826 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: AUTHENTICATION_FAILED
+src/muxi/services/a2a/auth/inbound.py:883 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: AUTHENTICATION_FAILED
+src/muxi/services/scheduler/parser.py:121 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERIALIZATION_ERROR
+src/muxi/services/scheduler/parser.py:434 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERIALIZATION_ERROR
+src/muxi/services/scheduler/parser.py:562 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE, SERIALIZATION_ERROR
+src/muxi/services/scheduler/parser.py:874 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: VALIDATION_ERROR, SERIALIZATION_ERROR
+src/muxi/services/scheduler/parser.py:883 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: VALIDATION_ERROR, SERIALIZATION_ERROR
+src/muxi/services/scheduler/parser.py:994 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: VALIDATION_ERROR
+src/muxi/services/scheduler/parser.py:1076 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERIALIZATION_ERROR
+src/muxi/services/scheduler/manager.py:576 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: RESOURCE_NOT_FOUND
+src/muxi/services/multimodal/fusion_engine.py:195 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERIALIZATION_ERROR
+src/muxi/services/multimodal/fusion_engine.py:233 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERIALIZATION_ERROR
+src/muxi/services/multimodal/fusion_engine.py:586 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: SERVICE_UNAVAILABLE, RESOURCE_EXHAUSTED
+src/muxi/services/multimodal/fusion_engine.py:1099 [INTERNAL_ERROR_GENERIC] Generic INTERNAL_ERROR, consider: RESOURCE_EXHAUSTED
+
+MISSING_DESCRIPTION: 12 issues
+--------------------------------------------------------------------------------
+src/muxi/formation/overlord/overlord.py:6623 [MISSING_DESCRIPTION] observability.observe() call without description parameter
+src/muxi/formation/agents/agent.py:1064 [MISSING_DESCRIPTION] observability.observe() call without description parameter
+src/muxi/formation/server/routes/admin/agents.py:204 [MISSING_DESCRIPTION] observability.observe() call without description parameter
+src/muxi/formation/documents/workflow/cross_reference_manager.py:103 [MISSING_DESCRIPTION] observability.observe() call without description parameter
+src/muxi/formation/documents/workflow/cross_reference_manager.py:195 [MISSING_DESCRIPTION] observability.observe() call without description parameter
+src/muxi/formation/documents/workflow/cross_reference_manager.py:290 [MISSING_DESCRIPTION] observability.observe() call without description parameter
+src/muxi/utils/response_converter.py:72 [MISSING_DESCRIPTION] observability.observe() call without description parameter
+src/muxi/utils/response_converter.py:181 [MISSING_DESCRIPTION] observability.observe() call without description parameter
+src/muxi/services/memory/extractor.py:590 [MISSING_DESCRIPTION] observability.observe() call without description parameter
+src/muxi/services/memory/working.py:785 [MISSING_DESCRIPTION] observability.observe() call without description parameter
+src/muxi/services/a2a/client.py:196 [MISSING_DESCRIPTION] observability.observe() call without description parameter
+src/muxi/services/a2a/client.py:230 [MISSING_DESCRIPTION] observability.observe() call without description parameter
