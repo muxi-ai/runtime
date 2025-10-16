@@ -695,10 +695,10 @@ def set_llm_api_key(api_key: str, provider: str) -> None:
     """
     set_api_key(api_key, provider)
     observability.observe(
-        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+        event_type=observability.SystemEvents.CREDENTIAL_CONFIGURED,
         level=observability.EventLevel.DEBUG,
         data={"provider": provider},
-        description=f"API key set for provider {provider}",
+        description=f"API key configured for provider {provider}",
     )
 
 
