@@ -469,7 +469,6 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
                 "traceback": traceback.format_exc(),
             },
             description=f"MCP tool '{tool_call.tool}' unexpected error: {type(e).__name__} - {str(e)}",
-        }
         )
         response = create_error_response(
             "TOOL_EXECUTION_ERROR",

@@ -177,8 +177,7 @@ class BufferMemoryManager:
                 event_type=observability.ErrorEvents.MEMORY_RETRIEVAL_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
-                    "session_id": session_id,
-                    "limit": limit,
+                    "query_length": len(query),
                     "error_type": type(e).__name__,
                     "error": str(e),
                 },

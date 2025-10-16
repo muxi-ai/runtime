@@ -455,7 +455,6 @@ class DocumentContextPreserver:
                 level=observability.EventLevel.ERROR,
                 data={
                     "operation": "select_relevant_contexts",
-                    "conversation_id": conversation_id,
                     "error_type": type(e).__name__,
                     "error": str(e),
                     "contexts_count": len(contexts),

@@ -376,8 +376,8 @@ class A2ACoordinator:
                 observability.observe(
                     event_type=observability.SystemEvents.A2A_AGENT_REGISTRATIONS_COMPLETED,
                     level=observability.EventLevel.INFO,
-                    data={"registration_count": len(pending_agents)},
-                    description=f"Completed bulk A2A agent registrations for {len(pending_agents)} agents",
+                    data={"registration_count": len(registration_tasks)},
+                    description=f"Completed bulk A2A agent registrations for {len(registration_tasks)} agents",
                 )
 
         except Exception as e:

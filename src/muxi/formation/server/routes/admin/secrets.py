@@ -16,6 +16,7 @@ from ...responses import (
 )
 from ...utils import mask_secret_value
 from .....datatypes.api import APIEventType, APIObjectType
+from .....datatypes import observability
 
 router = APIRouter(tags=["Secrets"])
 

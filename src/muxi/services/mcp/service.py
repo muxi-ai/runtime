@@ -606,7 +606,6 @@ class MCPService:
                 ),
             },
             description=f"Executing MCP tool '{tool_name}' on server '{server_id}' with user credentials",
-        }
         )
 
         try:

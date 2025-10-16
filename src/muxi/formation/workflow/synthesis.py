@@ -13,6 +13,7 @@ from enum import Enum
 
 from ...services.llm import LLM
 from ...datatypes.workflow import Workflow, TaskStatus
+from ...datatypes import observability
 
 
 class ResponseQuality(Enum):

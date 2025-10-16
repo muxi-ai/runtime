@@ -182,7 +182,7 @@ class DocumentWorkflowIntegrator:
                     event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
-                        "document_id": doc_id,
+                        "document_id": document_id,
                         "category": category,
                         "error_type": type(e).__name__,
                         "error": str(e),

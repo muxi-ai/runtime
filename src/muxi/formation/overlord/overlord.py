@@ -239,7 +239,6 @@ MEMORY_COLLECTIONS = {
 SUCCESS_STATES = {TaskStatus.COMPLETED, TaskStatus.DONE}
 SUCCESS_STATE_VALUES = {TaskStatus.COMPLETED.value, TaskStatus.DONE.value, "completed", "done"}
 
-
 class Overlord:
     """
     Overlord for managing agents, memory, and interactions with enhanced workflow orchestration.
@@ -2611,7 +2610,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     # Final fallback: extraction model
                     else:
                         decomposer_model = self.extraction_model
-                        model_source = "extraction_model_fallback"
 
                     self.task_decomposer.llm = decomposer_model
                 if hasattr(self, "multimodal_fusion_engine"):
@@ -5389,7 +5387,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             skip_clarification=skip_clarification,
         )
 
-
         # ===================================================================
         # EARLY WORKFLOW APPROVAL CHECK - SET BYPASS FLAG
         # ===================================================================
@@ -5833,7 +5830,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                 use_async = clarification_info.get("use_async")
                                 webhook_url = clarification_info.get("webhook_url")
 
-
                                 # Clean up pending states
                                 self._delete_pending_clarification(session_id)
                                 self.workflow_manager.remove_pending_approval(workflow_id)
@@ -5853,7 +5849,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                         self.async_threshold_seconds / 60
                                     )  # Convert seconds to minutes
                                     use_async = estimated_minutes > threshold_minutes
-
 
                                 # Log final decision
 
@@ -6292,13 +6287,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             description="Checking workflow analysis conditions",
         )
 
-
         # Check if we should analyze for workflow complexity
         # Only trigger if:
         # 1. No specific agent was requested (agent_name is None)
         # 2. auto_decomposition is enabled
         # 3. Not a clarification response
-
 
         # Initialize analysis variable (used later for scheduler routing)
         analysis = None
@@ -6484,7 +6477,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     else self.complexity_threshold
                 )
 
-
                 if analysis.complexity_score >= threshold:
                     # Protection: Skip workflow for non-actionable or simple informational messages
                     # even if they exceed the threshold
@@ -6605,7 +6597,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     f"I've created a scheduled job for you. Your request '{actual_message[:100]}' "
                     f"has been scheduled successfully. (Job ID: {job_id})"
                 )
-
 
                 return MuxiResponse(
                     role="assistant",
@@ -7343,7 +7334,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     requires_approval=needs_approval,
                 )
 
-
             # NEW: Make async decision based on workflow time estimate
             if use_async is None and workflow and workflow.tasks:
                 # Calculate estimated time based on task complexity
@@ -7377,9 +7367,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # Store workflow for tracking
             workflow_id = workflow.id
 
-
             self.workflow_manager.track_workflow(workflow, user_id)
-
 
             # Note: user_id is tracked separately in active_workflows
             # The Workflow model doesn't support user_id as an attribute
@@ -7425,7 +7413,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         request_id=request_id,
                         stream=False,  # Always False - streaming happens via events
                     )
-
 
                 # Emit the final response content as a streaming event
                 if result and hasattr(result, "content"):
@@ -7494,15 +7481,12 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         self._validate_workflow_inputs(message, user_id, session_id, request_id)
         self._validate_workflow_object(workflow)
 
-
         # Store pending workflow
         self.workflow_manager.add_pending_approval(workflow)
-
 
         # Generate approval message using approval manager
 
         approval_message = await self.approval_manager.present_plan_for_approval(workflow)
-
 
         # Store clarification info if session_id exists
         if session_id:
@@ -7523,7 +7507,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # Note: Verification happens through buffer memory KV store
             print(f"  Workflow approval stored in buffer memory for session: {session_id}")
 
-
         # Return response with approval message
         response = MuxiResponse(
             role="assistant",
@@ -7534,7 +7517,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 "requires_user_response": True,
             },
         )
-
 
         return response
 

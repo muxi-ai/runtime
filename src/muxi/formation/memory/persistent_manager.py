@@ -298,7 +298,7 @@ class PersistentMemoryManager:
                 event_type=observability.ErrorEvents.MEMORY_RETRIEVAL_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
-                    "limit": limit,
+                    "k": k,
                     "user_id": str(user_id) if user_id else None,
                     "error_type": type(e).__name__,
                     "error": str(e),

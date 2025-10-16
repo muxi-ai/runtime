@@ -106,7 +106,7 @@ class RequestAnalyzer:
                 data={
                     "error_type": type(e).__name__,
                     "error": str(e),
-                    "message_length": len(message),
+                    "message_length": len(user_message),
                 },
                 description="Workflow request analysis failed, using fallback",
             )
