@@ -1092,9 +1092,9 @@ class A2ARegistryClient:
                         except Exception as e:
                             # Log conversion error but continue
                             observability.observe(
-                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                                 level=observability.EventLevel.WARNING,
-                                description="Failed to parse agent card from registry",
+                                description="Failed to parse agent card JSON from registry",
                                 data={
                                     "registry_url": registry_url,
                                     "agent_name": agent_data.get("name", "unknown"),

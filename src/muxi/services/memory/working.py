@@ -655,7 +655,7 @@ class WorkingMemory:
             except Exception as e:
                 # Log embedding generation failure and fallback
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "operation": "query_embedding_generation",

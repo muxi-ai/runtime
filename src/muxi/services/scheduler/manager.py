@@ -573,10 +573,10 @@ class JobManager:
                 )
             else:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.RESOURCE_NOT_FOUND,
                     level=observability.EventLevel.WARNING,
                     data={"job_id": job_id, "reason": "Job not found or not a one-time job"},
-                    description=f"Failed to mark one-time job as completed: {job_id}",
+                    description=f"One-time job not found or already completed: {job_id}",
                 )
 
             return success

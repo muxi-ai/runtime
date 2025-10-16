@@ -433,9 +433,9 @@ class OneLLMService:
 
             # Emit error event
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.ERROR,
-                description=f"Chat completion failed for {model}: {str(e)}",
+                description=f"LLM service chat completion failed for {model}: {str(e)}",
                 data={
                     "service": "OneLLMService",
                     "operation": "chat",
@@ -572,9 +572,9 @@ class OneLLMService:
             self._stats["failed_requests"] += 1
             # Emit error event
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.ERROR,
-                description=f"Embedding failed for {model}: {str(e)}",
+                description=f"LLM service embedding generation failed for {model}: {str(e)}",
                 data={
                     "service": "OneLLMService",
                     "operation": "embed",

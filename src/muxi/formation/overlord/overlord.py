@@ -5270,10 +5270,10 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             return result
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.MEMORY_RETRIEVAL_FAILED,
                 level=observability.EventLevel.WARNING,
-                data={"error": str(e), "session_id": session_id},
-                description=f"Failed to get pending clarification: {e}",
+                data={"error": str(e), "session_id": session_id, "namespace": self.pending_clarification_namespace},
+                description=f"Failed to get pending clarification from buffer memory: {e}",
             )
             return None
 
@@ -6606,14 +6606,14 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                     level=observability.EventLevel.ERROR,
                     data={
                         "service": "scheduler",
                         "error": str(e),
                         "user_id": str(user_id),
                     },
-                    description=f"Failed to create scheduled job: {str(e)}",
+                    description=f"Scheduler service failed to create scheduled job: {str(e)}",
                 )
                 # Fall through to normal agent handling
 

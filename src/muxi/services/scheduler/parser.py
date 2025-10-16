@@ -559,7 +559,7 @@ Return only valid JSON, no explanation.
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "service": "scheduler_parser",
@@ -568,7 +568,7 @@ Return only valid JSON, no explanation.
                     "error": str(e),
                     "error_type": "datetime_parsing_failed",
                 },
-                description=f"Failed to parse specific datetime: {e}",
+                description=f"Failed to parse specific datetime from LLM response: {e}",
             )
             return self._fallback_parse_datetime(schedule_text, timezone)
 
@@ -991,10 +991,10 @@ IMPORTANT: Return ONLY the cron expression, no explanation or additional text.
             sanitized_description = SchedulerInputValidator.sanitize_schedule_text(description)
         except ValueError as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.VALIDATION_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"description": description[:100], "error": str(e)},
-                description=f"Exclusion description sanitization failed: {e}",
+                description=f"Exclusion description validation failed: {e}",
             )
             return {"type": "unknown", "pattern": "", "description": "Invalid exclusion"}
 
@@ -1073,14 +1073,14 @@ Return only valid JSON, no explanation.
 
         except (json.JSONDecodeError, KeyError) as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "description": description,
                     "response": response[:200] if response is not None else "No response",
                     "error": str(e),
                 },
-                description=f"Failed to parse exclusion rule JSON: {e}",
+                description=f"Failed to parse exclusion rule JSON from LLM response: {e}",
             )
             return None
 
