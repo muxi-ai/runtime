@@ -68,8 +68,8 @@ class A2ACacheManager:
         except IOError as e:
             print(f"Warning: Failed to save cache metadata: {e}")
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                level=observability.EventLevel.ERROR,
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
                 data={
                     "operation": "save_metadata",
                     "error": str(e),
@@ -164,7 +164,7 @@ class A2ACacheManager:
             self._remove_cache_entry(agent_id)
 
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.WARNING,
                 level=observability.EventLevel.WARNING,
                 data={
                     "operation": "get_cached_card",
@@ -207,8 +207,8 @@ class A2ACacheManager:
         except IOError as e:
             print(f"Warning: Failed to cache card for {agent_id}: {e}")
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                level=observability.EventLevel.ERROR,
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
                 data={
                     "operation": "cache_card",
                     "agent_id": agent_id,
@@ -265,8 +265,8 @@ class A2ACacheManager:
         except OSError as e:
             print(f"Warning: Failed to clear cache: {e}")
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                level=observability.EventLevel.ERROR,
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
                 data={
                     "operation": "invalidate_all",
                     "error": str(e),
@@ -326,8 +326,8 @@ class A2ACacheManager:
         except OSError as e:
             print(f"Warning: Failed during cache cleanup: {e}")
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                level=observability.EventLevel.ERROR,
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
                 data={
                     "operation": "cleanup_orphaned_cache",
                     "error": str(e),
@@ -368,7 +368,7 @@ class A2ACacheManager:
                 json.dump(data, f, indent=2)
         except IOError as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.WARNING,
                 level=observability.EventLevel.WARNING,
                 data={"operation": "set_filtered_agents", "error": str(e)},
                 description=f"Failed to cache filtered agents list: {str(e)}",
