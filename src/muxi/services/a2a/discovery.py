@@ -144,7 +144,7 @@ class LocalDiscoveryService:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={"formation_name": formation_name, "port": port, "error": str(e)},
                 description="Failed to start A2A Discovery Service",
@@ -193,7 +193,7 @@ class LocalDiscoveryService:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation_name": self.formation_name,
@@ -237,7 +237,7 @@ class LocalDiscoveryService:
                     agent_card = await self._fetch_agent_card(endpoint)
                 except Exception as e:
                     observability.observe(
-                        event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                        event_type=observability.ErrorEvents.NETWORK_ERROR,
                         level=observability.EventLevel.ERROR,
                         data={"agent_id": agent_id, "endpoint": endpoint, "error": str(e)},
                         description="Failed to fetch agent card during registration",
@@ -281,7 +281,7 @@ class LocalDiscoveryService:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.NETWORK_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={"agent_id": agent_id, "endpoint": endpoint, "error": str(e)},
                 description="Failed to register A2A agent",
@@ -334,7 +334,7 @@ class LocalDiscoveryService:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.NETWORK_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={"agent_id": agent_id, "error": str(e)},
                 description="Failed to unregister A2A agent",
@@ -416,7 +416,7 @@ class LocalDiscoveryService:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.NETWORK_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "capability_filter": capability_filter,
@@ -481,7 +481,7 @@ class LocalDiscoveryService:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.NETWORK_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={"agent_id": agent_id, "error": str(e)},
                 description="A2A agent info query failed",
@@ -544,7 +544,7 @@ class LocalDiscoveryService:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={"formation_name": self.formation_name, "error": str(e)},
                 description="A2A formation status query failed",
@@ -684,8 +684,8 @@ class LocalDiscoveryService:
                 break
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                    level=observability.EventLevel.ERROR,
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
                     data={"formation_name": self.formation_name, "error": str(e)},
                     description="A2A health check loop error",
                 )
@@ -744,8 +744,8 @@ class LocalDiscoveryService:
                 break
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                    level=observability.EventLevel.ERROR,
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
                     data={"formation_name": self.formation_name, "error": str(e)},
                     description="A2A cleanup loop error",
                 )
@@ -836,7 +836,7 @@ class LocalDiscoveryService:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation_name": self.formation_name,
@@ -907,7 +907,7 @@ class LocalDiscoveryService:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation_name": self.formation_name,

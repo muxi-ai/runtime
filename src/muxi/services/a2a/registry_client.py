@@ -116,7 +116,7 @@ class A2ARegistryClient:
         except Exception as e:
             # Emit error event for initialization failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to initialize A2A Registry Client (SDK): {str(e)}",
                 data={
@@ -154,7 +154,7 @@ class A2ARegistryClient:
         except Exception as e:
             # Emit error event for close failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to close A2A Registry Client (SDK): {str(e)}",
                 data={"error": str(e)}
@@ -208,7 +208,7 @@ class A2ARegistryClient:
         except Exception as e:
             # Emit error event for registry addition failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to add registry (SDK) {registry_url}: {str(e)}",
                 data={
@@ -260,7 +260,7 @@ class A2ARegistryClient:
         except Exception as e:
             # Emit error event for registry removal failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to remove registry (SDK) {registry_url}: {str(e)}",
                 data={
@@ -595,7 +595,7 @@ class A2ARegistryClient:
         except Exception as e:
             # Emit health check all error event
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to perform health check on all registries (SDK): {str(e)}",
                 data={
@@ -831,7 +831,7 @@ class A2ARegistryClient:
         except Exception as e:
             # Emit register all error event
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to register agent {agent_card.name} with all registries (SDK): {str(e)}",
                 data={
@@ -988,7 +988,7 @@ class A2ARegistryClient:
         except Exception as e:
             # Emit deregistration error event
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to deregister agent {agent_url} (SDK): {str(e)}",
                 data={
@@ -1203,7 +1203,7 @@ class A2ARegistryClient:
         except Exception as e:
             # Emit discover all error event
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to discover agents from all registries (SDK): {str(e)}",
                 data={
@@ -1235,7 +1235,7 @@ class A2ARegistryClient:
         except Exception as e:
             # Emit status request error event
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to get registry status (SDK): {str(e)}",
                 data={"error": str(e), "sdk_enabled": True}
@@ -1262,7 +1262,7 @@ class A2ARegistryClient:
         except Exception as e:
             # Emit registered agents request error event
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to get registered agents (SDK): {str(e)}",
                 data={"error": str(e), "sdk_enabled": True}
@@ -1306,7 +1306,7 @@ class A2ARegistryClient:
         except Exception as e:
             # Emit stats request error event
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to get registry client stats (SDK): {str(e)}",
                 data={"error": str(e), "sdk_enabled": True}

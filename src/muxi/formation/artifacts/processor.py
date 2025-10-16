@@ -122,8 +122,8 @@ def generate_pdf_thumbnail(
     except Exception as e:
         # Log the error for debugging but don't fail the whole artifact creation
         observability.observe(
-            event_type=observability.ErrorEvents.WARNING,
-            level=observability.EventLevel.WARNING,
+            event_type=observability.ErrorEvents.THUMBNAIL_GENERATION_FAILED,
+            level=observability.EventLevel.ERROR,
             data={"service": "artifact", "file": str(file_path), "error": str(e)},
             description=f"PDF thumbnail generation failed: {e}. This likely means Poppler is not installed."
         )

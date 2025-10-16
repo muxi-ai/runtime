@@ -80,7 +80,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for initialization failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to initialize A2A inbound authenticator: {str(e)}",
                 data={"auth_mode": auth_mode, "error": str(e)},
@@ -129,7 +129,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for credential initialization failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to initialize A2A inbound credentials: {str(e)}",
                 data={"auth_mode": self.auth_mode.value, "error": str(e)},
@@ -351,7 +351,7 @@ class A2AInboundAuthenticator:
                 except Exception as e:
                     # Emit error event for individual credential load failure
                     observability.observe(
-                        event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                        event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
                         level=observability.EventLevel.ERROR,
                         description=f"Failed to load credentials for {client_id}: {str(e)}",
                         data={"client_id": client_id, "error": str(e)},
@@ -374,7 +374,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for credential loading failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to load credentials from secrets: {str(e)}",
                 data={"auth_mode": self.auth_mode.value, "error": str(e)},
@@ -398,7 +398,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for secret retrieval failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to get secret {secret_name}: {str(e)}",
                 data={"secret_name": secret_name, "auth_type": auth_type.value, "error": str(e)},
@@ -430,7 +430,7 @@ class A2AInboundAuthenticator:
             except Exception as e:
                 # Emit error event for secret retrieval failure
                 observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
                     level=observability.EventLevel.ERROR,
                     description=f"Failed to get secret {secret_name}: {str(e)}",
                     data={
@@ -507,7 +507,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for credential addition failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to add client credential for {client_id}: {str(e)}",
                 data={"client_id": client_id, "auth_type": auth_type.value, "error": str(e)},
@@ -610,7 +610,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for authentication failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"A2A inbound authentication error: {str(e)}",
                 data={"auth_mode": self.auth_mode.value, "error": str(e)},
@@ -648,7 +648,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for API key authentication failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"API key authentication error: {str(e)}",
                 data={"auth_type": "api_key", "error": str(e)},
@@ -691,7 +691,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for Bearer authentication failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Bearer token authentication error: {str(e)}",
                 data={"auth_type": "bearer", "error": str(e)},
@@ -743,7 +743,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for Basic authentication failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Basic authentication error: {str(e)}",
                 data={"auth_type": "basic", "error": str(e)},
@@ -782,7 +782,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for auth requirements failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to get auth requirements: {str(e)}",
                 data={"auth_mode": self.auth_mode.value, "error": str(e)},
@@ -823,7 +823,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for client list failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to list clients: {str(e)}",
                 data={"auth_mode": self.auth_mode.value, "error": str(e)},
@@ -880,7 +880,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for client removal failure
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to remove client {client_id}: {str(e)}",
                 data={"client_id": client_id, "auth_mode": self.auth_mode.value, "error": str(e)},

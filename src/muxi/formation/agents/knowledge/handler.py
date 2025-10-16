@@ -479,18 +479,6 @@ class KnowledgeHandler:
                 data={"source_path": source_path, "error": str(e), "error_type": type(e).__name__}
             )
 
-            # Log knowledge source addition error
-            observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                level=observability.EventLevel.ERROR,
-                description="Failed to add knowledge source",
-                data={
-                    "source_path": getattr(source, "path", str(source)),
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-            )
-
     async def search(
         self,
         query: str,
@@ -608,17 +596,6 @@ class KnowledgeHandler:
                 level=observability.EventLevel.ERROR,
                 description="Knowledge search failed",
                 data={"query": query[:100], "error": str(e), "error_type": type(e).__name__}
-            )
-            # Log search error
-            observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                level=observability.EventLevel.ERROR,
-                description="Knowledge search operation failed",
-                data={
-                    "query": query,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
             )
             return []
 
@@ -746,7 +723,7 @@ class KnowledgeHandler:
         except Exception as e:
             # Log handler creation error
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description="Failed to create KnowledgeHandler from agent config",
                 data={"agent_id": agent_id, "error": str(e), "error_type": type(e).__name__},
@@ -1459,7 +1436,7 @@ class KnowledgeHandler:
         except Exception as e:
             # Log unified search error
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.KNOWLEDGE_SEARCH_FAILED,
                 level=observability.EventLevel.ERROR,
                 description="Unified search operation failed",
                 data={
@@ -1738,8 +1715,8 @@ class KnowledgeHandler:
             stats["errors_encountered"] = 1
             # Log cache cleanup error
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                level=observability.EventLevel.ERROR,
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
                 description="Cache cleanup failed",
                 data={"error": str(e), "error_type": type(e).__name__, **stats},
             )

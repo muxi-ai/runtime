@@ -138,8 +138,8 @@ class SOPSystem:
                         # Log and skip files with invalid YAML front matter
                         try:
                             observability.observe(
-                                event_type=observability.ErrorEvents.WARNING,
-                                level=observability.EventLevel.WARNING,
+                                event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
+                                level=observability.EventLevel.ERROR,
                                 data={
                                     "error": str(e),
                                     "file": str(md_file),
@@ -154,8 +154,8 @@ class SOPSystem:
                         # Log and skip files with other parsing errors
                         try:
                             observability.observe(
-                                event_type=observability.ErrorEvents.WARNING,
-                                level=observability.EventLevel.WARNING,
+                                event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
+                                level=observability.EventLevel.ERROR,
                                 data={
                                     "error": str(e),
                                     "file": str(md_file),
@@ -680,8 +680,8 @@ class SOPSystem:
                 except Exception as e:
                     # Log error and skip this SOP
                     observability.observe(
-                        event_type=observability.ErrorEvents.WARNING,
-                        level=observability.EventLevel.WARNING,
+                        event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,
+                        level=observability.EventLevel.ERROR,
                         data={
                             "error": str(e),
                             "sop_id": sop_id,
@@ -816,8 +816,8 @@ class SOPSystem:
             file_size_mb = file_path.stat().st_size / (1024 * 1024)
             if file_size_mb > max_file_size_mb:
                 observability.observe(
-                    event_type=observability.ErrorEvents.WARNING,
-                    level=observability.EventLevel.WARNING,
+                    event_type=observability.ErrorEvents.RESOURCE_EXHAUSTED,
+                    level=observability.EventLevel.ERROR,
                     data={
                         "file": str(file_path),
                         "file_size_mb": round(file_size_mb, 2),
