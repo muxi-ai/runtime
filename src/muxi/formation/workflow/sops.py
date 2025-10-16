@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ...services import observability
-from ...utils.user_dirs import get_cache_dir, FORMATION_ID
+from ...utils.user_dirs import get_cache_dir
 # Lazy import DocumentChunkManager to avoid initialization issues
 # from ..documents.storage.chunk_manager import DocumentChunkManager
 
