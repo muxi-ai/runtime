@@ -1946,12 +1946,15 @@ class Overlord:
                 if cache_key in self._model_cache:
                     llm = self._model_cache[cache_key]
                 else:
+                    # Filter out params we're setting explicitly to avoid duplicate kwargs
+                    settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
+                               if k not in ["temperature", "max_tokens"]}
                     llm = await self.create_model(
                         model=model_name,
                         api_key=text_model_config.get("api_key"),
                         temperature=0.1,  # Very low temperature for consistent classification
                         max_tokens=20,
-                        **text_model_config.get("settings", {}),
+                        **settings,
                     )
                     self._model_cache[cache_key] = llm
 
@@ -2007,12 +2010,15 @@ Response:""".format(
                 if cache_key in self._model_cache:
                     llm = self._model_cache[cache_key]
                 else:
+                    # Filter out params we're setting explicitly to avoid duplicate kwargs
+                    settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
+                               if k not in ["temperature", "max_tokens"]}
                     llm = await self.create_model(
                         model=model_name,
                         api_key=text_model_config.get("api_key"),
                         temperature=0.1,
                         max_tokens=20,
-                        **text_model_config.get("settings", {}),
+                        **settings,
                     )
                     self._model_cache[cache_key] = llm
 
@@ -2055,12 +2061,15 @@ Response:""".format(
                 if cache_key in self._model_cache:
                     llm = self._model_cache[cache_key]
                 else:
+                    # Filter out params we're setting explicitly to avoid duplicate kwargs
+                    settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
+                               if k not in ["temperature", "max_tokens"]}
                     llm = await self.create_model(
                         model=model_name,
                         api_key=text_model_config.get("api_key"),
                         temperature=0.1,
                         max_tokens=20,
-                        **text_model_config.get("settings", {}),
+                        **settings,
                     )
                     self._model_cache[cache_key] = llm
 

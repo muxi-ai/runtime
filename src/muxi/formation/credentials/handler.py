@@ -49,12 +49,15 @@ class CredentialHandler:
 
         # Create new model instance with proper configuration
         try:
+            # Filter out params we're setting explicitly to avoid duplicate kwargs
+            settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
+                       if k not in ["temperature", "max_tokens"]}
             llm = await self.overlord.create_model(
                 model=model_name,
                 api_key=text_model_config.get("api_key"),
                 temperature=0.7,  # Reasonable default for credential operations
                 max_tokens=max_tokens,
-                **text_model_config.get("settings", {}),
+                **settings,
             )
             self.overlord._model_cache[cache_key] = llm
             return llm
@@ -98,12 +101,15 @@ class CredentialHandler:
         if cache_key in self.overlord._model_cache:
             llm = self.overlord._model_cache[cache_key]
         else:
+            # Filter out params we're setting explicitly to avoid duplicate kwargs
+            settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
+                       if k not in ["temperature", "max_tokens"]}
             llm = await self.overlord.create_model(
                 model=model_name,
                 api_key=text_model_config.get("api_key"),
                 temperature=0.0,
                 max_tokens=100,
-                **text_model_config.get("settings", {}),
+                **settings,
             )
             self.overlord._model_cache[cache_key] = llm
 
@@ -541,12 +547,15 @@ Respond in JSON format:
         if cache_key in self.overlord._model_cache:
             llm = self.overlord._model_cache[cache_key]
         else:
+            # Filter out params we're setting explicitly to avoid duplicate kwargs
+            settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
+                       if k not in ["temperature", "max_tokens"]}
             llm = await self.overlord.create_model(
                 model=model_name,
                 api_key=text_model_config.get("api_key"),
                 temperature=0.0,
                 max_tokens=10,
-                **text_model_config.get("settings", {}),
+                **settings,
             )
             self.overlord._model_cache[cache_key] = llm
 
@@ -1031,12 +1040,15 @@ Return ONLY the message text, no quotes."""
             cache_key = f"text_model_{model_name}"
 
             if cache_key not in self.overlord._model_cache:
+                # Filter out params we're setting explicitly to avoid duplicate kwargs
+                settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
+                           if k not in ["temperature", "max_tokens"]}
                 llm = await self.overlord.create_model(
                     model=model_name,
                     api_key=text_model_config.get("api_key"),
                     temperature=0.7,
                     max_tokens=100,
-                    **text_model_config.get("settings", {}),
+                    **settings,
                 )
                 self.overlord._model_cache[cache_key] = llm
             else:
