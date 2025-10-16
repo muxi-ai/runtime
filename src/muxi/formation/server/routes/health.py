@@ -39,8 +39,9 @@ def _check_formation_health(formation) -> bool:
                 "error": str(e),
                 "error_type": type(e).__name__,
                 "function": "_check_formation_health",
-                "description": "Error checking formation health"
-            }
+            },
+            description=f"Error checking formation health: {str(e)}",
+        }
         )
         return False
 

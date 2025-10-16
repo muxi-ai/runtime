@@ -604,8 +604,9 @@ class MCPService:
                     else resolved_auth.get("type") if isinstance(resolved_auth, dict)
                     else "string"
                 ),
-                "description": f"Executing tool with user credentials for {server_id}",
             },
+            description=f"Executing MCP tool '{tool_name}' on server '{server_id}' with user credentials",
+        }
         )
 
         try:
