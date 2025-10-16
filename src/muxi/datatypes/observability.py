@@ -28,6 +28,57 @@ class SystemEvents(Enum):
 
     CLEANUP = "cleanup"
     # When server is cleaning up
+    
+    # ===================================================================
+    # LLM SYSTEM EVENTS
+    # ===================================================================
+    LLM_INITIALIZED = "llm.initialized"
+    # When LLM instance is initialized
+    
+    LLM_CACHE_CLEARED = "llm.cache.cleared"
+    # When LLM response cache is cleared
+    
+    LLM_CACHE_CONFIGURED = "llm.cache.configured"
+    # When LLM cache TTL is configured
+    
+    LLM_STATISTICS_RESET = "llm.statistics.reset"
+    # When LLM statistics and circuit breakers are reset
+    
+    # ===================================================================
+    # MCP RETRY EVENTS
+    # ===================================================================
+    MCP_RETRY_ATTEMPTED = "mcp.retry.attempted"
+    # When MCP operation retry is attempted
+    
+    # ===================================================================
+    # USER MANAGEMENT EVENTS
+    # ===================================================================
+    USER_RESOLVED = "user.resolved"
+    # When user identifier is resolved to existing user
+    
+    USER_CREATED = "user.created"
+    # When new user is created
+    
+    USER_IDENTIFIERS_ASSOCIATED = "user.identifiers.associated"
+    # When identifiers are associated with user
+    
+    # ===================================================================
+    # DOCUMENT CROSS-REFERENCE EVENTS
+    # ===================================================================
+    CROSS_REFERENCE_MANAGER_INITIALIZED = "cross_reference.manager.initialized"
+    # When document cross-reference manager is initialized
+    
+    CROSS_REFERENCE_ADDED = "cross_reference.added"
+    # When document cross-reference is added
+    
+    CROSS_REFERENCES_LOADED = "cross_reference.loaded"
+    # When document cross-references are loaded from storage
+    
+    # ===================================================================
+    # A2A CLEANUP EVENTS
+    # ===================================================================
+    A2A_HTTPX_CLEANUP = "a2a.httpx.cleanup"
+    # When A2A service httpx client is cleaned up
 
     OVERLORD_SHUTDOWN = "overlord.shutdown"
     # When overlord is shutting down gracefully
