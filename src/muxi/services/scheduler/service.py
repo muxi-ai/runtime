@@ -279,8 +279,8 @@ class SchedulerService:
 
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                    level=observability.EventLevel.ERROR,
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
                     data={"error": str(e), "error_type": type(e).__name__},
                     description=f"Scheduler worker error: {e}",
                 )
@@ -302,7 +302,7 @@ class SchedulerService:
             due_jobs = await self.get_due_jobs_map_reduce(current_time)
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "error": str(e),
@@ -512,8 +512,8 @@ class SchedulerService:
 
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                    level=observability.EventLevel.ERROR,
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
                     data={"job_id": job["id"], "exclusion_rule": rule, "error": str(e)},
                     description=f"Failed to evaluate exclusion rule for job {job['id']}: {e}",
                 )
@@ -569,8 +569,8 @@ class SchedulerService:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                level=observability.EventLevel.ERROR,
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
                 data={"pattern": pattern, "error": str(e)},
                 description=f"Failed to evaluate complex date pattern: {e}",
             )

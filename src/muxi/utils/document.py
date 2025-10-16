@@ -35,7 +35,7 @@ def load_document(file_path: str) -> str:
     try:
         if not os.path.exists(file_path):
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.RESOURCE_NOT_FOUND,
                 level=observability.EventLevel.ERROR,
                 description="Document loading failed - file not found",
                 data={
@@ -66,7 +66,7 @@ def load_document(file_path: str) -> str:
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.ERROR,
             description="Document loading failed with error",
             data={
@@ -168,7 +168,7 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.ERROR,
             description="Text chunking failed with error",
             data={

@@ -170,7 +170,7 @@ class Memobase:
         except Exception as e:
             # Log memory store error
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.MEMORY_OPERATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description="Memory store operation failed",
                 data={
@@ -295,7 +295,7 @@ class Memobase:
         except Exception as e:
             # Log memory retrieval error
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.MEMORY_RETRIEVAL_FAILED,
                 level=observability.EventLevel.ERROR,
                 description="Memory search operation failed",
                 data={
@@ -406,7 +406,7 @@ class Memobase:
         except Exception as e:
             # Log memory deletion error
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.MEMORY_OPERATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description="Memory deletion operation failed",
                 data={
@@ -478,7 +478,7 @@ class Memobase:
         except Exception as e:
             # Log memory clear error
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.MEMORY_CLEAR_FAILED,
                 level=observability.EventLevel.ERROR,
                 description="User memory clear operation failed",
                 data={
@@ -581,7 +581,7 @@ class Memobase:
         except Exception as e:
             # Log memory retrieval error
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.MEMORY_RETRIEVAL_FAILED,
                 level=observability.EventLevel.ERROR,
                 description="User memories retrieval operation failed",
                 data={

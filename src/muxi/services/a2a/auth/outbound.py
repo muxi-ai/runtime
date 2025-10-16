@@ -328,7 +328,7 @@ class A2AAuthManager:
             else:
                 # Log missing credential
                 observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.WARNING,
                     level=observability.EventLevel.WARNING,
                     description="A2A credential not found in secrets",
                     data={
@@ -341,7 +341,7 @@ class A2AAuthManager:
         except Exception as e:
             # Log credential loading error
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description="Failed to load single A2A credential",
                 data={
@@ -371,7 +371,7 @@ class A2AAuthManager:
                     return None
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.WARNING,
                     level=observability.EventLevel.WARNING,
                     description="Failed to load Basic auth credential",
                     data={
@@ -483,7 +483,7 @@ class A2AAuthManager:
             except Exception as e:
                 # Log formation configuration processing warning
                 observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.WARNING,
                     level=observability.EventLevel.WARNING,
                     description="Failed to process A2A service configuration",
                     data={

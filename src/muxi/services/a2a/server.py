@@ -287,7 +287,7 @@ class A2AServer:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation": self.formation_name,
@@ -750,7 +750,7 @@ class A2AServer:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation": self.formation_name,

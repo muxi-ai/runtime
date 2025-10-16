@@ -70,7 +70,7 @@ def convert_onellm_to_muxi_content(
 
     except Exception as e:
         observability.observe(
-            observability.ErrorEvents.RETRY_ATTEMPTED,
+            observability.ErrorEvents.INTERNAL_ERROR,
             observability.EventLevel.ERROR,
             f"OneLLM to MUXI content conversion failed: {str(e)}",
             data={
@@ -179,7 +179,7 @@ def extract_user_content(
 
     except Exception as e:
         observability.observe(
-            observability.ErrorEvents.RETRY_ATTEMPTED,
+            observability.ErrorEvents.INTERNAL_ERROR,
             observability.EventLevel.ERROR,
             f"MCP content extraction failed: {str(e)}",
             data={
@@ -272,7 +272,7 @@ def create_unified_response(
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.ERROR,
             description=f"Unified response creation failed: {str(e)}",
             data={
@@ -343,7 +343,7 @@ def create_error_response(exception: Exception, include_trace: bool = False) -> 
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.ERROR,
             data={
                 "error_type": type(e).__name__,

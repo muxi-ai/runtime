@@ -95,7 +95,7 @@ class AgentCardGenerator:
             return config
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "config_path": str(config_path),
@@ -598,7 +598,7 @@ class AgentCardGenerator:
             except Exception as e:
                 failed_cards += 1
                 observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.ERROR,
                     data={
                         "config_file": str(config_file),
@@ -664,7 +664,7 @@ class AgentCardGenerator:
             except Exception as e:
                 failed_exports += 1
                 observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.ERROR,
                     data={
                         "agent_id": agent_id,
