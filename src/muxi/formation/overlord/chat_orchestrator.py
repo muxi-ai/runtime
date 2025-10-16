@@ -695,7 +695,7 @@ class ChatOrchestrator:
             # Extraction happens separately in _extract_user_information_async
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.MEMORY_OPERATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "error": str(e),
@@ -734,7 +734,7 @@ class ChatOrchestrator:
             # Only user messages and extracted facts should be in long-term memory
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.MEMORY_OPERATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "error": str(e),

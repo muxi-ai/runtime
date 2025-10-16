@@ -337,7 +337,7 @@ class KnowledgeHandler:
                         chunks_added += 1
                     except Exception as e:
                         observability.observe(
-                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                            event_type=observability.ErrorEvents.MEMORY_OPERATION_FAILED,
                             level=observability.EventLevel.WARNING,
                             description="Failed to add cached chunk to memory",
                             data={"error": str(e), "error_type": type(e).__name__}
@@ -377,7 +377,7 @@ class KnowledgeHandler:
 
                     if not embeddings:
                         observability.observe(
-                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                            event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,
                             level=observability.EventLevel.ERROR,
                             description="Failed to generate embeddings",
                             data={"source_name": source.name, "chunks_count": len(chunk_contents)}
@@ -393,7 +393,7 @@ class KnowledgeHandler:
                             # Skip if embedding generation failed
                             if embedding is None:
                                 observability.observe(
-                                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                    event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,
                                     level=observability.EventLevel.WARNING,
                                     description="Skipping chunk due to missing embedding",
                                     data={
@@ -430,7 +430,7 @@ class KnowledgeHandler:
 
                         except Exception as e:
                             observability.observe(
-                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                event_type=observability.ErrorEvents.MEMORY_OPERATION_FAILED,
                                 level=observability.EventLevel.WARNING,
                                 description="Failed to add chunk to memory",
                                 data={
@@ -604,7 +604,7 @@ class KnowledgeHandler:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.KNOWLEDGE_SEARCH_FAILED,
                 level=observability.EventLevel.ERROR,
                 description="Knowledge search failed",
                 data={"query": query[:100], "error": str(e), "error_type": type(e).__name__}
@@ -852,7 +852,7 @@ class KnowledgeHandler:
 
             if not embeddings:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,
                     level=observability.EventLevel.ERROR,
                     description="Failed to generate embeddings for file",
                     data={"file_path": file_path}
@@ -865,7 +865,7 @@ class KnowledgeHandler:
                 # Skip if embedding generation failed
                 if embedding is None:
                     observability.observe(
-                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,
                         level=observability.EventLevel.WARNING,
                         description="Skipping chunk due to missing embedding",
                         data={

@@ -1068,6 +1068,36 @@ class ErrorEvents(Enum):
     SOP_INITIALIZATION_FAILED = "error.sop.initialization.failed"
     # When SOP (Standard Operating Procedure) system initialization fails
 
+    KNOWLEDGE_SEARCH_FAILED = "error.knowledge.search.failed"
+    # When knowledge base search operation fails
+
+    EMBEDDINGS_GENERATION_FAILED = "error.embeddings.generation.failed"
+    # When embedding generation for text fails
+
+    A2A_MESSAGE_HANDLING_FAILED = "error.a2a.message.handling.failed"
+    # When Agent-to-Agent message handling fails
+
+    MEMORY_OPERATION_FAILED = "error.memory.operation.failed"
+    # When general memory system operation fails
+
+    MEMORY_INITIALIZATION_FAILED = "error.memory.initialization.failed"
+    # When memory system initialization fails
+
+    FORMATION_INITIALIZATION_FAILED = "error.formation.initialization.failed"
+    # When formation initialization fails
+
+    PLANNING_TEMPLATE_MISSING = "error.planning.template.missing"
+    # When agent planning template file is missing
+
+    PARAMETER_VALIDATION_FAILED = "error.parameter.validation.failed"
+    # When parameter validation fails
+
+    METADATA_PERSISTENCE_FAILED = "error.metadata.persistence.failed"
+    # When metadata persistence to storage fails
+
+    REFERENCE_PERSISTENCE_FAILED = "error.reference.persistence.failed"
+    # When reference data persistence to storage fails
+
     RETRY_ATTEMPTED = "error.retry.attempted"
     # When a retry is attempted
 

@@ -270,7 +270,7 @@ def _initialize_working_memory(formation, working_config: Dict[str, Any]) -> Non
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
             level=observability.EventLevel.ERROR,
             data={"error": str(e), "service": "working_memory"},
             description=f"Failed to initialize working memory: {str(e)}",
@@ -327,7 +327,7 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
             level=observability.EventLevel.ERROR,
             data={"error": str(e), "service": "buffer_memory"},
             description=f"Failed to initialize buffer memory: {str(e)}",
@@ -432,7 +432,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
             level=observability.EventLevel.ERROR,
             data={"error": str(e), "service": "persistent_memory"},
             description=f"Failed to initialize persistent memory: {str(e)}",
@@ -487,7 +487,7 @@ def _create_all_database_tables(db_manager) -> None:
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            event_type=observability.ErrorEvents.DATABASE_TABLE_CREATION_FAILED,
             level=observability.EventLevel.ERROR,
             data={"error": str(e), "service": "database"},
             description=f"Failed to create database tables: {str(e)}",
@@ -516,7 +516,7 @@ def initialize_document_processing(formation) -> None:
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
             level=observability.EventLevel.WARNING,
             data={"error": str(e), "service": "document_processing"},
             description=f"Failed to initialize document processing: {str(e)}",
@@ -713,7 +713,7 @@ def initialize_clarification_config(formation) -> None:
         # Use default on error (but not for validation errors)
         formation._clarification_config_obj = ClarificationConfig()
         observability.observe(
-            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
             level=observability.EventLevel.WARNING,
             data={"error": str(e), "service": "clarification"},
             description=f"Failed to initialize clarification config, using defaults: {str(e)}",
@@ -750,7 +750,7 @@ def initialize_document_processing_config(formation) -> None:
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
             level=observability.EventLevel.WARNING,
             data={"error": str(e), "service": "document_processing"},
             description=f"Failed to initialize document processing config: {str(e)}",
@@ -862,7 +862,7 @@ async def initialize_buffer_memory(formation, overlord, buffer_config: Dict[str,
                 embedding_model = await overlord.get_model_for_capability("embedding")
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "config_type": "embedding_model"},
                     description=f"Failed to initialize embedding model for buffer memory: {str(e)}",
@@ -886,7 +886,7 @@ async def initialize_buffer_memory(formation, overlord, buffer_config: Dict[str,
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
             level=observability.EventLevel.ERROR,
             data={"error": str(e), "config_type": "buffer_memory"},
             description=f"Failed to initialize buffer memory: {str(e)}",
@@ -915,7 +915,7 @@ async def _get_embedding_model(
         except Exception as e:
             # Log the specific model failure
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "error": str(e),
@@ -929,7 +929,7 @@ async def _get_embedding_model(
                 embedding_model = await overlord.get_model_for_capability("embedding")
             except Exception as e2:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e2), "config_type": "embedding_model"},
                     description=f"Failed to initialize default embedding model: {str(e2)}",
@@ -940,7 +940,7 @@ async def _get_embedding_model(
             embedding_model = await overlord.get_model_for_capability("embedding")
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={"error": str(e), "config_type": "embedding_model"},
                 description=f"Failed to initialize default embedding model: {str(e)}",
@@ -969,7 +969,7 @@ async def initialize_persistent_memory(
                 connection_string = interpolated.get("connection_string", connection_string)
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.MEMORY_OPERATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "config_type": "persistent_memory_secrets"},
                     description=f"Failed to interpolate persistent memory secrets: {str(e)}",
@@ -1053,7 +1053,7 @@ async def initialize_persistent_memory(
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
             level=observability.EventLevel.ERROR,
             data={"error": str(e), "config_type": "persistent_memory"},
             description=f"Critical error during persistent memory initialization: {str(e)}",

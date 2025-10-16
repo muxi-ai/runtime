@@ -261,7 +261,7 @@ class FileKnowledge(KnowledgeSource):
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Error processing file {os.path.basename(file_path)}",
                 data={

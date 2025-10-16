@@ -218,7 +218,7 @@ class Agent:
             except Exception as e:
                 # Log but don't fail agent initialization
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.A2A_MESSAGE_HANDLING_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "agent_id": self.agent_id,
@@ -268,7 +268,7 @@ class Agent:
                         except Exception as e:
                             # Log error but continue processing other texts
                             observability.observe(
-                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,
                                 level=observability.EventLevel.WARNING,
                                 description="Failed to generate embedding for text in batch",
                                 data={
@@ -423,7 +423,7 @@ class Agent:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.KNOWLEDGE_SEARCH_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={"agent_id": self.agent_id, "error": str(e), "phase": "knowledge_search"},
                 description=f"Error in enhanced knowledge search: {str(e)}",
@@ -486,7 +486,7 @@ class Agent:
         except Exception as e:
             # Fall back to simple keyword-based detection
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.WARNING,
                 data={"agent_id": self.agent_id, "error": str(e), "phase": "intent_detection"},
                 description=f"Intent detection failed, using fallback: {str(e)}",
@@ -978,7 +978,7 @@ class Agent:
             except Exception as e:
                 # Log but don't fail if we can't get tools
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                     level=observability.EventLevel.WARNING,
                     data={
                         "agent_id": self.agent_id,
@@ -1268,7 +1268,7 @@ class Agent:
                             my_results[placeholder] = error_result
 
                             observability.observe(
-                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                event_type=observability.ErrorEvents.TOOL_CALL_ERROR,
                                 level=observability.EventLevel.WARNING,
                                 data={
                                     "agent_id": self.agent_id,
@@ -1457,7 +1457,7 @@ class Agent:
                                     )
                             except Exception as e:
                                 observability.observe(
-                                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                    event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
                                     level=observability.EventLevel.WARNING,
                                     data={
                                         "agent_id": self.agent_id,
@@ -1580,7 +1580,7 @@ class Agent:
             except Exception as e:
                 # Log error and fallback to no tools
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                     level=observability.EventLevel.WARNING,
                     data={
                         "agent_id": self.agent_id,
@@ -2120,7 +2120,7 @@ class Agent:
                     )
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "agent_id": self.agent_id,
@@ -2545,7 +2545,7 @@ class Agent:
         except Exception as e:
             # Fall back to keyword-based detection
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.WARNING,
                 data={"agent_id": self.agent_id, "error": str(e), "phase": "clarification_intent"},
                 description=f"Intent detection for clarification failed, using fallback: {str(e)}",
@@ -3009,7 +3009,7 @@ class Agent:
             # Note: 'in' operator works efficiently with deque for small sizes
             if request_hash in self._a2a_history:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.A2A_MESSAGE_HANDLING_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "agent_id": self.agent_id,
@@ -3285,7 +3285,7 @@ class Agent:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.A2A_MESSAGE_HANDLING_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "agent_id": self.agent_id,
@@ -3347,7 +3347,7 @@ class Agent:
         except Exception as e:
             # Log but don't fail planning
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.A2A_MESSAGE_HANDLING_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "agent_id": self.agent_id,
@@ -3414,7 +3414,7 @@ class Agent:
             planning_prompt += PromptLoader.get('agent_planning.md')
         except KeyError as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.PLANNING_TEMPLATE_MISSING,
                 level=observability.EventLevel.ERROR,
                 data={
                     "agent_id": self.agent_id,
@@ -3662,7 +3662,7 @@ class Agent:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.A2A_MESSAGE_HANDLING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "agent_id": self.agent_id,
@@ -4304,7 +4304,7 @@ class Agent:
         except Exception as e:
             # Log validation error but don't crash
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.PARAMETER_VALIDATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "agent_id": self.agent_id,

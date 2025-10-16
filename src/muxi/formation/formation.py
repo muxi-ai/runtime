@@ -1210,7 +1210,7 @@ class Formation:
             )
         except FileNotFoundError as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.FORMATION_INITIALIZATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={"error": str(e)},
                 description=f"Formation initialization failed: {e}",
@@ -1218,7 +1218,7 @@ class Formation:
             raise RuntimeError(f"Cannot start formation: {e}")
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={"error": str(e)},
                 description=f"Unexpected error loading prompts: {e}",

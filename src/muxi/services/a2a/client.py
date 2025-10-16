@@ -93,7 +93,7 @@ class A2AService:
                     self.sdk_client = None
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    event_type=observability.ErrorEvents.A2A_MESSAGE_HANDLING_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={"error": str(e), "component": "a2a_sdk"},
                     description=f"Failed to initialize A2A SDK client: {e}",
