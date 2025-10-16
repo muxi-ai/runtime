@@ -2580,15 +2580,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 # Re-initialize components that use the extraction model
                 if hasattr(self, "request_analyzer"):
                     self.request_analyzer.llm = self.extraction_model
-                    observability.observe(
-                        event_type=observability.ServerEvents.SERVER_STARTED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "component": "request_analyzer",
-                            "has_llm": self.request_analyzer.llm is not None,
-                        },
-                        description=f"Updated request_analyzer LLM: {self.request_analyzer.llm is not None}",
-                    )
                 if hasattr(self, "task_decomposer"):
                     # Use overlord.llm.model if available, fallback to text model
                     decomposer_model = None
@@ -2623,19 +2614,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         model_source = "extraction_model_fallback"
 
                     self.task_decomposer.llm = decomposer_model
-                    observability.observe(
-                        event_type=observability.ServerEvents.SERVER_STARTED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "component": "task_decomposer",
-                            "has_llm": self.task_decomposer.llm is not None,
-                            "model_source": model_source,
-                        },
-                        description=(
-                            f"Updated task_decomposer LLM from {model_source}: "
-                            f"{self.task_decomposer.llm is not None}"
-                        ),
-                    )
                 if hasattr(self, "multimodal_fusion_engine"):
                     self.multimodal_fusion_engine.llm = self.extraction_model
                 if hasattr(self, "quality_assessor"):
@@ -5411,19 +5389,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             skip_clarification=skip_clarification,
         )
 
-        # Debug: Entry point
-        observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "_process_sync_chat_entry",
-                "agent_name": agent_name,
-                "user_id": user_id,
-                "session_id": session_id,
-                "message_preview": redact_message_preview(message, 50),
-            },
-            description=f"_process_sync_chat ENTRY: agent={agent_name}, session={session_id}",
-        )
 
         # ===================================================================
         # EARLY WORKFLOW APPROVAL CHECK - SET BYPASS FLAG
@@ -5868,37 +5833,12 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                 use_async = clarification_info.get("use_async")
                                 webhook_url = clarification_info.get("webhook_url")
 
-                                # Debug logging
-                                observability.observe(
-                                    event_type=observability.ServerEvents.SERVER_STARTED,
-                                    level=observability.EventLevel.INFO,
-                                    data={
-                                        "service": "workflow_approval_execution",
-                                        "use_async": use_async,
-                                        "webhook_url": webhook_url,
-                                        "has_webhook": webhook_url is not None,
-                                    },
-                                    description=(
-                                        f"Workflow approval execution: async={use_async}, "
-                                        f"has_webhook={webhook_url is not None}"
-                                    ),
-                                )
 
                                 # Clean up pending states
                                 self._delete_pending_clarification(session_id)
                                 self.workflow_manager.remove_pending_approval(workflow_id)
 
                                 # Log initial state before recalculation
-                                observability.observe(
-                                    event_type=observability.ServerEvents.SERVER_STARTED,
-                                    level=observability.EventLevel.INFO,
-                                    data={
-                                        "service": "workflow_decision_before",
-                                        "use_async_before": use_async,
-                                        "webhook_url": webhook_url,
-                                    },
-                                    description=f"Before recalc: use_async={use_async}, webhook_url={webhook_url}",
-                                )
 
                                 # If use_async was not set, recalculate based on workflow complexity
                                 if use_async is None and workflow and workflow.tasks:
@@ -5914,49 +5854,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                     )  # Convert seconds to minutes
                                     use_async = estimated_minutes > threshold_minutes
 
-                                    observability.observe(
-                                        event_type=observability.ServerEvents.SERVER_STARTED,
-                                        level=observability.EventLevel.INFO,
-                                        data={
-                                            "service": "workflow_decision_recalc",
-                                            "total_complexity": total_complexity,
-                                            "estimated_minutes": estimated_minutes,
-                                            "threshold_minutes": threshold_minutes,
-                                            "use_async_recalc": use_async,
-                                        },
-                                        description=(
-                                            f"Recalculated: complexity={total_complexity}, ",
-                                            f"est={estimated_minutes}min > {threshold_minutes}min = {use_async}",
-                                        ),
-                                    )
 
                                 # Log final decision
-                                observability.observe(
-                                    event_type=observability.ServerEvents.SERVER_STARTED,
-                                    level=observability.EventLevel.INFO,
-                                    data={
-                                        "service": "workflow_decision_final",
-                                        "use_async_final": use_async,
-                                        "webhook_url": webhook_url,
-                                        "will_execute_async": use_async and webhook_url is not None,
-                                    },
-                                    description=(
-                                        f"Final decision: async={use_async and webhook_url is not None} "
-                                        f"(use_async={use_async}, has_webhook={webhook_url is not None})"
-                                    ),
-                                )
 
                                 # Check if we should execute async
                                 if use_async and webhook_url:
-                                    observability.observe(
-                                        event_type=observability.ServerEvents.SERVER_STARTED,
-                                        level=observability.EventLevel.INFO,
-                                        data={
-                                            "service": "workflow_executing_async",
-                                            "webhook_url": webhook_url,
-                                        },
-                                        description="Executing workflow ASYNCHRONOUSLY",
-                                    )
                                     # Execute asynchronously with webhook notification
                                     return await self._execute_workflow_async(
                                         workflow=workflow,
@@ -5967,25 +5869,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                         webhook_url=webhook_url,
                                     )
                                 else:
-                                    observability.observe(
-                                        event_type=observability.ServerEvents.SERVER_STARTED,
-                                        level=observability.EventLevel.INFO,
-                                        data={
-                                            "service": "workflow_executing_sync",
-                                            "use_async": use_async,
-                                            "webhook_url": webhook_url,
-                                            "reason": "sync because "
-                                            + (
-                                                "use_async is False"
-                                                if not use_async
-                                                else "no webhook URL"
-                                            ),
-                                        },
-                                        description=(
-                                            f"Executing workflow SYNCHRONOUSLY: use_async={use_async}, "
-                                            f"webhook={webhook_url}"
-                                        ),
-                                    )
                                     # Execute synchronously (existing code)
                                     return await self._execute_workflow(
                                         workflow=workflow,
@@ -6409,16 +6292,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             description="Checking workflow analysis conditions",
         )
 
-        # Debug: Immediate next step
-        observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.DEBUG,
-            data={
-                "service": "debug_next_step",
-                "checkpoint": "after_checking_conditions",
-            },
-            description="DEBUG: About to evaluate workflow conditions",
-        )
 
         # Check if we should analyze for workflow complexity
         # Only trigger if:
@@ -6426,27 +6299,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         # 2. auto_decomposition is enabled
         # 3. Not a clarification response
 
-        # Debug: Log the decision with more detail
-        observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.DEBUG,
-            data={
-                "service": "workflow_analysis_decision",
-                "agent_name": agent_name,
-                "agent_name_is_none": agent_name is None,
-                "auto_decomposition": self.auto_decomposition,
-                "should_analyze": agent_name is None and self.auto_decomposition,
-                "session_id": session_id,
-                "has_pending_clarifications": (
-                    bool(await self._get_pending_clarification(session_id)) if session_id else False
-                ),
-                "message_preview": redact_message_preview(message, 50),
-            },
-            description=(
-                f"WORKFLOW DECISION: agent_name={agent_name}, auto_decomp={self.auto_decomposition}, "
-                f"SHOULD_TRIGGER={agent_name is None and self.auto_decomposition}"
-            ),
-        )
 
         # Initialize analysis variable (used later for scheduler routing)
         analysis = None
@@ -6632,24 +6484,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     else self.complexity_threshold
                 )
 
-                # Debug logging
-                observability.observe(
-                    event_type=observability.ServerEvents.SERVER_STARTED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "service": "workflow_analysis_result",
-                        "complexity_score": analysis.complexity_score,
-                        "threshold": threshold,
-                        "exceeds_threshold": analysis.complexity_score >= threshold,
-                        "requires_decomposition": analysis.requires_decomposition,
-                        "requires_approval": analysis.requires_approval,
-                        "explicit_sop_request": analysis.explicit_sop_request,
-                    },
-                    description=(
-                        f"Workflow analysis: score={analysis.complexity_score}, "
-                        f"threshold={threshold}, trigger={analysis.complexity_score >= threshold}"
-                    ),
-                )
 
                 if analysis.complexity_score >= threshold:
                     # Protection: Skip workflow for non-actionable or simple informational messages
@@ -6677,35 +6511,15 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     is_non_actionable = await self._is_non_actionable_for_workflow(message_lower)
 
                     if is_non_actionable:
-                        observability.observe(
-                            event_type=observability.ServerEvents.SERVER_STARTED,
-                            level=observability.EventLevel.INFO,
-                            data={
-                                "service": "workflow_protection",
-                                "complexity_score": analysis.complexity_score,
-                                "threshold": threshold,
-                                "reason": "non_actionable_message",
-                            },
-                            description="Skipping workflow for non-actionable message despite threshold",
-                        )
                         # Fall through to normal agent selection
+                        pass
                     else:
                         # Protection: Prevent workflow for simple questions
                         is_simple_question = await self._is_simple_question(message_lower)
 
                         if threshold <= 2.0 or is_simple_question:
-                            observability.observe(
-                                event_type=observability.ServerEvents.SERVER_STARTED,
-                                level=observability.EventLevel.INFO,
-                                data={
-                                    "service": "workflow_protection",
-                                    "complexity_score": analysis.complexity_score,
-                                    "threshold": threshold,
-                                    "reason": "simple_question_low_threshold",
-                                },
-                                description="Skipping workflow for simple question with low threshold",
-                            )
                             # Fall through to normal agent selection
+                            pass
                         else:
                             # Process with workflow orchestration
                             return await self._process_with_workflow(
@@ -6792,16 +6606,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     f"has been scheduled successfully. (Job ID: {job_id})"
                 )
 
-                observability.observe(
-                    event_type=observability.ServerEvents.SERVER_STARTED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "service": "scheduler",
-                        "job_id": job_id,
-                        "user_id": str(user_id),
-                    },
-                    description="Scheduled job created successfully",
-                )
 
                 return MuxiResponse(
                     role="assistant",
@@ -7531,16 +7335,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             )
 
                 # Decompose the request into a workflow
-                observability.observe(
-                    event_type=observability.ServerEvents.SERVER_STARTED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "service": "task_decomposer",
-                        "has_llm": self.task_decomposer.llm is not None,
-                        "available_agents": list(self.agents.keys()),
-                    },
-                    description=f"Starting task decomposition (LLM: {self.task_decomposer.llm is not None})",
-                )
 
                 workflow = await self.task_decomposer.decompose_request(
                     request=enhanced_message,
@@ -7549,16 +7343,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     requires_approval=needs_approval,
                 )
 
-            observability.observe(
-                event_type=observability.ServerEvents.SERVER_STARTED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "task_decomposer_complete",
-                    "workflow_id": workflow.id if workflow else None,
-                    "task_count": len(workflow.tasks) if workflow else 0,
-                },
-                description=f"Task decomposition complete: {len(workflow.tasks) if workflow else 0} tasks",
-            )
 
             # NEW: Make async decision based on workflow time estimate
             if use_async is None and workflow and workflow.tasks:
@@ -7593,23 +7377,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # Store workflow for tracking
             workflow_id = workflow.id
 
-            # Debug: About to track workflow
-            observability.observe(
-                event_type=observability.ServerEvents.SERVER_STARTED,
-                level=observability.EventLevel.INFO,
-                data={"service": "track_workflow_call", "workflow_id": workflow_id},
-                description="About to call workflow_manager.track_workflow",
-            )
 
             self.workflow_manager.track_workflow(workflow, user_id)
 
-            # Debug: After tracking workflow
-            observability.observe(
-                event_type=observability.ServerEvents.SERVER_STARTED,
-                level=observability.EventLevel.INFO,
-                data={"service": "track_workflow_complete", "workflow_id": workflow_id},
-                description="workflow_manager.track_workflow completed successfully",
-            )
 
             # Note: user_id is tracked separately in active_workflows
             # The Workflow model doesn't support user_id as an attribute
@@ -7618,12 +7388,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # This accounts for bypass_approval from SOPs
             if workflow.requires_approval:
                 # Route to approval handler
-                observability.observe(
-                    event_type=observability.ServerEvents.SERVER_STARTED,
-                    level=observability.EventLevel.INFO,
-                    data={"service": "workflow_approval", "workflow_id": workflow_id},
-                    description="Routing to workflow approval handler",
-                )
                 return await self._handle_workflow_approval(
                     workflow=workflow,
                     message=message,
@@ -7635,22 +7399,10 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 )
             else:
                 # Execute immediately without approval
-                observability.observe(
-                    event_type=observability.ServerEvents.SERVER_STARTED,
-                    level=observability.EventLevel.INFO,
-                    data={"service": "workflow_execution", "workflow_id": workflow_id},
-                    description="Executing workflow without approval",
-                )
 
                 # Check if we should execute async or sync
                 if use_async and webhook_url:
                     # Execute asynchronously
-                    observability.observe(
-                        event_type=observability.ServerEvents.SERVER_STARTED,
-                        level=observability.EventLevel.INFO,
-                        data={"service": "execute_workflow_async_call", "workflow_id": workflow_id},
-                        description="About to call _execute_workflow_async",
-                    )
 
                     result = await self._execute_workflow_async(
                         workflow=workflow,
@@ -7662,12 +7414,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     )
                 else:
                     # Execute synchronously
-                    observability.observe(
-                        event_type=observability.ServerEvents.SERVER_STARTED,
-                        level=observability.EventLevel.INFO,
-                        data={"service": "execute_workflow_sync_call", "workflow_id": workflow_id},
-                        description="About to call _execute_workflow",
-                    )
 
                     # Never use stream=True for _execute_workflow when using streaming manager
                     # The streaming manager handles streaming via events, not generators
@@ -7680,13 +7426,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         stream=False,  # Always False - streaming happens via events
                     )
 
-                # Debug: _execute_workflow completed
-                observability.observe(
-                    event_type=observability.ServerEvents.SERVER_STARTED,
-                    level=observability.EventLevel.INFO,
-                    data={"service": "execute_workflow_complete", "workflow_id": workflow_id},
-                    description="_execute_workflow completed successfully",
-                )
 
                 # Emit the final response content as a streaming event
                 if result and hasattr(result, "content"):
@@ -7750,58 +7489,20 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         Stores the pending workflow and generates an approval message for the user.
         If session_id is provided, stores clarification info for handling the response.
         """
-        # Debug: Entry point
-        observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.INFO,
-            data={"service": "workflow_approval_handler", "workflow_id": workflow.id},
-            description="Entered _handle_workflow_approval method",
-        )
 
         # Validate inputs
         self._validate_workflow_inputs(message, user_id, session_id, request_id)
         self._validate_workflow_object(workflow)
 
-        # Debug: After validation
-        observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.INFO,
-            data={"service": "workflow_approval_validation", "workflow_id": workflow.id},
-            description="Validation completed successfully",
-        )
 
         # Store pending workflow
         self.workflow_manager.add_pending_approval(workflow)
 
-        # Debug: After storing workflow
-        observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.INFO,
-            data={"service": "workflow_approval_stored", "workflow_id": workflow.id},
-            description="Workflow stored for approval",
-        )
 
         # Generate approval message using approval manager
-        observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.INFO,
-            data={"service": "approval_manager_call", "workflow_id": workflow.id},
-            description="About to call ApprovalManager.present_plan_for_approval",
-        )
 
         approval_message = await self.approval_manager.present_plan_for_approval(workflow)
 
-        # Debug: After approval manager call
-        observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "approval_manager_complete",
-                "workflow_id": workflow.id,
-                "message_length": len(approval_message) if approval_message else 0,
-            },
-            description="ApprovalManager.present_plan_for_approval completed successfully",
-        )
 
         # Store clarification info if session_id exists
         if session_id:
@@ -7822,17 +7523,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # Note: Verification happens through buffer memory KV store
             print(f"  Workflow approval stored in buffer memory for session: {session_id}")
 
-        # Debug: Before returning response
-        observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "workflow_approval_response",
-                "workflow_id": workflow.id,
-                "has_session": session_id is not None,
-            },
-            description="About to return MuxiResponse with approval message",
-        )
 
         # Return response with approval message
         response = MuxiResponse(
@@ -7845,13 +7535,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             },
         )
 
-        # Debug: Final success
-        observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.INFO,
-            data={"service": "workflow_approval_success", "workflow_id": workflow.id},
-            description="_handle_workflow_approval completed successfully",
-        )
 
         return response
 
@@ -7940,16 +7623,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             webhook_url = self.formation_config.get("async", {}).get("webhook_url")
 
         # Log webhook URL for debugging
-        observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "async_execution_webhook_url",
-                "webhook_url": webhook_url,
-                "request_id": request_id,
-            },
-            description=f"Async execution will use webhook URL: {webhook_url}",
-        )
 
         # Mark request as async for observability
         if hasattr(self, "observability_manager"):
@@ -8000,16 +7673,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
     ):
         """Execute workflow in background and send webhook notification."""
         # Log that background execution started
-        observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "workflow_background_execution_started",
-                "request_id": request_id,
-                "webhook_url": webhook_url,
-            },
-            description=f"Starting background execution for request {request_id}",
-        )
 
         try:
             # Execute the workflow normally
@@ -8040,16 +7703,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             await self.request_tracker.remove_request(request_id)
 
             # Log before sending webhook
-            observability.observe(
-                event_type=observability.ServerEvents.SERVER_STARTED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "workflow_background_execution_completed",
-                    "request_id": request_id,
-                    "webhook_url": webhook_url,
-                },
-                description=f"Background execution completed for request {request_id}, sending webhook",
-            )
 
             # Convert result to JSON-serializable format
             serializable_result = None
@@ -8077,16 +7730,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             )
 
             # Log after sending webhook
-            observability.observe(
-                event_type=observability.ServerEvents.SERVER_STARTED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "workflow_webhook_sent",
-                    "request_id": request_id,
-                    "webhook_url": webhook_url,
-                },
-                description=f"Webhook sent successfully for request {request_id}",
-            )
 
         except Exception as e:
             # Store failed status in buffer memory before removing from tracker
