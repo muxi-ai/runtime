@@ -149,16 +149,7 @@ class DatabaseManager:
 
         # Note: pgvector extension for async engine will be initialized on first use
 
-        observability.observe(
-            event_type=observability.SystemEvents.DATABASE_MANAGER_INITIALIZED,
-            level=observability.EventLevel.INFO,
-            data={
-                "database_type": self.database_type,
-                "connection_configured": bool(self.connection_string),
-                "async_support": True,
-            },
-            description=f"Database manager initialized with {self.database_type} (async support enabled)",
-        )
+        pass  # REMOVED: init-phase observe() call
 
         # Don't print here - persistent memory init message already shows database type
         # (Database only initializes when persistent memory is configured, so this message is redundant)
@@ -397,12 +388,7 @@ class DatabaseManager:
         """
         try:
             metadata.create_all(self.engine)
-            observability.observe(
-                event_type=observability.SystemEvents.DATABASE_TABLES_CREATED,
-                level=observability.EventLevel.INFO,
-                data={"database_type": self.database_type},
-                description="Database tables created successfully",
-            )
+            pass  # REMOVED: init-phase observe() call
         except Exception as e:
             observability.observe(
                 event_type=observability.ErrorEvents.DATABASE_TABLE_CREATION_FAILED,
@@ -447,12 +433,7 @@ class DatabaseManager:
         try:
             async with self.async_engine.begin() as conn:
                 await conn.run_sync(metadata.create_all)
-            observability.observe(
-                event_type=observability.SystemEvents.DATABASE_TABLES_CREATED,
-                level=observability.EventLevel.INFO,
-                data={"database_type": self.database_type, "async": True},
-                description="Database tables created successfully (async)",
-            )
+            pass  # REMOVED: init-phase observe() call
         except Exception as e:
             observability.observe(
                 event_type=observability.ErrorEvents.DATABASE_TABLE_CREATION_FAILED,

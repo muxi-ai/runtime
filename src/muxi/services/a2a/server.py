@@ -115,18 +115,7 @@ class A2AServer:
             self._create_app()
 
             # Emit A2A formation server initialization event
-            observability.observe(
-                event_type=observability.SystemEvents.A2A_SERVER_STARTED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "formation_name": formation_name,
-                    "port": port,
-                    "host": self.host,
-                    "auth_mode": self.auth_mode,
-                    "sdk_enabled": True,
-                },
-                description=f"Initialized SDK-compatible A2A Formation Server for '{formation_name}' on port {port}",
-            )
+            pass  # REMOVED: init-phase observe() call
 
         except Exception as e:
             # Emit error event for initialization failure
@@ -273,17 +262,7 @@ class A2AServer:
                 """
                 return await self._handle_sdk_message(agent_id, request, http_request)
 
-            observability.observe(
-                event_type=observability.SystemEvents.A2A_SERVER_STARTED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "formation": self.formation_name,
-                    "endpoints_created": 6,
-                    "auth_mode": self.auth_mode,
-                    "sdk_enabled": True,
-                },
-                description="SDK A2A Formation Server FastAPI app created",
-            )
+            pass  # REMOVED: init-phase observe() call
 
         except Exception as e:
             observability.observe(
@@ -700,18 +679,7 @@ class A2AServer:
             self.server_task = asyncio.create_task(server.serve())
             self.is_running = True
 
-            observability.observe(
-                event_type=observability.SystemEvents.A2A_SERVER_STARTED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "formation": self.formation_name,
-                    "host": self.host,
-                    "port": self.port,
-                    "auth_mode": self.auth_mode,
-                    "sdk_enabled": True,
-                },
-                description=f"SDK A2A Formation Server started on {self.host}:{self.port}",
-            )
+            pass  # REMOVED: init-phase observe() call
 
         except Exception as e:
             observability.observe(

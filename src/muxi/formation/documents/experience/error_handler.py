@@ -250,7 +250,7 @@ class DocumentErrorHandler:
 
         except Exception as e:
             self.logger.emit(
-                ErrorEvents.UNEXPECTED_ERROR,
+                ErrorEvents.INTERNAL_ERROR,
                 EventLevel.ERROR,
                 "Failed to initialize fallback processors",
                 {"error": str(e)},
@@ -278,7 +278,7 @@ class DocumentErrorHandler:
             )
         except Exception as e:
             self.logger.emit(
-                ErrorEvents.UNEXPECTED_ERROR,
+                ErrorEvents.INTERNAL_ERROR,
                 EventLevel.ERROR,
                 "Failed to initialize intent detection service",
                 {"error": str(e)},
@@ -426,7 +426,7 @@ class DocumentErrorHandler:
 
         except Exception as fallback_error:
             self.logger.emit(
-                ErrorEvents.UNEXPECTED_ERROR,
+                ErrorEvents.INTERNAL_ERROR,
                 EventLevel.ERROR,
                 f"Fallback strategy {strategy.value} failed for {filename}",
                 {
@@ -454,7 +454,7 @@ class DocumentErrorHandler:
                 return f"Unable to extract text from {Path(filename).suffix} files"
         except Exception as e:
             self.logger.emit(
-                ErrorEvents.UNEXPECTED_ERROR,
+                ErrorEvents.INTERNAL_ERROR,
                 EventLevel.ERROR,
                 f"Failed text extraction fallback for {filename}",
                 {"error": str(e), "filename": filename},
@@ -473,7 +473,7 @@ class DocumentErrorHandler:
                 return await self._fallback_text_extraction(filename)
         except Exception as e:
             self.logger.emit(
-                ErrorEvents.UNEXPECTED_ERROR,
+                ErrorEvents.INTERNAL_ERROR,
                 EventLevel.ERROR,
                 f"Failed processing for {filename}",
                 {"error": str(e), "filename": filename},
@@ -493,7 +493,7 @@ class DocumentErrorHandler:
             return await self._fallback_text_extraction(filename)
         except Exception as e:
             self.logger.emit(
-                ErrorEvents.UNEXPECTED_ERROR,
+                ErrorEvents.INTERNAL_ERROR,
                 EventLevel.ERROR,
                 f"Failed processing for {filename}",
                 {"error": str(e), "filename": filename},
@@ -550,7 +550,7 @@ class DocumentErrorHandler:
         except Exception as e:
             # Log error and fall back to keyword-based classification
             self.logger.emit(
-                ErrorEvents.UNEXPECTED_ERROR,
+                ErrorEvents.INTERNAL_ERROR,
                 EventLevel.ERROR,
                 "Intent detection failed for error classification",
                 {"error": str(e), "original_error": error_str},

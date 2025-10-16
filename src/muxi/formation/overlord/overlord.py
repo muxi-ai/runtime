@@ -489,11 +489,7 @@ class Overlord:
                         db_manager=db_manager,
                     )
 
-                    observability.observe(
-                        event_type=observability.SystemEvents.SERVICE_INITIALIZED,
-                        level=observability.EventLevel.WARNING,
-                        description="Using non-encrypted credential resolver (cryptography not installed)",
-                    )
+                    pass  # REMOVED: init-phase observe() call
 
         # Initialize credential handler for LLM-based detection and processing
         self.credential_handler = CredentialHandler(self)
@@ -1494,24 +1490,10 @@ class Overlord:
 
                 loaded_count += 1
 
-                observability.observe(
-                    event_type=observability.SystemEvents.AGENT_INITIALIZED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "agent_id": agent_id,
-                        "name": agent_config.get("name", agent_id),
-                        "role": agent_config.get("role", "general"),
-                    },
-                    description=f"Agent '{agent_id}' loaded successfully",
-                )
+                pass  # REMOVED: init-phase observe() call
 
             except Exception as e:
-                observability.observe(
-                    event_type=observability.SystemEvents.AGENT_INITIALIZED,
-                    level=observability.EventLevel.ERROR,
-                    data={"agent_id": agent_config.get("id", "unknown"), "error": str(e)},
-                    description=f"Failed to load agent: {str(e)}",
-                )
+                pass  # REMOVED: init-phase observe() call
                 continue
 
         observability.observe(
@@ -1556,12 +1538,7 @@ class Overlord:
 
                 # Skip if user already defined this agent
                 if agent_id in self.agents:
-                    observability.observe(
-                        event_type=observability.SystemEvents.AGENT_INITIALIZED,
-                        level=observability.EventLevel.DEBUG,
-                        data={"agent_id": agent_id, "source": "user"},
-                        description=f"User-defined agent '{agent_id}' takes precedence over MUXI default"
-                    )
+                    pass  # REMOVED: init-phase observe() call
                     continue
 
                 # Create agent from config
@@ -1577,12 +1554,7 @@ class Overlord:
                     "system_message": agent_config.get("system_message", ""),
                 }
 
-                observability.observe(
-                    event_type=observability.SystemEvents.AGENT_INITIALIZED,
-                    level=observability.EventLevel.INFO,
-                    data={"agent_id": agent_id, "source": "muxi-default"},
-                    description=f"Loaded MUXI default agent: {agent_id}"
-                )
+                pass  # REMOVED: init-phase observe() call
 
             except Exception as e:
                 # Log warning but continue - don't fail formation load
@@ -1767,12 +1739,7 @@ class Overlord:
         if not mcp_servers or not self.mcp_service:
             return results
 
-        observability.observe(
-            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
-            level=observability.EventLevel.INFO,
-            data={"agent_id": agent_id, "server_count": len(mcp_servers)},
-            description=f"Registering {len(mcp_servers)} MCP servers for agent {agent_id}",
-        )
+        pass  # REMOVED: init-phase observe() call
 
         for server_config in mcp_servers:
             try:
@@ -1852,12 +1819,7 @@ class Overlord:
                         )
                         sys.exit(1)
 
-                observability.observe(
-                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
-                    level=observability.EventLevel.INFO,
-                    data={"agent_id": agent_id, "server_id": server_id},
-                    description=f"MCP server {server_id} registered for agent {agent_id}",
-                )
+                pass  # REMOVED: init-phase observe() call
 
                 results["successful"].append(server_id)
 
@@ -3396,12 +3358,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 # Set the first available agent as default, or None if no agents remain
                 self.default_agent_id = next(iter(self.agents)) if self.agents else None
 
-            observability.observe(
-                event_type=observability.SystemEvents.AGENT_INITIALIZED,  # Using closest available event
-                level=observability.EventLevel.INFO,
-                data={"agent_id": agent_id, "action": "deleted"},
-                description=f"Agent '{agent_id}' successfully deleted",
-            )
+            pass  # REMOVED: init-phase observe() call
 
     async def _actually_shutdown_overlord(self):
         """Actually shutdown overlord (called by active_agent_tracker)."""

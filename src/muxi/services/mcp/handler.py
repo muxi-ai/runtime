@@ -119,12 +119,7 @@ class MCPServerClient:
         Raises:
             MCPConnectionError: If connection fails
         """
-        observability.observe(
-            event_type=observability.SystemEvents.MCP_SERVER_CONNECTING,
-            level=observability.EventLevel.INFO,
-            description=f"Connecting to MCP server '{self.name}'",
-            data={"server_name": self.name, "url": self.url, "command": self.command},
-        )
+        pass  # REMOVED: init-phase observe() call
 
         try:
             # Create transport using factory with automatic type selection
@@ -150,17 +145,7 @@ class MCPServerClient:
                 self.connected = True
                 self.last_activity = datetime.now()
 
-                observability.observe(
-                    event_type=observability.SystemEvents.MCP_SERVER_CONNECTED,
-                    level=observability.EventLevel.INFO,
-                    description=f"Successfully connected to MCP server '{self.name}'",
-                    data={
-                        "server_name": self.name,
-                        "url": self.url,
-                        "command": self.command,
-                        "transport_stats": self.transport.get_connection_stats(),
-                    },
-                )
+                pass  # REMOVED: init-phase observe() call
 
             return success
 

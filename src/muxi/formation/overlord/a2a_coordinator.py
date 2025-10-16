@@ -232,17 +232,7 @@ class A2ACoordinator:
 
             # Emit success event
             auth_mode = self.config.auth_mode if self.config.auth_mode else "none"
-            observability.observe(
-                event_type=observability.SystemEvents.A2A_SERVER_STARTED,
-                level=observability.EventLevel.INFO,
-                description=f"A2A server started successfully on {self.server_host}:{self.server_port}",
-                data={
-                    "host": self.server_host,
-                    "port": self.server_port,
-                    "formation": self.overlord.formation_id,
-                    "auth_mode": auth_mode
-                }
-            )
+            pass  # REMOVED: init-phase observe() call
 
             # Print clean formatted line
             details = f"{self.server_host}:{self.server_port}, auth={auth_mode}"

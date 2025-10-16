@@ -161,18 +161,7 @@ class SchedulerService:
         )
         print(InitEventFormatter.format_ok("Background scheduler initialized", details))
 
-        observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_SERVICE_INITIALIZED,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "SchedulerService",
-                "database_type": self.db_manager.database_type,
-                "check_interval_minutes": self.check_interval_minutes,
-                "max_concurrent_jobs": self.max_concurrent_jobs,
-                "formation_timezone": self.formation_timezone,
-            },
-            description="Scheduler service initialized",
-        )
+        pass  # REMOVED: init-phase observe() call
 
     def _get_scheduler_config(self) -> Dict[str, Any]:
         """

@@ -247,18 +247,7 @@ class MCPService:
         """
         # This is just a placeholder implementation
         # Emit system event for server registration
-        observability.observe(
-            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
-            level=observability.EventLevel.INFO,
-            data={
-                "server_id": server_id,
-                "url": url,
-                "command": command,
-                "has_credentials": bool(credentials),
-                "request_timeout": request_timeout or 60,
-            },
-            description=f"MCP server registered: {server_id}",
-        )
+        pass  # REMOVED: init-phase observe() call
 
         self.servers[server_id] = {
             "url": url,
@@ -887,18 +876,7 @@ class MCPService:
 
                 except Exception as e:
                     # Emit tool discovery failed event
-                    observability.observe(
-                        event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
-                        level=observability.EventLevel.WARNING,
-                        data={
-                            "server_id": server_id,
-                            "error": str(e),
-                            "tools_count": 0,
-                        },
-                        description=(
-                            f"Unable to discover tools from MCP server " f"{server_id}: {str(e)}"
-                        ),
-                    )
+                    pass  # REMOVED: init-phase observe() call
                     self.tool_registry[server_id] = {}
 
                     # Also set empty registry in agent-specific registry
@@ -938,17 +916,7 @@ class MCPService:
 
                 # Emit MCP server registration completed event
                 tools_count = len(self.tool_registry.get(server_id, {}))
-                observability.observe(
-                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "server_id": server_id,
-                        "transport_type": transport_type,
-                        "tools_discovered": tools_count,
-                        "connection_status": "disconnected",  # Changed to disconnected
-                    },
-                    description=f"MCP server registration completed (tools discovered, connection closed): {server_id}",
-                )
+                pass  # REMOVED: init-phase observe() call
 
                 # Print clean formatted line
                 details = f"{tools_count} tools available via {transport_type.replace('_', ' ')}"

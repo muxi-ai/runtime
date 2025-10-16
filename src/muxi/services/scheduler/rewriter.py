@@ -64,11 +64,7 @@ class PromptRewriter:
             'this evening': 'this evening',
         }
 
-        observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_PARSER_INITIALIZED,
-            level=observability.EventLevel.INFO,
-            description="Prompt rewriter initialized"
-        )
+        pass  # REMOVED: init-phase observe() call
 
     async def _get_llm(self) -> Optional[LLM]:
         """Get LLM instance for prompt processing."""

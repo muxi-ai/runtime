@@ -468,12 +468,7 @@ def _create_all_database_tables(db_manager) -> None:
             "scheduled_jobs",
             "scheduled_job_audit",  # Scheduler tables
         ]
-        observability.observe(
-            event_type=observability.SystemEvents.DATABASE_TABLES_CREATED,
-            level=observability.EventLevel.INFO,
-            data={"tables_created": table_names},
-            description="All database tables created successfully",
-        )
+        pass  # REMOVED: init-phase observe() call
 
         # Print clean formatted line
         print(InitEventFormatter.format_ok("Database schema ready", f"{len(table_names)} tables initialized"))
@@ -781,12 +776,7 @@ def load_agents_from_configuration(formation) -> None:
         try:
             agent_id = agent_config.get("id")
             if not agent_id:
-                observability.observe(
-                    event_type=observability.SystemEvents.AGENT_INITIALIZED,
-                    level=observability.EventLevel.WARNING,
-                    data={"error": "Agent missing ID"},
-                    description="Skipping agent without ID",
-                )
+                pass  # REMOVED: init-phase observe() call
                 continue
 
             # Validate agent configuration has required fields
@@ -795,24 +785,10 @@ def load_agents_from_configuration(formation) -> None:
 
             processed_count += 1
 
-            observability.observe(
-                event_type=observability.SystemEvents.AGENT_INITIALIZED,
-                level=observability.EventLevel.DEBUG,
-                data={
-                    "agent_id": agent_id,
-                    "name": agent_config.get("name", agent_id),
-                    "role": agent_config.get("role", "general"),
-                },
-                description=f"Agent '{agent_id}' configuration processed",
-            )
+            pass  # REMOVED: init-phase observe() call
 
         except Exception as e:
-            observability.observe(
-                event_type=observability.SystemEvents.AGENT_INITIALIZED,
-                level=observability.EventLevel.ERROR,
-                data={"agent_id": agent_config.get("id", "unknown"), "error": str(e)},
-                description=f"Failed to process agent configuration: {str(e)}",
-            )
+            pass  # REMOVED: init-phase observe() call
             continue
 
     observability.observe(

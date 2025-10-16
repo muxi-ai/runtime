@@ -37,20 +37,10 @@ class StreamableHTTPTransport(BaseTransport):
         self.write_stream = None
         self.get_session_id = None
         self.client_context = None
-        observability.observe(
-            event_type=observability.SystemEvents.MCP_TRANSPORT_DETECTED,
-            level=observability.EventLevel.DEBUG,
-            data={"service": "mcp", "transport": "streamable_http", "action": "initialize", "url": url},
-            description=f"Initialized Streamable HTTP transport with URL: {url}"
-        )
+        pass  # REMOVED: init-phase observe() call
         # Log auth config safely without exposing sensitive data
         if auth:
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_TRANSPORT_DETECTED,
-                level=observability.EventLevel.DEBUG,
-                data={"service": "mcp", "transport": "streamable_http", "action": "auth_configured", "has_auth": True},
-                description="Auth configuration provided for Streamable HTTP transport"
-            )
+            pass  # REMOVED: init-phase observe() call
 
     def _mask_sensitive_data(self, data: Any) -> Any:
         """
@@ -135,12 +125,7 @@ class StreamableHTTPTransport(BaseTransport):
             self.connect_time = datetime.now()
             self.last_activity = datetime.now()
 
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_SERVER_CONNECTED,
-                level=observability.EventLevel.INFO,
-                data={"service": "mcp", "transport": "streamable_http", "action": "connect_success", "url": self.url},
-                description=f"Connected successfully to {self.url}"
-            )
+            pass  # REMOVED: init-phase observe() call
             return True
 
         except Exception as e:

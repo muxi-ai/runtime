@@ -62,12 +62,7 @@ class AgentCardGenerator:
             Parsed agent configuration
         """
         try:
-            observability.observe(
-                event_type=observability.SystemEvents.A2A_CONFIG_LOAD_STARTED,
-                level=observability.EventLevel.INFO,
-                data={"config_path": str(config_path), "file_exists": config_path.exists()},
-                description=f"Loading agent configuration from {config_path}",
-            )
+            pass  # REMOVED: init-phase observe() call
         except Exception:
             pass
 
@@ -76,19 +71,7 @@ class AgentCardGenerator:
                 config = yaml.safe_load(f)
 
             try:
-                observability.observe(
-                    event_type=observability.SystemEvents.A2A_CONFIG_LOAD_COMPLETED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "config_path": str(config_path),
-                        "agent_id": config.get("id"),
-                        "agent_name": config.get("name"),
-                        "has_capabilities": "capabilities" in config,
-                        "has_knowledge": "knowledge" in config,
-                        "has_mcp": "mcp_servers" in config,
-                    },
-                    description=f"Successfully loaded agent configuration from {config_path}",
-                )
+                pass  # REMOVED: init-phase observe() call
             except Exception:
                 pass
 
@@ -209,16 +192,7 @@ class AgentCardGenerator:
         if not agent_id:
             agent_id = config_path.stem
 
-        observability.observe(
-            event_type=observability.SystemEvents.A2A_CONFIG_LOAD_COMPLETED,
-            level=observability.EventLevel.DEBUG,
-            data={
-                "agent_id": agent_id,
-                "config_path": str(config_path),
-                "id_source": "config" if config.get("id") or config.get("name") else "filename",
-            },
-            description=f"Extracted agent ID: {agent_id}",
-        )
+        pass  # REMOVED: init-phase observe() call
 
         return agent_id
 
@@ -567,15 +541,7 @@ class AgentCardGenerator:
         # Find all YAML config files
         config_files = list(config_dir.glob("*.yaml")) + list(config_dir.glob("*.yml"))
 
-        observability.observe(
-            event_type=observability.SystemEvents.A2A_CONFIG_LOAD_STARTED,
-            level=observability.EventLevel.INFO,
-            data={
-                "config_files_count": len(config_files),
-                "config_files": [str(f) for f in config_files],
-            },
-            description=f"Found {len(config_files)} configuration files",
-        )
+        pass  # REMOVED: init-phase observe() call
 
         successful_cards = 0
         failed_cards = 0

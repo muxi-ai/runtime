@@ -104,11 +104,7 @@ class ScheduleParser:
             "work days": "1-5",
         }
 
-        observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_PARSER_INITIALIZED,
-            level=observability.EventLevel.INFO,
-            description="Schedule parser initialized",
-        )
+        pass  # REMOVED: init-phase observe() call
 
     async def _get_llm(self) -> Optional[LLM]:
         """Get LLM instance for natural language processing."""
@@ -142,12 +138,7 @@ class ScheduleParser:
         """
         schedule_lower = schedule_text.lower().strip()
 
-        observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_PARSER_INITIALIZED,
-            level=observability.EventLevel.DEBUG,
-            data={"original_text": schedule_text, "timezone": timezone},
-            description="Starting schedule parsing",
-        )
+        pass  # REMOVED: init-phase observe() call
 
         # First, detect if this is a one-time or recurring job
         job_type = await self._detect_job_type(schedule_text)
@@ -156,18 +147,7 @@ class ScheduleParser:
             # Parse as specific datetime
             datetime_result = await self._parse_specific_datetime(schedule_text, timezone)
 
-            observability.observe(
-                event_type=observability.SystemEvents.SCHEDULER_PARSER_INITIALIZED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "original_text": schedule_text,
-                    "scheduled_for": (
-                        datetime_result["scheduled_for"].isoformat() if datetime_result else None
-                    ),
-                    "method": "datetime_parsing",
-                },
-                description="Schedule parsed as one-time job",
-            )
+            pass  # REMOVED: init-phase observe() call
 
             return datetime_result
 
@@ -177,31 +157,13 @@ class ScheduleParser:
             cron_expr = await self._try_pattern_matching(schedule_lower)
 
             if cron_expr:
-                observability.observe(
-                    event_type=observability.SystemEvents.SCHEDULER_PARSER_INITIALIZED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "original_text": schedule_text,
-                        "cron_expression": cron_expr,
-                        "method": "pattern_matching",
-                    },
-                    description="Schedule parsed using pattern matching",
-                )
+                pass  # REMOVED: init-phase observe() call
                 return cron_expr
 
             # Fall back to LLM parsing for complex cases
             cron_expr = await self._llm_parse_schedule(schedule_text, timezone)
 
-            observability.observe(
-                event_type=observability.SystemEvents.SCHEDULER_PARSER_INITIALIZED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "original_text": schedule_text,
-                    "cron_expression": cron_expr,
-                    "method": "llm_parsing",
-                },
-                description="Schedule parsed using LLM",
-            )
+            pass  # REMOVED: init-phase observe() call
 
             return cron_expr
 

@@ -36,20 +36,10 @@ class HTTPSSETransport(BaseTransport):
         self.client_context = None
         self.read_stream = None
         self.write_stream = None
-        observability.observe(
-            event_type=observability.SystemEvents.MCP_TRANSPORT_DETECTED,
-            level=observability.EventLevel.DEBUG,
-            data={"service": "mcp", "transport": "http_sse", "action": "initialize", "url": url},
-            description=f"Initialized HTTP SSE transport with URL: {url}"
-        )
+        pass  # REMOVED: init-phase observe() call
         # Log auth config safely without exposing sensitive data
         if auth:
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_TRANSPORT_DETECTED,
-                level=observability.EventLevel.DEBUG,
-                data={"service": "mcp", "transport": "http_sse", "action": "auth_configured", "has_auth": True},
-                description="Auth configuration provided for HTTP SSE transport"
-            )
+            pass  # REMOVED: init-phase observe() call
 
     async def connect(self) -> bool:
         """Connect using MCP SDK sse_client."""
@@ -82,12 +72,7 @@ class HTTPSSETransport(BaseTransport):
             self.connect_time = datetime.now()
             self.last_activity = datetime.now()
 
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_SERVER_CONNECTED,
-                level=observability.EventLevel.INFO,
-                data={"service": "mcp", "transport": "http_sse", "action": "connect_success", "url": self.url},
-                description=f"Connected successfully to {self.url}"
-            )
+            pass  # REMOVED: init-phase observe() call
             return True
 
         except Exception as e:

@@ -192,19 +192,7 @@ class Agent:
             self._messages.append({"role": "system", "content": enhanced_system_message})
 
         # Emit agent initialization event
-        observability.observe(
-            event_type=observability.SystemEvents.AGENT_INITIALIZED,
-            level=observability.EventLevel.INFO,
-            data={
-                "agent_id": self.agent_id,
-                "agent_name": self.name,
-                "a2a_internal": self.a2a_internal,
-                "a2a_external": self.a2a_external,
-                "has_system_message": bool(self.system_message),
-                "has_knowledge_config": bool(knowledge_config),
-            },
-            description=f"Agent initialized: {self.agent_id}",
-        )
+        pass  # REMOVED: init-phase observe() call
 
         # Register with A2A service for internal routing
         if self.a2a_internal:
@@ -304,17 +292,7 @@ class Agent:
             )
 
             # Log successful knowledge initialization
-            observability.observe(
-                event_type=observability.SystemEvents.AGENT_INITIALIZED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "agent_id": self.agent_id,
-                    "knowledge_sources": len(knowledge_config.get("sources", [])),
-                    "knowledge_config_keys": list(knowledge_config.keys()),
-                    "knowledge_handler_created": self.knowledge_handler is not None,
-                },
-                description=f"Knowledge handler initialized for agent {self.agent_id}",
-            )
+            pass  # REMOVED: init-phase observe() call
 
         except Exception as e:
             # Log error but don't fail agent initialization

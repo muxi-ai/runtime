@@ -764,12 +764,7 @@ class Formation:
                     # Check if service is active (default to True)
                     if a2a_config.get("active", True):
                         config["a2a"]["outbound"]["services"].append(a2a_config)
-                        observability.observe(
-                            event_type=observability.SystemEvents.A2A_CONFIG_LOAD_COMPLETED,
-                            level=observability.EventLevel.DEBUG,
-                            data={"service_id": a2a_config["id"], "file": str(a2a_file)},
-                            description=f"Discovered A2A service: {a2a_config['id']}",
-                        )
+                        pass  # REMOVED: init-phase observe() call
 
                 except Exception as e:
                     observability.observe(
@@ -1523,16 +1518,7 @@ class Formation:
             # Add to servers list
             self._mcp_config["servers"].append(mcp_server_config)
 
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "mcp_name": mcp_name,
-                    "server_id": f"builtin-{mcp_name}",
-                    "mcp_path": str(mcp_path),
-                },
-                description=f"Built-in MCP server added to configuration: {mcp_name}",
-            )
+            pass  # REMOVED: init-phase observe() call
 
     def _setup_a2a_config(self) -> None:
         """Setup and validate Agent-to-Agent configuration."""
@@ -2155,12 +2141,7 @@ class Formation:
         if not hasattr(self, "_mcp_servers") or not self._mcp_servers:
             return
 
-        observability.observe(
-            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
-            level=observability.EventLevel.INFO,
-            data={"server_count": len(self._mcp_servers)},
-            description=f"Registering {len(self._mcp_servers)} MCP servers in Formation",
-        )
+        pass  # REMOVED: init-phase observe() call
 
         # Track failed registrations
         failed_servers = []
@@ -2280,29 +2261,9 @@ class Formation:
                                 "uses_user_credentials": True,
                             }
 
-                            observability.observe(
-                                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
-                                level=observability.EventLevel.INFO,
-                                data={
-                                    "server_id": server_id,
-                                    "service": service_name,
-                                    "accept_inline": original_auth.get("accept_inline", False),
-                                    "uses_user_credentials": True,
-                                    "description": "Registered in user credential server registry",
-                                },
-                                description=f"MCP server {server_id} configured for {service_name} user credentials",
-                            )
+                            pass  # REMOVED: init-phase observe() call
                         else:
-                            observability.observe(
-                                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
-                                level=observability.EventLevel.INFO,
-                                data={
-                                    "server_id": server_id,
-                                    "uses_user_credentials": True,
-                                    "description": "Using formation secrets for initial connection",
-                                },
-                                description=f"MCP server {server_id} configured with user credentials",
-                            )
+                            pass  # REMOVED: init-phase observe() call
                     else:
                         # No user credentials, interpolate secrets normally
                         if hasattr(self, "secrets_manager") and self.secrets_manager:
@@ -2428,23 +2389,7 @@ class Formation:
 
         # Add observability event for failed/skipped servers
         if failed_servers or skipped_servers:
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
-                level=observability.EventLevel.WARNING if failed_servers else observability.EventLevel.INFO,
-                data={
-                    "total_servers": len(self._mcp_servers),
-                    "successful": len(successful_servers),
-                    "failed": len(failed_servers),
-                    "skipped": len(skipped_servers),
-                    "failed_server_ids": failed_servers,
-                    "skipped_server_ids": skipped_servers,
-                    "successful_server_ids": successful_servers,
-                },
-                description=(
-                    f"MCP server registration completed: {len(successful_servers)} successful, "
-                    f"{len(failed_servers)} failed, {len(skipped_servers)} skipped",
-                )
-            )
+            pass  # REMOVED: init-phase observe() call
 
         # Show info message if there were failures
         if failed_servers:
@@ -2544,12 +2489,7 @@ class Formation:
             # Automatically suppress MCP exit errors if we have MCP servers
             if self._has_any_mcp_servers():
                 self.suppress_mcp_errors_on_exit()
-                observability.observe(
-                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
-                    level=observability.EventLevel.INFO,
-                    data={"has_mcp_servers": True, "exit_error_suppression": True},
-                    description="Formation has MCP servers - automatically enabled exit error suppression",
-                )
+                pass  # REMOVED: init-phase observe() call
 
             # A2A initialization happens through the Overlord's A2ACoordinator
             # No separate service initialization needed here
@@ -2785,7 +2725,7 @@ class Formation:
             )
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.UNEXPECTED_ERROR,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"error": str(e), "operation": "agent_deregistration"},
                 description=f"Failed to deregister agents: {e}",
@@ -2837,7 +2777,7 @@ class Formation:
                 )
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.UNEXPECTED_ERROR,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e)},
                     description=f"Operation failed: {e}",

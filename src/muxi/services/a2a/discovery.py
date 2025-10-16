@@ -68,17 +68,7 @@ class LocalDiscoveryService:
         self.http_client = httpx.AsyncClient(timeout=5.0)
 
         # Initialize observability
-        observability.observe(
-            event_type=observability.ConversationEvents.A2A_DISCOVERY_INITIALIZED,
-            level=observability.EventLevel.INFO,
-            data={
-                "health_check_interval": self.config.health_check_interval,
-                "agent_timeout": self.config.agent_timeout,
-                "enable_persistence": self.config.enable_persistence,
-                "enable_auto_cleanup": self.config.enable_auto_cleanup,
-            },
-            description="A2A Discovery Service initialized",
-        )
+        pass  # REMOVED: init-phase observe() call
 
         # Load persisted registry if enabled
         if self.config.enable_persistence and self.config.registry_file:

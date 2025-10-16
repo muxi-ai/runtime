@@ -476,12 +476,7 @@ class MCPCoordinator:
         """
         res = await self.mcp_service.list_tools(server_id=server_id)
 
-        observability.observe(
-            event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
-            level=observability.EventLevel.INFO,
-            data={"server_id": server_id, "tool_count": len(res) if isinstance(res, list) else 0},
-            description=f"MCP tool discovery completed for server '{server_id}'",
-        )
+        pass  # REMOVED: init-phase observe() call
         return res
 
     def get_mcp_service(self) -> MCPService:

@@ -33,7 +33,7 @@ def _check_formation_health(formation) -> bool:
     except Exception as e:
         # Log the exception for debugging
         observability.observe(
-            event_type=observability.SystemEvents.ERROR,
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.ERROR,
             data={
                 "error": str(e),

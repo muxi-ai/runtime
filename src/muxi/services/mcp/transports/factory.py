@@ -143,12 +143,7 @@ class MCPTransportFactory:
 
         # For HTTP URLs, implement fallback logic
         if url is not None:
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_SERVER_CONNECTING,
-                level=observability.EventLevel.DEBUG,
-                data={"service": "mcp", "action": "connect_attempt", "url": url},
-                description=f"Trying to connect to {url}"
-            )
+            pass  # REMOVED: init-phase observe() call
             # First, try streamable HTTP (unless we know it's SSE)
             with _sse_cache_lock:
                 is_sse_cached = url in _sse_server_cache
@@ -192,12 +187,7 @@ class MCPTransportFactory:
                     # Remember this server uses SSE
                     with _sse_cache_lock:
                         _sse_server_cache.add(url)
-                    observability.observe(
-                        event_type=observability.SystemEvents.MCP_TRANSPORT_DETECTED,
-                        level=observability.EventLevel.INFO,
-                        data={"service": "mcp", "action": "cache_sse_server", "url": url},
-                        description=f"Server {url} uses SSE transport (cached for formation lifetime)"
-                    )
+                    pass  # REMOVED: init-phase observe() call
                     return transport
                 else:
                     observability.observe(

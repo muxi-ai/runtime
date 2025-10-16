@@ -38,15 +38,7 @@ class JobManager:
         self._initialized = False
         self.formation_id = formation_id or "default-formation"
 
-        observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_MANAGER_INITIALIZED,
-            level=observability.EventLevel.INFO,
-            data={
-                "database_type": self.db_manager.database_type,
-                "connection_info": self.db_manager.get_connection_info(),
-            },
-            description=f"Job manager initialized with {self.db_manager.database_type} database",
-        )
+        pass  # REMOVED: init-phase observe() call
 
     def _resolve_user_id_sync(self, external_user_id: str) -> int:
         """
@@ -125,12 +117,7 @@ class JobManager:
         # Just mark as initialized
         self._initialized = True
 
-        observability.observe(
-            event_type=observability.SystemEvents.SCHEDULER_MANAGER_INITIALIZED,
-            level=observability.EventLevel.INFO,
-            data={"database_type": self.db_manager.database_type},
-            description=f"Scheduler service initialized for {self.db_manager.database_type}",
-        )
+        pass  # REMOVED: init-phase observe() call
 
     async def create_job(
         self,

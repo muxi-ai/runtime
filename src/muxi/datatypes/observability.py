@@ -370,6 +370,9 @@ class SystemEvents(Enum):
     # ===================================================================
     # GENERAL OPERATIONS
     # ===================================================================
+    SERVICE_STARTED = "service.started"
+    # When a service or operation starts (generic runtime event)
+
     OPERATION_COMPLETED = "operation.completed"
     # When a named operation completes successfully (with timing)
 
