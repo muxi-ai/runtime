@@ -1,208 +1,21 @@
 event_name,enum_category,exists_in_enum,recommendation,file,line,context
-A2A_AGENT_DEREGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/formation.py,2761,observability.observe(
-A2A_AGENT_DEREGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,499,observability.observe(
-A2A_AGENT_REGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,460,observability.observe(
-A2A_AGENT_REGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/client.py,418,observability.observe(
-A2A_AGENT_REGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,223,observability.observe(
-A2A_AGENT_REGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,626,observability.observe(
-A2A_AGENT_REGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,779,observability.observe(
-A2A_AGENT_REGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,879,observability.observe(
 A2A_AGENT_REGISTRATIONS_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,376,observability.observe(
 A2A_AGENT_REGISTRATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,384,observability.observe(
 A2A_AGENT_REGISTRATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,468,observability.observe(
-A2A_AUTH_INITIALIZED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,70,observability.observe(
-A2A_AUTH_INITIALIZED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,132,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,551,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,596,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,631,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,674,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,722,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,867,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,49,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,100,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,610,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,654,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,676,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,719,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,730,observability.observe(
-A2A_AUTH_VALIDATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,744,observability.observe(
-A2A_AUTH_VALIDATING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,536,observability.observe(
-A2A_AUTH_VALIDATING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,770,observability.observe(
-A2A_AUTH_VALIDATING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,814,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,586,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,640,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,683,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,731,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/inbound.py,838,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,62,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,72,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,82,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,520,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,570,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,624,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,667,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,687,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,755,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/server.py,342,observability.observe(
-A2A_AUTH_VALIDATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/server.py,557,observability.observe(
-A2A_CARD_EXPORTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,658,observability.observe(
-A2A_CARD_EXPORTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,678,observability.observe(
-A2A_CARD_EXPORTING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,636,observability.observe(
-A2A_CARD_GENERATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,155,observability.observe(
-A2A_CARD_GENERATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,185,observability.observe(
-A2A_CARD_GENERATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,265,observability.observe(
-A2A_CARD_GENERATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,376,observability.observe(
-A2A_CARD_GENERATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,406,observability.observe(
-A2A_CARD_GENERATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,451,observability.observe(
-A2A_CARD_GENERATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,483,observability.observe(
-A2A_CARD_GENERATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,525,observability.observe(
-A2A_CARD_GENERATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,612,observability.observe(
-A2A_CARD_GENERATING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,129,observability.observe(
-A2A_CARD_GENERATING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,169,observability.observe(
-A2A_CARD_GENERATING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,553,observability.observe(
-A2A_CARD_GENERATOR_INITIALIZED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,44,observability.observe(
 A2A_CONFIG_LOAD_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/formation.py,767,observability.observe(
 A2A_CONFIG_LOAD_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,79,observability.observe(
 A2A_CONFIG_LOAD_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,212,observability.observe(
 A2A_CONFIG_LOAD_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,65,observability.observe(
 A2A_CONFIG_LOAD_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/card_generator.py,570,observability.observe(
-A2A_CREDENTIALS_LOAD_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,265,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,94,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,108,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,117,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,158,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,180,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,235,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,268,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,277,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,290,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,327,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,342,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,363,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,422,observability.observe(
-A2A_CREDENTIAL_LOADED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/auth/inbound.py,493,observability.observe(
-A2A_CREDENTIAL_LOADED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,145,observability.observe(
-A2A_CREDENTIAL_LOADED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,160,observability.observe(
-A2A_CREDENTIAL_LOADED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,198,observability.observe(
-A2A_CREDENTIAL_LOADED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,248,observability.observe(
-A2A_CREDENTIAL_LOADED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,278,observability.observe(
-A2A_CREDENTIAL_LOADED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,297,observability.observe(
-A2A_CREDENTIAL_LOADED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,318,observability.observe(
-A2A_CREDENTIAL_LOADED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,472,observability.observe(
-A2A_CREDENTIAL_LOADED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,508,observability.observe(
 A2A_CREDENTIAL_REMOVED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/auth/outbound.py,774,observability.observe(
-A2A_DEREGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/formation.py,2772,observability.observe(
-A2A_DEREGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,317,observability.observe(
-A2A_DEREGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,326,observability.observe(
-A2A_DEREGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,718,observability.observe(
-A2A_DEREGISTRATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,507,observability.observe(
 A2A_DEREGISTRATION_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,302,observability.observe(
-A2A_DISCOVERY_COMPLETED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/discovery.py,136,observability.observe(
-A2A_DISCOVERY_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,404,observability.observe(
-A2A_DISCOVERY_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,452,observability.observe(
-A2A_DISCOVERY_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,473,observability.observe(
-A2A_DISCOVERY_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,531,observability.observe(
-A2A_DISCOVERY_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,730,observability.observe(
-A2A_DISCOVERY_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,758,observability.observe(
-A2A_DISCOVERY_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,779,observability.observe(
-A2A_DISCOVERY_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,825,observability.observe(
-A2A_DISCOVERY_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,852,observability.observe(
-A2A_DISCOVERY_COMPLETED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/discovery.py,901,observability.observe(
-A2A_DISCOVERY_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,1107,observability.observe(
-A2A_DISCOVERY_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,1186,observability.observe(
-A2A_DISCOVERY_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,1038,observability.observe(
-A2A_DISCOVERY_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,1123,observability.observe(
-A2A_DISCOVERY_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,1143,observability.observe(
 A2A_DISCOVERY_INITIALIZED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/discovery.py,71,observability.observe(
-A2A_DISCOVERY_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,109,observability.observe(
-A2A_DISCOVERY_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,360,observability.observe(
-A2A_DISCOVERY_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,441,observability.observe(
-A2A_DISCOVERY_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,499,observability.observe(
-A2A_DISCOVERY_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,699,observability.observe(
-A2A_DISCOVERY_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,767,observability.observe(
-A2A_DISCOVERY_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,861,observability.observe(
-A2A_DISCOVERY_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,1019,observability.observe(
-A2A_DISCOVERY_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,1156,observability.observe(
-A2A_DISCOVERY_STOPPED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,160,observability.observe(
-A2A_DISCOVERY_STOPPED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,187,observability.observe(
-A2A_HEALTH_CHECK_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,1200,observability.observe(
-A2A_HEALTH_CHECK_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,603,observability.observe(
-A2A_HEALTH_CHECK_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,620,observability.observe(
-A2A_HEALTH_CHECK_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,673,observability.observe(
-A2A_HEALTH_CHECK_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,342,observability.observe(
-A2A_HEALTH_CHECK_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,580,observability.observe(
-A2A_HEALTH_CHECK_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,639,observability.observe(
-A2A_HEALTH_CHECK_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,357,observability.observe(
-A2A_HEALTH_CHECK_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,567,observability.observe(
-A2A_HEALTH_CHECK_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,657,observability.observe(
-A2A_HEALTH_CHECK_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,293,observability.observe(
-A2A_HEALTH_CHECK_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,549,observability.observe(
-A2A_HEALTH_CHECK_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,558,observability.observe(
-A2A_HEALTH_CHECK_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,1222,observability.observe(
-A2A_HEALTH_CHECK_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,1297,observability.observe(
-A2A_HTTPX_CLEANUP,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/client.py,435,observability.observe(
-A2A_MESSAGE_FAILED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/agents/agent.py,3795,observability.observe(
-A2A_MESSAGE_FAILED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/agents/agent.py,4042,observability.observe(
-A2A_MESSAGE_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,923,observability.observe(
-A2A_MESSAGE_FAILED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/client.py,222,observability.observe(
-A2A_MESSAGE_FAILED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/client.py,231,observability.observe(
-A2A_MESSAGE_FAILED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/client.py,278,observability.observe(
-A2A_MESSAGE_FAILED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/server.py,519,observability.observe(
-A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/agents/agent.py,220,observability.observe(
-A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/agents/agent.py,3011,observability.observe(
-A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/agents/agent.py,3287,observability.observe(
-A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/agents/agent.py,3349,observability.observe(
-A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/agents/agent.py,3664,observability.observe(
-A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/overlord/overlord.py,1231,observability.observe(
-A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/overlord/overlord.py,2745,observability.observe(
-A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/overlord/overlord.py,3342,observability.observe(
-A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/services/a2a/client.py,95,observability.observe(
 A2A_MESSAGE_PARSING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/server.py,250,observability.observe(
-A2A_MESSAGE_PROCESSED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/agents/agent.py,3781,observability.observe(
-A2A_MESSAGE_RECEIVED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/agents/agent.py,3223,observability.observe(
-A2A_MESSAGE_RECEIVED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/agents/agent.py,3928,observability.observe(
-A2A_MESSAGE_RECEIVED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/agents/agent.py,4026,observability.observe(
-A2A_MESSAGE_SENT,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/agents/agent.py,3121,observability.observe(
-A2A_MESSAGE_SENT,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/agents/agent.py,3155,observability.observe(
-A2A_MESSAGE_SENT,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/client.py,147,observability.observe(
-A2A_MESSAGE_SENT,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/client.py,163,observability.observe(
-A2A_MESSAGE_SENT,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/a2a/client.py,196,observability.observe(
-A2A_REGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,701,observability.observe(
-A2A_REGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,815,observability.observe(
-A2A_REGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,915,observability.observe(
-A2A_REGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,973,observability.observe(
-A2A_REGISTERED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,1249,observability.observe(
 A2A_REGISTRATION_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/discovery.py,273,observability.observe(
-A2A_REGISTRATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,646,observability.observe(
-A2A_REGISTRATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,741,observability.observe(
-A2A_REGISTRATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,765,observability.observe(
-A2A_REGISTRATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,866,observability.observe(
-A2A_REGISTRATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,954,observability.observe(
-A2A_REGISTRY_CLIENT_INITIALIZED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/client.py,85,observability.observe(
-A2A_REGISTRY_CONNECTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,1112,observability.observe(
-A2A_REGISTRY_CONNECTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,103,observability.observe(
-A2A_REGISTRY_CONNECTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,186,observability.observe(
-A2A_REGISTRY_CONNECTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,198,observability.observe(
-A2A_REGISTRY_CONNECTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,403,observability.observe(
-A2A_REGISTRY_CONNECTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,483,observability.observe(
-A2A_REGISTRY_CONNECTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,520,observability.observe(
-A2A_REGISTRY_DISCONNECTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,142,observability.observe(
-A2A_REGISTRY_DISCONNECTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,238,observability.observe(
-A2A_REGISTRY_DISCONNECTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,250,observability.observe(
-A2A_REGISTRY_DISCONNECTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/registry_client.py,423,observability.observe(
-A2A_SERVER_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/a2a_coordinator.py,253,observability.observe(
-A2A_SERVER_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/server.py,133,observability.observe(
-A2A_SERVER_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/server.py,717,observability.observe(
 A2A_SERVER_STARTED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/formation/overlord/a2a_coordinator.py,235,observability.observe(
 A2A_SERVER_STARTED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/services/a2a/server.py,118,observability.observe(
 A2A_SERVER_STARTED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/services/a2a/server.py,276,observability.observe(
 A2A_SERVER_STARTED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/services/a2a/server.py,703,observability.observe(
-A2A_SERVER_STOPPED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/a2a/server.py,744,observability.observe(
-A2A_TASK_HANDOFF,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/agents/agent.py,3860,observability.observe(
-AGENT_A2A,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/agents/agent.py,1600,observability.observe(
-AGENT_A2A,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/agents/agent.py,1625,observability.observe(
-AGENT_A2A,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/agents/agent.py,2995,observability.observe(
-AGENT_A2A_MESSAGE_RECEIVED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/agents/agent.py,3627,observability.observe(
 AGENT_CREATION_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/overlord/overlord.py,3165,observability.observe(
 AGENT_DEREGISTRATION_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,3334,observability.observe(
 AGENT_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,1589,observability.observe(
@@ -218,9 +31,6 @@ AGENT_INITIALIZED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFor
 AGENT_INITIALIZED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/formation/overlord/overlord.py,1580,observability.observe(
 AGENT_INITIALIZED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/formation/overlord/overlord.py,3399,observability.observe(
 AGENT_REGISTRATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/agents/agent.py,4147,observability.observe(
-AGENT_REMOVED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,3312,observability.observe(
-AGENT_REMOVED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,3319,observability.observe(
-AGENT_REMOVED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/server/routes/admin/agents.py,481,observability.observe(
 BUILTIN_MCP_INITIALIZATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,9693,observability.observe(
 BUILTIN_MCP_PROMPT_LOAD_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,9677,observability.observe(
 CLARIFICATION_REQUEST_GENERATED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/overlord/overlord.py,8933,observability.observe(
@@ -235,29 +45,6 @@ DATABASE_TABLES_CREATED,SystemEvents,NO,Review: Check if similar event exists or
 DATABASE_TABLES_CREATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/db.py,400,observability.observe(
 DATABASE_TABLES_CREATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/db.py,450,observability.observe(
 DATABASE_TYPE_FALLBACK,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/db.py,214,observability.observe(
-DOCUMENT_PROCESSING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/agents/agent.py,1459,observability.observe(
-DOCUMENT_PROCESSING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/agents/agent.py,2122,observability.observe(
-DOCUMENT_PROCESSING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/agents/knowledge/base.py,263,observability.observe(
-DOCUMENT_PROCESSING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/documents/experience/summarizer.py,95,observability.observe(
-DOCUMENT_PROCESSING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/documents/experience/summarizer.py,146,observability.observe(
-DOCUMENT_PROCESSING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/documents/experience/summarizer.py,347,observability.observe(
-DOCUMENT_PROCESSING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/documents/experience/summarizer.py,374,observability.observe(
-DOCUMENT_PROCESSING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/documents/workflow/context_preserver.py,453,observability.observe(
-DOCUMENT_PROCESSING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/documents/workflow/context_preserver.py,537,observability.observe(
-DOCUMENT_PROCESSING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/documents/workflow/context_preserver.py,583,observability.observe(
-DOCUMENT_PROCESSING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/documents/workflow/context_preserver.py,642,observability.observe(
-DOCUMENT_PROCESSING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/documents/workflow/cross_reference_manager.py,267,observability.observe(
-DOCUMENT_PROCESSING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/documents/workflow/cross_reference_manager.py,304,observability.observe(
-DOCUMENT_PROCESSING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/documents/workflow/workflow_integrator.py,181,observability.observe(
-DOCUMENT_PROCESSING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/documents/workflow/workflow_integrator.py,266,observability.observe(
-DOCUMENT_PROCESSING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/documents/workflow/workflow_integrator.py,316,observability.observe(
-DOCUMENT_PROCESSING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/documents/workflow/workflow_integrator.py,354,observability.observe(
-DOCUMENT_PROCESSING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/initialization.py,511,observability.observe(
-DOCUMENT_PROCESSING_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/initialization.py,743,observability.observe(
-DOCUMENT_PROCESSING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,3939,observability.observe(
-DOCUMENT_PROCESSING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,4179,observability.observe(
-DOCUMENT_PROCESSING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,4224,observability.observe(
-DOCUMENT_PROCESSING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,4311,observability.observe(
 ERROR,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/server/routes/health.py,35,observability.observe(
 EXCLUSION_RULES_GENERATED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/scheduler/parser.py,964,observability.observe(
 EXCLUSION_RULES_GENERATION_STARTED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/scheduler/parser.py,938,observability.observe(
@@ -273,24 +60,19 @@ MCP_SERVER_CONNECTED,SystemEvents,NO,Remove - init phase,src/muxi/services/mcp/t
 MCP_SERVER_CONNECTED,SystemEvents,NO,Remove - init phase,src/muxi/services/mcp/transports/streamable.py,138,observability.observe(
 MCP_SERVER_CONNECTING,SystemEvents,NO,Remove - init phase,src/muxi/services/mcp/handler.py,122,observability.observe(
 MCP_SERVER_CONNECTING,SystemEvents,NO,Remove - init phase,src/muxi/services/mcp/transports/factory.py,146,observability.observe(
-MCP_SERVER_DISCONNECTION_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/formation.py,2712,observability.observe(
 MCP_SERVER_MAPPING_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/handler.py,922,observability.observe(
 MCP_SERVER_MAPPING_INCONSISTENT,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/handler.py,973,observability.observe(
 MCP_SERVER_OPERATIONS_CANCELLED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/handler.py,1038,observability.observe(
-MCP_SERVER_REGISTERED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/overlord/mcp_coordinator.py,428,observability.observe(
 MCP_SERVER_REGISTRATION_COMPLETED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/formation/formation.py,1526,observability.observe(
 MCP_SERVER_REGISTRATION_COMPLETED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/formation/formation.py,2431,observability.observe(
 MCP_SERVER_REGISTRATION_COMPLETED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/formation/formation.py,2547,observability.observe(
 MCP_SERVER_REGISTRATION_COMPLETED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/formation/overlord/overlord.py,1855,observability.observe(
 MCP_SERVER_REGISTRATION_COMPLETED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/services/mcp/service.py,250,observability.observe(
 MCP_SERVER_REGISTRATION_COMPLETED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/services/mcp/service.py,941,observability.observe(
-MCP_SERVER_REGISTRATION_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/formation.py,4400,observability.observe(
-MCP_SERVER_REGISTRATION_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/formation.py,4408,observability.observe(
 MCP_SERVER_REGISTRATION_STARTED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/formation/formation.py,2158,observability.observe(
 MCP_SERVER_REGISTRATION_STARTED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/formation/formation.py,2283,observability.observe(
 MCP_SERVER_REGISTRATION_STARTED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/formation/formation.py,2296,observability.observe(
 MCP_SERVER_REGISTRATION_STARTED,SystemEvents,NO,"Remove - init phase, replaced by InitEventFormatter",src/muxi/formation/overlord/overlord.py,1770,observability.observe(
-MCP_SERVER_UNREGISTERED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/overlord/mcp_coordinator.py,539,observability.observe(
 MCP_TOOL_DISCOVERY_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/mcp_coordinator.py,479,observability.observe(
 MCP_TOOL_DISCOVERY_COMPLETED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/service.py,890,observability.observe(
 MCP_TOOL_FALLBACK_USED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/handler.py,938,observability.observe(
@@ -302,22 +84,12 @@ MCP_TRANSPORT_DETECTED,SystemEvents,NO,Review: Check if similar event exists or 
 MCP_TRANSPORT_DETECTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/transports/streamable.py,40,observability.observe(
 MCP_TRANSPORT_DETECTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/mcp/transports/streamable.py,48,observability.observe(
 MEMORY_BUFFER_UPDATE_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/memory/buffer_manager.py,57,observability.observe(
-MEMORY_OPERATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/clarification.py,382,observability.observe(
-MEMORY_OPERATION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/clarification.py,606,observability.observe(
 OVERLORD_PROCESSING_ERROR,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/overlord/overlord.py,8875,observability.observe(
 PROCESSING_ERROR,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/overlord/chat_orchestrator.py,618,observability.observe(
 PROMPT_FORMATION_ENHANCED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/scheduler/rewriter.py,292,observability.observe(
 PROMPT_FORMATION_ENHANCEMENT_STARTED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/scheduler/rewriter.py,229,observability.observe(
 PROMPT_VALIDATION_COMPLETED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/scheduler/rewriter.py,407,observability.observe(
 RESOURCE_ERROR,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/memory/working.py,1018,observability.observe(
-RESPONSE_SYNTHESIZED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/workflow/synthesis.py,483,observability.observe(
-RESPONSE_SYNTHESIZED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/workflow/synthesis.py,648,observability.observe(
-RESPONSE_SYNTHESIZED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/multimodal/fusion_engine.py,850,observability.observe(
-SCHEDULED_JOB_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/services/scheduler/service.py,746,observability.observe(
-SCHEDULED_JOB_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/services/scheduler/service.py,937,observability.observe(
-SCHEDULED_JOB_PAUSED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/service.py,735,observability.observe(
-SCHEDULED_JOB_PAUSED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/service.py,926,observability.observe(
-SCHEDULED_JOB_UPDATED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/services/scheduler/manager.py,1268,observability.observe(
 SCHEDULER_CACHE_CLEANUP,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/cache.py,296,observability.observe(
 SCHEDULER_CIRCUIT_BREAKER_ACTIVATED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/parser.py,424,observability.observe(
 SCHEDULER_CIRCUIT_BREAKER_STATE_CHANGE,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/circuit_breaker.py,101,observability.observe(
@@ -333,8 +105,6 @@ SCHEDULER_PARSER_INITIALIZED,SystemEvents,NO,Review: Check if similar event exis
 SCHEDULER_PARSER_INITIALIZED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/rewriter.py,67,observability.observe(
 SCHEDULER_PROMPT_COMPARISON,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/manager.py,1324,observability.observe(
 SCHEDULER_SERVICE_INITIALIZED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/scheduler/service.py,164,observability.observe(
-SERVER_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,2659,observability.observe(
-SERVER_STARTED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,2678,observability.observe(
 SERVICE_ERROR,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,1302,observability.observe(
 SERVICE_INITIALIZED,SystemEvents,NO,Remove or use appropriate existing event,src/muxi/formation/overlord/overlord.py,492,observability.observe(
 SERVICE_STARTED,SystemEvents,NO,Context-dependent: use OPERATION_COMPLETED or appropriate domain event,src/muxi/formation/agents/knowledge/base.py,291,observability.observe(
@@ -369,48 +139,198 @@ SERVICE_STARTED,SystemEvents,NO,Context-dependent: use OPERATION_COMPLETED or ap
 SERVICE_STARTED,SystemEvents,NO,Context-dependent: use OPERATION_COMPLETED or appropriate domain event,src/muxi/services/intent/service.py,93,observability.observe(
 SERVICE_STARTED,SystemEvents,NO,Context-dependent: use OPERATION_COMPLETED or appropriate domain event,src/muxi/services/intent/service.py,114,observability.observe(
 SERVICE_STARTED,SystemEvents,NO,Context-dependent: use OPERATION_COMPLETED or appropriate domain event,src/muxi/services/mcp/service.py,1569,observability.observe(
-SERVICE_WARNING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/agents/agent.py,2184,observability.observe(
-SERVICE_WARNING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/agents/agent.py,2204,observability.observe(
-SERVICE_WARNING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/documents/storage/chunk_manager.py,98,observability.observe(
-SERVICE_WARNING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/documents/storage/chunk_manager.py,106,observability.observe(
-SERVICE_WARNING,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/overlord/overlord.py,1310,observability.observe(
 SYSTEM_ACTION,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/services/memory/extractor.py,228,observability.observe(
-TIMEOUT_ERROR,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/formation.py,2780,observability.observe(
-TIMEOUT_ERROR,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/formation.py,2832,observability.observe(
 UNEXPECTED_ERROR,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/formation.py,2787,observability.observe(
 UNEXPECTED_ERROR,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/formation.py,2839,observability.observe(
-VALIDATION_ERROR,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/agents/agent.py,1191,observability.observe(
-VALIDATION_ERROR,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/workflow/decomposer.py,1174,observability.observe(
-VALIDATION_ERROR,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/services/llm/llm.py,275,observability.observe(
-VALIDATION_ERROR,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/services/scheduler/parser.py,993,observability.observe(
-WEBHOOK_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/background/webhook_manager.py,165,observability.observe(
-WEBHOOK_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/background/webhook_manager.py,176,observability.observe(
-WEBHOOK_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/background/webhook_manager.py,190,observability.observe(
-WEBHOOK_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/background/webhook_manager.py,202,observability.observe(
-WEBHOOK_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/background/webhook_manager.py,412,observability.observe(
-WEBHOOK_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/background/webhook_manager.py,427,observability.observe(
-WEBHOOK_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/background/webhook_manager.py,444,observability.observe(
-WEBHOOK_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/background/webhook_manager.py,460,observability.observe(
-WEBHOOK_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/background/webhook_manager.py,510,observability.observe(
-WEBHOOK_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/background/webhook_manager.py,520,observability.observe(
-WEBHOOK_SENT,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/background/webhook_manager.py,151,observability.observe(
-WEBHOOK_SENT,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/background/webhook_manager.py,397,observability.observe(
-WORKFLOW_ANALYSIS_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/workflow/analyzer.py,323,observability.observe(
-WORKFLOW_DECOMPOSITION_COMPLETED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/workflow/decomposer.py,91,observability.observe(
-WORKFLOW_DECOMPOSITION_COMPLETED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/workflow/decomposer.py,1061,observability.observe(
-WORKFLOW_DECOMPOSITION_COMPLETED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/workflow/decomposer.py,1119,observability.observe(
-WORKFLOW_DECOMPOSITION_COMPLETED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/workflow/decomposer.py,1144,observability.observe(
-WORKFLOW_DECOMPOSITION_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/workflow/decomposer.py,297,observability.observe(
-WORKFLOW_EXECUTION_COMPLETED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/workflow/executor.py,249,observability.observe(
-WORKFLOW_EXECUTION_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/workflow/executor.py,267,observability.observe(
-WORKFLOW_EXECUTION_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/workflow/executor.py,382,observability.observe(
-WORKFLOW_EXECUTION_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/workflow/executor.py,854,observability.observe(
-WORKFLOW_EXECUTION_FAILED,ErrorEvents,NO,Review: Check if similar event exists or add to ErrorEvents,src/muxi/formation/workflow/executor.py,1296,observability.observe(
-WORKFLOW_EXECUTION_STARTED,ConversationEvents,NO,"Check if exists, may need to add",src/muxi/formation/workflow/executor.py,195,observability.observe(
-WORKFLOW_EXECUTION_STARTED,ConversationEvents,NO,"Check if exists, may need to add",src/muxi/formation/workflow/executor.py,208,observability.observe(
-WORKFLOW_EXECUTION_STARTED,ConversationEvents,NO,"Check if exists, may need to add",src/muxi/formation/workflow/executor.py,1784,observability.observe(
-WORKFLOW_TASK_ASSIGNED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/workflow/executor.py,753,observability.observe(
-WORKFLOW_TASK_COMPLETED,ConversationEvents,NO,Review: Check if similar event exists or add to ConversationEvents,src/muxi/formation/workflow/executor.py,804,observability.observe(
+WORKFLOW_ANALYSIS_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/workflow/analyzer.py,323,observability.observe(
+WORKFLOW_DECOMPOSITION_FAILED,SystemEvents,NO,Review: Check if similar event exists or add to SystemEvents,src/muxi/formation/workflow/decomposer.py,297,observability.observe(
+A2A_AGENT_DEREGISTERED,SystemEvents,YES,,src/muxi/formation/formation.py,2761,observability.observe(
+A2A_AGENT_DEREGISTERED,SystemEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,499,observability.observe(
+A2A_AGENT_REGISTERED,SystemEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,460,observability.observe(
+A2A_AGENT_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/client.py,418,observability.observe(
+A2A_AGENT_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,223,observability.observe(
+A2A_AGENT_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,626,observability.observe(
+A2A_AGENT_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,779,observability.observe(
+A2A_AGENT_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,879,observability.observe(
+A2A_AUTH_INITIALIZED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,70,observability.observe(
+A2A_AUTH_INITIALIZED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,132,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,551,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,596,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,631,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,674,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,722,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,867,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,49,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,100,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,610,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,654,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,676,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,719,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,730,observability.observe(
+A2A_AUTH_VALIDATED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,744,observability.observe(
+A2A_AUTH_VALIDATING,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,536,observability.observe(
+A2A_AUTH_VALIDATING,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,770,observability.observe(
+A2A_AUTH_VALIDATING,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,814,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,586,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,640,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,683,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,731,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,838,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,62,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,72,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,82,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,520,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,570,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,624,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,667,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,687,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,755,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/server.py,342,observability.observe(
+A2A_AUTH_VALIDATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/server.py,557,observability.observe(
+A2A_CARD_EXPORTED,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,658,observability.observe(
+A2A_CARD_EXPORTED,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,678,observability.observe(
+A2A_CARD_EXPORTING,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,636,observability.observe(
+A2A_CARD_GENERATED,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,155,observability.observe(
+A2A_CARD_GENERATED,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,185,observability.observe(
+A2A_CARD_GENERATED,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,265,observability.observe(
+A2A_CARD_GENERATED,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,376,observability.observe(
+A2A_CARD_GENERATED,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,406,observability.observe(
+A2A_CARD_GENERATED,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,451,observability.observe(
+A2A_CARD_GENERATED,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,483,observability.observe(
+A2A_CARD_GENERATED,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,525,observability.observe(
+A2A_CARD_GENERATED,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,612,observability.observe(
+A2A_CARD_GENERATING,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,129,observability.observe(
+A2A_CARD_GENERATING,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,169,observability.observe(
+A2A_CARD_GENERATING,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,553,observability.observe(
+A2A_CARD_GENERATOR_INITIALIZED,SystemEvents,YES,,src/muxi/services/a2a/card_generator.py,44,observability.observe(
+A2A_CREDENTIALS_LOAD_FAILED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,265,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,94,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,108,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,117,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,158,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,180,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,235,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,268,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,277,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,290,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,327,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,342,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,363,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,422,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/inbound.py,493,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,145,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,160,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,198,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,248,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,278,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,297,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,318,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,472,observability.observe(
+A2A_CREDENTIAL_LOADED,SystemEvents,YES,,src/muxi/services/a2a/auth/outbound.py,508,observability.observe(
+A2A_DEREGISTERED,SystemEvents,YES,,src/muxi/formation/formation.py,2772,observability.observe(
+A2A_DEREGISTERED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,317,observability.observe(
+A2A_DEREGISTERED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,326,observability.observe(
+A2A_DEREGISTERED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,718,observability.observe(
+A2A_DEREGISTRATION_FAILED,SystemEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,507,observability.observe(
+A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,136,observability.observe(
+A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,404,observability.observe(
+A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,452,observability.observe(
+A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,473,observability.observe(
+A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,531,observability.observe(
+A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,730,observability.observe(
+A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,758,observability.observe(
+A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,779,observability.observe(
+A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,825,observability.observe(
+A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,852,observability.observe(
+A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,901,observability.observe(
+A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,1107,observability.observe(
+A2A_DISCOVERY_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,1186,observability.observe(
+A2A_DISCOVERY_FAILED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,1038,observability.observe(
+A2A_DISCOVERY_FAILED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,1123,observability.observe(
+A2A_DISCOVERY_FAILED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,1143,observability.observe(
+A2A_DISCOVERY_STARTED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,109,observability.observe(
+A2A_DISCOVERY_STARTED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,360,observability.observe(
+A2A_DISCOVERY_STARTED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,441,observability.observe(
+A2A_DISCOVERY_STARTED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,499,observability.observe(
+A2A_DISCOVERY_STARTED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,699,observability.observe(
+A2A_DISCOVERY_STARTED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,767,observability.observe(
+A2A_DISCOVERY_STARTED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,861,observability.observe(
+A2A_DISCOVERY_STARTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,1019,observability.observe(
+A2A_DISCOVERY_STARTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,1156,observability.observe(
+A2A_DISCOVERY_STOPPED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,160,observability.observe(
+A2A_DISCOVERY_STOPPED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,187,observability.observe(
+A2A_HEALTH_CHECK_COMPLETED,SystemEvents,YES,,src/muxi/formation/overlord/overlord.py,1200,observability.observe(
+A2A_HEALTH_CHECK_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,603,observability.observe(
+A2A_HEALTH_CHECK_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,620,observability.observe(
+A2A_HEALTH_CHECK_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,673,observability.observe(
+A2A_HEALTH_CHECK_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,342,observability.observe(
+A2A_HEALTH_CHECK_COMPLETED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,580,observability.observe(
+A2A_HEALTH_CHECK_FAILED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,639,observability.observe(
+A2A_HEALTH_CHECK_FAILED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,357,observability.observe(
+A2A_HEALTH_CHECK_STARTED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,567,observability.observe(
+A2A_HEALTH_CHECK_STARTED,SystemEvents,YES,,src/muxi/services/a2a/discovery.py,657,observability.observe(
+A2A_HEALTH_CHECK_STARTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,293,observability.observe(
+A2A_HEALTH_CHECK_STARTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,549,observability.observe(
+A2A_HEALTH_CHECK_STARTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,558,observability.observe(
+A2A_HEALTH_CHECK_STARTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,1222,observability.observe(
+A2A_HEALTH_CHECK_STARTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,1297,observability.observe(
+A2A_HTTPX_CLEANUP,SystemEvents,YES,,src/muxi/services/a2a/client.py,435,observability.observe(
+A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3795,observability.observe(
+A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4042,observability.observe(
+A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,923,observability.observe(
+A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/services/a2a/client.py,222,observability.observe(
+A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/services/a2a/client.py,231,observability.observe(
+A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/services/a2a/client.py,278,observability.observe(
+A2A_MESSAGE_FAILED,ConversationEvents,YES,,src/muxi/services/a2a/server.py,519,observability.observe(
+A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,220,observability.observe(
+A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3011,observability.observe(
+A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3287,observability.observe(
+A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3349,observability.observe(
+A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,3664,observability.observe(
+A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,1231,observability.observe(
+A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,2745,observability.observe(
+A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,3342,observability.observe(
+A2A_MESSAGE_HANDLING_FAILED,ErrorEvents,YES,,src/muxi/services/a2a/client.py,95,observability.observe(
+A2A_MESSAGE_PROCESSED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3781,observability.observe(
+A2A_MESSAGE_RECEIVED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3223,observability.observe(
+A2A_MESSAGE_RECEIVED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3928,observability.observe(
+A2A_MESSAGE_RECEIVED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4026,observability.observe(
+A2A_MESSAGE_SENT,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3121,observability.observe(
+A2A_MESSAGE_SENT,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3155,observability.observe(
+A2A_MESSAGE_SENT,ConversationEvents,YES,,src/muxi/services/a2a/client.py,147,observability.observe(
+A2A_MESSAGE_SENT,ConversationEvents,YES,,src/muxi/services/a2a/client.py,163,observability.observe(
+A2A_MESSAGE_SENT,ConversationEvents,YES,,src/muxi/services/a2a/client.py,196,observability.observe(
+A2A_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,701,observability.observe(
+A2A_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,815,observability.observe(
+A2A_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,915,observability.observe(
+A2A_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,973,observability.observe(
+A2A_REGISTERED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,1249,observability.observe(
+A2A_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,646,observability.observe(
+A2A_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,741,observability.observe(
+A2A_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,765,observability.observe(
+A2A_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,866,observability.observe(
+A2A_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,954,observability.observe(
+A2A_REGISTRY_CLIENT_INITIALIZED,SystemEvents,YES,,src/muxi/services/a2a/client.py,85,observability.observe(
+A2A_REGISTRY_CONNECTED,SystemEvents,YES,,src/muxi/formation/overlord/overlord.py,1112,observability.observe(
+A2A_REGISTRY_CONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,103,observability.observe(
+A2A_REGISTRY_CONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,186,observability.observe(
+A2A_REGISTRY_CONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,198,observability.observe(
+A2A_REGISTRY_CONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,403,observability.observe(
+A2A_REGISTRY_CONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,483,observability.observe(
+A2A_REGISTRY_CONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,520,observability.observe(
+A2A_REGISTRY_DISCONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,142,observability.observe(
+A2A_REGISTRY_DISCONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,238,observability.observe(
+A2A_REGISTRY_DISCONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,250,observability.observe(
+A2A_REGISTRY_DISCONNECTED,SystemEvents,YES,,src/muxi/services/a2a/registry_client.py,423,observability.observe(
+A2A_SERVER_FAILED,SystemEvents,YES,,src/muxi/formation/overlord/a2a_coordinator.py,253,observability.observe(
+A2A_SERVER_FAILED,SystemEvents,YES,,src/muxi/services/a2a/server.py,133,observability.observe(
+A2A_SERVER_FAILED,SystemEvents,YES,,src/muxi/services/a2a/server.py,717,observability.observe(
+A2A_SERVER_STOPPED,SystemEvents,YES,,src/muxi/services/a2a/server.py,744,observability.observe(
+A2A_TASK_HANDOFF,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3860,observability.observe(
+AGENT_A2A,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1600,observability.observe(
+AGENT_A2A,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1625,observability.observe(
+AGENT_A2A,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2995,observability.observe(
+AGENT_A2A_MESSAGE_RECEIVED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,3627,observability.observe(
 AGENT_ADDED,SystemEvents,YES,,src/muxi/formation/overlord/overlord.py,3114,observability.observe(
 AGENT_ADDED,SystemEvents,YES,,src/muxi/formation/server/routes/admin/agents.py,316,observability.observe(
 AGENT_MESSAGE_PROCESSING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,835,observability.observe(
@@ -433,6 +353,9 @@ AGENT_PLANNING,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,4435,o
 AGENT_PLANNING_STARTED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,1162,observability.observe(
 AGENT_PROCESSING_ERROR,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,902,observability.observe(
 AGENT_PROCESSING_ERROR,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2469,observability.observe(
+AGENT_REMOVED,SystemEvents,YES,,src/muxi/formation/overlord/overlord.py,3312,observability.observe(
+AGENT_REMOVED,SystemEvents,YES,,src/muxi/formation/overlord/overlord.py,3319,observability.observe(
+AGENT_REMOVED,SystemEvents,YES,,src/muxi/formation/server/routes/admin/agents.py,481,observability.observe(
 AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1350,observability.observe(
 AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1447,observability.observe(
 AGENT_RESPONSE_GENERATED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1718,observability.observe(
@@ -538,6 +461,8 @@ CONFIG_FORMATION_LOADED,SystemEvents,YES,,src/muxi/formation/server/routes/admin
 CONFIG_FORMATION_LOADED,SystemEvents,YES,,src/muxi/formation/server/routes/admin/secrets.py,167,observability.observe(
 CONFIG_FORMATION_LOADED,SystemEvents,YES,,src/muxi/formation/server/routes/admin/secrets.py,224,observability.observe(
 CONNECTION_REFUSED,ErrorEvents,YES,,src/muxi/services/mcp/reconnect_handler.py,117,observability.observe(
+CONNECTION_TIMEOUT,ErrorEvents,YES,,src/muxi/formation/formation.py,2780,observability.observe(
+CONNECTION_TIMEOUT,ErrorEvents,YES,,src/muxi/formation/formation.py,2832,observability.observe(
 CONNECTION_TIMEOUT,ErrorEvents,YES,,src/muxi/formation/workflow/executor.py,99,observability.observe(
 CONNECTION_TIMEOUT,ErrorEvents,YES,,src/muxi/formation/workflow/executor.py,1541,observability.observe(
 CONNECTION_TIMEOUT,ErrorEvents,YES,,src/muxi/services/mcp/reconnect_handler.py,354,observability.observe(
@@ -597,10 +522,33 @@ DOCUMENT_PROCESSING_COMPLETED,ConversationEvents,YES,,src/muxi/services/llm/llm.
 DOCUMENT_PROCESSING_COMPLETED,ConversationEvents,YES,,src/muxi/utils/document.py,53,observability.observe(
 DOCUMENT_PROCESSING_COMPLETED,ConversationEvents,YES,,src/muxi/utils/document.py,109,observability.observe(
 DOCUMENT_PROCESSING_COMPLETED,ConversationEvents,YES,,src/muxi/utils/document.py,149,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,1459,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/agent.py,2122,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/knowledge/base.py,263,observability.observe(
 DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/knowledge/handler.py,802,observability.observe(
 DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/agents/knowledge/handler.py,892,observability.observe(
 DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/artifacts/extractor.py,277,observability.observe(
 DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/artifacts/processor.py,288,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/experience/summarizer.py,95,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/experience/summarizer.py,146,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/experience/summarizer.py,347,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/experience/summarizer.py,374,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/workflow/context_preserver.py,453,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/workflow/context_preserver.py,537,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/workflow/context_preserver.py,583,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/workflow/context_preserver.py,642,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/workflow/cross_reference_manager.py,267,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/workflow/cross_reference_manager.py,304,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/workflow/workflow_integrator.py,181,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/workflow/workflow_integrator.py,266,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/workflow/workflow_integrator.py,316,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/documents/workflow/workflow_integrator.py,354,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/initialization.py,511,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/initialization.py,743,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,3939,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,4179,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,4224,observability.observe(
+DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,4311,observability.observe(
 DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,8556,observability.observe(
 DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,8567,observability.observe(
 DOCUMENT_PROCESSING_FAILED,ConversationEvents,YES,,src/muxi/services/llm/llm.py,818,observability.observe(
@@ -797,23 +745,28 @@ MCP_SERVER_DISCONNECTED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,201,o
 MCP_SERVER_DISCONNECTED,SystemEvents,YES,,src/muxi/services/mcp/service.py,1080,observability.observe(
 MCP_SERVER_DISCONNECTED,SystemEvents,YES,,src/muxi/services/mcp/service.py,1090,observability.observe(
 MCP_SERVER_DISCONNECTED,SystemEvents,YES,,src/muxi/services/mcp/service.py,1546,observability.observe(
+MCP_SERVER_DISCONNECTION_FAILED,SystemEvents,YES,,src/muxi/formation/formation.py,2712,observability.observe(
 MCP_SERVER_DISCONNECTION_FAILED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,216,observability.observe(
 MCP_SERVER_DISCONNECTION_FAILED,SystemEvents,YES,,src/muxi/services/mcp/service.py,1557,observability.observe(
 MCP_SERVER_RECONNECTED,SystemEvents,YES,,src/muxi/services/mcp/reconnect_handler.py,295,observability.observe(
 MCP_SERVER_RECONNECTING,SystemEvents,YES,,src/muxi/services/mcp/handler.py,664,observability.observe(
 MCP_SERVER_RECONNECTING,SystemEvents,YES,,src/muxi/services/mcp/reconnect_handler.py,276,observability.observe(
 MCP_SERVER_REGISTERED,SystemEvents,YES,,src/muxi/formation/formation.py,2325,observability.observe(
+MCP_SERVER_REGISTERED,SystemEvents,YES,,src/muxi/formation/overlord/mcp_coordinator.py,428,observability.observe(
 MCP_SERVER_REGISTERED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,694,observability.observe(
 MCP_SERVER_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/formation/formation.py,1502,observability.observe(
 MCP_SERVER_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/formation/formation.py,2200,observability.observe(
 MCP_SERVER_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/formation/formation.py,2349,observability.observe(
 MCP_SERVER_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/formation/formation.py,2380,observability.observe(
 MCP_SERVER_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/formation/formation.py,2407,observability.observe(
+MCP_SERVER_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/formation/formation.py,4400,observability.observe(
+MCP_SERVER_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/formation/formation.py,4408,observability.observe(
 MCP_SERVER_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/formation/initialization.py,560,observability.observe(
 MCP_SERVER_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/formation/overlord/mcp_coordinator.py,385,observability.observe(
 MCP_SERVER_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/formation/overlord/overlord.py,1876,observability.observe(
 MCP_SERVER_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,707,observability.observe(
 MCP_SERVER_REGISTRATION_FAILED,SystemEvents,YES,,src/muxi/services/mcp/service.py,961,observability.observe(
+MCP_SERVER_UNREGISTERED,SystemEvents,YES,,src/muxi/formation/overlord/mcp_coordinator.py,539,observability.observe(
 MCP_SERVER_UNREGISTERED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,744,observability.observe(
 MCP_SERVER_UNREGISTRATION_FAILED,SystemEvents,YES,,src/muxi/services/mcp/handler.py,758,observability.observe(
 MCP_TOOL_CALLED,ConversationEvents,YES,,src/muxi/formation/server/routes/admin/mcp.py,382,observability.observe(
@@ -869,6 +822,8 @@ MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/knowledge/han
 MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/formation/initialization.py,962,observability.observe(
 MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/chat_orchestrator.py,697,observability.observe(
 MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/chat_orchestrator.py,736,observability.observe(
+MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/clarification.py,382,observability.observe(
+MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/clarification.py,606,observability.observe(
 MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/services/memory/memobase.py,172,observability.observe(
 MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/services/memory/memobase.py,408,observability.observe(
 MEMORY_RETRIEVAL_FAILED,ErrorEvents,YES,,src/muxi/formation/memory/buffer_manager.py,176,observability.observe(
@@ -1017,6 +972,9 @@ RESPONSE_CONVERSION_STARTED,ConversationEvents,YES,,src/muxi/utils/response_conv
 RESPONSE_CONVERSION_STARTED,ConversationEvents,YES,,src/muxi/utils/response_converter.py,224,observability.observe(
 RESPONSE_CONVERSION_STARTED,ConversationEvents,YES,,src/muxi/utils/response_converter.py,301,observability.observe(
 RESPONSE_GENERATION_STARTED,ConversationEvents,YES,,src/muxi/services/llm/llm.py,1445,observability.observe(
+RESPONSE_SYNTHESIZED,ConversationEvents,YES,,src/muxi/formation/workflow/synthesis.py,483,observability.observe(
+RESPONSE_SYNTHESIZED,ConversationEvents,YES,,src/muxi/formation/workflow/synthesis.py,648,observability.observe(
+RESPONSE_SYNTHESIZED,ConversationEvents,YES,,src/muxi/services/multimodal/fusion_engine.py,850,observability.observe(
 RETRY_ATTEMPTED,ErrorEvents,YES,,src/muxi/services/llm/llm.py,1219,observability.observe(
 RETRY_ATTEMPTED,ErrorEvents,YES,,src/muxi/services/mcp/reconnection.py,386,observability.observe(
 RETRY_ATTEMPTED,ErrorEvents,YES,,src/muxi/utils/retry_manager.py,287,"on_retry_callback=lambda attempt, error, delay: observability.observe("
@@ -1036,9 +994,14 @@ SCHEDULED_JOB_EXECUTION_TRACKED,ConversationEvents,YES,,src/muxi/services/schedu
 SCHEDULED_JOB_EXECUTION_TRACKED,ConversationEvents,YES,,src/muxi/services/scheduler/manager.py,621,observability.observe(
 SCHEDULED_JOB_EXECUTION_TRACKED,ConversationEvents,YES,,src/muxi/services/scheduler/manager.py,691,observability.observe(
 SCHEDULED_JOB_EXECUTION_TRACKED,ConversationEvents,YES,,src/muxi/services/scheduler/manager.py,737,observability.observe(
+SCHEDULED_JOB_FAILED,ConversationEvents,YES,,src/muxi/services/scheduler/service.py,746,observability.observe(
+SCHEDULED_JOB_FAILED,ConversationEvents,YES,,src/muxi/services/scheduler/service.py,937,observability.observe(
+SCHEDULED_JOB_PAUSED,ConversationEvents,YES,,src/muxi/services/scheduler/service.py,735,observability.observe(
+SCHEDULED_JOB_PAUSED,ConversationEvents,YES,,src/muxi/services/scheduler/service.py,926,observability.observe(
 SCHEDULED_JOB_PAUSED,ConversationEvents,YES,,src/muxi/services/scheduler/service.py,976,observability.observe(
 SCHEDULED_JOB_RESUMED,ConversationEvents,YES,,src/muxi/services/scheduler/service.py,998,observability.observe(
 SCHEDULED_JOB_STARTED,ConversationEvents,YES,,src/muxi/services/scheduler/service.py,673,observability.observe(
+SCHEDULED_JOB_UPDATED,ConversationEvents,YES,,src/muxi/services/scheduler/manager.py,1268,observability.observe(
 SCHEDULED_JOB_WEBHOOK_RECEIVED,ConversationEvents,YES,,src/muxi/services/scheduler/service.py,950,observability.observe(
 SECRET_INTERPOLATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,2360,observability.observe(
 SECRET_INTERPOLATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,2838,observability.observe(
@@ -1079,6 +1042,8 @@ SERIALIZATION_ERROR,ErrorEvents,YES,,src/muxi/services/scheduler/parser.py,561,o
 SERIALIZATION_ERROR,ErrorEvents,YES,,src/muxi/services/scheduler/parser.py,1075,observability.observe(
 SERVER_INITIALIZING,ServerEvents,YES,,src/muxi/formation/server/server.py,130,observability.observe(
 SERVER_RESTARTING,ServerEvents,YES,,src/muxi/formation/formation.py,3123,observability.observe(
+SERVER_STARTED,ServerEvents,YES,,src/muxi/formation/overlord/overlord.py,2659,observability.observe(
+SERVER_STARTED,ServerEvents,YES,,src/muxi/formation/overlord/overlord.py,2678,observability.observe(
 SERVER_STARTED,ServerEvents,YES,,src/muxi/formation/server/server.py,154,observability.observe(
 SERVER_STARTED,ServerEvents,YES,,src/muxi/formation/server/server.py,166,observability.observe(
 SERVER_STARTED,ServerEvents,YES,,src/muxi/utils/run_formation.py,69,observability.observe(
@@ -1129,16 +1094,25 @@ TOOL_PARSE_ERROR,ErrorEvents,YES,,src/muxi/services/mcp/parser.py,357,observabil
 USER_CREATED,SystemEvents,YES,,src/muxi/utils/user_resolution.py,167,observability.observe(
 USER_IDENTIFIERS_ASSOCIATED,SystemEvents,YES,,src/muxi/utils/user_resolution.py,362,observability.observe(
 USER_RESOLVED,SystemEvents,YES,,src/muxi/utils/user_resolution.py,135,observability.observe(
+VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,1191,observability.observe(
 VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/formation/artifacts/extractor.py,160,observability.observe(
 VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/formation/background/time_estimator.py,97,observability.observe(
 VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/formation/background/time_estimator.py,162,observability.observe(
 VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,9348,observability.observe(
+VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/formation/workflow/decomposer.py,1174,observability.observe(
+VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/services/llm/llm.py,275,observability.observe(
+VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/services/scheduler/parser.py,993,observability.observe(
 VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/utils/run_formation.py,108,observability.observe(
 VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/utils/user_resolution.py,95,observability.observe(
 VALIDATION_FAILED,ErrorEvents,YES,,src/muxi/utils/user_resolution.py,312,observability.observe(
+WARNING,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,2184,observability.observe(
+WARNING,ErrorEvents,YES,,src/muxi/formation/agents/agent.py,2204,observability.observe(
 WARNING,ErrorEvents,YES,,src/muxi/formation/agents/knowledge/handler.py,1738,observability.observe(
+WARNING,ErrorEvents,YES,,src/muxi/formation/documents/storage/chunk_manager.py,98,observability.observe(
+WARNING,ErrorEvents,YES,,src/muxi/formation/documents/storage/chunk_manager.py,106,observability.observe(
 WARNING,ErrorEvents,YES,,src/muxi/formation/documents/storage/metadata_store.py,440,observability.observe(
 WARNING,ErrorEvents,YES,,src/muxi/formation/documents/storage/reference_system.py,467,observability.observe(
+WARNING,ErrorEvents,YES,,src/muxi/formation/overlord/overlord.py,1310,observability.observe(
 WARNING,ErrorEvents,YES,,src/muxi/formation/workflow/sops.py,268,observability.observe(
 WARNING,ErrorEvents,YES,,src/muxi/formation/workflow/sops.py,307,observability.observe(
 WARNING,ErrorEvents,YES,,src/muxi/formation/workflow/sops.py,388,observability.observe(
@@ -1165,15 +1139,31 @@ WARNING,ErrorEvents,YES,,src/muxi/services/scheduler/service.py,281,observabilit
 WARNING,ErrorEvents,YES,,src/muxi/services/scheduler/service.py,514,observability.observe(
 WARNING,ErrorEvents,YES,,src/muxi/services/scheduler/service.py,571,observability.observe(
 WARNING,ErrorEvents,YES,,src/muxi/utils/error_classifier.py,44,observability.observe(
+WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,165,observability.observe(
+WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,176,observability.observe(
+WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,190,observability.observe(
+WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,202,observability.observe(
 WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,216,observability.observe(
+WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,412,observability.observe(
+WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,427,observability.observe(
+WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,444,observability.observe(
+WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,460,observability.observe(
 WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,475,observability.observe(
+WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,510,observability.observe(
+WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,520,observability.observe(
 WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,5129,observability.observe(
 WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,5139,observability.observe(
 WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,5210,observability.observe(
+WEBHOOK_SENT,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,151,observability.observe(
+WEBHOOK_SENT,ConversationEvents,YES,,src/muxi/formation/background/webhook_manager.py,397,observability.observe(
 WEBHOOK_SENT,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,5095,observability.observe(
 WEBHOOK_SENT,ConversationEvents,YES,,src/muxi/formation/overlord/overlord.py,5118,observability.observe(
 WORKFLOW_ANALYSIS_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/analyzer.py,103,observability.observe(
 WORKFLOW_ANALYSIS_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/analyzer.py,421,observability.observe(
+WORKFLOW_DECOMPOSITION_COMPLETED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,91,observability.observe(
+WORKFLOW_DECOMPOSITION_COMPLETED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,1061,observability.observe(
+WORKFLOW_DECOMPOSITION_COMPLETED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,1119,observability.observe(
+WORKFLOW_DECOMPOSITION_COMPLETED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,1144,observability.observe(
 WORKFLOW_DECOMPOSITION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,108,observability.observe(
 WORKFLOW_DECOMPOSITION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,158,observability.observe(
 WORKFLOW_DECOMPOSITION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,629,observability.observe(
@@ -1184,4 +1174,14 @@ WORKFLOW_DECOMPOSITION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflo
 WORKFLOW_DECOMPOSITION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,998,observability.observe(
 WORKFLOW_DECOMPOSITION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,1013,observability.observe(
 WORKFLOW_DECOMPOSITION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/decomposer.py,1028,observability.observe(
+WORKFLOW_EXECUTION_COMPLETED,ConversationEvents,YES,,src/muxi/formation/workflow/executor.py,249,observability.observe(
+WORKFLOW_EXECUTION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/executor.py,267,observability.observe(
+WORKFLOW_EXECUTION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/executor.py,382,observability.observe(
+WORKFLOW_EXECUTION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/executor.py,854,observability.observe(
+WORKFLOW_EXECUTION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/executor.py,1296,observability.observe(
 WORKFLOW_EXECUTION_FAILED,ConversationEvents,YES,,src/muxi/formation/workflow/executor.py,1628,observability.observe(
+WORKFLOW_EXECUTION_STARTED,ConversationEvents,YES,,src/muxi/formation/workflow/executor.py,195,observability.observe(
+WORKFLOW_EXECUTION_STARTED,ConversationEvents,YES,,src/muxi/formation/workflow/executor.py,208,observability.observe(
+WORKFLOW_EXECUTION_STARTED,ConversationEvents,YES,,src/muxi/formation/workflow/executor.py,1784,observability.observe(
+WORKFLOW_TASK_ASSIGNED,ConversationEvents,YES,,src/muxi/formation/workflow/executor.py,753,observability.observe(
+WORKFLOW_TASK_COMPLETED,ConversationEvents,YES,,src/muxi/formation/workflow/executor.py,804,observability.observe(

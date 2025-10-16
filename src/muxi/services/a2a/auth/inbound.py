@@ -92,7 +92,7 @@ class A2AInboundAuthenticator:
         try:
             # Emit credential initialization start event
             observability.observe(
-                event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
                 level=observability.EventLevel.INFO,
                 description="Starting A2A inbound credential initialization",
                 data={
@@ -106,7 +106,7 @@ class A2AInboundAuthenticator:
             else:
                 # Emit warning for missing secrets manager
                 observability.observe(
-                    event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                    event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
                     level=observability.EventLevel.WARNING,
                     description="No SecretsManager provided - no credentials will be available",
                     data={"auth_mode": self.auth_mode.value},
@@ -115,7 +115,7 @@ class A2AInboundAuthenticator:
 
             # Emit successful initialization event
             observability.observe(
-                event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
                 level=observability.EventLevel.INFO,
                 description="A2A inbound credential initialization completed",
                 data={
@@ -156,7 +156,7 @@ class A2AInboundAuthenticator:
             try:
                 credential_configs = json.loads(env_config)
                 observability.observe(
-                    event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                    event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
                     level=observability.EventLevel.INFO,
                     description="Loaded A2A inbound credentials from environment",
                     data={"client_count": len(credential_configs)}
@@ -178,7 +178,7 @@ class A2AInboundAuthenticator:
                     config_data = json.load(f)
                     credential_configs = config_data.get('inbound_credentials', {})
                     observability.observe(
-                        event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                        event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
                         level=observability.EventLevel.INFO,
                         description=f"Loaded A2A inbound credentials from file: {config_path}",
                         data={"client_count": len(credential_configs)}
@@ -233,7 +233,7 @@ class A2AInboundAuthenticator:
 
         if credential_configs:
             observability.observe(
-                event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
                 level=observability.EventLevel.INFO,
                 description="Loaded A2A inbound credentials from individual environment variables",
                 data={"client_count": len(credential_configs)}
@@ -266,7 +266,7 @@ class A2AInboundAuthenticator:
         # Only use defaults if explicitly enabled
         if os.environ.get("A2A_USE_DEFAULT_CLIENTS", "false").lower() == "true":
             observability.observe(
-                event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
                 level=observability.EventLevel.INFO,
                 description="Using default A2A inbound credential configurations",
                 data={"client_count": len(default_configs)}
@@ -275,7 +275,7 @@ class A2AInboundAuthenticator:
 
         # Return empty dict if no configurations found
         observability.observe(
-            event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+            event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
             level=observability.EventLevel.WARNING,
             description="No A2A inbound credential configurations found",
             data={}
@@ -288,7 +288,7 @@ class A2AInboundAuthenticator:
             if not self.secrets_manager:
                 # Emit warning for missing secrets manager
                 observability.observe(
-                    event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                    event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
                     level=observability.EventLevel.WARNING,
                     description="SecretsManager not available for credential loading",
                     data={"auth_mode": self.auth_mode.value},
@@ -325,7 +325,7 @@ class A2AInboundAuthenticator:
 
                         # Emit successful credential load event
                         observability.observe(
-                            event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                            event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
                             level=observability.EventLevel.INFO,
                             description=f"Loaded inbound credential for {client_id}",
                             data={
@@ -340,7 +340,7 @@ class A2AInboundAuthenticator:
                     else:
                         # Emit warning for missing credentials
                         observability.observe(
-                            event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                            event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
                             level=observability.EventLevel.WARNING,
                             description=f"No credentials found for {client_id}",
                             data={"client_id": client_id, "auth_type": auth_type.value},
@@ -361,7 +361,7 @@ class A2AInboundAuthenticator:
 
             # Emit summary event
             observability.observe(
-                event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
                 level=observability.EventLevel.INFO,
                 description="A2A inbound credential loading completed",
                 data={
@@ -420,7 +420,7 @@ class A2AInboundAuthenticator:
                 else:
                     # Emit warning for missing secret
                     observability.observe(
-                        event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                        event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
                         level=observability.EventLevel.WARNING,
                         description=f"Secret {secret_name} not found for Basic auth {key}",
                         data={"secret_name": secret_name, "key": key, "auth_type": "basic"},
@@ -491,7 +491,7 @@ class A2AInboundAuthenticator:
 
             # Emit credential addition event
             observability.observe(
-                event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
                 level=observability.EventLevel.INFO,
                 description=f"Added client credential for {client_id}",
                 data={

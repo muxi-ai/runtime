@@ -1189,7 +1189,7 @@ class Agent:
 
                                     if not is_valid:
                                         observability.observe(
-                                            event_type=observability.ErrorEvents.VALIDATION_ERROR,
+                                            event_type=observability.ErrorEvents.VALIDATION_FAILED,
                                             level=observability.EventLevel.ERROR,
                                             data={
                                                 "agent_id": self.agent_id,
@@ -1457,7 +1457,7 @@ class Agent:
                                     )
                             except Exception as e:
                                 observability.observe(
-                                    event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                                     level=observability.EventLevel.WARNING,
                                     data={
                                         "agent_id": self.agent_id,
@@ -2120,7 +2120,7 @@ class Agent:
                     )
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "agent_id": self.agent_id,
@@ -2182,7 +2182,7 @@ class Agent:
                             )
                         except (UnicodeDecodeError, AttributeError) as e:
                             observability.observe(
-                                event_type=observability.SystemEvents.SERVICE_WARNING,
+                                event_type=observability.ErrorEvents.WARNING,
                                 level=observability.EventLevel.WARNING,
                                 data={
                                     "agent_id": self.agent_id,
@@ -2202,7 +2202,7 @@ class Agent:
                     doc_content = doc_content.decode("utf-8")
                 except (UnicodeDecodeError, AttributeError) as e:
                     observability.observe(
-                        event_type=observability.SystemEvents.SERVICE_WARNING,
+                        event_type=observability.ErrorEvents.WARNING,
                         level=observability.EventLevel.WARNING,
                         data={
                             "agent_id": self.agent_id,

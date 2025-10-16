@@ -34,13 +34,14 @@ def load_enum_events() -> Dict[str, Set[str]]:
         if match:
             enum_content = match.group(0)
             # Find all event definitions (EVENT_NAME = "event.value")
-            event_pattern = r'^\s+([A-Z_]+)\s*=\s*["\']([^"\']+)["\']'
+            # Note: Include digits in pattern to match events like A2A_*
+            event_pattern = r'^\s+([A-Z0-9_]+)\s*=\s*["\']([^"\']+)["\']'
             for line in enum_content.split('\n'):
                 event_match = re.match(event_pattern, line)
                 if event_match:
                     event_name = event_match.group(1)
-                    # Skip if it's a REMOVED comment
-                    if 'REMOVED' not in line and not line.strip().startswith('#'):
+                    # Skip if it's a comment line or a "# REMOVED:" comment
+                    if not line.strip().startswith('#') and '# REMOVED:' not in line:
                         enums[enum_name].add(event_name)
     
     return enums

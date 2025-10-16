@@ -991,7 +991,7 @@ IMPORTANT: Return ONLY the cron expression, no explanation or additional text.
             sanitized_description = SchedulerInputValidator.sanitize_schedule_text(description)
         except ValueError as e:
             observability.observe(
-                event_type=observability.ErrorEvents.VALIDATION_ERROR,
+                event_type=observability.ErrorEvents.VALIDATION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={"description": description[:100], "error": str(e)},
                 description=f"Exclusion description validation failed: {e}",

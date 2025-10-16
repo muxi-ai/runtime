@@ -426,7 +426,7 @@ class MCPCoordinator:
                 )
 
             observability.observe(
-                event_type=observability.ConversationEvents.MCP_SERVER_REGISTERED,
+                event_type=observability.SystemEvents.MCP_SERVER_REGISTERED,
                 level=observability.EventLevel.INFO,
                 data={"server_id": server_id, "tool_count": len(res.get('tools', []))},
                 description=f"MCP server '{server_id}' registered successfully",
@@ -537,7 +537,7 @@ class MCPCoordinator:
         await self.mcp_service.unregister_server(server_id)
 
         observability.observe(
-            event_type=observability.ConversationEvents.MCP_SERVER_UNREGISTERED,
+            event_type=observability.SystemEvents.MCP_SERVER_UNREGISTERED,
             level=observability.EventLevel.INFO,
             data={"server_id": server_id},
             description=f"MCP server '{server_id}' unregistered successfully",

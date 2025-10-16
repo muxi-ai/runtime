@@ -733,7 +733,7 @@ class SchedulerService:
                 await self.job_manager.pause_job(job_id)
 
                 observability.observe(
-                    event_type=observability.SystemEvents.SCHEDULED_JOB_PAUSED,
+                    event_type=observability.ConversationEvents.SCHEDULED_JOB_PAUSED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "job_id": job_id,
@@ -744,7 +744,7 @@ class SchedulerService:
                 )
 
             observability.observe(
-                event_type=observability.ErrorEvents.SCHEDULED_JOB_FAILED,
+                event_type=observability.ConversationEvents.SCHEDULED_JOB_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "job_id": job_id,
@@ -924,7 +924,7 @@ class SchedulerService:
                 await self.job_manager.pause_job(job_id)
 
                 observability.observe(
-                    event_type=observability.SystemEvents.SCHEDULED_JOB_PAUSED,
+                    event_type=observability.ConversationEvents.SCHEDULED_JOB_PAUSED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "job_id": job_id,
@@ -935,7 +935,7 @@ class SchedulerService:
                 )
 
             observability.observe(
-                event_type=observability.ErrorEvents.SCHEDULED_JOB_FAILED,
+                event_type=observability.ConversationEvents.SCHEDULED_JOB_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "job_id": job_id,

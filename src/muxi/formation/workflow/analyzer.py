@@ -321,7 +321,7 @@ class RequestAnalyzer:
         except Exception as e:
             # Log error and fall back to heuristic
             observability.observe(
-                event_type=observability.ErrorEvents.WORKFLOW_ANALYSIS_FAILED,
+                event_type=observability.SystemEvents.WORKFLOW_ANALYSIS_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "error_type": type(e).__name__,

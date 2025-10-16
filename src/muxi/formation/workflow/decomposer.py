@@ -295,7 +295,7 @@ class TaskDecomposer:
         except Exception as e:
             # Log decomposition failure and fall back to heuristic
             observability.observe(
-                event_type=observability.ErrorEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                event_type=observability.SystemEvents.WORKFLOW_DECOMPOSITION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "workflow_id": workflow_id,
@@ -1172,7 +1172,7 @@ class ApprovalManager:
 
         if not workflow.plan_preview:
             observability.observe(
-                event_type=observability.ErrorEvents.VALIDATION_ERROR,
+                event_type=observability.ErrorEvents.VALIDATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={"service": "approval_manager_error", "workflow_id": workflow.id},
                 description="Workflow missing plan preview - raising ValueError",

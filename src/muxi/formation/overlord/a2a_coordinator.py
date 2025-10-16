@@ -921,7 +921,7 @@ class A2ACoordinator:
         except Exception as e:
             # Log error properly using observability
             observability.observe(
-                event_type=observability.SystemEvents.A2A_MESSAGE_FAILED,
+                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to route message to external agent: {str(e)}",
                 data={

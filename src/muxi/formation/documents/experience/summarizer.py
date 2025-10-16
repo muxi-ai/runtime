@@ -93,7 +93,7 @@ class DocumentSummarizer:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "document_id": document_id,
@@ -144,7 +144,7 @@ class DocumentSummarizer:
                 summaries[doc["id"]] = summary
             except Exception as e:
                 observability.observe(
-                    event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
                         "document_id": doc.get("id", "unknown"),
@@ -345,7 +345,7 @@ class DocumentSummarizer:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "error_type": type(e).__name__,
@@ -372,7 +372,7 @@ class DocumentSummarizer:
             return response.strip()
         except Exception as e:
             observability.observe(
-                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "batch_id": batch_id,

@@ -2710,7 +2710,7 @@ class Formation:
                     )
                 except Exception as mcp_error:
                     observability.observe(
-                        event_type=observability.ErrorEvents.MCP_SERVER_DISCONNECTION_FAILED,
+                        event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTION_FAILED,
                         level=observability.EventLevel.WARNING,
                         data={"error": str(mcp_error)},
                         description=f"Failed to disconnect MCP servers: {mcp_error}",
@@ -2778,7 +2778,7 @@ class Formation:
 
         except asyncio.TimeoutError:
             observability.observe(
-                event_type=observability.ErrorEvents.TIMEOUT_ERROR,
+                event_type=observability.ErrorEvents.CONNECTION_TIMEOUT,
                 level=observability.EventLevel.WARNING,
                 data={"timeout": timeout, "operation": "agent_deregistration"},
                 description=f"Agent deregistration timed out after {timeout} seconds",
@@ -2830,7 +2830,7 @@ class Formation:
                 loop.run_until_complete(asyncio.wait_for(coro, timeout=timeout))
             except asyncio.TimeoutError:
                 observability.observe(
-                    event_type=observability.ErrorEvents.TIMEOUT_ERROR,
+                    event_type=observability.ErrorEvents.CONNECTION_TIMEOUT,
                     level=observability.EventLevel.WARNING,
                     data={"timeout": timeout, "operation": "async_with_timeout"},
                     description=f"Operation timed out after {timeout} seconds",
@@ -4398,7 +4398,7 @@ class Formation:
             return True
         except asyncio.TimeoutError:
             observability.observe(
-                event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
+                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={"timeout": timeout},
                 description=f"Built-in MCP registration timed out after {timeout} seconds",
@@ -4406,7 +4406,7 @@ class Formation:
             return False
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
+                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={"error": str(e)},
                 description=f"Built-in MCP registration failed: {e}",

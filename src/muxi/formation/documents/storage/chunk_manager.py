@@ -96,7 +96,7 @@ class DocumentChunkManager:
                     self._nlp_model = future.result(timeout=2.0)
                 except concurrent.futures.TimeoutError:
                     observability.observe(
-                        event_type=observability.SystemEvents.SERVICE_WARNING,
+                        event_type=observability.ErrorEvents.WARNING,
                         level=observability.EventLevel.WARNING,
                         data={"model": model_name, "reason": "timeout"},
                         description=f"Timeout loading spacy model '{model_name}' - using basic processing",
@@ -104,7 +104,7 @@ class DocumentChunkManager:
                     self._nlp_model = None
         except (OSError, ImportError) as e:
             observability.observe(
-                event_type=observability.SystemEvents.SERVICE_WARNING,
+                event_type=observability.ErrorEvents.WARNING,
                 level=observability.EventLevel.WARNING,
                 data={"model": model_name, "error": str(e)},
                 description=f"spaCy model '{model_name}' not found - falling back to basic processing",

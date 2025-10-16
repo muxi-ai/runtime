@@ -509,7 +509,7 @@ def initialize_document_processing(formation) -> None:
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+            event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
             level=observability.EventLevel.WARNING,
             data={"error": str(e), "service": "document_processing"},
             description=f"Failed to initialize document processing: {str(e)}",
@@ -741,7 +741,7 @@ def initialize_document_processing_config(formation) -> None:
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+            event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
             level=observability.EventLevel.WARNING,
             data={"error": str(e), "service": "document_processing"},
             description=f"Failed to initialize document processing config: {str(e)}",

@@ -179,7 +179,7 @@ class DocumentWorkflowIntegrator:
                 all_tasks.extend(tasks)
             except Exception as e:
                 observability.observe(
-                    event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
                         "document_id": document_id,
@@ -264,7 +264,7 @@ class DocumentWorkflowIntegrator:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "workflow_id": workflow_id,
@@ -314,7 +314,7 @@ class DocumentWorkflowIntegrator:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "document_id": document_id,
@@ -352,7 +352,7 @@ class DocumentWorkflowIntegrator:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "document_id": document_id,

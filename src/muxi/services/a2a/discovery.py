@@ -134,7 +134,7 @@ class LocalDiscoveryService:
             }
 
             observability.observe(
-                event_type=observability.ConversationEvents.A2A_DISCOVERY_COMPLETED,
+                event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                 level=observability.EventLevel.INFO,
                 data=result,
                 description="A2A Discovery Service startup completed",
@@ -899,7 +899,7 @@ class LocalDiscoveryService:
             #  A2A discovery debug - TODO: add observability
 
             observability.observe(
-                event_type=observability.ConversationEvents.A2A_DISCOVERY_COMPLETED,
+                event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 data={"formation_name": self.formation_name, "saved_agents": len(self.agents)},
                 description="A2A registry saved successfully",

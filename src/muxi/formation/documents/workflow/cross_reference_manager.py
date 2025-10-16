@@ -265,7 +265,7 @@ class DocumentCrossReferenceManager:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "operation": "save_references",
@@ -302,7 +302,7 @@ class DocumentCrossReferenceManager:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "operation": "load_references",

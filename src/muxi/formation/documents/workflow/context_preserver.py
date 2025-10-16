@@ -451,7 +451,7 @@ class DocumentContextPreserver:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "operation": "select_relevant_contexts",
@@ -535,7 +535,7 @@ class DocumentContextPreserver:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "operation": "save_conversation_contexts",
@@ -581,7 +581,7 @@ class DocumentContextPreserver:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "operation": "save_context_snapshots",
@@ -640,7 +640,7 @@ class DocumentContextPreserver:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "operation": "load_contexts",

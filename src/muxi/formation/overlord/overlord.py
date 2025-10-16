@@ -1308,7 +1308,7 @@ class Overlord:
                 # Continue execution even if artifact service fails
         else:
             observability.observe(
-                event_type=observability.SystemEvents.SERVICE_WARNING,
+                event_type=observability.ErrorEvents.WARNING,
                 level=observability.EventLevel.WARNING,
                 data={"service": "artifact"},
                 description="Artifact service not initialized: formation instance not available",
@@ -2657,7 +2657,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             self.extractor.extraction_model = self.extraction_model
 
                         observability.observe(
-                            event_type=observability.SystemEvents.SERVER_STARTED,
+                            event_type=observability.ServerEvents.SERVER_STARTED,
                             level=observability.EventLevel.INFO,
                             data={"fallback_model": text_model},
                             description="Successfully initialized extraction model with fallback",
@@ -2676,7 +2676,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             self.extractor.extraction_model = self.extraction_model
 
                         observability.observe(
-                            event_type=observability.SystemEvents.SERVER_STARTED,
+                            event_type=observability.ServerEvents.SERVER_STARTED,
                             level=observability.EventLevel.INFO,
                             data={"fallback_model": text_model["model"]},
                             description="Successfully initialized extraction model with fallback",
@@ -3937,7 +3937,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
         except Exception as e:
             observability.observe(
-                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "error_type": type(e).__name__,
@@ -4177,7 +4177,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
             except Exception as e:
                 observability.observe(
-                    event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
                         "filename": attachment.get("filename", "unknown"),
@@ -4222,7 +4222,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
         except Exception as e:
             observability.observe(
-                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "error_type": type(e).__name__,
@@ -4309,7 +4309,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
         except Exception as e:
             observability.observe(
-                event_type=observability.SystemEvents.DOCUMENT_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "error_type": type(e).__name__,

@@ -545,6 +545,21 @@ class ConversationEvents(Enum):
     WORKFLOW_EXECUTION_FAILED = "workflow.execution.failed"
     # When workflow task execution fails
 
+    WORKFLOW_DECOMPOSITION_COMPLETED = "workflow.decomposition.completed"
+    # When workflow task decomposition completes successfully
+
+    WORKFLOW_EXECUTION_STARTED = "workflow.execution.started"
+    # When workflow execution starts
+
+    WORKFLOW_EXECUTION_COMPLETED = "workflow.execution.completed"
+    # When workflow execution completes successfully
+
+    WORKFLOW_TASK_ASSIGNED = "workflow.task.assigned"
+    # When a workflow task is assigned to an agent
+
+    WORKFLOW_TASK_COMPLETED = "workflow.task.completed"
+    # When a workflow task completes successfully
+
     # ===================================================================
     # SOP (Standard Operating Procedures) EVENTS
     # ===================================================================
@@ -789,6 +804,9 @@ class ConversationEvents(Enum):
     RESPONSE_DELIVERED = "response.delivered"
     # When response is successfully delivered
 
+    RESPONSE_SYNTHESIZED = "response.synthesized"
+    # When multiple responses are synthesized into final response
+
     # ===================================================================
     # ASYNC PROCESSING
     # ===================================================================
@@ -869,6 +887,9 @@ class ConversationEvents(Enum):
 
     SCHEDULED_JOB_RESUMED = "scheduled.job.resumed"
     # When a scheduled job is resumed
+
+    SCHEDULED_JOB_UPDATED = "scheduled.job.updated"
+    # When a scheduled job configuration is updated
 
     SCHEDULED_JOB_DELETED = "scheduled.job.deleted"
     # When a scheduled job is deleted

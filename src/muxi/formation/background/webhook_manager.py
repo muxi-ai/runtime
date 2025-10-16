@@ -149,7 +149,7 @@ class WebhookManager:
                 )
                 if success:
                     observability.observe(
-                        event_type=observability.SystemEvents.WEBHOOK_SENT,
+                        event_type=observability.ConversationEvents.WEBHOOK_SENT,
                         level=observability.EventLevel.INFO,
                         data={
                             "request_id": request_id,
@@ -163,7 +163,7 @@ class WebhookManager:
                 else:
                     if attempt < max_retries:
                         observability.observe(
-                            event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                            event_type=observability.ConversationEvents.WEBHOOK_FAILED,
                             level=observability.EventLevel.WARNING,
                             data={
                                 "request_id": request_id,
@@ -174,7 +174,7 @@ class WebhookManager:
                         )
                     else:
                         observability.observe(
-                            event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                            event_type=observability.ConversationEvents.WEBHOOK_FAILED,
                             level=observability.EventLevel.ERROR,
                             data={
                                 "request_id": request_id,
@@ -188,7 +188,7 @@ class WebhookManager:
                 error_summary = self._summarize_webhook_error(e)
                 if attempt < max_retries:
                     observability.observe(
-                        event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                        event_type=observability.ConversationEvents.WEBHOOK_FAILED,
                         level=observability.EventLevel.WARNING,
                         data={
                             "request_id": request_id,
@@ -200,7 +200,7 @@ class WebhookManager:
                     )
                 else:
                     observability.observe(
-                        event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                        event_type=observability.ConversationEvents.WEBHOOK_FAILED,
                         level=observability.EventLevel.ERROR,
                         data={
                             "request_id": request_id,
@@ -395,7 +395,7 @@ class WebhookManager:
                 )
                 if success:
                     observability.observe(
-                        event_type=observability.SystemEvents.WEBHOOK_SENT,
+                        event_type=observability.ConversationEvents.WEBHOOK_SENT,
                         level=observability.EventLevel.INFO,
                         data={
                             "request_id": request_id,
@@ -410,7 +410,7 @@ class WebhookManager:
                 else:
                     if attempt < max_retries:
                         observability.observe(
-                            event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                            event_type=observability.ConversationEvents.WEBHOOK_FAILED,
                             level=observability.EventLevel.WARNING,
                             data={
                                 "request_id": request_id,
@@ -425,7 +425,7 @@ class WebhookManager:
                         )
                     else:
                         observability.observe(
-                            event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                            event_type=observability.ConversationEvents.WEBHOOK_FAILED,
                             level=observability.EventLevel.ERROR,
                             data={
                                 "request_id": request_id,
@@ -442,7 +442,7 @@ class WebhookManager:
                 error_summary = self._summarize_webhook_error(e)
                 if attempt < max_retries:
                     observability.observe(
-                        event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                        event_type=observability.ConversationEvents.WEBHOOK_FAILED,
                         level=observability.EventLevel.WARNING,
                         data={
                             "request_id": request_id,
@@ -458,7 +458,7 @@ class WebhookManager:
                     )
                 else:
                     observability.observe(
-                        event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                        event_type=observability.ConversationEvents.WEBHOOK_FAILED,
                         level=observability.EventLevel.ERROR,
                         data={
                             "request_id": request_id,
@@ -508,7 +508,7 @@ class WebhookManager:
                 else:
                     # Log failed status code at DEBUG level (retry logic handles WARNING/ERROR)
                     observability.observe(
-                        event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                        event_type=observability.ConversationEvents.WEBHOOK_FAILED,
                         level=observability.EventLevel.DEBUG,
                         data={"http_status": response.status},
                         description=f"Clarification webhook delivery failed with HTTP {response.status}",
@@ -518,7 +518,7 @@ class WebhookManager:
         except Exception as e:
             # Log exception at DEBUG level (retry logic handles WARNING/ERROR)
             observability.observe(
-                event_type=observability.SystemEvents.WEBHOOK_FAILED,
+                event_type=observability.ConversationEvents.WEBHOOK_FAILED,
                 level=observability.EventLevel.DEBUG,
                 data={"error_type": type(e).__name__, "error": str(e)},
                 description=f"Clarification webhook delivery exception: {type(e).__name__}",

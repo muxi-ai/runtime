@@ -273,7 +273,7 @@ class FileProcessor:
             # Basic security check - avoid obviously dangerous files
             if file_path.suffix.lower() in [".exe", ".bat", ".sh", ".scr"]:
                 observability.observe(
-                    event_type=observability.ErrorEvents.VALIDATION_ERROR,
+                    event_type=observability.ErrorEvents.VALIDATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "file_path": str(file_path),

@@ -265,7 +265,7 @@ class WorkflowExecutor:
             # Note: Workflow model doesn't have error_message field
             # Log error for debuggability since workflow doesn't store error_message
             observability.observe(
-                event_type=observability.ErrorEvents.WORKFLOW_EXECUTION_FAILED,
+                event_type=observability.ConversationEvents.WORKFLOW_EXECUTION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "workflow_id": workflow.id,
@@ -380,7 +380,7 @@ class WorkflowExecutor:
             # Note: Workflow model doesn't have error_message field
             # Log error for debuggability since workflow doesn't store error_message
             observability.observe(
-                event_type=observability.ErrorEvents.WORKFLOW_EXECUTION_FAILED,
+                event_type=observability.ConversationEvents.WORKFLOW_EXECUTION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "workflow_id": workflow.id,
@@ -852,7 +852,7 @@ class WorkflowExecutor:
 
             # Default: mark as failed
             observability.observe(
-                event_type=observability.ErrorEvents.WORKFLOW_EXECUTION_FAILED,
+                event_type=observability.ConversationEvents.WORKFLOW_EXECUTION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "task_id": task.id,
@@ -1294,7 +1294,7 @@ class WorkflowExecutor:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.WORKFLOW_EXECUTION_FAILED,
+                event_type=observability.ConversationEvents.WORKFLOW_EXECUTION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "task_id": task.id,
