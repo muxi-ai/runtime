@@ -174,7 +174,7 @@ class BufferMemoryManager:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.WARNING,
+                event_type=observability.ErrorEvents.MEMORY_RETRIEVAL_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "session_id": session_id,
@@ -210,7 +210,7 @@ class BufferMemoryManager:
             )
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.WARNING,
+                event_type=observability.ErrorEvents.MEMORY_CLEAR_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "agent_id": agent_id,

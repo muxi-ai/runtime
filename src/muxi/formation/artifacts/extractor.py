@@ -118,7 +118,7 @@ async def extract_artifacts_from_tool_results(
                                         )
                                     except json.JSONDecodeError:
                                         observability.observe(
-                                            event_type=observability.ErrorEvents.WARNING,
+                                            event_type=observability.ErrorEvents.JSON_PARSE_FAILED,
                                             level=observability.EventLevel.WARNING,
                                             data={
                                                 "service": "artifact",
@@ -144,7 +144,7 @@ async def extract_artifacts_from_tool_results(
                                 )
                             except json.JSONDecodeError:
                                 observability.observe(
-                                    event_type=observability.ErrorEvents.WARNING,
+                                    event_type=observability.ErrorEvents.JSON_PARSE_FAILED,
                                     level=observability.EventLevel.WARNING,
                                     data={"service": "artifact", "action": "parse_json", "error": "json_decode_error"},
                                     description="Could not parse content as JSON"
@@ -158,7 +158,7 @@ async def extract_artifacts_from_tool_results(
                 # Validate that result is a dict before accessing
                 if not isinstance(file_info, dict):
                     observability.observe(
-                        event_type=observability.ErrorEvents.WARNING,
+                        event_type=observability.ErrorEvents.VALIDATION_FAILED,
                         level=observability.EventLevel.WARNING,
                         data={"service": "artifact", "action": "validate_result", "result_type": str(type(file_info))},
                         description=f"Tool result for generate_file is not a dict: {type(file_info)}"
@@ -222,7 +222,7 @@ async def extract_artifacts_from_tool_results(
                 file_path = file_info.get("file_path")
                 if not file_path:
                     observability.observe(
-                        event_type=observability.ErrorEvents.WARNING,
+                        event_type=observability.ErrorEvents.ARTIFACT_FIELD_MISSING,
                         level=observability.EventLevel.WARNING,
                         data={"service": "artifact", "action": "validate_result", "error": "missing_file_path"},
                         description="generate_file result missing both artifact and file_path fields"
@@ -263,7 +263,7 @@ async def extract_artifacts_from_tool_results(
                                 )
                         except Exception as e:
                             observability.observe(
-                                event_type=observability.ErrorEvents.WARNING,
+                                event_type=observability.SystemEvents.CLEANUP,
                                 level=observability.EventLevel.DEBUG,
                                 data={
                                     "service": "artifact",

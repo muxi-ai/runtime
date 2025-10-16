@@ -1035,6 +1035,39 @@ class ErrorEvents(Enum):
     ENCODING_ERROR = "error.encoding.error"
     # When character encoding/decoding fails
 
+    # ===================================================================
+    # FEATURE-SPECIFIC ERRORS (Knowledge, Memory, Artifacts, etc.)
+    # ===================================================================
+    KNOWLEDGE_SOURCE_MISSING = "error.knowledge.source.missing"
+    # When knowledge source file or directory doesn't exist
+
+    MARKITDOWN_INITIALIZATION_FAILED = "error.markitdown.initialization.failed"
+    # When MarkItDown document processor initialization fails
+
+    MEMORY_RETRIEVAL_FAILED = "error.memory.retrieval.failed"
+    # When memory system retrieval operation fails
+
+    MEMORY_CLEAR_FAILED = "error.memory.clear.failed"
+    # When memory system clear operation fails
+
+    JSON_PARSE_FAILED = "error.json.parse.failed"
+    # When JSON parsing fails
+
+    ARTIFACT_FIELD_MISSING = "error.artifact.field.missing"
+    # When required artifact field is missing
+
+    THUMBNAIL_GENERATION_FAILED = "error.thumbnail.generation.failed"
+    # When document thumbnail generation fails
+
+    PERSONA_FILE_MISSING = "error.persona.file.missing"
+    # When agent persona configuration file is missing
+
+    SECRET_INTERPOLATION_FAILED = "error.secret.interpolation.failed"
+    # When secret value interpolation in configuration fails
+
+    SOP_INITIALIZATION_FAILED = "error.sop.initialization.failed"
+    # When SOP (Standard Operating Procedure) system initialization fails
+
     RETRY_ATTEMPTED = "error.retry.attempted"
     # When a retry is attempted
 

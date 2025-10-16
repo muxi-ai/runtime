@@ -295,7 +295,7 @@ class PersistentMemoryManager:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.WARNING,
+                event_type=observability.ErrorEvents.MEMORY_RETRIEVAL_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "limit": limit,
@@ -342,7 +342,7 @@ class PersistentMemoryManager:
                 )
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.WARNING,
+                event_type=observability.ErrorEvents.MEMORY_CLEAR_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "agent_id": agent_id,

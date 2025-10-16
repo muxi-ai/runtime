@@ -951,7 +951,7 @@ class Overlord:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.WARNING,
+                event_type=observability.ErrorEvents.SOP_INITIALIZATION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "service": "sop_system",
@@ -1911,7 +1911,7 @@ class Overlord:
                     fallback = "You are a friendly and helpful assistant."
                     self._default_persona = fallback
                     observability.observe(
-                        event_type=observability.ErrorEvents.WARNING,
+                        event_type=observability.ErrorEvents.PERSONA_FILE_MISSING,
                         level=observability.EventLevel.WARNING,
                         data={"file": "system_persona.md"},
                         description="Persona file not found, using fallback persona",
@@ -2350,7 +2350,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 final_api_key = interpolated_config.get("api_key", final_api_key)
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.WARNING,
+                    event_type=observability.ErrorEvents.SECRET_INTERPOLATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "error_type": type(e).__name__,
@@ -2857,7 +2857,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 final_api_key = interpolated_config.get("api_key", api_key)
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.WARNING,
+                    event_type=observability.ErrorEvents.SECRET_INTERPOLATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "error_type": type(e).__name__,
@@ -3164,7 +3164,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     except Exception as rollback_error:
                         # Log rollback failure but continue with other rollbacks
                         observability.observe(
-                            event_type=observability.ErrorEvents.WARNING,
+                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
                             level=observability.EventLevel.WARNING,
                             data={
                                 "agent_id": agent_id,

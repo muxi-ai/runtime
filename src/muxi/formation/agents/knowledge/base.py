@@ -200,7 +200,7 @@ class FileKnowledge(KnowledgeSource):
                 self._markitdown = MarkItDown()
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.WARNING,
+                    event_type=observability.ErrorEvents.MARKITDOWN_INITIALIZATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     description="Failed to initialize MarkItDown",
                     data={"error": str(e)}
@@ -315,7 +315,7 @@ class FileKnowledge(KnowledgeSource):
                     # Log file discovery is now done after all extensions are processed
         else:
             observability.observe(
-                event_type=observability.ErrorEvents.WARNING,
+                event_type=observability.ErrorEvents.KNOWLEDGE_SOURCE_MISSING,
                 level=observability.EventLevel.WARNING,
                 description="Knowledge source path does not exist",
                 data={
@@ -328,7 +328,7 @@ class FileKnowledge(KnowledgeSource):
 
         if len(unique_files) > self.max_files:
             observability.observe(
-                event_type=observability.ErrorEvents.WARNING,
+                event_type=observability.ErrorEvents.RESOURCE_EXHAUSTED,
                 level=observability.EventLevel.WARNING,
                 description=f"Limiting knowledge files to {self.max_files} (found {len(unique_files)})",
                 data={
@@ -408,7 +408,7 @@ class FileKnowledge(KnowledgeSource):
                 file_size = os.path.getsize(file_path)
                 if file_size > self.max_file_size:
                     observability.observe(
-                        event_type=observability.ErrorEvents.WARNING,
+                        event_type=observability.ErrorEvents.RESOURCE_EXHAUSTED,
                         level=observability.EventLevel.WARNING,
                         description=f"Skipping large file ({file_size} bytes > {self.max_file_size})",
                         data={
