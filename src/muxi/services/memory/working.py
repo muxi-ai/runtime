@@ -802,7 +802,6 @@ class WorkingMemory:
                         else 0
                     ),
                 },
-                description="Working memory search completed",
             )
 
             return final_results
