@@ -2586,7 +2586,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     # First try: overlord.llm.model
                     if hasattr(self, "routing_model") and self.routing_model:
                         decomposer_model = self.routing_model
-                        model_source = "overlord.llm.model"
                     # Second try: text capability model
                     elif hasattr(self, "_capability_models") and "text" in self._capability_models:
                         text_model_config = self._capability_models["text"]
@@ -2602,11 +2601,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                 ),
                                 api_key=text_model_config.get("api_key"),
                             )
-                            model_source = "llm.models.text"
                         elif isinstance(text_model_config, str):
                             # Simple string model name
                             decomposer_model = await self.create_model(model=text_model_config)
-                            model_source = "llm.models.text"
                     # Final fallback: extraction model
                     else:
                         decomposer_model = self.extraction_model

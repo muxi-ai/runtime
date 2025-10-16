@@ -1344,7 +1344,7 @@ class LLM:
                 },
                 description=" ".join(context_parts),
             )
-        except Exception as e:
+        except Exception:
             # Observability failure - continue gracefully
             pass  # Don't emit error event about failing to emit an event (circular)
 

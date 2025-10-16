@@ -24,7 +24,6 @@ from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 from . import observability
-from ..datatypes.observability import InitEventFormatter
 from ..utils.user_dirs import get_memory_dir
 
 # Create a shared base for all MUXI models
