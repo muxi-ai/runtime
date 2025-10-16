@@ -137,8 +137,8 @@ def get_recommendation(event_type, level, description, file_path, line_num):
     if level == "INFO" and any(word in description.lower() for word in ["processing step", "iteration", "parsing"]):
         return "REVIEW - Consider DEBUG level for granular processing steps"
     
-    # Default - no recommendation
-    return ""
+    # Default - no issues identified
+    return "OK - No issues identified"
 
 def add_all_recommendations():
     """Add recommendations to all events in CSV"""
