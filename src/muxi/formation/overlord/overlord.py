@@ -1199,7 +1199,11 @@ class Overlord:
 
                         observability.observe(
                             event_type=observability.SystemEvents.A2A_HEALTH_CHECK_COMPLETED,
-                            level=observability.EventLevel.INFO if healthy_count > 0 else observability.EventLevel.WARNING,
+                            level=(
+                                observability.EventLevel.INFO
+                                if healthy_count > 0
+                                else observability.EventLevel.WARNING
+                            ),
                             data={
                                 "healthy_registries": healthy_count,
                                 "unhealthy_registries": unhealthy_count,
@@ -1340,7 +1344,11 @@ class Overlord:
         observability.observe(
             event_type=observability.SystemEvents.OPERATION_COMPLETED,
             level=observability.EventLevel.DEBUG,
-            data={"operation": "clarification_service_update", "service": "clarification", "updated_components": ["llm", "managers"]},
+            data={
+                "operation": "clarification_service_update",
+                "service": "clarification",
+                "updated_components": ["llm", "managers"],
+            },
             description="Clarification system updated with actual services",
         )
 

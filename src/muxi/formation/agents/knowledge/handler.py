@@ -1111,16 +1111,27 @@ class KnowledgeHandler:
 
                 # Check if path exists (it should already be resolved by formation loader)
                 if not os.path.exists(source_path):
-                    observability.observe(
-                        event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_FAILED,
-                        level=observability.EventLevel.WARNING,
-                        description="Knowledge source path not found",
-                        data={
-                            "source_path": source_path,
-                            "cwd": os.getcwd()
-                        }
-                    )
-                    continue
+                    # Check if this source is required (fail fast)
+                    is_required = source_config.get('required', False)
+                    if is_required:
+                        from ...datatypes.observability import InitEventFormatter
+                        print(InitEventFormatter.format_fail(
+                            f"Required knowledge source not found: {source_path}",
+                            f"Current directory: {os.getcwd()}"
+                        ))
+                        raise FileNotFoundError(f"Required knowledge source not found: {source_path}")
+                    else:
+                        # Optional source - log warning and continue
+                        observability.observe(
+                            event_type=observability.ErrorEvents.RESOURCE_NOT_FOUND,
+                            level=observability.EventLevel.WARNING,
+                            description="Optional knowledge source path not found - skipping",
+                            data={
+                                "source_path": source_path,
+                                "cwd": os.getcwd()
+                            }
+                        )
+                        continue
 
                 # Make path absolute for consistency
                 source_path = os.path.abspath(source_path)
@@ -1218,20 +1229,27 @@ class KnowledgeHandler:
                 )
                 continue
 
-        # Log comprehensive summary
-        observability.observe(
-            event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
-            level=observability.EventLevel.INFO,
-            description="Knowledge loading completed",
-            data={
-                "summary": {
-                    "skipped_unchanged": skipped_count,
-                    "processed_new_or_changed": processed_count,
-                    "cleaned_deleted": cleanup_count,
-                    "total_sources": skipped_count + processed_count
-                }
-            }
-        )
+        # Init event - visible during startup (Linux init-style)
+        if processed_count > 0 or skipped_count > 0:
+            from ...datatypes.observability import InitEventFormatter
+            total = processed_count + skipped_count
+            details = f"{processed_count} processed, {skipped_count} cached"
+            if cleanup_count > 0:
+                details += f", {cleanup_count} removed"
+            
+            print(InitEventFormatter.format_ok(
+                f"Knowledge sources: {total} loaded",
+                details
+            ))
+        elif knowledge_sources:
+            # Had sources configured but all failed
+            from ...datatypes.observability import InitEventFormatter
+            print(InitEventFormatter.format_fail(
+                "Failed to load any knowledge sources",
+                f"{len(knowledge_sources)} sources configured but all failed"
+            ))
+            # Fail fast - knowledge sources configured but broken
+            raise RuntimeError(f"Knowledge source initialization failed: {len(knowledge_sources)} sources configured but failed")
 
     async def _inject_knowledge_into_memory(
         self,

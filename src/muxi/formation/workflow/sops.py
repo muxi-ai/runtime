@@ -74,28 +74,30 @@ class SOPSystem:
         # INITIALIZATION
         # ===================================================================
         if self.sop_dir and self.sop_dir.exists():
-            self._scan_directory()
-            if self.sops:
-                self.enabled = True
-                # Hydrate WorkingMemory from cache on startup
-                self._hydrate_from_cache()
+            try:
+                self._scan_directory()
+                if self.sops:
+                    self.enabled = True
+                    # Hydrate WorkingMemory from cache on startup
+                    self._hydrate_from_cache()
 
-                # Emit observability event for monitoring
-                try:
-                    observability.observe(
-                        event_type=observability.ConversationEvents.SOP_LOADED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "formation_id": FORMATION_ID,
-                            "sop_count": len(self.sops),
-                            "sop_names": list(self.sops.keys()),
-                            "cached_embeddings": len(self.embeddings_cache),
-                        },
-                        description=f"Loaded {len(self.sops)} SOPs from {self.sop_dir}"
-                    )
-                except Exception:
-                    # Ignore observability errors during initialization
-                    pass
+                    # Init event - visible during startup (Linux init-style)
+                    from ...datatypes.observability import InitEventFormatter
+                    sop_names = ", ".join(list(self.sops.keys())[:3])
+                    if len(self.sops) > 3:
+                        sop_names += f" +{len(self.sops) - 3} more"
+                    print(InitEventFormatter.format_ok(
+                        f"SOPs: {len(self.sops)} procedure(s) loaded",
+                        sop_names
+                    ))
+            except Exception as e:
+                # Fail fast with clear error (Linux init-style)
+                from ...datatypes.observability import InitEventFormatter
+                print(InitEventFormatter.format_fail(
+                    f"Failed to load SOPs from {self.sop_dir}",
+                    str(e)
+                ))
+                raise RuntimeError(f"SOP initialization failed: {e}") from e
 
     @property
     def cache_dir(self) -> Path:
