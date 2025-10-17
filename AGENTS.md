@@ -125,6 +125,17 @@ Extended structure details live in `context/project-structure.md`.
     - UnifiedClarificationSystem: `clarification:{request_id}` → clarification state
     - **⚠️ DO NOT attempt to "fix" this two-level lookup—it's intentional and correct**
 
+## Observability Standards
+- **Event types**: 157 typed ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents covering complete request lifecycle.
+- **Validation requirement**: 100% validation mandatory—run `python3 scripts/validate_events.py` before committing any observe() changes.
+- **Event naming conventions**:
+  - Past tense for completion: `_COMPLETED`, `_FAILED`, `_SELECTED`
+  - Present tense for progress: `_PROCESSING`, `_STARTED`, `_PLANNING`
+  - Component prefix: `OVERLORD_*`, `AGENT_*`, `WORKFLOW_*`, `MEMORY_*`, `MCP_*`
+- **Adding events**: prefer reusing existing events with enhanced metadata over creating new types; add new events only when semantically distinct.
+- **Metadata enhancement**: enrich events with performance metrics, quality scores, and diagnostic fields (see Phase 2 audit in `docs/audits/phase-2-observability/` for patterns).
+- **Event lifecycle**: emit `_STARTED` for initiation, `_COMPLETED` for success, `_FAILED` for errors—ensures complete traceability.
+
 ## Testing Philosophy
 - Use real services (OpenAI, Anthropic, live MCP, actual embeddings); mocks are disallowed.
 - Tests should spotlight the targeted feature and succeed when that feature works—even if ancillary services are missing.
@@ -147,6 +158,7 @@ Extended structure details live in `context/project-structure.md`.
 - **Missing required LLM capability 'text'**: ensure formation includes a `text` model under `llm.models`.
 - **Intent detection failing**: verify formation LLM entry, credentials, and model capability coverage.
 - **Workflow not triggering**: confirm `auto_decomposition: true`, validate complexity threshold (default 7.0), and ensure no agent override is forcing a bypass.
+- **Event validation failing**: run `python3 scripts/validate_events.py` to identify missing event types; all observe() calls must use enum-defined events.
 - **E2E test 'str' object is not callable**: check if base class abstraction interferes; consider standalone pattern without base class.
 - **RecursionError spam in tests**: missing async cleanup; use `ensure_async_cleanup()` utility from test helpers.
 - **Formation not loading in tests**: verify symlinks to `.key` and `secrets.enc` use correct relative paths.
@@ -171,6 +183,9 @@ Extended structure details live in `context/project-structure.md`.
 - `src/muxi/formation/workflow/` — SOP execution pipeline.
 - `src/muxi/formation/resilience/` — error recovery and user messaging.
 - `src/muxi/services/` — runtime services catalog.
+- `src/muxi/datatypes/observability.py` — 157 event type definitions (ConversationEvents, SystemEvents, ErrorEvents).
+- `scripts/validate_events.py` — event validation utility (100% coverage required).
+- `docs/audits/phase-2-observability/` — comprehensive observability audit documentation.
 - `schemas/formation/formation.yaml` — formation schema definition.
 - `e2e/tests/` — 12 test areas (215+ tests) covering all runtime functionality.
 - `e2e/results/` — migration reports and test execution documentation.
