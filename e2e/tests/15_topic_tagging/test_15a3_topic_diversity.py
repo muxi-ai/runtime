@@ -13,14 +13,15 @@ from muxi import Formation
 async def formation():
     """Load test formation with LLM configured."""
     formation_dir = Path(__file__).parent / "formations" / "formation-topic-tagging"
-    formation = Formation()
-    await formation.load(str(formation_dir / "formation.yaml"))
-    overlord = await formation.start_overlord()
+    formation_obj = Formation()
+    await formation_obj.load(str(formation_dir / "formation.yaml"))
+    overlord = await formation_obj.start_overlord()
     
     yield overlord
     
     # Cleanup
-    await overlord.stop()
+    await formation_obj.stop_overlord()
+    formation_obj.stop()
 
 
 @pytest.mark.asyncio
