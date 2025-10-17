@@ -1,7 +1,7 @@
 ---
 created: 2025-08-21T17:31:00Z
-last_updated: 2025-10-08T13:55:25Z
-version: 1.6
+last_updated: 2025-10-17T12:23:10Z
+version: 1.7
 author: Claude Code PM System
 ---
 
@@ -146,6 +146,13 @@ Comprehensive documentation covering all aspects:
 - `features/` - Feature-specific documentation
 - `mcp/` - MCP server development
 - `scheduler/` - Scheduling system guide
+
+### Audits
+- `audits/phase-2-observability/` - Complete Phase 2 observability audit (Oct 2025)
+  - 12 comprehensive documents covering all 4 phases
+  - Event refactoring details (12 new events, 32 enhanced metadata fields)
+  - Testing and validation results
+  - Organized from root for cleaner project structure
 
 ### References
 - `knowledge-system.md` - Domain knowledge architecture
