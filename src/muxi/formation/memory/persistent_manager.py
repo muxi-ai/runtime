@@ -85,6 +85,8 @@ class PersistentMemoryManager:
                         "memory_id": memory_id,
                         "memory_type": "long_term",
                         "content_length": len(content),
+                        "has_metadata": metadata is not None and len(metadata) > 0,
+                        "embedding_dimensions": len(embedding) if embedding else None,
                     },
                     description="Long-term memory storage completed",
                 )
@@ -119,6 +121,8 @@ class PersistentMemoryManager:
                     "memory_id": memory_id,
                     "memory_type": "long_term",
                     "content_length": len(content),
+                    "has_metadata": metadata is not None and len(metadata) > 0,
+                    "embedding_dimensions": len(embedding) if embedding else None,
                 },
                 description="Long-term memory storage completed",
             )
@@ -180,6 +184,7 @@ class PersistentMemoryManager:
                     "agent_id": agent_id,
                     "user_id": str(user_id) if user_id is not None else None,
                     "collections": collections,
+                    "collections_count": len(collections) if collections else 1,
                 },
                 description="Starting long-term memory search",
             )
@@ -253,6 +258,17 @@ class PersistentMemoryManager:
                 # No collections specified, search all collections
                 lt_results = await search_collection()
 
+            # Calculate quality metrics from results
+            results_quality_score = 0.0
+            if lt_results:
+                scores = []
+                for item in lt_results:
+                    if isinstance(item, dict):
+                        scores.append(item.get("score", 0.0))
+                    elif isinstance(item, (tuple, list)) and len(item) > 0:
+                        scores.append(float(item[0]))
+                results_quality_score = sum(scores) / len(scores) if scores else 0.0
+
             # Emit memory search completed event
             observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
@@ -261,7 +277,9 @@ class PersistentMemoryManager:
                     "query": query[:100],
                     "memory_type": "long_term",
                     "results_count": len(lt_results),
+                    "results_quality_score": results_quality_score,
                     "collections_searched": collections if collections else "all",
+                    "collections_count": len(collections) if collections else 1,
                 },
                 description=(f"Long-term memory search completed: " f"{len(lt_results)} results"),
             )

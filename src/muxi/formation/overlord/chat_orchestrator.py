@@ -218,14 +218,15 @@ class ChatOrchestrator:
             if stored_request_id:
                 request_id = stored_request_id
                 observability.observe(
-                    event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+                    event_type=observability.ConversationEvents.REQUEST_ID_REUSED,
                     level=observability.EventLevel.DEBUG,
                     data={
                         "session_id": session_id,
-                        "reused_request_id": request_id,
+                        "request_id": request_id,
                         "clarification_type": pending_clarification.get("type"),
+                        "clarification_turn": "response",
                     },
-                    description=f"Reusing request_id {request_id} for clarification response",
+                    description=f"Reusing request_id for multi-turn clarification (type: {pending_clarification.get('type')})",
                 )
             else:
                 # Fallback if somehow request_id is missing
@@ -276,16 +277,25 @@ class ChatOrchestrator:
             # So we don't need to emit it again here
 
             # Emit request validation event (basic validation)
+            validation_start = time.time()
+            message_valid = len(message.strip()) > 0
+            agent_exists = agent_name is None or agent_name in self.overlord.agents
+            has_files = files is not None
+            file_count = len(files) if files else 0
+            
             observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_VALIDATED,
                 level=observability.EventLevel.INFO,
                 data={
-                    "message_valid": len(message.strip()) > 0,
-                    "agent_exists": agent_name is None or agent_name in self.overlord.agents,
-                    "has_files": files is not None,
-                    "file_count": len(files) if files else 0,
+                    "message_valid": message_valid,
+                    "agent_exists": agent_exists,
+                    "has_files": has_files,
+                    "file_count": file_count,
+                    "validation_checks_passed": message_valid and agent_exists,
+                    "file_processing_required": has_files,
+                    "validation_duration_ms": (time.time() - validation_start) * 1000,
                 },
-                description=f"Request {request_id} validated",
+                description=f"Request {request_id} validated successfully",
             )
 
             # Store user message in buffer memory immediately for all messages (fire-and-forget)
@@ -354,12 +364,16 @@ class ChatOrchestrator:
                 and user_id
                 and self.overlord.auto_extract_user_info
             ):
-                # DEBUG: Log task creation
+                # Log user info extraction task creation
                 observability.observe(
-                    event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+                    event_type=observability.ConversationEvents.USER_INFO_EXTRACTION_STARTED,
                     level=observability.EventLevel.INFO,
-                    data={"operation": "extraction_task_created", "user_id": user_id},
-                    description="Creating extraction task",
+                    data={
+                        "user_id": user_id,
+                        "extraction_enabled": True,
+                        "background_task": True,
+                    },
+                    description="Starting background user information extraction task",
                 )
 
                 asyncio.create_task(
@@ -381,14 +395,15 @@ class ChatOrchestrator:
             # FAIL-SAFE: Force sync mode if no webhook URL is available
             if use_async is not False and webhook_url is None:
                 observability.observe(
-                    event_type=observability.SystemEvents.SYSTEM_ACTION,
+                    event_type=observability.ConversationEvents.REQUEST_MODE_CHANGED,
                     level=observability.EventLevel.WARNING,
                     data={
-                        "forced_sync": True,
+                        "requested_mode": "async",
+                        "forced_mode": "sync",
                         "reason": "no_webhook_url",
-                        "use_async_requested": use_async,
+                        "webhook_url_provided": webhook_url is not None,
                     },
-                    description="Forcing sync mode: No webhook URL configured or provided",
+                    description="Request mode forced from async to sync due to missing webhook URL",
                 )
                 use_async = False
 
@@ -519,14 +534,15 @@ class ChatOrchestrator:
 
         # Create tracked background task for async execution
         observability.observe(
-            event_type=observability.ConversationEvents.ASYNC_PROCESSING_STARTED,
+            event_type=observability.ConversationEvents.REQUEST_QUEUED_ASYNC,
             level=observability.EventLevel.INFO,
             data={
                 "request_id": request_id,
-                "has_execute_method": hasattr(self.overlord, "_execute_async_request"),
-                "has_create_method": hasattr(self.overlord, "_create_tracked_task"),
+                "webhook_url": webhook_url,
+                "estimated_duration_ms": None,  # Unknown at queue time
+                "queue_position": None,  # Single task queue currently
             },
-            description=f"Creating async task for request {request_id}",
+            description=f"Request queued for asynchronous processing: {request_id}",
         )
 
         # Capture the current context to propagate to the async task
@@ -980,47 +996,15 @@ class ChatOrchestrator:
         enhanced_message: str = None,
     ) -> None:
         """Extract user information from conversation without blocking."""
-        # DEBUG: Log that async method was called
-        observability.observe(
-            event_type=observability.ConversationEvents.REQUEST_VALIDATED,
-            level=observability.EventLevel.INFO,
-            data={
-                "operation": "extract_async_called",
-                "user_id": user_id,
-            },
-            description="Extraction async method started",
-        )
         try:
             # Use enhanced message for extraction if provided, otherwise use original
             extraction_message = enhanced_message if enhanced_message else user_message
-
-            # DEBUG: Log before calling overlord method
-            observability.observe(
-                event_type=observability.ConversationEvents.REQUEST_VALIDATED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "operation": "calling_overlord_extract",
-                    "user_id": user_id,
-                },
-                description="About to call overlord.extract_user_information",
-            )
 
             await self.overlord.extract_user_information(
                 user_message=extraction_message,  # Use enhanced for better context
                 agent_response=agent_response,
                 user_id=user_id,
                 agent_id=agent_id,
-            )
-
-            # DEBUG: Log after successful call
-            observability.observe(
-                event_type=observability.ConversationEvents.REQUEST_VALIDATED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "operation": "overlord_extract_completed",
-                    "user_id": user_id,
-                },
-                description="overlord.extract_user_information completed",
             )
             # User information extraction completed
         except Exception as e:

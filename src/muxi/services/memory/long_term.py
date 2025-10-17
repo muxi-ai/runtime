@@ -472,6 +472,7 @@ class LongTermMemory:
                 "content_length": len(content),
                 "has_metadata": metadata is not None,
                 "has_embedding": embedding is not None,
+                "embedding_dimensions": len(embedding) if embedding is not None else None,
                 "collection": collection or self.default_collection,
             },
             description="Long-term memory storage started",
@@ -685,6 +686,13 @@ class LongTermMemory:
                 }
             )
 
+        # Calculate quality metrics
+        results_quality_score = (
+            sum(r["score"] for r in formatted_results) / len(formatted_results)
+            if formatted_results
+            else 0.0
+        )
+
         # Emit memory search completed event
         observability.observe(
             event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
@@ -692,6 +700,7 @@ class LongTermMemory:
             data={
                 "query_length": len(query),
                 "results_count": len(formatted_results),
+                "results_quality_score": results_quality_score,
                 "collection": collection,
                 "limit": limit,
             },

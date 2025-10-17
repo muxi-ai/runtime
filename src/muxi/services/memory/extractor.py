@@ -549,20 +549,6 @@ class MemoryExtractor:
                             "collection": collection,
                         }
 
-                        # DEBUG: Log before add
-                        observability.observe(
-                            event_type=observability.ConversationEvents.MEMORY_LONG_TERM_LOOKUP,
-                            level=observability.EventLevel.DEBUG,
-                            data={
-                                "operation": "before_add",
-                                "is_multi_user": self.overlord.is_multi_user,
-                                "add_params_keys": list(add_params.keys()),
-                                "memory_content": memory_content[:50],
-                                "user_id": str(user_id),
-                            },
-                            description=f"About to call long_term_memory.add with {list(add_params.keys())}",
-                        )
-
                         await self.overlord.long_term_memory.add(**add_params)
 
                         # Invalidate identity synopsis cache if this affects identity collections
@@ -574,17 +560,6 @@ class MemoryExtractor:
                                     )
                             except Exception:
                                 pass  # Cache invalidation failure is non-critical
-
-                        # DEBUG: Log after add
-                        observability.observe(
-                            event_type=observability.ConversationEvents.MEMORY_LONG_TERM_ENHANCED,
-                            level=observability.EventLevel.DEBUG,
-                            data={
-                                "operation": "after_add",
-                                "memory_content": memory_content[:50],
-                            },
-                            description="Successfully called long_term_memory.add",
-                        )
                 except Exception as e:
                     # Log memory storage failure for debugging while continuing execution
                     observability.observe(

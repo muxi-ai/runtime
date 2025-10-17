@@ -546,6 +546,24 @@ class ConversationEvents(Enum):
     REQUEST_COMPLETED = "request.completed"  # Success state
     # When request processing completes successfully
 
+    REQUEST_MODE_CHANGED = "request.mode.changed"
+    # When request processing mode is forced to change (e.g., async→sync due to missing webhook)
+
+    REQUEST_MODE_RESOLVED = "request.mode.resolved"
+    # When conflicting request modes are resolved (e.g., async + streaming conflict)
+
+    REQUEST_ID_REUSED = "request.id.reused"
+    # When existing request_id is reused for multi-turn clarification
+
+    REQUEST_CONTEXT_LOADED = "request.context.loaded"
+    # When request context is loaded from memory (buffer + long-term)
+
+    REQUEST_NON_ACTIONABLE = "request.non_actionable"
+    # When request is identified as non-actionable (greeting, acknowledgment) and uses fast path
+
+    REQUEST_QUEUED_ASYNC = "request.queued.async"
+    # When request is queued for asynchronous processing
+
     # ===================================================================
     # MULTI-MODAL CONTENT PROCESSING
     # ===================================================================
@@ -630,6 +648,9 @@ class ConversationEvents(Enum):
     WORKFLOW_TASK_COMPLETED = "workflow.task.completed"
     # When a workflow task completes successfully
 
+    WORKFLOW_APPROVAL_RECEIVED = "workflow.approval.received"
+    # When user responds to workflow approval request
+
     # ===================================================================
     # SOP (Standard Operating Procedures) EVENTS
     # ===================================================================
@@ -641,6 +662,9 @@ class ConversationEvents(Enum):
 
     SOP_EXECUTED = "sop.executed"
     # When an SOP is used to generate a workflow
+
+    SOP_NOT_FOUND = "sop.not_found"
+    # When requested SOP is not found or disabled
 
     # ===================================================================
     # MEMORY & CONTEXT OPERATIONS
@@ -666,6 +690,9 @@ class ConversationEvents(Enum):
 
     MEMORY_AUTO_EXTRACTION_FAILED = "memory.auto.extraction.failed"
     # When memory auto-extraction fails
+
+    USER_INFO_EXTRACTION_STARTED = "user.info.extraction.started"
+    # When background user information extraction task is initiated
 
     # Long-term memory operations
     MEMORY_LONG_TERM_LOOKUP = "memory.long_term.lookup"
@@ -916,6 +943,9 @@ class ConversationEvents(Enum):
     # ===================================================================
     # WEBHOOK DELIVERY
     # ===================================================================
+    WEBHOOK_DELIVERY_STARTED = "webhook.delivery.started"
+    # When webhook delivery attempt begins
+
     WEBHOOK_SENT = "webhook.sent"
     # When webhook notification is sent
 
@@ -944,6 +974,12 @@ class ConversationEvents(Enum):
     # When clarification is skipped (disabled or not needed)
 
     # ===================================================================
+    # CREDENTIAL HANDLING
+    # ===================================================================
+    CREDENTIAL_PROVIDED = "credential.provided"
+    # When user provides credentials via clarification or direct input
+
+    # ===================================================================
     # REQUEST ANALYSIS & CLASSIFICATION
     # ===================================================================
     REQUEST_TOPICS_EXTRACTED = "request.topics.extracted"
@@ -952,6 +988,9 @@ class ConversationEvents(Enum):
     # ===================================================================
     # SCHEDULER OPERATIONS
     # ===================================================================
+    SCHEDULER_JOB_REQUESTED = "scheduler.job.requested"
+    # When user requests to create a scheduled job
+
     SCHEDULED_JOB_CREATED = "scheduled.job.created"
     # When a scheduled job is created
 

@@ -150,3 +150,5 @@ tests/assets/files/report.pdf
 tests/assets/files/presentation.mp4
 tests/assets/files/document.docx
 tests/assets/files/slide.png
+# E2E test results
+e2e/results/*

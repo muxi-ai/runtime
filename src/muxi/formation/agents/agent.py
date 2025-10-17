@@ -803,7 +803,8 @@ class Agent:
         # Reset A2A attempt counter for each new request to prevent cascading failures
         self._a2a_attempt_count = 0
 
-        # Emit agent message processing event
+        # Emit agent message processing event with enhanced metadata
+        tool_count = len(self.tools) if hasattr(self, 'tools') and self.tools else 0
         observability.observe(
             event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
             level=observability.EventLevel.INFO,
@@ -811,8 +812,11 @@ class Agent:
                 "agent_id": self.agent_id,
                 "agent_name": self.name,
                 "message_length": len(content),
+                "has_tools": tool_count > 0,
+                "tool_count": tool_count,
+                "model_used": self.model if hasattr(self, 'model') and self.model else None,
             },
-            description=f"Agent {self.agent_id} processing message",
+            description=f"Agent {self.agent_id} ({self.name}) starting message processing",
         )
 
         # Memory storage is handled by chat orchestrator - agent should not store messages
@@ -2835,6 +2839,20 @@ class Agent:
                 except Exception:
                     # Failed to get conversation context, continue without it
                     conversation_context = []
+
+            # Emit tool call started event
+            observability.observe(
+                event_type=observability.ConversationEvents.MCP_TOOL_CALL_STARTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "tool_name": tool_name,
+                    "server_id": server_id,
+                    "has_parameters": bool(parameters),
+                    "parameter_count": len(parameters) if parameters else 0,
+                },
+                description=f"Agent {self.agent_id} starting tool call: {tool_name}",
+            )
 
             if server_id:
                 result = await self._mcp_service.invoke_tool(

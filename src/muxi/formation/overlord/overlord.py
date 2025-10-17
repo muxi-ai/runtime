@@ -4758,14 +4758,16 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         # When both async and streaming are requested, ignore streaming
         if use_async and stream:
             observability.observe(
-                event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+                event_type=observability.ConversationEvents.REQUEST_MODE_RESOLVED,
                 level=observability.EventLevel.INFO,
                 data={
-                    "use_async": use_async,
-                    "stream": stream,
-                    "resolution": "ignoring_stream",
+                    "requested_async": True,
+                    "requested_stream": True,
+                    "resolved_async": True,
+                    "resolved_stream": False,
+                    "resolution_reason": "async_streaming_conflict",
                 },
-                description="Async mode requested with streaming - ignoring streaming to prevent conflict",
+                description="Resolved async+streaming conflict: async mode takes precedence, streaming disabled",
             )
             stream = False  # Disable streaming when async is active
 
@@ -5059,15 +5061,16 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             webhook_url = await self._get_webhook_url_for_request(request_id)
             if webhook_url:
                 observability.observe(
-                    event_type=observability.ConversationEvents.WEBHOOK_SENT,
+                    event_type=observability.ConversationEvents.WEBHOOK_DELIVERY_STARTED,
                     level=observability.EventLevel.INFO,
                     data={
                         "request_id": request_id,
                         "webhook_url": webhook_url,
-                        "result_size": len(str(result_content)),
-                        "processing_time": processing_time,
+                        "payload_size_bytes": len(str(result_content)),
+                        "processing_time_ms": processing_time * 1000 if processing_time else None,
+                        "attempt_number": 1,
                     },
-                    description=f"Starting webhook delivery for request {request_id}",
+                    description=f"Starting webhook delivery attempt for request {request_id}",
                 )
 
                 success = await self.webhook_manager.deliver_completion(
@@ -5384,17 +5387,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
         # Check for ANY pending clarification (not just credential tokens)
         if session_id:
-            observability.observe(
-                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
-                level=observability.EventLevel.INFO,
-                data={
-                    "session_id": session_id,
-                    "contains_token": contains_token,
-                    "message_preview": redact_message_preview(message, 100),
-                },
-                description="Checking for pending clarifications (workflow approval, credentials, etc.)",
-            )
-
             # Check if we have a pending clarification for this session
             clarification_info = await self._get_pending_clarification(session_id)
 
@@ -5749,14 +5741,15 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 elif clarification_info.get("type") == "workflow_approval":
                     # Handle workflow approval response
                     observability.observe(
-                        event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
+                        event_type=observability.ConversationEvents.WORKFLOW_APPROVAL_RECEIVED,
                         level=observability.EventLevel.INFO,
                         data={
                             "session_id": session_id,
                             "workflow_id": clarification_info.get("workflow_id"),
-                            "message": message[:100],
+                            "user_response": message[:200],
+                            "request_id": request_id,
                         },
-                        description="Processing workflow approval response",
+                        description="Received user response to workflow approval request",
                     )
 
                     workflow_id = clarification_info.get("workflow_id")
@@ -5764,19 +5757,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
                     # Retrieve workflow from pending approvals
                     workflow = self.workflow_manager.get_pending_approval(workflow_id)
-
-                    observability.observe(
-                        event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "workflow_id": workflow_id,
-                            "workflow_found": workflow is not None,
-                            "pending_approvals_keys": list(
-                                self.workflow_manager.pending_approvals.keys()
-                            ),
-                        },
-                        description=f"Looking up workflow {workflow_id} in pending approvals",
-                    )
 
                     if workflow:
                         try:
@@ -5993,18 +5973,17 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         # Log clarification bypass decision
         if skip_clarification:
             observability.observe(
-                event_type=observability.SystemEvents.SERVICE_STARTED,
+                event_type=observability.ConversationEvents.CLARIFICATION_SKIPPED,
                 level=observability.EventLevel.DEBUG,
                 data={
-                    "clarification_bypassed": True,
-                    "is_workflow_task": message and message.startswith("## Task:"),
                     "reason": (
                         "workflow_task"
                         if message and message.startswith("## Task:")
                         else "analyzer_clear"
                     ),
+                    "is_workflow_task": message and message.startswith("## Task:"),
                 },
-                description="Clarification bypassed",
+                description="Clarification skipped for this request",
             )
 
         # Check if clarification is needed using unified system with request_id
@@ -6192,14 +6171,15 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
         if not is_actionable:
             observability.observe(
-                event_type=observability.ConversationEvents.REQUEST_PROCESSING,
+                event_type=observability.ConversationEvents.REQUEST_NON_ACTIONABLE,
                 level=observability.EventLevel.DEBUG,
                 data={
-                    "message_preview": redact_message_preview(message, 50),
-                    "path": "fast_conversational",
-                    "message_type": "non_actionable",
+                    "message_type": "greeting_or_acknowledgment",
+                    "fast_path": True,
+                    "processing_skipped": ["workflow_analysis", "agent_selection", "tool_planning"],
+                    "request_id": request_id,
                 },
-                description="Non-actionable message, using fast conversational path",
+                description="Non-actionable message detected, using fast conversational path",
             )
 
             # Skip all heavy processing - go straight to persona
@@ -6312,12 +6292,15 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         data={
                             "reason": f"LLM detected {analysis.threat_type} attempt",
                             "threat_type": analysis.threat_type or "llm_detected",
+                            "threat_level": "high",  # LLM detection is high confidence
+                            "blocked": True,
+                            "detection_confidence": 0.9,  # LLM analysis is highly confident
+                            "detection_method": "request_analyzer",
                             "request_id": request_id,
                             "user_id": str(user_id) if user_id else None,
                             "session_id": session_id,
-                            "detection_method": "request_analyzer",
                         },
-                        description=f"Security threat detected by LLM analyzer: {analysis.threat_type}",
+                        description=f"Security threat blocked by LLM analyzer: {analysis.threat_type}",
                     )
 
                     # Emit streaming event to inform user
@@ -6351,40 +6334,22 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         description=f"Extracted {len(analysis.topics)} topic tags from request"
                     )
 
-                # Debug: Log the complete analysis object
-                observability.observe(
-                    event_type=observability.ServerEvents.REQUEST_RECEIVED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "service": "request_analyzer_result",
-                        "analysis_fields": dir(analysis) if analysis else [],
-                        "is_scheduling_request": (
-                            getattr(analysis, "is_scheduling_request", None) if analysis else None
-                        ),
-                        "complexity_score": analysis.complexity_score if analysis else None,
-                        "requires_decomposition": (
-                            analysis.requires_decomposition if analysis else None
-                        ),
-                        "message_analyzed": actual_message[:100],
-                    },
-                    description=f"Request analyzer returned: scheduling={getattr(analysis, 'is_scheduling_request', 'N/A')}",  # noqa: E501
-                )
-
                 # FIRST: Check for explicit SOP request - highest priority
                 if analysis.explicit_sop_request:
                     # User explicitly requested a specific SOP
                     sop_id = analysis.explicit_sop_request
                     if self._ensure_sop_system() and sop_id in self.sop_system.sops:
                         observability.observe(
-                            event_type=observability.ConversationEvents.REQUEST_VALIDATED,
+                            event_type=observability.ConversationEvents.SOP_MATCHED,
                             level=observability.EventLevel.INFO,
                             data={
-                                "service": "explicit_sop_request",
                                 "sop_id": sop_id,
                                 "sop_name": self.sop_system.sops[sop_id].get("name", sop_id),
-                                "user_message_preview": redact_message_preview(actual_message, 100),
+                                "explicit_request": True,
+                                "matched_score": 1.0,
+                                "request_id": request_id,
                             },
-                            description=f"User explicitly requested SOP: {sop_id}",
+                            description=f"Matched explicit SOP request: {sop_id}",
                         )
 
                         # Direct SOP invocation - bypass complexity analysis
@@ -6402,15 +6367,15 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         # SOP explicitly requested but not found - return error to user
                         available_sops = list(self.sop_system.sops.keys()) if self.sop_system else []
                         observability.observe(
-                            event_type=observability.ConversationEvents.SOP_MATCHED,
+                            event_type=observability.ConversationEvents.SOP_NOT_FOUND,
                             level=observability.EventLevel.WARNING,
                             data={
-                                "sop_id": sop_id,
+                                "requested_sop_id": sop_id,
                                 "available_sops": available_sops,
                                 "sop_system_enabled": self._ensure_sop_system(),
-                                "reason": "sop_not_found_or_disabled",
+                                "request_id": request_id,
                             },
-                            description=f"Explicit SOP request '{sop_id}' could not be fulfilled",
+                            description=f"Requested SOP '{sop_id}' not found or disabled",
                         )
 
                         # Return clear error message to user
@@ -6503,39 +6468,13 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 )
                 # Fall through to normal agent selection
 
-        # Check for scheduler integration
-        observability.observe(
-            event_type=observability.ServerEvents.REQUEST_RECEIVED,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "scheduler_check",
-                "has_analysis": analysis is not None,
-                "is_scheduling_request": (
-                    getattr(analysis, "is_scheduling_request", False) if analysis else False
-                ),
-                "scheduler_service_available": self.scheduler_service is not None,
-                "message_preview": message[:100],
-            },
-            description=f"Checking scheduler routing - analysis: {analysis is not None}, scheduler: {self.scheduler_service is not None}",  # noqa: E501
-        )
-
-        # Route to scheduler if this is a scheduling request
+        # Check for scheduler integration and route if needed
         if (
             analysis
             and getattr(analysis, "is_scheduling_request", False)
             and self.scheduler_service
         ):
-            observability.observe(
-                event_type=observability.ServerEvents.REQUEST_RECEIVED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "scheduler_routing",
-                    "user_id": str(user_id),
-                    "message": message[:100],
-                },
-                description="Routing to scheduler service for scheduling request",
-            )
-
+            # Route to scheduler service
             try:
                 # Extract the actual user message for scheduler
                 actual_message = message
@@ -6583,27 +6522,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
         # Use existing agent selection logic if no specific agent requested
         if agent_name is None:
-            # Add debug info about why we're here
-            observability.observe(
-                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
-                level=observability.EventLevel.WARNING,
-                data={
-                    "session_id": session_id,
-                    "has_pending_clarifications": (
-                        bool(await self._get_pending_clarification(session_id))
-                        if session_id
-                        else False
-                    ),
-                    "pending_clarification_type": (
-                        (await self._get_pending_clarification(session_id) or {}).get("type")
-                        if session_id
-                        else None
-                    ),
-                    "message": message[:100],
-                },
-                description="Agent selection triggered - check if this should have been handled as clarification",
-            )
-
             # Emit streaming event for agent selection planning
             streaming.stream(
                 "planning",
@@ -6636,11 +6554,15 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         data={
                             "reason": str(e),
                             "threat_type": e.threat_type,
+                            "threat_level": "high",  # Security exception is high severity
+                            "blocked": True,
+                            "detection_confidence": 0.95,  # Security exception has very high confidence
+                            "detection_method": "agent_selection",
                             "request_id": request_id,
                             "user_id": str(user_id) if user_id else None,
                             "session_id": session_id,
                         },
-                        description=f"Security violation detected: {e.threat_type}",
+                        description=f"Security threat blocked during agent selection: {e.threat_type}",
                     )
 
                     # Emit streaming event to inform user
@@ -9332,7 +9254,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             self._delete_pending_clarification(session_id)
 
                             observability.observe(
-                                event_type=observability.SystemEvents.CREDENTIAL_UPDATE,
+                                event_type=observability.ConversationEvents.CREDENTIAL_PROVIDED,
                                 level=observability.EventLevel.INFO,
                                 data={
                                     "service": service,
@@ -9342,8 +9264,10 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                         if credential_data
                                         else "unknown"
                                     ),
+                                    "via_clarification": True,
+                                    "session_id": session_id,
                                 },
-                                description=f"Successfully stored {service} credentials for user",
+                                description=f"User provided {service} credentials via clarification",
                             )
 
                             return True

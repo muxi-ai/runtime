@@ -277,6 +277,13 @@ class Memobase:
                     }
                 )
 
+            # Calculate quality metrics from similarity scores
+            results_quality_score = (
+                sum(memory.get("score", 0.0) for memory in search_results) / len(search_results)
+                if search_results
+                else 0.0
+            )
+
             # Log successful memory retrieval
             observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
@@ -286,6 +293,7 @@ class Memobase:
                     "external_user_id": external_user_id,
                     "collection": collection,
                     "results_count": len(results),
+                    "results_quality_score": results_quality_score,
                     "query_length": len(query) if query else 0,
                 },
             )

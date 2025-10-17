@@ -757,8 +757,12 @@ class WorkflowExecutor:
                     "task_id": task.id,
                     "task_name": task.name,
                     "agent_id": agent.agent_id,
+                    "task_complexity": task.estimated_complexity if hasattr(task, 'estimated_complexity') else None,
+                    "estimated_duration_s": task_timeout,
+                    "dependencies_completed": len(task.dependencies) if hasattr(task, 'dependencies') else 0,
+                    "workflow_id": workflow.id if workflow else None,
                 },
-                description=f"Task '{task.name}' assigned to agent '{agent.agent_id}'",
+                description=f"Task '{task.name}' (complexity {task.estimated_complexity if hasattr(task, 'estimated_complexity') else 'N/A'}) assigned to agent '{agent.agent_id}'",
             )
 
             # Calculate task timeout
@@ -809,8 +813,12 @@ class WorkflowExecutor:
                     "task_name": task.name,
                     "agent_id": task.assigned_agent_id,
                     "status": result.status.value if result else "unknown",
+                    "duration_ms": execution_time * 1000 if execution_time else None,
+                    "task_complexity": task.estimated_complexity if hasattr(task, 'estimated_complexity') else None,
+                    "success": result.status.value == "completed" if result else False,
+                    "workflow_id": workflow.id if workflow else None,
                 },
-                description=f"Task '{task.name}' completed by agent '{task.assigned_agent_id}'",
+                description=f"Task '{task.name}' completed in {execution_time:.2f}s by agent '{task.assigned_agent_id}'",
             )
             return result
 
