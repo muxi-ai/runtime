@@ -9,6 +9,11 @@ llm:
   models:
     - text: "openai/gpt-4o-mini"
 
+workflow:
+  auto_decomposition: true
+  complexity_threshold: 5.0  # Low threshold to trigger workflow
+  plan_approval_threshold: 6.0  # Low threshold to require approval
+
 agents:
   - id: test-agent
     name: Test Agent

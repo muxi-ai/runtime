@@ -4702,6 +4702,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         threshold_seconds: Optional[float] = None,  # Optional threshold override
         stream: Optional[bool] = None,  # None=use config, True=force stream, False=no stream
         files: Optional[List[Dict[str, Any]]] = None,  # Optional file attachments
+        bypass_workflow_approval: bool = False,  # Skip workflow approval (useful for triggers/automation)
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
         """
         Enhanced chat with async support for long-running agentic tasks and file attachments.
@@ -4732,6 +4733,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 - content: File content (text or bytes)
                 - content_type: MIME type of the file
                 - size: File size in bytes
+            bypass_workflow_approval: If True, skip manual approval for workflows
+                regardless of complexity threshold. Useful for automated triggers
+                and scenarios where manual approval doesn't make sense.
 
         Returns:
             For sync processing: str with the agent's response content, or
@@ -4782,6 +4786,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             threshold_seconds=threshold_seconds,
             stream=stream,
             files=files,
+            bypass_workflow_approval=bypass_workflow_approval,
         )
 
     async def avchat(
@@ -5300,6 +5305,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         skip_clarification: bool = False,
         use_async: Optional[bool] = None,
         webhook_url: Optional[str] = None,
+        bypass_workflow_approval: bool = False,
     ) -> MuxiResponse:
         """
         Process chat synchronously using existing infrastructure.
@@ -6362,6 +6368,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             relevant_sop=self.sop_system.sops[sop_id],
                             use_async=use_async,
                             webhook_url=webhook_url,
+                            bypass_workflow_approval=bypass_workflow_approval,
                         )
                     else:
                         # SOP explicitly requested but not found - return error to user
@@ -6425,6 +6432,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             use_async=use_async,
                             webhook_url=webhook_url,
                             relevant_sop=relevant_sop,
+                            bypass_workflow_approval=bypass_workflow_approval,
                         )
 
                     # No SOP found - apply normal protection logic
@@ -6452,6 +6460,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                 use_async=use_async,
                                 webhook_url=webhook_url,
                                 relevant_sop=None,
+                                bypass_workflow_approval=bypass_workflow_approval,
                             )
             except Exception as e:
                 # Log error but continue with normal flow
@@ -7041,6 +7050,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         relevant_sop: Optional[Dict] = None,
         use_async: Optional[bool] = None,
         webhook_url: Optional[str] = None,
+        bypass_workflow_approval: bool = False,
     ) -> MuxiResponse:
         """
         Process a complex request using workflow orchestration.
@@ -7094,11 +7104,12 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             )
 
             # Determine if approval is needed - ALWAYS if explicitly requested
+            # UNLESS bypass_workflow_approval is True (e.g., from triggers)
             needs_approval = (
                 analysis.is_explicit_approval_request  # User explicitly wants to see plan
                 or analysis.complexity_score
                 >= self.plan_approval_threshold  # Or complexity threshold met
-            )
+            ) and not bypass_workflow_approval  # Skip approval if bypassed
 
             observability.observe(
                 event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
@@ -7107,9 +7118,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     "complexity_score": analysis.complexity_score,
                     "plan_approval_threshold": self.plan_approval_threshold,
                     "needs_approval": needs_approval,
+                    "bypass_workflow_approval": bypass_workflow_approval,
                     "message_preview": redact_message_preview(message, 100),
                 },
-                description=f"Workflow approval decision: {'REQUIRED' if needs_approval else 'NOT REQUIRED'}",
+                description=f"Workflow approval decision: {'REQUIRED' if needs_approval else 'NOT REQUIRED'}"
+                + (f" (bypassed by flag)" if bypass_workflow_approval else ""),
             )
 
             # Use the passed relevant_sop if provided, otherwise search for SOPs
@@ -7178,6 +7191,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         session_id=session_id,
                         request_id=request_id,
                         relevant_sop=fallback_sop,
+                        bypass_workflow_approval=bypass_workflow_approval,
                     )
 
             # Fall back to standard decomposition if no SOP found

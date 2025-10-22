@@ -66,6 +66,7 @@ If you're new to the MUXI Workflow System, we recommend reading the documentatio
 - **Parallel Execution**: Executes independent tasks concurrently for optimal performance
 - **SOP System**: Intelligent execution of predefined procedures via decomposer 🆕
 - **Approval Workflows**: Requires user confirmation for high-stakes operations
+- **Approval Bypass**: Programmable approval skip for automation scenarios (triggers, CI/CD)
 - **Resilience Layer**: Automatic retry, graceful degradation, and user-friendly error messages
 - **Configurable Complexity Analysis**: Multiple methods for determining request complexity
 
@@ -73,23 +74,24 @@ If you're new to the MUXI Workflow System, we recommend reading the documentatio
 
 ```yaml
 overlord:
-  config:
+  workflow:
     # Enable workflow features
     auto_decomposition: true
-    plan_approval_threshold: 7
+    complexity_threshold: 6.0        # When to trigger workflows (1-10)
+    plan_approval_threshold: 7.0     # When to require approval (1-10)
+    
+    routing_strategy: "capability_based"
+    parallel_execution: true
 
-    workflow:
-      complexity_threshold: 6.0
-      routing_strategy: "capability_based"
-      parallel_execution: true
-
-      # Resilience configuration
-      error_recovery: "retry_with_backoff"
-      retry:
-        max_attempts: 5
-        initial_delay: 2.0
-        backoff_factor: 2.0
+    # Resilience configuration
+    error_recovery: "retry_with_backoff"
+    retry:
+      max_attempts: 5
+      initial_delay: 2.0
+      backoff_factor: 2.0
 ```
+
+**Note:** Configuration is under `overlord.workflow` in formation.yaml. Both thresholds are optional and default to 7.0.
 
 ## 🛠️ Development
 

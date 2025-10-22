@@ -52,6 +52,7 @@ class ChatOrchestrator:
         webhook_url: Optional[str],
         internal_user_id: Optional[int] = None,
         muxi_user_id: Optional[str] = None,
+        bypass_workflow_approval: bool = False,
     ) -> AsyncGenerator[str, None]:
         """
         Create a streaming generator that fires off processing and yields events.
@@ -113,6 +114,7 @@ class ChatOrchestrator:
                 original_message=original_message,
                 use_async=use_async,
                 webhook_url=webhook_url,
+                bypass_workflow_approval=bypass_workflow_approval,
             )
 
             # Note: The overlord._process_sync_chat method handles all streaming events:
@@ -145,6 +147,7 @@ class ChatOrchestrator:
         threshold_seconds: Optional[float] = None,
         stream: Optional[bool] = None,
         files: Optional[List[Dict[str, Any]]] = None,
+        bypass_workflow_approval: bool = False,
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
         """
         Enhanced chat with async support for long-running agentic tasks and file attachments.
@@ -450,6 +453,7 @@ class ChatOrchestrator:
                     webhook_url=webhook_url,
                     internal_user_id=internal_user_id,
                     muxi_user_id=muxi_user_id,
+                    bypass_workflow_approval=bypass_workflow_approval,
                 )
 
             # else...
@@ -462,6 +466,7 @@ class ChatOrchestrator:
                 original_message=message,  # Pass original for extraction
                 use_async=use_async,
                 webhook_url=webhook_url,
+                bypass_workflow_approval=bypass_workflow_approval,
             )
 
     async def _determine_async_mode(
@@ -594,6 +599,7 @@ class ChatOrchestrator:
         original_message: Optional[str] = None,
         use_async: Optional[bool] = None,
         webhook_url: Optional[str] = None,
+        bypass_workflow_approval: bool = False,
     ) -> Union[str, MuxiResponse]:
         """
         Process a chat request synchronously.
@@ -620,6 +626,7 @@ class ChatOrchestrator:
             request_id=request_id,
             use_async=use_async,
             webhook_url=webhook_url,
+            bypass_workflow_approval=bypass_workflow_approval,
         )
 
         # Store overlord's final response in buffer memory (fire-and-forget)

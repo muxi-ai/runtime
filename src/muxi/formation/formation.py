@@ -2456,6 +2456,10 @@ class Formation:
             # Prepare services for handoff
             self._prepare_services()
 
+            # Get workflow configuration (check overlord.workflow first, then root workflow)
+            overlord_config = self.config.get("overlord", {})
+            workflow_config = overlord_config.get("workflow", self.config.get("workflow", {}))
+            
             # Create overlord with pre-configured services
             self._overlord = Overlord(
                 # Pre-configured services from Formation
@@ -2471,7 +2475,8 @@ class Formation:
                 request_timeout=self.config.get("request_timeout", 60),
                 # Enhanced workflow parameters from configuration
                 enable_workflow_by_default=self.config.get("enable_workflow_by_default", False),
-                complexity_threshold=self.config.get("complexity_threshold", 7.0),
+                complexity_threshold=workflow_config.get("complexity_threshold", 7.0),
+                plan_approval_threshold=workflow_config.get("plan_approval_threshold", 7.0),
             )
 
             # Set the formation instance reference for memory initialization

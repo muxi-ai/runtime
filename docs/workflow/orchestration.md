@@ -239,8 +239,13 @@ The system requests user approval in two scenarios:
 2. **Explicit approval requests** - When users ask to see the plan in any language (e.g., "Show me your plan", "Muéstrame tu enfoque")
 
 ```python
-# Approval is triggered by either condition
-if analysis.is_explicit_approval_request or complexity_score >= plan_approval_threshold:
+# Approval is triggered by either condition (unless bypassed)
+needs_approval = (
+    analysis.is_explicit_approval_request or 
+    complexity_score >= plan_approval_threshold
+) and not bypass_workflow_approval
+
+if needs_approval:
     plan = await task_decomposer.decompose_request(request)
     approval = await request_user_approval(plan)
     if approval.approved:
@@ -250,6 +255,26 @@ if analysis.is_explicit_approval_request or complexity_score >= plan_approval_th
 ```
 
 The `is_explicit_approval_request` field uses LLM-based intent detection, making it work seamlessly in any language without pattern matching.
+
+#### Bypassing Workflow Approvals
+
+For automated scenarios (triggers, scheduled tasks, scripts), you can bypass approval requirements:
+
+```python
+# Skip approval for automated execution
+response = await overlord.chat(
+    message="Deploy production build v2.4.1",
+    bypass_workflow_approval=True  # Execute immediately regardless of complexity
+)
+```
+
+**Use cases for bypassing approvals:**
+- **Webhook triggers** - Already approved by the external system
+- **Scheduled tasks** - Pre-configured automation
+- **Internal operations** - System-initiated workflows
+- **CI/CD pipelines** - Automated deployment processes
+
+**Important:** Triggers automatically bypass approvals by default (see [Triggers Documentation](../triggers.md)).
 
 #### Approval-Aware Async Execution 🆕
 

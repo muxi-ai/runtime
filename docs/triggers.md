@@ -438,6 +438,31 @@ Triggers are for **data transformation**, not logic:
 
 If you need conditional logic, handle it in the LLM response, not the template.
 
+## Workflow Approvals
+
+Triggers automatically **bypass workflow approvals** regardless of complexity threshold. This is intentional because:
+
+1. **Webhooks are already automated** - the triggering system made the decision
+2. **No one to approve** - webhooks are fire-and-forget, not interactive
+3. **Manual approval doesn't make sense** - if you want approval, build it into the external system before calling the trigger
+
+If a trigger's request would normally require manual approval (high complexity score), it will be executed automatically without waiting for approval.
+
+**For regular chat requests**, you can also bypass workflow approval programmatically:
+
+```python
+await overlord.chat(
+    message="Complex task that would normally require approval",
+    bypass_workflow_approval=True  # Skip approval for automated scenarios
+)
+```
+
+This is useful for:
+- Automated scripts
+- Scheduled tasks
+- Internal system operations
+- Any scenario where manual approval doesn't make sense
+
 ## Comparison with /chat
 
 | Feature | /chat | /triggers/{name} |

@@ -151,11 +151,13 @@ async def execute_trigger(
             """Background task to process trigger."""
             try:
                 # Use overlord's chat method (non-streaming)
+                # Bypass workflow approval for triggers (automated execution)
                 await overlord.chat(
                     rendered_message,
                     user_id=user_id,
                     session_id=trigger_request.session_id,
                     request_id=request_id,
+                    bypass_workflow_approval=True,
                 )
 
                 observability.observe(
@@ -200,11 +202,13 @@ async def execute_trigger(
         # Process synchronously (non-streaming)
         try:
             # Use overlord's chat method (non-streaming for triggers)
+            # Bypass workflow approval for triggers (automated execution)
             response = await overlord.chat(
                 rendered_message,
                 user_id=user_id,
                 session_id=trigger_request.session_id,
                 request_id=request_id,
+                bypass_workflow_approval=True,
             )
 
             observability.observe(

@@ -8,8 +8,8 @@
 overlord:
   workflow:
     auto_decomposition: true
-    complexity_threshold: 7.0
-    plan_approval_threshold: 10
+    complexity_threshold: 7.0        # When to trigger workflows (1-10)
+    plan_approval_threshold: 10      # When to require approval (1-10)
     complexity_method: "heuristic"
     routing_strategy: "capability_based"
     error_recovery: "retry_with_backoff"
@@ -48,6 +48,19 @@ overlord:
 response = await overlord.chat(
     "What's the weather?",
     user_id="user123",
+)
+
+# Complex request (triggers workflow)
+response = await overlord.chat(
+    "Research competitive pricing, create presentation, and email stakeholders",
+    user_id="user123",
+)
+
+# Complex request with approval bypass (automated scenarios)
+response = await overlord.chat(
+    "Deploy v2.4.1 to production with health checks",
+    user_id="system",
+    bypass_workflow_approval=True,  # Skip approval gate
     session_id="session456"
 )
 
