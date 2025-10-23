@@ -27,5 +27,5 @@ server:
   # host: 127.0.0.1  # Default - localhost only
   port: 8271
   api_keys:
-    admin: test-admin-key-123
-    client: test-client-key-456
+    admin_key: test-admin-key-123
+    client_key: test-client-key-456
