@@ -1280,7 +1280,7 @@ class Formation:
 
         # Store server configuration for later use
         self._server_config = {
-            "host": server_config.get("host", "0.0.0.0"),
+            "host": server_config.get("host", "127.0.0.1"),
             "port": server_config.get("port", 8271),
             "access_log": server_config.get("access_log", False),
             "api_keys": self._api_keys,
