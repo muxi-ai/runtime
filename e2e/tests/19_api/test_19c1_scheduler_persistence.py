@@ -6,7 +6,7 @@ import json
 import time
 from pathlib import Path
 import sys
-import requests
+import httpx
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
@@ -65,11 +65,12 @@ class TestSchedulerPersistence(BaseE2ETest):
                 "enabled": True,
             }
             
-            response = requests.post(
-                f"{self.base_url}/scheduler/jobs",
-                headers=self.headers,
-                json=job_data,
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/scheduler/jobs",
+                    headers=self.headers,
+                    json=job_data,
+                )
             
             assert response.status_code == 422, f"Expected 422, got {response.status_code}"
             

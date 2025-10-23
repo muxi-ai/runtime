@@ -112,7 +112,7 @@ async def get_audit_log(
 @router.delete("/audit", response_model=APIResponse)
 async def clear_audit_log(
     request: Request,
-    confirm: str = Query(..., description="Required confirmation string to prevent accidental deletion"),
+    confirm: str | None = Query(None, description="Required confirmation string to prevent accidental deletion"),
 ) -> JSONResponse:
     """
     Clear the audit log file.
@@ -135,7 +135,7 @@ async def clear_audit_log(
     request_id = getattr(request.state, "request_id", None)
 
     # Validate confirmation
-    if confirm != "clear-audit-log":
+    if not confirm or confirm != "clear-audit-log":
         return JSONResponse(
             status_code=400,
             content=create_error_response(

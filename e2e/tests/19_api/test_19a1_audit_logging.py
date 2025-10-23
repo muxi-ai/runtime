@@ -6,7 +6,7 @@ import json
 import time
 from pathlib import Path
 import sys
-import requests
+import httpx
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
@@ -56,11 +56,12 @@ class TestAuditLogging(BaseE2ETest):
 
             # Test 1: Get audit log (should be empty initially or have system entries)
             print("\n2. Testing GET /v1/audit...")
-            response = requests.get(
-                f"{self.base_url}/audit",
-                headers=self.headers,
-                params={"limit": 100},
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.base_url}/audit",
+                    headers=self.headers,
+                    params={"limit": 100},
+                )
             assert response.status_code == 200, f"Expected 200, got {response.status_code}"
             
             data = response.json()
@@ -77,14 +78,15 @@ class TestAuditLogging(BaseE2ETest):
 
             # Test 2: Get audit log with filters
             print("\n3. Testing GET /v1/audit with filters...")
-            response = requests.get(
-                f"{self.base_url}/audit",
-                headers=self.headers,
-                params={
-                    "limit": 50,
-                    "resource_type": "agent",
-                },
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.base_url}/audit",
+                    headers=self.headers,
+                    params={
+                        "limit": 50,
+                        "resource_type": "agent",
+                    },
+                )
             assert response.status_code == 200
             data = response.json()
             assert data["object"] == "audit_log"
@@ -98,10 +100,11 @@ class TestAuditLogging(BaseE2ETest):
 
             # Test 3: Try to clear without confirmation (should fail)
             print("\n4. Testing DELETE /v1/audit without confirmation...")
-            response = requests.delete(
-                f"{self.base_url}/audit",
-                headers=self.headers,
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.delete(
+                    f"{self.base_url}/audit",
+                    headers=self.headers,
+                )
             assert response.status_code == 400, "Should require confirmation"
             data = response.json()
             assert data["success"] is False
@@ -111,11 +114,12 @@ class TestAuditLogging(BaseE2ETest):
 
             # Test 4: Clear audit log with confirmation
             print("\n5. Testing DELETE /v1/audit with confirmation...")
-            response = requests.delete(
-                f"{self.base_url}/audit",
-                headers=self.headers,
-                params={"confirm": "clear-audit-log"},
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.delete(
+                    f"{self.base_url}/audit",
+                    headers=self.headers,
+                    params={"confirm": "clear-audit-log"},
+                )
             assert response.status_code == 200
             data = response.json()
             assert data["object"] == "audit_log"
@@ -130,10 +134,11 @@ class TestAuditLogging(BaseE2ETest):
 
             # Test 5: Verify log was cleared (should have 1 entry - the cleared entry)
             print("\n6. Verifying audit log after clearing...")
-            response = requests.get(
-                f"{self.base_url}/audit",
-                headers=self.headers,
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.base_url}/audit",
+                    headers=self.headers,
+                )
             assert response.status_code == 200
             data = response.json()
             
@@ -144,11 +149,12 @@ class TestAuditLogging(BaseE2ETest):
 
             # Test 6: Test invalid timestamp format
             print("\n7. Testing invalid timestamp format...")
-            response = requests.get(
-                f"{self.base_url}/audit",
-                headers=self.headers,
-                params={"since": "invalid-date"},
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.base_url}/audit",
+                    headers=self.headers,
+                    params={"since": "invalid-date"},
+                )
             assert response.status_code == 400
             data = response.json()
             assert data["success"] is False
