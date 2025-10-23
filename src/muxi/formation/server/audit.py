@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import Request
 
-from ...utils.user_dirs import get_formations_base_dir
+from ...utils.user_dirs import get_user_dir
 
 
 class AuditLogger:
@@ -36,8 +36,8 @@ class AuditLogger:
         self._lock = threading.Lock()
 
         # Determine audit log path: ~/.muxi/formations/{formation_id}/audit.log
-        formations_dir = get_formations_base_dir()
-        self.formation_dir = formations_dir / formation_id
+        base_dir = get_user_dir()
+        self.formation_dir = base_dir / "formations" / formation_id
         self.formation_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.formation_dir / "audit.log"
 
