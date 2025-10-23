@@ -678,7 +678,7 @@ class FormationServer:
         
         # Show server binding event
         print(InitEventFormatter.format_info(
-            f"API server: binding to {self.host}:{self.port}",
+            f"API Worker: binding to {self.host}:{self.port}",
             None
         ))
         
@@ -694,7 +694,7 @@ class FormationServer:
                     raise RuntimeError("Server task completed unexpectedly")
                 except Exception as e:
                     print(InitEventFormatter.format_fail(
-                        f"API server failed to start",
+                        f"API Worker failed to start",
                         str(e)
                     ))
                     raise RuntimeError(f"Server startup failed: {e}") from e
@@ -708,7 +708,7 @@ class FormationServer:
                     if result == 0:
                         # Connection successful - server is ready!
                         print(InitEventFormatter.format_ok(
-                            f"API server: listening on {self.host}:{self.port}",
+                            f"API Worker: listening on {self.host}:{self.port}",
                             f"http://{self.host if self.host != '0.0.0.0' else '127.0.0.1'}:{self.port}"
                         ))
                         return
@@ -724,7 +724,7 @@ class FormationServer:
             error_msg += f": {last_error}"
         
         print(InitEventFormatter.format_fail(
-            "API server startup timeout",
+            "API Worker startup timeout",
             error_msg
         ))
         
