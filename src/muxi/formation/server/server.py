@@ -531,6 +531,7 @@ class FormationServer:
             mcp,
             llm,
             logging,
+            logs,
             memory,
             scheduler,
             a2a,
@@ -549,6 +550,7 @@ class FormationServer:
             mcp.router,
             llm.router,
             logging.router,
+            logs.router,
             memory.router,
             async_router,
             scheduler.router,
@@ -564,13 +566,13 @@ class FormationServer:
         from fastapi import Depends
 
         # Import all client route modules
-        from .routes.client import chat, events, jobs, memory, triggers
+        from .routes.client import chat, events, jobs, memory, triggers, users, sessions
 
         # Create auth dependency
         client_auth = ClientKeyAuth(self.client_key)
 
         # Register all client routers with auth dependency
-        client_routers = [chat.router, events.router, jobs.router, memory.router, triggers.router]
+        client_routers = [chat.router, events.router, jobs.router, memory.router, triggers.router, users.router, sessions.router]
 
         for router in client_routers:
             app.include_router(router, prefix="/v1", dependencies=[Depends(client_auth)])

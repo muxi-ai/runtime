@@ -114,3 +114,254 @@ async def delete_user_memory(request: Request, user_id: str, memory_id: str) -> 
         "NOT_IMPLEMENTED", "Memory deletion not yet implemented", None, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=501)
+
+
+# Buffer Memory Operations
+@router.get("/memory/buffer/{user_id}", response_model=APIResponse)
+async def get_buffer_status(request: Request, user_id: str) -> JSONResponse:
+    """
+    Get buffer memory status for a user.
+
+    Args:
+        user_id: User ID
+
+    Returns:
+        Buffer status with message counts and session info
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    try:
+        # Get overlord for buffer access
+        overlord = getattr(formation, "_overlord", None)
+        if not overlord:
+            response = create_error_response(
+                "SERVICE_UNAVAILABLE",
+                "Overlord service is not available",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=503)
+
+        # Get buffer memory
+        buffer = getattr(overlord, "buffer_memory", None)
+        if not buffer:
+            # Return empty status if no buffer
+            from ...responses import create_success_response
+            from .....datatypes.api import APIObjectType, APIEventType
+            data = {
+                "user_id": user_id,
+                "total_messages": 0,
+                "sessions": [],
+                "buffer_size_kb": 0,
+            }
+            response = create_success_response(
+                APIObjectType.MEMORY,
+                APIEventType.MEMORY_RETRIEVED,
+                data,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=200)
+
+        # Get buffer stats  
+        total_messages = 0
+        sessions = []
+        buffer_size_kb = 0
+
+        if hasattr(buffer, "get_buffer_stats"):
+            stats = buffer.get_buffer_stats(user_id)
+            total_messages = stats.get("total_messages", 0)
+            sessions = stats.get("sessions", [])
+            buffer_size_kb = stats.get("size_kb", 0)
+        else:
+            # Fallback: calculate from buffer
+            if hasattr(buffer, "buffer"):
+                user_buffer = buffer.buffer.get(user_id, [])
+                total_messages = len(user_buffer)
+                import sys
+                buffer_size_kb = sys.getsizeof(str(user_buffer)) / 1024
+
+        from ...responses import create_success_response
+        from .....datatypes.api import APIObjectType, APIEventType
+        data = {
+            "user_id": user_id,
+            "total_messages": total_messages,
+            "sessions": sessions,
+            "buffer_size_kb": round(buffer_size_kb, 2),
+        }
+
+        response = create_success_response(
+            APIObjectType.MEMORY,
+            APIEventType.MEMORY_RETRIEVED,
+            data,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=200)
+
+    except Exception as e:
+        response = create_error_response(
+            "INTERNAL_ERROR",
+            f"Failed to get buffer status: {str(e)}",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+
+@router.delete("/memory/buffer/{user_id}", response_model=APIResponse)
+async def clear_user_buffer(request: Request, user_id: str) -> JSONResponse:
+    """
+    Clear all buffer memory for a user across all sessions.
+
+    Args:
+        user_id: User ID
+
+    Returns:
+        Success response with cleared counts
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    try:
+        # Get overlord for buffer access
+        overlord = getattr(formation, "_overlord", None)
+        if not overlord:
+            response = create_error_response(
+                "SERVICE_UNAVAILABLE",
+                "Overlord service is not available",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=503)
+
+        # Get buffer memory
+        buffer = getattr(overlord, "buffer_memory", None)
+        if not buffer:
+            response = create_error_response(
+                "SERVICE_UNAVAILABLE",
+                "Buffer memory is not available",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=503)
+
+        # Clear user's buffer
+        messages_cleared = 0
+        sessions_cleared = 0
+
+        if hasattr(buffer, "clear_user"):
+            result = buffer.clear_user(user_id)
+            messages_cleared = result.get("messages_cleared", 0)
+            sessions_cleared = result.get("sessions_cleared", 0)
+        elif hasattr(buffer, "clear"):
+            # Count before clearing
+            if hasattr(buffer, "buffer"):
+                user_buffer = buffer.buffer.get(user_id, [])
+                messages_cleared = len(user_buffer)
+            buffer.clear(user_id=user_id)
+
+        from ...responses import create_success_response
+        from .....datatypes.api import APIObjectType, APIEventType
+        data = {
+            "message": "Buffer cleared successfully",
+            "user_id": user_id,
+            "messages_cleared": messages_cleared,
+            "sessions_cleared": sessions_cleared,
+        }
+
+        response = create_success_response(
+            APIObjectType.MEMORY,
+            APIEventType.MEMORY_DELETED,
+            data,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=200)
+
+    except Exception as e:
+        response = create_error_response(
+            "INTERNAL_ERROR",
+            f"Failed to clear buffer: {str(e)}",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+
+@router.delete("/memory/buffer/{user_id}/{session_id}", response_model=APIResponse)
+async def clear_session_buffer(request: Request, user_id: str, session_id: str) -> JSONResponse:
+    """
+    Clear buffer memory for a specific session.
+
+    Args:
+        user_id: User ID
+        session_id: Session ID
+
+    Returns:
+        Success response with cleared message count
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    try:
+        # Get overlord for buffer access
+        overlord = getattr(formation, "_overlord", None)
+        if not overlord:
+            response = create_error_response(
+                "SERVICE_UNAVAILABLE",
+                "Overlord service is not available",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=503)
+
+        # Get buffer memory
+        buffer = getattr(overlord, "buffer_memory", None)
+        if not buffer:
+            response = create_error_response(
+                "SERVICE_UNAVAILABLE",
+                "Buffer memory is not available",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=503)
+
+        # Clear session buffer
+        messages_cleared = 0
+
+        if hasattr(buffer, "clear_session"):
+            messages_cleared = buffer.clear_session(user_id, session_id)
+        elif hasattr(buffer, "clear"):
+            # Count before clearing
+            if hasattr(buffer, "buffer"):
+                user_buffer = buffer.buffer.get(user_id, [])
+                messages_cleared = len([
+                    msg for msg in user_buffer
+                    if msg.get("session_id") == session_id
+                ])
+            buffer.clear(user_id=user_id, session_id=session_id)
+
+        from ...responses import create_success_response
+        from .....datatypes.api import APIObjectType, APIEventType
+        data = {
+            "message": "Session buffer cleared successfully",
+            "user_id": user_id,
+            "session_id": session_id,
+            "messages_cleared": messages_cleared,
+        }
+
+        response = create_success_response(
+            APIObjectType.MEMORY,
+            APIEventType.MEMORY_DELETED,
+            data,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=200)
+
+    except Exception as e:
+        response = create_error_response(
+            "INTERNAL_ERROR",
+            f"Failed to clear session buffer: {str(e)}",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
