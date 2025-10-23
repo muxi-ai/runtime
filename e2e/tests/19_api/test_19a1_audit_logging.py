@@ -158,26 +158,35 @@ class TestAuditLogging(BaseE2ETest):
             # Success!
             success = True
             elapsed_time = time.time() - start_time
-            formatter.print_test_summary(
+            formatter.print_test_result(
                 test_name="test_19a1_audit_logging",
                 success=True,
-                elapsed_time=elapsed_time,
-                details="All audit log endpoint tests passed",
+                checks=[
+                    "GET /v1/audit passed",
+                    "Filtering by resource_type passed",
+                    "Confirmation requirement enforced",
+                    "Audit log cleared successfully",
+                    "Cleared entry verification passed",
+                    "Invalid timestamp rejected",
+                ],
+                transcript=[],
+                duration=elapsed_time,
             )
 
         except Exception as e:
             elapsed_time = time.time() - start_time
-            formatter.print_test_summary(
+            formatter.print_test_result(
                 test_name="test_19a1_audit_logging",
                 success=False,
-                elapsed_time=elapsed_time,
-                error_message=str(e),
+                checks=[f"Failed: {str(e)}"],
+                transcript=[],
+                duration=elapsed_time,
             )
             raise
         finally:
             # Cleanup
             if self.formation:
-                await self.cleanup()
+                await self.cleanup_formation()
 
 
 async def main():

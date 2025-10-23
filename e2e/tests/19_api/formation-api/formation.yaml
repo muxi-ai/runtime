@@ -1,23 +1,26 @@
-version: 1
+schema: "1.0.0"
+id: api-test-formation
+description: "Formation for testing API endpoints (audit, SOP, scheduler)"
 
-agents:
-  - id: assistant
-    description: A helpful assistant for testing API endpoints
-    model: openai/gpt-4o-mini
-    instructions: |
-      You are a helpful assistant. Be concise and direct.
-      
 llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
   models:
-    - text: openai/gpt-4o-mini
+    - text: "openai/gpt-4o-mini"
 
-overlord:
-  model: openai/gpt-4o-mini
+runtime:
+  built_in_mcps: false
 
 memory:
   buffer:
-    enabled: true
-    max_messages: 100
+    size: 100
+    vector_search: false
+
+agents:
+  - id: assistant
+    name: "API Test Assistant"
+    description: "A helpful assistant for testing API endpoints"
+    system_message: "You are a helpful assistant. Be concise and direct."
 
 server:
   enabled: true

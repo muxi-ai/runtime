@@ -111,26 +111,31 @@ class TestSchedulerPersistence(BaseE2ETest):
             # Success!
             success = True
             elapsed_time = time.time() - start_time
-            formatter.print_test_summary(
+            formatter.print_test_result(
                 test_name="test_19c1_scheduler_persistence",
                 success=True,
-                elapsed_time=elapsed_time,
-                details="Scheduler persistence check works correctly",
+                checks=[
+                    "422 response format matches spec exactly",
+                    "Error message provides clear guidance",
+                ],
+                transcript=[],
+                duration=elapsed_time,
             )
 
         except Exception as e:
             elapsed_time = time.time() - start_time
-            formatter.print_test_summary(
+            formatter.print_test_result(
                 test_name="test_19c1_scheduler_persistence",
                 success=False,
-                elapsed_time=elapsed_time,
-                error_message=str(e),
+                checks=[f"Failed: {str(e)}"],
+                transcript=[],
+                duration=elapsed_time,
             )
             raise
         finally:
             # Cleanup
             if self.formation:
-                await self.cleanup()
+                await self.cleanup_formation()
 
 
 async def main():

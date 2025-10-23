@@ -113,26 +113,33 @@ class TestSOPEndpoints(BaseE2ETest):
             # Success!
             success = True
             elapsed_time = time.time() - start_time
-            formatter.print_test_summary(
+            formatter.print_test_result(
                 test_name="test_19b1_sop_endpoints",
                 success=True,
-                elapsed_time=elapsed_time,
-                details="All SOP endpoint tests passed",
+                checks=[
+                    "GET /v1/sops passed",
+                    "404 for non-existent SOP works",
+                    "Authentication enforced",
+                    "Key type validation tested",
+                ],
+                transcript=[],
+                duration=elapsed_time,
             )
 
         except Exception as e:
             elapsed_time = time.time() - start_time
-            formatter.print_test_summary(
+            formatter.print_test_result(
                 test_name="test_19b1_sop_endpoints",
                 success=False,
-                elapsed_time=elapsed_time,
-                error_message=str(e),
+                checks=[f"Failed: {str(e)}"],
+                transcript=[],
+                duration=elapsed_time,
             )
             raise
         finally:
             # Cleanup
             if self.formation:
-                await self.cleanup()
+                await self.cleanup_formation()
 
 
 async def main():
