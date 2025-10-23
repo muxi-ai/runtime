@@ -49,10 +49,14 @@ class TestSchedulerPersistence(BaseE2ETest):
             await self.setup_formation(
                 formation_path=Path(__file__).parent / "formation-api",
             )
+            
+            # Start the API server
+            print("   Starting API server...")
+            await self.formation.start_server(block=False)
             print("✅ Formation ready with API server (buffer memory only)")
 
             # Wait for server to be fully ready
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
 
             # Test 1: Try to create a scheduler job (should return 422)
             print("\n2. Testing POST /v1/scheduler/jobs without persistent memory...")
