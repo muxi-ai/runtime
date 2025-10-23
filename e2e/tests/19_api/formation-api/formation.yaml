@@ -24,7 +24,7 @@ agents:
 
 server:
   enabled: true
-  host: 127.0.0.1
+  # host: 127.0.0.1  # Default - localhost only
   port: 8271
   api_keys:
     admin: test-admin-key-123
