@@ -50,13 +50,9 @@ class TestAuditLogging(BaseE2ETest):
                 formation_path=Path(__file__).parent / "formation-api",
             )
             
-            # Start the API server
-            print("   Starting API server...")
+            # Start the API server (now waits for readiness automatically)
             await self.formation.start_server(block=False)
             print("✅ Formation ready with API server")
-
-            # Wait for server to be fully ready
-            await asyncio.sleep(3)
 
             # Test 1: Get audit log (should be empty initially or have system entries)
             print("\n2. Testing GET /v1/audit...")

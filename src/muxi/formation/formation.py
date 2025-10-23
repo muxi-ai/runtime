@@ -3081,7 +3081,7 @@ class Formation:
 
         # Get configuration values
         config_host = self._server_config.get("host", "0.0.0.0")
-        config_port = self._server_config.get("port", 3000)
+        config_port = self._server_config.get("port", 8271)
 
         # Use provided values or fall back to config
         actual_host = host or config_host

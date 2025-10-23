@@ -188,7 +188,6 @@ class FormationServer:
             ))
 
             # Still print to console for development visibility
-            print(f"\n✅ Formation server started on http://{self.host}:{self.port}")
             print("\n" + "=" * 60)
             print("⚠️  AUTO-GENERATED API KEYS - DEVELOPMENT ONLY")
             print("=" * 60)
@@ -226,7 +225,6 @@ class FormationServer:
             )
 
             # Minimal console output for configured keys
-            print(f"\n✅ Formation server started on http://{self.host}:{self.port}")
             if self.admin_key and self.client_key:
                 print("🔒 API keys loaded from configuration")
             print()
@@ -650,24 +648,95 @@ class FormationServer:
                 signal.signal(signal.SIGINT, sync_signal_handler)
                 signal.signal(signal.SIGTERM, sync_signal_handler)
 
-        # Start server
+        # Start server with proper initialization
+        # Always wait for server to be ready before returning (fail fast)
+        self._server_task = asyncio.create_task(self._server.serve())
+        
+        # Wait for server to be ready (with timeout)
+        await self._wait_for_server_ready(timeout=10.0)
+        
+        # If blocking mode, wait for server to complete
         if block:
-            # Run server in blocking mode
-            await self._server.serve()
-        else:
-            # Run server in non-blocking mode
-            self._server_task = asyncio.create_task(self._server.serve())
+            await self._server_task
 
-            # Wait a moment to ensure server starts
-            await asyncio.sleep(0.5)
-
-            # Check if server started successfully
+    async def _wait_for_server_ready(self, timeout: float = 10.0) -> None:
+        """
+        Wait for the server to be ready to accept connections.
+        
+        Shows Linux-style init events during startup.
+        Implements fail-fast philosophy - raises immediately on errors.
+        
+        Args:
+            timeout: Maximum time to wait for server to be ready (seconds)
+            
+        Raises:
+            RuntimeError: If server fails to start within timeout
+            Exception: If server task encounters an error during startup
+        """
+        import socket
+        from ...datatypes.observability import InitEventFormatter
+        
+        # Show server binding event
+        print(InitEventFormatter.format_info(
+            f"API server: binding to {self.host}:{self.port}",
+            None
+        ))
+        
+        start_time = asyncio.get_event_loop().time()
+        last_error = None
+        
+        while (asyncio.get_event_loop().time() - start_time) < timeout:
+            # Check if server task failed
             if self._server_task.done():
-                # Server task completed immediately, likely due to error
                 try:
                     await self._server_task
+                    # Task completed without error but server isn't ready?
+                    raise RuntimeError("Server task completed unexpectedly")
                 except Exception as e:
-                    raise RuntimeError(f"Failed to start server: {e}")
+                    print(InitEventFormatter.format_fail(
+                        f"API server failed to start",
+                        str(e)
+                    ))
+                    raise RuntimeError(f"Server startup failed: {e}") from e
+            
+            # Try to connect to the port
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                    sock.settimeout(0.1)
+                    # Try to connect
+                    result = sock.connect_ex((self.host if self.host != "0.0.0.0" else "127.0.0.1", self.port))
+                    if result == 0:
+                        # Connection successful - server is ready!
+                        print(InitEventFormatter.format_ok(
+                            f"API server: listening on {self.host}:{self.port}",
+                            f"http://{self.host if self.host != '0.0.0.0' else '127.0.0.1'}:{self.port}"
+                        ))
+                        return
+            except Exception as e:
+                last_error = e
+            
+            # Wait a bit before retrying
+            await asyncio.sleep(0.1)
+        
+        # Timeout reached
+        error_msg = f"Server failed to start within {timeout}s"
+        if last_error:
+            error_msg += f": {last_error}"
+        
+        print(InitEventFormatter.format_fail(
+            "API server startup timeout",
+            error_msg
+        ))
+        
+        # Try to cancel the server task
+        if self._server_task and not self._server_task.done():
+            self._server_task.cancel()
+            try:
+                await self._server_task
+            except asyncio.CancelledError:
+                pass
+        
+        raise RuntimeError(error_msg)
 
     async def stop(self) -> None:
         """Stop the Formation server gracefully."""
