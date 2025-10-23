@@ -104,6 +104,14 @@ class APIEventType(str, Enum):
     # Generic list events
     LIST_RETRIEVED = "list.retrieved"
 
+    # Audit events
+    AUDIT_RETRIEVED = "audit.retrieved"
+    AUDIT_CLEARED = "audit.cleared"
+
+    # SOP events
+    SOPS_LIST = "sops.list"
+    SOP_RETRIEVED = "sop.retrieved"
+
     # Error events
     ERROR_VALIDATION = "error.validation"
     ERROR_AUTHENTICATION = "error.authentication"
@@ -175,3 +183,10 @@ class APIObjectType(str, Enum):
 
     # Generic message type (used for delete/clear operations)
     MESSAGE = "message"
+
+    # Audit objects
+    AUDIT_LOG = "audit_log"
+
+    # SOP objects
+    SOP = "sop"
+    SOP_LIST = "sop_list"
