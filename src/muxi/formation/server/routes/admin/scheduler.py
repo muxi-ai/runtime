@@ -155,6 +155,10 @@ async def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSO
     """
     Create a new scheduled job.
 
+    **Database Storage**: Scheduler jobs are stored in the database and require
+    persistent memory (PostgreSQL or MySQL). Returns 422 error if formation uses
+    SQLite or no persistent memory.
+
     Args:
         job: Job configuration (one-time or recurring)
 
@@ -163,6 +167,36 @@ async def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSO
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Check for persistent memory (non-SQLite database required)
+    if not formation.has_persistent_memory():
+        response = create_error_response(
+            "UNPROCESSABLE_ENTITY",
+            "Scheduler jobs require persistent memory (non-SQLite database)",
+            {
+                "reason": "Formation has no persistent memory configured",
+                "required": "PostgreSQL or MySQL for scheduler job persistence",
+                "current_memory_type": "none",
+            },
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=422)
+
+    # Check if using SQLite (not suitable for persistent jobs)
+    is_multi_user = getattr(formation, "_is_multi_user", False)
+    if not is_multi_user:
+        # SQLite is detected - not suitable for scheduler jobs
+        response = create_error_response(
+            "UNPROCESSABLE_ENTITY",
+            "Scheduler jobs require persistent memory (non-SQLite database)",
+            {
+                "reason": "Formation is using SQLite or no persistent memory",
+                "required": "PostgreSQL or MySQL for scheduler job persistence",
+                "current_memory_type": "sqlite",
+            },
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=422)
 
     # Validate job type
     if job.type not in ["one_time", "recurring"]:
