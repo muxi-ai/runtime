@@ -122,7 +122,7 @@ def create_error_response(
 
     # Determine event type based on error code
     event_type = APIEventType.ERROR_INTERNAL
-    if error_code in ["INVALID_REQUEST", "INVALID_PARAMS", "PARSE_ERROR"]:
+    if error_code in ["INVALID_REQUEST", "INVALID_PARAMS", "PARSE_ERROR", "UNPROCESSABLE_ENTITY"]:
         event_type = APIEventType.ERROR_VALIDATION
     elif error_code in ["UNAUTHORIZED", "BAD_CREDENTIALS"]:
         event_type = APIEventType.ERROR_AUTHENTICATION

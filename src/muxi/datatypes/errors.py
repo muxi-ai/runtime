@@ -130,6 +130,13 @@ ERROR_CODE_REGISTRY: Dict[str, ErrorCodeInfo] = {
         category="validation",
         description="Malformed JSON",
     ),
+    "UNPROCESSABLE_ENTITY": ErrorCodeInfo(
+        code="UNPROCESSABLE_ENTITY",
+        message="Request cannot be processed due to semantic errors",
+        http_status=422,
+        category="validation",
+        description="Request is well-formed but semantically incorrect or violates business rules",
+    ),
     "METHOD_NOT_FOUND": ErrorCodeInfo(
         code="METHOD_NOT_FOUND",
         message="Unknown method or endpoint",

@@ -171,14 +171,17 @@ async def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSO
     # Check for persistent memory (non-SQLite database required)
     if not formation.has_persistent_memory():
         response = create_error_response(
-            "UNPROCESSABLE_ENTITY",
-            "Scheduler jobs require persistent memory (non-SQLite database)",
-            {
+            error_code="UNPROCESSABLE_ENTITY",
+            message="Scheduler jobs require persistent memory (non-SQLite database)",
+            trace=None,
+            request_id=request_id,
+            idempotency_key=None,
+            data=None,
+            error_data={
                 "reason": "Formation has no persistent memory configured",
                 "required": "PostgreSQL or MySQL for scheduler job persistence",
                 "current_memory_type": "none",
             },
-            request_id,
         )
         return JSONResponse(content=response.model_dump(), status_code=422)
 
@@ -187,14 +190,17 @@ async def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSO
     if not is_multi_user:
         # SQLite is detected - not suitable for scheduler jobs
         response = create_error_response(
-            "UNPROCESSABLE_ENTITY",
-            "Scheduler jobs require persistent memory (non-SQLite database)",
-            {
+            error_code="UNPROCESSABLE_ENTITY",
+            message="Scheduler jobs require persistent memory (non-SQLite database)",
+            trace=None,
+            request_id=request_id,
+            idempotency_key=None,
+            data=None,
+            error_data={
                 "reason": "Formation is using SQLite or no persistent memory",
                 "required": "PostgreSQL or MySQL for scheduler job persistence",
                 "current_memory_type": "sqlite",
             },
-            request_id,
         )
         return JSONResponse(content=response.model_dump(), status_code=422)
 
