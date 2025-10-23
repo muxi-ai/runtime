@@ -90,14 +90,19 @@ async def chat(request: Request, chat_request: ChatRequest) -> StreamingResponse
         """Generate SSE stream from overlord response."""
         try:
             # Get streaming response from overlord
-            async for token in overlord.chat_stream(
-                chat_request.message,
+            # Note: overlord.chat() is async and returns AsyncGenerator when stream=True
+            response = await overlord.chat(
+                message=chat_request.message,
                 user_id=effective_user_id,
                 session_id=chat_request.session_id,
                 request_id=chat_request.request_id,
                 agent_name=chat_request.agent_id,
                 files=chat_request.files,
-            ):
+                stream=True,  # Enable streaming
+            )
+            
+            # Stream the tokens
+            async for token in response:
                 # Format as SSE (removed "role" to save bandwidth as requested)
                 data = json.dumps({"token": token})
                 yield f"data: {data}\n\n"

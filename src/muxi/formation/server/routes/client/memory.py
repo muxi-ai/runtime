@@ -174,12 +174,16 @@ async def get_buffer_status(request: Request, user_id: str) -> JSONResponse:
             sessions = stats.get("sessions", [])
             buffer_size_kb = stats.get("size_kb", 0)
         else:
-            # Fallback: calculate from buffer
+            # Fallback: calculate from buffer deque
             if hasattr(buffer, "buffer"):
-                user_buffer = buffer.buffer.get(user_id, [])
-                total_messages = len(user_buffer)
+                # Buffer is a deque - count messages for this user by filtering
                 import sys
-                buffer_size_kb = sys.getsizeof(str(user_buffer)) / 1024
+                user_messages = [
+                    msg for msg in buffer.buffer 
+                    if isinstance(msg, dict) and msg.get("metadata", {}).get("user_id") == user_id
+                ]
+                total_messages = len(user_messages)
+                buffer_size_kb = sys.getsizeof(str(user_messages)) / 1024
 
         from ...responses import create_success_response
         from .....datatypes.api import APIObjectType, APIEventType

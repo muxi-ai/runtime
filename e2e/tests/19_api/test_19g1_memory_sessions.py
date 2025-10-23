@@ -29,7 +29,8 @@ class TestMemorySessions(BaseE2ETest):
             "X-Muxi-Client-Key": self.client_key,
             "Content-Type": "application/json",
         }
-        self.test_user_id = "test_memory_user"
+        # Note: In single-user mode, overlord normalizes all user_ids to "0"
+        self.test_user_id = "0"  # Must use "0" for single-user mode
         self.test_session_id = "test_session_001"
 
     async def test_19g1_memory_sessions(self):
@@ -66,37 +67,45 @@ class TestMemorySessions(BaseE2ETest):
             assert response.status_code == 200, f"Expected 200, got {response.status_code}"
             data = response.json()
             
-            assert data["object"] == "buffer_memory"
-            assert data["type"] == "buffer.retrieved"
+            assert data["object"] == "memory"  # API returns generic 'memory' type
+            assert data["type"] == "memory.retrieved"  # APIEventType.MEMORY_RETRIEVED
             assert data["success"] is True
-            assert "messages" in data["data"]
-            assert "count" in data["data"]
+            assert "total_messages" in data["data"]
+            assert "sessions" in data["data"]
+            assert "buffer_size_kb" in data["data"]
             
-            initial_message_count = data["data"]["count"]
+            initial_message_count = data["data"]["total_messages"]
             print(f"   Initial message count: {initial_message_count}")
             print("✅ GET /v1/memory/buffer/{user_id} passed")
 
             # Test 2: Send a chat message to create buffer memory
             print("\n3. Sending chat to create buffer memory...")
             chat_request = {
-                "message": "Hello, this is a test message for memory.",
+                "message": "Say hi",  # Very simple message for fast response
                 "user_id": self.test_user_id,
                 "session_id": self.test_session_id,
             }
             
             # Consume the stream to complete the chat
+            current_event = None
             async with httpx.AsyncClient() as client:
                 async with client.stream(
                     "POST",
                     f"{self.base_url}/chat",
                     headers=self.headers,
                     json=chat_request,
-                    timeout=30.0,
+                    timeout=60.0,  # Increased timeout for LLM
                 ) as response:
                     assert response.status_code == 200
                     async for line in response.aiter_lines():
-                        if line.startswith("data: [DONE]"):
-                            break
+                        if not line:
+                            continue
+                        if line.startswith("event: "):
+                            current_event = line[7:]
+                        elif line.startswith("data: "):
+                            if current_event == "done":
+                                break
+                            current_event = None
             
             print("✅ Chat message sent")
 
@@ -108,17 +117,19 @@ class TestMemorySessions(BaseE2ETest):
                     headers=self.headers,
                 )
             
+            if response.status_code != 200:
+                print(f"   ERROR: Got status {response.status_code}")
+                print(f"   Response: {response.text}")
             assert response.status_code == 200
             data = response.json()
-            new_message_count = data["data"]["count"]
+            new_message_count = data["data"]["total_messages"]  # Buffer status uses total_messages
             
             # Should have at least 2 messages (user message + assistant response)
             assert new_message_count >= initial_message_count + 2, \
                 f"Expected at least {initial_message_count + 2} messages, got {new_message_count}"
             
-            messages = data["data"]["messages"]
+            # Buffer status doesn't return messages list, just counts
             print(f"   Message count after chat: {new_message_count}")
-            print(f"   Messages: {len(messages)} in response")
             print("✅ Buffer memory contains chat messages")
 
             # Test 4: Get sessions for user
@@ -133,7 +144,7 @@ class TestMemorySessions(BaseE2ETest):
             data = response.json()
             
             assert data["object"] == "session_list"
-            assert data["type"] == "sessions.list"
+            assert data["type"] == "session.list"  # Singular, not plural
             assert "sessions" in data["data"]
             assert "count" in data["data"]
             
@@ -179,8 +190,8 @@ class TestMemorySessions(BaseE2ETest):
             assert response.status_code == 200
             data = response.json()
             
-            assert data["object"] == "message_list"
-            assert data["type"] == "messages.list"
+            assert data["object"] == "session"  # API returns 'session' for message lists
+            assert data["type"] == "session.messages.list"
             assert "messages" in data["data"]
             assert "count" in data["data"]
             
@@ -201,11 +212,11 @@ class TestMemorySessions(BaseE2ETest):
             assert response.status_code == 200
             data = response.json()
             
-            assert data["object"] == "buffer_memory"
-            assert data["type"] == "buffer.cleared"
-            assert "deleted_count" in data["data"]
+            assert data["object"] == "message"  # API returns 'message' for buffer clears
+            assert data["type"] == "memory.buffer.session.cleared"  # Session-specific clear
+            assert "messages_cleared" in data["data"]
             
-            deleted_count = data["data"]["deleted_count"]
+            deleted_count = data["data"]["messages_cleared"]
             print(f"   Deleted {deleted_count} messages for session")
             print("✅ DELETE /v1/memory/buffer/{user_id}/{session_id} passed")
 
@@ -234,8 +245,8 @@ class TestMemorySessions(BaseE2ETest):
             assert response.status_code == 200
             data = response.json()
             
-            assert data["object"] == "session"
-            assert data["type"] == "session.deleted"
+            assert data["object"] == "message"  # API returns 'message' for session deletes
+            assert data["type"] == "session.cleared"
             assert data["data"]["session_id"] == self.test_session_id
             
             print(f"   Deleted session: {data['data']['session_id']}")

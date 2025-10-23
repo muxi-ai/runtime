@@ -99,7 +99,17 @@ class TestChatStreaming(BaseE2ETest):
                                 
                                 # Extract token from data events
                                 if current_event is None and "token" in event_data:
-                                    received_tokens.append(event_data["token"])
+                                    token = event_data["token"]
+                                    # Token might be a dict or string - handle both
+                                    if isinstance(token, dict):
+                                        # Extract text if it's a dict
+                                        if "content" in token:
+                                            received_tokens.append(token["content"])
+                                        elif "text" in token:
+                                            received_tokens.append(token["text"])
+                                        # Otherwise skip - it's metadata
+                                    else:
+                                        received_tokens.append(str(token))
                                 
                                 # Check for done event
                                 if current_event == "done" and event_data.get("finished"):
@@ -155,12 +165,13 @@ class TestChatStreaming(BaseE2ETest):
             print("\n5. Testing POST /v1/chat with different user...")
             
             chat_request2 = {
-                "message": "Quick test",
+                "message": "Say hello in one word",  # Simple message for faster response
                 "user_id": "different_user",
                 "session_id": "different_session",
             }
             
             received_events2 = []
+            current_event = None
             
             async with httpx.AsyncClient() as client:
                 async with client.stream(
@@ -168,20 +179,28 @@ class TestChatStreaming(BaseE2ETest):
                     f"{self.base_url}/chat",
                     headers=self.headers,
                     json=chat_request2,
-                    timeout=30.0,
+                    timeout=60.0,  # Increased timeout for LLM response
                 ) as response:
                     assert response.status_code == 200
                     
                     async for line in response.aiter_lines():
-                        if line.startswith("data: "):
+                        if not line or line.startswith(":"):
+                            continue
+                        
+                        if line.startswith("event: "):
+                            current_event = line[7:]
+                        elif line.startswith("data: "):
                             data_str = line[6:]
-                            if data_str == "[DONE]":
-                                break
                             try:
                                 event_data = json.loads(data_str)
                                 received_events2.append(event_data)
+                                
+                                # Check for done event
+                                if current_event == "done":
+                                    break
                             except:
                                 pass
+                            current_event = None
             
             assert len(received_events2) > 0, "Should receive events for different user"
             print(f"   Received {len(received_events2)} events for different user")
@@ -194,9 +213,9 @@ class TestChatStreaming(BaseE2ETest):
                 test_name="test_19e1_chat_streaming",
                 success=True,
                 checks=[
-                    f"POST /v1/chat streaming passed ({len(received_events)} events)",
+                    f"POST /v1/chat streaming passed ({len(received_tokens)} tokens)",
                     "SSE format verified (text/event-stream)",
-                    "Event types verified (response.started, response.done)",
+                    f"Received {len(received_tokens)} tokens, {len(full_message)} chars",
                     "Authentication enforced",
                     "Validation enforced (missing message)",
                     "Multiple users supported",

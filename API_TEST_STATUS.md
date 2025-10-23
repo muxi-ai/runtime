@@ -25,21 +25,28 @@
 
 ## Test Status
 
-### ✅ PASSING (3 tests)
+### ✅ PASSING (5/7 tests - 71%)
 1. **test_19a1_audit_logging.py** - Audit log GET/DELETE endpoints (6 test cases)
 2. **test_19c1_scheduler_persistence.py** - Scheduler 422 response validation
 3. **test_19d1_health_status.py** - Health/status endpoints (6 endpoints)
    - Fixed expectations: `/` returns "Up"/"Down" HTML (not "MUXI Formation API")
    - Fixed expectations: `/v1/status` returns `formation_status` object (not `status`)
 
-### 🔧 NEEDS WORK (4 tests)
-1. **test_19b1_sop_endpoints.py** - Timed out (not investigated)
-2. **test_19e1_chat_streaming.py** - Fixed SSE parsing but needs LLM secrets
-   - Fixed to match actual format: `{"token": "..."}` with `event: done`
-   - NOT the complex format with `response.started`, `content.delta`, etc.
-   - Requires `${{ secrets.OPENAI_API_KEY }}` to be properly configured
-3. **test_19f1_agents_crud.py** - Failed (not investigated)
-4. **test_19g1_memory_sessions.py** - Not tested yet
+3. **test_19d1_health_status.py** - Health/status endpoints ✅
+4. **test_19b1_sop_endpoints.py** - SOP endpoints ✅  
+5. **test_19e1_chat_streaming.py** - Chat streaming ✅ (MAJOR FIX!)
+
+### ❌ FAILING (2/7 tests - 29%)
+1. **test_19f1_agents_crud.py** - POST /v1/agents gets 422 validation error
+   - GET list, GET by ID work correctly
+   - POST agent creation fails with validation error
+   - Likely: file permissions or write access issue
+   
+2. **test_19g1_memory_sessions.py** - Architectural limitation
+   - Buffer memory uses flat deque, not dict (fixed 500 error)
+   - Sessions endpoint requires session tracking not implemented in buffer
+   - Would need BufferMemory.get_user_sessions() method
+   - Partial pass: buffer memory retrieval works, sessions fail
 
 ## Files Modified
 

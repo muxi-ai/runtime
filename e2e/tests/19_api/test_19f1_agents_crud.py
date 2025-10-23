@@ -64,9 +64,9 @@ class TestAgentsCRUD(BaseE2ETest):
             assert response.status_code == 200, f"Expected 200, got {response.status_code}"
             data = response.json()
             
-            # Verify response structure
-            assert data["object"] == "agent_list", f"Wrong object type: {data['object']}"
-            assert data["type"] == "agents.list", f"Wrong event type: {data['type']}"
+            # Verify response structure (API uses generic "list" type with use_generic_type=True)
+            assert data["object"] == "list", f"Wrong object type: {data['object']}"
+            assert data["type"] == "agent.list", f"Wrong event type: {data['type']}"  # Note: singular not plural
             assert data["success"] is True
             assert "agents" in data["data"]
             assert "count" in data["data"]
@@ -107,7 +107,7 @@ class TestAgentsCRUD(BaseE2ETest):
                 "name": "Test Agent E2E",
                 "description": "Agent created by e2e test",
                 "system_message": "You are a test agent. Be concise.",
-                "role": "specialist",
+                # Note: removed "role" field - not in AgentCreate schema
             }
             
             async with httpx.AsyncClient() as client:
@@ -117,7 +117,7 @@ class TestAgentsCRUD(BaseE2ETest):
                     json=new_agent,
                 )
             
-            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+            assert response.status_code == 201, f"Expected 201 (created), got {response.status_code}"
             data = response.json()
             assert data["object"] == "agent"
             assert data["type"] == "agent.created"

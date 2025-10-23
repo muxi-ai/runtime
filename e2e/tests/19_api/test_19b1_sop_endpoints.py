@@ -6,7 +6,7 @@ import json
 import time
 from pathlib import Path
 import sys
-import requests
+import httpx
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
@@ -56,10 +56,11 @@ class TestSOPEndpoints(BaseE2ETest):
 
             # Test 1: List SOPs (should be empty - no SOPs in test formation)
             print("\n2. Testing GET /v1/sops...")
-            response = requests.get(
-                f"{self.base_url}/sops",
-                headers=self.headers,
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.base_url}/sops",
+                    headers=self.headers,
+                )
             assert response.status_code == 200, f"Expected 200, got {response.status_code}"
             
             data = response.json()
@@ -76,10 +77,11 @@ class TestSOPEndpoints(BaseE2ETest):
 
             # Test 2: Get non-existent SOP (should return 404)
             print("\n3. Testing GET /v1/sops/{sop_name} for non-existent SOP...")
-            response = requests.get(
-                f"{self.base_url}/sops/non-existent-sop",
-                headers=self.headers,
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.base_url}/sops/non-existent-sop",
+                    headers=self.headers,
+                )
             assert response.status_code == 404, f"Expected 404, got {response.status_code}"
             data = response.json()
             assert data["success"] is False
@@ -89,22 +91,24 @@ class TestSOPEndpoints(BaseE2ETest):
 
             # Test 3: Test authentication (should require client key)
             print("\n4. Testing authentication requirement...")
-            response = requests.get(
-                f"{self.base_url}/sops",
-                headers={"Content-Type": "application/json"},  # No API key
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.base_url}/sops",
+                    headers={"Content-Type": "application/json"},  # No API key
+                )
             assert response.status_code == 401, "Should require authentication"
             print("✅ Authentication enforced")
 
             # Test 4: Test with wrong key type (admin key instead of client key)
             print("\n5. Testing key type validation...")
-            response = requests.get(
-                f"{self.base_url}/sops",
-                headers={
-                    "X-Muxi-Admin-Key": "test-admin-key-123",  # Wrong key type
-                    "Content-Type": "application/json",
-                },
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.base_url}/sops",
+                    headers={
+                        "X-Muxi-Admin-Key": "test-admin-key-123",  # Wrong key type
+                        "Content-Type": "application/json",
+                    },
+                )
             # This might return 401 (no valid client key) or work if the implementation
             # allows admin keys on client endpoints
             # Either is acceptable, but we expect 401 for proper separation
