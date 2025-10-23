@@ -3080,7 +3080,7 @@ class Formation:
         from .server import FormationServer
 
         # Get configuration values
-        config_host = self._server_config.get("host", "0.0.0.0")
+        config_host = self._server_config.get("host", "127.0.0.1")
         config_port = self._server_config.get("port", 8271)
 
         # Use provided values or fall back to config
