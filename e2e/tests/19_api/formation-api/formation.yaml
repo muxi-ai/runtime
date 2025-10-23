@@ -1,0 +1,28 @@
+version: 1
+
+agents:
+  - id: assistant
+    description: A helpful assistant for testing API endpoints
+    model: openai/gpt-4o-mini
+    instructions: |
+      You are a helpful assistant. Be concise and direct.
+      
+llm:
+  models:
+    - text: openai/gpt-4o-mini
+
+overlord:
+  model: openai/gpt-4o-mini
+
+memory:
+  buffer:
+    enabled: true
+    max_messages: 100
+
+server:
+  enabled: true
+  host: 127.0.0.1
+  port: 8271
+  api_keys:
+    admin: test-admin-key-123
+    client: test-client-key-456
