@@ -60,8 +60,8 @@ async def list_user_sessions(
             # Return empty list if no buffer
             data = {"sessions": [], "count": 0}
             response = create_success_response(
-                APIObjectType.SESSION,
-                APIEventType.SESSION_RETRIEVED,
+                APIObjectType.SESSION_LIST,
+                APIEventType.SESSION_LIST,
                 data,
                 request_id,
             )
@@ -82,8 +82,8 @@ async def list_user_sessions(
         data = {"sessions": sessions[:limit], "count": len(sessions[:limit])}
 
         response = create_success_response(
-            APIObjectType.SESSION,
-            APIEventType.SESSION_RETRIEVED,
+            APIObjectType.SESSION_LIST,
+            APIEventType.SESSION_LIST,
             data,
             request_id,
         )
@@ -262,8 +262,8 @@ async def clear_session(request: Request, user_id: str, session_id: str) -> JSON
         }
 
         response = create_success_response(
-            APIObjectType.SESSION,
-            APIEventType.SESSION_DELETED,
+            APIObjectType.MESSAGE,
+            APIEventType.SESSION_CLEARED,
             data,
             request_id,
         )
@@ -374,7 +374,7 @@ async def get_session_messages(
 
         response = create_success_response(
             APIObjectType.SESSION,
-            APIEventType.SESSION_RETRIEVED,
+            APIEventType.SESSION_MESSAGES_LIST,
             data,
             request_id,
         )

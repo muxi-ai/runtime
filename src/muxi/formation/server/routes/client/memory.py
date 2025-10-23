@@ -192,7 +192,7 @@ async def get_buffer_status(request: Request, user_id: str) -> JSONResponse:
 
         response = create_success_response(
             APIObjectType.MEMORY,
-            APIEventType.MEMORY_RETRIEVED,
+            APIEventType.MEMORY_BUFFER_STATUS,
             data,
             request_id,
         )
@@ -270,8 +270,8 @@ async def clear_user_buffer(request: Request, user_id: str) -> JSONResponse:
         }
 
         response = create_success_response(
-            APIObjectType.MEMORY,
-            APIEventType.MEMORY_DELETED,
+            APIObjectType.MESSAGE,
+            APIEventType.MEMORY_BUFFER_USER_CLEARED,
             data,
             request_id,
         )
@@ -350,8 +350,8 @@ async def clear_session_buffer(request: Request, user_id: str, session_id: str) 
         }
 
         response = create_success_response(
-            APIObjectType.MEMORY,
-            APIEventType.MEMORY_DELETED,
+            APIObjectType.MESSAGE,
+            APIEventType.MEMORY_BUFFER_SESSION_CLEARED,
             data,
             request_id,
         )

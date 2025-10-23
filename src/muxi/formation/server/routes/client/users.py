@@ -95,8 +95,8 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
             }
 
             response = create_success_response(
-                APIObjectType.USER,
-                APIEventType.USER_RETRIEVED,
+                APIObjectType.USER_IDENTIFIER_LIST,
+                APIEventType.USER_IDENTIFIERS_LIST,
                 data,
                 request_id,
             )
@@ -206,8 +206,8 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
             }
 
             response = create_success_response(
-                APIObjectType.USER,
-                APIEventType.USER_UPDATED,
+                APIObjectType.MESSAGE,
+                APIEventType.USER_IDENTIFIER_DELETED,
                 data,
                 request_id,
             )
@@ -277,7 +277,7 @@ async def resolve_identifier(request: Request, identifier: str) -> JSONResponse:
 
         response = create_success_response(
             APIObjectType.USER,
-            APIEventType.USER_RETRIEVED,
+            APIEventType.USER_RESOLVED,
             data,
             request_id,
         )

@@ -102,8 +102,8 @@ async def list_scheduled_jobs(request: Request) -> JSONResponse:
     scheduler = getattr(formation, "_scheduler", None)
     if not scheduler:
         response = create_success_response(
-            APIObjectType.SCHEDULER,
-            APIEventType.SCHEDULER_RETRIEVED,
+            APIObjectType.SCHEDULED_JOB_LIST,
+            APIEventType.SCHEDULER_JOBS_LIST,
             {"jobs": [], "count": 0},
             request_id,
         )
@@ -142,8 +142,8 @@ async def list_scheduled_jobs(request: Request) -> JSONResponse:
         )
 
     response = create_success_response(
-        APIObjectType.SCHEDULER,
-        APIEventType.SCHEDULER_RETRIEVED,
+        APIObjectType.SCHEDULED_JOB_LIST,
+        APIEventType.SCHEDULER_JOBS_LIST,
         {"jobs": jobs, "count": len(jobs)},
         request_id,
     )
@@ -253,8 +253,8 @@ async def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSO
         return JSONResponse(content=response.model_dump(), status_code=500)
 
     response = create_success_response(
-        APIObjectType.SCHEDULER,
-        APIEventType.SCHEDULER_UPDATED,
+        APIObjectType.SCHEDULED_JOB,
+        APIEventType.SCHEDULER_JOB_CREATED,
         job_data,
         request_id,
     )
@@ -312,8 +312,8 @@ async def get_scheduled_job(request: Request, job_id: str) -> JSONResponse:
         return JSONResponse(content=response.model_dump(), status_code=404)
 
     response = create_success_response(
-        APIObjectType.SCHEDULER,
-        APIEventType.SCHEDULER_RETRIEVED,
+        APIObjectType.SCHEDULED_JOB,
+        APIEventType.SCHEDULER_JOB_RETRIEVED,
         job_data,
         request_id,
     )
@@ -377,8 +377,8 @@ async def remove_scheduled_job(request: Request, job_id: str) -> JSONResponse:
         return JSONResponse(content=response.model_dump(), status_code=500)
 
     response = create_success_response(
-        APIObjectType.SCHEDULER,
-        APIEventType.SCHEDULER_UPDATED,
+        APIObjectType.MESSAGE,
+        APIEventType.SCHEDULER_JOB_DELETED,
         {"message": f"Scheduled job '{job_id}' removed successfully"},
         request_id,
     )

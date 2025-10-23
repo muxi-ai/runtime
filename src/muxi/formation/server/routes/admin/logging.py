@@ -97,8 +97,8 @@ async def list_logging_destinations(request: Request) -> JSONResponse:
     }
 
     response = create_success_response(
-        APIObjectType.LOGGING,
-        APIEventType.LOGGING_RETRIEVED,
+        APIObjectType.LOGGING_DESTINATION_LIST,
+        APIEventType.LOGGING_DESTINATIONS_LIST,
         data,
         request_id,
     )
@@ -169,8 +169,8 @@ async def create_logging_destination(
     )
 
     response = create_success_response(
-        APIObjectType.LOGGING,
-        APIEventType.LOGGING_UPDATED,
+        APIObjectType.LOGGING_DESTINATION,
+        APIEventType.LOGGING_DESTINATION_CREATED,
         dest_config,
         request_id,
     )
@@ -233,8 +233,8 @@ async def update_logging_destination(
     )
 
     response = create_success_response(
-        APIObjectType.LOGGING,
-        APIEventType.LOGGING_UPDATED,
+        APIObjectType.LOGGING_DESTINATION,
+        APIEventType.LOGGING_DESTINATION_UPDATED,
         dest,
         request_id,
     )
@@ -288,8 +288,8 @@ async def delete_logging_destination(request: Request, destination_id: str) -> J
     )
 
     response = create_success_response(
-        APIObjectType.LOGGING,
-        APIEventType.LOGGING_UPDATED,
+        APIObjectType.MESSAGE,
+        APIEventType.LOGGING_DESTINATION_DELETED,
         {"message": f"Logging destination '{destination_id}' removed successfully"},
         request_id,
     )

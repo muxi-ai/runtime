@@ -72,6 +72,35 @@ class APIEventType(str, Enum):
     CONFIG_RETRIEVED = "config.retrieved"
     STATUS_RETRIEVED = "status.retrieved"
 
+    # Scheduler job events (for scheduled jobs management)
+    SCHEDULER_JOBS_LIST = "scheduler.jobs.list"
+    SCHEDULER_JOB_CREATED = "scheduler.job.created"
+    SCHEDULER_JOB_RETRIEVED = "scheduler.job.retrieved"
+    SCHEDULER_JOB_DELETED = "scheduler.job.deleted"
+
+    # Session events
+    SESSION_LIST = "session.list"
+    SESSION_RETRIEVED = "session.retrieved"
+    SESSION_CLEARED = "session.cleared"
+    SESSION_DELETED = "session.deleted"
+    SESSION_MESSAGES_LIST = "session.messages.list"
+
+    # User identifier events
+    USER_IDENTIFIERS_LIST = "user.identifiers.list"
+    USER_IDENTIFIER_DELETED = "user.identifier.deleted"
+    USER_RESOLVED = "user.resolved"
+
+    # Logging destination events (for log destination management)
+    LOGGING_DESTINATIONS_LIST = "logging.destinations.list"
+    LOGGING_DESTINATION_CREATED = "logging.destination.created"
+    LOGGING_DESTINATION_UPDATED = "logging.destination.updated"
+    LOGGING_DESTINATION_DELETED = "logging.destination.deleted"
+
+    # Buffer memory events
+    MEMORY_BUFFER_STATUS = "memory.buffer.status"
+    MEMORY_BUFFER_USER_CLEARED = "memory.buffer.user.cleared"
+    MEMORY_BUFFER_SESSION_CLEARED = "memory.buffer.session.cleared"
+
     # Generic list events
     LIST_RETRIEVED = "list.retrieved"
 
@@ -126,3 +155,23 @@ class APIObjectType(str, Enum):
     CONFIG = "config"
     FORMATION_STATUS = "formation_status"
     FORMATION_CONFIG = "formation_config"
+
+    # Scheduler job objects (for scheduled jobs management)
+    SCHEDULED_JOB = "scheduled_job"
+    SCHEDULED_JOB_LIST = "scheduled_job_list"
+
+    # Session objects
+    SESSION = "session"
+    SESSION_LIST = "session_list"
+
+    # User identifier objects
+    USER = "user"
+    USER_IDENTIFIER = "user_identifier"
+    USER_IDENTIFIER_LIST = "user_identifier_list"
+
+    # Logging destination objects (for log destination management)
+    LOGGING_DESTINATION = "logging_destination"
+    LOGGING_DESTINATION_LIST = "logging_destination_list"
+
+    # Generic message type (used for delete/clear operations)
+    MESSAGE = "message"
