@@ -190,7 +190,7 @@ def _delete_agent_file_safe(formation: Any, agent_id: str) -> None:
     """
     formation_path = formation.get_formation_path()
     if formation_path:
-        from ...utils.agent_persistence import delete_agent_file
+        from ....utils.agent_persistence import delete_agent_file
 
         try:
             deleted = delete_agent_file(agent_id, formation_path)
@@ -466,15 +466,19 @@ async def delete_agent(request: Request, agent_id: str) -> JSONResponse:
         agent_index = next((i for i, a in enumerate(agents) if a.get("id") == agent_id), -1)
 
         # Remove from formation config
+        logger.info(f"Removing agent '{agent_id}' from config...")
         formation.remove_agent_from_config(agent_id)
 
         # Remove from overlord if running
+        logger.info(f"Removing agent '{agent_id}' from overlord...")
         await _cleanup_agent_from_overlord(formation, agent_id)
 
         # Clean up secret placeholders
+        logger.info(f"Cleaning up secret placeholders for agent '{agent_id}'...")
         _cleanup_secret_placeholders(formation, agent_index)
 
         # Delete the YAML file
+        logger.info(f"Deleting agent file for '{agent_id}'...")
         _delete_agent_file_safe(formation, agent_id)
 
         # Log agent removal
@@ -498,6 +502,7 @@ async def delete_agent(request: Request, agent_id: str) -> JSONResponse:
             response = create_error_response(FORBIDDEN_ERROR, error_msg, None, request_id)
             return JSONResponse(content=response.model_dump(), status_code=403)
     except Exception as e:
+        logger.error(f"Failed to delete agent '{agent_id}': {str(e)}", exc_info=True)
         response = create_error_response(
             INTERNAL_ERROR, f"Failed to delete agent: {str(e)}", None, request_id
         )
@@ -506,7 +511,7 @@ async def delete_agent(request: Request, agent_id: str) -> JSONResponse:
     response = create_success_response(
         APIObjectType.AGENT,
         APIEventType.AGENT_DELETED,
-        {"message": f"Agent '{agent_id}' deleted successfully"},
+        {"id": agent_id, "deleted": True},
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)

@@ -51,11 +51,15 @@ class TestAgentsCRUD(BaseE2ETest):
             
             # Start the API server
             await self.formation.start_server(block=False)
+            
+            # Wait for server to be ready
+            import asyncio
+            await asyncio.sleep(2)
             print("✅ Formation ready with API server")
 
             # Test 1: List agents (GET /v1/agents)
             print("\n2. Testing GET /v1/agents...")
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
                     f"{self.base_url}/agents",
                     headers=self.headers,
@@ -81,7 +85,7 @@ class TestAgentsCRUD(BaseE2ETest):
             if initial_agent_count > 0:
                 first_agent_id = initial_agents[0]["id"]
                 
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.get(
                         f"{self.base_url}/agents/{first_agent_id}",
                         headers=self.headers,
@@ -102,21 +106,33 @@ class TestAgentsCRUD(BaseE2ETest):
             # Test 3: Create agent (POST /v1/agents)
             print("\n4. Testing POST /v1/agents...")
             
+            # Cleanup: Delete test agent if it exists from previous run
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                cleanup_response = await client.delete(
+                    f"{self.base_url}/agents/test_agent_e2e",
+                    headers=self.headers,
+                )
+            if cleanup_response.status_code == 200:
+                print("   Cleaned up existing test agent from previous run")
+            
             new_agent = {
+                "schema": "1.0.0",  # Required field - agent schema version
                 "id": "test_agent_e2e",
                 "name": "Test Agent E2E",
                 "description": "Agent created by e2e test",
                 "system_message": "You are a test agent. Be concise.",
-                # Note: removed "role" field - not in AgentCreate schema
             }
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     f"{self.base_url}/agents",
                     headers=self.headers,
                     json=new_agent,
                 )
             
+            if response.status_code != 201:
+                print(f"   ERROR: Got status {response.status_code}")
+                print(f"   Response: {response.text}")
             assert response.status_code == 201, f"Expected 201 (created), got {response.status_code}"
             data = response.json()
             assert data["object"] == "agent"
@@ -129,7 +145,7 @@ class TestAgentsCRUD(BaseE2ETest):
 
             # Test 4: Verify agent was created (list again)
             print("\n5. Verifying agent was created...")
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
                     f"{self.base_url}/agents",
                     headers=self.headers,
@@ -153,7 +169,7 @@ class TestAgentsCRUD(BaseE2ETest):
                 "description": "Updated description",
             }
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.patch(
                     f"{self.base_url}/agents/test_agent_e2e",
                     headers=self.headers,
@@ -173,12 +189,15 @@ class TestAgentsCRUD(BaseE2ETest):
             # Test 6: Delete agent (DELETE /v1/agents/{agent_id})
             print("\n7. Testing DELETE /v1/agents/{agent_id}...")
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.delete(
                     f"{self.base_url}/agents/test_agent_e2e",
                     headers=self.headers,
                 )
             
+            if response.status_code != 200:
+                print(f"   ERROR: DELETE returned {response.status_code}")
+                print(f"   Response: {response.text}")
             assert response.status_code == 200
             data = response.json()
             assert data["object"] == "agent"
@@ -190,7 +209,7 @@ class TestAgentsCRUD(BaseE2ETest):
 
             # Test 7: Verify agent was deleted
             print("\n8. Verifying agent was deleted...")
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
                     f"{self.base_url}/agents",
                     headers=self.headers,
@@ -208,7 +227,7 @@ class TestAgentsCRUD(BaseE2ETest):
 
             # Test 8: Get non-existent agent (should 404)
             print("\n9. Testing GET /v1/agents/{non_existent}...")
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
                     f"{self.base_url}/agents/non_existent_agent",
                     headers=self.headers,
@@ -222,7 +241,7 @@ class TestAgentsCRUD(BaseE2ETest):
 
             # Test 9: Authentication (without admin key)
             print("\n10. Testing authentication requirement...")
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
                     f"{self.base_url}/agents",
                     headers={"Content-Type": "application/json"},
