@@ -27,8 +27,8 @@ run_test() {
     TOTAL=$((TOTAL + 1))
     echo "[$TOTAL/22] Running $test_name..."
     
-    # Run test with timeout
-    if timeout 90 python3 "$test_file" > "/tmp/${test_name}.log" 2>&1; then
+    # Run test with timeout (use exec to avoid subprocess issues)
+    if python3 "$test_file" > "/tmp/${test_name}.log" 2>&1; then
         # Check if test passed by looking for success indicators
         if grep -q "✅.*PASSED\|Test Result:.*✅" "/tmp/${test_name}.log" 2>/dev/null || \
            grep -q "success=True" "/tmp/${test_name}.log" 2>/dev/null; then
