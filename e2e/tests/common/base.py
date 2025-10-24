@@ -121,10 +121,25 @@ class BaseE2ETest:
 
     async def cleanup_formation(self):
         """Clean up formation resources."""
-        if self.formation and self.overlord:
+        if self.formation:
             try:
                 self.formatter.print_teardown("Cleaning up formation...")
-                await self.formation.stop_overlord()
+                
+                # Stop API server if it's running
+                if hasattr(self.formation, '_formation_server') and self.formation._formation_server:
+                    if hasattr(self.formation._formation_server, 'is_running') and self.formation._formation_server.is_running:
+                        self.formatter.print_teardown("Stopping API server...")
+                        try:
+                            await self.formation._formation_server.stop()
+                            # Give server time to fully release port
+                            await asyncio.sleep(1)
+                        except Exception as e:
+                            self.formatter.print_warning(f"Server stop error: {e}")
+                
+                # Stop overlord if it's running
+                if self.overlord:
+                    await self.formation.stop_overlord()
+                
                 self.formatter.print_teardown("Formation cleaned up")
             except Exception as e:
                 self.formatter.print_warning(f"Cleanup error: {e}")
