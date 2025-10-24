@@ -8,8 +8,8 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
 echo "========================================"
-echo "API Test Suite - 83/84 Endpoints"
-echo "22 Test Files - 98.8% Coverage"
+echo "API Test Suite - 84/84 Endpoints"
+echo "23 Test Files - 100% Coverage 🎉"
 echo "========================================"
 echo ""
 
@@ -80,6 +80,7 @@ run_test "test_19s1_async_jobs.py"
 run_test "test_19t1_logging.py"
 run_test "test_19u1_triggers.py"
 run_test "test_19v1_events_streaming.py"
+run_test "test_19w1_logs_stream.py"
 
 # Final summary
 echo ""
@@ -101,7 +102,8 @@ if [ $FAILED -gt 0 ]; then
     echo "Logs available in /tmp/test_*.log"
     exit 1
 else
-    echo "🎉 ALL TESTS PASSED! 🎉"
-    echo "API Test Coverage: 98.8% (83/84 endpoints)"
+    echo "🎉🎉🎉 ALL TESTS PASSED! 🎉🎉🎉"
+    echo "API Test Coverage: 100% (84/84 endpoints)"
+    echo "*** COMPLETE API COVERAGE ACHIEVED ***"
     exit 0
 fi
