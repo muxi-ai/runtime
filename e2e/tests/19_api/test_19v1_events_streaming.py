@@ -87,4 +87,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()) or 0)
+    os._exit(asyncio.run(main()) or 0)

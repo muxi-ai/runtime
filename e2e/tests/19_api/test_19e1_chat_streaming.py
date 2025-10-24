@@ -6,6 +6,7 @@ import json
 import time
 from pathlib import Path
 import sys
+import os
 import httpx
 
 # Add parent directory to path for imports
@@ -249,4 +250,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()) or 0)
+    os._exit(asyncio.run(main()) or 0)

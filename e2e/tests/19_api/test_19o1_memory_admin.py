@@ -5,6 +5,7 @@ import asyncio
 import time
 from pathlib import Path
 import sys
+import os
 import httpx
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
@@ -121,4 +122,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()) or 0)
+    os._exit(asyncio.run(main()) or 0)
