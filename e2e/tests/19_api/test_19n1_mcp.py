@@ -213,8 +213,8 @@ class TestMCP(BaseE2ETest):
                     json=tool_call_data,
                 )
             
-            # Expected to fail with 404 or 400 since tool doesn't exist
-            assert response.status_code in [400, 404, 500], f"Expected 400/404/500, got {response.status_code}"
+            # Expected to fail since tool doesn't exist (422 = validation error)
+            assert response.status_code in [400, 404, 422, 500], f"Expected 400/404/422/500, got {response.status_code}"
             print("✅ POST /v1/mcp/tools/call endpoint exists (expected failure for non-existent tool)")
 
             # Test 9: DELETE /v1/mcp/servers/{server_id}
