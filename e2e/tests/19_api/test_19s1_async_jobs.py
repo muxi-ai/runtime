@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Test 19s1: Async jobs endpoints."""
 
-import asyncio, time, sys, httpx
+import asyncio, os, time, sys, httpx
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
