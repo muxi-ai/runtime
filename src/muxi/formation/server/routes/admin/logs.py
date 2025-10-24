@@ -5,6 +5,7 @@ This endpoint provides admin-only access to stream live formation logs
 via Server-Sent Events (SSE) with required filtering to prevent firehose.
 """
 
+import re
 from typing import Optional
 import asyncio
 import json
@@ -48,7 +49,6 @@ async def stream_logs(
         GET /logs/stream?user_id=alice&level=ERROR
         GET /logs/stream?agent_id=weather-assistant
     """
-    formation = request.app.state.formation
 
     # Validate that at least one filter is provided
     filters = {
@@ -83,44 +83,54 @@ async def stream_logs(
         """
         Generate Server-Sent Events from observability logs.
 
-        This is a simplified implementation that demonstrates the SSE format.
-        A production implementation would hook into the observability system's
-        event emitter to get real-time events.
+        TODO: Production implementation required
+        This is currently a placeholder that returns a "not implemented" message.
+        
+        Production implementation should:
+        1. Subscribe to the observability system's event emitter instead of polling
+        2. Use the existing matches_filters() function to filter events
+        3. Emit SSE-compliant messages (event: log + data: JSON) for matching events
+        4. Monitor request.is_disconnected() and break/cleanup subscription to avoid leaks
+        5. Handle backpressure and buffering appropriately
         """
         try:
-            # Send initial connection event
-            yield f"data: {json.dumps({'connected': True, 'filters': active_filters})}\n\n"
+            # FIXME: Replace this placeholder with real event streaming
+            # Currently returns a "not implemented" message to avoid misleading users
+            not_implemented = {
+                "error": True,
+                "message": "Real-time log streaming is not yet implemented",
+                "reason": "Event sourcing from observability system not connected",
+                "workaround": "Use GET /v1/logging/destinations to view configured log outputs",
+                "filters_received": active_filters,
+            }
+            yield "event: error\n"
+            yield f"data: {json.dumps(not_implemented)}\n\n"
 
-            # Keep connection alive and send events
-            # In a real implementation, this would subscribe to the observability
-            # event stream and filter based on the provided parameters
-            
-            while True:
-                # Check if client disconnected
-                if await request.is_disconnected():
-                    break
-
-                # Wait a bit before next check (this would be event-driven in production)
-                await asyncio.sleep(1)
-
-                # In production, this would receive actual events from observability system
-                # and filter them based on active_filters, then format and yield them
-                
-                # Example event format:
-                # event_data = {
-                #     "timestamp": 1706616000000,
-                #     "level": "INFO",
-                #     "event_type": "chat.completed",
-                #     "user_id": "alice",
-                #     "session_id": "sess123",
-                #     "request_id": "req_abc",
-                #     "message": "Request completed",
-                #     "data": {}
-                # }
-                # 
-                # if matches_filters(event_data, active_filters):
-                #     yield f"event: log\n"
-                #     yield f"data: {json.dumps(event_data)}\n\n"
+            # Production implementation outline:
+            # 1. Subscribe to observability event emitter:
+            #    subscription = observability.subscribe()
+            #
+            # 2. Stream events with filtering:
+            #    async for event in subscription:
+            #        if await request.is_disconnected():
+            #            break
+            #        
+            #        if matches_filters(event, active_filters):
+            #            event_data = {
+            #                "timestamp": event.timestamp,
+            #                "level": event.level,
+            #                "event_type": event.event_type,
+            #                "user_id": event.get("user_id"),
+            #                "session_id": event.get("session_id"),
+            #                "request_id": event.get("request_id"),
+            #                "agent_id": event.get("agent_id"),
+            #                "message": event.description,
+            #                "data": event.data,
+            #            }
+            #            yield f"event: log\n"
+            #            yield f"data: {json.dumps(event_data)}\n\n"
+            #
+            # 3. Cleanup subscription on disconnect/error
 
         except asyncio.CancelledError:
             # Client disconnected
@@ -142,7 +152,7 @@ async def stream_logs(
                 "error": True,
                 "message": "Streaming error occurred",
             }
-            yield f"event: error\n"
+            yield "event: error\n"
             yield f"data: {json.dumps(error_event)}\n\n"
         finally:
             # Log disconnection
@@ -183,8 +193,7 @@ def matches_filters(event_data: dict, filters: dict) -> bool:
         if key == "event_type":
             # Support wildcard matching for event_type
             pattern = value.replace("*", ".*")
-            import re
-            if not re.match(pattern, event_data.get("event_type", "")):
+            if not re.fullmatch(pattern, event_data.get("event_type", "")):
                 return False
         else:
             # Exact match for other fields

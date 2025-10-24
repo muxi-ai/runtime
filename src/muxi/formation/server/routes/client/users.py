@@ -6,6 +6,7 @@ requiring client API key authentication.
 """
 
 from typing import List, Dict, Any
+from datetime import timezone
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -82,7 +83,12 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
                 {
                     "identifier": id_obj.identifier,
                     "type": id_obj.identifier_type or "unknown",
-                    "created_at": id_obj.created_at.isoformat() + "Z" if id_obj.created_at else None,
+                    "created_at": (
+                        id_obj.created_at.astimezone(timezone.utc).isoformat() 
+                        if id_obj.created_at and id_obj.created_at.tzinfo 
+                        else id_obj.created_at.isoformat() + "Z" if id_obj.created_at 
+                        else None
+                    ),
                 }
                 for id_obj in identifiers
             ]
@@ -238,11 +244,27 @@ async def resolve_identifier(request: Request, identifier: str) -> JSONResponse:
     """
     Look up which MUXI user an identifier belongs to.
 
+    **⚠️ WARNING: This endpoint has side effects (violates HTTP GET semantics)**
+    
+    This endpoint will CREATE a new user if the identifier doesn't exist.
+    This violates the HTTP specification that GET requests should be safe
+    and idempotent (no side effects).
+    
+    **Implications:**
+    - User agents that prefetch/cache URLs may create spurious users
+    - Typos or probing may create unwanted user records
+    - Not compliant with RESTful API contracts
+    
+    **TODO: Consider migrating to one of these approaches:**
+    1. Change to POST /users/resolve with create_if_missing flag
+    2. Split into GET (404 if not exists) and POST (create)
+    3. Add rate limiting and require explicit opt-in header
+
     Args:
         identifier: Identifier to resolve
 
     Returns:
-        MUXI user information
+        MUXI user information (creates user if identifier is new)
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
