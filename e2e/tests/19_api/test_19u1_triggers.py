@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Test 19u1: Triggers endpoints."""
 
-import asyncio, time, sys, httpx
+import asyncio, os, time, sys, httpx
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -19,12 +19,12 @@ class TestTriggers(BaseE2ETest):
         formatter.print_test_header(test_name="test_19u1_triggers", description="Test triggers endpoints")
         try:
             print("\n1. Setting up formation...")
-            await self.setup_formation(formation_path=Path(__file__).parent / "formation-api")
+            await self.setup_formation(formation_path=Path(__file__).parent / "formation-api-full")
             await self.formation.start_server(block=False)
             await asyncio.sleep(2)
             print("✅ Formation ready")
 
-            formation_id = "api-test-formation"
+            formation_id = "api-test-formation-full"
             async with httpx.AsyncClient(timeout=30.0) as client:
                 # GET /v1/formations/{formation_id}/triggers
                 print("\n2. Testing GET /v1/formations/{formation_id}/triggers...")

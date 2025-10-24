@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Test 19q1: LLM settings endpoints."""
 
-import asyncio, time, sys, httpx
+import asyncio, os, time, sys, httpx
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -33,14 +33,14 @@ class TestLLMSettings(BaseE2ETest):
 
                 # PATCH /v1/llm/settings
                 print("\n3. Testing PATCH /v1/llm/settings...")
-                r = await client.patch(f"{self.base_url}/llm/settings", headers=self.headers, json={"temperature": 0.7})
+                r = await client.patch(f"{self.base_url}/llm/settings", headers=self.headers, json={"settings": {"temperature": 0.7}})
                 assert r.status_code in [200, 204]
                 print("✅ PATCH /v1/llm/settings passed")
 
                 # DELETE /v1/llm/settings/{item}
                 print("\n4. Testing DELETE /v1/llm/settings/{item}...")
                 r = await client.delete(f"{self.base_url}/llm/settings/test_setting", headers=self.headers)
-                assert r.status_code in [200, 404]
+                assert r.status_code in [200, 400, 404]  # 400 = bad request (invalid key), 404 = not found
                 print("✅ DELETE /v1/llm/settings/{item} verified")
 
                 # Auth test

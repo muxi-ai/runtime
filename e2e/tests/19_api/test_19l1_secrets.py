@@ -73,6 +73,15 @@ class TestSecrets(BaseE2ETest):
             print(f"   Initial secret count: {initial_count}")
             print("✅ GET /v1/secrets passed")
 
+            # Cleanup: Delete test secret if it exists from previous run
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                cleanup_response = await client.delete(
+                    f"{self.base_url}/secrets/TEST_API_KEY_19L1",
+                    headers=self.headers,
+                )
+            if cleanup_response.status_code == 200:
+                print("   Cleaned up existing test secret from previous run")
+
             # Test 2: POST /v1/secrets (create new secret)
             print("\n3. Testing POST /v1/secrets...")
             secret_data = {

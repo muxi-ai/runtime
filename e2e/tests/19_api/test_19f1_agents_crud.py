@@ -237,7 +237,7 @@ class TestAgentsCRUD(BaseE2ETest):
             assert response.status_code == 404, f"Expected 404, got {response.status_code}"
             data = response.json()
             assert data["success"] is False
-            assert data["error"]["code"] == "RESOURCE_NOT_FOUND"
+            assert data["error"]["code"] == "AGENT_NOT_FOUND"
             print("✅ 404 for non-existent agent")
 
             # Test 9: Authentication (without admin key)

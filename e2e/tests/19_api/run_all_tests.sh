@@ -1,109 +1,100 @@
 #!/bin/bash
-# Comprehensive API Test Suite Runner
-# Tests all 83/84 endpoints across 22 test files
+# Run all API tests sequentially with proper cleanup
 
-set -e
+cd /Users/ran/Projects/muxi/code/runtime
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
+# Kill any stale processes on port 8271
+echo "Cleaning up stale processes..."
+lsof -ti :8271 | xargs kill -9 2>/dev/null || true
+sleep 1
 
-echo "========================================"
-echo "API Test Suite - 84/84 Endpoints"
-echo "23 Test Files - 100% Coverage 🎉"
-echo "========================================"
-echo ""
+TESTS=(
+    "test_19a1_audit_logging"
+    "test_19b1_sop_endpoints"
+    "test_19c1_scheduler_persistence"
+    "test_19d1_health_status"
+    "test_19e1_chat_streaming"
+    "test_19f1_agents_crud"
+    "test_19g1_memory_sessions"
+    "test_19h1_users"
+    "test_19i1_memory_crud"
+    "test_19j1_buffer_memory_ops"
+    "test_19k1_jobs"
+    "test_19l1_secrets"
+    "test_19m1_admin_config"
+    "test_19n1_mcp"
+    "test_19o1_memory_admin"
+    "test_19p1_scheduler_admin"
+    "test_19q1_llm_settings"
+    "test_19r1_a2a"
+    "test_19s1_async_jobs"
+    "test_19t1_logging"
+    "test_19u1_triggers"
+    "test_19v1_events_streaming"
+    "test_19w1_logs_stream"
+)
 
-# Counters
-TOTAL=0
 PASSED=0
 FAILED=0
-FAILED_TESTS=()
+TOTAL=${#TESTS[@]}
 
-# Function to run a test
-run_test() {
-    local test_file=$1
-    local test_name=$(basename "$test_file" .py)
+echo "========================================================================"
+echo "RUNNING ALL API TESTS ($TOTAL tests)"
+echo "========================================================================"
+echo ""
+
+for test in "${TESTS[@]}"; do
+    echo "[$((PASSED + FAILED + 1))/$TOTAL] Running $test..."
     
-    TOTAL=$((TOTAL + 1))
-    echo "[$TOTAL/22] Running $test_name..."
+    # Run test with timeout
+    timeout 60 python3 "e2e/tests/19_api/${test}.py" > "/tmp/${test}.log" 2>&1
+    exit_code=$?
     
-    # Run test with timeout (use exec to avoid subprocess issues)
-    if python3 "$test_file" > "/tmp/${test_name}.log" 2>&1; then
-        # Check if test passed by looking for success indicators
-        if grep -q "✅.*PASSED\|Test Result:.*✅" "/tmp/${test_name}.log" 2>/dev/null || \
-           grep -q "success=True" "/tmp/${test_name}.log" 2>/dev/null; then
-            echo "   ✅ PASSED"
-            PASSED=$((PASSED + 1))
-        else
-            # Check the actual result
-            if grep -q "FAILED\|❌" "/tmp/${test_name}.log" 2>/dev/null; then
-                echo "   ❌ FAILED"
-                FAILED=$((FAILED + 1))
-                FAILED_TESTS+=("$test_name")
-            else
-                echo "   ⚠️  UNCERTAIN (check log)"
-                PASSED=$((PASSED + 1))  # Assume pass if no clear failure
-            fi
-        fi
+    # Kill any lingering processes
+    lsof -ti :8271 | xargs kill -9 2>/dev/null || true
+    
+    if [ $exit_code -eq 0 ] && grep -q "SUCCESS:" "/tmp/${test}.log"; then
+        echo "✅ PASS"
+        ((PASSED++))
     else
-        echo "   ❌ TIMEOUT/ERROR"
-        FAILED=$((FAILED + 1))
-        FAILED_TESTS+=("$test_name (timeout)")
+        echo "❌ FAIL"
+        ((FAILED++))
+        # Show error details
+        if grep -q "AssertionError" "/tmp/${test}.log"; then
+            echo "   Assertion error found. Last 10 lines:"
+            tail -10 "/tmp/${test}.log" | sed 's/^/   /'
+        elif grep -q "address already in use" "/tmp/${test}.log"; then
+            echo "   Port conflict (should have been cleaned up)"
+        elif [ $exit_code -eq 124 ]; then
+            echo "   Test timed out after 60 seconds"
+        else
+            echo "   Exit code: $exit_code"
+        fi
     fi
     
-    # Clean up leftover processes
-    pkill -9 -f "$test_file" 2>/dev/null || true
-    lsof -ti:8271 | xargs kill -9 2>/dev/null || true
-    sleep 1
-}
+    # Small delay between tests
+    sleep 2
+    echo ""
+done
 
-# Run all tests in order
-run_test "test_19a1_audit_logging.py"
-run_test "test_19b1_sop_endpoints.py"
-run_test "test_19c1_scheduler_persistence.py"
-run_test "test_19d1_health_status.py"
-run_test "test_19e1_chat_streaming.py"
-run_test "test_19f1_agents_crud.py"
-run_test "test_19g1_memory_sessions.py"
-run_test "test_19h1_users.py"
-run_test "test_19i1_memory_crud.py"
-run_test "test_19j1_buffer_memory_ops.py"
-run_test "test_19k1_jobs.py"
-run_test "test_19l1_secrets.py"
-run_test "test_19m1_admin_config.py"
-run_test "test_19n1_mcp.py"
-run_test "test_19o1_memory_admin.py"
-run_test "test_19p1_scheduler_admin.py"
-run_test "test_19q1_llm_settings.py"
-run_test "test_19r1_a2a.py"
-run_test "test_19s1_async_jobs.py"
-run_test "test_19t1_logging.py"
-run_test "test_19u1_triggers.py"
-run_test "test_19v1_events_streaming.py"
-run_test "test_19w1_logs_stream.py"
-
-# Final summary
-echo ""
-echo "========================================"
-echo "FINAL RESULTS"
-echo "========================================"
-echo "Total Tests:  $TOTAL"
-echo "Passed:       $PASSED ✅"
-echo "Failed:       $FAILED ❌"
-echo "Success Rate: $(( PASSED * 100 / TOTAL ))%"
+echo "========================================================================"
+echo "TEST SUMMARY"
+echo "========================================================================"
+echo "Passed: $PASSED/$TOTAL"
+echo "Failed: $FAILED/$TOTAL"
 echo ""
 
 if [ $FAILED -gt 0 ]; then
-    echo "Failed Tests:"
-    for test in "${FAILED_TESTS[@]}"; do
-        echo "  - $test"
+    echo "Failed tests:"
+    for test in "${TESTS[@]}"; do
+        if [ -f "/tmp/${test}.log" ]; then
+            if ! grep -q "SUCCESS:" "/tmp/${test}.log" 2>/dev/null; then
+                echo "  - $test"
+            fi
+        fi
     done
-    echo ""
-    echo "Logs available in /tmp/test_*.log"
     exit 1
 else
-    echo "🎉🎉🎉 ALL TESTS PASSED! 🎉🎉🎉"
-    echo "API Test Coverage: 100% (84/84 endpoints)"
-    echo "*** COMPLETE API COVERAGE ACHIEVED ***"
+    echo "🎉 All tests passed!"
     exit 0
 fi

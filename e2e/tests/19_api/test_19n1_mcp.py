@@ -47,7 +47,7 @@ class TestMCP(BaseE2ETest):
             # Setup formation
             print("\n1. Setting up formation with API server...")
             await self.setup_formation(
-                formation_path=Path(__file__).parent / "formation-api",
+                formation_path=Path(__file__).parent / "formation-api-full",
             )
             
             # Start the API server
@@ -68,8 +68,9 @@ class TestMCP(BaseE2ETest):
             assert response.status_code == 200, f"Expected 200, got {response.status_code}"
             data = response.json()
             assert data["success"] is True
-            assert "mcp" in data["data"]
-            print(f"   MCP enabled: {data['data']['mcp'].get('enabled', False)}")
+            # MCP settings are flat in data, not nested under data.mcp
+            assert "enhance_user_prompts" in data["data"] or "servers" in data["data"]
+            print(f"   MCP settings retrieved: enhance_user_prompts={data['data'].get('enhance_user_prompts')}")
             print("✅ GET /v1/mcp passed")
 
             # Test 2: PATCH /v1/mcp (update MCP config)
