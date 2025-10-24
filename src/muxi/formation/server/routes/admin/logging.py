@@ -116,64 +116,35 @@ async def create_logging_destination(
         destination: Destination configuration
 
     Returns:
-        Created destination with ID
+        501 Not Implemented - persistence not yet implemented
     """
     request_id = getattr(request.state, "request_id", None)
 
-    # Validate transport type
-    if destination.transport not in ["stdout", "file", "stream"]:
-        response = create_error_response(
-            "INVALID_REQUEST",
-            f"Invalid transport '{destination.transport}'. Must be: stdout, file, or stream",
-            None,
-            request_id,
-        )
-        return JSONResponse(content=response.model_dump(), status_code=400)
-
-    # Validate destination field for file/stream
-    if destination.transport in ["file", "stream"] and not destination.destination:
-        response = create_error_response(
-            "INVALID_REQUEST",
-            f"Field 'destination' is required for transport type '{destination.transport}'",
-            None,
-            request_id,
-        )
-        return JSONResponse(content=response.model_dump(), status_code=400)
-
-    # Generate ID if not provided
-    dest_id = destination.id
-    if not dest_id:
-        from .....utils.id_generator import generate_request_id
-        dest_id = f"dest_{generate_request_id()[4:]}"
-
-    # Build destination config
-    dest_config = {
-        "id": dest_id,
-        "transport": destination.transport,
-        "level": destination.level,
-        "format": destination.format,
-        "enabled": destination.enabled,
-    }
-    if destination.destination:
-        dest_config["destination"] = destination.destination
-
-    # TODO: Add destination to formation logging config
-    # This would require updating the formation config and reloading logging
-
-    observability.observe(
-        event_type=observability.SystemEvents.OPERATION_COMPLETED,
-        level=observability.EventLevel.INFO,
-        description=f"Logging destination '{dest_id}' created",
-        data={"destination_id": dest_id, "transport": destination.transport},
+    # Return 501 Not Implemented - logging destination persistence not yet implemented
+    # This endpoint requires:
+    # 1. Updating formation.config.logging.streams with the new destination
+    # 2. Persisting the updated formation config to disk/storage
+    # 3. Reloading the logging subsystem to activate the new destination
+    # Until these are implemented, returning 501 is more honest than accepting
+    # the request and silently failing to persist it.
+    response = create_error_response(
+        error_code="NOT_IMPLEMENTED",
+        message="Logging destination persistence is not yet implemented",
+        trace=None,
+        request_id=request_id,
+        idempotency_key=None,
+        data=None,
+        error_data={
+            "reason": "Dynamic logging destination creation requires formation config persistence",
+            "workaround": "Add logging destinations directly to your formation.yaml file",
+            "required_implementation": [
+                "Formation config update mechanism",
+                "Logging subsystem reload/reconfiguration",
+                "Persistent storage of logging configuration"
+            ]
+        },
     )
-
-    response = create_success_response(
-        APIObjectType.LOGGING_DESTINATION,
-        APIEventType.LOGGING_DESTINATION_CREATED,
-        dest_config,
-        request_id,
-    )
-    return JSONResponse(content=response.model_dump(), status_code=201)
+    return JSONResponse(content=response.model_dump(), status_code=501)
 
 
 @router.patch("/logging/destinations/{destination_id}", response_model=APIResponse)
@@ -188,56 +159,30 @@ async def update_logging_destination(
         update: Fields to update
 
     Returns:
-        Updated destination configuration
+        501 Not Implemented - persistence not yet implemented
     """
-    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Get logging config
-    logging_config = formation.config.get("logging", {})
-    streams = logging_config.get("streams", [])
-
-    # Find destination by ID
-    dest_index = None
-    for idx, stream in enumerate(streams):
-        if stream.get("id", f"dest-{idx}") == destination_id:
-            dest_index = idx
-            break
-
-    if dest_index is None:
-        response = create_error_response(
-            "RESOURCE_NOT_FOUND",
-            f"Logging destination '{destination_id}' not found",
-            None,
-            request_id,
-        )
-        return JSONResponse(content=response.model_dump(), status_code=404)
-
-    # Apply updates
-    dest = streams[dest_index]
-    if update.level is not None:
-        dest["level"] = update.level
-    if update.format is not None:
-        dest["format"] = update.format
-    if update.enabled is not None:
-        dest["enabled"] = update.enabled
-
-    # TODO: Persist changes to formation config and reload logging
-
-    observability.observe(
-        event_type=observability.SystemEvents.OPERATION_COMPLETED,
-        level=observability.EventLevel.INFO,
-        description=f"Logging destination '{destination_id}' updated",
-        data={"destination_id": destination_id, "updates": update.model_dump(exclude_unset=True)},
+    # Return 501 Not Implemented - logging destination updates not yet implemented
+    # This endpoint requires the same persistence infrastructure as POST
+    response = create_error_response(
+        error_code="NOT_IMPLEMENTED",
+        message="Logging destination updates are not yet implemented",
+        trace=None,
+        request_id=request_id,
+        idempotency_key=None,
+        data=None,
+        error_data={
+            "reason": "Dynamic logging destination updates require formation config persistence",
+            "workaround": "Update logging destinations directly in your formation.yaml file and restart",
+            "required_implementation": [
+                "Formation config update mechanism",
+                "Logging subsystem reload/reconfiguration",
+                "Persistent storage of logging configuration"
+            ]
+        },
     )
-
-    response = create_success_response(
-        APIObjectType.LOGGING_DESTINATION,
-        APIEventType.LOGGING_DESTINATION_UPDATED,
-        dest,
-        request_id,
-    )
-    return JSONResponse(content=response.model_dump(), status_code=200)
+    return JSONResponse(content=response.model_dump(), status_code=501)
 
 
 @router.delete("/logging/destinations/{destination_id}", response_model=APIResponse)
@@ -249,47 +194,27 @@ async def delete_logging_destination(request: Request, destination_id: str) -> J
         destination_id: ID of the destination to remove
 
     Returns:
-        Success response
+        501 Not Implemented - persistence not yet implemented
     """
-    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Get logging config
-    logging_config = formation.config.get("logging", {})
-    streams = logging_config.get("streams", [])
-
-    # Find destination by ID
-    dest_index = None
-    for idx, stream in enumerate(streams):
-        if stream.get("id", f"dest-{idx}") == destination_id:
-            dest_index = idx
-            break
-
-    if dest_index is None:
-        response = create_error_response(
-            "RESOURCE_NOT_FOUND",
-            f"Logging destination '{destination_id}' not found",
-            None,
-            request_id,
-        )
-        return JSONResponse(content=response.model_dump(), status_code=404)
-
-    # Remove destination
-    del streams[dest_index]
-
-    # TODO: Persist changes to formation config and reload logging
-
-    observability.observe(
-        event_type=observability.SystemEvents.OPERATION_COMPLETED,
-        level=observability.EventLevel.INFO,
-        description=f"Logging destination '{destination_id}' removed",
-        data={"destination_id": destination_id},
+    # Return 501 Not Implemented - logging destination deletion not yet implemented
+    # This endpoint requires the same persistence infrastructure as POST and PATCH
+    response = create_error_response(
+        error_code="NOT_IMPLEMENTED",
+        message="Logging destination deletion is not yet implemented",
+        trace=None,
+        request_id=request_id,
+        idempotency_key=None,
+        data=None,
+        error_data={
+            "reason": "Dynamic logging destination deletion requires formation config persistence",
+            "workaround": "Remove logging destinations directly from your formation.yaml file and restart",
+            "required_implementation": [
+                "Formation config update mechanism",
+                "Logging subsystem reload/reconfiguration",
+                "Persistent storage of logging configuration"
+            ]
+        },
     )
-
-    response = create_success_response(
-        APIObjectType.MESSAGE,
-        APIEventType.LOGGING_DESTINATION_DELETED,
-        {"message": f"Logging destination '{destination_id}' removed successfully"},
-        request_id,
-    )
-    return JSONResponse(content=response.model_dump(), status_code=200)
+    return JSONResponse(content=response.model_dump(), status_code=501)
