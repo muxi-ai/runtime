@@ -64,7 +64,10 @@ async def stream_logs(
     if not active_filters:
         raise HTTPException(
             status_code=400,
-            detail="At least one filter parameter is required (user_id, session_id, request_id, agent_id, level, or event_type)",
+            detail=(
+                "At least one filter parameter is required "
+                "(user_id, session_id, request_id, agent_id, level, or event_type)"
+            ),
         )
 
     # Log the streaming request
@@ -85,7 +88,7 @@ async def stream_logs(
 
         TODO: Production implementation required
         This is currently a placeholder that returns a "not implemented" message.
-        
+
         Production implementation should:
         1. Subscribe to the observability system's event emitter instead of polling
         2. Use the existing matches_filters() function to filter events
@@ -114,7 +117,7 @@ async def stream_logs(
             #    async for event in subscription:
             #        if await request.is_disconnected():
             #            break
-            #        
+            #
             #        if matches_filters(event, active_filters):
             #            event_data = {
             #                "timestamp": event.timestamp,

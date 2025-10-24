@@ -5,7 +5,6 @@ These endpoints provide user identity mapping operations,
 requiring client API key authentication.
 """
 
-from typing import List, Dict, Any
 from datetime import timezone
 
 from fastapi import APIRouter, Request
@@ -17,7 +16,7 @@ from ...responses import (
     create_error_response,
 )
 from .....datatypes.api import APIEventType, APIObjectType
-from .....utils.user_resolution import resolve_user_identifier, associate_user_identifiers
+from .....utils.user_resolution import resolve_user_identifier
 from .....services import observability
 
 router = APIRouter(tags=["Users"])
@@ -84,9 +83,9 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
                     "identifier": id_obj.identifier,
                     "type": id_obj.identifier_type or "unknown",
                     "created_at": (
-                        id_obj.created_at.astimezone(timezone.utc).isoformat() 
-                        if id_obj.created_at and id_obj.created_at.tzinfo 
-                        else id_obj.created_at.isoformat() + "Z" if id_obj.created_at 
+                        id_obj.created_at.astimezone(timezone.utc).isoformat()
+                        if id_obj.created_at and id_obj.created_at.tzinfo
+                        else id_obj.created_at.isoformat() + "Z" if id_obj.created_at
                         else None
                     ),
                 }
@@ -245,16 +244,16 @@ async def resolve_identifier(request: Request, identifier: str) -> JSONResponse:
     Look up which MUXI user an identifier belongs to.
 
     **⚠️ WARNING: This endpoint has side effects (violates HTTP GET semantics)**
-    
+
     This endpoint will CREATE a new user if the identifier doesn't exist.
     This violates the HTTP specification that GET requests should be safe
     and idempotent (no side effects).
-    
+
     **Implications:**
     - User agents that prefetch/cache URLs may create spurious users
     - Typos or probing may create unwanted user records
     - Not compliant with RESTful API contracts
-    
+
     **TODO: Consider migrating to one of these approaches:**
     1. Change to POST /users/resolve with create_if_missing flag
     2. Split into GET (404 if not exists) and POST (create)
