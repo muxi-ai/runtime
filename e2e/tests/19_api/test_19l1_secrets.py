@@ -69,8 +69,7 @@ class TestSecrets(BaseE2ETest):
             data = response.json()
             assert data["success"] is True
             assert "secrets" in data["data"]
-            initial_count = len(data["data"]["secrets"])
-            print(f"   Initial secret count: {initial_count}")
+            print(f"   Total secrets: {len(data['data']['secrets'])}")
             print("✅ GET /v1/secrets passed")
 
             # Cleanup: Delete test secret if it exists from previous run
@@ -81,6 +80,16 @@ class TestSecrets(BaseE2ETest):
                 )
             if cleanup_response.status_code == 200:
                 print("   Cleaned up existing test secret from previous run")
+            
+            # Get clean baseline count AFTER cleanup
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/secrets",
+                    headers=self.headers,
+                )
+            baseline_data = response.json()
+            initial_count = len(baseline_data["data"]["secrets"])
+            print(f"   Baseline count after cleanup: {initial_count}")
 
             # Test 2: POST /v1/secrets (create new secret)
             print("\n3. Testing POST /v1/secrets...")
@@ -115,12 +124,14 @@ class TestSecrets(BaseE2ETest):
             
             assert response.status_code == 200
             data = response.json()
-            new_count = len(data["data"]["secrets"])
+            # API returns secrets as a dict {key: masked_value}, not a list
+            secrets_dict = data["data"]["secrets"]
+            new_count = len(secrets_dict)
             assert new_count == initial_count + 1, "Secret count should increase by 1"
             
-            # Find our secret in the list
-            secret_keys = [s["key"] for s in data["data"]["secrets"]]
-            assert "TEST_API_KEY_19L1" in secret_keys, "New secret should be in list"
+            # Find our secret in the dict keys
+            assert "TEST_API_KEY_19L1" in secrets_dict, "New secret should be in list"
+            print(f"   New secret count: {new_count} (was {initial_count})")
             print("✅ Secret creation verified")
 
             # Test 4: PUT /v1/secrets/{key} (update secret)
@@ -175,9 +186,8 @@ class TestSecrets(BaseE2ETest):
             final_count = len(data["data"]["secrets"])
             assert final_count == initial_count, "Secret count should return to initial"
             
-            # Verify deleted secret is not in list
-            secret_keys = [s["key"] for s in data["data"]["secrets"]]
-            assert "TEST_API_KEY_19L1" not in secret_keys, "Deleted secret should not be in list"
+            # Verify deleted secret is not in dict
+            assert "TEST_API_KEY_19L1" not in data["data"]["secrets"], "Deleted secret should not be in list"
             print("✅ Secret deletion verified")
 
             # Test 7: DELETE non-existent secret (should 404)
