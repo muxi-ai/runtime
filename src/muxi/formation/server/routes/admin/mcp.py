@@ -160,10 +160,11 @@ async def list_mcp_servers(request: Request) -> JSONResponse:
     if servers:
         servers = restore_secret_placeholders(servers, formation.secret_placeholders)
 
+    # Wrap servers list in dict for APIResponse schema compliance
     response = create_success_response(
         APIObjectType.LIST,
         APIEventType.MCP_SERVER_LIST,
-        servers,
+        {"servers": servers},
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
@@ -330,10 +331,11 @@ async def list_mcp_tools(request: Request) -> JSONResponse:
             }
         )
 
+    # Wrap tools list in dict for APIResponse schema compliance
     response = create_success_response(
         APIObjectType.LIST,
         APIEventType.MCP_TOOL_LIST,
-        available_tools,
+        {"tools": available_tools},
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)

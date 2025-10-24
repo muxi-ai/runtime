@@ -67,10 +67,11 @@ async def list_memory_buffers(request: Request) -> JSONResponse:
     # TODO: Implement memory buffer access
     request_id = getattr(request.state, "request_id", None)
 
+    # Wrap buffers list in dict for APIResponse schema compliance
     response = create_success_response(
         APIObjectType.LIST,
         APIEventType.MEMORY_LIST,
-        [],
+        {"buffers": []},
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
