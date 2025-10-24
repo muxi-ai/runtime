@@ -5,12 +5,12 @@ These endpoints provide chat functionality for users,
 requiring client API key authentication.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 import asyncio
 import json
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
 from .....services import observability
@@ -30,14 +30,16 @@ class ChatRequest(BaseModel):
     request_id: Optional[str] = None
     mode: Optional[str] = "sync"  # sync or async
     files: Optional[List[Dict[str, Any]]] = None
+    stream: Optional[bool] = True  # Enable/disable streaming (default: True)
 
 
-@router.post("/chat")
-async def chat(request: Request, chat_request: ChatRequest) -> StreamingResponse:
+@router.post("/chat", response_model=None)
+async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingResponse, JSONResponse]:
     """
     Send a message to the formation and receive a response.
 
-    For synchronous requests, returns a streaming response.
+    For synchronous requests with stream=True, returns a streaming response.
+    For synchronous requests with stream=False, returns a complete JSON response.
     For asynchronous requests, returns a job ID.
 
     Args:
@@ -47,7 +49,7 @@ async def chat(request: Request, chat_request: ChatRequest) -> StreamingResponse
         X-Muxi-User-Id: User ID for request context (optional, defaults to "0")
 
     Returns:
-        Streaming response or async job details
+        Streaming response, JSON response, or async job details
     """
     formation = request.app.state.formation
 
@@ -84,6 +86,59 @@ async def chat(request: Request, chat_request: ChatRequest) -> StreamingResponse
     if chat_request.mode == "async":
         # TODO: Implement async processing
         raise HTTPException(status_code=501, detail="Async mode not yet implemented")
+
+    # Handle non-streaming mode
+    if chat_request.stream is False:
+        try:
+            # Get complete response from overlord
+            response = await overlord.chat(
+                message=chat_request.message,
+                user_id=effective_user_id,
+                session_id=chat_request.session_id,
+                request_id=chat_request.request_id,
+                agent_name=chat_request.agent_id,
+                files=chat_request.files,
+                stream=False,  # Disable streaming
+            )
+            
+            # Return complete response as JSON
+            from ...responses import create_success_response
+            from .....datatypes.api import APIObjectType, APIEventType
+            
+            data = {
+                "message": response,
+                "user_id": effective_user_id,
+                "session_id": chat_request.session_id,
+                "request_id": chat_request.request_id,
+            }
+            
+            api_response = create_success_response(
+                APIObjectType.MESSAGE,
+                APIEventType.CHAT_COMPLETED,
+                data,
+                chat_request.request_id,
+            )
+            
+            return JSONResponse(content=api_response.model_dump(), status_code=200)
+            
+        except Exception as e:
+            # Log error
+            observability.observe(
+                event_type=observability.ConversationEvents.REQUEST_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "service": "formation_api_server",
+                    "endpoint": "/api/chat",
+                    "user_id": effective_user_id,
+                    "session_id": chat_request.session_id,
+                    "request_id": chat_request.request_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "formation_id": formation.formation_id,
+                },
+                description=f"Chat request failed: {e}",
+            )
+            raise HTTPException(status_code=500, detail=str(e))
 
     # Process synchronously with streaming
     async def generate_stream():
