@@ -73,11 +73,11 @@ async def list_logging_destinations(request: Request) -> JSONResponse:
 
     # Get logging config from formation
     logging_config = formation.config.get("logging", {})
-    
+
     # Extract destinations (streams in YAML)
     destinations = []
     streams = logging_config.get("streams", [])
-    
+
     for idx, stream in enumerate(streams):
         dest = {
             "id": stream.get("id", f"dest-{idx}"),
@@ -118,7 +118,6 @@ async def create_logging_destination(
     Returns:
         Created destination with ID
     """
-    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
     # Validate transport type
