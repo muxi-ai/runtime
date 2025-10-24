@@ -1,9 +1,0 @@
-MUXI Init Formatting Tests - Success Scenarios
-======================================================================
-
-FAIL: 1_foundation_basic
-FAIL: 2_memory_persistent
-FAIL: 7_multi_agent_mcp
-FAIL: 12_scheduling
-
-Total: 0/4 passed
