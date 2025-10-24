@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""Test 19m1: Admin config and overlord endpoints."""
+
+import asyncio
+import time
+from pathlib import Path
+import sys
+import httpx
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from common import BaseE2ETest, TestOutputFormatter
+
+
+class TestAdminConfig(BaseE2ETest):
+    """Test admin config and overlord endpoints."""
+
+    def __init__(self):
+        super().__init__(
+            test_name="test_19m1_admin_config",
+            test_description="Test admin config and overlord endpoints",
+            test_area="19_api",
+        )
+        self.base_url = "http://127.0.0.1:8271/v1"
+        self.admin_key = "test-admin-key-123"
+        self.headers = {
+            "X-Muxi-Admin-Key": self.admin_key,
+            "Content-Type": "application/json",
+        }
+
+    async def test_19m1_admin_config(self):
+        """Test admin config and overlord endpoints."""
+        formatter = TestOutputFormatter()
+        start_time = time.time()
+        success = False
+
+        # Print header
+        formatter.print_test_header(
+            test_name="test_19m1_admin_config",
+            description="Test admin config and overlord endpoints",
+        )
+
+        try:
+            # Setup formation
+            print("\n1. Setting up formation with API server...")
+            await self.setup_formation(
+                formation_path=Path(__file__).parent / "formation-api",
+            )
+            
+            # Start the API server
+            await self.formation.start_server(block=False)
+            
+            # Wait for server to be ready
+            await asyncio.sleep(2)
+            print("✅ Formation ready with API server")
+
+            # Test 1: GET /v1/config
+            print("\n2. Testing GET /v1/config...")
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/config",
+                    headers=self.headers,
+                )
+            
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+            data = response.json()
+            assert data["success"] is True
+            assert "config" in data["data"]
+            # Should have formation structure
+            assert "schema" in data["data"]["config"]
+            assert "id" in data["data"]["config"]
+            print(f"   Formation ID: {data['data']['config']['id']}")
+            print("✅ GET /v1/config passed")
+
+            # Test 2: GET /v1/formation
+            print("\n3. Testing GET /v1/formation...")
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/formation",
+                    headers=self.headers,
+                )
+            
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+            data = response.json()
+            assert data["success"] is True
+            assert "formation" in data["data"]
+            # Should have formation info
+            assert "id" in data["data"]["formation"]
+            assert "agents" in data["data"]["formation"]
+            print(f"   Formation: {data['data']['formation']['id']}")
+            print(f"   Agents: {len(data['data']['formation'].get('agents', []))}")
+            print("✅ GET /v1/formation passed")
+
+            # Test 3: GET /v1/status
+            print("\n4. Testing GET /v1/status...")
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/status",
+                    headers=self.headers,
+                )
+            
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+            data = response.json()
+            assert data["success"] is True
+            assert "status" in data["data"]
+            # Should have runtime status
+            assert "runtime" in data["data"]["status"]
+            print(f"   Runtime: {data['data']['status']['runtime']}")
+            print("✅ GET /v1/status passed")
+
+            # Test 4: GET /v1/overlord
+            print("\n5. Testing GET /v1/overlord...")
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/overlord",
+                    headers=self.headers,
+                )
+            
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+            data = response.json()
+            assert data["success"] is True
+            assert "overlord" in data["data"]
+            # Should have overlord info
+            assert "agents" in data["data"]["overlord"]
+            print(f"   Overlord agents: {len(data['data']['overlord'].get('agents', []))}")
+            print("✅ GET /v1/overlord passed")
+
+            # Test 5: GET /v1/overlord/persona
+            print("\n6. Testing GET /v1/overlord/persona...")
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/overlord/persona",
+                    headers=self.headers,
+                )
+            
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+            data = response.json()
+            assert data["success"] is True
+            assert "persona" in data["data"]
+            # Should have persona info
+            if data["data"]["persona"]:
+                print(f"   Persona: {data['data']['persona'].get('name', 'N/A')}")
+            else:
+                print("   Persona: None configured")
+            print("✅ GET /v1/overlord/persona passed")
+
+            # Test 6: Authentication (without admin key)
+            print("\n7. Testing authentication requirement...")
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/config",
+                    headers={"Content-Type": "application/json"},
+                )
+            
+            assert response.status_code == 401
+            print("✅ Authentication enforced")
+
+            # Success!
+            success = True
+            elapsed_time = time.time() - start_time
+            formatter.print_test_result(
+                test_name="test_19m1_admin_config",
+                success=True,
+                checks=[
+                    "GET /v1/config passed (formation config)",
+                    "GET /v1/formation passed (formation info)",
+                    "GET /v1/status passed (runtime status)",
+                    "GET /v1/overlord passed (overlord state)",
+                    "GET /v1/overlord/persona passed",
+                    "Authentication enforced",
+                ],
+                transcript=[],
+                duration=elapsed_time,
+            )
+
+        except Exception as e:
+            elapsed_time = time.time() - start_time
+            formatter.print_test_result(
+                test_name="test_19m1_admin_config",
+                success=False,
+                checks=[f"Failed: {str(e)}"],
+                transcript=[],
+                duration=elapsed_time,
+            )
+            import traceback
+            traceback.print_exc()
+            raise
+        finally:
+            # Cleanup
+            if self.formation:
+                await self.cleanup_formation()
+
+
+async def main():
+    """Run the test."""
+    test = TestAdminConfig()
+    await test.test_19m1_admin_config()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
