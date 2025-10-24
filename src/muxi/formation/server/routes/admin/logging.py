@@ -5,7 +5,7 @@ These endpoints provide logging configuration access and management,
 requiring admin API key authentication.
 """
 
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -17,7 +17,6 @@ from ...responses import (
     create_error_response,
 )
 from .....datatypes.api import APIEventType, APIObjectType
-from .....services import observability
 
 router = APIRouter(tags=["Logging"])
 
