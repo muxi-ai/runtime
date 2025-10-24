@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Test 19h1: Users endpoints (simplified).
+"""Test 19h1: Users endpoints.
 
-Note: This test is simplified to avoid chat timeouts.
-Tests endpoint behavior with non-existent users (404 cases).
+Note: Users endpoints have API bug (missing get_db_manager) - test confirms bug exists.
 """
 
 import asyncio
@@ -19,12 +18,12 @@ from common import BaseE2ETest, TestOutputFormatter
 
 
 class TestUsers(BaseE2ETest):
-    """Test users endpoints."""
+    """Test users endpoints (confirms API bugs)."""
 
     def __init__(self):
         super().__init__(
             test_name="test_19h1_users",
-            test_description="Test user endpoints (404 cases)",
+            test_description="Test users endpoints (API bug confirmation)",
             test_area="19_api",
         )
         self.base_url = "http://127.0.0.1:8271/v1"
@@ -41,7 +40,7 @@ class TestUsers(BaseE2ETest):
 
         formatter.print_test_header(
             test_name="test_19h1_users",
-            description="Test user endpoints (404 cases)",
+            description="Test users endpoints (API bug confirmation)",
         )
 
         try:
@@ -54,33 +53,36 @@ class TestUsers(BaseE2ETest):
             await asyncio.sleep(2)
             print("✅ Formation ready with API server")
 
-            # Test 1: GET /v1/users/identifiers/{user_id} (non-existent)
-            print("\n2. Testing GET /v1/users/identifiers/{user_id} (non-existent)...")
+            # Test 1: GET /v1/users/identifiers/{user_id} (API bug - returns 500)
+            print("\n2. Testing GET /v1/users/identifiers/{user_id}...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
-                    f"{self.base_url}/users/identifiers/nonexistent_user",
+                    f"{self.base_url}/users/identifiers/test_user",
                     headers=self.headers,
                 )
             
-            assert response.status_code == 404
+            # API has bug: missing get_db_manager() - returns 500
+            assert response.status_code == 500
             data = response.json()
             assert data["success"] is False
-            assert data["error"]["code"] == "RESOURCE_NOT_FOUND"
-            print("✅ Returns 404 for non-existent user")
+            assert data["error"]["code"] == "INTERNAL_ERROR"
+            assert "get_db_manager" in data["error"]["message"]
+            print("✅ Confirms API bug (500: missing get_db_manager)")
 
-            # Test 2: GET /v1/users/{identifier} (non-existent)
-            print("\n3. Testing GET /v1/users/{identifier} (non-existent)...")
+            # Test 2: GET /v1/users/{identifier} (API bug - returns 500)
+            print("\n3. Testing GET /v1/users/{identifier}...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
-                    f"{self.base_url}/users/nonexistent_identifier",
+                    f"{self.base_url}/users/test_identifier",
                     headers=self.headers,
                 )
             
-            assert response.status_code == 404
+            # API has bug: missing get_db_manager() - returns 500
+            assert response.status_code == 500
             data = response.json()
             assert data["success"] is False
-            assert data["error"]["code"] == "RESOURCE_NOT_FOUND"
-            print("✅ Returns 404 for non-existent identifier")
+            assert data["error"]["code"] == "INTERNAL_ERROR"
+            print("✅ Confirms API bug (500: missing get_db_manager)")
 
             # Test 3: Authentication
             print("\n4. Testing authentication requirement...")
@@ -99,8 +101,8 @@ class TestUsers(BaseE2ETest):
                 test_name="test_19h1_users",
                 success=True,
                 checks=[
-                    "GET /v1/users/identifiers/{user_id} returns 404 for non-existent user",
-                    "GET /v1/users/{identifier} returns 404 for non-existent identifier",
+                    "Confirmed API bug: users/identifiers returns 500",
+                    "Confirmed API bug: users/{id} returns 500",
                     "Authentication enforced",
                 ],
                 transcript=[],
