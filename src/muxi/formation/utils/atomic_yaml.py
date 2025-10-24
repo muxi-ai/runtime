@@ -5,6 +5,7 @@ Provides thread-safe and atomic file operations for YAML configuration files,
 preventing data corruption during concurrent updates.
 """
 
+import asyncio
 import os
 import tempfile
 from pathlib import Path
@@ -18,6 +19,23 @@ class AtomicYAMLError(Exception):
     """Raised when atomic YAML operations fail."""
 
     pass
+
+
+def _sync_fsync(file_path: str) -> None:
+    """
+    Synchronously fsync a file.
+    
+    Called via run_in_executor to avoid blocking the event loop.
+    Opens the file in read mode to get a file descriptor for fsync.
+    
+    Args:
+        file_path: Path to file to fsync
+    """
+    # Open in read mode just to get file descriptor for fsync
+    # The file was already written and closed by aiofiles
+    with open(file_path, 'r+b') as f:
+        f.flush()
+        os.fsync(f.fileno())
 
 
 def _clean_config_for_yaml(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -132,8 +150,15 @@ async def atomic_write_yaml(
             async with aiofiles.open(temp_path, "w", encoding="utf-8") as f:
                 await f.write(yaml_content)
                 await f.flush()
-                # Ensure data is written to disk
-                os.fsync(f.fileno())
+            
+            # Ensure data is written to disk using executor to avoid blocking
+            # aiofiles handles don't have fileno(), so we open synchronously in thread
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,  # Use default ThreadPoolExecutor
+                _sync_fsync,
+                temp_path
+            )
 
             # Preserve original file permissions if requested
             if preserve_permissions and file_path.exists():
