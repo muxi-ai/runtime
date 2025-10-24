@@ -68,18 +68,51 @@ async def list_user_sessions(
             return JSONResponse(content=response.model_dump(), status_code=200)
 
         # Get sessions from buffer
-        # This is a simplified implementation - production would query buffer metadata
         sessions = []
         
         # Get buffer entries for this user
         if hasattr(buffer, "get_user_sessions"):
+            # If method exists, it should already respect the limit
             sessions = buffer.get_user_sessions(user_id, active_only=active_only, limit=limit)
         else:
-            # Fallback: scan buffer for sessions
-            # In production, buffer would maintain session metadata
-            pass
+            # Fallback: scan buffer to extract unique sessions
+            # Track unique session IDs with metadata
+            seen_sessions = {}
+            
+            if hasattr(buffer, "buffer"):
+                # Scan buffer in reverse (most recent first)
+                for item in reversed(buffer.buffer):
+                    metadata = item.get("metadata", {})
+                    item_user_id = metadata.get("user_id")
+                    session_id = metadata.get("session_id")
+                    
+                    # Skip if not matching user or no session ID
+                    if item_user_id != user_id or not session_id:
+                        continue
+                    
+                    # Track unique sessions
+                    if session_id not in seen_sessions:
+                        seen_sessions[session_id] = {
+                            "session_id": session_id,
+                            "user_id": user_id,
+                            "last_activity": metadata.get("timestamp", item.get("timestamp")),
+                            "active": True,  # Sessions in buffer are considered active
+                        }
+                        
+                        # Stop if we've reached the limit
+                        if len(seen_sessions) >= limit:
+                            break
+                
+                # Convert to list (already in most-recent-first order)
+                sessions = list(seen_sessions.values())
+                
+                # Apply active_only filter if requested
+                if active_only:
+                    sessions = [s for s in sessions if s.get("active", True)]
 
-        data = {"sessions": sessions[:limit], "count": len(sessions[:limit])}
+        # Compute paged results once and reuse
+        paged_sessions = sessions[:limit]
+        data = {"sessions": paged_sessions, "count": len(paged_sessions)}
 
         response = create_success_response(
             APIObjectType.SESSION_LIST,
