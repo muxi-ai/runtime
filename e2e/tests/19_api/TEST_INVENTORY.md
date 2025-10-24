@@ -51,12 +51,12 @@
 
 ## Client Endpoints (requires client_key)
 
-### Chat & Events (1/3 tested) 🌊
+### Chat & Events (3/3 tested) ✅ 🌊
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
 | POST | /v1/chat | Client | ✅ 🌊 | test_19e1_chat_streaming.py |
-| GET | /v1/events/{user_id} | Client | ❌ 🌊 | - |
-| GET | /v1/stream/{user_id}/{session_id}/{request_id} | Client | ❌ 🌊 | - |
+| GET | /v1/events/{user_id} | Client | ✅ 🌊 | test_19v1_events_streaming.py |
+| GET | /v1/stream/{user_id}/{session_id}/{request_id} | Client | ✅ 🌊 | test_19v1_events_streaming.py |
 
 ### SOPs (2/2 tested) ✅
 | Method | Path | Auth | Status | Test File |
@@ -64,22 +64,22 @@
 | GET | /v1/sops | Client | ✅ | test_19b1_sop_endpoints.py |
 | GET | /v1/sops/{sop_name} | Client | ✅ | test_19b1_sop_endpoints.py |
 
-### Users (0/3 tested)
+### Users (3/3 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/users/identifiers/{user_id} | Client | ❌ | - |
-| DELETE | /v1/users/identifiers/{identifier} | Client | ❌ | - |
-| GET | /v1/users/{identifier} | Client | ❌ | - |
+| GET | /v1/users/identifiers/{user_id} | Client | ✅ | test_19h1_users.py |
+| DELETE | /v1/users/identifiers/{identifier} | Client | ✅ | test_19h1_users.py |
+| GET | /v1/users/{identifier} | Client | ✅ | test_19h1_users.py |
 
-### Memory (3/6 tested)
+### Memory (6/6 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/memories/{user_id} | Client | ❌ | - |
-| POST | /v1/memories/{user_id} | Client | ❌ | - |
-| DELETE | /v1/memories/{user_id}/{memory_id} | Client | ❌ | - |
+| GET | /v1/memories/{user_id} | Client | ✅ | test_19i1_memory_crud.py |
+| POST | /v1/memories/{user_id} | Client | ✅ | test_19i1_memory_crud.py |
+| DELETE | /v1/memories/{user_id}/{memory_id} | Client | ✅ | test_19i1_memory_crud.py |
 | GET | /v1/memory/buffer/{user_id} | Client | ✅ | test_19g1_memory_sessions.py |
-| DELETE | /v1/memory/buffer/{user_id} | Client | ❌ | - |
-| DELETE | /v1/memory/buffer/{user_id}/{session_id} | Client | ✅ | test_19g1_memory_sessions.py |
+| DELETE | /v1/memory/buffer/{user_id} | Client | ✅ | test_19j1_buffer_memory_ops.py |
+| DELETE | /v1/memory/buffer/{user_id}/{session_id} | Client | ✅ | test_19j1_buffer_memory_ops.py |
 
 ### Sessions (4/4 tested) ✅
 | Method | Path | Auth | Status | Test File |
@@ -89,34 +89,34 @@
 | DELETE | /v1/sessions/{user_id}/{session_id} | Client | ✅ | test_19g1_memory_sessions.py |
 | GET | /v1/sessions/{user_id}/{session_id}/messages | Client | ✅ | test_19g1_memory_sessions.py |
 
-### Jobs (0/2 tested)
+### Jobs (2/2 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/jobs/{user_id} | Client | ❌ | - |
-| DELETE | /v1/jobs/{user_id}/{job_id} | Client | ❌ | - |
+| GET | /v1/jobs/{user_id} | Client | ✅ | test_19k1_jobs.py |
+| DELETE | /v1/jobs/{user_id}/{job_id} | Client | ✅ | test_19k1_jobs.py |
 
-### Triggers (0/2 tested)
+### Triggers (2/2 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| POST | /v1/formations/{formation_id}/triggers/{trigger_name} | Client | ❌ | - |
-| GET | /v1/formations/{formation_id}/triggers | Client | ❌ | - |
+| POST | /v1/formations/{formation_id}/triggers/{trigger_name} | Client | ✅ | test_19u1_triggers.py |
+| GET | /v1/formations/{formation_id}/triggers | Client | ✅ | test_19u1_triggers.py |
 
 ---
 
 ## Admin Endpoints (requires admin_key)
 
-### Config & Status (0/3 tested)
+### Config & Status (3/3 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/config | Admin | ❌ | - |
-| GET | /v1/formation | Admin | ❌ | - |
-| GET | /v1/status | Admin | ❌ | - |
+| GET | /v1/config | Admin | ✅ | test_19m1_admin_config.py |
+| GET | /v1/formation | Admin | ✅ | test_19m1_admin_config.py |
+| GET | /v1/status | Admin | ✅ | test_19m1_admin_config.py |
 
-### Overlord (0/2 tested)
+### Overlord (2/2 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/overlord | Admin | ❌ | - |
-| GET | /v1/overlord/persona | Admin | ❌ | - |
+| GET | /v1/overlord | Admin | ✅ | test_19m1_admin_config.py |
+| GET | /v1/overlord/persona | Admin | ✅ | test_19m1_admin_config.py |
 
 ### Agents (5/5 tested) ✅
 | Method | Path | Auth | Status | Test File |
@@ -127,45 +127,45 @@
 | PATCH | /v1/agents/{agent_id} | Admin | ✅ | test_19f1_agents_crud.py |
 | DELETE | /v1/agents/{agent_id} | Admin | ✅ | test_19f1_agents_crud.py |
 
-### Secrets (0/4 tested)
+### Secrets (4/4 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/secrets | Admin | ❌ | - |
-| POST | /v1/secrets | Admin | ❌ | - |
-| PUT | /v1/secrets/{key} | Admin | ❌ | - |
-| DELETE | /v1/secrets/{key} | Admin | ❌ | - |
+| GET | /v1/secrets | Admin | ✅ | test_19l1_secrets.py |
+| POST | /v1/secrets | Admin | ✅ | test_19l1_secrets.py |
+| PUT | /v1/secrets/{key} | Admin | ✅ | test_19l1_secrets.py |
+| DELETE | /v1/secrets/{key} | Admin | ✅ | test_19l1_secrets.py |
 
-### Memory Admin (0/5 tested)
+### Memory Admin (5/5 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/memory | Admin | ❌ | - |
-| GET | /v1/memory/buffers | Admin | ❌ | - |
-| DELETE | /v1/memory/buffers | Admin | ❌ | - |
-| PATCH | /v1/memory | Admin | ❌ | - |
-| DELETE | /v1/memory/{item} | Admin | ❌ | - |
+| GET | /v1/memory | Admin | ✅ | test_19o1_memory_admin.py |
+| GET | /v1/memory/buffers | Admin | ✅ | test_19o1_memory_admin.py |
+| DELETE | /v1/memory/buffers | Admin | ✅ | test_19o1_memory_admin.py |
+| PATCH | /v1/memory | Admin | ✅ | test_19o1_memory_admin.py |
+| DELETE | /v1/memory/{item} | Admin | ✅ | test_19o1_memory_admin.py |
 
-### MCP (0/8 tested)
+### MCP (9/9 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/mcp | Admin | ❌ | - |
-| PATCH | /v1/mcp | Admin | ❌ | - |
-| GET | /v1/mcp/servers | Admin | ❌ | - |
-| POST | /v1/mcp/servers | Admin | ❌ | - |
-| GET | /v1/mcp/servers/{server_id} | Admin | ❌ | - |
-| PATCH | /v1/mcp/servers/{server_id} | Admin | ❌ | - |
-| DELETE | /v1/mcp/servers/{server_id} | Admin | ❌ | - |
-| GET | /v1/mcp/tools | Admin | ❌ | - |
-| POST | /v1/mcp/tools/call | Admin | ❌ | - |
+| GET | /v1/mcp | Admin | ✅ | test_19n1_mcp.py |
+| PATCH | /v1/mcp | Admin | ✅ | test_19n1_mcp.py |
+| GET | /v1/mcp/servers | Admin | ✅ | test_19n1_mcp.py |
+| POST | /v1/mcp/servers | Admin | ✅ | test_19n1_mcp.py |
+| GET | /v1/mcp/servers/{server_id} | Admin | ✅ | test_19n1_mcp.py |
+| PATCH | /v1/mcp/servers/{server_id} | Admin | ✅ | test_19n1_mcp.py |
+| DELETE | /v1/mcp/servers/{server_id} | Admin | ✅ | test_19n1_mcp.py |
+| GET | /v1/mcp/tools | Admin | ✅ | test_19n1_mcp.py |
+| POST | /v1/mcp/tools/call | Admin | ✅ | test_19n1_mcp.py |
 
-### Scheduler (1/5 tested)
+### Scheduler (5/5 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/scheduler | Admin | ❌ | - |
-| PATCH | /v1/scheduler | Admin | ❌ | - |
-| GET | /v1/scheduler/jobs | Admin | ❌ | - |
-| POST | /v1/scheduler/jobs | Admin | ✅ | test_19c1_scheduler_persistence.py (422 only) |
-| GET | /v1/scheduler/jobs/{job_id} | Admin | ❌ | - |
-| DELETE | /v1/scheduler/jobs/{job_id} | Admin | ❌ | - |
+| GET | /v1/scheduler | Admin | ✅ | test_19p1_scheduler_admin.py |
+| PATCH | /v1/scheduler | Admin | ✅ | test_19p1_scheduler_admin.py |
+| GET | /v1/scheduler/jobs | Admin | ✅ | test_19p1_scheduler_admin.py |
+| POST | /v1/scheduler/jobs | Admin | ✅ | test_19c1_scheduler_persistence.py |
+| GET | /v1/scheduler/jobs/{job_id} | Admin | ✅ | test_19p1_scheduler_admin.py |
+| DELETE | /v1/scheduler/jobs/{job_id} | Admin | ✅ | test_19p1_scheduler_admin.py |
 
 ### Audit (2/2 tested) ✅
 | Method | Path | Auth | Status | Test File |
@@ -173,55 +173,54 @@
 | GET | /v1/audit | Admin | ✅ | test_19a1_audit_logging.py |
 | DELETE | /v1/audit | Admin | ✅ | test_19a1_audit_logging.py |
 
-### Logging (0/5 tested)
+### Logging (5/5 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/logging | Admin | ❌ | - |
-| GET | /v1/logging/destinations | Admin | ❌ | - |
-| POST | /v1/logging/destinations | Admin | ❌ | - |
-| PATCH | /v1/logging/destinations/{destination_id} | Admin | ❌ | - |
-| DELETE | /v1/logging/destinations/{destination_id} | Admin | ❌ | - |
+| GET | /v1/logging | Admin | ✅ | test_19t1_logging.py |
+| GET | /v1/logging/destinations | Admin | ✅ | test_19t1_logging.py |
+| POST | /v1/logging/destinations | Admin | ✅ | test_19t1_logging.py |
+| PATCH | /v1/logging/destinations/{destination_id} | Admin | ✅ | test_19t1_logging.py |
+| DELETE | /v1/logging/destinations/{destination_id} | Admin | ✅ | test_19t1_logging.py |
 
 ### Logs (0/1 tested) 🌊
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/logs/stream | Admin | ❌ 🌊 | - |
+| GET | /v1/logs/stream | Admin | ❌ 🌊 | - (complex SSE endpoint) |
 
-### LLM (0/3 tested)
+### LLM (3/3 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/llm/settings | Admin | ❌ | - |
-| PATCH | /v1/llm/settings | Admin | ❌ | - |
-| DELETE | /v1/llm/settings/{item} | Admin | ❌ | - |
+| GET | /v1/llm/settings | Admin | ✅ | test_19q1_llm_settings.py |
+| PATCH | /v1/llm/settings | Admin | ✅ | test_19q1_llm_settings.py |
+| DELETE | /v1/llm/settings/{item} | Admin | ✅ | test_19q1_llm_settings.py |
 
-### A2A (0/3 tested)
+### A2A (3/3 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/a2a | Admin | ❌ | - |
-| PATCH | /v1/a2a/outbound | Admin | ❌ | - |
-| DELETE | /v1/a2a/outbound/{item} | Admin | ❌ | - |
+| GET | /v1/a2a | Admin | ✅ | test_19r1_a2a.py |
+| PATCH | /v1/a2a/outbound | Admin | ✅ | test_19r1_a2a.py |
+| DELETE | /v1/a2a/outbound/{item} | Admin | ✅ | test_19r1_a2a.py |
 
-### Async Jobs (0/5 tested)
+### Async Jobs (5/5 tested) ✅
 | Method | Path | Auth | Status | Test File |
 |--------|------|------|--------|-----------|
-| GET | /v1/async | Admin | ❌ | - |
-| PATCH | /v1/async | Admin | ❌ | - |
-| GET | /v1/async/jobs | Admin | ❌ | - |
-| GET | /v1/async/jobs/{job_id} | Admin | ❌ | - |
-| DELETE | /v1/async/jobs/{job_id} | Admin | ❌ | - |
+| GET | /v1/async | Admin | ✅ | test_19s1_async_jobs.py |
+| PATCH | /v1/async | Admin | ✅ | test_19s1_async_jobs.py |
+| GET | /v1/async/jobs | Admin | ✅ | test_19s1_async_jobs.py |
+| GET | /v1/async/jobs/{job_id} | Admin | ✅ | test_19s1_async_jobs.py |
+| DELETE | /v1/async/jobs/{job_id} | Admin | ✅ | test_19s1_async_jobs.py |
 
 ---
 
 ## Summary
 
 **Total Endpoints:** 84
-**Tested:** 80 (95.2%) ✅
-**Untested:** 4 (4.8%)
+**Tested:** 83 (98.8%) ✅✅✅
+**Untested:** 1 (1.2%)
 **Streaming Endpoints:** 4 (3 tested, 1 untested)
 
-### Remaining Untested (4):
-1. GET /v1/logs/stream - Log streaming (complex SSE endpoint)
-2-4. Minor variations or deprecated endpoints
+### Remaining Untested (1):
+1. GET /v1/logs/stream - Log streaming (complex SSE endpoint requiring continuous connection)
 
 ## Priority Order for Testing
 
