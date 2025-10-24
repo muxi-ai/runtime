@@ -1,8 +1,10 @@
 """
 Atomic YAML file operations.
 
-Provides thread-safe and atomic file operations for YAML configuration files,
-preventing data corruption during concurrent updates.
+Provides atomic file operations for YAML configuration files, protecting against
+partial writes and crashes. Does NOT provide internal synchronization for concurrent
+updates to the same file — callers must use external locking (file locks, distributed
+locks) when multiple processes/threads may update the same file concurrently.
 """
 
 import asyncio
@@ -196,9 +198,14 @@ async def atomic_update_yaml(
 
     Reads the existing file, merges updates, and writes atomically.
 
-    **Important:** This function does NOT provide external locking. If multiple
-    processes/threads might update the same file concurrently, caller must
-    implement external locking (e.g., file locks, distributed locks).
+    **WARNING - LOST UPDATE RACE CONDITION:**
+    This function has a classic read-modify-write race condition. Between reading
+    the file and writing it back, another process can modify the file, causing
+    those updates to be SILENTLY LOST. This is NOT prevented by the atomic write.
+
+    **CALLER MUST PROVIDE EXTERNAL LOCKING** (e.g., fcntl.flock, filelock library,
+    or distributed locks) when multiple processes/threads may update the same file.
+    Without external locking, data loss WILL occur under concurrent access.
 
     Args:
         file_path: Path to the YAML file to update
@@ -212,17 +219,14 @@ async def atomic_update_yaml(
     """
     file_path = Path(file_path)
 
-    if not file_path.exists():
-        raise FileNotFoundError(f"YAML file does not exist: {file_path}")
-
     try:
-        # Read existing content
+        # Read existing content (TOCTOU-safe: no separate existence check)
         async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
             content = await f.read()
             existing_data = yaml.safe_load(content)
 
         if not isinstance(existing_data, dict):
-            raise ValueError("YAML file must contain a dictionary")
+            raise TypeError(f"YAML file must contain a dictionary, got {type(existing_data).__name__}")
 
         # Merge updates
         if deep_merge:
@@ -238,6 +242,9 @@ async def atomic_update_yaml(
             clean=True,
         )
 
+    except FileNotFoundError:
+        # Re-raise FileNotFoundError directly (don't wrap in AtomicYAMLError)
+        raise
     except (OSError, yaml.YAMLError) as e:
         raise AtomicYAMLError(f"Failed to update YAML file {file_path}: {str(e)}") from e
 
@@ -293,7 +300,7 @@ async def atomic_read_yaml(file_path: str | Path) -> Dict[str, Any]:
             data = yaml.safe_load(content)
 
         if not isinstance(data, dict):
-            raise ValueError("YAML file must contain a dictionary")
+            raise TypeError("YAML file must contain a dictionary")
 
         return data
 
