@@ -6,7 +6,9 @@ requiring admin API key authentication.
 """
 
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
+
+import croniter
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -276,8 +278,28 @@ async def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSO
         # Calculate next run time
         next_run = None
         if job.type == "recurring":
-            # TODO: Calculate next run from cron expression
-            next_run = datetime.utcnow().isoformat() + "Z"
+            # Calculate next run from cron expression using croniter
+            try:
+                base_time = datetime.now(timezone.utc)
+                cron = croniter.croniter(job.schedule, base_time)
+                next_run_dt = cron.get_next(datetime)
+                # Convert to ISO 8601 UTC string
+                next_run = next_run_dt.astimezone(timezone.utc).isoformat()
+            except (ValueError, KeyError, croniter.CroniterBadCronError, croniter.CroniterBadDateError) as e:
+                # Invalid cron expression - log and set to None
+                from .....services import observability
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    description=f"Invalid cron expression '{job.schedule}': {str(e)}",
+                    data={
+                        "job_id": job_id,
+                        "schedule": job.schedule,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    },
+                )
+                next_run = None  # Will need manual intervention
         else:
             next_run = job.run_at
 
