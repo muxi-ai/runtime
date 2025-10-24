@@ -249,20 +249,33 @@ async def clear_user_buffer(request: Request, user_id: str) -> JSONResponse:
             )
             return JSONResponse(content=response.model_dump(), status_code=503)
 
-        # Clear user's buffer
+        # Clear user's buffer by manually removing matching items
         messages_cleared = 0
         sessions_cleared = 0
 
-        if hasattr(buffer, "clear_user"):
-            result = buffer.clear_user(user_id)
-            messages_cleared = result.get("messages_cleared", 0)
-            sessions_cleared = result.get("sessions_cleared", 0)
-        elif hasattr(buffer, "clear"):
-            # Count before clearing
-            if hasattr(buffer, "buffer"):
-                user_buffer = buffer.buffer.get(user_id, [])
-                messages_cleared = len(user_buffer)
-            buffer.clear(user_id=user_id)
+        if hasattr(buffer, "buffer"):
+            # buffer.buffer is a deque - find items to remove
+            items_to_remove = []
+            unique_sessions = set()
+            
+            for i, item in enumerate(buffer.buffer):
+                if isinstance(item, dict) and item.get("metadata", {}).get("user_id") == user_id:
+                    items_to_remove.append(i)
+                    # Track unique sessions
+                    sess_id = item.get("metadata", {}).get("session_id")
+                    if sess_id:
+                        unique_sessions.add(sess_id)
+            
+            # Remove items in reverse order to maintain indices
+            for i in reversed(items_to_remove):
+                del buffer.buffer[i]
+                messages_cleared += 1
+            
+            sessions_cleared = len(unique_sessions)
+            
+            # Mark index for rebuild if we removed items and vector search is enabled
+            if messages_cleared > 0 and hasattr(buffer, "needs_rebuild"):
+                buffer.needs_rebuild = True
 
         from ...responses import create_success_response
         from .....datatypes.api import APIObjectType, APIEventType
@@ -329,22 +342,26 @@ async def clear_session_buffer(request: Request, user_id: str, session_id: str) 
             )
             return JSONResponse(content=response.model_dump(), status_code=503)
 
-        # Clear session buffer
+        # Clear session buffer by manually removing matching items
         messages_cleared = 0
 
-        if hasattr(buffer, "clear_session"):
-            messages_cleared = buffer.clear_session(user_id, session_id)
-        elif hasattr(buffer, "clear"):
-            # Count before clearing
-            if hasattr(buffer, "buffer"):
-                # buffer.buffer is a deque, iterate through it
-                messages_cleared = len([
-                    msg for msg in buffer.buffer
-                    if isinstance(msg, dict) and 
-                       msg.get("metadata", {}).get("user_id") == user_id and
-                       msg.get("metadata", {}).get("session_id") == session_id
-                ])
-            buffer.clear(user_id=user_id, session_id=session_id)
+        if hasattr(buffer, "buffer"):
+            # buffer.buffer is a deque - find items to remove
+            items_to_remove = []
+            for i, item in enumerate(buffer.buffer):
+                if (isinstance(item, dict) and 
+                    item.get("metadata", {}).get("user_id") == user_id and
+                    item.get("metadata", {}).get("session_id") == session_id):
+                    items_to_remove.append(i)
+            
+            # Remove items in reverse order to maintain indices
+            for i in reversed(items_to_remove):
+                del buffer.buffer[i]
+                messages_cleared += 1
+            
+            # Mark index for rebuild if we removed items and vector search is enabled
+            if messages_cleared > 0 and hasattr(buffer, "needs_rebuild"):
+                buffer.needs_rebuild = True
 
         from ...responses import create_success_response
         from .....datatypes.api import APIObjectType, APIEventType
