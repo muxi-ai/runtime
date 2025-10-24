@@ -2,6 +2,18 @@
 
 Your fast-reference for building, debugging, and extending the MUXI Runtime without losing critical context.
 
+---
+
+## MUXI Ecosystem
+
+This repository is part of the larger MUXI ecosystem.
+
+**📋 Complete architectural overview:** See [MUXI-ARCHITECTURE.md](../MUXI-ARCHITECTURE.md) - explains how all 9 repositories fit together, dependencies, status, and roadmap.
+
+**🎯 This repo (runtime):** The formation execution environment - FastAPI-based Python runtime that will be packaged as SIF container. Currently testing & debugging API contract.
+
+---
+
 ## TL;DR: Non-Negotiables
 - Use sub-agents: `file-analyzer` for reading files, `code-analyzer` for code search/analysis, `test-runner` for any tests (invoke with `bash .claude/scripts/test-and-log.sh path/to/test.py` and include the post-run success + transcript block).
 - Maintain required LLM config: formations must declare `llm.models` with a `text` entry (e.g., `openai/gpt-4o-mini`). System aborts if missing.
