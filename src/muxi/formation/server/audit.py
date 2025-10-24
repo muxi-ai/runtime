@@ -8,8 +8,7 @@ destinations, async configuration, and memory operations.
 
 import json
 import threading
-from datetime import datetime
-from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import Request
@@ -74,7 +73,7 @@ class AuditLogger:
             additional_data: Additional context data
         """
         entry = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "request_id": request_id,
             "action": action,
             "resource_type": resource_type,
@@ -208,29 +207,31 @@ class AuditLogger:
         Returns:
             Number of entries that were cleared
         """
-        # Count entries before clearing
-        count = 0
-        if self.log_path.exists():
-            with self._lock:
+        # Acquire lock once for entire operation to prevent race conditions
+        # (another thread could append between counting and writing)
+        with self._lock:
+            # Count entries before clearing
+            count = 0
+            if self.log_path.exists():
                 with open(self.log_path, "r") as f:
                     count = sum(1 for line in f if line.strip())
 
-        # Create new log with only the "cleared" entry
-        entry = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "request_id": request_id,
-            "action": "audit.cleared",
-            "resource_type": "audit_log",
-            "resource_id": self.formation_id,
-            "user": user,
-            "ip": None,
-            "result": "success",
-            "status_code": 200,
-            "message": f"Audit log cleared by {user} ({count} entries removed)",
-            "data": {"previous_entries_count": count},
-        }
+            # Create new log with only the "cleared" entry
+            entry = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "request_id": request_id,
+                "action": "audit.cleared",
+                "resource_type": "audit_log",
+                "resource_id": self.formation_id,
+                "user": user,
+                "ip": None,
+                "result": "success",
+                "status_code": 200,
+                "message": f"Audit log cleared by {user} ({count} entries removed)",
+                "data": {"previous_entries_count": count},
+            }
 
-        with self._lock:
+            # Write the cleared entry (atomically with counting)
             with open(self.log_path, "w") as f:
                 f.write(json.dumps(entry) + "\n")
 
