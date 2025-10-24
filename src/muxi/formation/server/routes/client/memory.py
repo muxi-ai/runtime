@@ -337,10 +337,12 @@ async def clear_session_buffer(request: Request, user_id: str, session_id: str) 
         elif hasattr(buffer, "clear"):
             # Count before clearing
             if hasattr(buffer, "buffer"):
-                user_buffer = buffer.buffer.get(user_id, [])
+                # buffer.buffer is a deque, iterate through it
                 messages_cleared = len([
-                    msg for msg in user_buffer
-                    if msg.get("session_id") == session_id
+                    msg for msg in buffer.buffer
+                    if isinstance(msg, dict) and 
+                       msg.get("metadata", {}).get("user_id") == user_id and
+                       msg.get("metadata", {}).get("session_id") == session_id
                 ])
             buffer.clear(user_id=user_id, session_id=session_id)
 
