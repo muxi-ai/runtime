@@ -8,6 +8,7 @@ and other components that need to access services on behalf of users.
 from typing import Optional, Dict, Any, List
 from sqlalchemy import Column, Integer, String, DateTime, select, Text
 import nanoid
+from cachetools import TTLCache
 
 from ...datatypes.exceptions import FormationError
 from ...utils.datetime_utils import utc_now_naive
@@ -50,7 +51,15 @@ class CredentialResolver:
     the JSONType abstraction.
     """
 
-    def __init__(self, async_session_maker, formation_id: str, llm_model: Optional[str] = None, db_manager=None):
+    def __init__(
+        self,
+        async_session_maker,
+        formation_id: str,
+        llm_model: Optional[str] = None,
+        db_manager=None,
+        cache_ttl: int = 3600,  # 1 hour default
+        cache_maxsize: int = 10000,  # 10k users max
+    ):
         """
         Initialize the credential resolver.
 
@@ -59,10 +68,14 @@ class CredentialResolver:
             formation_id: The formation ID (normalized)
             llm_model: Optional LLM model to use for extraction (e.g., from formation.llm.models.text)
             db_manager: Database manager instance for user resolution
+            cache_ttl: Time-to-live for cached credentials in seconds (default: 1 hour)
+            cache_maxsize: Maximum number of users in cache (default: 10,000)
         """
         self.async_session_maker = async_session_maker
         self.formation_id = formation_id
-        self._cache = {}  # In-memory cache: {user_id: {service: credentials}}
+        # Bounded TTL cache to prevent unbounded growth
+        # Credentials are re-fetched from DB after TTL expires
+        self._cache = TTLCache(maxsize=cache_maxsize, ttl=cache_ttl)
         self.llm_model = llm_model  # Store the LLM model to use
         self.db_manager = db_manager  # Store for user identifier resolution
 

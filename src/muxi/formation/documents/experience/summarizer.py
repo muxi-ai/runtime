@@ -58,7 +58,6 @@ class DocumentSummarizer:
         self.llm_model = llm_model
         self.persona_config = persona_config or {}
         self._summary_cache: Dict[str, DocumentSummary] = {}
-        #  Info - TODO: add observability
 
     async def summarize_document(
         self, document_id: str, document_content: str, config: Optional[SummaryConfig] = None
@@ -130,7 +129,6 @@ class DocumentSummarizer:
         Returns:
             Dictionary with individual summaries and cross-document insights
         """
-        #  Info - TODO: add observability
 
         # Generate individual summaries
         summaries = {}
@@ -178,7 +176,6 @@ class DocumentSummarizer:
         Returns:
             DocumentSummary object with progressive summary
         """
-        #  Info - TODO: add observability
 
         # Summarize chunks in batches
         chunk_summaries = []
@@ -204,7 +201,6 @@ class DocumentSummarizer:
             config=SummaryConfig(summary_type=final_summary_type),
         )
 
-        #  Info - TODO: add observability
         return final_summary
 
     def _build_summarization_prompt(
@@ -311,7 +307,6 @@ class DocumentSummarizer:
         self, summaries: Dict[str, DocumentSummary]
     ) -> Dict[str, Any]:
         """Generate insights across multiple document summaries"""
-        #  Info - TODO: add observability
 
         # Combine all summary content
         combined_content = "\n\n".join(

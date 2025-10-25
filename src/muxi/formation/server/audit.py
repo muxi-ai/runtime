@@ -269,15 +269,15 @@ class AuditLogger:
     def _task_done_callback(self, task: asyncio.Task) -> None:
         """
         Callback for completed background write tasks.
-        
+
         Logs any exceptions and removes task from tracking set.
-        
+
         Args:
             task: The completed task
         """
         # Remove task from tracking set
         self._pending_tasks.discard(task)
-        
+
         # Check for exceptions
         try:
             task.result()  # This will raise if the task failed
@@ -292,7 +292,7 @@ class AuditLogger:
     async def shutdown(self) -> None:
         """
         Wait for all pending audit log writes to complete.
-        
+
         Should be called during application shutdown to ensure
         all log entries are written to disk.
         """

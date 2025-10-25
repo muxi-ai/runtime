@@ -48,8 +48,6 @@ class CircuitBreaker(Generic[T]):
         self.state = CircuitBreakerState()
         self._lock = asyncio.Lock()
 
-        #  Circuit breaker debug - TODO: add observability
-
     async def execute(
         self, func: Callable[..., T], *args, fallback: Optional[Callable[..., T]] = None, **kwargs
     ) -> T:
@@ -193,7 +191,6 @@ class CircuitBreaker(Generic[T]):
             # Reset failure count on success
             self.state.failure_count = max(0, self.state.failure_count - 1)
 
-        #  Circuit breaker debug - TODO: add observability
         #     f"Circuit breaker '{self.name}' recorded success "
         #     f"(execution_time: {execution_time:.2f}s, state: {self.state.state.value})"
         # )
@@ -261,16 +258,12 @@ class CircuitBreaker(Generic[T]):
         self.state.success_count = 0
         self.state.failure_count = 0
 
-        #  Circuit breaker info - TODO: add observability
-
     async def _transition_to_closed(self) -> None:
         """Transition circuit breaker to CLOSED state."""
         self.state.state = CircuitState.CLOSED
         self.state.failure_count = 0
         self.state.success_count = 0
         self.state.next_attempt_time = None
-
-        #  Circuit breaker info - TODO: add observability
 
     def _get_estimated_recovery_time(self) -> Optional[float]:
         """Get estimated time until circuit breaker recovery attempt."""
@@ -314,7 +307,6 @@ class CircuitBreaker(Generic[T]):
         """Reset circuit breaker to initial state."""
         async with self._lock:
             self.state = CircuitBreakerState()
-            #  Circuit breaker info - TODO: add observability
 
     async def force_open(self) -> None:
         """Force circuit breaker to OPEN state."""
@@ -331,7 +323,6 @@ class CircuitBreaker(Generic[T]):
         """Force circuit breaker to CLOSED state."""
         async with self._lock:
             await self._transition_to_closed()
-            #  Circuit breaker info - TODO: add observability
 
 
 class CircuitBreakerRegistry:
@@ -358,7 +349,6 @@ class CircuitBreakerRegistry:
         if name not in self._circuit_breakers:
             effective_config = config or self._default_config
             self._circuit_breakers[name] = CircuitBreaker(name, effective_config)
-            #  Circuit breaker debug - TODO: add observability
 
         return self._circuit_breakers[name]
 
@@ -374,7 +364,6 @@ class CircuitBreakerRegistry:
         """
         if name in self._circuit_breakers:
             del self._circuit_breakers[name]
-            #  Circuit breaker debug - TODO: add observability
             return True
         return False
 
@@ -386,7 +375,6 @@ class CircuitBreakerRegistry:
         """Reset all circuit breakers."""
         for cb in self._circuit_breakers.values():
             await cb.reset()
-        #  Circuit breaker info - TODO: add observability
 
     def set_default_config(self, config: CircuitBreakerConfig) -> None:
         """Set default configuration for new circuit breakers."""

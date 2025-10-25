@@ -75,8 +75,6 @@ class DocumentAcknowledgmentGenerator:
         # Message templates by persona type
         self._message_templates = self._initialize_templates()
 
-        #  Info - TODO: add observability
-
     def _initialize_templates(self) -> Dict[str, Dict[str, List[str]]]:
         """Initialize message templates for different persona types and stages"""
         return {
@@ -202,7 +200,6 @@ class DocumentAcknowledgmentGenerator:
         # Apply persona styling
         final_message = self._apply_persona_styling(base_message)
 
-        #  Info - TODO: add observability
         return final_message
 
     async def generate_progress_update(
@@ -249,7 +246,6 @@ class DocumentAcknowledgmentGenerator:
         # Apply persona styling
         final_message = self._apply_persona_styling(message)
 
-        #  Info - TODO: add observability
         return final_message
 
     async def generate_completion_acknowledgment(
@@ -300,7 +296,6 @@ class DocumentAcknowledgmentGenerator:
         # Apply persona styling
         final_message = self._apply_persona_styling(base_message)
 
-        #  Info - TODO: add observability
         return final_message
 
     async def generate_error_acknowledgment(
@@ -344,7 +339,6 @@ class DocumentAcknowledgmentGenerator:
         # Apply persona styling
         final_message = self._apply_persona_styling(base_message)
 
-        #  Info - TODO: add observability
         return final_message
 
     def _get_template_message(self, stage: str, **kwargs) -> str:

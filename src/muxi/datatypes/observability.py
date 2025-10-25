@@ -83,6 +83,9 @@ class SystemEvents(Enum):
     OVERLORD_SHUTDOWN = "overlord.shutdown"
     # When overlord is shutting down gracefully
 
+    SECURITY_CONFIGURATION_WARNING = "security.configuration.warning"
+    # When a security configuration issue is detected (e.g., weak encryption key)
+
     # ===================================================================
     # MCP SYSTEM EVENTS
     # ===================================================================

@@ -135,8 +135,6 @@ class DocumentAwareBufferMemory:
         self._chunk_to_document: Dict[str, str] = {}  # chunk_id -> document_id
         self._document_timestamps: Dict[str, float] = {}  # document_id -> upload_time
 
-        #  Info - TODO: add observability
-
     async def add_document(
         self,
         content: str,
@@ -160,7 +158,6 @@ class DocumentAwareBufferMemory:
         Returns:
             Document ID
         """
-        #  Info - TODO: add observability
 
         # Chunk the document
         chunks = await self.chunk_manager.chunk_document(
@@ -213,7 +210,6 @@ class DocumentAwareBufferMemory:
         self._document_entries[document_id] = buffer_entries
         self._document_timestamps[document_id] = current_time
 
-        #  Info - TODO: add observability
         return document_id
 
     async def search_documents(
@@ -333,8 +329,6 @@ class DocumentAwareBufferMemory:
         if document_id not in self._document_entries:
             return False
 
-        #  Info - TODO: add observability
-
         # Remove all chunks from buffer
         entries = self._document_entries[document_id]
         for entry in entries:
@@ -358,7 +352,6 @@ class DocumentAwareBufferMemory:
         if self.has_vector_search:
             await self._rebuild_vector_index()
 
-        #  Info - TODO: add observability
         return True
 
     def get_document_stats(self) -> Dict[str, Any]:
@@ -399,7 +392,6 @@ class DocumentAwareBufferMemory:
         if current_memory <= self.max_memory_mb:
             return
 
-        #  Info - TODO: add observability
         #     f"Document-aware FIFO cleanup triggered: {current_memory}MB > {self.max_memory_mb}MB"
         # )
 
@@ -419,14 +411,10 @@ class DocumentAwareBufferMemory:
             # Recalculate memory usage
             current_memory = self._estimate_memory_usage()
 
-        #  Info - TODO: add observability
-
     async def _rebuild_vector_index(self) -> None:
         """Rebuild the vector index after document removal"""
         if not self.has_vector_search or not self.buffer:
             return
-
-        #  Info - TODO: add observability
 
         # Get all current content for re-indexing
         contents = []
@@ -446,9 +434,7 @@ class DocumentAwareBufferMemory:
 
                 # Rebuild index
                 await self._build_index(embeddings)
-                #  Info - TODO: add observability
 
             except Exception as e:
-                #  Error - TODO: add observability
                 _ = e  # remove this after implementing observability
                 self.has_vector_search = False

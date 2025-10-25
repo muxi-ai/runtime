@@ -45,19 +45,16 @@ class FallbackManager:
             # Try cached response first
             cached_response = await self._get_cached_fallback(workflow, context)
             if cached_response is not None:
-                #  Fallback manager info - TODO: add observability
                 return cached_response
 
             # Try simplified workflow
             simplified_response = await self._get_simplified_workflow_response(workflow, context)
             if simplified_response is not None:
-                #  Fallback manager info - TODO: add observability
                 return simplified_response
 
             # Try partial response
             partial_response = await self._get_partial_response(workflow, context)
             if partial_response is not None:
-                #  Fallback manager info - TODO: add observability
                 return partial_response
 
             # Generate error message as last resort
@@ -105,7 +102,6 @@ class FallbackManager:
                     return cached_data.get("response")
 
         except Exception as cache_error:
-            #  Fallback manager debug - TODO: add observability
             _ = cache_error  # remove this after implementing observability
 
         return None
@@ -124,7 +120,6 @@ class FallbackManager:
                 return await self._execute_simplified_workflow(workflow, simplified_config, context)
 
         except Exception as simplification_error:
-            #  Fallback manager debug - TODO: add observability
             _ = simplification_error  # remove this after implementing observability
 
         return None
@@ -156,7 +151,6 @@ class FallbackManager:
                     }
 
         except Exception as partial_error:
-            #  Fallback manager debug - TODO: add observability
             _ = partial_error  # remove this after implementing observability
 
         return None
@@ -263,8 +257,6 @@ class FallbackManager:
                 # Keep only the newest 800 entries
                 self._fallback_cache = dict(sorted_items[-800:])
 
-            #  Fallback manager debug - TODO: add observability
-
         except Exception as cache_error:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
@@ -280,17 +272,14 @@ class FallbackManager:
     def register_fallback_function(self, name: str, function: FallbackFunction) -> None:
         """Register a custom fallback function."""
         self._fallback_functions[name] = function
-        #  Fallback manager debug - TODO: add observability
 
     def register_simplified_workflow(self, workflow_type: str, config: Dict[str, Any]) -> None:
         """Register a simplified workflow configuration."""
         self._simplified_workflows[workflow_type] = config
-        #  Fallback manager debug - TODO: add observability
 
     def clear_cache(self) -> None:
         """Clear the fallback cache."""
         self._fallback_cache.clear()
-        #  Fallback manager info - TODO: add observability
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get fallback cache statistics."""

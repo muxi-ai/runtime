@@ -90,7 +90,6 @@ class LocalDiscoveryService:
             self.discovery_port = port
             self.is_running = True
 
-            #  A2A discovery info - TODO: add observability
             #  A2A_MESSAGE_SENT
             #     f"Starting A2A Discovery Service for formation '{formation_name}' on port {port}"
             # )
@@ -144,7 +143,6 @@ class LocalDiscoveryService:
     async def stop(self):
         """Stop the discovery service."""
         try:
-            #  A2A discovery info - TODO: add observability
             #  A2A_MESSAGE_SENT
 
             observability.observe(
@@ -208,7 +206,6 @@ class LocalDiscoveryService:
             Registration result
         """
         try:
-            #  A2A discovery info - TODO: add observability
 
             observability.observe(
                 event_type=observability.SystemEvents.A2A_AGENT_REGISTERED,
@@ -249,8 +246,6 @@ class LocalDiscoveryService:
             # Persist if enabled
             if self.config.enable_persistence:
                 self._save_registry()
-
-            #  A2A discovery info - TODO: add observability
 
             result = {
                 "agent_id": agent_id,
@@ -298,7 +293,6 @@ class LocalDiscoveryService:
 
             if agent_id in self.agents:
                 del self.agents[agent_id]
-                #  A2A discovery info - TODO: add observability
 
                 # Persist if enabled
                 if self.config.enable_persistence:
@@ -622,7 +616,6 @@ class LocalDiscoveryService:
                 return False
 
         except Exception as e:
-            #  A2A discovery debug - TODO: add observability
             registration.status = "unreachable"
             registration.health_score = 0.0
 
@@ -700,7 +693,6 @@ class LocalDiscoveryService:
                     # Remove agents that haven't been seen for too long
                     if current_time - registration.last_seen > self.config.agent_timeout:
                         if registration.status != "unreachable":
-                            #  A2A discovery info - TODO: add observability
                             registration.status = "unreachable"
                             registration.health_score = 0.0
                             cleaned_up_agents += 1
@@ -810,8 +802,6 @@ class LocalDiscoveryService:
                     )
                     failed_agents += 1
 
-            #  A2A discovery info - TODO: add observability
-
             observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                 level=observability.EventLevel.INFO,
@@ -885,8 +875,6 @@ class LocalDiscoveryService:
 
             with open(registry_path, "w") as f:
                 json.dump(data, f, indent=2)
-
-            #  A2A discovery debug - TODO: add observability
 
             observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,

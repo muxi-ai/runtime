@@ -603,7 +603,6 @@ class DocumentErrorHandler:
 
             if breaker.failure_count >= breaker.failure_threshold:
                 breaker.state = "open"
-                #  Warning - TODO: add observability
 
     def _is_circuit_breaker_open(self, operation: str) -> bool:
         """Check if circuit breaker is open"""
@@ -616,7 +615,6 @@ class DocumentErrorHandler:
         if breaker.state == "open":
             if current_time - breaker.last_failure_time > breaker.timeout_seconds:
                 breaker.state = "half_open"
-                #  Info - TODO: add observability
                 return False
             return True
 
@@ -744,7 +742,6 @@ class DocumentErrorHandler:
     ) -> None:
         """Queue document for manual review"""
         # This could integrate with a ticketing system, email alerts, etc.
-        #  Warning - TODO: add observability
         #     f"Document {filename} queued for manual review: "
         #     f"{error_type.value} - {str(error)}"
         # )

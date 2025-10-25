@@ -12,8 +12,10 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.fernet import Fernet
+from cachetools import LRUCache
 
 from .resolver import CredentialResolver
+from ...services import observability
 from ...utils.user_resolution import resolve_user_identifier
 
 
@@ -35,6 +37,9 @@ class EncryptedCredentialResolver(CredentialResolver):
         llm_model: Optional[str] = None,
         db_manager=None,
         encryption_key: Optional[str] = None,
+        cache_ttl: int = 3600,  # Pass through to parent
+        cache_maxsize: int = 10000,  # Pass through to parent
+        fernet_cache_maxsize: int = 10000,  # Separate limit for Fernet instances
     ):
         """
         Initialize the encrypted credential resolver.
@@ -45,10 +50,31 @@ class EncryptedCredentialResolver(CredentialResolver):
             llm_model: Optional LLM model for extraction
             db_manager: Database manager instance for user resolution
             encryption_key: Optional custom encryption key (overrides formation_id)
+            cache_ttl: Time-to-live for cached credentials in seconds (default: 1 hour)
+            cache_maxsize: Maximum number of users in credential cache (default: 10,000)
+            fernet_cache_maxsize: Maximum Fernet instances to cache (default: 10,000)
         """
-        super().__init__(async_session_maker, formation_id, llm_model, db_manager)
+        super().__init__(async_session_maker, formation_id, llm_model, db_manager, cache_ttl, cache_maxsize)
         self.custom_key = encryption_key
-        self._fernet_cache = {}  # Cache Fernet instances per user
+        # Bounded LRU cache for Fernet instances (deterministic, no TTL needed)
+        # Fernet instances are small (~200 bytes) but should still be bounded
+        self._fernet_cache = LRUCache(maxsize=fernet_cache_maxsize)
+
+        # Warn if using formation_id as encryption key (security concern)
+        if not encryption_key:
+            observability.observe(
+                event_type=observability.SystemEvents.SECURITY_CONFIGURATION_WARNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "formation_id": formation_id,
+                    "encryption_key_source": "formation_id",
+                    "recommendation": "Provide explicit encryption_key for production deployments"
+                },
+                description=(
+                    "Using formation_id as encryption key. This is acceptable for development "
+                    "but consider providing an explicit encryption_key for production."
+                ),
+            )
 
     def derive_user_key(self, user_id: str) -> Fernet:
         """

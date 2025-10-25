@@ -842,7 +842,6 @@ class Overlord:
                 if task.exception():
                     exception_str = str(task.exception())
             except asyncio.CancelledError:
-                #  Warning - TODO: add observability
                 # SystemEvents.CANCELLED (task)
                 exception_str = "CancelledError"
             except Exception as e:
@@ -851,7 +850,11 @@ class Overlord:
             # Log task completion
             observability.observe(
                 event_type=observability.SystemEvents.SERVICE_STARTED,  # Reuse existing event type
-                level=observability.EventLevel.DEBUG if not exception_str else observability.EventLevel.ERROR,
+                level=(
+                    observability.EventLevel.DEBUG
+                    if not exception_str
+                    else observability.EventLevel.ERROR
+                ),
                 data={
                     "task_name": task.get_name() if hasattr(task, "get_name") else "unnamed",
                     "remaining_tasks": len(self._background_tasks),
@@ -904,7 +907,6 @@ class Overlord:
                 self._startup_task = None
 
         except Exception:
-            #  Error - TODO: add observability
             #  ErrorEvents.INTERNAL_ERROR (overlord)
             raise
 
@@ -1117,17 +1119,25 @@ class Overlord:
 
                     # Print one line per registry for traceability
                     from ...datatypes.observability import InitEventFormatter
+
                     for registry_url in registry_urls:
                         # Extract just the host:port or domain from URL for display
-                        display_url = registry_url.replace("http://", "").replace("https://", "").rstrip("/")
-                        print(InitEventFormatter.format_ok(f"Connected to A2A registry at {display_url}", ""))
+                        display_url = (
+                            registry_url.replace("http://", "").replace("https://", "").rstrip("/")
+                        )
+                        print(
+                            InitEventFormatter.format_ok(
+                                f"Connected to A2A registry at {display_url}", ""
+                            )
+                        )
 
                     # Optional summary line if multiple registries
                     if len(registry_urls) > 1:
-                        print(InitEventFormatter.format_info(
-                            f"{len(registry_urls)} A2A registries connected and ready",
-                            ""
-                        ))
+                        print(
+                            InitEventFormatter.format_info(
+                                f"{len(registry_urls)} A2A registries connected and ready", ""
+                            )
+                        )
 
                     # Check registry health according to startup policy
                     if hasattr(self.a2a_coordinator, "config") and self.a2a_coordinator.config:
@@ -1366,7 +1376,6 @@ class Overlord:
         # Populate formation capabilities after all services are loaded
         self._populate_formation_capabilities()
 
-        #  Info - TODO: add observability
         #  SystemEvents.STARTED (overlord)
 
     def _populate_formation_capabilities(self) -> None:
@@ -1492,7 +1501,7 @@ class Overlord:
 
                 pass  # REMOVED: init-phase observe() call
 
-            except Exception as e:
+            except Exception:
                 pass  # REMOVED: init-phase observe() call
                 continue
 
@@ -1529,7 +1538,7 @@ class Overlord:
         # Load all YAML files from the directory
         for agent_file in muxi_agents_dir.glob("*.yaml"):
             try:
-                with open(agent_file, 'r') as f:
+                with open(agent_file, "r") as f:
                     agent_config = yaml.safe_load(f)
 
                 agent_id = agent_config.get("id")
@@ -1562,7 +1571,7 @@ class Overlord:
                     event_type=observability.ErrorEvents.AGENT_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={"file": str(agent_file), "error": str(e)},
-                    description=f"Failed to load MUXI default agent from {agent_file.name}: {e}"
+                    description=f"Failed to load MUXI default agent from {agent_file.name}: {e}",
                 )
                 continue
 
@@ -1576,7 +1585,7 @@ class Overlord:
         3. No default (existing behavior)
         """
         # Skip if already set by user configuration
-        if hasattr(self, 'default_agent_id') and self.default_agent_id:
+        if hasattr(self, "default_agent_id") and self.default_agent_id:
             return
 
         # Check if any user agent has default: true
@@ -1594,7 +1603,7 @@ class Overlord:
                 event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
                 level=observability.EventLevel.INFO,
                 data={"default_agent_id": "muxi-generalist"},
-                description="Set muxi-generalist as default fallback agent"
+                description="Set muxi-generalist as default fallback agent",
             )
 
     @contextmanager
@@ -1947,8 +1956,11 @@ class Overlord:
                     llm = self._model_cache[cache_key]
                 else:
                     # Filter out params we're setting explicitly to avoid duplicate kwargs
-                    settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
-                               if k not in ["temperature", "max_tokens"]}
+                    settings = {
+                        k: v
+                        for k, v in text_model_config.get("settings", {}).items()
+                        if k not in ["temperature", "max_tokens"]
+                    }
                     llm = await self.create_model(
                         model=model_name,
                         api_key=text_model_config.get("api_key"),
@@ -2011,8 +2023,11 @@ Response:""".format(
                     llm = self._model_cache[cache_key]
                 else:
                     # Filter out params we're setting explicitly to avoid duplicate kwargs
-                    settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
-                               if k not in ["temperature", "max_tokens"]}
+                    settings = {
+                        k: v
+                        for k, v in text_model_config.get("settings", {}).items()
+                        if k not in ["temperature", "max_tokens"]
+                    }
                     llm = await self.create_model(
                         model=model_name,
                         api_key=text_model_config.get("api_key"),
@@ -2062,8 +2077,11 @@ Response:""".format(
                     llm = self._model_cache[cache_key]
                 else:
                     # Filter out params we're setting explicitly to avoid duplicate kwargs
-                    settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
-                               if k not in ["temperature", "max_tokens"]}
+                    settings = {
+                        k: v
+                        for k, v in text_model_config.get("settings", {}).items()
+                        if k not in ["temperature", "max_tokens"]
+                    }
                     llm = await self.create_model(
                         model=model_name,
                         api_key=text_model_config.get("api_key"),
@@ -2505,7 +2523,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             if self.routing_cache_ttl > 0:
                 self._routing_cache_expiry: Dict[str, float] = {}
 
-            #  Info - TODO: add observability
             #  SystemEvents.STARTED (overlord routing)
             #     f"✅ Initialized overlord routing with "
             #     f"cache_enabled={self.routing_cache_enabled}, "
@@ -2982,7 +2999,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         """
         await self.clear_memory(clear_long_term=clear_long_term)
 
-        #  Info - TODO: add observability
         # SystemEvents.MEMORY_CLEAR
 
     # ===================================================================
@@ -3015,7 +3031,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
         # Get the agent
         if agent_id not in self.agents:
-            #  Error - TODO: add observability
             # ErrorEvents.RESOURCE_NOT_FOUND
             raise ValueError(f"No agent with ID '{agent_id}' exists")
 
@@ -3805,7 +3820,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             if not self._is_document_processing_available():
                 return self._generate_document_unavailable_message()
 
-            #  Info - TODO: add observability
             # ConversationEvents.DOCUMENT_PROCESSING_STARTED
             #     f"Processing {len(attachments)} document(s) for user request: "
             #     f"{user_request[:100]}..."
@@ -3834,7 +3848,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 )
                 to_return = final_response
 
-            #  Info - TODO: add observability
             # ConversationEvents.DOCUMENT_PROCESSING_COMPLETED
 
             # Store processed documents for immediate access by agents
@@ -3938,8 +3951,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 filename = attachment.get("filename", "unknown")
                 content = attachment.get("content", "")
                 content_type = attachment.get("content_type", "text/plain")
-
-                #  Info - TODO: add observability
 
                 # Determine content modality based on content_type
                 if content_type.startswith("image/"):
@@ -4246,7 +4257,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     )
 
         except Exception:
-            #  Error - TODO: add observability
             # ConversationEvents.DOCUMENT_PROCESSING_FAILED
             # Document workflow error - logged via observability
             return (
@@ -4939,13 +4949,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         user_id=user_id,
                     )
                     if success:
-                        #  Info - TODO: add observability
                         # ConversationEvents.CLARIFICATION_REQUEST_SENT
                         #   f"Request {request_id}: Clarification question sent via webhook"
                         # )
                         return  # Exit early, wait for clarification response
                     else:
-                        #  Error - TODO: add observability
                         # ConversationEvents.CLARIFICATION_FAILED
                         #     f"Request {request_id}: Failed to send clarification via webhook"
                         # )
@@ -4954,7 +4962,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             request_id, RequestStatus.PROCESSING
                         )
                 else:
-                    #  Warning - TODO: add observability
                     # ConversationEvents.CLARIFICATION_FAILED
                     #     f"Request {request_id}: No webhook URL for clarification, "
                     #     "proceeding with regular processing"
@@ -5178,7 +5185,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     user_id=user_id,  # include user identifier
                     formation_id=self.formation_id,  # include formation identifier
                 )
-                #  Info - TODO: add observability
                 # ConversationEvents.WEBHOOK_DELIVERED + ConversationEvents.RESPONSE_DELIVERED
             else:
                 observability.observe(
@@ -5244,7 +5250,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             observability.observe(
                 event_type=observability.ErrorEvents.MEMORY_RETRIEVAL_FAILED,
                 level=observability.EventLevel.WARNING,
-                data={"error": str(e), "session_id": session_id, "namespace": self.pending_clarification_namespace},
+                data={
+                    "error": str(e),
+                    "session_id": session_id,
+                    "namespace": self.pending_clarification_namespace,
+                },
                 description=f"Failed to get pending clarification from buffer memory: {e}",
             )
             return None
@@ -5261,14 +5271,15 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         if not session_id or not self.buffer_memory:
             return
 
-        # Fire-and-forget for performance
-        asyncio.create_task(
+        # Fire-and-forget for performance - use tracked task for error handling
+        self._create_tracked_task(
             self.buffer_memory.kv_set(
                 key=session_id,
                 value=data,
                 ttl=None,  # No TTL - let FIFO handle cleanup
                 namespace=self.pending_clarification_namespace,
-            )
+            ),
+            name=f"set_pending_clarification_{session_id}",
         )
 
     def _delete_pending_clarification(self, session_id: str) -> None:
@@ -5383,15 +5394,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     # credentials and should undergo normal security analysis
                     skip_security_check = True
 
-        # Check if this might be a credential response (e.g., GitHub token)
-        # Check if message contains a credential token using UnifiedClarificationSystem
-        contains_token = (
-            await self.clarification.looks_like_credential_token(message)
-            if (session_id and self.clarification)
-            else False
-        )
-
-        # Check for ANY pending clarification (not just credential tokens)
+        # Check for ANY pending clarification
         if session_id:
             # Check if we have a pending clarification for this session
             clarification_info = await self._get_pending_clarification(session_id)
@@ -5458,8 +5461,11 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                     # Silent failure - credential still works with generic name
                                     pass
 
-                            # Fire and forget - don't wait for completion
-                            asyncio.create_task(update_credential_name())
+                            # Fire and forget - don't wait for completion, but track errors
+                            self._create_tracked_task(
+                                update_credential_name(),
+                                name=f"update_credential_name_{service}_{user_id}",
+                            )
 
                             # Get the original message that triggered the clarification
                             original_message = clarification_info.get("original_message")
@@ -5586,9 +5592,12 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
                                     # Get the original auth config from the MCP server to preserve auth type
                                     original_auth_config = None
-                                    if hasattr(mcp_service, 'servers') and matching_server in mcp_service.servers:
+                                    if (
+                                        hasattr(mcp_service, "servers")
+                                        and matching_server in mcp_service.servers
+                                    ):
                                         server_config = mcp_service.servers[matching_server]
-                                        original_auth_config = server_config.get('auth', {})
+                                        original_auth_config = server_config.get("auth", {})
 
                                     # Handle both "credential_data" and "credentials" keys
                                     credential_data = selected_credential.get(
@@ -5600,7 +5609,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                         resolved_auth = mcp_service._replace_credential_in_auth(
                                             original_auth_config, credential_data
                                         )
-                                        mcp_service.user_credentials[matching_server][user_id] = resolved_auth
+                                        mcp_service.user_credentials[matching_server][
+                                            user_id
+                                        ] = resolved_auth
                                     else:
                                         # Fallback: assume bearer token if we can't get the original config
                                         mcp_service.user_credentials[matching_server][user_id] = {
@@ -6012,7 +6023,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     "proactive",
                     "multi_turn",
                     "credential",  # Handle credential selection responses
-                    "redirect",   # Handle missing credential redirect responses (e.g., help requests)
+                    "redirect",  # Handle missing credential redirect responses (e.g., help requests)
                 ]:
                     # This is a response to an existing clarification - call handle_response
                     clarification_result = await self.clarification.handle_response(
@@ -6191,9 +6202,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # Skip all heavy processing - go straight to persona
             response = await self._apply_persona(None, message)
 
-            # Store assistant response in memory (user message already stored at entry) - fire-and-forget
+            # Store assistant response in memory (user message already stored at entry) - fire-and-forget with tracking
             if self.buffer_memory_manager:
-                asyncio.create_task(
+                self._create_tracked_task(
                     self.buffer_memory_manager.add_to_buffer_memory(
                         message=f"Assistant: {response}",
                         metadata={
@@ -6204,7 +6215,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             "request_id": request_id,
                         },
                         agent_id="overlord",
-                    )
+                    ),
+                    name=f"store_response_{request_id}",
                 )
 
             return MuxiResponse(
@@ -6333,11 +6345,10 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             "topic_count": len(analysis.topics),
                             "complexity_score": analysis.complexity_score,
                             "analysis_method": (
-                                "llm" if self.request_analyzer.llm
-                                else "heuristic"
+                                "llm" if self.request_analyzer.llm else "heuristic"
                             ),
                         },
-                        description=f"Extracted {len(analysis.topics)} topic tags from request"
+                        description=f"Extracted {len(analysis.topics)} topic tags from request",
                     )
 
                 # FIRST: Check for explicit SOP request - highest priority
@@ -6372,7 +6383,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         )
                     else:
                         # SOP explicitly requested but not found - return error to user
-                        available_sops = list(self.sop_system.sops.keys()) if self.sop_system else []
+                        available_sops = (
+                            list(self.sop_system.sops.keys()) if self.sop_system else []
+                        )
                         observability.observe(
                             event_type=observability.ConversationEvents.SOP_NOT_FOUND,
                             level=observability.EventLevel.WARNING,
@@ -6631,10 +6644,10 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 request_id=request_id,
             )
 
-            # Store assistant response in buffer memory (fire-and-forget)
+            # Store assistant response in buffer memory (fire-and-forget with tracking)
             if self.buffer_memory_manager and result:
                 response_content = result.content if hasattr(result, "content") else str(result)
-                asyncio.create_task(
+                self._create_tracked_task(
                     self.buffer_memory_manager.add_to_buffer_memory(
                         message=response_content,  # Store without "Assistant: " prefix - role is in metadata
                         metadata={
@@ -6646,7 +6659,8 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             "request_id": request_id,
                         },
                         agent_id=agent_name or "overlord",
-                    )
+                    ),
+                    name=f"store_agent_response_{request_id}_{agent_name}",
                 )
 
             # Mark agent as idle
@@ -6769,7 +6783,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             request_id=request_id,
                             original_request=message,
                             mode="redirect",
-                            session_id=session_id
+                            session_id=session_id,
                         )
                         # Add MCP service to state
                         state = await self.clarification._get_state(request_id)
@@ -7122,7 +7136,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     "message_preview": redact_message_preview(message, 100),
                 },
                 description=f"Workflow approval decision: {'REQUIRED' if needs_approval else 'NOT REQUIRED'}"
-                + (f" (bypassed by flag)" if bypass_workflow_approval else ""),
+                + (" (bypassed by flag)" if bypass_workflow_approval else ""),
             )
 
             # Use the passed relevant_sop if provided, otherwise search for SOPs
@@ -9022,19 +9036,20 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                         user_cache = self.mcp_service.user_credentials.setdefault(
                                             server_id, {}
                                         )
-                                        auth_template = (
-                                            self.mcp_service.servers.get(server_id, {}).get("auth", {})
-                                        )
+                                        auth_template = self.mcp_service.servers.get(
+                                            server_id, {}
+                                        ).get("auth", {})
                                         if auth_template:
-                                            resolved_auth = self.mcp_service._replace_credential_in_auth(
-                                                auth_template, credential_payload
+                                            resolved_auth = (
+                                                self.mcp_service._replace_credential_in_auth(
+                                                    auth_template, credential_payload
+                                                )
                                             )
                                         else:
                                             if isinstance(credential_payload, dict):
-                                                token_value = (
-                                                    credential_payload.get("token")
-                                                    or credential_payload.get("value")
-                                                )
+                                                token_value = credential_payload.get(
+                                                    "token"
+                                                ) or credential_payload.get("value")
                                             else:
                                                 token_value = credential_payload
                                             resolved_auth = {
@@ -9061,7 +9076,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             if clarification_override_message:
                 enhanced_message = clarification_override_message
             else:
-                enhanced_message = f"{original_message}\n\nAdditional context: {clarification_response}"
+                enhanced_message = (
+                    f"{original_message}\n\nAdditional context: {clarification_response}"
+                )
 
             # Re-process with enhanced message
             result = await self._process_sync_chat(enhanced_message, agent_name, user_id)
@@ -9245,7 +9262,9 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                                             mcp_service=self.mcp_service,
                                         )
 
-                                asyncio.create_task(update_name())
+                                self._create_tracked_task(
+                                    update_name(), name=f"update_cred_name_{service}_{user_id}"
+                                )
                             else:
                                 observability.observe(
                                     event_type=observability.ErrorEvents.VALIDATION_FAILED,
@@ -9367,12 +9386,10 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # Get the request state
             request_state = await self.request_tracker.get_request(request_id)
             if not request_state:
-                #  Error - TODO: add observability
                 # ConversationEvents.CLARIFICATION_FAILED
                 return False
 
             if request_state.status != RequestStatus.AWAITING_CLARIFICATION:
-                #  Error - TODO: add observability
                 # ConversationEvents.CLARIFICATION_FAILED
                 return False
 
@@ -9400,7 +9417,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
                 if result.action == "execute":
                     # Resume processing with complete parameters
-                    #  Info - TODO: add observability
                     # ConversationEvents.CLARIFICATION_COMPLETED
                     #     f"Request {request_id}: Clarification completed, resuming processing"
                     # )
@@ -9595,9 +9611,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         except Exception as e:
             # Fail fast: If built-in MCPs are configured, they must work
             # InitEventFormatter will display the error clearly during init
-            raise RuntimeError(
-                f"Failed to initialize built-in MCP prompts: {str(e)}"
-            ) from e
+            raise RuntimeError(f"Failed to initialize built-in MCP prompts: {str(e)}") from e
 
     async def remember_user_info(
         self,

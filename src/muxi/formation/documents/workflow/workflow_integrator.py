@@ -84,8 +84,6 @@ class DocumentWorkflowIntegrator:
         # Task generation prompts
         self._task_prompts = self._initialize_task_prompts()
 
-        #  Info - TODO: add observability
-
     def _initialize_task_prompts(self) -> Dict[str, str]:
         """Initialize task generation prompts"""
         return {
@@ -166,7 +164,6 @@ class DocumentWorkflowIntegrator:
         Returns:
             List of DocumentTask objects
         """
-        #  Info - TODO: add observability
 
         categories = task_categories or ["action_tasks", "decision_tasks", "review_tasks"]
         all_tasks = []
@@ -195,7 +192,6 @@ class DocumentWorkflowIntegrator:
         for task in all_tasks:
             self._generated_tasks[task.task_id] = task
 
-        #  Info - TODO: add observability
         return all_tasks
 
     async def enrich_workflow_with_document(
@@ -217,7 +213,6 @@ class DocumentWorkflowIntegrator:
         Returns:
             WorkflowEnrichment object with insights and suggestions
         """
-        #  Info - TODO: add observability
 
         # Analyze document for workflow insights
         insights_prompt = f"""
@@ -259,7 +254,6 @@ class DocumentWorkflowIntegrator:
             # Store enrichment
             self._workflow_enrichments[enrichment.enrichment_id] = enrichment
 
-            #  Info - TODO: add observability
             return enrichment
 
         except Exception as e:
@@ -307,7 +301,6 @@ class DocumentWorkflowIntegrator:
             response = await self.llm_model.generate_response(follow_up_prompt)
             suggestions = self._parse_follow_up_suggestions(response)
 
-            #  Info - TODO: add observability
             #     f"Generated {len(suggestions)} follow-up suggestions for document {document_id}"
             # )
             return suggestions

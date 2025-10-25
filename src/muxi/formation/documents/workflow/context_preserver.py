@@ -108,7 +108,6 @@ class DocumentContextPreserver:
         # Load existing data
         self._load_contexts()
 
-        #  Context preserver info - TODO: add observability
         #     f"Initialized DocumentContextPreserver with storage at {self.storage_path}"
         # )
 
@@ -172,7 +171,6 @@ class DocumentContextPreserver:
         # Save contexts
         await self._save_contexts()
 
-        #  Context preserver info - TODO: add observability
         #     f"Preserved context for document {document_id} in conversation {conversation_id}"
         # )
         return document_id
@@ -274,7 +272,6 @@ class DocumentContextPreserver:
         # Save snapshots
         await self._save_snapshots()
 
-        #  Context preserver info - TODO: add observability
         return snapshot_id
 
     async def restore_context_snapshot(self, snapshot_id: str) -> Optional[ContextSnapshot]:
@@ -288,14 +285,12 @@ class DocumentContextPreserver:
             ContextSnapshot object if found and valid
         """
         if snapshot_id not in self._context_snapshots:
-            #  Context preserver warning - TODO: add observability
             return None
 
         snapshot = self._context_snapshots[snapshot_id]
 
         # Check if snapshot has expired
         if snapshot.expires_at and time.time() > snapshot.expires_at:
-            #  Context preserver warning - TODO: add observability
             del self._context_snapshots[snapshot_id]
             await self._save_snapshots()
             return None
@@ -304,7 +299,6 @@ class DocumentContextPreserver:
         for doc_context in snapshot.document_contexts:
             self._document_contexts[doc_context.document_id] = doc_context
 
-        #  Context preserver info - TODO: add observability
         return snapshot
 
     def get_context_statistics(self) -> Dict[str, Any]:
@@ -476,7 +470,6 @@ class DocumentContextPreserver:
 
         for snapshot_id in expired_snapshots:
             del self._context_snapshots[snapshot_id]
-            #  Context preserver info - TODO: add observability
 
         # Remove oldest snapshots if over limit
         if len(self._context_snapshots) > self.max_snapshots:
@@ -488,7 +481,6 @@ class DocumentContextPreserver:
             for i in range(excess_count):
                 snapshot_id = sorted_snapshots[i][0]
                 del self._context_snapshots[snapshot_id]
-                #  Context preserver info - TODO: add observability
 
     async def _save_contexts(self):
         """Save document and conversation contexts to storage"""
@@ -604,8 +596,6 @@ class DocumentContextPreserver:
                 for doc_id, ctx_data in doc_contexts_data.items():
                     self._document_contexts[doc_id] = DocumentContext(**ctx_data)
 
-                #  Context preserver info - TODO: add observability
-
             # Load conversation contexts
             conv_contexts_file = self.storage_path / "conversation_contexts.json"
             if conv_contexts_file.exists():
@@ -614,8 +604,6 @@ class DocumentContextPreserver:
 
                 for conv_id, ctx_data in conv_contexts_data.items():
                     self._conversation_contexts[conv_id] = ConversationContext(**ctx_data)
-
-                #  Context preserver info - TODO: add observability
 
             # Load snapshots
             snapshots_file = self.storage_path / "context_snapshots.json"
@@ -631,8 +619,6 @@ class DocumentContextPreserver:
                     snap_data["document_contexts"] = doc_contexts
 
                     self._context_snapshots[snap_id] = ContextSnapshot(**snap_data)
-
-                #  Context preserver info - TODO: add observability
 
             # Rebuild access maps
             for conv_id, ctx in self._conversation_contexts.items():

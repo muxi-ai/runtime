@@ -188,27 +188,23 @@ class RecoveryStrategist:
             # Check for custom strategy override
             if error_context.error_type in self.config.custom_strategies:
                 strategy = self.config.custom_strategies[error_context.error_type]
-                #  Debug - TODO: add observability
                 return strategy
 
             # Get candidate strategies
             candidates = available_strategies or self._get_candidate_strategies(error_context)
 
             if not candidates:
-                #  Warning - TODO: add observability
                 return RecoveryStrategy.ABORT_WORKFLOW
 
             # Filter strategies based on configuration
             filtered_candidates = self._filter_strategies_by_config(candidates)
 
             if not filtered_candidates:
-                #  Warning - TODO: add observability
                 return candidates[0]
 
             # Select best strategy based on performance and context
             selected_strategy = await self._select_best_strategy(filtered_candidates, error_context)
 
-            #  Debug - TODO: add observability
             #  f"Selected {selected_strategy.value} for error {error_context.error_type.value} "
             #  f"(severity: {error_context.severity.value}, attempt: {error_context.attempt_count})"
             # )
@@ -319,8 +315,6 @@ class RecoveryStrategist:
         # Select strategy with highest score
         best_strategy = max(strategy_scores.keys(), key=lambda s: strategy_scores[s])
 
-        #  Debug - TODO: add observability
-
         return best_strategy
 
     async def _calculate_strategy_score(
@@ -397,7 +391,6 @@ class RecoveryStrategist:
             1 - alpha
         ) * current_performance + alpha * new_result
 
-        #  Debug - TODO: add observability
         #     f"Updated strategy performance: {performance_key} = "
         #     f"{self._strategy_performance[performance_key]:.3f} (success: {success})"
         # )
@@ -409,14 +402,12 @@ class RecoveryStrategist:
     def reset_strategy_performance(self) -> None:
         """Reset all strategy performance metrics."""
         self._strategy_performance.clear()
-        #  Info - TODO: add observability
 
     def add_custom_strategy_mapping(
         self, error_type: ErrorType, strategies: List[RecoveryStrategy]
     ) -> None:
         """Add or update custom strategy mapping for an error type."""
         self.default_strategies[error_type] = strategies
-        #  Debug - TODO: add observability
 
     def get_available_strategies(self, error_type: ErrorType) -> List[RecoveryStrategy]:
         """Get available strategies for a specific error type."""

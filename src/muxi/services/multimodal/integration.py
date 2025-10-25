@@ -88,11 +88,9 @@ class WorkflowMultiModalProcessor:
             # Set up content flow between tasks
             await self._setup_content_flow(workflow)
 
-            #  Info - TODO: add observability
             return workflow
 
         except Exception as e:
-            #  Error - TODO: add observability
             _ = e  # remove this after implementing observability
             return workflow
 
@@ -148,7 +146,6 @@ class WorkflowMultiModalProcessor:
             )
 
         except Exception as e:
-            #  Error - TODO: add observability
             _ = e  # remove this after implementing observability
 
     def _get_required_modalities(self, task: SubTask) -> List[ModalityType]:
@@ -358,7 +355,6 @@ class TaskInputProcessor:
             return processed_inputs
 
         except Exception as e:
-            #  Error - TODO: add observability
             _ = e  # remove this after implementing observability
             return []
 
@@ -408,7 +404,6 @@ class TaskInputProcessor:
             modality = self._detect_modality_from_mime(mime_type)
 
             if modality is None:
-                #  Warning - TODO: add observability
                 return None
 
             # Handle local file vs URL
@@ -418,7 +413,6 @@ class TaskInputProcessor:
                 file_size = file_path_obj.stat().st_size
 
                 if file_size > MAX_FILE_SIZE_BYTES:
-                    #  Warning - TODO: add observability
                     # File too large, reject for security
                     return None
 
@@ -438,7 +432,6 @@ class TaskInputProcessor:
             else:
                 # Validate URL before storing
                 if not self._validate_url(file_path):
-                    #  Warning - TODO: add observability
                     # Invalid or malicious URL, reject for security
                     return None
 
@@ -453,7 +446,6 @@ class TaskInputProcessor:
             return content_item
 
         except Exception as e:
-            #  Error - TODO: add observability
             _ = e  # remove this after implementing observability
             return None
 
@@ -541,7 +533,6 @@ class TaskInputProcessor:
             )
 
         except Exception as e:
-            #  Error - TODO: add observability
             _ = e  # remove this after implementing observability
             return None
 
@@ -573,7 +564,6 @@ class TaskInputProcessor:
             )
 
         except Exception as e:
-            #  Error - TODO: add observability
             _ = e  # remove this after implementing observability
             return None
 
@@ -621,7 +611,6 @@ class TaskOutputProcessor:
             return processed_outputs
 
         except Exception as e:
-            #  Error - TODO: add observability
             _ = e  # remove this after implementing observability
             return []
 
@@ -708,7 +697,6 @@ class TaskOutputProcessor:
                 )
 
         except Exception as e:
-            #  Error - TODO: add observability
             return MultiModalProcessingResult(
                 unified_representation={"error": str(e)}, modality_results={}
             )

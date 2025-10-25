@@ -298,7 +298,6 @@ class WorkingMemory:
             except Exception as e:
                 # Handle embedding generation failures gracefully
                 _ = e  # remove this after implementing observability
-                #  Embedding generation error - TODO: add observability
                 item["embedding"] = None
         else:
             # No embedding if model is not available
@@ -346,8 +345,6 @@ class WorkingMemory:
         self.index_count = new_count
         self.needs_rebuild = False
 
-        #  FAISS index rebuild - TODO: add observability
-
     def check_memory_usage_and_cleanup(self) -> None:
         """
         Check memory usage and perform FIFO cleanup if needed.
@@ -393,7 +390,6 @@ class WorkingMemory:
                     kv_item_size_mb = (key_size + value_size) / (1024**2)
                     estimated_usage_mb += kv_item_size_mb
 
-            #  Debug - TODO: add observability
             #     f"Buffer memory usage: {estimated_usage_mb:.2f}MB, "
             #     f"configured limit: {self.max_memory_mb}MB"
             # )
@@ -402,7 +398,6 @@ class WorkingMemory:
             if estimated_usage_mb > self.max_memory_mb and buffer_namespace_indices:
                 # Calculate how many buffer items to remove (25% of buffer items)
                 items_to_remove = max(1, len(buffer_namespace_indices) // 4)
-                #  Info - TODO: add observability
                 #     f"Buffer memory limit ({self.max_memory_mb}MB) exceeded. "
                 #     f"Removing {items_to_remove} oldest items from buffer namespace"
                 # )
@@ -456,12 +451,10 @@ class WorkingMemory:
                     for _, key in namespace_items[:items_to_remove]:
                         del self.kv_store[key]
                         # Log the removal for observability
-                        #  KV FIFO cleanup - TODO: add observability
                         #     f"Removed KV item {key} from namespace {namespace}"
                         # )
 
         except Exception as e:
-            #  Buffer cleanup error - TODO: add observability
             _ = e  # remove this after implementing observability
 
     def _recency_search(
@@ -1145,7 +1138,6 @@ def fifo_cleanup_task(buffer_memory: "WorkingMemory") -> None:
     """
     import time
 
-    #  Info - TODO: add observability
     #     f"Starting FIFO cleanup task with {buffer_memory.fifo_interval_min} minute interval"
     # )
 

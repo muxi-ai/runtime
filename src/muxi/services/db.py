@@ -223,10 +223,11 @@ class DatabaseManager:
         """
         if self.database_type == "postgresql":
             # PostgreSQL configuration with connection pooling
+            # Increased from 5/10 to 20/40 for production async workloads
             engine = create_engine(
                 self.connection_string,
-                pool_size=5,
-                max_overflow=10,
+                pool_size=20,  # Increased for multi-agent concurrent operations
+                max_overflow=40,  # Total max connections: 60
                 pool_timeout=30,
                 pool_recycle=1800,
                 echo=False,  # Set to True for SQL debugging
@@ -268,13 +269,14 @@ class DatabaseManager:
 
         if self.database_type == "postgresql":
             # PostgreSQL async configuration with connection pooling
+            # Higher limits than sync due to async concurrency patterns
             engine = create_async_engine(
                 async_connection_string,
-                pool_size=20,  # Increased for async operations
-                max_overflow=40,  # Increased for async operations
+                pool_size=50,  # Increased for high async concurrency
+                max_overflow=100,  # Total max connections: 150
                 pool_timeout=30,
                 pool_recycle=1800,
-                pool_pre_ping=True,
+                pool_pre_ping=True,  # Verify connections before use
                 echo=False,  # Set to True for SQL debugging
             )
         else:  # SQLite

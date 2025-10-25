@@ -111,12 +111,10 @@ class FormationLoader:
 
         if path_obj.is_file():
             # Flattened formation file
-            #  Formation loading - TODO: add observability
             #  CONFIG_FORMATION_LOADED
             return await self._load_flattened_formation(path, secrets_manager)
         elif path_obj.is_dir():
             # Modular formation directory
-            #  Modular formation loading - TODO: add observability
             #  CONFIG_FORMATION_LOADED
             return await self._load_modular_formation(path, secrets_manager)
         else:
@@ -258,7 +256,6 @@ class FormationLoader:
         """
         agents_dir = formation_dir / "agents"
         if not agents_dir.exists():
-            #  Agent discovery - TODO: add observability
             #  AGENT_MESSAGE_PROCESSING
             return
 
@@ -268,7 +265,6 @@ class FormationLoader:
             agent_files.extend(agents_dir.glob(pattern))
 
         if not agent_files:
-            #  Agent config discovery - TODO: add observability
             #  AGENT_MESSAGE_PROCESSING
             return
 
@@ -279,7 +275,6 @@ class FormationLoader:
         # Load and merge each agent configuration
         for agent_file in sorted(agent_files):
             try:
-                #  Agent config loading - TODO: add observability
                 #  AGENT_MESSAGE_PROCESSING
                 agent_config = self.config_loader.load(str(agent_file))
 
@@ -321,7 +316,6 @@ class FormationLoader:
                     f"⚠️  Warning: Failed to load agent file '{agent_file.name}': {type(e).__name__}: {str(e)}"
                 )
                 continue
-        #  Agent discovery complete - TODO: add observability
         #  AGENT_MESSAGE_PROCESSING
 
     def _filter_inline_agents_by_active(self, config: Dict[str, Any]) -> None:
@@ -398,7 +392,6 @@ class FormationLoader:
         """
         mcp_dir = formation_dir / "mcp"
         if not mcp_dir.exists():
-            #  MCP discovery - TODO: add observability
             #  MCP_SERVER_CONNECTING
             return
 
@@ -408,7 +401,6 @@ class FormationLoader:
             mcp_files.extend(mcp_dir.glob(pattern))
 
         if not mcp_files:
-            #  MCP config discovery - TODO: add observability
             #  MCP_SERVER_CONNECTING
             return
 
@@ -421,7 +413,6 @@ class FormationLoader:
         # Load and merge each MCP server configuration
         for mcp_file in sorted(mcp_files):
             try:
-                #  MCP config loading - TODO: add observability
                 #  MCP_SERVER_CONNECTING
                 mcp_config = self.config_loader.load(str(mcp_file))
 
@@ -466,7 +457,6 @@ class FormationLoader:
                 )
                 continue
 
-        #  Info - TODO: add observability
         #  MCP_SERVER_CONNECTING
         #     f"✅ Discovered {len(config['mcp']['servers'])} MCP servers from mcp/ directory"
         # )
@@ -491,7 +481,6 @@ class FormationLoader:
         """
         a2a_dir = formation_dir / "a2a"
         if not a2a_dir.exists():
-            #  A2A discovery - TODO: add observability
             #  A2A_MESSAGE_SENT
             return
 
@@ -501,7 +490,6 @@ class FormationLoader:
             a2a_files.extend(a2a_dir.glob(pattern))
 
         if not a2a_files:
-            #  A2A config discovery - TODO: add observability
             #  A2A_MESSAGE_SENT
             return
 
@@ -516,7 +504,6 @@ class FormationLoader:
         # Load and merge each A2A service configuration
         for a2a_file in sorted(a2a_files):
             try:
-                #  A2A config loading - TODO: add observability
                 #  A2A_MESSAGE_SENT
                 a2a_config = self.config_loader.load(str(a2a_file))
 
@@ -556,7 +543,6 @@ class FormationLoader:
                 )
                 continue
 
-        #  Info - TODO: add observability
         #  A2A_MESSAGE_SENT
         #     f"✅ Discovered {len(config['a2a']['outbound']['services'])} "
         #     "A2A services from a2a/ directory"

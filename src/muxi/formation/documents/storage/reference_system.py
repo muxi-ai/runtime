@@ -81,8 +81,6 @@ class DocumentReferenceSystem:
         # Load existing references
         self._load_references()
 
-        #  Info - TODO: add observability
-
     async def create_reference(
         self,
         source_document_id: str,
@@ -129,7 +127,6 @@ class DocumentReferenceSystem:
         # Persist changes
         await self._persist_references()
 
-        #  Info - TODO: add observability
         return reference_id
 
     async def create_lineage(
@@ -172,7 +169,6 @@ class DocumentReferenceSystem:
         # Persist changes
         await self._persist_references()
 
-        #  Info - TODO: add observability
         return lineage_id
 
     async def add_derived_reference(self, lineage_id: str, derived_reference_id: str) -> bool:
@@ -193,7 +189,6 @@ class DocumentReferenceSystem:
         lineage.derived_references.append(derived_reference_id)
         await self._persist_references()
 
-        #  Info - TODO: add observability
         return True
 
     async def get_references_for_document(self, document_id: str) -> List[DocumentReference]:
@@ -460,8 +455,6 @@ class DocumentReferenceSystem:
                     if lineage.final_output:
                         output_hash = self._hash_content(lineage.final_output)
                         self._output_to_lineage[output_hash] = lineage_id
-
-                #  Info - TODO: add observability
 
         except Exception as e:
             observability.observe(

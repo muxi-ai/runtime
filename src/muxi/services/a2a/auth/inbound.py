@@ -111,7 +111,6 @@ class A2AInboundAuthenticator:
                     description="No SecretsManager provided - no credentials will be available",
                     data={"auth_mode": self.auth_mode.value},
                 )
-                #  A2A inbound auth warning - TODO: add observability
 
             # Emit successful initialization event
             observability.observe(
@@ -293,10 +292,7 @@ class A2AInboundAuthenticator:
                     description="SecretsManager not available for credential loading",
                     data={"auth_mode": self.auth_mode.value},
                 )
-                #  A2A inbound auth warning - TODO: add observability
                 return
-
-            #  A2A inbound auth debug - TODO: add observability
 
             # Load credential configurations from environment or config file
             credential_configs = self._load_credential_configurations()
@@ -335,7 +331,6 @@ class A2AInboundAuthenticator:
                             },
                         )
 
-                        #  A2A inbound auth debug - TODO: add observability
                         successful_loads += 1
                     else:
                         # Emit warning for missing credentials
@@ -345,7 +340,6 @@ class A2AInboundAuthenticator:
                             description=f"No credentials found for {client_id}",
                             data={"client_id": client_id, "auth_type": auth_type.value},
                         )
-                        #  A2A inbound auth warning - TODO: add observability
                         failed_loads += 1
 
                 except Exception as e:
@@ -356,7 +350,6 @@ class A2AInboundAuthenticator:
                         description=f"Failed to load credentials for {client_id}: {str(e)}",
                         data={"client_id": client_id, "error": str(e)},
                     )
-                    #  A2A inbound auth warning - TODO: add observability
                     failed_loads += 1
 
             # Emit summary event
@@ -403,7 +396,6 @@ class A2AInboundAuthenticator:
                 description=f"Failed to get secret {secret_name}: {str(e)}",
                 data={"secret_name": secret_name, "auth_type": auth_type.value, "error": str(e)},
             )
-            #  A2A inbound auth warning - TODO: add observability
 
         return None
 
@@ -425,7 +417,6 @@ class A2AInboundAuthenticator:
                         description=f"Secret {secret_name} not found for Basic auth {key}",
                         data={"secret_name": secret_name, "key": key, "auth_type": "basic"},
                     )
-                    #  A2A inbound auth warning - TODO: add observability
                     return None
             except Exception as e:
                 # Emit error event for secret retrieval failure
@@ -440,7 +431,6 @@ class A2AInboundAuthenticator:
                         "error": str(e),
                     },
                 )
-                #  A2A inbound auth warning - TODO: add observability
                 return None
 
         # Return credentials only if we have both username and password
@@ -501,8 +491,6 @@ class A2AInboundAuthenticator:
                     "total_credentials": len(self.credentials),
                 },
             )
-
-            #  A2A inbound auth debug - TODO: add observability
 
         except Exception as e:
             # Emit error event for credential addition failure
@@ -874,8 +862,6 @@ class A2AInboundAuthenticator:
                     "remaining_clients": len(self.credentials),
                 },
             )
-
-            #  A2A inbound auth info - TODO: add observability
 
         except Exception as e:
             # Emit error event for client removal failure

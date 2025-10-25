@@ -135,7 +135,6 @@ class DocumentMetadataStore:
         # Persist to storage
         await self._persist_metadata()
 
-        #  Info - TODO: add observability
         return metadata
 
     async def get_document_metadata(self, document_id: str) -> Optional[DocumentMetadata]:
@@ -292,7 +291,6 @@ class DocumentMetadataStore:
         # Persist changes
         await self._persist_metadata()
 
-        #  Info - TODO: add observability
         return True
 
     async def delete_document_metadata(self, document_id: str) -> bool:
@@ -318,7 +316,6 @@ class DocumentMetadataStore:
         # Persist changes
         await self._persist_metadata()
 
-        #  Info - TODO: add observability
         return True
 
     def get_storage_stats(self) -> Dict[str, Any]:
@@ -435,7 +432,6 @@ class DocumentMetadataStore:
                     self._metadata_cache[doc_id] = metadata
                     self._update_indexes(metadata)
 
-                #  Info - TODO: add observability
         except Exception as e:
             observability.observe(
                 event_type=observability.ErrorEvents.WARNING,

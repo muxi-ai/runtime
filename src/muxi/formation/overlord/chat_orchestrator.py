@@ -229,7 +229,10 @@ class ChatOrchestrator:
                         "clarification_type": pending_clarification.get("type"),
                         "clarification_turn": "response",
                     },
-                    description=f"Reusing request_id for multi-turn clarification (type: {pending_clarification.get('type')})",
+                    description=(
+                        "Reusing request_id for multi-turn clarification "
+                        f"(type: {pending_clarification.get('type')})"
+                    ),
                 )
             else:
                 # Fallback if somehow request_id is missing
@@ -285,7 +288,7 @@ class ChatOrchestrator:
             agent_exists = agent_name is None or agent_name in self.overlord.agents
             has_files = files is not None
             file_count = len(files) if files else 0
-            
+
             observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_VALIDATED,
                 level=observability.EventLevel.INFO,
@@ -340,8 +343,8 @@ class ChatOrchestrator:
                     )
                     file_results = f"[File Processing]: Failed to process {len(files)} file(s)"
 
-            # Store ORIGINAL user message in buffer memory (fire-and-forget)
-            asyncio.create_task(
+            # Store ORIGINAL user message in buffer memory (fire-and-forget with tracking)
+            self.overlord._create_tracked_task(
                 self._store_user_message_async(
                     message=message,  # Store original message, not enhanced
                     timestamp=timestamp,
@@ -349,7 +352,8 @@ class ChatOrchestrator:
                     user_id=user_id,
                     session_id=session_id,
                     request_id=request_id,
-                )
+                ),
+                name=f"store_user_message_{request_id}"
             )
 
             # Enhance message with conversation context (memories + buffer)
@@ -379,14 +383,15 @@ class ChatOrchestrator:
                     description="Starting background user information extraction task",
                 )
 
-                asyncio.create_task(
+                self.overlord._create_tracked_task(
                     self._extract_user_information_async(
                         user_message=message,  # Original message for storage
                         agent_response="",  # No response yet
                         user_id=user_id,
                         agent_id=agent_name or "overlord",
                         enhanced_message=enhanced_message,  # Enhanced message for context
-                    )
+                    ),
+                    name=f"extract_user_info_{request_id}"
                 )
 
             # Use provided values or formation defaults
@@ -654,8 +659,8 @@ class ChatOrchestrator:
                 # Use repr as fallback to ensure we have a string
                 content_for_storage = repr(result.content)
 
-            # Always call storage with valid data
-            asyncio.create_task(
+            # Always call storage with valid data (tracked)
+            self.overlord._create_tracked_task(
                 self._store_assistant_response_async(
                     content=content_for_storage,
                     timestamp=time.time(),
@@ -663,7 +668,8 @@ class ChatOrchestrator:
                     user_id=user_id,
                     session_id=session_id,
                     request_id=request_id,
-                )
+                ),
+                name=f"store_assistant_response_{request_id}"
             )
 
         # ALWAYS return MuxiResponse objects

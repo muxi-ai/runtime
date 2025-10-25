@@ -115,7 +115,6 @@ class DocumentChunkManager:
         try:
             nltk.data.find("tokenizers/punkt")
         except LookupError:
-            #  Info - TODO: add observability
             nltk.download("punkt", quiet=True)
 
     async def chunk_document(
@@ -144,12 +143,9 @@ class DocumentChunkManager:
         if document_id is None:
             document_id = self._generate_document_id(filename)
 
-        #  Info - TODO: add observability
-
         # Select chunking strategy
         if strategy == "adaptive":
             strategy = self._determine_chunk_strategy(content, filename)
-            #  Info - TODO: add observability
 
         # Execute chunking based on strategy
         if strategy == "semantic":
@@ -159,7 +155,6 @@ class DocumentChunkManager:
         elif strategy == "fixed":
             chunks = await self._fixed_chunking(content)
         else:
-            #  Warning - TODO: add observability
             chunks = await self._adaptive_chunking(content)
 
         # Convert to DocumentChunk objects
@@ -198,7 +193,6 @@ class DocumentChunkManager:
             )
             document_chunks.append(chunk)
 
-        #  Info - TODO: add observability
         return document_chunks
 
     def _determine_chunk_strategy(self, content: str, filename: str) -> str:
