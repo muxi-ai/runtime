@@ -11,7 +11,7 @@ Usage:
         --formation-id myformation \
         --old-salt "old-salt-value" \
         --new-salt "new-salt-value" \
-        [--db-url "postgresql://..."] \
+        [--db-url DATABASE_URL] \
         [--dry-run]
 
 Example:
@@ -22,12 +22,12 @@ Example:
         --new-salt "production-salt-2025" \
         --dry-run
 
-    # Actual rotation
+    # Actual rotation (use your actual database URL)
     python scripts/rotate_credential_keys.py \
         --formation-id production-formation \
         --old-salt "muxi-user-credentials-salt-v1" \
         --new-salt "production-salt-2025" \
-        --db-url "postgresql://user:pass@localhost/muxi"
+        --db-url "$DATABASE_URL"
 """
 
 import argparse
