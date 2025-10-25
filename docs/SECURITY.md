@@ -415,8 +415,199 @@ Pattern filtering was completely removed due to:
 
 ---
 
+---
+
+## Credential Encryption & Storage
+
+### Overview
+
+MUXI encrypts user credentials (API keys, tokens, OAuth credentials) at rest using **per-user encryption keys** derived from PBKDF2 with 100,000 iterations. This ensures that even with database access, credentials cannot be decrypted without the formation's encryption key and salt.
+
+### Encryption Architecture
+
+```
+Formation Key + Salt + User ID
+         ↓
+   PBKDF2-HMAC-SHA256
+   (100,000 iterations)
+         ↓
+    Per-User Fernet Key
+         ↓
+   Encrypted Credentials
+   (stored in database)
+```
+
+**Key Components:**
+
+1. **Formation Encryption Key**
+   - Primary encryption key for the formation
+   - Can be explicitly set or defaults to `formation_id` (with warning)
+   - Configured via `user_credentials.encryption.key` in formation YAML
+
+2. **Salt**
+   - Used for PBKDF2 key derivation
+   - Formation-specific (configurable per formation)
+   - Defaults to `"muxi-user-credentials-salt-v1"`
+   - Configured via `user_credentials.encryption.salt` in formation YAML
+
+3. **Per-User Derivation**
+   - Each user gets a unique encryption key
+   - Formula: `PBKDF2(formation_key + ":" + user_id, salt, 100000 iterations)`
+   - Provides user isolation even within same formation
+
+### Configuration
+
+**Basic (Development):**
+```yaml
+user_credentials:
+  mode: "redirect"
+  # Uses formation_id as key (with warning)
+  # Uses default salt
+```
+
+**Production (Recommended):**
+```yaml
+user_credentials:
+  mode: "redirect"
+  encryption:
+    key: "${{ secrets.CREDENTIAL_ENCRYPTION_KEY }}"  # Strong random key
+    salt: "production-formation-2025-salt"           # Unique per formation
+```
+
+### Security Features
+
+✅ **Strong Encryption:**
+- PBKDF2-HMAC-SHA256 with 100,000 iterations
+- Per-user key isolation
+- Fernet symmetric encryption (AES-128-CBC + HMAC-SHA256)
+
+✅ **Bounded Caches:**
+- Fernet instance cache: LRU with 10,000 max entries
+- Credential cache: TTL-based with 1-hour expiration
+- Prevents memory leaks in multi-user deployments
+
+✅ **Automatic PII Redaction:**
+- All observability events automatically redact credentials
+- Prevents accidental logging of sensitive data
+- See "Observability" section above
+
+✅ **Weak Key Detection:**
+- Warns when using `formation_id` as encryption key
+- Recommends explicit key for production
+- Logs security configuration warning event
+
+### Salt Rotation
+
+#### Why Rotate Salt?
+
+Salt rotation provides:
+- **Defense-in-depth**: Different formations use different salts
+- **Compliance**: SOC 2, PCI-DSS may require periodic key rotation
+- **Incident Response**: Rotate after security incidents
+- **Key Upgrade**: Move from default to production-grade salt
+
+#### Rotation Utility
+
+MUXI provides a CLI utility for rotating encryption salts:
+
+**Location:** `utils/rotate_credential_keys.py`
+
+**Usage:**
+```bash
+# Dry run (test without committing changes)
+python utils/rotate_credential_keys.py \
+  --formation-id production-formation \
+  --old-salt "muxi-user-credentials-salt-v1" \
+  --new-salt "production-salt-2025" \
+  --dry-run
+
+# Actual rotation
+python utils/rotate_credential_keys.py \
+  --formation-id production-formation \
+  --old-salt "muxi-user-credentials-salt-v1" \
+  --new-salt "production-salt-2025" \
+  --db-url "$DATABASE_URL"
+```
+
+**Features:**
+- ✅ **Dry-run mode**: Test rotation without committing
+- ✅ **Transaction-based**: Automatic rollback on errors
+- ✅ **Progress reporting**: Shows per-user rotation status
+- ✅ **Error handling**: Skips users on decryption errors (dry-run) or aborts (live)
+- ✅ **Statistics**: Reports users processed, credentials rotated, duration
+
+**Process:**
+1. Decrypts all credentials with old salt
+2. Re-encrypts with new salt
+3. Updates database in transaction
+4. Reports success/errors
+
+**Safety:**
+- Prompts for confirmation before live rotation
+- Supports dry-run to preview changes
+- Transaction-based (all-or-nothing)
+- Preserves original credentials on error
+
+#### Rotation Best Practices
+
+**Before Rotation:**
+1. ✅ Backup database
+2. ✅ Run dry-run first
+3. ✅ Schedule during maintenance window
+4. ✅ Verify user count matches expectations
+
+**After Rotation:**
+1. ✅ Update formation YAML with new salt
+2. ✅ Test credential access
+3. ✅ Monitor for authentication errors
+4. ✅ Document rotation in change log
+
+**Frequency:**
+- Default salt → Production salt: Immediately for production deployments
+- Production rotations: Annually or after security incidents
+- Compliance requirements: Per your security policy (SOC 2, PCI-DSS)
+
+### Credential Security Checklist
+
+**Development:**
+- [ ] Use default encryption (formation_id + default salt)
+- [ ] Encryption warnings are acceptable
+
+**Staging:**
+- [ ] Set explicit encryption key in secrets.enc
+- [ ] Use environment-specific salt
+- [ ] Test credential rotation process
+
+**Production:**
+- [ ] Strong encryption key (32+ random bytes, base64 encoded)
+- [ ] Unique formation-specific salt
+- [ ] Document rotation procedures
+- [ ] Backup `.key` file securely
+- [ ] Monitor security configuration warnings
+- [ ] Regular security audits
+
+### Troubleshooting
+
+**Decryption Fails After Rotation:**
+- Verify formation YAML has new salt configured
+- Check database was successfully updated
+- Restore from backup if needed
+
+**Performance Issues:**
+- Cache sizes may need tuning for very large deployments
+- Default cache limits: 10,000 users (Fernet), 1-hour TTL (credentials)
+- Adjust via `EncryptedCredentialResolver` constructor
+
+**Security Warnings:**
+- "Using formation_id as encryption key" → Set explicit key in production
+- Normal in development, should not appear in production
+
+---
+
 ## Related Documentation
 
+- **user-credentials.md** - Complete credential handling system documentation
+- **secrets-management.md** - Formation-level secrets (API keys, tokens)
 - **LAUNCH_READINESS.md** - Complete pre-launch checklist
 - **Issue #85** - Security escalation policies (post-launch)
 - **Issue #76** - Original security implementation plan
@@ -431,5 +622,6 @@ For security concerns or questions:
 2. Review this documentation
 3. Check GitHub issues (#76, #85)
 4. Review test suite for examples
+5. For credential encryption issues, see **user-credentials.md**
 
 **Remember:** LLM-based security provides context understanding that pattern matching cannot achieve. Trust the system to distinguish legitimate technical discussions from actual attacks.

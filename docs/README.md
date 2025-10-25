@@ -70,6 +70,15 @@ Transform your AI from reactive to proactive:
 - [MCP Transport Guide](mcp/transport-guide.md) - MCP transport implementation
 - [MCP Server Development](mcp/) - Building MCP servers
 
+### Security & Credentials
+- **[SECURITY.md](SECURITY.md)** - Complete security architecture and credential encryption
+  - LLM-based security (prompt injection, credential fishing, jailbreak detection)
+  - Credential encryption with PBKDF2 (100k iterations)
+  - Salt rotation procedures and best practices
+  - PII redaction in observability events
+- [User Credentials](user-credentials.md) - Credential handling system
+- [Secrets Management](secrets-management.md) - Formation-level secrets
+
 ### Developer Guides
 - [Type Safety Guide](type-safety-guide.md) - Type checking best practices
 - [Observability](observability.md) - Event streaming and monitoring
@@ -87,6 +96,14 @@ Transform your AI from reactive to proactive:
 
 ## Recent Updates
 
+- **October 2025 (Production Enhancements)**: 
+  - ✅ Input validation limits with configurable boundaries
+  - ✅ Database query timeouts (30s default)
+  - ✅ Workflow max timeout (2-hour hard ceiling)
+  - ✅ Configurable credential encryption salt
+  - ✅ Automatic PII redaction in observability events
+  - ✅ Salt rotation utility for credential security
+  - See [SECURITY.md](SECURITY.md) for credential encryption details
 - **October 2025**: Added [LLM Caching](features/llm-caching.md) - Intelligent response caching for 70%+ cost savings
 - **September 2025**: Added [Prompt Management](prompt-management.md) documentation for centralized prompt system
 - **September 2025**: Enhanced clarification system with multilingual support
