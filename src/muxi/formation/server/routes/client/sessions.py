@@ -22,7 +22,7 @@ router = APIRouter(tags=["Sessions"])
 
 
 @router.get("/sessions/{user_id}", response_model=APIResponse)
-async def list_user_sessions(
+def list_user_sessions(
     request: Request,
     user_id: str,
     active_only: bool = Query(default=False, description="Only return active sessions"),
@@ -69,7 +69,7 @@ async def list_user_sessions(
 
         # Get sessions from buffer
         sessions = []
-        
+
         # Get buffer entries for this user
         if hasattr(buffer, "get_user_sessions"):
             # If method exists, it should already respect the limit
@@ -78,18 +78,18 @@ async def list_user_sessions(
             # Fallback: scan buffer to extract unique sessions
             # Track unique session IDs with metadata
             seen_sessions = {}
-            
+
             if hasattr(buffer, "buffer"):
                 # Scan buffer in reverse (most recent first)
                 for item in reversed(buffer.buffer):
                     metadata = item.get("metadata", {})
                     item_user_id = metadata.get("user_id")
                     session_id = metadata.get("session_id")
-                    
+
                     # Skip if not matching user or no session ID
                     if item_user_id != user_id or not session_id:
                         continue
-                    
+
                     # Track unique sessions
                     if session_id not in seen_sessions:
                         seen_sessions[session_id] = {
@@ -98,20 +98,20 @@ async def list_user_sessions(
                             "last_activity": metadata.get("timestamp", item.get("timestamp")),
                             "active": True,  # Sessions in buffer are considered active
                         }
-                        
+
                         # Stop if we've reached the limit
                         if len(seen_sessions) >= limit:
                             break
-                
+
                 # Convert to list (already in most-recent-first order)
                 sessions = list(seen_sessions.values())
-                
+
                 # Apply active_only filter if requested
                 if active_only:
                     sessions = [s for s in sessions if s.get("active", True)]
 
         # Compute paged results once and reuse
-        paged_sessions = sessions[:limit]
+        paged_sessions = sessions[:limit]  # Ensure limit (already applied in fallback)
         data = {"sessions": paged_sessions, "count": len(paged_sessions)}
 
         response = create_success_response(
@@ -139,7 +139,7 @@ async def list_user_sessions(
 
 
 @router.get("/sessions/{user_id}/{session_id}", response_model=APIResponse)
-async def get_session(request: Request, user_id: str, session_id: str) -> JSONResponse:
+def get_session(request: Request, user_id: str, session_id: str) -> JSONResponse:
     """
     Get detailed information about a specific session.
 
@@ -231,7 +231,7 @@ async def get_session(request: Request, user_id: str, session_id: str) -> JSONRe
 
 
 @router.delete("/sessions/{user_id}/{session_id}", response_model=APIResponse)
-async def clear_session(request: Request, user_id: str, session_id: str) -> JSONResponse:
+def clear_session(request: Request, user_id: str, session_id: str) -> JSONResponse:
     """
     Clear a session and its buffer memory.
 
@@ -324,7 +324,7 @@ async def clear_session(request: Request, user_id: str, session_id: str) -> JSON
 
 
 @router.get("/sessions/{user_id}/{session_id}/messages", response_model=APIResponse)
-async def get_session_messages(
+def get_session_messages(
     request: Request,
     user_id: str,
     session_id: str,
@@ -387,12 +387,19 @@ async def get_session_messages(
         else:
             # Fallback: direct buffer access
             if hasattr(buffer, "buffer"):
-                # Simple implementation - production would have proper indexing
-                all_messages = buffer.buffer.get(user_id, [])
-                messages = [
-                    msg for msg in all_messages
-                    if msg.get("session_id") == session_id
-                ][:limit + 1]
+                # buffer.buffer is a deque - iterate and filter by user_id and session_id
+                messages = []
+                for item in buffer.buffer:
+                    if not isinstance(item, dict):
+                        continue
+                    metadata = item.get("metadata", {})
+                    if (
+                        metadata.get("user_id") == user_id
+                        and metadata.get("session_id") == session_id
+                    ):
+                        messages.append(item)
+                        if len(messages) >= limit + 1:
+                            break
 
         # Check pagination
         has_more = len(messages) > limit

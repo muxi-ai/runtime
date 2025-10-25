@@ -1,5 +1,33 @@
 """Admin route modules."""
 
-from . import agents, secrets, config, overlord, mcp, llm, logging, logs, memory, scheduler, a2a, async_routes, audit
+from . import (
+    a2a,
+    agents,
+    async_routes,
+    audit,
+    config,
+    llm,
+    logging,
+    logs,
+    mcp,
+    memory,
+    overlord,
+    scheduler,
+    secrets,
+)
 
-__all__ = ["agents", "secrets", "config", "overlord", "mcp", "llm", "logging", "logs", "memory", "scheduler", "a2a", "async_routes", "audit"]
+__all__ = [
+    "a2a",
+    "agents",
+    "async_routes",
+    "audit",
+    "config",
+    "llm",
+    "logging",
+    "logs",
+    "mcp",
+    "memory",
+    "overlord",
+    "scheduler",
+    "secrets",
+]

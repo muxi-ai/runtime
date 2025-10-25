@@ -20,20 +20,18 @@ import yaml
 class AtomicYAMLError(Exception):
     """Raised when atomic YAML operations fail."""
 
-    pass
-
 
 def _sync_fsync(file_path: str) -> None:
     """
     Synchronously fsync a file.
-    
+
     Called via run_in_executor to avoid blocking the event loop.
     Opens the file in read mode to get a file descriptor for fsync.
-    
+
     Args:
         file_path: Path to file to fsync
     """
-    # Open in read mode just to get file descriptor for fsync
+    # Open in read+write mode to get file descriptor for fsync
     # The file was already written and closed by aiofiles
     with open(file_path, 'r+b') as f:
         f.flush()
@@ -112,10 +110,10 @@ async def atomic_write_yaml(
 
     Raises:
         AtomicYAMLError: If the write operation fails
-        ValueError: If data is not a dictionary
+        TypeError: If data is not a dictionary
     """
     if not isinstance(data, dict):
-        raise ValueError("Data must be a dictionary for YAML serialization")
+        raise TypeError("Data must be a dictionary for YAML serialization")
 
     file_path = Path(file_path)
 
@@ -152,7 +150,7 @@ async def atomic_write_yaml(
             async with aiofiles.open(temp_path, "w", encoding="utf-8") as f:
                 await f.write(yaml_content)
                 await f.flush()
-            
+
             # Ensure data is written to disk using executor to avoid blocking
             # aiofiles handles don't have fileno(), so we open synchronously in thread
             loop = asyncio.get_event_loop()
@@ -291,9 +289,6 @@ async def atomic_read_yaml(file_path: str | Path) -> Dict[str, Any]:
     """
     file_path = Path(file_path)
 
-    if not file_path.exists():
-        raise FileNotFoundError(f"YAML file does not exist: {file_path}")
-
     try:
         async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
             content = await f.read()
@@ -301,8 +296,7 @@ async def atomic_read_yaml(file_path: str | Path) -> Dict[str, Any]:
 
         if not isinstance(data, dict):
             raise TypeError("YAML file must contain a dictionary")
-
         return data
 
     except (OSError, yaml.YAMLError) as e:
-        raise AtomicYAMLError(f"Failed to read YAML file {file_path}: {str(e)}") from e
+        raise AtomicYAMLError(f"Failed to read YAML file {file_path}: {e!s}") from e

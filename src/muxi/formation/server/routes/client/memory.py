@@ -15,7 +15,9 @@ from ...responses import (
     APIResponse,
     memory_list_response,
     create_error_response,
+    create_success_response,
 )
+from .....datatypes.api import APIObjectType, APIEventType
 
 router = APIRouter(tags=["Memory"])
 
@@ -32,7 +34,7 @@ async def get_user_memories(
     request: Request,
     user_id: str,
     limit: int = Query(10, ge=1, le=100, description="Maximum number of memories to return"),
-    offset: int = Query(0, ge=0, description="Offset for pagination")
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
 ) -> JSONResponse:
     """
     Get memories for a user.
@@ -118,7 +120,7 @@ async def delete_user_memory(request: Request, user_id: str, memory_id: str) -> 
 
 # Buffer Memory Operations
 @router.get("/memory/buffer/{user_id}", response_model=APIResponse)
-async def get_buffer_status(request: Request, user_id: str) -> JSONResponse:
+def get_buffer_status(request: Request, user_id: str) -> JSONResponse:
     """
     Get buffer memory status for a user.
 
@@ -147,8 +149,6 @@ async def get_buffer_status(request: Request, user_id: str) -> JSONResponse:
         buffer = getattr(overlord, "buffer_memory", None)
         if not buffer:
             # Return empty status if no buffer
-            from ...responses import create_success_response
-            from .....datatypes.api import APIObjectType, APIEventType
             data = {
                 "user_id": user_id,
                 "total_messages": 0,
@@ -163,7 +163,7 @@ async def get_buffer_status(request: Request, user_id: str) -> JSONResponse:
             )
             return JSONResponse(content=response.model_dump(), status_code=200)
 
-        # Get buffer stats  
+        # Get buffer stats
         total_messages = 0
         sessions = []
         buffer_size_kb = 0
@@ -178,15 +178,15 @@ async def get_buffer_status(request: Request, user_id: str) -> JSONResponse:
             if hasattr(buffer, "buffer"):
                 # Buffer is a deque - count messages for this user by filtering
                 import sys
+
                 user_messages = [
-                    msg for msg in buffer.buffer 
+                    msg
+                    for msg in buffer.buffer
                     if isinstance(msg, dict) and msg.get("metadata", {}).get("user_id") == user_id
                 ]
                 total_messages = len(user_messages)
                 buffer_size_kb = sys.getsizeof(str(user_messages)) / 1024
 
-        from ...responses import create_success_response
-        from .....datatypes.api import APIObjectType, APIEventType
         data = {
             "user_id": user_id,
             "total_messages": total_messages,
@@ -213,7 +213,7 @@ async def get_buffer_status(request: Request, user_id: str) -> JSONResponse:
 
 
 @router.delete("/memory/buffer/{user_id}", response_model=APIResponse)
-async def clear_user_buffer(request: Request, user_id: str) -> JSONResponse:
+def clear_user_buffer(request: Request, user_id: str) -> JSONResponse:
     """
     Clear all buffer memory for a user across all sessions.
 
@@ -254,31 +254,31 @@ async def clear_user_buffer(request: Request, user_id: str) -> JSONResponse:
         sessions_cleared = 0
 
         if hasattr(buffer, "buffer"):
-            # buffer.buffer is a deque - find items to remove
-            items_to_remove = []
+            # Single-pass rebuild for O(n) performance
+            from collections import deque
+
+            original_length = len(buffer.buffer)
+            new_buffer = deque()
             unique_sessions = set()
-            
-            for i, item in enumerate(buffer.buffer):
+
+            for item in buffer.buffer:
                 if isinstance(item, dict) and item.get("metadata", {}).get("user_id") == user_id:
-                    items_to_remove.append(i)
-                    # Track unique sessions
+                    # Track unique sessions being removed
                     sess_id = item.get("metadata", {}).get("session_id")
                     if sess_id:
                         unique_sessions.add(sess_id)
-            
-            # Remove items in reverse order to maintain indices
-            for i in reversed(items_to_remove):
-                del buffer.buffer[i]
-                messages_cleared += 1
-            
+                else:
+                    # Keep items that don't match
+                    new_buffer.append(item)
+
+            messages_cleared = original_length - len(new_buffer)
             sessions_cleared = len(unique_sessions)
-            
+            buffer.buffer = new_buffer
+
             # Mark index for rebuild if we removed items and vector search is enabled
             if messages_cleared > 0 and hasattr(buffer, "needs_rebuild"):
                 buffer.needs_rebuild = True
 
-        from ...responses import create_success_response
-        from .....datatypes.api import APIObjectType, APIEventType
         data = {
             "message": "Buffer cleared successfully",
             "user_id": user_id,
@@ -305,7 +305,7 @@ async def clear_user_buffer(request: Request, user_id: str) -> JSONResponse:
 
 
 @router.delete("/memory/buffer/{user_id}/{session_id}", response_model=APIResponse)
-async def clear_session_buffer(request: Request, user_id: str, session_id: str) -> JSONResponse:
+def clear_session_buffer(request: Request, user_id: str, session_id: str) -> JSONResponse:
     """
     Clear buffer memory for a specific session.
 
@@ -346,25 +346,31 @@ async def clear_session_buffer(request: Request, user_id: str, session_id: str) 
         messages_cleared = 0
 
         if hasattr(buffer, "buffer"):
-            # buffer.buffer is a deque - find items to remove
-            items_to_remove = []
-            for i, item in enumerate(buffer.buffer):
-                if (isinstance(item, dict) and 
-                    item.get("metadata", {}).get("user_id") == user_id and
-                    item.get("metadata", {}).get("session_id") == session_id):
-                    items_to_remove.append(i)
-            
-            # Remove items in reverse order to maintain indices
-            for i in reversed(items_to_remove):
-                del buffer.buffer[i]
-                messages_cleared += 1
-            
+            # Single-pass rebuild for O(n) performance
+            from collections import deque
+
+            original_length = len(buffer.buffer)
+            new_buffer = deque()
+
+            for item in buffer.buffer:
+                if (
+                    isinstance(item, dict)
+                    and item.get("metadata", {}).get("user_id") == user_id
+                    and item.get("metadata", {}).get("session_id") == session_id
+                ):
+                    # Skip items that match (they're being cleared)
+                    pass
+                else:
+                    # Keep items that don't match
+                    new_buffer.append(item)
+
+            messages_cleared = original_length - len(new_buffer)
+            buffer.buffer = new_buffer
+
             # Mark index for rebuild if we removed items and vector search is enabled
             if messages_cleared > 0 and hasattr(buffer, "needs_rebuild"):
                 buffer.needs_rebuild = True
 
-        from ...responses import create_success_response
-        from .....datatypes.api import APIObjectType, APIEventType
         data = {
             "message": "Session buffer cleared successfully",
             "user_id": user_id,

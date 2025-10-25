@@ -5,11 +5,12 @@ These endpoints provide logging configuration access and management,
 requiring admin API key authentication.
 """
 
-from typing import Optional
+import logging
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ...responses import (
     APIResponse,
@@ -25,18 +26,32 @@ class LoggingDestinationCreate(BaseModel):
     """Model for creating a logging destination."""
 
     id: Optional[str] = Field(default=None, description="Optional ID (auto-generated if not provided)")
-    transport: str = Field(..., description="Transport type: stdout, file, stream")
+    transport: Literal["stdout", "file", "stream"] = Field(..., description="Transport type: stdout, file, stream")
     destination: Optional[str] = Field(default=None, description="Destination path/URL (required for file and stream)")
-    level: str = Field(default="INFO", description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
-    format: str = Field(default="jsonl", description="Log format: text or jsonl")
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(default="INFO", description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL")  # noqa: E501
+    format: Literal["text", "jsonl"] = Field(default="jsonl", description="Log format: text or jsonl")
     enabled: bool = Field(default=True, description="Whether destination is enabled")
+
+    @model_validator(mode='after')
+    def validate_destination_requirement(self):
+        """Validate that destination is provided when transport is file or stream."""
+        if self.transport in ("file", "stream") and not self.destination:
+            raise ValueError(
+                f"destination is required when transport is '{self.transport}'. "
+                f"Please provide a file path for 'file' transport or URL for 'stream' transport."
+            )
+        return self
 
 
 class LoggingDestinationUpdate(BaseModel):
     """Model for updating logging destination configuration."""
 
-    level: Optional[str] = Field(default=None, description="Log level")
-    format: Optional[str] = Field(default=None, description="Log format")
+    level: Optional[Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]] = Field(
+        default=None, description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL"
+    )
+    format: Optional[Literal["text", "jsonl"]] = Field(
+        default=None, description="Log format: text or jsonl"
+    )
     enabled: Optional[bool] = Field(default=None, description="Whether destination is enabled")
 
 
@@ -78,6 +93,18 @@ async def list_logging_destinations(request: Request) -> JSONResponse:
     streams = logging_config.get("streams", [])
 
     for idx, stream in enumerate(streams):
+        # Defensive type check for malformed YAML entries
+        if not isinstance(stream, dict):
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "Malformed logging stream entry at index %d: expected dict, got %s. "
+                "Value: %r. Skipping this entry.",
+                idx,
+                type(stream).__name__,
+                stream
+            )
+            continue
+
         dest = {
             "id": stream.get("id", f"dest-{idx}"),
             "transport": stream.get("transport", "stdout"),

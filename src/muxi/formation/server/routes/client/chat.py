@@ -100,29 +100,33 @@ async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingRe
                 files=chat_request.files,
                 stream=False,  # Disable streaming
             )
-            
+
             # Return complete response as JSON
             from ...responses import create_success_response
             from .....datatypes.api import APIObjectType, APIEventType
-            
+
             data = {
                 "message": response,
                 "user_id": effective_user_id,
                 "session_id": chat_request.session_id,
                 "request_id": chat_request.request_id,
             }
-            
+
             api_response = create_success_response(
                 APIObjectType.MESSAGE,
                 APIEventType.CHAT_COMPLETED,
                 data,
                 chat_request.request_id,
             )
-            
+
             return JSONResponse(content=api_response.model_dump(), status_code=200)
-            
+
         except Exception as e:
-            # Log error
+            # Re-raise HTTPException unchanged to preserve status code and details
+            if isinstance(e, HTTPException):
+                raise
+            
+            # Log non-HTTP exceptions
             observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_FAILED,
                 level=observability.EventLevel.ERROR,
@@ -138,7 +142,8 @@ async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingRe
                 },
                 description=f"Chat request failed: {e}",
             )
-            raise HTTPException(status_code=500, detail=str(e))
+            # Raise new HTTPException with original exception chain preserved
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     # Process synchronously with streaming
     async def generate_stream():
@@ -155,7 +160,7 @@ async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingRe
                 files=chat_request.files,
                 stream=True,  # Enable streaming
             )
-            
+
             # Stream the tokens
             async for token in response:
                 # Format as SSE (removed "role" to save bandwidth as requested)

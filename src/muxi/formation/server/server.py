@@ -572,7 +572,16 @@ class FormationServer:
         client_auth = ClientKeyAuth(self.client_key)
 
         # Register all client routers with auth dependency
-        client_routers = [chat.router, events.router, jobs.router, memory.router, triggers.router, users.router, sessions.router, sops.router]
+        client_routers = [
+            chat.router,
+            events.router,
+            jobs.router,
+            memory.router,
+            triggers.router,
+            users.router,
+            sessions.router,
+            sops.router,
+        ]
 
         for router in client_routers:
             app.include_router(router, prefix="/v1", dependencies=[Depends(client_auth)])
@@ -651,10 +660,10 @@ class FormationServer:
         # Start server with proper initialization
         # Always wait for server to be ready before returning (fail fast)
         self._server_task = asyncio.create_task(self._server.serve())
-        
+
         # Wait for server to be ready (with timeout)
         await self._wait_for_server_ready(timeout=10.0)
-        
+
         # If blocking mode, wait for server to complete
         if block:
             await self._server_task
@@ -662,29 +671,29 @@ class FormationServer:
     async def _wait_for_server_ready(self, timeout: float = 10.0) -> None:
         """
         Wait for the server to be ready to accept connections.
-        
+
         Shows Linux-style init events during startup.
         Implements fail-fast philosophy - raises immediately on errors.
-        
+
         Args:
             timeout: Maximum time to wait for server to be ready (seconds)
-            
+
         Raises:
             RuntimeError: If server fails to start within timeout
             Exception: If server task encounters an error during startup
         """
         import socket
         from ...datatypes.observability import InitEventFormatter
-        
+
         # Show server binding event
         print(InitEventFormatter.format_info(
             f"API Worker: binding to {self.host}:{self.port}",
             None
         ))
-        
+
         start_time = asyncio.get_event_loop().time()
         last_error = None
-        
+
         while (asyncio.get_event_loop().time() - start_time) < timeout:
             # Check if server task failed
             if self._server_task.done():
@@ -694,11 +703,11 @@ class FormationServer:
                     raise RuntimeError("Server task completed unexpectedly")
                 except Exception as e:
                     print(InitEventFormatter.format_fail(
-                        f"API Worker failed to start",
+                        "API Worker failed to start",
                         str(e)
                     ))
                     raise RuntimeError(f"Server startup failed: {e}") from e
-            
+
             # Try to connect to the port
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -714,20 +723,20 @@ class FormationServer:
                         return
             except Exception as e:
                 last_error = e
-            
+
             # Wait a bit before retrying
             await asyncio.sleep(0.1)
-        
+
         # Timeout reached
         error_msg = f"Server failed to start within {timeout}s"
         if last_error:
             error_msg += f": {last_error}"
-        
+
         print(InitEventFormatter.format_fail(
             "API Worker startup timeout",
             error_msg
         ))
-        
+
         # Try to cancel the server task
         if self._server_task and not self._server_task.done():
             self._server_task.cancel()
@@ -735,7 +744,7 @@ class FormationServer:
                 await self._server_task
             except asyncio.CancelledError:
                 pass
-        
+
         raise RuntimeError(error_msg)
 
     async def stop(self) -> None:

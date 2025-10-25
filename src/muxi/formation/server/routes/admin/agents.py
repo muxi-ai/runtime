@@ -502,7 +502,7 @@ async def delete_agent(request: Request, agent_id: str) -> JSONResponse:
             response = create_error_response(FORBIDDEN_ERROR, error_msg, None, request_id)
             return JSONResponse(content=response.model_dump(), status_code=403)
     except Exception as e:
-        logger.error(f"Failed to delete agent '{agent_id}': {str(e)}", exc_info=True)
+        logger.error("Failed to delete agent '%s': %s", agent_id, e, exc_info=True)
         response = create_error_response(
             INTERNAL_ERROR, f"Failed to delete agent: {str(e)}", None, request_id
         )

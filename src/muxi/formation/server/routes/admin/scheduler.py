@@ -153,7 +153,7 @@ async def list_scheduled_jobs(request: Request) -> JSONResponse:
 
 
 @router.post("/scheduler/jobs", response_model=APIResponse)
-async def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONResponse:
+def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONResponse:
     """
     Create a new scheduled job.
 
@@ -324,7 +324,7 @@ async def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSO
 
 
 @router.get("/scheduler/jobs/{job_id}", response_model=APIResponse)
-async def get_scheduled_job(request: Request, job_id: str) -> JSONResponse:
+def get_scheduled_job(request: Request, job_id: str) -> JSONResponse:
     """
     Get details for a specific scheduled job.
 
@@ -383,7 +383,7 @@ async def get_scheduled_job(request: Request, job_id: str) -> JSONResponse:
 
 
 @router.delete("/scheduler/jobs/{job_id}", response_model=APIResponse)
-async def remove_scheduled_job(request: Request, job_id: str) -> JSONResponse:
+def remove_scheduled_job(request: Request, job_id: str) -> JSONResponse:
     """
     Remove a scheduled job.
 

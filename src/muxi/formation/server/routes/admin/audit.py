@@ -8,7 +8,7 @@ requiring admin API key authentication.
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Query, Request, HTTPException
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
 from ...audit import AuditLogger
@@ -84,7 +84,7 @@ async def get_audit_log(
             )
 
     # Get entries
-    entries = audit_logger.get_entries(
+    entries = await audit_logger.get_entries(
         limit=limit,
         action=action,
         resource_type=resource_type,
@@ -149,7 +149,7 @@ async def clear_audit_log(
     audit_logger = AuditLogger(formation.formation_id)
 
     # Clear the log (this creates a "cleared" entry)
-    previous_count = audit_logger.clear(user="admin", request_id=request_id)
+    previous_count = await audit_logger.clear(user="admin", request_id=request_id)
 
     response_data = {
         "message": "Audit log cleared successfully",

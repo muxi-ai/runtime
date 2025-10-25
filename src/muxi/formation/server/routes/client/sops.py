@@ -5,10 +5,10 @@ These endpoints provide read-only access to formation-defined SOPs,
 requiring client API key authentication.
 """
 
-from typing import Dict, List, Any
-from pathlib import Path
+import re
+from typing import Dict, Any, List
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ...responses import (
@@ -19,6 +19,43 @@ from ...responses import (
 from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["SOPs"])
+
+
+def _extract_agents_from_sop(metadata: Dict[str, Any], content: str) -> List[str]:
+    """
+    Extract agent names from SOP metadata or content.
+    
+    Prefer metadata-first approach to avoid false positives from prose.
+    Falls back to parsing content only when metadata is absent.
+    
+    Args:
+        metadata: SOP frontmatter metadata dictionary
+        content: SOP markdown content
+    
+    Returns:
+        List of agent names used in the SOP
+    """
+    agents_used = []
+    
+    # First, try metadata fields
+    if "agents" in metadata:
+        agents_used = metadata["agents"]
+    elif "routing" in metadata and "agents" in metadata.get("routing", {}):
+        agents_used = metadata["routing"]["agents"]
+    else:
+        # Fallback: Parse from content (only YAML-structured key patterns)
+        # Only detect "agent:" at line start (after optional whitespace) to avoid prose
+        for line in content.split("\n"):
+            # Match lines that start with optional whitespace followed by "agent:" as a key
+            match = re.match(r'^\s*agent:\s*(.+?)\s*$', line, re.IGNORECASE)
+            if match:
+                agent_name = match.group(1).strip()
+                # Validate: non-empty, alphanumeric/underscore/dash only
+                if agent_name and re.match(r'^[a-zA-Z0-9_-]+$', agent_name):
+                    if agent_name not in agents_used:
+                        agents_used.append(agent_name)
+    
+    return agents_used
 
 
 @router.get("/sops", response_model=APIResponse)
@@ -63,19 +100,7 @@ async def list_sops(request: Request) -> JSONResponse:
         steps = sum(1 for line in content.split("\n") if line.strip() and line.strip()[0].isdigit())
 
         # Extract agents used (from content or metadata)
-        agents_used = []
-        if "agents" in metadata:
-            agents_used = metadata["agents"]
-        else:
-            # Parse from content (look for "Agent:" lines)
-            for line in content.split("\n"):
-                if "agent:" in line.lower():
-                    # Extract agent name
-                    parts = line.split(":", 1)
-                    if len(parts) > 1:
-                        agent_name = parts[1].strip()
-                        if agent_name and agent_name not in agents_used:
-                            agents_used.append(agent_name)
+        agents_used = _extract_agents_from_sop(metadata, content)
 
         sop_entry = {
             "name": sop_name,
@@ -127,7 +152,7 @@ async def get_sop_details(request: Request, sop_name: str) -> JSONResponse:
         return JSONResponse(
             status_code=404,
             content=create_error_response(
-                error_code="RESOURCE_NOT_FOUND",
+                error_code="SOP_NOT_FOUND",
                 message=f"SOP '{sop_name}' not found",
                 request_id=request_id,
             ).model_dump(),
@@ -140,7 +165,7 @@ async def get_sop_details(request: Request, sop_name: str) -> JSONResponse:
         return JSONResponse(
             status_code=404,
             content=create_error_response(
-                error_code="RESOURCE_NOT_FOUND",
+                error_code="SOP_NOT_FOUND",
                 message=f"SOP '{sop_name}' not found",
                 request_id=request_id,
             ).model_dump(),
@@ -155,18 +180,7 @@ async def get_sop_details(request: Request, sop_name: str) -> JSONResponse:
     steps = sum(1 for line in content.split("\n") if line.strip() and line.strip()[0].isdigit())
 
     # Extract agents used
-    agents_used = []
-    if "agents" in metadata:
-        agents_used = metadata["agents"]
-    else:
-        # Parse from content
-        for line in content.split("\n"):
-            if "agent:" in line.lower():
-                parts = line.split(":", 1)
-                if len(parts) > 1:
-                    agent_name = parts[1].strip()
-                    if agent_name and agent_name not in agents_used:
-                        agents_used.append(agent_name)
+    agents_used = _extract_agents_from_sop(metadata, content)
 
     # Extract references (files referenced in the SOP)
     references = []
@@ -174,8 +188,6 @@ async def get_sop_details(request: Request, sop_name: str) -> JSONResponse:
         references = metadata["references"]
     else:
         # Look for [file:...] patterns in content
-        import re
-
         file_pattern = r"\[file:([^\]]+)\]"
         matches = re.findall(file_pattern, content)
         references = [f"file:{match}" for match in matches]

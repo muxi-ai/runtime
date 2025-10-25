@@ -5,10 +5,11 @@ This endpoint provides admin-only access to stream live formation logs
 via Server-Sent Events (SSE) with required filtering to prevent firehose.
 """
 
-import re
-from typing import Optional
 import asyncio
 import json
+import re
+from functools import lru_cache
+from typing import Optional, Pattern
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
@@ -16,6 +17,25 @@ from fastapi.responses import StreamingResponse
 from .....services import observability
 
 router = APIRouter(tags=["Logs"])
+
+
+@lru_cache(maxsize=128)
+def _compile_event_type_pattern(filter_value: str) -> Pattern:
+    """
+    Compile and cache a regex pattern for event_type wildcard matching.
+    
+    Escapes regex metacharacters and converts * wildcards to .* pattern.
+    Cached to avoid recompiling the same pattern on every event.
+    
+    Args:
+        filter_value: Event type filter value (may contain * wildcards)
+    
+    Returns:
+        Compiled regex pattern for matching
+    """
+    escaped = re.escape(filter_value)
+    pattern_str = escaped.replace(r"\*", ".*")
+    return re.compile(pattern_str)
 
 
 @router.get("/logs/stream")
@@ -194,9 +214,9 @@ def matches_filters(event_data: dict, filters: dict) -> bool:
     """
     for key, value in filters.items():
         if key == "event_type":
-            # Support wildcard matching for event_type
-            pattern = value.replace("*", ".*")
-            if not re.fullmatch(pattern, event_data.get("event_type", "")):
+            # Support wildcard matching for event_type (with cached compiled pattern)
+            pattern = _compile_event_type_pattern(value)
+            if not pattern.fullmatch(event_data.get("event_type", "")):
                 return False
         else:
             # Exact match for other fields

@@ -6,14 +6,18 @@ tracking changes to agents, secrets, MCP servers, scheduler jobs, logging
 destinations, async configuration, and memory operations.
 """
 
+import asyncio
 import json
+import logging
 import threading
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import Request
 
 from ...utils.user_dirs import get_user_dir
+
+logger = logging.getLogger(__name__)
 
 
 class AuditLogger:
@@ -33,6 +37,8 @@ class AuditLogger:
         """
         self.formation_id = formation_id
         self._lock = threading.Lock()
+        self._total_entries = 0  # Cached counter for O(1) total_entries lookup
+        self._pending_tasks: Set[asyncio.Task] = set()  # Track background write tasks
 
         # Determine audit log path: ~/.muxi/formations/{formation_id}/audit.log
         base_dir = get_user_dir()
@@ -40,9 +46,13 @@ class AuditLogger:
         self.formation_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.formation_dir / "audit.log"
 
-        # Create empty log file if it doesn't exist
+        # Create empty log file if it doesn't exist and initialize counter
         if not self.log_path.exists():
             self.log_path.touch()
+        else:
+            # Initialize counter by counting existing entries
+            with open(self.log_path, "r") as f:
+                self._total_entries = sum(1 for line in f if line.strip())
 
     def log(
         self,
@@ -88,10 +98,22 @@ class AuditLogger:
         if additional_data:
             entry["data"] = additional_data
 
-        # Thread-safe append to log file
-        with self._lock:
+        # Serialize entry once before I/O
+        entry_json = json.dumps(entry) + "\n"
+
+        # Perform file I/O off the event loop to avoid blocking
+        def write_entry():
             with open(self.log_path, "a") as f:
-                f.write(json.dumps(entry) + "\n")
+                f.write(entry_json)
+
+        # Run file write in thread pool and track the task
+        task = asyncio.create_task(asyncio.to_thread(write_entry))
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._task_done_callback)
+
+        # Update in-memory counter (brief lock)
+        with self._lock:
+            self._total_entries += 1
 
     def log_from_request(
         self,
@@ -138,7 +160,7 @@ class AuditLogger:
             additional_data=additional_data,
         )
 
-    def get_entries(
+    async def get_entries(
         self,
         limit: int = 100,
         action: Optional[str] = None,
@@ -160,10 +182,9 @@ class AuditLogger:
         if not self.log_path.exists():
             return []
 
-        entries = []
-
-        # Read all entries from log file (thread-safe)
-        with self._lock:
+        # Read entries off event loop with chunked processing
+        def read_entries():
+            entries = []
             with open(self.log_path, "r") as f:
                 for line in f:
                     line = line.strip()
@@ -176,6 +197,10 @@ class AuditLogger:
                     except json.JSONDecodeError:
                         # Skip malformed entries
                         continue
+            return entries
+
+        # Perform file read in thread pool (no lock needed for reads)
+        entries = await asyncio.to_thread(read_entries)
 
         # Apply filters
         filtered = entries
@@ -196,7 +221,7 @@ class AuditLogger:
         # Apply limit
         return filtered[:limit]
 
-    def clear(self, user: str = "admin", request_id: Optional[str] = None) -> int:
+    async def clear(self, user: str = "admin", request_id: Optional[str] = None) -> int:
         """
         Clear the audit log, leaving only a "cleared" entry.
 
@@ -207,46 +232,84 @@ class AuditLogger:
         Returns:
             Number of entries that were cleared
         """
-        # Acquire lock once for entire operation to prevent race conditions
-        # (another thread could append between counting and writing)
+        # Get count from in-memory cache (O(1))
         with self._lock:
-            # Count entries before clearing
-            count = 0
-            if self.log_path.exists():
-                with open(self.log_path, "r") as f:
-                    count = sum(1 for line in f if line.strip())
+            count = self._total_entries
 
-            # Create new log with only the "cleared" entry
-            entry = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "request_id": request_id,
-                "action": "audit.cleared",
-                "resource_type": "audit_log",
-                "resource_id": self.formation_id,
-                "user": user,
-                "ip": None,
-                "result": "success",
-                "status_code": 200,
-                "message": f"Audit log cleared by {user} ({count} entries removed)",
-                "data": {"previous_entries_count": count},
-            }
+        # Create new log with only the "cleared" entry
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "request_id": request_id,
+            "action": "audit.cleared",
+            "resource_type": "audit_log",
+            "resource_id": self.formation_id,
+            "user": user,
+            "ip": None,
+            "result": "success",
+            "status_code": 200,
+            "message": f"Audit log cleared by {user} ({count} entries removed)",
+            "data": {"previous_entries_count": count},
+        }
 
-            # Write the cleared entry (atomically with counting)
+        entry_json = json.dumps(entry) + "\n"
+
+        # Perform file write off event loop
+        def write_cleared():
             with open(self.log_path, "w") as f:
-                f.write(json.dumps(entry) + "\n")
+                f.write(entry_json)
+
+        await asyncio.to_thread(write_cleared)
+
+        # Update in-memory counter (brief lock)
+        with self._lock:
+            self._total_entries = 1  # Only the cleared entry remains
 
         return count
+
+    def _task_done_callback(self, task: asyncio.Task) -> None:
+        """
+        Callback for completed background write tasks.
+        
+        Logs any exceptions and removes task from tracking set.
+        
+        Args:
+            task: The completed task
+        """
+        # Remove task from tracking set
+        self._pending_tasks.discard(task)
+        
+        # Check for exceptions
+        try:
+            task.result()  # This will raise if the task failed
+        except Exception as e:
+            logger.error(
+                "Audit log write failed for formation %s: %s",
+                self.formation_id,
+                e,
+                exc_info=True
+            )
+
+    async def shutdown(self) -> None:
+        """
+        Wait for all pending audit log writes to complete.
+        
+        Should be called during application shutdown to ensure
+        all log entries are written to disk.
+        """
+        if self._pending_tasks:
+            logger.info(
+                "Waiting for %d pending audit log writes to complete...",
+                len(self._pending_tasks)
+            )
+            await asyncio.gather(*self._pending_tasks, return_exceptions=True)
+            logger.info("All pending audit log writes completed")
 
     def get_total_entries(self) -> int:
         """
         Get total number of entries in the audit log.
 
         Returns:
-            Total entry count
+            Total entry count (O(1) via cached counter)
         """
-        if not self.log_path.exists():
-            return 0
-
         with self._lock:
-            with open(self.log_path, "r") as f:
-                return sum(1 for line in f if line.strip())
+            return self._total_entries

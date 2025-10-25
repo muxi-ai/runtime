@@ -166,6 +166,13 @@ ERROR_CODE_REGISTRY: Dict[str, ErrorCodeInfo] = {
         category="resource",
         description="MCP tool not available",
     ),
+    "SOP_NOT_FOUND": ErrorCodeInfo(
+        code="SOP_NOT_FOUND",
+        message="Specified SOP does not exist",
+        http_status=404,
+        category="resource",
+        description="Invalid SOP name",
+    ),
     "RESOURCE_NOT_FOUND": ErrorCodeInfo(
         code="RESOURCE_NOT_FOUND",
         message="Requested resource not found",
