@@ -7,7 +7,7 @@ It decrypts credentials with the old salt, re-encrypts with the new salt, and up
 the database in a transaction.
 
 Usage:
-    python scripts/rotate_credential_keys.py \
+    python utils/rotate_credential_keys.py \
         --formation-id myformation \
         --old-salt "old-salt-value" \
         --new-salt "new-salt-value" \
@@ -16,14 +16,14 @@ Usage:
 
 Example:
     # Dry run (show what would be changed without committing)
-    python scripts/rotate_credential_keys.py \
+    python utils/rotate_credential_keys.py \
         --formation-id production-formation \
         --old-salt "muxi-user-credentials-salt-v1" \
         --new-salt "production-salt-2025" \
         --dry-run
 
     # Actual rotation (use your actual database URL)
-    python scripts/rotate_credential_keys.py \
+    python utils/rotate_credential_keys.py \
         --formation-id production-formation \
         --old-salt "muxi-user-credentials-salt-v1" \
         --new-salt "production-salt-2025" \
@@ -34,7 +34,7 @@ import argparse
 import asyncio
 import sys
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import Dict, Any
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(__file__).rsplit('/', 2)[0])
@@ -64,7 +64,7 @@ async def rotate_credentials(
         Dictionary with rotation statistics
     """
     print(f"\n{'='*60}")
-    print(f"CREDENTIAL KEY ROTATION")
+    print("CREDENTIAL KEY ROTATION")
     print(f"{'='*60}")
     print(f"Formation ID: {formation_id}")
     print(f"Old Salt: {old_salt}")
@@ -120,7 +120,7 @@ async def rotate_credentials(
                     old_credentials = await old_resolver.get_all(user_id)
                     
                     if not old_credentials:
-                        print(f"  No credentials found")
+                        print("  No credentials found")
                         continue
                     
                     print(f"  Found {len(old_credentials)} credential(s)")
@@ -135,7 +135,7 @@ async def rotate_credentials(
                         
                         stats["credentials_rotated"] += 1
                     
-                    print(f"  ✓ Completed")
+                    print("  ✓ Completed")
                     
                 except Exception as e:
                     error_msg = f"Error processing user {user_id}: {str(e)}"
@@ -149,9 +149,9 @@ async def rotate_credentials(
             if not dry_run:
                 # Commit the transaction
                 await session.commit()
-                print(f"\n✓ Changes committed to database")
+                print("\n✓ Changes committed to database")
             else:
-                print(f"\n✓ Dry run complete (no changes saved)")
+                print("\n✓ Dry run complete (no changes saved)")
     
     finally:
         stats["end_time"] = datetime.now()
@@ -166,7 +166,7 @@ async def rotate_credentials(
 def print_summary(stats: Dict[str, Any], dry_run: bool):
     """Print rotation summary."""
     print(f"\n{'='*60}")
-    print(f"ROTATION SUMMARY")
+    print("ROTATION SUMMARY")
     print(f"{'='*60}")
     print(f"Users Processed: {stats['users_processed']}")
     print(f"Credentials Rotated: {stats['credentials_rotated']}")
@@ -174,15 +174,15 @@ def print_summary(stats: Dict[str, Any], dry_run: bool):
     print(f"Duration: {stats['duration_seconds']:.2f} seconds")
     
     if stats['errors']:
-        print(f"\nErrors encountered:")
+        print("\nErrors encountered:")
         for error in stats['errors']:
             print(f"  - {error}")
     
     if dry_run:
-        print(f"\n⚠️  DRY RUN MODE - No changes were saved to the database")
-        print(f"    To perform actual rotation, run again without --dry-run")
+        print("\n⚠️  DRY RUN MODE - No changes were saved to the database")
+        print("    To perform actual rotation, run again without --dry-run")
     else:
-        print(f"\n✓ Rotation completed successfully!")
+        print("\n✓ Rotation completed successfully!")
     
     print(f"{'='*60}\n")
 
@@ -233,7 +233,7 @@ def main():
     
     # Confirm if not dry run
     if not args.dry_run:
-        print(f"\n⚠️  WARNING: This will modify credentials in the database!")
+        print("\n⚠️  WARNING: This will modify credentials in the database!")
         print(f"   Formation: {args.formation_id}")
         print(f"   Database: {args.db_url or '(from environment)'}")
         response = input("\nAre you sure you want to continue? (yes/no): ")

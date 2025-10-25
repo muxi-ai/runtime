@@ -136,12 +136,12 @@ credentials:
 **No YAML configuration** - This is a developer utility
 
 ### Implementation Location
-- `scripts/rotate_credential_keys.py` - New utility script
+- `utils/rotate_credential_keys.py` - New utility script
 
 ### Implementation Notes
 ```bash
 # Usage
-python scripts/rotate_credential_keys.py \
+python utils/rotate_credential_keys.py \
   --formation-id myformation \
   --old-salt "old-salt-value" \
   --new-salt "new-salt-value"

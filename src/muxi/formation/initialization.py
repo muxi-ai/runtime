@@ -793,7 +793,7 @@ def load_agents_from_configuration(formation) -> None:
 
             pass  # REMOVED: init-phase observe() call
 
-        except Exception as e:
+        except Exception:
             pass  # REMOVED: init-phase observe() call
             continue
 

@@ -55,7 +55,7 @@ def classify_error_code(exception: Exception) -> str:
 
     # Check for specific exception types first
     for exc_type, error_code in EXCEPTION_TO_ERROR_CODE.items():
-        if isinstance(exception, exc_type) and exc_type != Exception:
+        if isinstance(exception, exc_type) and exc_type is not Exception:
             return error_code
 
     # Check exception message for specific patterns

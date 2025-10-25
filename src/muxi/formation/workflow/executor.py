@@ -804,6 +804,9 @@ class WorkflowExecutor:
             state.assigned_agent_id = agent.agent_id
             task.assigned_agent_id = agent.agent_id
 
+            # Calculate task timeout
+            task_timeout = self._calculate_task_timeout(task)
+
             observability.observe(
                 event_type=observability.ConversationEvents.WORKFLOW_TASK_ASSIGNED,
                 level=observability.EventLevel.INFO,
@@ -818,9 +821,6 @@ class WorkflowExecutor:
                 },
                 description=f"Task '{task.name}' (complexity {task.estimated_complexity if hasattr(task, 'estimated_complexity') else 'N/A'}) assigned to agent '{agent.agent_id}'",
             )
-
-            # Calculate task timeout
-            task_timeout = self._calculate_task_timeout(task)
 
             # Execute task with timeout
             try:
