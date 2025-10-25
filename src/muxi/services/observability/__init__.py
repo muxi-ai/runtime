@@ -84,6 +84,41 @@ import threading
 # Set multitasking to thread mode for shared memory access
 multitasking.set_engine("thread")
 
+
+# PII Redaction Helper
+def _redact_data_recursive(obj: Any) -> Any:
+    """
+    Recursively redact PII in nested data structures.
+    
+    Uses redact_sensitive_content() from utils.security to redact:
+    - API keys and tokens
+    - Passwords and secrets
+    - Email addresses (partial)
+    - Phone numbers
+    - Credit card numbers
+    - SSNs
+    - AWS credentials
+    - Database connection strings
+    - JWT tokens
+    
+    Args:
+        obj: Data to redact (can be str, dict, list, tuple, or primitive)
+    
+    Returns:
+        Redacted copy of the data
+    """
+    if isinstance(obj, str):
+        from ...utils.security import redact_sensitive_content
+        return redact_sensitive_content(obj)
+    elif isinstance(obj, dict):
+        return {k: _redact_data_recursive(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        result = [_redact_data_recursive(item) for item in obj]
+        return result if isinstance(obj, list) else tuple(result)
+    else:
+        # Numbers, bools, None, etc. - return as-is
+        return obj
+
 # Kill all tasks on ctrl-c for clean shutdown
 # Only register signal handlers in main thread to avoid errors in tests
 try:
@@ -154,6 +189,10 @@ def observe(
         if not configured_logger:
             return
 
+        # Automatically redact PII from data and description
+        redacted_data = _redact_data_recursive(data or {})
+        redacted_description = _redact_data_recursive(description) if description else ""
+
         # Get request context
         from .context import get_current_request_context
         request_context = get_current_request_context()
@@ -173,9 +212,9 @@ def observe(
                 # Silently fail if observability unavailable
                 pass
 
-        # Start the background task with all parameters explicit
+        # Start the background task with all parameters explicit (using redacted data)
         _emit_in_background(
-            configured_logger, request_context, event_type, level, data or {}, description
+            configured_logger, request_context, event_type, level, redacted_data, redacted_description
         )
 
     except Exception:

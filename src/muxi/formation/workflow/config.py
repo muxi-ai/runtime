@@ -61,6 +61,9 @@ class TimeoutConfig(BaseModel):
     phase_timeout: Optional[float] = Field(
         default=600.0, ge=1.0, description="Timeout per execution phase in seconds"
     )
+    max_timeout_seconds: Optional[float] = Field(
+        default=7200.0, ge=1.0, description="Hard maximum timeout for entire workflow (2 hours)"
+    )
     enable_adaptive_timeout: bool = Field(
         default=True, description="Adjust timeouts based on task complexity"
     )

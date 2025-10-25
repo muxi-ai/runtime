@@ -37,6 +37,7 @@ class EncryptedCredentialResolver(CredentialResolver):
         llm_model: Optional[str] = None,
         db_manager=None,
         encryption_key: Optional[str] = None,
+        encryption_salt: Optional[str] = None,
         cache_ttl: int = 3600,  # Pass through to parent
         cache_maxsize: int = 10000,  # Pass through to parent
         fernet_cache_maxsize: int = 10000,  # Separate limit for Fernet instances
@@ -50,12 +51,15 @@ class EncryptedCredentialResolver(CredentialResolver):
             llm_model: Optional LLM model for extraction
             db_manager: Database manager instance for user resolution
             encryption_key: Optional custom encryption key (overrides formation_id)
+            encryption_salt: Optional salt for key derivation (default: "muxi-user-credentials-salt-v1")
             cache_ttl: Time-to-live for cached credentials in seconds (default: 1 hour)
             cache_maxsize: Maximum number of users in credential cache (default: 10,000)
             fernet_cache_maxsize: Maximum Fernet instances to cache (default: 10,000)
         """
         super().__init__(async_session_maker, formation_id, llm_model, db_manager, cache_ttl, cache_maxsize)
         self.custom_key = encryption_key
+        # Use provided salt or default
+        self.encryption_salt = (encryption_salt or "muxi-user-credentials-salt-v1").encode("utf-8")
         # Bounded LRU cache for Fernet instances (deterministic, no TTL needed)
         # Fernet instances are small (~200 bytes) but should still be bounded
         self._fernet_cache = LRUCache(maxsize=fernet_cache_maxsize)
@@ -103,7 +107,7 @@ class EncryptedCredentialResolver(CredentialResolver):
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
-            salt=b"muxi-user-credentials-v1",  # Static salt for deterministic key derivation
+            salt=self.encryption_salt,  # Configurable salt (formation-specific)
             iterations=100000,
             backend=default_backend(),
         )

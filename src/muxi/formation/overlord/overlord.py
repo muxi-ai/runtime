@@ -110,6 +110,7 @@ from .agent_router import AgentRouter
 from .chat_orchestrator import ChatOrchestrator
 from .mcp_coordinator import MCPCoordinator
 from .a2a_coordinator import A2ACoordinator
+from .input_validation import InputValidator, InputLimits
 from ...services.scheduler.service import SchedulerService
 from ..initialization import initialize_artifact_service
 from ...datatypes.exceptions import RegistryConfigurationError
@@ -430,6 +431,10 @@ class Overlord:
         self.formation_id = self.formation_config.get("formation_id", "default-formation")
         set_formation_id(self.formation_id)
 
+        # Initialize input validator with formation limits
+        input_limits = InputLimits.from_config(self.formation_config)
+        self.input_validator = InputValidator(input_limits)
+
         # Initialize credential resolver if database is configured
         self.credential_resolver = None
         if configured_services:
@@ -466,7 +471,15 @@ class Overlord:
 
                 # Check if encryption is configured
                 cred_config = self.formation_config.get("user_credentials", {})
-                encryption_key = cred_config.get("encryption_key")
+                # Support both old format (encryption_key) and new format (encryption.key/salt)
+                if "encryption" in cred_config and isinstance(cred_config["encryption"], dict):
+                    encryption_config = cred_config["encryption"]
+                    encryption_key = encryption_config.get("key")
+                    encryption_salt = encryption_config.get("salt")
+                else:
+                    # Backward compatibility: old format
+                    encryption_key = cred_config.get("encryption_key")
+                    encryption_salt = None
 
                 # Use encrypted resolver if we have cryptography available
                 try:
@@ -478,6 +491,7 @@ class Overlord:
                         llm_model=llm_model,
                         db_manager=db_manager,
                         encryption_key=encryption_key,  # Optional custom key
+                        encryption_salt=encryption_salt,  # Optional custom salt
                     )
                     # REMOVE - line 482 (user: feels pointless)
                 except ImportError:
@@ -4757,6 +4771,24 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         # Do this EARLY before any other processing
         if not self.is_multi_user:
             user_id = "0"
+
+        # Validate message length before processing
+        try:
+            self.input_validator.validate_message(message)
+        except Exception as e:
+            # Return validation error as response
+            return str(e)
+
+        # Validate file uploads if present
+        if files:
+            try:
+                for file_data in files:
+                    filename = file_data.get("filename", "unknown")
+                    size = file_data.get("size", 0)
+                    self.input_validator.validate_file_upload(filename, size)
+            except Exception as e:
+                # Return validation error as response
+                return str(e)
         elif user_id is not None:
             # Normalize user_id - lowercase and strip whitespace
             user_id = str(user_id).lower().strip()

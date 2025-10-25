@@ -19,6 +19,7 @@ from ...datatypes.workflow_models import (
     create_execution_result,
 )
 from ...services import observability, streaming
+from ...datatypes.exceptions import WorkflowTimeoutError
 
 from ..agents.agent import Agent
 
@@ -173,6 +174,59 @@ class WorkflowExecutor:
         4. Handle failures with configured recovery strategies
         5. Apply timeouts and resource limits
         6. Report progress throughout execution
+
+        Args:
+            workflow: Workflow to execute
+            context: Optional execution context
+
+        Returns:
+            Updated workflow with execution results
+        """
+        # Wrap entire execution with hard max timeout if configured
+        max_timeout = self.config.timeout_config.max_timeout_seconds
+        if max_timeout:
+            try:
+                async with asyncio.timeout(max_timeout):
+                    return await self._execute_workflow_internal(workflow, context)
+            except asyncio.TimeoutError:
+                # Workflow exceeded maximum allowed time
+                workflow.status = WorkflowStatus.FAILED
+                workflow.completed_at = datetime.now()
+                
+                elapsed = (workflow.completed_at - workflow.started_at).total_seconds() if workflow.started_at else 0
+                
+                observability.observe(
+                    event_type=observability.ConversationEvents.WORKFLOW_EXECUTION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "workflow_id": workflow.id,
+                        "failure_reason": "max_timeout_exceeded",
+                        "max_timeout_seconds": max_timeout,
+                        "elapsed_seconds": elapsed,
+                        "total_tasks": len(workflow.tasks),
+                        "completed_tasks": sum(1 for t in workflow.tasks.values() if t.status == TaskStatus.COMPLETED),
+                    },
+                    description=f"Workflow {workflow.id} exceeded maximum timeout of {max_timeout}s (ran for {elapsed:.1f}s)",
+                )
+                
+                # Clean up
+                if workflow.id in self.active_workflows:
+                    del self.active_workflows[workflow.id]
+                if workflow.id in self.workflow_start_times:
+                    del self.workflow_start_times[workflow.id]
+                
+                raise WorkflowTimeoutError(
+                    f"Workflow exceeded maximum duration of {max_timeout}s (ran for {elapsed:.1f}s)"
+                )
+        else:
+            # No hard timeout configured, execute normally
+            return await self._execute_workflow_internal(workflow, context)
+
+    async def _execute_workflow_internal(
+        self, workflow: Workflow, context: Optional[Dict[str, Any]] = None
+    ) -> Workflow:
+        """
+        Internal workflow execution logic (separated for timeout wrapping).
 
         Args:
             workflow: Workflow to execute

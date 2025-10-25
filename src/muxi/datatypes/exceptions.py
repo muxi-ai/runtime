@@ -479,6 +479,30 @@ class MCPServerNotFoundError(MCPError):
         self.server_id = server_id
 
 
+# Workflow Errors
+class WorkflowError(FormationError):
+    """Base class for workflow-related errors."""
+
+    pass
+
+
+class WorkflowTimeoutError(WorkflowError):
+    """Raised when workflow execution exceeds maximum allowed time."""
+
+    def __init__(
+        self,
+        message: str,
+        workflow_id: str = None,
+        max_timeout: float = None,
+        elapsed: float = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(message, details)
+        self.workflow_id = workflow_id
+        self.max_timeout = max_timeout
+        self.elapsed = elapsed
+
+
 # Security Errors
 class SecurityError(FormationError):
     """Base class for security-related errors."""

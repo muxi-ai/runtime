@@ -123,7 +123,7 @@ class DatabaseManager:
     and shared connection pooling for optimal resource usage across services.
     """
 
-    def __init__(self, connection_string: Optional[str] = None):
+    def __init__(self, connection_string: Optional[str] = None, statement_timeout_seconds: int = 30):
         """
         Initializes the database manager with synchronous engine and session support,
         resolving the connection string and database type.
@@ -134,6 +134,7 @@ class DatabaseManager:
         """
         self.connection_string = self._resolve_connection_string(connection_string)
         self.database_type = self._detect_database_type(self.connection_string)
+        self.statement_timeout_seconds = statement_timeout_seconds
 
         # Create sync engine first
         self.engine = self._create_engine()
@@ -231,6 +232,10 @@ class DatabaseManager:
                 pool_timeout=30,
                 pool_recycle=1800,
                 echo=False,  # Set to True for SQL debugging
+                connect_args={
+                    # Set statement timeout to prevent hung queries
+                    "options": f"-c statement_timeout={self.statement_timeout_seconds * 1000}"
+                },
             )
 
             # Enable pgvector extension for PostgreSQL
@@ -278,6 +283,14 @@ class DatabaseManager:
                 pool_recycle=1800,
                 pool_pre_ping=True,  # Verify connections before use
                 echo=False,  # Set to True for SQL debugging
+                connect_args={
+                    "server_settings": {
+                        # Statement timeout prevents hung queries (milliseconds)
+                        "statement_timeout": str(self.statement_timeout_seconds * 1000),
+                        # Idle transaction timeout for cleanup (60 seconds)
+                        "idle_in_transaction_session_timeout": "60000",
+                    }
+                },
             )
         else:  # SQLite
             # SQLite async configuration
@@ -487,12 +500,15 @@ class DatabaseManager:
 _db_manager: Optional[DatabaseManager] = None
 
 
-def get_database_manager(connection_string: Optional[str] = None) -> DatabaseManager:
+def get_database_manager(
+    connection_string: Optional[str] = None, statement_timeout_seconds: int = 30
+) -> DatabaseManager:
     """
     Get the global database manager instance.
 
     Args:
         connection_string: Optional connection string for initialization
+        statement_timeout_seconds: Maximum time for individual SQL queries (default: 30)
 
     Returns:
         DatabaseManager instance
@@ -500,7 +516,7 @@ def get_database_manager(connection_string: Optional[str] = None) -> DatabaseMan
     global _db_manager
 
     if _db_manager is None:
-        _db_manager = DatabaseManager(connection_string)
+        _db_manager = DatabaseManager(connection_string, statement_timeout_seconds)
 
     return _db_manager
 
