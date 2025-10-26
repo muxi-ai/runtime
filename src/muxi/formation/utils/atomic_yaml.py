@@ -1,10 +1,15 @@
 """
 Atomic YAML file operations.
 
-Provides atomic file operations for YAML configuration files, protecting against
-partial writes and crashes. Does NOT provide internal synchronization for concurrent
-updates to the same file — callers must use external locking (file locks, distributed
-locks) when multiple processes/threads may update the same file concurrently.
+Provides atomic write operations for YAML configuration files, protecting against
+partial writes and crashes.
+
+**CRITICAL - CONCURRENCY WARNING:**
+The update_yaml function performs read-modify-write and is NOT safe for concurrent
+updates to the same file without external locking. Multiple concurrent calls WILL
+result in lost updates. Callers MUST implement external locking (e.g., fcntl.flock,
+filelock library, or distributed locks) when multiple processes/threads may update
+the same file concurrently.
 """
 
 import asyncio
@@ -185,25 +190,33 @@ async def atomic_write_yaml(
         raise AtomicYAMLError(f"Failed to write YAML file {file_path}: {str(e)}") from e
 
 
-async def atomic_update_yaml(
+async def update_yaml(
     file_path: str | Path,
     updates: Dict[str, Any],
     preserve_permissions: bool = True,
     deep_merge: bool = True,
 ) -> None:
     """
-    Atomically update a YAML file with partial data.
+    Update a YAML file with partial data using atomic write.
 
     Reads the existing file, merges updates, and writes atomically.
 
-    **WARNING - LOST UPDATE RACE CONDITION:**
-    This function has a classic read-modify-write race condition. Between reading
-    the file and writing it back, another process can modify the file, causing
-    those updates to be SILENTLY LOST. This is NOT prevented by the atomic write.
+    **CRITICAL - CONCURRENCY WARNING:**
+    This function performs a read-modify-write and is NOT safe for concurrent
+    updates to the same file without external locking. Multiple concurrent calls
+    will result in lost updates (classic lost-update race condition). Callers MUST
+    implement external locking (e.g., fcntl.flock, filelock library, or distributed
+    locks) when multiple processes/threads may update the same file.
 
-    **CALLER MUST PROVIDE EXTERNAL LOCKING** (e.g., fcntl.flock, filelock library,
-    or distributed locks) when multiple processes/threads may update the same file.
-    Without external locking, data loss WILL occur under concurrent access.
+    **What happens without locking:**
+    1. Process A reads file (version 1)
+    2. Process B reads file (version 1)
+    3. Process A writes update (version 2)
+    4. Process B writes update (version 2 - Process A's changes are LOST)
+
+    **Atomic write guarantee:**
+    The write itself is atomic (no partial writes), but this does NOT prevent
+    lost updates from concurrent readers.
 
     Args:
         file_path: Path to the YAML file to update
@@ -214,11 +227,21 @@ async def atomic_update_yaml(
     Raises:
         AtomicYAMLError: If the operation fails
         FileNotFoundError: If the file doesn't exist
+
+    Example with proper locking:
+        ```python
+        from filelock import FileLock
+
+        lock = FileLock("config.yaml.lock")
+        with lock:
+            await update_yaml("config.yaml", {"key": "value"})
+        ```
     """
     file_path = Path(file_path)
 
     try:
-        # Read existing content (TOCTOU-safe: no separate existence check)
+        # Read existing content
+        # Note: No separate existence check - open() will raise FileNotFoundError if missing
         async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
             content = await f.read()
             existing_data = yaml.safe_load(content)
@@ -271,6 +294,31 @@ def _deep_merge(base: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]
             result[key] = value
 
     return result
+
+
+# Backward compatibility alias (deprecated)
+async def atomic_update_yaml(
+    file_path: str | Path,
+    updates: Dict[str, Any],
+    preserve_permissions: bool = True,
+    deep_merge: bool = True,
+) -> None:
+    """
+    Deprecated alias for update_yaml. Use update_yaml instead.
+
+    This function is maintained for backward compatibility but will be removed
+    in a future version. The name "atomic_update_yaml" is misleading because
+    the update operation (read-modify-write) is NOT atomic without external locking.
+    """
+    import warnings
+    warnings.warn(
+        "atomic_update_yaml is deprecated and will be removed in a future version. "
+        "Use update_yaml instead. Note: This function is NOT safe for concurrent "
+        "updates without external locking.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    return await update_yaml(file_path, updates, preserve_permissions, deep_merge)
 
 
 async def atomic_read_yaml(file_path: str | Path) -> Dict[str, Any]:
