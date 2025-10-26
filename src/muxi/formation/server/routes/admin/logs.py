@@ -107,7 +107,17 @@ async def stream_logs(
         Generate Server-Sent Events from observability logs.
         """
         formation = request.app.state.formation
-        overlord = formation.overlord
+        overlord = getattr(formation, "_overlord", None)
+        
+        if not overlord:
+            error_msg = {
+                "error": True,
+                "message": "Overlord service not available",
+                "filters_received": active_filters,
+            }
+            yield "event: error\n"
+            yield f"data: {json.dumps(error_msg)}\n\n"
+            return
         
         # Get observability manager
         observability_manager = overlord.observability_manager if hasattr(overlord, 'observability_manager') else None

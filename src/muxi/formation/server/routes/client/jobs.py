@@ -29,8 +29,14 @@ async def list_user_jobs(request: Request, user_id: str) -> JSONResponse:
         List of job details
     """
     formation = request.app.state.formation
-    overlord = formation.overlord
+    overlord = getattr(formation, "_overlord", None)
     request_id = getattr(request.state, "request_id", None)
+
+    if not overlord:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Overlord service not available", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
 
     # Get all requests and filter by user_id
     all_requests = await overlord.request_tracker.get_all_requests()
@@ -72,8 +78,14 @@ async def cancel_job(request: Request, user_id: str, job_id: str) -> JSONRespons
         Success response
     """
     formation = request.app.state.formation
-    overlord = formation.overlord
+    overlord = getattr(formation, "_overlord", None)
     request_id = getattr(request.state, "request_id", None)
+
+    if not overlord:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Overlord service not available", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
 
     # Verify job exists and belongs to user (security check)
     job_state = await overlord.request_tracker.get_request(job_id)

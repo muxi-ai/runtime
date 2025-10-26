@@ -28,7 +28,13 @@ async def user_events(request: Request, user_id: str) -> StreamingResponse:
         Client API key authentication is enforced at the router level
     """
     formation = request.app.state.formation
-    overlord = formation.overlord
+    overlord = getattr(formation, "_overlord", None)
+    
+    if not overlord:
+        raise HTTPException(
+            status_code=503,
+            detail="Overlord service not available"
+        )
     
     # Get observability manager
     observability_manager = overlord.observability_manager if hasattr(overlord, 'observability_manager') else None

@@ -68,8 +68,14 @@ async def update_async_settings(request: Request, settings: AsyncSettingsUpdate)
         Updated async configuration
     """
     formation = request.app.state.formation
-    overlord = formation.overlord
+    overlord = getattr(formation, "_overlord", None)
     request_id = getattr(request.state, "request_id", None)
+
+    if not overlord:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Overlord service not available", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
 
     # Update in-memory configuration (ephemeral - lost on restart)
     async_config = formation.config.setdefault("async", {})
@@ -98,8 +104,14 @@ async def list_async_jobs(request: Request) -> JSONResponse:
         List of async job statuses
     """
     formation = request.app.state.formation
-    overlord = formation.overlord
+    overlord = getattr(formation, "_overlord", None)
     request_id = getattr(request.state, "request_id", None)
+
+    if not overlord:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Overlord service not available", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
 
     # Get all active async jobs across all users
     all_requests = await overlord.request_tracker.get_all_requests()
@@ -137,8 +149,14 @@ async def get_async_job(request: Request, job_id: str) -> JSONResponse:
         Job status and result if complete
     """
     formation = request.app.state.formation
-    overlord = formation.overlord
+    overlord = getattr(formation, "_overlord", None)
     request_id = getattr(request.state, "request_id", None)
+
+    if not overlord:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Overlord service not available", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
 
     # Get full job status (checks both request tracker and buffer memory)
     status = await overlord.get_request_status(job_id)
@@ -163,8 +181,14 @@ async def cancel_async_job(request: Request, job_id: str) -> JSONResponse:
         Success response
     """
     formation = request.app.state.formation
-    overlord = formation.overlord
+    overlord = getattr(formation, "_overlord", None)
     request_id = getattr(request.state, "request_id", None)
+
+    if not overlord:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Overlord service not available", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
 
     # Cancel the job
     result = await overlord.cancel_request(job_id)
