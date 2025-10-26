@@ -7768,7 +7768,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
 
         if success:
             observability.observe(
-                event_type=observability.ConversationEvents.ASYNC_THRESHOLD_DETECTED,
+                event_type=observability.ConversationEvents.WEBHOOK_SENT,
                 level=observability.EventLevel.INFO,
                 data={
                     "webhook_url": webhook_url,
@@ -7780,7 +7780,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             )
         else:
             observability.observe(
-                event_type=observability.ConversationEvents.ASYNC_PROCESSING_FAILED,
+                event_type=observability.ConversationEvents.WEBHOOK_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "webhook_url": webhook_url,
