@@ -144,8 +144,10 @@ class AuditLogger:
         request_id = getattr(request.state, "request_id", None)
         ip = request.client.host if request.client else None
 
-        # TODO: Extract user from authentication context when multi-user is implemented
-        user = "admin"
+        # Extract user from authentication context
+        # Currently all admin API requests use "admin" user
+        # When multi-admin support is added, extract from JWT/API key metadata
+        user = getattr(request.state, "authenticated_user", "admin")
 
         self.log(
             action=action,

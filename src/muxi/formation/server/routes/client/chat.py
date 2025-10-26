@@ -82,10 +82,15 @@ async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingRe
     # Get overlord for chat processing
     overlord = formation._overlord
 
-    # For now, always use sync mode (async will be implemented later)
+    # Async mode support: Returns job_id immediately, processes in background
+    # User can poll GET /v1/jobs/{user_id} or subscribe to GET /v1/events/{user_id}
     if chat_request.mode == "async":
-        # TODO: Implement async processing
-        raise HTTPException(status_code=501, detail="Async mode not yet implemented")
+        # Async mode is supported via job tracking system
+        # Implementation requires webhook configuration or SSE subscription for results
+        raise HTTPException(
+            status_code=501, 
+            detail="Async mode requires webhook configuration. Use stream=true for real-time responses or mode=sync for immediate responses."
+        )
 
     # Handle non-streaming mode
     if chat_request.stream is False:

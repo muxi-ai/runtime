@@ -623,13 +623,52 @@ async def _handle_chat(
 
 async def _handle_get_memories(formation, user_id: str, limit: int = 10, **kwargs):
     """Get memories handler."""
-    # TODO: Implement memory retrieval
-    return []
+    overlord = formation._overlord
+    if not overlord or not hasattr(overlord, "long_term_memory") or not overlord.long_term_memory:
+        return []
+    
+    try:
+        # Search with empty query to get recent memories
+        memories = await overlord.long_term_memory.search(
+            query="",
+            limit=limit,
+            external_user_id=user_id,
+        )
+        
+        # Convert to simple format for MCP tools
+        return [
+            {
+                "id": mem.get("id"),
+                "content": mem.get("content") or mem.get("text"),
+                "created_at": mem.get("created_at"),
+            }
+            for mem in memories
+        ]
+    except Exception:
+        # Silently fail and return empty list
+        return []
 
 
 async def _handle_create_memory(
     formation, user_id: str, content: str, metadata: dict = None, **kwargs
 ):
     """Create memory handler."""
-    # TODO: Implement memory creation
-    return {"id": "memory_123", "content": content, "metadata": metadata}
+    overlord = formation._overlord
+    if not overlord or not hasattr(overlord, "long_term_memory") or not overlord.long_term_memory:
+        raise ValueError("Memory system not available")
+    
+    try:
+        # Add memory using the same system as the API endpoint
+        memory_id = await overlord.long_term_memory.add(
+            content=content,
+            metadata=metadata or {},
+            external_user_id=user_id,
+        )
+        
+        return {
+            "id": memory_id,
+            "content": content,
+            "metadata": metadata or {},
+        }
+    except Exception as e:
+        raise ValueError(f"Failed to create memory: {str(e)}") from e

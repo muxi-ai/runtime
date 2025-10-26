@@ -111,8 +111,8 @@ async def reset_llm_setting(request: Request, item: str) -> JSONResponse:
         )
         return JSONResponse(content=response.model_dump(), status_code=400)
 
-    # TODO: Implement LLM setting reset logic
-    # For now, just update the configuration to remove the setting
+    # Reset specific LLM setting by removing it from in-memory config
+    # This restores the formation YAML default value
     llm_config = formation.config.get("llm", {})
     settings = llm_config.get("settings", {})
 

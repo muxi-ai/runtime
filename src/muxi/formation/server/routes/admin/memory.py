@@ -223,8 +223,9 @@ async def update_memory_config(request: Request, config: MemoryConfigUpdate) -> 
     # Update formation configuration
     formation.config["memory"] = current_config
 
-    # TODO: Persist configuration to file/database if needed
-    # For now, configuration is only updated in memory
+    # NOTE: Configuration changes are ephemeral (in-memory only)
+    # They take effect immediately but are lost on formation restart
+    # This is by design for runtime configuration management
 
     response = create_success_response(
         APIObjectType.CONFIG, APIEventType.CONFIG_UPDATED, current_config, request_id
@@ -243,9 +244,28 @@ async def reset_memory_setting(request: Request, item: str) -> JSONResponse:
     Returns:
         Success response
     """
+    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # TODO: Implement memory setting reset logic
+    # Reset specific memory setting by removing it from in-memory config
+    # This restores the formation YAML default value
+    memory_config = formation.config.get("memory", {})
+    
+    # Define valid memory settings that can be reset
+    valid_paths = {
+        "buffer_size": ["buffer", "size"],
+        "buffer_multiplier": ["buffer", "multiplier"],
+        "buffer_vector_search": ["buffer", "vector_search"],
+        "working_max_memory_mb": ["working", "max_memory_mb"],
+        "working_fifo_interval_min": ["working", "fifo_interval_min"],
+    }
+    
+    if item in valid_paths:
+        path = valid_paths[item]
+        if len(path) == 2 and path[0] in memory_config:
+            section = memory_config[path[0]]
+            if isinstance(section, dict) and path[1] in section:
+                del section[path[1]]
 
     response = create_success_response(
         APIObjectType.CONFIG,
