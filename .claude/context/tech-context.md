@@ -4,6 +4,24 @@ This document outlines the technical context of the MUXI Runtime, including tech
 
 ## Recent Technical Improvements (July-October 2025)
 
+### Code Quality & Security Improvements (October 26, 2025)
+- **HTTP Semantics Compliance**: Fixed GET endpoint side effects
+  - Split user identifier endpoints: GET (lookup only) vs POST (resolution with creation)
+  - Added `create_if_missing` parameter for explicit control over user creation
+- **Timezone Handling**: Fixed audit log timestamp filtering
+  - Replaced string comparison with proper datetime comparison
+  - UTC normalization for both naive and aware datetimes
+  - Handles multiple ISO format variations (Z suffix, timezone offsets)
+- **Input Validation**: Enhanced security across multiple endpoints
+  - Path traversal prevention in SOP endpoints (regex validation)
+  - Safe string indexing to prevent IndexError on empty input
+- **Concurrency Warnings**: Clarified atomic operations
+  - Renamed `atomic_update_yaml` → `update_yaml` (more accurate naming)
+  - Added prominent warnings about read-modify-write race conditions
+  - Provided locking examples (FileLock) for safe concurrent access
+- **Test Coverage**: Added 19 new tests for validation and edge cases
+- **Code Quality**: Zero ruff linting errors across codebase
+
 ### Multi-Identity User Management (October 2025)
 - **Database Schema**: Two-table design for one-to-many identifier mapping
   - `users` table: Core entity with auto-increment ID, public_id (usr_xxxx), formation_id
