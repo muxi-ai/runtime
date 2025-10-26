@@ -8,6 +8,7 @@ requiring admin API key authentication.
 from typing import Dict, Any, Optional, List
 import uuid
 from copy import deepcopy
+import logging
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -24,6 +25,9 @@ from ...utils import get_header_case_insensitive
 from .....services.secrets.config_utils import get_config_item_with_secrets_restored
 
 router = APIRouter(tags=["MCP"])
+
+# Module logger for error tracking
+logger = logging.getLogger(__name__)
 
 
 class MCPToolCall(BaseModel):
@@ -642,12 +646,21 @@ async def _handle_get_memories(formation, user_id: str, limit: int = 10, **kwarg
             for mem in memories
         ]
     except Exception:
-        # Silently fail and return empty list
+        # Log the exception before returning empty list
+        logger.exception(
+            "Failed to retrieve memories for user %s (limit=%d)",
+            user_id,
+            limit,
+        )
         return []
 
 
 async def _handle_create_memory(
-    formation, user_id: str, content: str, metadata: dict = None, **kwargs
+    formation,
+    user_id: str,
+    content: str,
+    metadata: dict | None = None,
+    **kwargs,  # Required for MCP handler signature consistency
 ):
     """Create memory handler."""
     overlord = formation._overlord
