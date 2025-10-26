@@ -58,6 +58,9 @@ class ObservabilityManager:
         self._subscribers: List[tuple] = []  # List of (queue, filters) tuples
         import asyncio
         self._subscriber_lock = asyncio.Lock()
+        
+        # Metrics for dropped events (when subscriber queue is full)
+        self._dropped_events_count = 0
 
     def _create_event_logger(self) -> EventLogger:
         """Create event logger from configuration."""
@@ -203,14 +206,41 @@ class ObservabilityManager:
         """
         import asyncio
 
+        # Take shallow copy of subscribers under lock, then release
+        # This prevents lock contention from filter checks and slow subscribers
         async with self._subscriber_lock:
-            for queue, filters in self._subscribers:
-                if self._matches_filters(event, filters):
-                    try:
-                        queue.put_nowait(event)
-                    except asyncio.QueueFull:
-                        # Drop events if subscriber is slow
-                        pass
+            subscribers_snapshot = list(self._subscribers)
+        
+        # Iterate snapshot without holding lock
+        for queue, filters in subscribers_snapshot:
+            if self._matches_filters(event, filters):
+                try:
+                    queue.put_nowait(event)
+                except asyncio.QueueFull:
+                    # Drop events if subscriber is slow
+                    # Track dropped events for observability
+                    self._dropped_events_count += 1
+                    # Emit metric if we have significant drops
+                    if self._dropped_events_count % 100 == 0:
+                        # Use event_logger to avoid recursion in observability system
+                        self.event_logger.log_event(
+                            event_type="observability.subscriber_slow",
+                            level=EventLevel.WARNING,
+                            data={
+                                "dropped_events": self._dropped_events_count,
+                                "subscriber_queue_size": queue.qsize() if hasattr(queue, 'qsize') else 'unknown'
+                            },
+                            description=f"Dropped {self._dropped_events_count} events due to slow subscribers"
+                        )
+
+    def get_dropped_events_count(self) -> int:
+        """
+        Get the total number of events dropped due to slow subscribers.
+        
+        Returns:
+            Number of events dropped
+        """
+        return self._dropped_events_count
 
     def mark_request_async(self, request_id: str) -> None:
         """Mark a request as async to prevent premature completion.
