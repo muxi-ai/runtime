@@ -4798,7 +4798,12 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         try:
             self.input_validator.validate_message(message)
         except InputValidationError as e:
-            return str(e)
+            # Return uniform error response for validation failures
+            return MuxiResponse(
+                role="assistant",
+                content=str(e),
+                metadata={"error_code": "INPUT_VALIDATION_ERROR", "error_type": "validation"}
+            )
         except Exception as e:
             # Log unexpected validation errors but re-raise to avoid hiding bugs
             observability.observe(
@@ -4822,7 +4827,12 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     size = file_data.get("size", 0)
                     self.input_validator.validate_file_upload(filename, size)
             except InputValidationError as e:
-                return str(e)
+                # Return uniform error response for validation failures
+                return MuxiResponse(
+                    role="assistant",
+                    content=str(e),
+                    metadata={"error_code": "FILE_VALIDATION_ERROR", "error_type": "validation"}
+                )
             except Exception as e:
                 # Log unexpected validation errors but re-raise to avoid hiding bugs
                 observability.observe(
@@ -7499,7 +7509,12 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             )
 
             # Note: Verification happens through buffer memory KV store
-            print(f"  Workflow approval stored in buffer memory for session: {session_id}")
+            observability.observe(
+                event_type=observability.ConversationEvents.REQUEST_PROCESSING,
+                level=observability.EventLevel.INFO,
+                data={"session_id": session_id, "workflow_id": workflow.id},
+                description="Workflow approval stored in buffer memory",
+            )
 
         # Return response with approval message
         response = MuxiResponse(
