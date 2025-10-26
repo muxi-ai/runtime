@@ -328,6 +328,36 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
         raise
 
 
+def _validate_query_timeout(persistent_config: Dict[str, Any]) -> int:
+    """
+    Validate and extract query_timeout_seconds from persistent memory config.
+    
+    Args:
+        persistent_config: Persistent memory configuration dict
+        
+    Returns:
+        Validated positive integer timeout value
+        
+    Raises:
+        ValueError: If timeout is invalid (non-integer, zero, or negative)
+    """
+    raw_timeout = persistent_config.get("query_timeout_seconds", 30)
+    
+    try:
+        timeout = int(raw_timeout)
+    except (ValueError, TypeError):
+        raise ValueError(
+            f"Invalid query_timeout_seconds: {raw_timeout!r}. Must be a positive integer."
+        )
+    
+    if timeout <= 0:
+        raise ValueError(
+            f"Invalid query_timeout_seconds: {timeout}. Must be a positive integer (got {timeout})."
+        )
+    
+    return timeout
+
+
 def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) -> None:
     """
     Initializes the persistent memory system for the formation based on the provided configuration.
@@ -359,8 +389,8 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
         # For now, we'll pass the model name and let the memory systems handle model creation
         # This avoids the async initialization issue
 
-        # Extract statement timeout once for reuse across all database manager branches
-        statement_timeout = persistent_config.get("query_timeout_seconds", 30)
+        # Extract and validate statement timeout once for reuse across all database manager branches
+        statement_timeout = _validate_query_timeout(persistent_config)
 
         # Determine the type of persistent memory based on connection string
         if connection_string.startswith("postgresql://"):
@@ -963,6 +993,9 @@ async def initialize_persistent_memory(
         # Get embedding model
         embedding_model = await _get_embedding_model(overlord, embedding_model_name)
 
+        # Extract and validate statement timeout once for reuse across all database manager branches
+        statement_timeout = _validate_query_timeout(persistent_config)
+
         # Determine multi-user mode - check explicit config first, then infer from database type
         explicit_multi_user = persistent_config.get("multi_user")
         if explicit_multi_user is not None:
@@ -986,7 +1019,6 @@ async def initialize_persistent_memory(
             from ..services.db import get_database_manager
 
             # Create ONE DatabaseManager for the Formation
-            statement_timeout = persistent_config.get("query_timeout_seconds", 30)
             db_manager = get_database_manager(connection_string, statement_timeout)
 
             # Store db_manager on both formation and overlord
@@ -1025,7 +1057,6 @@ async def initialize_persistent_memory(
             overlord.long_term_memory = sqlite_memory
 
             # Create DatabaseManager for scheduler access (SQLite)
-            statement_timeout = persistent_config.get("query_timeout_seconds", 30)
             db_manager = get_database_manager(connection_string, statement_timeout)
             formation._db_manager = db_manager
             overlord.db_manager = db_manager
