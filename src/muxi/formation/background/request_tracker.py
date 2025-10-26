@@ -54,6 +54,18 @@ class RequestState:
             return self.end_time - self.start_time
         return None
 
+    def get_created_timestamp(self) -> Optional[float]:
+        """
+        Get the creation timestamp for this request.
+        
+        Returns created_at if available, otherwise falls back to start_time.
+        This provides a canonical accessor for timestamp resolution.
+        
+        Returns:
+            Timestamp as float, or None if neither field exists
+        """
+        return getattr(self, 'created_at', None) or getattr(self, 'start_time', None)
+
 
 class RequestTracker:
     """In-memory tracking of async requests with thread-safe operations."""

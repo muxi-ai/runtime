@@ -12,7 +12,9 @@ from ...responses import (
     APIResponse,
     job_list_response,
     create_error_response,
+    create_success_response,
 )
+from .....datatypes.api import APIObjectType, APIEventType
 
 router = APIRouter(tags=["Jobs"])
 
@@ -52,7 +54,7 @@ async def list_user_jobs(request: Request, user_id: str) -> JSONResponse:
             "id": req_id,
             "status": state.status.value,
             "progress": state.progress,
-            "created_at": state.created_at if hasattr(state, 'created_at') else state.start_time,
+            "created_at": state.get_created_timestamp(),
             "completed_at": state.end_time,
         }
         # Only include error if present
@@ -105,8 +107,6 @@ async def cancel_job(request: Request, user_id: str, job_id: str) -> JSONRespons
     result = await overlord.cancel_request(job_id)
 
     if result["success"]:
-        from ...responses import create_success_response
-        from .....datatypes.api import APIObjectType, APIEventType
         response = create_success_response(
             APIObjectType.JOB, APIEventType.JOB_CANCELLED, result, request_id
         )
