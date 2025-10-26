@@ -1543,7 +1543,11 @@ class Overlord:
                         "agent_id": agent_id,
                         "error_type": type(e).__name__,
                         "error": str(e),
-                        "agent_config": {k: v for k, v in (agent_config or {}).items() if k not in ["system_message", "tools"]} if isinstance(agent_config, dict) else None,
+                        "agent_config": (
+                            {k: v for k, v in (agent_config or {}).items() if k not in ["system_message", "tools"]}
+                            if isinstance(agent_config, dict)
+                            else None
+                        ),
                     },
                     description=f"Failed to load agent '{agent_id}': {type(e).__name__}: {e}",
                 )

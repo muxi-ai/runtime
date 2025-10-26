@@ -139,8 +139,61 @@ class InputValidator:
         Raises:
             InputValidationError: If output exceeds maximum size
         """
-        # Convert to string for size validation
-        output_str = str(output)
+        # Perform cheap pre-checks before expensive string conversion
+        
+        # Fast path: bytes/bytearray can be checked directly
+        if isinstance(output, (bytes, bytearray)):
+            size_bytes = len(output)
+            if size_bytes > self.limits.max_tool_output_size:
+                raise InputValidationError(
+                    f"Tool '{tool_name}' output too large: {size_bytes:,} bytes "
+                    f"({size_bytes / 1_000_000:.1f}MB) "
+                    f"(max: {self.limits.max_tool_output_size / 1_000_000:.0f}MB).\n\n"
+                    "Try:\n"
+                    "- Paginating results\n"
+                    "- Filtering or aggregating data\n"
+                    "- Writing results to a file instead"
+                )
+            return
+        
+        # Heuristic: if object is a collection (not string), estimate potential size
+        # Skip strings as they're already in final form
+        # Assume each element could be ~100 bytes when stringified
+        if not isinstance(output, str) and hasattr(output, '__len__'):
+            try:
+                element_count = len(output)
+                # Conservative estimate: 100 bytes per element
+                estimated_size = element_count * 100
+                if estimated_size > self.limits.max_tool_output_size:
+                    raise InputValidationError(
+                        f"Tool '{tool_name}' output too large: estimated {estimated_size:,} bytes "
+                        f"from {element_count:,} elements "
+                        f"(max: {self.limits.max_tool_output_size / 1_000_000:.0f}MB).\n\n"
+                        "Try:\n"
+                        "- Paginating results\n"
+                        "- Filtering or aggregating data\n"
+                        "- Writing results to a file instead"
+                    )
+            except (TypeError, AttributeError):
+                # __len__ exists but doesn't work - continue to str() conversion
+                pass
+        
+        # Convert to string for precise size validation
+        # Guard against memory exhaustion and infinite recursion
+        try:
+            output_str = str(output)
+        except (MemoryError, RecursionError) as e:
+            # Object is too large or too deeply nested to stringify
+            raise InputValidationError(
+                f"Tool '{tool_name}' output too large: failed to convert to string "
+                f"({type(e).__name__}).\n\n"
+                "The output is too large or deeply nested. Try:\n"
+                "- Paginating results\n"
+                "- Filtering or aggregating data\n"
+                "- Writing results to a file instead"
+            )
+        
+        # Now perform actual byte-size check
         size_bytes = len(output_str.encode("utf-8"))
 
         if size_bytes > self.limits.max_tool_output_size:
