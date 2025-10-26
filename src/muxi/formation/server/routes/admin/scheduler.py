@@ -67,7 +67,7 @@ async def get_scheduler_config(request: Request) -> JSONResponse:
 
 
 @router.patch("/scheduler", response_model=APIResponse)
-async def update_scheduler(request: Request, config: SchedulerUpdate) -> JSONResponse:
+def update_scheduler(request: Request, config: SchedulerUpdate) -> JSONResponse:
     """
     Update scheduler configuration.
 
