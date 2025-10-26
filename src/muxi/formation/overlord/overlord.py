@@ -110,7 +110,7 @@ from .agent_router import AgentRouter
 from .chat_orchestrator import ChatOrchestrator
 from .mcp_coordinator import MCPCoordinator
 from .a2a_coordinator import A2ACoordinator
-from .input_validation import InputValidator, InputLimits
+from .input_validation import InputValidator, InputLimits, InputValidationError
 from ...services.scheduler.service import SchedulerService
 from ..initialization import initialize_artifact_service
 from ...datatypes.exceptions import RegistryConfigurationError
@@ -4787,9 +4787,16 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         # Validate message length before processing
         try:
             self.input_validator.validate_message(message)
-        except Exception as e:
-            # Return validation error as response
+        except InputValidationError as e:
             return str(e)
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.VALIDATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={"error": str(e), "phase": "chat_message_validation"},
+                description="Unexpected error during message validation",
+            )
+            return "Invalid input."
 
         # Validate file uploads if present
         if files:
@@ -4798,9 +4805,16 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     filename = file_data.get("filename", "unknown")
                     size = file_data.get("size", 0)
                     self.input_validator.validate_file_upload(filename, size)
-            except Exception as e:
-                # Return validation error as response
+            except InputValidationError as e:
                 return str(e)
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.VALIDATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={"error": str(e), "phase": "file_upload_validation"},
+                    description="Unexpected error during file validation",
+                )
+                return "Invalid file upload."
         elif user_id is not None:
             # Normalize user_id - lowercase and strip whitespace
             user_id = str(user_id).lower().strip()
