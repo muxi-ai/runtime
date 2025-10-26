@@ -69,14 +69,21 @@ async def update_a2a_outbound(request: Request, settings: A2AOutboundUpdate) -> 
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Update in-memory configuration (ephemeral - lost on restart)
-    a2a_config = formation.config.setdefault("a2a", {})
-    outbound_config = a2a_config.setdefault("outbound", {})
+    # Acquire async lock to prevent race conditions when modifying shared config
+    if formation._async_config_lock is None:
+        # Fallback: initialize lock if not already created (should not happen in normal operation)
+        import asyncio
+        formation._async_config_lock = asyncio.Lock()
     
-    # Update only fields that were explicitly provided by the client
-    # Using exclude_unset=True to avoid overwriting with default values
-    for key, value in settings.dict(exclude_unset=True).items():
-        outbound_config[key] = value
+    async with formation._async_config_lock:
+        # Update in-memory configuration (ephemeral - lost on restart)
+        a2a_config = formation.config.setdefault("a2a", {})
+        outbound_config = a2a_config.setdefault("outbound", {})
+
+        # Update only fields that were explicitly provided by the client
+        # Using exclude_unset=True to avoid overwriting with default values
+        for key, value in settings.dict(exclude_unset=True).items():
+            outbound_config[key] = value
 
     response = create_success_response(
         APIObjectType.A2A,
@@ -101,13 +108,19 @@ async def reset_a2a_outbound_setting(request: Request, item: str) -> JSONRespons
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Remove specific endpoint from in-memory configuration (ephemeral)
-    a2a_config = formation.config.get("a2a", {})
-    outbound_config = a2a_config.get("outbound", {})
-    endpoints = outbound_config.get("endpoints", {})
+    # Acquire async lock to prevent race conditions
+    if formation._async_config_lock is None:
+        import asyncio
+        formation._async_config_lock = asyncio.Lock()
     
-    if item in endpoints:
-        del endpoints[item]
+    async with formation._async_config_lock:
+        # Remove specific endpoint from in-memory configuration (ephemeral)
+        a2a_config = formation.config.get("a2a", {})
+        outbound_config = a2a_config.get("outbound", {})
+        endpoints = outbound_config.get("endpoints", {})
+
+        if item in endpoints:
+            del endpoints[item]
 
     response = create_success_response(
         APIObjectType.A2A,

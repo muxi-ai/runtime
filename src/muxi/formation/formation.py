@@ -175,6 +175,10 @@ class Formation:
 
         # Thread safety for config modifications
         self._config_lock = threading.Lock()
+        
+        # Async lock for config modifications (async operations)
+        # Initialized in load() since asyncio.Lock requires event loop
+        self._async_config_lock: Optional[asyncio.Lock] = None
 
         # Dependency validation
         self._dependency_validator = DependencyValidator()
@@ -463,6 +467,10 @@ class Formation:
 
             # Ensure formation_id is in config for Overlord
             self.config["formation_id"] = self.formation_id
+
+            # Initialize async config lock for thread-safe config modifications from async handlers
+            if self._async_config_lock is None:
+                self._async_config_lock = asyncio.Lock()
 
             # Prepare services (but don't start them yet)
             self._prepare_services()
