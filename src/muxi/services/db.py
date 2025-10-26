@@ -123,7 +123,14 @@ class DatabaseManager:
     and shared connection pooling for optimal resource usage across services.
     """
 
-    def __init__(self, connection_string: Optional[str] = None, statement_timeout_seconds: int = 30):
+    def __init__(
+        self,
+        connection_string: Optional[str] = None,
+        statement_timeout_seconds: int = 30,
+        pool_size: int = 20,
+        max_overflow: int = 40,
+        idle_transaction_timeout_seconds: int = 60,
+    ):
         """
         Initializes the database manager with synchronous engine and session support,
         resolving the connection string and database type.
@@ -131,10 +138,51 @@ class DatabaseManager:
         If no connection string is provided, attempts to load from environment variables
         or defaults to SQLite. Prepares for lazy initialization of asynchronous engine
         and session factory. Emits an observability event upon successful initialization.
+
+        Args:
+            connection_string: Database connection string (None for environment/default)
+            statement_timeout_seconds: Maximum time for individual SQL queries.
+                                      Must be a positive integer, range: 1-3600 seconds (default: 30)
+            pool_size: Number of connections to maintain in the pool (default: 20)
+            max_overflow: Max connections above pool_size (default: 40)
+            idle_transaction_timeout_seconds: Timeout for idle transactions in seconds (default: 60)
+
+        Raises:
+            ValueError: If statement_timeout_seconds is invalid (not int, <= 0, or > 3600)
+            ValueError: If pool_size or max_overflow are negative integers
         """
         self.connection_string = self._resolve_connection_string(connection_string)
         self.database_type = self._detect_database_type(self.connection_string)
+        
+        # Validate statement_timeout_seconds
+        if not isinstance(statement_timeout_seconds, int):
+            raise ValueError(
+                f"statement_timeout_seconds must be an integer, got {type(statement_timeout_seconds).__name__}"
+            )
+        if statement_timeout_seconds <= 0:
+            raise ValueError(
+                f"statement_timeout_seconds must be positive, got {statement_timeout_seconds}"
+            )
+        if statement_timeout_seconds > 3600:
+            raise ValueError(
+                f"statement_timeout_seconds must be <= 3600 seconds (1 hour), got {statement_timeout_seconds}"
+            )
         self.statement_timeout_seconds = statement_timeout_seconds
+        
+        # Validate pool_size and max_overflow
+        if not isinstance(pool_size, int) or pool_size < 0:
+            raise ValueError(f"pool_size must be a non-negative integer, got {pool_size}")
+        if not isinstance(max_overflow, int) or max_overflow < 0:
+            raise ValueError(f"max_overflow must be a non-negative integer, got {max_overflow}")
+        self.pool_size = pool_size
+        self.max_overflow = max_overflow
+        
+        # Validate idle_transaction_timeout_seconds
+        if not isinstance(idle_transaction_timeout_seconds, int) or idle_transaction_timeout_seconds < 0:
+            raise ValueError(
+                f"idle_transaction_timeout_seconds must be a non-negative integer, got {idle_transaction_timeout_seconds}"
+            )
+        self.idle_transaction_timeout_seconds = idle_transaction_timeout_seconds
 
         # Create sync engine first
         self.engine = self._create_engine()
@@ -224,11 +272,10 @@ class DatabaseManager:
         """
         if self.database_type == "postgresql":
             # PostgreSQL configuration with connection pooling
-            # Increased from 5/10 to 20/40 for production async workloads
             engine = create_engine(
                 self.connection_string,
-                pool_size=20,  # Increased for multi-agent concurrent operations
-                max_overflow=40,  # Total max connections: 60
+                pool_size=self.pool_size,
+                max_overflow=self.max_overflow,
                 pool_timeout=30,
                 pool_recycle=1800,
                 echo=False,  # Set to True for SQL debugging
@@ -287,8 +334,8 @@ class DatabaseManager:
                     "server_settings": {
                         # Statement timeout prevents hung queries (milliseconds)
                         "statement_timeout": str(self.statement_timeout_seconds * 1000),
-                        # Idle transaction timeout for cleanup (60 seconds)
-                        "idle_in_transaction_session_timeout": "60000",
+                        # Idle transaction timeout for cleanup (milliseconds)
+                        "idle_in_transaction_session_timeout": str(self.idle_transaction_timeout_seconds * 1000),
                     }
                 },
             )
@@ -504,19 +551,54 @@ def get_database_manager(
     connection_string: Optional[str] = None, statement_timeout_seconds: int = 30
 ) -> DatabaseManager:
     """
-    Get the global database manager instance.
+    Get the global database manager instance (SINGLETON).
+
+    **Important**: This function uses a module-level singleton. The FIRST call's parameters
+    are authoritative and will be used to initialize the DatabaseManager. Subsequent calls
+    with different parameters will be IGNORED and will return the existing instance.
+    A warning will be logged if parameters differ from the existing instance.
 
     Args:
-        connection_string: Optional connection string for initialization
-        statement_timeout_seconds: Maximum time for individual SQL queries (default: 30)
+        connection_string: Optional connection string for initialization (only used on first call)
+        statement_timeout_seconds: Maximum time for individual SQL queries (default: 30, only used on first call)
 
     Returns:
-        DatabaseManager instance
+        DatabaseManager instance (singleton)
+
+    Note:
+        If you need multiple DatabaseManager instances with different configurations,
+        create them directly using DatabaseManager() instead of this singleton function.
     """
     global _db_manager
 
     if _db_manager is None:
         _db_manager = DatabaseManager(connection_string, statement_timeout_seconds)
+    else:
+        # Check if parameters differ from existing instance and log warning
+        params_differ = False
+        differences = []
+        
+        if connection_string is not None and connection_string != _db_manager.connection_string:
+            params_differ = True
+            differences.append(
+                f"connection_string (provided: {connection_string!r}, existing: {_db_manager.connection_string!r})"
+            )
+        
+        if statement_timeout_seconds != _db_manager.statement_timeout_seconds:
+            params_differ = True
+            differences.append(
+                f"statement_timeout_seconds (provided: {statement_timeout_seconds}, existing: {_db_manager.statement_timeout_seconds})"
+            )
+        
+        if params_differ:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "get_database_manager called with different parameters than existing instance. "
+                "Using existing instance and IGNORING new parameters. "
+                "Differences: %s",
+                ", ".join(differences)
+            )
 
     return _db_manager
 
