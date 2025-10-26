@@ -100,8 +100,10 @@ async def list_memory_buffers(request: Request) -> JSONResponse:
 
     # Get KV store namespaces if available
     kv_namespaces = {}
-    if hasattr(buffer, "kv_store"):
-        for key in buffer.kv_store.keys():
+    # Guard: ensure kv_store exists, is not None, and is dict-like
+    kv_store = getattr(buffer, "kv_store", None)
+    if kv_store is not None and (hasattr(kv_store, "keys") or isinstance(kv_store, dict)):
+        for key in kv_store.keys():
             namespace = key.split(":")[0] if ":" in key else "default"
             kv_namespaces[namespace] = kv_namespaces.get(namespace, 0) + 1
 
@@ -160,7 +162,9 @@ async def clear_memory_buffers(request: Request) -> JSONResponse:
     if hasattr(buffer, "buffer"):
         from collections import deque
         entries_cleared = len(buffer.buffer)
-        buffer.buffer = deque(maxlen=buffer.buffer.maxlen)
+        # Preserve maxlen if it exists, otherwise create unbounded deque
+        existing_maxlen = getattr(buffer.buffer, "maxlen", None)
+        buffer.buffer = deque(maxlen=existing_maxlen) if existing_maxlen is not None else deque()
 
     # Clear KV store
     kv_entries_cleared = 0

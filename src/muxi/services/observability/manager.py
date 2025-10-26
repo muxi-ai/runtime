@@ -139,22 +139,22 @@ class ObservabilityManager:
     async def subscribe(self, filters: Optional[Dict[str, Any]] = None):
         """
         Subscribe to filtered event stream for live log streaming.
-        
+
         Args:
             filters: Optional dict of filters to apply (user_id, session_id, level, etc.)
-        
+
         Yields:
             Events that match the filters
         """
         import asyncio
-        
+
         filters = filters or {}
         queue = asyncio.Queue(maxsize=1000)  # Buffered event queue
-        
+
         # Add subscriber
         async with self._subscriber_lock:
             self._subscribers.append((queue, filters))
-        
+
         try:
             while True:
                 event = await queue.get()
@@ -167,11 +167,11 @@ class ObservabilityManager:
     def _matches_filters(self, event: Dict[str, Any], filters: Dict[str, Any]) -> bool:
         """
         Check if an event matches the given filters.
-        
+
         Args:
             event: Event dict with keys like user_id, session_id, level, event_type
             filters: Filter dict with same keys
-        
+
         Returns:
             True if event matches all filters, False otherwise
         """
@@ -197,12 +197,12 @@ class ObservabilityManager:
     async def _emit_to_subscribers(self, event: Dict[str, Any]) -> None:
         """
         Emit event to all matching subscribers.
-        
+
         Args:
             event: Event dict to emit
         """
         import asyncio
-        
+
         async with self._subscriber_lock:
             for queue, filters in self._subscribers:
                 if self._matches_filters(event, filters):
@@ -367,7 +367,7 @@ class ObservabilityManager:
         if self._streams_initialized:
             await self._emit_to_streams(event_type, level, data, None, None, description, event_id)
 
-        # Also emit to live stream subscribers  
+        # Also emit to live stream subscribers
         if self._subscribers:
             event_dict = {
                 "event_id": event_id,
