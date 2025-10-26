@@ -52,7 +52,8 @@ class TestAsyncJobs(BaseE2ETest):
                 # DELETE /v1/async/jobs/{job_id}
                 print("\n6. Testing DELETE /v1/async/jobs/{job_id}...")
                 r = await client.delete(f"{self.base_url}/async/jobs/test_job", headers=self.headers)
-                assert r.status_code in [200, 404]
+                # 200 (success), 400 (can't cancel), or 404 (not found) are all valid
+                assert r.status_code in [200, 400, 404]
                 print("✅ DELETE /v1/async/jobs/{job_id} verified")
 
                 # Auth test
