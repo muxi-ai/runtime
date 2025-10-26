@@ -73,9 +73,10 @@ async def update_a2a_outbound(request: Request, settings: A2AOutboundUpdate) -> 
     a2a_config = formation.config.setdefault("a2a", {})
     outbound_config = a2a_config.setdefault("outbound", {})
     
-    # Update endpoints from settings
-    if settings.endpoints is not None:
-        outbound_config["endpoints"] = settings.endpoints
+    # Update only fields that were explicitly provided by the client
+    # Using exclude_unset=True to avoid overwriting with default values
+    for key, value in settings.dict(exclude_unset=True).items():
+        outbound_config[key] = value
 
     response = create_success_response(
         APIObjectType.A2A,

@@ -5,6 +5,7 @@ These endpoints provide memory CRUD operations for users,
 requiring client API key authentication.
 """
 
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
 from fastapi import APIRouter, Request, Query
@@ -127,11 +128,10 @@ async def create_user_memory(request: Request, user_id: str, memory: MemoryCreat
             external_user_id=user_id,
         )
 
-        from datetime import datetime
         result = {
             "id": memory_id,
             "content": memory.content,
-            "created_at": datetime.utcnow().isoformat() + "Z",
+            "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "metadata": memory.metadata or {}
         }
 

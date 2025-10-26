@@ -133,14 +133,11 @@ async def update_mcp_defaults(request: Request, defaults: MCPDefaultsUpdate) -> 
     # Update in-memory configuration (ephemeral - lost on restart)
     mcp_config = formation.config.setdefault("mcp", {})
     mcp_defaults = mcp_config.setdefault("defaults", {})
-    
-    # Update only provided defaults
-    if defaults.timeout is not None:
-        mcp_defaults["timeout"] = defaults.timeout
-    if defaults.max_retries is not None:
-        mcp_defaults["max_retries"] = defaults.max_retries
-    if defaults.environment is not None:
-        mcp_defaults["environment"] = defaults.environment
+
+    # Update only fields that were explicitly provided by the client
+    # Using exclude_unset=True to avoid overwriting with default values
+    for key, value in defaults.dict(exclude_unset=True).items():
+        mcp_defaults[key] = value
 
     response = create_success_response(
         APIObjectType.MCP, APIEventType.MCP_UPDATED, {"defaults": mcp_defaults}, request_id
@@ -275,11 +272,11 @@ async def update_mcp_server(
     request_id = getattr(request.state, "request_id", None)
 
     formation = request.app.state.formation
-    
+
     # Find and update server in in-memory configuration (ephemeral)
     mcp_config = formation.config.get("mcp", {})
     servers = mcp_config.get("servers", [])
-    
+
     server_config = None
     for server in servers:
         if server.get("id") == server_id:
@@ -288,7 +285,7 @@ async def update_mcp_server(
             server.update(update_data)
             server_config = server
             break
-    
+
     if not server_config:
         response = create_error_response(
             "MCP_SERVER_NOT_FOUND", f"MCP server '{server_id}' not found", None, request_id
@@ -315,15 +312,15 @@ async def delete_mcp_server(request: Request, server_id: str) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     formation = request.app.state.formation
-    
+
     # Find and delete server from in-memory configuration (ephemeral)
     mcp_config = formation.config.get("mcp", {})
     servers = mcp_config.get("servers", [])
-    
+
     # Find and remove server
     original_count = len(servers)
     servers[:] = [s for s in servers if s.get("id") != server_id]
-    
+
     if len(servers) == original_count:
         response = create_error_response(
             "MCP_SERVER_NOT_FOUND", f"MCP server '{server_id}' not found", None, request_id
@@ -626,7 +623,7 @@ async def _handle_get_memories(formation, user_id: str, limit: int = 10, **kwarg
     overlord = formation._overlord
     if not overlord or not hasattr(overlord, "long_term_memory") or not overlord.long_term_memory:
         return []
-    
+
     try:
         # Search with empty query to get recent memories
         memories = await overlord.long_term_memory.search(
@@ -634,7 +631,7 @@ async def _handle_get_memories(formation, user_id: str, limit: int = 10, **kwarg
             limit=limit,
             external_user_id=user_id,
         )
-        
+
         # Convert to simple format for MCP tools
         return [
             {
@@ -656,7 +653,7 @@ async def _handle_create_memory(
     overlord = formation._overlord
     if not overlord or not hasattr(overlord, "long_term_memory") or not overlord.long_term_memory:
         raise ValueError("Memory system not available")
-    
+
     try:
         # Add memory using the same system as the API endpoint
         memory_id = await overlord.long_term_memory.add(
@@ -664,7 +661,7 @@ async def _handle_create_memory(
             metadata=metadata or {},
             external_user_id=user_id,
         )
-        
+
         return {
             "id": memory_id,
             "content": content,

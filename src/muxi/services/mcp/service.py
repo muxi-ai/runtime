@@ -875,8 +875,6 @@ class MCPService:
                             self.agent_tool_registry["_shared"][server_id][tool_name] = tool_data
 
                 except Exception:
-                    # Emit tool discovery failed event
-                    pass  # REMOVED: init-phase observe() call
                     self.tool_registry[server_id] = {}
 
                     # Also set empty registry in agent-specific registry

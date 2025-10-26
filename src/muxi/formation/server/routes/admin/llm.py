@@ -70,7 +70,7 @@ async def update_llm_settings(request: Request, settings: LLMSettingsUpdate) -> 
     # Update in-memory configuration (ephemeral - lost on restart)
     llm_config = formation.config.setdefault("llm", {})
     llm_settings = llm_config.setdefault("settings", {})
-    
+
     # Update only the provided settings
     for key, value in settings.settings.items():
         llm_settings[key] = value
