@@ -81,6 +81,8 @@ import multitasking
 import signal
 import threading
 
+from ...utils.security import redact_sensitive_content
+
 # Set multitasking to thread mode for shared memory access
 multitasking.set_engine("thread")
 
@@ -89,7 +91,7 @@ multitasking.set_engine("thread")
 def _redact_data_recursive(obj: Any) -> Any:
     """
     Recursively redact PII in nested data structures.
-    
+
     Uses redact_sensitive_content() from utils.security to redact:
     - API keys and tokens
     - Passwords and secrets
@@ -100,15 +102,14 @@ def _redact_data_recursive(obj: Any) -> Any:
     - AWS credentials
     - Database connection strings
     - JWT tokens
-    
+
     Args:
         obj: Data to redact (can be str, dict, list, tuple, or primitive)
-    
+
     Returns:
         Redacted copy of the data
     """
     if isinstance(obj, str):
-        from ...utils.security import redact_sensitive_content
         return redact_sensitive_content(obj)
     elif isinstance(obj, dict):
         return {k: _redact_data_recursive(v) for k, v in obj.items()}
@@ -189,9 +190,23 @@ def observe(
         if not configured_logger:
             return
 
-        # Automatically redact PII from data and description
-        redacted_data = _redact_data_recursive(data or {})
-        redacted_description = _redact_data_recursive(description) if description else ""
+        # Conditionally redact PII based on event type
+        # Only redact for user-facing events (conversation, errors, API, user-related)
+        should_redact = False
+        if isinstance(event_type, (ConversationEvents, ErrorEvents, APIEvents)):
+            should_redact = True
+        elif isinstance(event_type, str):
+            # Check for user-related keywords in string event types
+            event_type_lower = event_type.lower()
+            if any(keyword in event_type_lower for keyword in ["user", "conversation", "message", "error", "api"]):
+                should_redact = True
+        
+        if should_redact:
+            redacted_data = _redact_data_recursive(data or {})
+            redacted_description = _redact_data_recursive(description) if description else ""
+        else:
+            redacted_data = data or {}
+            redacted_description = description or ""
 
         # Get request context
         from .context import get_current_request_context
