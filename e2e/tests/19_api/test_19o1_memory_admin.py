@@ -63,10 +63,12 @@ class TestMemoryAdmin(BaseE2ETest):
             print("\n4. Testing DELETE /v1/memory/buffers...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.delete(f"{self.base_url}/memory/buffers", headers=self.headers)
-            # May return 200, 204, or 501 (not implemented)
-            assert response.status_code in [200, 204, 501]
+            # May return 200, 204, 501 (not implemented), or 503 (buffer memory not available)
+            assert response.status_code in [200, 204, 501, 503]
             if response.status_code == 501:
                 print("   Note: DELETE /v1/memory/buffers returns 501 (not implemented)")
+            elif response.status_code == 503:
+                print("   Note: DELETE /v1/memory/buffers returns 503 (buffer memory not available)")
             print("✅ DELETE /v1/memory/buffers verified")
 
             # PATCH /v1/memory
