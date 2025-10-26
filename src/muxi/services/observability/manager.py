@@ -57,6 +57,7 @@ class ObservabilityManager:
         # Event streaming subscriptions for live log streaming
         self._subscribers: List[tuple] = []  # List of (queue, filters) tuples
         self._subscriber_lock = None  # Lazy-initialized to bind to correct event loop
+        self.subscriber_queue_maxsize = self.config.get("subscriber_queue_maxsize", 1000)
 
         # Metrics for dropped events (when subscriber queue is full)
         self._dropped_events_count = 0
@@ -161,7 +162,7 @@ class ObservabilityManager:
         import asyncio
 
         filters = filters or {}
-        queue = asyncio.Queue(maxsize=1000)  # Buffered event queue
+        queue = asyncio.Queue(maxsize=self.subscriber_queue_maxsize)
 
         # Add subscriber
         lock = await self._get_subscriber_lock()
@@ -173,10 +174,14 @@ class ObservabilityManager:
                 event = await queue.get()
                 yield event
         finally:
-            # Cleanup on disconnect
+            # Cleanup on disconnect - remove subscriber in-place under lock
             lock = await self._get_subscriber_lock()
             async with lock:
-                self._subscribers = [(q, f) for q, f in self._subscribers if q != queue]
+                # Find and remove the matching queue in-place (safer than reassigning list)
+                for i, (q, f) in enumerate(self._subscribers):
+                    if q is queue:
+                        self._subscribers.pop(i)
+                        break
 
     def _matches_filters(self, event: Dict[str, Any], filters: Dict[str, Any]) -> bool:
         """
@@ -382,10 +387,11 @@ class ObservabilityManager:
 
         # Also emit to live stream subscribers
         if self._subscribers:
+            # event_type and level are always Enum instances with .value attribute
             event_dict = {
                 "event_id": event_id,
-                "event_type": event_type.value if hasattr(event_type, 'value') else str(event_type),
-                "level": level.value if hasattr(level, 'value') else str(level),
+                "event_type": event_type.value,
+                "level": level.value,
                 "description": description or "",
                 "data": data or {},
                 "user_id": request_context.user_id if request_context else None,
@@ -421,10 +427,11 @@ class ObservabilityManager:
 
         # Also emit to live stream subscribers
         if self._subscribers:
+            # event_type and level are always Enum instances with .value attribute
             event_dict = {
                 "event_id": event_id,
-                "event_type": event_type.value if hasattr(event_type, 'value') else str(event_type),
-                "level": level.value if hasattr(level, 'value') else str(level),
+                "event_type": event_type.value,
+                "level": level.value,
                 "description": description or "",
                 "data": data or {},
                 "timestamp": time.time(),
@@ -452,7 +459,7 @@ class ObservabilityManager:
                 "level": level.value,
                 "muxi_version": self.config.get("muxi_version", "1.0.0"),
                 "server": self._get_server_id(),
-                "event": event_type.value if hasattr(event_type, "value") else str(event_type),
+                "event": event_type.value,
             }
 
             # Add parent event relationship
