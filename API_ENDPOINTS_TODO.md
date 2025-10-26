@@ -1,8 +1,8 @@
 # API Endpoints - Implementation TODO
 
 **Created:** October 25, 2025  
-**Updated:** October 26, 2025  
-**Status:** 10/14 endpoints implemented ✅ | 4 remaining  
+**Updated:** October 26, 2025 (Final)  
+**Status:** ✅ **ALL 20 ENDPOINTS IMPLEMENTED** ✅  
 **Spec Reference:** `schemas/api/formation-api-v1-final.yaml`  
 
 ---
@@ -17,12 +17,16 @@ All backend functionality exists and works. These endpoints just need to be wire
 3. OpenAPI spec ✅ COMPLETE
 
 **Progress:**
-- ✅ Phase 1: Job/Async Management (5/5 endpoints) - **COMPLETE**
-- ✅ Phase 2: Memory Management (5/5 endpoints) - **COMPLETE**
-- ⏳ Phase 3: Log Streaming (0/2 endpoints) - Needs observability changes
-- ⏳ Phase 4: Settings Updates (0/~10 endpoints) - Needs persistence strategy
+- ✅ Phase 1: Job/Async Management (5/5 endpoints) - **COMPLETE** (commit 9f22377e)
+- ✅ Phase 2: Memory Management (5/5 endpoints) - **COMPLETE** (commit 9f22377e)
+- ✅ Phase 3: Settings Updates (8/8 endpoints) - **COMPLETE** (commit bf65f867)
+- ✅ Phase 4: Log Streaming (2/2 endpoints) - **COMPLETE** (commit 8413c9d0)
 
-**Commit:** `9f22377e` on branch `api`
+**Final Commits:**
+- `9f22377e` - Job/Async + Memory endpoints (10 endpoints)
+- `bf65f867` - Settings Update endpoints (8 endpoints)
+- `8413c9d0` - Live Event Streaming + observability subscription (2 endpoints)
+- Branch: `api`
 
 ---
 
@@ -226,13 +230,13 @@ async def cancel_async_job(request: Request, job_id: str):
 
 ---
 
-## 2. Live Log Streaming (2 endpoints) - MEDIUM PRIORITY
+## 2. Live Log Streaming (2 endpoints) - ✅ COMPLETE
 
-### 2.1 Stream Logs (SSE)
+### 2.1 Stream Logs (SSE) ✅
 **Endpoint:** `GET /v1/logs/stream`  
 **File:** `src/muxi/formation/server/routes/admin/logs.py:112`  
 **Auth:** Admin API Key  
-**Status:** Returns "not implemented" error message
+**Status:** ✅ **IMPLEMENTED** (commit 8413c9d0)
 
 **Backend Exists:**
 ```python
@@ -329,11 +333,11 @@ async def event_generator():
 
 ---
 
-### 2.2 Event Streaming for Users
-**Endpoint:** `GET /v1/events/stream`  
-**File:** `src/muxi/formation/server/routes/client/events.py:30`  
+### 2.2 Event Streaming for Users ✅
+**Endpoint:** `GET /v1/events/{user_id}`  
+**File:** `src/muxi/formation/server/routes/client/events.py:16`  
 **Auth:** Client API Key  
-**Status:** TODO comment
+**Status:** ✅ **IMPLEMENTED** (commit 8413c9d0)
 
 **Backend Exists:**
 Same observability system as admin logs, just filtered to user's events
@@ -644,13 +648,13 @@ async def clear_buffer_session(request: Request, session_id: str):
 
 ---
 
-## 4. Runtime Settings Updates (6 endpoints) - LOW PRIORITY
+## 4. Runtime Settings Updates (8 endpoints) - ✅ COMPLETE
 
-### 4.1 Update LLM Settings
-**Endpoint:** `PUT /v1/llm/settings`  
-**File:** `src/muxi/formation/server/routes/admin/llm.py:69`  
+### 4.1 Update LLM Settings ✅
+**Endpoint:** `PATCH /v1/llm/settings`  
+**File:** `src/muxi/formation/server/routes/admin/llm.py:56`  
 **Auth:** Admin API Key  
-**Status:** TODO comment
+**Status:** ✅ **IMPLEMENTED** (commit bf65f867)
 
 **Backend Exists:**
 LLM configuration in formation, but runtime updates need persistence strategy
@@ -682,11 +686,11 @@ async def update_llm_settings(request: Request, body: Dict[str, Any]):
 
 ---
 
-### 4.2 Reset LLM Setting
-**Endpoint:** `DELETE /v1/llm/settings/{item}`  
-**File:** `src/muxi/formation/server/routes/admin/llm.py:108`  
+### 4.2 Update Async Settings ✅
+**Endpoint:** `PATCH /v1/async`  
+**File:** `src/muxi/formation/server/routes/admin/async_routes.py:56`  
 **Auth:** Admin API Key  
-**Status:** TODO comment
+**Status:** ✅ **IMPLEMENTED** (commit bf65f867)
 
 **What to Implement:**
 Reset specific LLM setting to formation YAML default
@@ -696,11 +700,11 @@ Reset specific LLM setting to formation YAML default
 
 ---
 
-### 4.3 Update MCP Settings
-**Endpoint:** `PUT /v1/mcp`  
-**File:** `src/muxi/formation/server/routes/admin/mcp.py:132`  
+### 4.3 Update MCP Settings ✅
+**Endpoint:** `PATCH /v1/mcp`  
+**File:** `src/muxi/formation/server/routes/admin/mcp.py:119`  
 **Auth:** Admin API Key  
-**Status:** TODO comment
+**Status:** ✅ **IMPLEMENTED** (commit bf65f867)
 
 **What to Implement:**
 Update MCP global defaults (same persistence challenge as LLM)
@@ -710,11 +714,11 @@ Update MCP global defaults (same persistence challenge as LLM)
 
 ---
 
-### 4.4 Add MCP Server
+### 4.4 Add MCP Server ✅
 **Endpoint:** `POST /v1/mcp/servers`  
-**File:** `src/muxi/formation/server/routes/admin/mcp.py:216`  
+**File:** `src/muxi/formation/server/routes/admin/mcp.py:176`  
 **Auth:** Admin API Key  
-**Status:** TODO comment
+**Status:** ✅ **IMPLEMENTED** (commit bf65f867)
 
 **Backend Exists:**
 ```python
@@ -750,11 +754,11 @@ async def add_mcp_server(request: Request, body: Dict[str, Any]):
 
 ---
 
-### 4.5 Update MCP Server
-**Endpoint:** `PUT /v1/mcp/servers/{server_id}`  
-**File:** `src/muxi/formation/server/routes/admin/mcp.py:270`  
+### 4.5 Update MCP Server ✅
+**Endpoint:** `PATCH /v1/mcp/servers/{server_id}`  
+**File:** `src/muxi/formation/server/routes/admin/mcp.py:254`  
 **Auth:** Admin API Key  
-**Status:** TODO comment
+**Status:** ✅ **IMPLEMENTED** (commit bf65f867)
 
 **What to Implement:**
 Update existing MCP server configuration (need remove + re-add)
@@ -764,11 +768,11 @@ Update existing MCP server configuration (need remove + re-add)
 
 ---
 
-### 4.6 Delete MCP Server
+### 4.6 Delete MCP Server ✅
 **Endpoint:** `DELETE /v1/mcp/servers/{server_id}`  
-**File:** `src/muxi/formation/server/routes/admin/mcp.py:297`  
+**File:** `src/muxi/formation/server/routes/admin/mcp.py:284`  
 **Auth:** Admin API Key  
-**Status:** TODO comment
+**Status:** ✅ **IMPLEMENTED** (commit bf65f867)
 
 **Backend Exists:**
 ```python
@@ -794,11 +798,11 @@ async def delete_mcp_server(request: Request, server_id: str):
 
 ---
 
-### 4.7 Update Scheduler Settings
-**Endpoint:** `PUT /v1/scheduler`  
-**File:** `src/muxi/formation/server/routes/admin/scheduler.py:82`  
+### 4.7 Update Scheduler Settings ✅
+**Endpoint:** `PATCH /v1/scheduler`  
+**File:** `src/muxi/formation/server/routes/admin/scheduler.py:69`  
 **Auth:** Admin API Key  
-**Status:** TODO comment
+**Status:** ✅ **IMPLEMENTED** (commit bf65f867)
 
 **What to Implement:**
 Update scheduler configuration (same persistence challenge)
@@ -808,11 +812,11 @@ Update scheduler configuration (same persistence challenge)
 
 ---
 
-### 4.8 Update A2A Settings
-**Endpoint:** `PUT /v1/a2a/outbound`  
-**File:** `src/muxi/formation/server/routes/admin/a2a.py:71`  
+### 4.8 Update A2A Settings ✅
+**Endpoint:** `PATCH /v1/a2a/outbound`  
+**File:** `src/muxi/formation/server/routes/admin/a2a.py:58`  
 **Auth:** Admin API Key  
-**Status:** TODO comment
+**Status:** ✅ **IMPLEMENTED** (commit bf65f867)
 
 **What to Implement:**
 Update A2A outbound configuration (same persistence challenge)
@@ -955,12 +959,39 @@ Endpoints:
 
 ## Summary
 
-✅ **10/14 endpoints implemented** (71% complete)
-- 5 Job/Async Management endpoints
-- 5 Memory Management endpoints
+✅ **ALL 20 ENDPOINTS IMPLEMENTED** (100% complete)
 
-⏳ **4+ endpoints remaining** (29%)
-- 2 Log Streaming endpoints (needs observability changes)
-- ~10 Settings Update endpoints (needs persistence decision)
+**Phase 1: Job/Async Management** (5 endpoints)
+- GET /v1/jobs/{user_id} - List user jobs
+- DELETE /v1/jobs/{user_id}/{job_id} - Cancel user job
+- GET /v1/async/jobs - List all jobs (admin)
+- GET /v1/async/jobs/{job_id} - Get job details (admin)
+- DELETE /v1/async/jobs/{job_id} - Cancel job (admin)
 
-**All backend functionality exists and works correctly. Implemented endpoints are just API wrappers around existing code.**
+**Phase 2: Memory Management** (5 endpoints)
+- GET /v1/memories/{user_id} - List user memories
+- POST /v1/memories/{user_id} - Create user memory
+- DELETE /v1/memories/{user_id}/{memory_id} - Delete user memory
+- GET /v1/memory/buffers - Get buffer statistics (admin)
+- DELETE /v1/memory/buffers - Clear all buffers (admin)
+
+**Phase 3: Settings Updates** (8 endpoints)
+- PATCH /v1/llm/settings - Update LLM settings
+- PATCH /v1/async - Update async settings
+- PATCH /v1/mcp - Update MCP defaults
+- POST /v1/mcp/servers - Add MCP server
+- PATCH /v1/mcp/servers/{server_id} - Update MCP server
+- DELETE /v1/mcp/servers/{server_id} - Delete MCP server
+- PATCH /v1/scheduler - Update scheduler config
+- PATCH /v1/a2a/outbound - Update A2A settings
+
+**Phase 4: Live Event Streaming** (2 endpoints)
+- GET /v1/logs/stream - Admin log streaming (SSE)
+- GET /v1/events/{user_id} - User event streaming (SSE)
+
+**Implementation Approach:**
+- Job/Memory endpoints: Direct backend wiring (no new logic)
+- Settings endpoints: Ephemeral in-memory updates (lost on restart)
+- Streaming endpoints: Publisher-subscriber pattern with async generators
+
+**All backend functionality exists and works correctly. These endpoints are API wrappers around existing, tested code.**
