@@ -5,7 +5,7 @@ This service handles runtime resolution of user credentials for MCP servers
 and other components that need to access services on behalf of users.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from sqlalchemy import Column, Integer, String, DateTime, select, Text
 import nanoid
 from cachetools import TTLCache
@@ -89,7 +89,7 @@ class CredentialResolver:
         )
         return internal_user_id
 
-    async def resolve(self, user_id: str, service: str) -> Optional[Dict]:
+    async def resolve(self, user_id: str, service: str) -> Optional[Union[Dict, List[Dict]]]:
         """
         Resolve user credentials for a service.
 
@@ -98,10 +98,11 @@ class CredentialResolver:
             service: The service name (will be normalized to lowercase)
 
         Returns:
-            The credential data if found, None otherwise.
-            Callers should check for None and handle missing credentials
-            appropriately (e.g., by raising MissingCredentialError or
-            triggering a clarification flow).
+            Dict for a single credential, List[Dict] for multiple credentials,
+            or None if not found. When multiple credentials exist, each dict
+            contains 'name' and 'credentials' keys. Callers should check for None
+            and handle missing credentials appropriately (e.g., by raising
+            MissingCredentialError or triggering a clarification flow).
         """
         # Normalize service name to lowercase
         service = service.lower()
