@@ -6286,7 +6286,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             if self.buffer_memory_manager:
                 self._create_tracked_task(
                     self.buffer_memory_manager.add_to_buffer_memory(
-                        message=f"Assistant: {response}",
+                        message=response,  # Store without "Assistant: " prefix - role is in metadata
                         metadata={
                             "user_id": user_id,
                             "session_id": session_id,
