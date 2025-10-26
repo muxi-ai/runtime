@@ -66,16 +66,24 @@ async def update_a2a_outbound(request: Request, settings: A2AOutboundUpdate) -> 
     Returns:
         Updated A2A outbound configuration
     """
+    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # TODO: Implement A2A outbound settings update logic
-    response = create_error_response(
-        "METHOD_NOT_FOUND",
-        "A2A outbound settings update is not yet implemented",
-        None,
+    # Update in-memory configuration (ephemeral - lost on restart)
+    a2a_config = formation.config.setdefault("a2a", {})
+    outbound_config = a2a_config.setdefault("outbound", {})
+    
+    # Update endpoints from settings
+    if settings.endpoints is not None:
+        outbound_config["endpoints"] = settings.endpoints
+
+    response = create_success_response(
+        APIObjectType.A2A,
+        APIEventType.A2A_UPDATED,
+        {"outbound": outbound_config},
         request_id
     )
-    return JSONResponse(content=response.model_dump(), status_code=501)
+    return JSONResponse(content=response.model_dump(), status_code=200)
 
 
 @router.delete("/a2a/outbound/{item}", response_model=APIResponse)
@@ -89,9 +97,16 @@ async def reset_a2a_outbound_setting(request: Request, item: str) -> JSONRespons
     Returns:
         Success response
     """
+    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # TODO: Implement A2A outbound setting reset logic
+    # Remove specific endpoint from in-memory configuration (ephemeral)
+    a2a_config = formation.config.get("a2a", {})
+    outbound_config = a2a_config.get("outbound", {})
+    endpoints = outbound_config.get("endpoints", {})
+    
+    if item in endpoints:
+        del endpoints[item]
 
     response = create_success_response(
         APIObjectType.A2A,

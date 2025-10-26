@@ -77,11 +77,19 @@ async def update_scheduler(request: Request, config: SchedulerUpdate) -> JSONRes
     Returns:
         Updated scheduler configuration
     """
+    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # TODO: Implement scheduler update logic
-
-    scheduler_config = {"enabled": config.enabled, "timezone": config.timezone, "jobs": config.jobs}
+    # Update in-memory configuration (ephemeral - lost on restart)
+    scheduler_config = formation.config.setdefault("scheduler", {})
+    
+    # Update only provided fields
+    if config.enabled is not None:
+        scheduler_config["enabled"] = config.enabled
+    if config.timezone is not None:
+        scheduler_config["timezone"] = config.timezone
+    if config.jobs is not None:
+        scheduler_config["jobs"] = config.jobs
 
     response = create_success_response(
         APIObjectType.SCHEDULER, APIEventType.SCHEDULER_UPDATED, scheduler_config, request_id

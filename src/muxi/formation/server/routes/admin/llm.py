@@ -64,15 +64,21 @@ async def update_llm_settings(request: Request, settings: LLMSettingsUpdate) -> 
     Returns:
         Updated LLM configuration
     """
+    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # TODO: Implement LLM settings update logic
-    # For now, just return success with the provided settings
+    # Update in-memory configuration (ephemeral - lost on restart)
+    llm_config = formation.config.setdefault("llm", {})
+    llm_settings = llm_config.setdefault("settings", {})
+    
+    # Update only the provided settings
+    for key, value in settings.settings.items():
+        llm_settings[key] = value
 
     response = create_success_response(
         APIObjectType.LLM,
         APIEventType.LLM_UPDATED,
-        {"settings": settings.settings},
+        {"settings": llm_settings},
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)

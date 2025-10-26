@@ -127,15 +127,20 @@ async def update_mcp_defaults(request: Request, defaults: MCPDefaultsUpdate) -> 
     Returns:
         Updated MCP configuration
     """
+    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # TODO: Implement MCP defaults update logic
-
-    mcp_defaults = {
-        "timeout": defaults.timeout,
-        "max_retries": defaults.max_retries,
-        "environment": defaults.environment,
-    }
+    # Update in-memory configuration (ephemeral - lost on restart)
+    mcp_config = formation.config.setdefault("mcp", {})
+    mcp_defaults = mcp_config.setdefault("defaults", {})
+    
+    # Update only provided defaults
+    if defaults.timeout is not None:
+        mcp_defaults["timeout"] = defaults.timeout
+    if defaults.max_retries is not None:
+        mcp_defaults["max_retries"] = defaults.max_retries
+    if defaults.environment is not None:
+        mcp_defaults["environment"] = defaults.environment
 
     response = create_success_response(
         APIObjectType.MCP, APIEventType.MCP_UPDATED, {"defaults": mcp_defaults}, request_id
@@ -213,8 +218,10 @@ async def create_mcp_server(request: Request, server: MCPServerCreate) -> JSONRe
         "enabled": server.enabled,
     }
 
-    # TODO: Add server to formation configuration
-    # For now, this just returns the created config without persisting
+    # Add server to in-memory configuration (ephemeral - lost on restart)
+    mcp_config = formation.config.setdefault("mcp", {})
+    servers = mcp_config.setdefault("servers", [])
+    servers.append(server_config)
 
     response = create_success_response(
         APIObjectType.MCP_SERVER, APIEventType.MCP_SERVER_CREATED, server_config, request_id
@@ -267,13 +274,26 @@ async def update_mcp_server(
     """
     request_id = getattr(request.state, "request_id", None)
 
-    # TODO: Implement MCP server update logic
-    # Find server and apply updates
-
-    update_data = update.model_dump(exclude_unset=True)
-
-    # Mock response for now
-    server_config = {"id": server_id, **update_data}
+    formation = request.app.state.formation
+    
+    # Find and update server in in-memory configuration (ephemeral)
+    mcp_config = formation.config.get("mcp", {})
+    servers = mcp_config.get("servers", [])
+    
+    server_config = None
+    for server in servers:
+        if server.get("id") == server_id:
+            # Apply updates
+            update_data = update.model_dump(exclude_unset=True)
+            server.update(update_data)
+            server_config = server
+            break
+    
+    if not server_config:
+        response = create_error_response(
+            "MCP_SERVER_NOT_FOUND", f"MCP server '{server_id}' not found", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=404)
 
     response = create_success_response(
         APIObjectType.MCP_SERVER, APIEventType.MCP_SERVER_UPDATED, server_config, request_id
@@ -294,8 +314,21 @@ async def delete_mcp_server(request: Request, server_id: str) -> JSONResponse:
     """
     request_id = getattr(request.state, "request_id", None)
 
-    # TODO: Implement MCP server deletion logic
-    # Find and remove server from configuration
+    formation = request.app.state.formation
+    
+    # Find and delete server from in-memory configuration (ephemeral)
+    mcp_config = formation.config.get("mcp", {})
+    servers = mcp_config.get("servers", [])
+    
+    # Find and remove server
+    original_count = len(servers)
+    servers[:] = [s for s in servers if s.get("id") != server_id]
+    
+    if len(servers) == original_count:
+        response = create_error_response(
+            "MCP_SERVER_NOT_FOUND", f"MCP server '{server_id}' not found", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=404)
 
     response = create_success_response(
         APIObjectType.MCP_SERVER,

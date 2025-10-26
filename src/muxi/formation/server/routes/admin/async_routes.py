@@ -67,16 +67,21 @@ async def update_async_settings(request: Request, settings: AsyncSettingsUpdate)
     Returns:
         Updated async configuration
     """
+    formation = request.app.state.formation
+    overlord = formation.overlord
     request_id = getattr(request.state, "request_id", None)
 
-    # TODO: Implement async settings update logic
+    # Update in-memory configuration (ephemeral - lost on restart)
+    async_config = formation.config.setdefault("async", {})
+    async_config["enabled"] = settings.enabled
+    async_config["max_concurrent_jobs"] = settings.max_concurrent_jobs
+    async_config["job_timeout_seconds"] = settings.job_timeout_seconds
+    async_config["retention_policy"] = settings.retention_policy
 
-    async_config = {
-        "enabled": settings.enabled,
-        "max_concurrent_jobs": settings.max_concurrent_jobs,
-        "job_timeout_seconds": settings.job_timeout_seconds,
-        "retention_policy": settings.retention_policy,
-    }
+    # Also update overlord runtime settings if available
+    if hasattr(overlord, "async_threshold_seconds"):
+        # Map job_timeout_seconds to async threshold
+        overlord.async_threshold_seconds = settings.job_timeout_seconds
 
     response = create_success_response(
         APIObjectType.ASYNC, APIEventType.ASYNC_UPDATED, async_config, request_id
