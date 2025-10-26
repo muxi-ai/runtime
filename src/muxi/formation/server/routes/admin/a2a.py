@@ -15,7 +15,6 @@ from pydantic import BaseModel
 from ...responses import (
     APIResponse,
     create_success_response,
-    create_error_response,
 )
 from ...secrets import restore_secret_placeholders
 from .....datatypes.api import APIEventType, APIObjectType
@@ -74,7 +73,7 @@ async def update_a2a_outbound(request: Request, settings: A2AOutboundUpdate) -> 
         # Fallback: initialize lock if not already created (should not happen in normal operation)
         import asyncio
         formation._async_config_lock = asyncio.Lock()
-    
+
     async with formation._async_config_lock:
         # Update in-memory configuration (ephemeral - lost on restart)
         a2a_config = formation.config.setdefault("a2a", {})
@@ -112,7 +111,7 @@ async def reset_a2a_outbound_setting(request: Request, item: str) -> JSONRespons
     if formation._async_config_lock is None:
         import asyncio
         formation._async_config_lock = asyncio.Lock()
-    
+
     async with formation._async_config_lock:
         # Remove specific endpoint from in-memory configuration (ephemeral)
         a2a_config = formation.config.get("a2a", {})

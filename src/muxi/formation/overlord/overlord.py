@@ -889,13 +889,13 @@ class Overlord:
     def _filter_llm_settings(settings_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
         Filter out LLM settings that should be set explicitly.
-        
+
         Removes 'temperature' and 'max_tokens' from settings to avoid duplicate
         kwargs when creating models with explicit values for these parameters.
-        
+
         Args:
             settings_dict: Original settings dictionary
-            
+
         Returns:
             Filtered settings dictionary (empty dict if input is None/empty)
         """
@@ -4796,13 +4796,19 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         except InputValidationError as e:
             return str(e)
         except Exception as e:
+            # Log unexpected validation errors but re-raise to avoid hiding bugs
             observability.observe(
                 event_type=observability.ErrorEvents.VALIDATION_FAILED,
                 level=observability.EventLevel.ERROR,
-                data={"error": str(e), "phase": "chat_message_validation"},
-                description="Unexpected error during message validation",
+                data={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "phase": "chat_message_validation"
+                },
+                description=f"Unexpected error during message validation: {type(e).__name__}",
             )
-            return "Invalid input."
+            # Re-raise to propagate programming errors (AttributeError, TypeError, etc.)
+            raise
 
         # Validate file uploads if present
         if files:
@@ -4814,13 +4820,19 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             except InputValidationError as e:
                 return str(e)
             except Exception as e:
+                # Log unexpected validation errors but re-raise to avoid hiding bugs
                 observability.observe(
                     event_type=observability.ErrorEvents.VALIDATION_FAILED,
                     level=observability.EventLevel.ERROR,
-                    data={"error": str(e), "phase": "file_upload_validation"},
-                    description="Unexpected error during file validation",
+                    data={
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "phase": "file_upload_validation"
+                    },
+                    description=f"Unexpected error during file validation: {type(e).__name__}",
                 )
-                return "Invalid file upload."
+                # Re-raise to propagate programming errors (AttributeError, TypeError, etc.)
+                raise
         elif user_id is not None:
             # Normalize user_id - lowercase and strip whitespace
             user_id = str(user_id).lower().strip()
