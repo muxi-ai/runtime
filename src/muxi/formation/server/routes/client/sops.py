@@ -24,19 +24,19 @@ router = APIRouter(tags=["SOPs"])
 def _extract_agents_from_sop(metadata: Dict[str, Any], content: str) -> List[str]:
     """
     Extract agent names from SOP metadata or content.
-    
+
     Prefer metadata-first approach to avoid false positives from prose.
     Falls back to parsing content only when metadata is absent.
-    
+
     Args:
         metadata: SOP frontmatter metadata dictionary
         content: SOP markdown content
-    
+
     Returns:
         List of agent names used in the SOP
     """
     agents_used = []
-    
+
     # First, try metadata fields
     if "agents" in metadata:
         agents_used = metadata["agents"]
@@ -54,7 +54,7 @@ def _extract_agents_from_sop(metadata: Dict[str, Any], content: str) -> List[str
                 if agent_name and re.match(r'^[a-zA-Z0-9_-]+$', agent_name):
                     if agent_name not in agents_used:
                         agents_used.append(agent_name)
-    
+
     return agents_used
 
 

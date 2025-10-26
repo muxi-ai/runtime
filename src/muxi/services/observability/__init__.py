@@ -120,6 +120,7 @@ def _redact_data_recursive(obj: Any) -> Any:
         # Numbers, bools, None, etc. - return as-is
         return obj
 
+
 # Kill all tasks on ctrl-c for clean shutdown
 # Only register signal handlers in main thread to avoid errors in tests
 try:
@@ -200,7 +201,7 @@ def observe(
             event_type_lower = event_type.lower()
             if any(keyword in event_type_lower for keyword in ["user", "conversation", "message", "error", "api"]):
                 should_redact = True
-        
+
         if should_redact:
             redacted_data = _redact_data_recursive(data or {})
             redacted_description = _redact_data_recursive(description) if description else ""

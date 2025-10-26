@@ -29,33 +29,33 @@ async def user_events(request: Request, user_id: str) -> StreamingResponse:
     """
     formation = request.app.state.formation
     overlord = getattr(formation, "_overlord", None)
-    
+
     if not overlord:
         raise HTTPException(
             status_code=503,
             detail="Overlord service not available"
         )
-    
+
     # Get observability manager
     observability_manager = overlord.observability_manager if hasattr(overlord, 'observability_manager') else None
-    
+
     if not observability_manager or not hasattr(observability_manager, 'subscribe'):
         raise HTTPException(
             status_code=503,
             detail="Live event streaming not available - observability manager not configured"
         )
-    
+
     async def event_generator():
         try:
             # Subscribe to observability event stream filtered to this user
             # Only stream user-facing events (not internal system events)
             filters = {"user_id": user_id}
-            
+
             async for event in observability_manager.subscribe(filters):
                 # Check if client disconnected
                 if await request.is_disconnected():
                     break
-                
+
                 # Only send user-facing events (filter out internal system events)
                 event_type = event.get("event_type", "")
                 if event_type.startswith(("chat.", "agent.", "workflow.", "task.")):
@@ -67,20 +67,20 @@ async def user_events(request: Request, user_id: str) -> StreamingResponse:
                         "session_id": event.get("session_id"),
                         "request_id": event.get("request_id"),
                     }
-                    
+
                     yield f"data: {json.dumps(event_data)}\\n\\n"
 
         except asyncio.CancelledError:
             # Client disconnected
             pass
-        except Exception as e:
+        except Exception:
             # Send error event to client
             error_event = {
                 "error": True,
                 "message": "Streaming error occurred",
             }
             yield f"data: {json.dumps(error_event)}\\n\\n"
-    
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
