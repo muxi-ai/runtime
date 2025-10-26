@@ -61,6 +61,9 @@ class ObservabilityManager:
         
         # Metrics for dropped events (when subscriber queue is full)
         self._dropped_events_count = 0
+        
+        # Cache for compiled regex patterns (performance optimization)
+        self._compiled_patterns: Dict[str, Any] = {}
 
     def _create_event_logger(self) -> EventLogger:
         """Create event logger from configuration."""
@@ -181,15 +184,25 @@ class ObservabilityManager:
         for key, value in filters.items():
             if key == "event_type":
                 # Support wildcard matching for event_type
-                import re
-                pattern_str = value.replace("*", ".*")
-                pattern = re.compile(pattern_str)
+                # Use cached compiled patterns for performance
+                if value not in self._compiled_patterns:
+                    import re
+                    pattern_str = value.replace("*", ".*")
+                    self._compiled_patterns[value] = re.compile(pattern_str)
+                pattern = self._compiled_patterns[value]
                 if not pattern.fullmatch(event.get("event_type", "")):
                     return False
             elif key == "level":
-                # Match level or higher severity
+                # Match level or higher severity (e.g., INFO matches INFO, WARNING, ERROR, CRITICAL)
                 event_level = event.get("level", "")
-                if event_level != value:
+                level_order = ["debug", "info", "warning", "error", "critical"]
+                try:
+                    event_idx = level_order.index(event_level.lower())
+                    filter_idx = level_order.index(value.lower())
+                    if event_idx < filter_idx:
+                        return False
+                except (ValueError, AttributeError):
+                    # Invalid level, exclude event
                     return False
             else:
                 # Exact match for other fields
