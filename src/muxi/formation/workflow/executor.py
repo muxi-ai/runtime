@@ -208,7 +208,10 @@ class WorkflowExecutor:
                         "total_tasks": len(workflow.tasks),
                         "completed_tasks": sum(1 for t in workflow.tasks.values() if t.status == TaskStatus.COMPLETED),
                     },
-                    description=f"Workflow {workflow.id} exceeded maximum timeout of {max_timeout}s (ran for {elapsed:.1f}s)",
+                    description=(
+                        f"Workflow {workflow.id} exceeded maximum timeout of {max_timeout}s "
+                        f"(ran for {elapsed:.1f}s)"
+                    ),
                 )
 
                 # Clean up
@@ -821,7 +824,11 @@ class WorkflowExecutor:
                     "dependencies_completed": len(task.dependencies) if hasattr(task, 'dependencies') else 0,
                     "workflow_id": workflow.id if workflow else None,
                 },
-                description=f"Task '{task.name}' (complexity {task.estimated_complexity if hasattr(task, 'estimated_complexity') else 'N/A'}) assigned to agent '{agent.agent_id}'",
+                description=(
+                    f"Task '{task.name}' "
+                    f"(complexity {task.estimated_complexity if hasattr(task, 'estimated_complexity') else 'N/A'}) "
+                    f"assigned to agent '{agent.agent_id}'"
+                ),
             )
 
             # Execute task with timeout
@@ -874,7 +881,10 @@ class WorkflowExecutor:
                     "success": result.status.value == "completed" if result else False,
                     "workflow_id": workflow.id if workflow else None,
                 },
-                description=f"Task '{task.name}' completed in {execution_time:.2f}s by agent '{task.assigned_agent_id}'",
+                description=(
+                    f"Task '{task.name}' completed in {execution_time:.2f}s "
+                    f"by agent '{task.assigned_agent_id}'"
+                ),
             )
             return result
 

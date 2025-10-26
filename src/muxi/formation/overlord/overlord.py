@@ -9675,7 +9675,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
         except Exception as e:
             # Fail fast: If built-in MCPs are configured, they must work
             # InitEventFormatter will display the error clearly during init
-            raise RuntimeError(f"Failed to initialize built-in MCP prompts: {str(e)}") from e
+            raise RuntimeError("Failed to initialize built-in MCP prompts") from e
 
     async def remember_user_info(
         self,
