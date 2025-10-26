@@ -11,7 +11,7 @@ This module provides advanced configuration options for the workflow system incl
 
 from typing import Optional, Dict, Any, List, Callable
 from enum import Enum
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from datetime import datetime, timezone
 import asyncio
 
@@ -70,6 +70,19 @@ class TimeoutConfig(BaseModel):
     timeout_multiplier: float = Field(
         default=1.5, ge=1.0, description="Multiplier for complexity-based timeout adjustment"
     )
+
+    @model_validator(mode='after')
+    def validate_workflow_timeout(self):
+        """Ensure workflow_timeout doesn't exceed max_timeout_seconds"""
+        if (self.workflow_timeout is not None and 
+            self.max_timeout_seconds is not None and 
+            self.workflow_timeout > self.max_timeout_seconds):
+            raise ValueError(
+                f"workflow_timeout ({self.workflow_timeout}s) cannot exceed "
+                f"max_timeout_seconds ({self.max_timeout_seconds}s). "
+                f"Please reduce workflow_timeout or increase max_timeout_seconds."
+            )
+        return self
 
     model_config = ConfigDict(extra="forbid")
 
