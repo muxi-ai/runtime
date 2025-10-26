@@ -31,26 +31,34 @@ class TestLLMSettings(BaseE2ETest):
                 assert r.status_code == 200
                 print("✅ GET /v1/llm/settings passed")
 
-                # PATCH /v1/llm/settings
-                print("\n3. Testing PATCH /v1/llm/settings...")
+                # PATCH /v1/llm/settings (valid key)
+                print("\n3. Testing PATCH /v1/llm/settings with valid key...")
                 r = await client.patch(f"{self.base_url}/llm/settings", headers=self.headers, json={"settings": {"temperature": 0.7}})
                 assert r.status_code in [200, 204]
-                print("✅ PATCH /v1/llm/settings passed")
+                print("✅ PATCH /v1/llm/settings with valid key passed")
+
+                # PATCH /v1/llm/settings (invalid key - should reject)
+                print("\n4. Testing PATCH /v1/llm/settings with invalid key...")
+                r = await client.patch(f"{self.base_url}/llm/settings", headers=self.headers, json={"settings": {"invalid_setting": 123}})
+                assert r.status_code == 400, f"Expected 400 for invalid key, got {r.status_code}"
+                data = r.json()
+                assert "invalid_setting" in data.get("error", {}).get("message", "").lower(), "Error message should mention invalid key"
+                print("✅ PATCH /v1/llm/settings correctly rejects invalid key")
 
                 # DELETE /v1/llm/settings/{item}
-                print("\n4. Testing DELETE /v1/llm/settings/{item}...")
+                print("\n5. Testing DELETE /v1/llm/settings/{item}...")
                 r = await client.delete(f"{self.base_url}/llm/settings/test_setting", headers=self.headers)
                 assert r.status_code in [200, 400, 404]  # 400 = bad request (invalid key), 404 = not found
                 print("✅ DELETE /v1/llm/settings/{item} verified")
 
                 # Auth test
-                print("\n5. Testing authentication...")
+                print("\n6. Testing authentication...")
                 r = await client.get(f"{self.base_url}/llm/settings", headers={"Content-Type": "application/json"})
                 assert r.status_code == 401
                 print("✅ Authentication enforced")
 
             formatter.print_test_result(test_name="test_19q1_llm_settings", success=True, 
-                checks=["GET settings", "PATCH settings", "DELETE setting item", "Auth enforced"], 
+                checks=["GET settings", "PATCH valid key", "PATCH invalid key rejected", "DELETE setting item", "Auth enforced"], 
                 transcript=[], duration=time.time()-start_time)
         except Exception as e:
             formatter.print_test_result(test_name="test_19q1_llm_settings", success=False, checks=[f"Failed: {e}"], transcript=[], duration=time.time()-start_time)

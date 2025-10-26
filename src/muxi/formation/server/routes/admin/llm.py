@@ -22,6 +22,9 @@ from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["LLM"])
 
+# Valid LLM settings that can be updated/reset via API
+VALID_LLM_SETTINGS = {"temperature", "max_tokens", "timeout_seconds"}
+
 
 class LLMSettingsUpdate(BaseModel):
     """Model for updating LLM settings."""
@@ -71,7 +74,19 @@ async def update_llm_settings(request: Request, settings: LLMSettingsUpdate) -> 
     llm_config = formation.config.setdefault("llm", {})
     llm_settings = llm_config.setdefault("settings", {})
 
-    # Update only the provided settings
+    # Validate all incoming keys against VALID_LLM_SETTINGS
+    invalid_keys = [key for key in settings.settings.keys() if key not in VALID_LLM_SETTINGS]
+    if invalid_keys:
+        response = create_error_response(
+            "INVALID_PARAMS",
+            f"Invalid LLM setting(s): {', '.join(sorted(invalid_keys))}. "
+            f"Valid settings are: {', '.join(sorted(VALID_LLM_SETTINGS))}",
+            None,
+            request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=400)
+
+    # Update only the validated settings
     for key, value in settings.settings.items():
         llm_settings[key] = value
 
@@ -97,9 +112,6 @@ async def reset_llm_setting(request: Request, item: str) -> JSONResponse:
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
-
-    # Define valid LLM settings that can be reset
-    VALID_LLM_SETTINGS = {"temperature", "max_tokens", "timeout_seconds"}
 
     # Validate the item parameter
     if item not in VALID_LLM_SETTINGS:
