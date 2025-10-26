@@ -29,13 +29,14 @@ async def resolve_user_identifier(
     db_manager,
     kv_cache,
     identifier_type: Optional[str] = None,
-) -> Tuple[int, str]:
+    create_if_missing: bool = True,
+) -> Optional[Tuple[int, str]]:
     """
     Resolve any external identifier to (internal_user_id, muxi_user_id).
 
     This function provides fast identifier resolution with KV caching. It first
     checks the cache, then queries the database if needed. If the identifier
-    doesn't exist, it creates a new user and identifier.
+    doesn't exist, behavior depends on create_if_missing parameter.
 
     Args:
         identifier: Developer-provided ID (email, Slack ID, etc.)
@@ -43,15 +44,20 @@ async def resolve_user_identifier(
         db_manager: Database manager instance
         kv_cache: KV cache instance for fast lookups
         identifier_type: Optional type hint for new users ('email', 'slack', etc.)
+        create_if_missing: If True, creates new user when identifier not found.
+                          If False, returns None when identifier not found.
+                          Default: True (for backward compatibility)
 
     Returns:
-        Tuple of (internal_user_id: int, muxi_user_id: str)
+        Tuple of (internal_user_id: int, muxi_user_id: str) if found/created
+        None if not found and create_if_missing=False
         Example: (123, "usr_abc123")
 
     Raises:
         ValueError: If identifier or formation_id is not a non-empty string
 
     Example:
+        >>> # Resolve with creation (default behavior)
         >>> internal_id, muxi_id = await resolve_user_identifier(
         ...     identifier="alice@email.com",
         ...     formation_id="form_123",
@@ -60,6 +66,17 @@ async def resolve_user_identifier(
         ... )
         >>> print(f"Internal: {internal_id}, MUXI: {muxi_id}")
         Internal: 123, MUXI: usr_abc123
+        >>>
+        >>> # Lookup only (no creation)
+        >>> result = await resolve_user_identifier(
+        ...     identifier="unknown@email.com",
+        ...     formation_id="form_123",
+        ...     db_manager=db,
+        ...     kv_cache=kv,
+        ...     create_if_missing=False
+        ... )
+        >>> print(result)  # None if not found
+        None
     """
     # Input validation - fail fast with clear errors
     if not isinstance(identifier, str) or not identifier.strip():
@@ -143,9 +160,9 @@ async def resolve_user_identifier(
                     "source": "database",
                     "formation_id": formation_id,
                 },
-                description=f"Resolved user identifier '{identifier}' to {muxi_id} (internal ID: {internal_id})",
+                description=f"Resolved user identifier {identifier!r} to {muxi_id} (internal ID: {internal_id})",
             )
-        else:
+        elif create_if_missing:
             # Create new user + identifier
             new_user = await User.create(
                 session,
@@ -176,11 +193,22 @@ async def resolve_user_identifier(
                     "formation_id": formation_id,
                     "identifier_type": identifier_type,
                 },
-                description=(
-                    f"User resolution: Resolved identifier '{identifier}' "
-                    f"to muxi_user_id={muxi_id}"
-                ),
+                description=f"User resolution: Resolved identifier {identifier!r} to muxi_user_id={muxi_id}",
             )
+        else:
+            # Not found and create_if_missing=False
+            observability.observe(
+                event_type=observability.SystemEvents.USER_RESOLVED,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "operation": "user_identifier_lookup",
+                    "identifier": identifier,
+                    "source": "not_found",
+                    "formation_id": formation_id,
+                },
+                description=f"User identifier {identifier!r} not found (lookup only, no creation)",
+            )
+            return None
 
     # Step 3: Cache result (1 hour TTL) - if cache available
     if kv_cache is not None:

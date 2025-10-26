@@ -62,7 +62,7 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
             if not user:
                 response = create_error_response(
                     "RESOURCE_NOT_FOUND",
-                    f"User not found: {user_id}",
+                    f"User not found: {user_id!r}",
                     None,
                     request_id,
                 )
@@ -111,7 +111,7 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
         observability.observe(
             event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.ERROR,
-            description=f"Failed to retrieve user identifiers: {str(e)}",
+            description=f"Failed to retrieve user identifiers: {e!r}",
             data={
                 "user_id": user_id,
                 "error": str(e),
@@ -120,7 +120,7 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
         )
         response = create_error_response(
             "INTERNAL_ERROR",
-            f"Failed to retrieve user identifiers: {str(e)}",
+            f"Failed to retrieve user identifiers: {e!r}",
             None,
             request_id,
         )
@@ -169,7 +169,7 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
             if not id_obj:
                 response = create_error_response(
                     "RESOURCE_NOT_FOUND",
-                    f"Identifier '{identifier}' not found",
+                    f"Identifier {identifier!r} not found",
                     None,
                     request_id,
                 )
@@ -198,7 +198,7 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
             observability.observe(
                 event_type=observability.SystemEvents.OPERATION_COMPLETED,
                 level=observability.EventLevel.INFO,
-                description=f"User identifier '{identifier}' removed",
+                description=f"User identifier {identifier!r} removed",
                 data={
                     "identifier": identifier,
                     "muxi_user_id": muxi_user_id,
@@ -206,7 +206,7 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
             )
 
             data = {
-                "message": f"Identifier '{identifier}' removed successfully",
+                "message": f"Identifier {identifier!r} removed successfully",
                 "muxi_user_id": muxi_user_id,
             }
 
@@ -222,7 +222,7 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
         observability.observe(
             event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.ERROR,
-            description=f"Failed to delete user identifier: {str(e)}",
+            description=f"Failed to delete user identifier: {e!r}",
             data={
                 "identifier": identifier,
                 "error": str(e),
@@ -231,7 +231,7 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
         )
         response = create_error_response(
             "INTERNAL_ERROR",
-            f"Failed to delete identifier: {str(e)}",
+            f"Failed to delete identifier: {e!r}",
             None,
             request_id,
         )
@@ -239,37 +239,25 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
 
 
 @router.get("/users/{identifier}", response_model=APIResponse)
-async def resolve_identifier(request: Request, identifier: str) -> JSONResponse:
+async def lookup_identifier(request: Request, identifier: str) -> JSONResponse:
     """
-    Look up which MUXI user an identifier belongs to.
+    Look up which MUXI user an identifier belongs to (read-only, no creation).
 
-    **⚠️ WARNING: This endpoint has side effects (violates HTTP GET semantics)**
+    This endpoint follows proper HTTP GET semantics: it is safe and idempotent,
+    with no side effects. If the identifier doesn't exist, returns 404.
 
-    This endpoint will CREATE a new user if the identifier doesn't exist.
-    This violates the HTTP specification that GET requests should be safe
-    and idempotent (no side effects).
-
-    **Implications:**
-    - User agents that prefetch/cache URLs may create spurious users
-    - Typos or probing may create unwanted user records
-    - Not compliant with RESTful API contracts
-
-    **TODO: Consider migrating to one of these approaches:**
-    1. Change to POST /users/resolve with create_if_missing flag
-    2. Split into GET (404 if not exists) and POST (create)
-    3. Add rate limiting and require explicit opt-in header
+    To resolve an identifier with automatic user creation, use POST /users/resolve.
 
     Args:
-        identifier: Identifier to resolve
+        identifier: Identifier to look up (email, Slack ID, etc.)
 
     Returns:
-        MUXI user information (creates user if identifier is new)
+        MUXI user information if found, 404 if not found
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
     try:
-        # Use the resolve_user_identifier utility
         db_manager = formation.get_db_manager()
         kv_cache = formation.get_kv_cache()
 
@@ -282,13 +270,26 @@ async def resolve_identifier(request: Request, identifier: str) -> JSONResponse:
             )
             return JSONResponse(content=response.model_dump(), status_code=503)
 
-        # Resolve identifier (this will create if not exists, but that's okay for resolution)
-        internal_user_id, muxi_user_id = await resolve_user_identifier(
+        # Lookup only (no creation)
+        result = await resolve_user_identifier(
             identifier=identifier,
             formation_id=formation.formation_id,
             db_manager=db_manager,
             kv_cache=kv_cache,
+            create_if_missing=False,
         )
+
+        if result is None:
+            # Identifier not found
+            response = create_error_response(
+                "RESOURCE_NOT_FOUND",
+                f"Identifier not found: {identifier!r}",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=404)
+
+        internal_user_id, muxi_user_id = result
 
         data = {
             "identifier": identifier,
@@ -308,7 +309,7 @@ async def resolve_identifier(request: Request, identifier: str) -> JSONResponse:
         # Invalid input
         response = create_error_response(
             "INVALID_REQUEST",
-            str(e),
+            f"{e!r}",
             None,
             request_id,
         )
@@ -317,7 +318,7 @@ async def resolve_identifier(request: Request, identifier: str) -> JSONResponse:
         observability.observe(
             event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.ERROR,
-            description=f"Failed to resolve identifier: {str(e)}",
+            description=f"Failed to lookup identifier: {e!r}",
             data={
                 "identifier": identifier,
                 "error": str(e),
@@ -326,7 +327,112 @@ async def resolve_identifier(request: Request, identifier: str) -> JSONResponse:
         )
         response = create_error_response(
             "INTERNAL_ERROR",
-            f"Failed to resolve identifier: {str(e)}",
+            f"Failed to lookup identifier: {e!r}",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+
+@router.post("/users/resolve", response_model=APIResponse)
+async def resolve_identifier(request: Request) -> JSONResponse:
+    """
+    Resolve an identifier to a MUXI user (creates user if needed).
+
+    This endpoint uses POST method since it has side effects (user creation).
+    If the identifier doesn't exist, creates a new user and returns its details.
+
+    Request body:
+        {
+            "identifier": "alice@email.com",
+            "identifier_type": "email"  // optional
+        }
+
+    Args:
+        identifier: Identifier to resolve (from request body)
+        identifier_type: Optional type hint (email, slack, telegram, etc.)
+
+    Returns:
+        MUXI user information (creates user if identifier is new)
+    """
+    from pydantic import BaseModel, Field
+
+    class ResolveRequest(BaseModel):
+        identifier: str = Field(..., description="Identifier to resolve")
+        identifier_type: Optional[str] = Field(None, description="Optional identifier type")
+
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    try:
+        # Parse request body
+        body = await request.json()
+        resolve_req = ResolveRequest(**body)
+
+        db_manager = formation.get_db_manager()
+        kv_cache = formation.get_kv_cache()
+
+        if not db_manager:
+            response = create_error_response(
+                "SERVICE_UNAVAILABLE",
+                "Database service is not available",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=503)
+
+        # Resolve identifier with creation enabled
+        result = await resolve_user_identifier(
+            identifier=resolve_req.identifier,
+            formation_id=formation.formation_id,
+            db_manager=db_manager,
+            kv_cache=kv_cache,
+            identifier_type=resolve_req.identifier_type,
+            create_if_missing=True,
+        )
+
+        # Should never be None with create_if_missing=True
+        if result is None:
+            raise ValueError("Unexpected None result from resolve_user_identifier")
+
+        internal_user_id, muxi_user_id = result
+
+        data = {
+            "identifier": resolve_req.identifier,
+            "muxi_user_id": muxi_user_id,
+            "internal_user_id": internal_user_id,
+        }
+
+        response = create_success_response(
+            APIObjectType.USER,
+            APIEventType.USER_RESOLVED,
+            data,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=200)
+
+    except ValueError as e:
+        # Invalid input
+        response = create_error_response(
+            "INVALID_REQUEST",
+            f"{e!r}",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=400)
+    except Exception as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.ERROR,
+            description=f"Failed to resolve identifier: {e!r}",
+            data={
+                "error": str(e),
+                "error_type": type(e).__name__,
+            },
+        )
+        response = create_error_response(
+            "INTERNAL_ERROR",
+            f"Failed to resolve identifier: {e!r}",
             None,
             request_id,
         )
