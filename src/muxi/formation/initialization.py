@@ -359,6 +359,9 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
         # For now, we'll pass the model name and let the memory systems handle model creation
         # This avoids the async initialization issue
 
+        # Extract statement timeout once for reuse across all database manager branches
+        statement_timeout = persistent_config.get("query_timeout_seconds", 30)
+
         # Determine the type of persistent memory based on connection string
         if connection_string.startswith("postgresql://"):
             # PostgreSQL memory
@@ -366,7 +369,6 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             from ..services.db import get_database_manager
 
             # Create database manager with configured timeout
-            statement_timeout = persistent_config.get("query_timeout_seconds", 30)
             db_manager = get_database_manager(connection_string, statement_timeout)
             formation._db_manager = db_manager
 
@@ -390,7 +392,6 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             else:
                 db_connection_string = f"sqlite:///{connection_string}"
 
-            statement_timeout = persistent_config.get("query_timeout_seconds", 30)
             db_manager = get_database_manager(db_connection_string, statement_timeout)
             formation._db_manager = db_manager
 
@@ -408,7 +409,6 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             from ..services.db import get_database_manager
 
             # Create database manager with configured timeout
-            statement_timeout = persistent_config.get("query_timeout_seconds", 30)
             db_manager = get_database_manager(connection_string, statement_timeout)
             formation._db_manager = db_manager
 
