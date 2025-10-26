@@ -56,14 +56,20 @@ class ObservabilityManager:
 
         # Event streaming subscriptions for live log streaming
         self._subscribers: List[tuple] = []  # List of (queue, filters) tuples
-        import asyncio
-        self._subscriber_lock = asyncio.Lock()
-        
+        self._subscriber_lock = None  # Lazy-initialized to bind to correct event loop
+
         # Metrics for dropped events (when subscriber queue is full)
         self._dropped_events_count = 0
-        
+
         # Cache for compiled regex patterns (performance optimization)
         self._compiled_patterns: Dict[str, Any] = {}
+
+    async def _get_subscriber_lock(self):
+        """Lazily initialize subscriber lock on the correct event loop."""
+        if self._subscriber_lock is None:
+            import asyncio
+            self._subscriber_lock = asyncio.Lock()
+        return self._subscriber_lock
 
     def _create_event_logger(self) -> EventLogger:
         """Create event logger from configuration."""
@@ -158,7 +164,8 @@ class ObservabilityManager:
         queue = asyncio.Queue(maxsize=1000)  # Buffered event queue
 
         # Add subscriber
-        async with self._subscriber_lock:
+        lock = await self._get_subscriber_lock()
+        async with lock:
             self._subscribers.append((queue, filters))
 
         try:
@@ -167,7 +174,8 @@ class ObservabilityManager:
                 yield event
         finally:
             # Cleanup on disconnect
-            async with self._subscriber_lock:
+            lock = await self._get_subscriber_lock()
+            async with lock:
                 self._subscribers = [(q, f) for q, f in self._subscribers if q != queue]
 
     def _matches_filters(self, event: Dict[str, Any], filters: Dict[str, Any]) -> bool:
@@ -221,9 +229,10 @@ class ObservabilityManager:
 
         # Take shallow copy of subscribers under lock, then release
         # This prevents lock contention from filter checks and slow subscribers
-        async with self._subscriber_lock:
+        lock = await self._get_subscriber_lock()
+        async with lock:
             subscribers_snapshot = list(self._subscribers)
-        
+
         # Iterate snapshot without holding lock
         for queue, filters in subscribers_snapshot:
             if self._matches_filters(event, filters):
@@ -249,7 +258,7 @@ class ObservabilityManager:
     def get_dropped_events_count(self) -> int:
         """
         Get the total number of events dropped due to slow subscribers.
-        
+
         Returns:
             Number of events dropped
         """
