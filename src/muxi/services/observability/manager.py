@@ -54,6 +54,11 @@ class ObservabilityManager:
         # Track async requests to prevent premature completion
         self._async_requests = set()
 
+        # Event streaming subscriptions for live log streaming
+        self._subscribers: List[tuple] = []  # List of (queue, filters) tuples
+        import asyncio
+        self._subscriber_lock = asyncio.Lock()
+
     def _create_event_logger(self) -> EventLogger:
         """Create event logger from configuration."""
         logging_config = self.config.get("logging", {})
@@ -130,6 +135,82 @@ class ObservabilityManager:
             await self.stream_processor.stop()
         if self._health_monitoring_started:
             await self.health_monitor.stop()
+
+    async def subscribe(self, filters: Optional[Dict[str, Any]] = None):
+        """
+        Subscribe to filtered event stream for live log streaming.
+        
+        Args:
+            filters: Optional dict of filters to apply (user_id, session_id, level, etc.)
+        
+        Yields:
+            Events that match the filters
+        """
+        import asyncio
+        
+        filters = filters or {}
+        queue = asyncio.Queue(maxsize=1000)  # Buffered event queue
+        
+        # Add subscriber
+        async with self._subscriber_lock:
+            self._subscribers.append((queue, filters))
+        
+        try:
+            while True:
+                event = await queue.get()
+                yield event
+        finally:
+            # Cleanup on disconnect
+            async with self._subscriber_lock:
+                self._subscribers = [(q, f) for q, f in self._subscribers if q != queue]
+
+    def _matches_filters(self, event: Dict[str, Any], filters: Dict[str, Any]) -> bool:
+        """
+        Check if an event matches the given filters.
+        
+        Args:
+            event: Event dict with keys like user_id, session_id, level, event_type
+            filters: Filter dict with same keys
+        
+        Returns:
+            True if event matches all filters, False otherwise
+        """
+        for key, value in filters.items():
+            if key == "event_type":
+                # Support wildcard matching for event_type
+                import re
+                pattern_str = value.replace("*", ".*")
+                pattern = re.compile(pattern_str)
+                if not pattern.fullmatch(event.get("event_type", "")):
+                    return False
+            elif key == "level":
+                # Match level or higher severity
+                event_level = event.get("level", "")
+                if event_level != value:
+                    return False
+            else:
+                # Exact match for other fields
+                if event.get(key) != value:
+                    return False
+        return True
+
+    async def _emit_to_subscribers(self, event: Dict[str, Any]) -> None:
+        """
+        Emit event to all matching subscribers.
+        
+        Args:
+            event: Event dict to emit
+        """
+        import asyncio
+        
+        async with self._subscriber_lock:
+            for queue, filters in self._subscribers:
+                if self._matches_filters(event, filters):
+                    try:
+                        queue.put_nowait(event)
+                    except asyncio.QueueFull:
+                        # Drop events if subscriber is slow
+                        pass
 
     def mark_request_async(self, request_id: str) -> None:
         """Mark a request as async to prevent premature completion.
@@ -247,6 +328,21 @@ class ObservabilityManager:
                 event_type, level, data, request_context, parent_event_id, description, event_id
             )
 
+        # Also emit to live stream subscribers
+        if self._subscribers:
+            event_dict = {
+                "event_id": event_id,
+                "event_type": event_type.value if hasattr(event_type, 'value') else str(event_type),
+                "level": level.value if hasattr(level, 'value') else str(level),
+                "description": description or "",
+                "data": data or {},
+                "user_id": request_context.user_id if request_context else None,
+                "session_id": request_context.session_id if request_context else None,
+                "request_id": request_context.id if request_context else None,
+                "timestamp": time.time(),
+            }
+            await self._emit_to_subscribers(event_dict)
+
         return event_id
 
     async def emit_system_event(
@@ -270,6 +366,18 @@ class ObservabilityManager:
         # Also emit via stream processor if initialized
         if self._streams_initialized:
             await self._emit_to_streams(event_type, level, data, None, None, description, event_id)
+
+        # Also emit to live stream subscribers  
+        if self._subscribers:
+            event_dict = {
+                "event_id": event_id,
+                "event_type": event_type.value if hasattr(event_type, 'value') else str(event_type),
+                "level": level.value if hasattr(level, 'value') else str(level),
+                "description": description or "",
+                "data": data or {},
+                "timestamp": time.time(),
+            }
+            await self._emit_to_subscribers(event_dict)
 
         return event_id
 

@@ -105,55 +105,46 @@ async def stream_logs(
     async def event_generator():
         """
         Generate Server-Sent Events from observability logs.
-
-        TODO: Production implementation required
-        This is currently a placeholder that returns a "not implemented" message.
-
-        Production implementation should:
-        1. Subscribe to the observability system's event emitter instead of polling
-        2. Use the existing matches_filters() function to filter events
-        3. Emit SSE-compliant messages (event: log + data: JSON) for matching events
-        4. Monitor request.is_disconnected() and break/cleanup subscription to avoid leaks
-        5. Handle backpressure and buffering appropriately
         """
-        try:
-            # FIXME: Replace this placeholder with real event streaming
-            # Currently returns a "not implemented" message to avoid misleading users
-            not_implemented = {
+        formation = request.app.state.formation
+        overlord = formation.overlord
+        
+        # Get observability manager
+        observability_manager = overlord.observability_manager if hasattr(overlord, 'observability_manager') else None
+        
+        if not observability_manager or not hasattr(observability_manager, 'subscribe'):
+            # Fallback if observability manager doesn't have subscription support
+            error_msg = {
                 "error": True,
-                "message": "Real-time log streaming is not yet implemented",
-                "reason": "Event sourcing from observability system not connected",
-                "workaround": "Use GET /v1/logging/destinations to view configured log outputs",
+                "message": "Observability manager does not support live streaming",
                 "filters_received": active_filters,
             }
             yield "event: error\n"
-            yield f"data: {json.dumps(not_implemented)}\n\n"
-
-            # Production implementation outline:
-            # 1. Subscribe to observability event emitter:
-            #    subscription = observability.subscribe()
-            #
-            # 2. Stream events with filtering:
-            #    async for event in subscription:
-            #        if await request.is_disconnected():
-            #            break
-            #
-            #        if matches_filters(event, active_filters):
-            #            event_data = {
-            #                "timestamp": event.timestamp,
-            #                "level": event.level,
-            #                "event_type": event.event_type,
-            #                "user_id": event.get("user_id"),
-            #                "session_id": event.get("session_id"),
-            #                "request_id": event.get("request_id"),
-            #                "agent_id": event.get("agent_id"),
-            #                "message": event.description,
-            #                "data": event.data,
-            #            }
-            #            yield f"event: log\n"
-            #            yield f"data: {json.dumps(event_data)}\n\n"
-            #
-            # 3. Cleanup subscription on disconnect/error
+            yield f"data: {json.dumps(error_msg)}\n\n"
+            return
+        
+        try:
+            # Subscribe to observability event stream with filters
+            async for event in observability_manager.subscribe(active_filters):
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                
+                # Format event for SSE
+                event_data = {
+                    "timestamp": event.get("timestamp"),
+                    "level": event.get("level"),
+                    "event_type": event.get("event_type"),
+                    "user_id": event.get("user_id"),
+                    "session_id": event.get("session_id"),
+                    "request_id": event.get("request_id"),
+                    "agent_id": event.get("data", {}).get("agent_id"),
+                    "message": event.get("description"),
+                    "data": event.get("data"),
+                }
+                
+                yield "event: log\n"
+                yield f"data: {json.dumps(event_data)}\n\n"
 
         except asyncio.CancelledError:
             # Client disconnected

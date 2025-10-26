@@ -27,8 +27,63 @@ async def user_events(request: Request, user_id: str) -> StreamingResponse:
     Note:
         Client API key authentication is enforced at the router level
     """
-    # TODO: Implement user event streaming
-    raise HTTPException(status_code=501, detail="Event streaming not yet implemented")
+    formation = request.app.state.formation
+    overlord = formation.overlord
+    
+    # Get observability manager
+    observability_manager = overlord.observability_manager if hasattr(overlord, 'observability_manager') else None
+    
+    if not observability_manager or not hasattr(observability_manager, 'subscribe'):
+        raise HTTPException(
+            status_code=503,
+            detail="Live event streaming not available - observability manager not configured"
+        )
+    
+    async def event_generator():
+        try:
+            # Subscribe to observability event stream filtered to this user
+            # Only stream user-facing events (not internal system events)
+            filters = {"user_id": user_id}
+            
+            async for event in observability_manager.subscribe(filters):
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                
+                # Only send user-facing events (filter out internal system events)
+                event_type = event.get("event_type", "")
+                if event_type.startswith(("chat.", "agent.", "workflow.", "task.")):
+                    # Format event for user consumption (simplified)
+                    event_data = {
+                        "type": event_type,
+                        "timestamp": event.get("timestamp"),
+                        "message": event.get("description"),
+                        "session_id": event.get("session_id"),
+                        "request_id": event.get("request_id"),
+                    }
+                    
+                    yield f"data: {json.dumps(event_data)}\\n\\n"
+
+        except asyncio.CancelledError:
+            # Client disconnected
+            pass
+        except Exception as e:
+            # Send error event to client
+            error_event = {
+                "error": True,
+                "message": "Streaming error occurred",
+            }
+            yield f"data: {json.dumps(error_event)}\\n\\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @router.get("/stream/{user_id}/{session_id}/{request_id}")
