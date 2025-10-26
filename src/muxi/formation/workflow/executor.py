@@ -186,15 +186,17 @@ class WorkflowExecutor:
         max_timeout = self.config.timeout_config.max_timeout_seconds
         if max_timeout:
             try:
-                async with asyncio.timeout(max_timeout):
-                    return await self._execute_workflow_internal(workflow, context)
+                return await asyncio.wait_for(
+                    self._execute_workflow_internal(workflow, context),
+                    timeout=max_timeout
+                )
             except asyncio.TimeoutError:
                 # Workflow exceeded maximum allowed time
                 workflow.status = WorkflowStatus.FAILED
                 workflow.completed_at = datetime.now()
-                
+
                 elapsed = (workflow.completed_at - workflow.started_at).total_seconds() if workflow.started_at else 0
-                
+
                 observability.observe(
                     event_type=observability.ConversationEvents.WORKFLOW_EXECUTION_FAILED,
                     level=observability.EventLevel.ERROR,
@@ -208,13 +210,13 @@ class WorkflowExecutor:
                     },
                     description=f"Workflow {workflow.id} exceeded maximum timeout of {max_timeout}s (ran for {elapsed:.1f}s)",
                 )
-                
+
                 # Clean up
                 if workflow.id in self.active_workflows:
                     del self.active_workflows[workflow.id]
                 if workflow.id in self.workflow_start_times:
                     del self.workflow_start_times[workflow.id]
-                
+
                 raise WorkflowTimeoutError(
                     f"Workflow exceeded maximum duration of {max_timeout}s (ran for {elapsed:.1f}s)"
                 )
