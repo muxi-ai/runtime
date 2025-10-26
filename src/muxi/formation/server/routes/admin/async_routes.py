@@ -92,11 +92,31 @@ async def list_async_jobs(request: Request) -> JSONResponse:
     Returns:
         List of async job statuses
     """
-    # TODO: Implement async job tracking
+    formation = request.app.state.formation
+    overlord = formation.overlord
     request_id = getattr(request.state, "request_id", None)
 
+    # Get all active async jobs across all users
+    all_requests = await overlord.request_tracker.get_all_requests()
+    
+    jobs = []
+    for req_id, state in all_requests.items():
+        job_data = {
+            "request_id": req_id,
+            "user_id": state.user_id,
+            "session_id": state.session_id,
+            "status": state.status.value,
+            "progress": state.progress,
+            "created_at": state.created_at if hasattr(state, 'created_at') else state.start_time,
+            "completed_at": state.end_time,
+        }
+        # Include error if present
+        if state.error:
+            job_data["error"] = state.error
+        jobs.append(job_data)
+
     # Wrap jobs list in dict for APIResponse schema compliance
-    response = create_success_response(APIObjectType.LIST, APIEventType.JOB_LIST, {"jobs": []}, request_id)
+    response = create_success_response(APIObjectType.LIST, APIEventType.JOB_LIST, {"jobs": jobs}, request_id)
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
@@ -111,11 +131,19 @@ async def get_async_job(request: Request, job_id: str) -> JSONResponse:
     Returns:
         Job status and result if complete
     """
-    # TODO: Implement async job retrieval
+    formation = request.app.state.formation
+    overlord = formation.overlord
     request_id = getattr(request.state, "request_id", None)
 
-    response = create_error_response("JOB_NOT_FOUND", f"Job '{job_id}' not found", None, request_id)
-    return JSONResponse(content=response.model_dump(), status_code=404)
+    # Get full job status (checks both request tracker and buffer memory)
+    status = await overlord.get_request_status(job_id)
+
+    if "error" in status:
+        response = create_error_response("NOT_FOUND", status["error"], None, request_id)
+        return JSONResponse(content=response.model_dump(), status_code=404)
+
+    response = create_success_response(APIObjectType.JOB, APIEventType.JOB_RETRIEVED, status, request_id)
+    return JSONResponse(content=response.model_dump(), status_code=200)
 
 
 @router.delete("/async/jobs/{job_id}", response_model=APIResponse)
@@ -129,8 +157,16 @@ async def cancel_async_job(request: Request, job_id: str) -> JSONResponse:
     Returns:
         Success response
     """
-    # TODO: Implement async job cancellation
+    formation = request.app.state.formation
+    overlord = formation.overlord
     request_id = getattr(request.state, "request_id", None)
 
-    response = create_error_response("JOB_NOT_FOUND", f"Job '{job_id}' not found", None, request_id)
-    return JSONResponse(content=response.model_dump(), status_code=404)
+    # Cancel the job
+    result = await overlord.cancel_request(job_id)
+
+    if result["success"]:
+        response = create_success_response(APIObjectType.JOB, APIEventType.JOB_CANCELLED, result, request_id)
+        return JSONResponse(content=response.model_dump(), status_code=200)
+    else:
+        response = create_error_response("OPERATION_FAILED", result["message"], None, request_id)
+        return JSONResponse(content=response.model_dump(), status_code=400)

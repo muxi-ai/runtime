@@ -55,9 +55,38 @@ async def get_user_memories(
         response = memory_list_response([], request_id)
         return JSONResponse(content=response.model_dump(), status_code=200)
 
-    # TODO: Implement memory retrieval
-    response = memory_list_response([], request_id)
-    return JSONResponse(content=response.model_dump(), status_code=200)
+    # Get overlord for memory access
+    overlord = getattr(formation, "_overlord", None)
+    if not overlord or not hasattr(overlord, "long_term_memory") or not overlord.long_term_memory:
+        response = memory_list_response([], request_id)
+        return JSONResponse(content=response.model_dump(), status_code=200)
+
+    try:
+        # Get recent memories for this user (search with empty query returns all)
+        memories = await overlord.long_term_memory.search(
+            query="",
+            limit=limit,
+            external_user_id=user_id,
+        )
+
+        # Convert to API format
+        memory_list = []
+        for mem in memories:
+            memory_list.append({
+                "id": mem.get("id"),
+                "content": mem.get("content") or mem.get("text"),
+                "created_at": mem.get("created_at"),
+                "metadata": mem.get("metadata", {})
+            })
+
+        response = memory_list_response(memory_list, request_id)
+        return JSONResponse(content=response.model_dump(), status_code=200)
+
+    except Exception as e:
+        response = create_error_response(
+            "INTERNAL_ERROR", f"Failed to retrieve memories: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
 
 
 @router.post("/memories/{user_id}", response_model=APIResponse)
@@ -82,11 +111,40 @@ async def create_user_memory(request: Request, user_id: str, memory: MemoryCreat
         )
         return JSONResponse(content=response.model_dump(), status_code=503)
 
-    # TODO: Implement memory creation
-    response = create_error_response(
-        "NOT_IMPLEMENTED", "Memory creation not yet implemented", None, request_id
-    )
-    return JSONResponse(content=response.model_dump(), status_code=501)
+    # Get overlord for memory access
+    overlord = getattr(formation, "_overlord", None)
+    if not overlord or not hasattr(overlord, "long_term_memory") or not overlord.long_term_memory:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Memory service not available", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    try:
+        # Add memory
+        memory_id = await overlord.long_term_memory.add(
+            content=memory.content,
+            metadata=memory.metadata or {},
+            external_user_id=user_id,
+        )
+
+        from datetime import datetime
+        result = {
+            "id": memory_id,
+            "content": memory.content,
+            "created_at": datetime.utcnow().isoformat() + "Z",
+            "metadata": memory.metadata or {}
+        }
+
+        response = create_success_response(
+            APIObjectType.MEMORY, APIEventType.MEMORY_CREATED, result, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=200)
+
+    except Exception as e:
+        response = create_error_response(
+            "INTERNAL_ERROR", f"Failed to create memory: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
 
 
 @router.delete("/memories/{user_id}/{memory_id}", response_model=APIResponse)
@@ -111,11 +169,41 @@ async def delete_user_memory(request: Request, user_id: str, memory_id: str) -> 
         )
         return JSONResponse(content=response.model_dump(), status_code=503)
 
-    # TODO: Implement memory deletion
-    response = create_error_response(
-        "NOT_IMPLEMENTED", "Memory deletion not yet implemented", None, request_id
-    )
-    return JSONResponse(content=response.model_dump(), status_code=501)
+    # Get overlord for memory access
+    overlord = getattr(formation, "_overlord", None)
+    if not overlord or not hasattr(overlord, "long_term_memory") or not overlord.long_term_memory:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Memory service not available", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    try:
+        # Delete memory (with user_id check for security)
+        success = await overlord.long_term_memory.delete(
+            memory_id=memory_id,
+            external_user_id=user_id,
+        )
+
+        if success:
+            result = {
+                "deleted": memory_id,
+                "user_id": user_id
+            }
+            response = create_success_response(
+                APIObjectType.MEMORY, APIEventType.MEMORY_DELETED, result, request_id
+            )
+            return JSONResponse(content=response.model_dump(), status_code=200)
+        else:
+            response = create_error_response(
+                "NOT_FOUND", f"Memory {memory_id} not found", None, request_id
+            )
+            return JSONResponse(content=response.model_dump(), status_code=404)
+
+    except Exception as e:
+        response = create_error_response(
+            "INTERNAL_ERROR", f"Failed to delete memory: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
 
 
 # Buffer Memory Operations

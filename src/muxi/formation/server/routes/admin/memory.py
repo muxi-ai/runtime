@@ -64,14 +64,59 @@ async def list_memory_buffers(request: Request) -> JSONResponse:
     Returns:
         List of memory buffer entries
     """
-    # TODO: Implement memory buffer access
+    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Get overlord for buffer access
+    overlord = getattr(formation, "_overlord", None)
+    if not overlord:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Overlord service is not available",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    # Get buffer memory
+    buffer = getattr(overlord, "buffer_memory", None)
+    if not buffer:
+        # Return empty list if no buffer
+        response = create_success_response(
+            APIObjectType.LIST,
+            APIEventType.MEMORY_LIST,
+            {"buffers": [], "total_entries": 0},
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=200)
+
+    # Get buffer statistics
+    total_entries = 0
+    if hasattr(buffer, "buffer"):
+        total_entries = len(buffer.buffer)
+
+    max_size = getattr(buffer, "size", 0)
+    utilization = (total_entries / max_size) if max_size > 0 else 0
+
+    # Get KV store namespaces if available
+    kv_namespaces = {}
+    if hasattr(buffer, "kv_store"):
+        for key in buffer.kv_store.keys():
+            namespace = key.split(":")[0] if ":" in key else "default"
+            kv_namespaces[namespace] = kv_namespaces.get(namespace, 0) + 1
+
+    buffer_stats = {
+        "total_entries": total_entries,
+        "max_size": max_size,
+        "utilization": round(utilization, 2),
+        "kv_namespaces": kv_namespaces,
+    }
 
     # Wrap buffers list in dict for APIResponse schema compliance
     response = create_success_response(
         APIObjectType.LIST,
         APIEventType.MEMORY_LIST,
-        {"buffers": []},
+        {"buffers": [buffer_stats]},
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
@@ -83,19 +128,63 @@ async def clear_memory_buffers(request: Request) -> JSONResponse:
     Clear all memory buffers.
 
     Returns:
-        Not implemented response
+        Success response with cleared counts
     """
+    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # TODO: Implement memory buffer clearing
-    # This would require access to the formation's overlord and buffer memory manager
+    # Get overlord for buffer access
+    overlord = getattr(formation, "_overlord", None)
+    if not overlord:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Overlord service is not available",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
 
-    response = create_error_response(
-        error_code="METHOD_NOT_FOUND",
-        message="Memory buffer clearing is not yet implemented",
-        request_id=request_id,
+    # Get buffer memory
+    buffer = getattr(overlord, "buffer_memory", None)
+    if not buffer:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Buffer memory is not available",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    # Clear all buffer entries
+    entries_cleared = 0
+    if hasattr(buffer, "buffer"):
+        from collections import deque
+        entries_cleared = len(buffer.buffer)
+        buffer.buffer = deque(maxlen=buffer.buffer.maxlen)
+
+    # Clear KV store
+    kv_entries_cleared = 0
+    if hasattr(buffer, "kv_store"):
+        kv_entries_cleared = len(buffer.kv_store)
+        buffer.kv_store.clear()
+
+    # Mark index for rebuild if vector search is enabled
+    if hasattr(buffer, "needs_rebuild"):
+        buffer.needs_rebuild = True
+
+    data = {
+        "message": "All buffers cleared successfully",
+        "entries_cleared": entries_cleared,
+        "kv_entries_cleared": kv_entries_cleared,
+    }
+
+    response = create_success_response(
+        APIObjectType.MESSAGE,
+        APIEventType.MEMORY_BUFFER_CLEARED,
+        data,
+        request_id,
     )
-    return JSONResponse(content=response.model_dump(), status_code=501)
+    return JSONResponse(content=response.model_dump(), status_code=200)
 
 
 @router.patch("/memory", response_model=APIResponse)
