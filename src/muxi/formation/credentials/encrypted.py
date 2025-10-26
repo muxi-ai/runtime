@@ -18,6 +18,9 @@ from .resolver import CredentialResolver
 from ...services import observability
 from ...utils.user_resolution import resolve_user_identifier
 
+# Default salt for key derivation (v1 format)
+DEFAULT_ENCRYPTION_SALT = "muxi-user-credentials-salt-v1"
+
 
 class EncryptedCredentialResolver(CredentialResolver):
     """
@@ -51,7 +54,7 @@ class EncryptedCredentialResolver(CredentialResolver):
             llm_model: Optional LLM model for extraction
             db_manager: Database manager instance for user resolution
             encryption_key: Optional custom encryption key (overrides formation_id)
-            encryption_salt: Optional salt for key derivation (default: "muxi-user-credentials-salt-v1")
+            encryption_salt: Optional salt for key derivation (default: DEFAULT_ENCRYPTION_SALT)
             cache_ttl: Time-to-live for cached credentials in seconds (default: 1 hour)
             cache_maxsize: Maximum number of users in credential cache (default: 10,000)
             fernet_cache_maxsize: Maximum Fernet instances to cache (default: 10,000)
@@ -59,7 +62,7 @@ class EncryptedCredentialResolver(CredentialResolver):
         super().__init__(async_session_maker, formation_id, llm_model, db_manager, cache_ttl, cache_maxsize)
         self.custom_key = encryption_key
         # Use provided salt or default
-        self.encryption_salt = (encryption_salt or "muxi-user-credentials-salt-v1").encode("utf-8")
+        self.encryption_salt = (encryption_salt or DEFAULT_ENCRYPTION_SALT).encode("utf-8")
         # Bounded LRU cache for Fernet instances (deterministic, no TTL needed)
         # Fernet instances are small (~200 bytes) but should still be bounded
         self._fernet_cache = LRUCache(maxsize=fernet_cache_maxsize)
