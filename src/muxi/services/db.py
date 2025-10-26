@@ -153,7 +153,7 @@ class DatabaseManager:
         """
         self.connection_string = self._resolve_connection_string(connection_string)
         self.database_type = self._detect_database_type(self.connection_string)
-        
+
         # Validate statement_timeout_seconds
         if not isinstance(statement_timeout_seconds, int):
             raise ValueError(
@@ -168,7 +168,7 @@ class DatabaseManager:
                 f"statement_timeout_seconds must be <= 3600 seconds (1 hour), got {statement_timeout_seconds}"
             )
         self.statement_timeout_seconds = statement_timeout_seconds
-        
+
         # Validate pool_size and max_overflow
         if not isinstance(pool_size, int) or pool_size < 0:
             raise ValueError(f"pool_size must be a non-negative integer, got {pool_size}")
@@ -176,11 +176,12 @@ class DatabaseManager:
             raise ValueError(f"max_overflow must be a non-negative integer, got {max_overflow}")
         self.pool_size = pool_size
         self.max_overflow = max_overflow
-        
+
         # Validate idle_transaction_timeout_seconds
         if not isinstance(idle_transaction_timeout_seconds, int) or idle_transaction_timeout_seconds < 0:
             raise ValueError(
-                f"idle_transaction_timeout_seconds must be a non-negative integer, got {idle_transaction_timeout_seconds}"
+                "idle_transaction_timeout_seconds must be a non-negative integer, "
+                f"got {idle_transaction_timeout_seconds}"
             )
         self.idle_transaction_timeout_seconds = idle_transaction_timeout_seconds
 
@@ -577,19 +578,20 @@ def get_database_manager(
         # Check if parameters differ from existing instance and log warning
         params_differ = False
         differences = []
-        
+
         if connection_string is not None and connection_string != _db_manager.connection_string:
             params_differ = True
             differences.append(
                 f"connection_string (provided: {connection_string!r}, existing: {_db_manager.connection_string!r})"
             )
-        
+
         if statement_timeout_seconds != _db_manager.statement_timeout_seconds:
             params_differ = True
             differences.append(
-                f"statement_timeout_seconds (provided: {statement_timeout_seconds}, existing: {_db_manager.statement_timeout_seconds})"
+                f"statement_timeout_seconds (provided: {statement_timeout_seconds}, "
+                f"existing: {_db_manager.statement_timeout_seconds})"
             )
-        
+
         if params_differ:
             import logging
             logger = logging.getLogger(__name__)
