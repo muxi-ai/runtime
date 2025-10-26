@@ -492,10 +492,10 @@ class WorkflowTimeoutError(WorkflowError):
     def __init__(
         self,
         message: str,
-        workflow_id: str = None,
-        max_timeout: float = None,
-        elapsed: float = None,
-        details: Optional[Dict[str, Any]] = None,
+        workflow_id: str | None = None,
+        max_timeout: float | None = None,
+        elapsed: float | None = None,
+        details: dict[str, Any] | None = None,
     ):
         super().__init__(message, details)
         self.workflow_id = workflow_id
