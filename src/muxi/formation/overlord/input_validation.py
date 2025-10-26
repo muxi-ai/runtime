@@ -12,7 +12,20 @@ from typing import Any, Dict, List, Optional
 class InputValidationError(ValueError):
     """Raised when input validation fails."""
 
-    pass
+    def __init__(
+        self, message: str, limit: Optional[int] = None, actual: Optional[int] = None
+    ):
+        """
+        Initialize InputValidationError with structured context.
+
+        Args:
+            message: Human-readable error message
+            limit: The maximum allowed value (optional)
+            actual: The actual value that exceeded the limit (optional)
+        """
+        super().__init__(message)
+        self.limit = limit
+        self.actual = actual
 
 
 @dataclass
@@ -85,7 +98,9 @@ class InputValidator:
                 "Try:\n"
                 "- Breaking into multiple messages\n"
                 "- Uploading content as a file\n"
-                "- Summarizing the key points"
+                "- Summarizing the key points",
+                limit=self.limits.max_message_length,
+                actual=length,
             )
 
     def validate_file_upload(self, filename: str, size_bytes: int) -> None:
@@ -107,7 +122,9 @@ class InputValidator:
                 "Try:\n"
                 "- Compressing the file (zip, gzip)\n"
                 "- Splitting into smaller files\n"
-                "- Uploading to cloud storage and sharing a link"
+                "- Uploading to cloud storage and sharing a link",
+                limit=self.limits.max_file_size_bytes,
+                actual=size_bytes,
             )
 
     def validate_memory_entry(self, content: str) -> None:
@@ -125,7 +142,9 @@ class InputValidator:
             raise InputValidationError(
                 f"Memory entry too large: {length:,} characters "
                 f"(max: {self.limits.max_memory_entry_size:,}).\n\n"
-                "Memory entries should be concise summaries, not full documents."
+                "Memory entries should be concise summaries, not full documents.",
+                limit=self.limits.max_memory_entry_size,
+                actual=length,
             )
 
     def validate_tool_output(self, output: Any, tool_name: str = "tool") -> None:
@@ -140,7 +159,7 @@ class InputValidator:
             InputValidationError: If output exceeds maximum size
         """
         # Perform cheap pre-checks before expensive string conversion
-        
+
         # Fast path: bytes/bytearray can be checked directly
         if isinstance(output, (bytes, bytearray)):
             size_bytes = len(output)
@@ -152,10 +171,12 @@ class InputValidator:
                     "Try:\n"
                     "- Paginating results\n"
                     "- Filtering or aggregating data\n"
-                    "- Writing results to a file instead"
+                    "- Writing results to a file instead",
+                    limit=self.limits.max_tool_output_size,
+                    actual=size_bytes,
                 )
             return
-        
+
         # Heuristic: if object is a collection (not string), estimate potential size
         # Skip strings as they're already in final form
         # Assume each element could be ~100 bytes when stringified
@@ -172,12 +193,14 @@ class InputValidator:
                         "Try:\n"
                         "- Paginating results\n"
                         "- Filtering or aggregating data\n"
-                        "- Writing results to a file instead"
+                        "- Writing results to a file instead",
+                        limit=self.limits.max_tool_output_size,
+                        actual=estimated_size,
                     )
             except (TypeError, AttributeError):
                 # __len__ exists but doesn't work - continue to str() conversion
                 pass
-        
+
         # Convert to string for precise size validation
         # Guard against memory exhaustion and infinite recursion
         try:
@@ -192,7 +215,7 @@ class InputValidator:
                 "- Filtering or aggregating data\n"
                 "- Writing results to a file instead"
             )
-        
+
         # Now perform actual byte-size check
         size_bytes = len(output_str.encode("utf-8"))
 
@@ -204,7 +227,9 @@ class InputValidator:
                 "Try:\n"
                 "- Paginating results\n"
                 "- Filtering or aggregating data\n"
-                "- Writing results to a file instead"
+                "- Writing results to a file instead",
+                limit=self.limits.max_tool_output_size,
+                actual=size_bytes,
             )
 
     def validate_batch_size(self, items: List[Any]) -> None:
@@ -222,5 +247,7 @@ class InputValidator:
             raise InputValidationError(
                 f"Batch too large: {count} items "
                 f"(max: {self.limits.max_batch_items}).\n\n"
-                "Break into smaller batches for processing."
+                "Break into smaller batches for processing.",
+                limit=self.limits.max_batch_items,
+                actual=count,
             )
