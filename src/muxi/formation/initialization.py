@@ -366,8 +366,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             from ..services.db import get_database_manager
 
             # Create database manager with configured timeout
-            db_config = formation.config.get("database", {})
-            statement_timeout = db_config.get("statement_timeout_seconds", 30)
+            statement_timeout = persistent_config.get("query_timeout_seconds", 30)
             db_manager = get_database_manager(connection_string, statement_timeout)
             formation._db_manager = db_manager
 
@@ -391,8 +390,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             else:
                 db_connection_string = f"sqlite:///{connection_string}"
 
-            db_config = formation.config.get("database", {})
-            statement_timeout = db_config.get("statement_timeout_seconds", 30)
+            statement_timeout = persistent_config.get("query_timeout_seconds", 30)
             db_manager = get_database_manager(db_connection_string, statement_timeout)
             formation._db_manager = db_manager
 
@@ -410,8 +408,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             from ..services.db import get_database_manager
 
             # Create database manager with configured timeout
-            db_config = formation.config.get("database", {})
-            statement_timeout = db_config.get("statement_timeout_seconds", 30)
+            statement_timeout = persistent_config.get("query_timeout_seconds", 30)
             db_manager = get_database_manager(connection_string, statement_timeout)
             formation._db_manager = db_manager
 
@@ -975,8 +972,7 @@ async def initialize_persistent_memory(
             from ..services.db import get_database_manager
 
             # Create ONE DatabaseManager for the Formation
-            db_config = overlord.formation_config.get("database", {})
-            statement_timeout = db_config.get("statement_timeout_seconds", 30)
+            statement_timeout = persistent_config.get("query_timeout_seconds", 30)
             db_manager = get_database_manager(connection_string, statement_timeout)
 
             # Store db_manager on both formation and overlord
@@ -1015,8 +1011,7 @@ async def initialize_persistent_memory(
             overlord.long_term_memory = sqlite_memory
 
             # Create DatabaseManager for scheduler access (SQLite)
-            db_config = overlord.formation_config.get("database", {})
-            statement_timeout = db_config.get("statement_timeout_seconds", 30)
+            statement_timeout = persistent_config.get("query_timeout_seconds", 30)
             db_manager = get_database_manager(connection_string, statement_timeout)
             formation._db_manager = db_manager
             overlord.db_manager = db_manager

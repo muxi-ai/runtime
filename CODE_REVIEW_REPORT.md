@@ -1225,7 +1225,7 @@ The codebase is **fundamentally sound** with **production-ready architecture**. 
 - Added `statement_timeout` to PostgreSQL engines (default: 30s)
 - Applied to both sync and async database connections
 - Includes idle transaction timeout (60s) for async connections
-- Configuration: `database.statement_timeout_seconds`
+- Configuration: `memory.persistent.query_timeout_seconds`
 
 **Files Modified:** `services/db.py`, `formation/initialization.py`
 
