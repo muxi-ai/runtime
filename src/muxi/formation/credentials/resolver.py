@@ -138,10 +138,10 @@ class CredentialResolver:
                         try:
                             credential_data = json.loads(credential_data)
                         except (json.JSONDecodeError, TypeError) as e:
-                            # Log parsing error with context, keep as string
+                            # Log parsing error with context, then fail fast
                             observability.observe(
                                 event_type=observability.SystemEvents.EXTENSION_FAILED,
-                                level=observability.EventLevel.WARNING,
+                                level=observability.EventLevel.ERROR,
                                 data={
                                     "user_id": user_id,
                                     "service": service,
@@ -151,6 +151,10 @@ class CredentialResolver:
                                 },
                                 description=f"Failed to parse credential JSON for {credentials[0].name}: {str(e)}"
                             )
+                            raise FormationError(
+                                f"Malformed credential JSON for service '{service}' "
+                                f"(credential: {credentials[0].name}): {str(e)}"
+                            ) from e
 
                     user_cache = self._cache.setdefault(user_id, {})
                     user_cache[service] = credential_data
@@ -164,10 +168,10 @@ class CredentialResolver:
                             try:
                                 cred_data = json.loads(cred_data)
                             except (json.JSONDecodeError, TypeError) as e:
-                                # Log parsing error with context, keep as string
+                                # Log parsing error with context, skip malformed credential
                                 observability.observe(
                                     event_type=observability.SystemEvents.EXTENSION_FAILED,
-                                    level=observability.EventLevel.WARNING,
+                                    level=observability.EventLevel.ERROR,
                                     data={
                                         "user_id": user_id,
                                         "service": service,
@@ -177,6 +181,8 @@ class CredentialResolver:
                                     },
                                     description=f"Failed to parse credential JSON for {cred.name}: {str(e)}"
                                 )
+                                # Skip this malformed credential, don't include it in the list
+                                continue
                         credential_list.append({"name": cred.name, "credentials": cred_data})
                     return credential_list
 
