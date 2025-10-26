@@ -97,7 +97,12 @@ async def list_sops(request: Request) -> JSONResponse:
         content = sop_data.get("content", "")
 
         # Count steps (simple heuristic: count numbered lines)
-        steps = sum(1 for line in content.split("\n") if line.strip() and line.strip()[0].isdigit())
+        # Safe check: strip once, verify non-empty, then check first char
+        def is_numbered_line(line: str) -> bool:
+            stripped = line.strip()
+            return len(stripped) > 0 and stripped[0].isdigit()
+        
+        steps = sum(1 for line in content.split("\n") if is_numbered_line(line))
 
         # Extract agents used (from content or metadata)
         agents_used = _extract_agents_from_sop(metadata, content)
@@ -145,6 +150,17 @@ async def get_sop_details(request: Request, sop_name: str) -> JSONResponse:
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
+    # Validate sop_name to prevent path traversal attacks
+    if not re.match(r'^[a-zA-Z0-9_-]+$', sop_name):
+        return JSONResponse(
+            status_code=400,
+            content=create_error_response(
+                error_code="INVALID_REQUEST",
+                message=f"Invalid SOP name {sop_name!r}: must contain only letters, numbers, hyphens, and underscores",
+                request_id=request_id,
+            ).model_dump(),
+        )
+
     # Access the SOP system from the overlord
     overlord = formation._overlord
     if not hasattr(overlord, "sop_system") or not overlord.sop_system:
@@ -176,8 +192,12 @@ async def get_sop_details(request: Request, sop_name: str) -> JSONResponse:
     metadata = sop_data.get("metadata", {})
     content = sop_data.get("content", "")
 
-    # Count steps
-    steps = sum(1 for line in content.split("\n") if line.strip() and line.strip()[0].isdigit())
+    # Count steps (safe check: strip once, verify non-empty, then check first char)
+    def is_numbered_line(line: str) -> bool:
+        stripped = line.strip()
+        return len(stripped) > 0 and stripped[0].isdigit()
+    
+    steps = sum(1 for line in content.split("\n") if is_numbered_line(line))
 
     # Extract agents used
     agents_used = _extract_agents_from_sop(metadata, content)
