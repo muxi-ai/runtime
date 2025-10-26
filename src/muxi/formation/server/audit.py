@@ -214,8 +214,41 @@ class AuditLogger:
             filtered = [e for e in filtered if e.get("resource_type") == resource_type]
 
         if since:
-            since_iso = since.isoformat() + "Z" if not since.tzinfo else since.isoformat()
-            filtered = [e for e in filtered if e.get("timestamp", "") >= since_iso]
+            # Normalize since to UTC datetime
+            if since.tzinfo is None:
+                # Naive datetime - assume UTC
+                since_utc = since.replace(tzinfo=timezone.utc)
+            else:
+                # Aware datetime - convert to UTC
+                since_utc = since.astimezone(timezone.utc)
+            
+            # Filter using datetime comparison instead of string comparison
+            def should_include(entry: Dict[str, Any]) -> bool:
+                timestamp_str = entry.get("timestamp", "")
+                if not timestamp_str:
+                    return False
+                
+                try:
+                    # Parse timestamp (handles multiple ISO formats)
+                    # Remove trailing 'Z' and parse, then set UTC
+                    ts = timestamp_str.rstrip("Z")
+                    if "+" in ts or ts.count("-") > 2:
+                        # Has timezone info - let fromisoformat handle it
+                        event_dt = datetime.fromisoformat(ts)
+                        if event_dt.tzinfo is None:
+                            event_dt = event_dt.replace(tzinfo=timezone.utc)
+                        else:
+                            event_dt = event_dt.astimezone(timezone.utc)
+                    else:
+                        # No timezone info - assume UTC
+                        event_dt = datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
+                    
+                    return event_dt >= since_utc
+                except (ValueError, AttributeError):
+                    # Malformed timestamp - exclude entry
+                    return False
+            
+            filtered = [e for e in filtered if should_include(e)]
 
         # Return most recent first
         filtered.reverse()
