@@ -790,9 +790,23 @@ def load_agents_from_configuration(formation) -> None:
 
             pass  # REMOVED: init-phase observe() call
 
-        except Exception:
-            pass  # REMOVED: init-phase observe() call
+        except (KeyError, ValueError, TypeError, AttributeError) as e:
+            # Configuration errors that we can tolerate - log and continue to next agent
+            agent_id = agent_config.get("id", "unknown") if isinstance(agent_config, dict) else "unknown"
+            observability.observe(
+                event_type=observability.ErrorEvents.CONFIG_AGENT_VALIDATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": agent_id,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description=f"Skipping agent '{agent_id}' due to configuration error: {type(e).__name__}: {e}",
+            )
             continue
+        except Exception:
+            # Unexpected error - re-raise to prevent hiding real bugs
+            raise
 
     observability.observe(
         event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,

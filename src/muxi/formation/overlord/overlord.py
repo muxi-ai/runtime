@@ -1515,8 +1515,20 @@ class Overlord:
 
                 pass  # REMOVED: init-phase observe() call
 
-            except Exception:
-                pass  # REMOVED: init-phase observe() call
+            except Exception as e:
+                # Agent loading failed - log error details and continue with next agent
+                agent_id = agent_config.get("id", "unknown") if isinstance(agent_config, dict) else "unknown"
+                observability.observe(
+                    event_type=observability.ErrorEvents.AGENT_INITIALIZATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "agent_id": agent_id,
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "agent_config": {k: v for k, v in (agent_config or {}).items() if k not in ["system_message", "tools"]} if isinstance(agent_config, dict) else None,
+                    },
+                    description=f"Failed to load agent '{agent_id}': {type(e).__name__}: {e}",
+                )
                 continue
 
         observability.observe(
