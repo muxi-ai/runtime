@@ -885,6 +885,24 @@ class Overlord:
 
         return task
 
+    @staticmethod
+    def _filter_llm_settings(settings_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Filter out LLM settings that should be set explicitly.
+        
+        Removes 'temperature' and 'max_tokens' from settings to avoid duplicate
+        kwargs when creating models with explicit values for these parameters.
+        
+        Args:
+            settings_dict: Original settings dictionary
+            
+        Returns:
+            Filtered settings dictionary (empty dict if input is None/empty)
+        """
+        if not settings_dict:
+            return {}
+        return {k: v for k, v in settings_dict.items() if k not in ["temperature", "max_tokens"]}
+
     async def _wait_for_background_tasks(self, timeout: float = 30.0):
         """Wait for all background tasks to complete with timeout."""
         if not self._background_tasks:
@@ -1982,11 +2000,7 @@ class Overlord:
                     llm = self._model_cache[cache_key]
                 else:
                     # Filter out params we're setting explicitly to avoid duplicate kwargs
-                    settings = {
-                        k: v
-                        for k, v in text_model_config.get("settings", {}).items()
-                        if k not in ["temperature", "max_tokens"]
-                    }
+                    settings = self._filter_llm_settings(text_model_config.get("settings", {}))
                     llm = await self.create_model(
                         model=model_name,
                         api_key=text_model_config.get("api_key"),
@@ -2049,11 +2063,7 @@ Response:""".format(
                     llm = self._model_cache[cache_key]
                 else:
                     # Filter out params we're setting explicitly to avoid duplicate kwargs
-                    settings = {
-                        k: v
-                        for k, v in text_model_config.get("settings", {}).items()
-                        if k not in ["temperature", "max_tokens"]
-                    }
+                    settings = self._filter_llm_settings(text_model_config.get("settings", {}))
                     llm = await self.create_model(
                         model=model_name,
                         api_key=text_model_config.get("api_key"),
@@ -2103,11 +2113,7 @@ Response:""".format(
                     llm = self._model_cache[cache_key]
                 else:
                     # Filter out params we're setting explicitly to avoid duplicate kwargs
-                    settings = {
-                        k: v
-                        for k, v in text_model_config.get("settings", {}).items()
-                        if k not in ["temperature", "max_tokens"]
-                    }
+                    settings = self._filter_llm_settings(text_model_config.get("settings", {}))
                     llm = await self.create_model(
                         model=model_name,
                         api_key=text_model_config.get("api_key"),
