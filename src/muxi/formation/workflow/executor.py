@@ -222,7 +222,7 @@ class WorkflowExecutor:
 
                 raise WorkflowTimeoutError(
                     f"Workflow exceeded maximum duration of {max_timeout}s (ran for {elapsed:.1f}s)"
-                )
+                ) from None
         else:
             # No hard timeout configured, execute normally
             return await self._execute_workflow_internal(workflow, context)
