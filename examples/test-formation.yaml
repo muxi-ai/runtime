@@ -1,0 +1,25 @@
+schema: "1.0.0"
+id: "test-assistant"
+name: "Test Assistant"
+description: "Simple test formation for SIF validation"
+
+llm:
+  models:
+    - text: "openai/gpt-4o-mini"
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+
+agents:
+  - id: "assistant"
+    name: "General Assistant"
+    system_message: |
+      You are a helpful AI assistant running inside a Singularity container.
+      Keep your responses concise and informative.
+      
+      When asked about your environment, you can mention that you're running
+      in a containerized MUXI formation powered by Singularity/Apptainer.
+
+memory:
+  buffer:
+    size: 20
+    vector_search: false

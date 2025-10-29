@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # Basic MUXI Runtime (minimal, for formations)
+  muxi-runtime:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: muxi-runtime:latest
+    container_name: muxi-runtime
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./examples:/formations:ro
+      - ./data:/data
+      - ./logs:/logs
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - MUXI_FORMATIONS_DIR=/formations
+      - MUXI_DATA_DIR=/data
+      - MUXI_LOGS_DIR=/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - muxi-network
+
+  # Production MUXI Runtime (with PostgreSQL + FAISSx)
+  muxi-production:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: muxi-runtime:production
+    container_name: muxi-production
+    ports:
+      - "8001:8000"   # Formation server
+      - "5432:5432"   # PostgreSQL
+      - "45678:45678" # FAISSx (no auth)
+      - "65432:65432" # FAISSx (with auth)
+    volumes:
+      - ./examples:/formations:ro
+      - ./data:/data
+      - ./logs:/logs
+      - postgres-data:/var/lib/postgresql/17/main
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - POSTGRES_URI=postgresql://muxi:muxi_password@localhost:5432/muxi
+      - FAISSX_NO_AUTH_URL=http://localhost:45678
+      - FAISSX_WITH_AUTH_URL=http://localhost:65432
+    healthcheck:
+      test: ["/app/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - muxi-network
+
+networks:
+  muxi-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
