@@ -77,6 +77,8 @@ dependencies = [
 
     # LLM Package
     "onellm>=0.20251013.0",
+    "boto3>=1.26.0",  # AWS SDK for OneLLM Bedrock provider
+    "google-cloud-aiplatform>=1.25.0",  # Google Cloud for OneLLM Vertex AI provider
 
     # A2A (Agent-to-Agent) Communication
     "a2a-sdk>=0.3",  # Google's Agent-to-Agent SDK for inter-agent communication
