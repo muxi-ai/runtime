@@ -1,0 +1,17 @@
+schema: "1.0.0"
+id: example-formation
+description: "Example formation with secrets management"
+
+llm:
+  api_keys:
+    # Secrets are read from secrets.enc (encrypted) in this directory
+    # Use: python ../../utils/add_secret.py to add OPENAI_API_KEY
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+
+agents:
+  - id: assistant
+    name: "Example Assistant"
+    description: "An example AI assistant"
+    system_message: "You are a helpful AI assistant."

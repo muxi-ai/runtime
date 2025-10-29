@@ -31,15 +31,9 @@ services:
       # - ./formations/my-formation/secrets.env:/app/secrets.env:ro
     
     environment:
-      # LLM API Keys (set in .env file)
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-      - COHERE_API_KEY=${COHERE_API_KEY:-}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      
       # MUXI Configuration
+      # Note: API keys come from secrets.enc in formation directories
+      # Do NOT set them as environment variables
       - MUXI_FORMATIONS_DIR=/formations
       - MUXI_DATA_DIR=/data
       - MUXI_LOGS_DIR=/logs
@@ -92,10 +86,8 @@ services:
       - ${LOGS_DIR:-./logs}:/logs
     
     environment:
-      # LLM API Keys
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      # Note: LLM API keys come from secrets.enc in formation directories
+      # Do NOT set them as environment variables
       
       # Database Configuration
       - POSTGRES_HOST=postgres
