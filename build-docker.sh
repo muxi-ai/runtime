@@ -23,7 +23,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-BUILD_TYPE="${1:-basic}"
+BUILD_TYPE="${1:-latest}"
 EXTRA_ARGS="${@:2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -83,9 +83,10 @@ build_docker() {
     local image_tag
     
     case "$build_type" in
-        basic)
+        latest|"")
             dockerfile="Dockerfile"
             image_tag="muxi-runtime:latest"
+            build_type="latest"
             ;;
         production|prod)
             dockerfile="Dockerfile.production"
@@ -94,7 +95,7 @@ build_docker() {
             ;;
         *)
             print_error "Unknown build type: $build_type"
-            echo "Valid types: basic, production"
+            echo "Valid types: latest, production"
             exit 1
             ;;
     esac
@@ -174,8 +175,8 @@ Usage:
   $0 [TYPE] [OPTIONS]
 
 Build Types:
-  basic       - Basic runtime (~2GB)
-  production  - Production with services (~3GB)
+  latest      - Optimized runtime (~2.4GB) [DEFAULT]
+  production  - With PostgreSQL + services (~3GB) [Full stack]
 
 Options:
   --no-cache      Rebuild from scratch
