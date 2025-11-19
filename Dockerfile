@@ -86,5 +86,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Default command
-CMD ["python", "-m", "muxi.server"]
+# Default command: Print usage and keep container alive
+# Override in docker-compose.yaml or when running:
+#   docker run muxi-runtime python -m muxi.utils.run_formation /formations/my-formation/formation.yaml
+CMD ["sh", "-c", "echo 'MUXI Runtime v0.2025.0 - Ready!' && echo 'To run a formation, use: python -m muxi.utils.run_formation /formations/your-formation/formation.yaml' && tail -f /dev/null"]

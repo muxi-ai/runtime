@@ -14,12 +14,19 @@ services:
     container_name: muxi-runtime
     restart: unless-stopped
     
+    # Override default CMD to run a formation
+    # Change this to point to your formation:
+    command: >
+      python -m muxi.utils.run_formation
+      /formations/example-formation/formation.yaml
+    
     ports:
       - "${MUXI_PORT:-8000}:8000"
     
     volumes:
-      # Mount your formations directory (read-only for safety)
-      - ${FORMATIONS_DIR:-./formations}:/formations:ro
+      # Mount your formations directory (read-write for secrets management)
+      # Note: MUXI needs write access to create .key files
+      - ${FORMATIONS_DIR:-./formations}:/formations
       
       # Persistent data directory
       - ${DATA_DIR:-./data}:/data
