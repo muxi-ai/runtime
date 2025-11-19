@@ -9,9 +9,9 @@ MUXI Runtime is the execution engine that powers AI agent formations. Your contr
 You can contribute by:
 
 - [Reporting a bug](https://github.com/muxi-ai/runtime/issues/new/choose)
-- [Participating in the discussions](https://github.com/muxi-ai/community/discussions)
+- [Participating in the discussions](https://muxi.org/community)
 - [Improving the documentation](https://github.com/muxi-ai/docs)
-- [Proposing new features](https://github.com/muxi-ai/community/discussions)
+- [Proposing new features](https://muxi.org/community)
 
 
 ## 👨🏼‍💻 Contributing code
@@ -260,7 +260,7 @@ When adding features, please update:
 #### Getting Help
 
 - **Discord**: [Join our Discord](https://discord.gg/muxi) for real-time chat
-- **Discussions**: [GitHub Discussions](https://github.com/muxi-ai/community/discussions) for questions
+- **Discussions**: [GitHub Discussions](https://muxi.org/community) for questions
 - **Issues**: [GitHub Issues](https://github.com/muxi-ai/runtime/issues) for bugs
 
 #### Communication Tips
