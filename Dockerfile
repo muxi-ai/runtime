@@ -70,7 +70,11 @@ COPY --from=builder /install /usr/local
 COPY --from=builder /build/src ./src
 
 # Create necessary directories
-RUN mkdir -p /data /logs /formations
+RUN mkdir -p /data /logs /formations ~/.muxi
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Set environment variables
 ENV PYTHONPATH=/app/src:/app:$PYTHONPATH
@@ -86,7 +90,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Default command: Print usage and keep container alive
-# Override in docker-compose.yaml or when running:
-#   docker run muxi-runtime python -m muxi.utils.run_formation /formations/my-formation/formation.yaml
-CMD ["sh", "-c", "echo 'MUXI Runtime v0.2025.0 - Ready!' && echo 'To run a formation, use: python -m muxi.utils.run_formation /formations/your-formation/formation.yaml' && tail -f /dev/null"]
+# Use entrypoint script
+ENTRYPOINT ["docker-entrypoint.sh"]
+
+# Default: show usage (user must provide formation path)
+CMD []
