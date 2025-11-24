@@ -73,11 +73,15 @@ if [ ! -f "$FORMATION_PATH" ]; then
     exit 1
 fi
 
+# Get port and host from environment or use defaults
+PORT="${PORT:-${FORMATION_PORT:-8000}}"
+HOST="${HOST:-${FORMATION_HOST:-127.0.0.1}}"
+
 # Display configuration
 echo "📋 Configuration:"
 echo "   Formation: $FORMATION_PATH"
-echo "   Host: ${FORMATION_HOST:-0.0.0.0}"
-echo "   Port: ${FORMATION_PORT:-8000}"
+echo "   Host: $HOST"
+echo "   Port: $PORT"
 echo ""
 
 # Check for required API keys (basic check)
@@ -105,6 +109,6 @@ echo "🎯 Starting Formation Server..."
 echo "======================================"
 echo ""
 
-# Run the formation server
+# Run the formation server with port and host overrides
 # The formation will load secrets from ~/.muxi/secrets.enc
-exec python -m muxi.utils.run_formation "$FORMATION_PATH"
+exec python -m muxi.utils.run_formation "$FORMATION_PATH" --port "$PORT" --host "$HOST"
