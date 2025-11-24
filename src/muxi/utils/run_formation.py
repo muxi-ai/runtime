@@ -55,7 +55,7 @@ except ImportError:
     )
 
 
-async def run_formation(formation_path: str):
+async def run_formation(formation_path: str, port: int = None, host: str = None):
     """Load and run a formation with its API server."""
     formation = Formation()
     formation_loaded = False
@@ -72,12 +72,15 @@ async def run_formation(formation_path: str):
             data={
                 "service": "run_formation",
                 "formation_id": formation.config.get("id", "unknown"),
+                "port_override": port,
+                "host_override": host,
             },
             description="Starting formation server...",
         )
 
         # This will block until the server is stopped
-        await formation.start_server(block=True)
+        # Port and host overrides from CLI take precedence over formation.yaml
+        await formation.start_server(host=host, port=port, block=True)
 
     except KeyboardInterrupt:
         observability.observe(
@@ -248,22 +251,45 @@ async def run_formation(formation_path: str):
 
 def main():
     """Main entry point for the module."""
-    if len(sys.argv) < 2:
-        # For usage messages, we still use print since this is user-facing CLI output
-        print("Usage: python -m src.muxi.utils.run_formation <formation.yaml>")
-        print("\nFor auto-reload with nodemon:")
-        print(
-            '  nodemon --exec "python -m src.muxi.utils.run_formation formation.yaml" --ext py,yaml'
-        )
-        sys.exit(1)
-
-    formation_path = sys.argv[1]
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description="Run a MUXI formation with its API server",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run with default settings from formation.yaml
+  python -m muxi.utils.run_formation formation.yaml
+  
+  # Override port and host
+  python -m muxi.utils.run_formation formation.yaml --port 8080 --host 0.0.0.0
+  
+  # Auto-reload with nodemon
+  nodemon --exec "python -m muxi.utils.run_formation formation.yaml" --ext py,yaml
+        """
+    )
+    
+    parser.add_argument(
+        "formation_path",
+        help="Path to formation.yaml file"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        help="Port to bind server (overrides formation.yaml)"
+    )
+    parser.add_argument(
+        "--host",
+        help="Host to bind server (overrides formation.yaml, default: 127.0.0.1)"
+    )
+    
+    args = parser.parse_args()
 
     # Initialize observability system
     # REMOVE - line 271 (redundant with InitEventFormatter section 1: Formation banner)
 
     # Run the formation - file existence will be checked during loading
-    asyncio.run(run_formation(formation_path))
+    asyncio.run(run_formation(args.formation_path, port=args.port, host=args.host))
 
 
 if __name__ == "__main__":
