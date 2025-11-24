@@ -2014,12 +2014,11 @@ class Overlord:
                     )
                     self._model_cache[cache_key] = llm
 
-                # Add timeout to prevent hanging
-                response = await asyncio.wait_for(llm.generate_text(prompt), timeout=5.0)
+                response = await llm.generate_text(prompt)
                 if response and "NON_ACTIONABLE" in response.upper():
                     return False
-            except (Exception, asyncio.TimeoutError):
-                # If LLM check fails or times out, continue to default
+            except Exception:
+                # If LLM check fails, continue to default
                 pass
 
         # Default to actionable if unsure
