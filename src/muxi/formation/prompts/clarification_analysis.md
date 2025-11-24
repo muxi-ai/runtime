@@ -26,6 +26,7 @@ Determine:
 4. Which MCP service (if any) is this request about?
 
 IMPORTANT RULES:
+- **Simple greetings and pleasantries NEVER need clarification** (e.g., "hello", "hi", "good morning", "how are you", etc. in any language)
 - If the request is clear enough to make an attempt, don't clarify
 - If user provides code or specific error, that's usually enough
 - For vague requests like "help me" or "fix this", DO clarify
