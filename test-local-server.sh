@@ -74,7 +74,7 @@ if [ ! -f "$HOME/.muxi/secrets.enc" ]; then
     
     # Add secret (this will create the file)
     if [ -n "$OPENAI_API_KEY" ]; then
-        echo "$OPENAI_API_KEY" | python -m muxi.utils.add_secret OPENAI_API_KEY
+        python -m muxi.utils.add_secret OPENAI_API_KEY "$OPENAI_API_KEY"
         echo "✅ Secret added"
     else
         echo "⚠️  Skipping secret initialization (no OPENAI_API_KEY)"

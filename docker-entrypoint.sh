@@ -91,12 +91,12 @@ fi
 mkdir -p ~/.muxi
 if [ -n "$OPENAI_API_KEY" ]; then
     echo "🔐 Setting up OPENAI_API_KEY secret..."
-    echo "$OPENAI_API_KEY" | python -m muxi.utils.add_secret OPENAI_API_KEY 2>/dev/null || true
+    python -m muxi.utils.add_secret OPENAI_API_KEY "$OPENAI_API_KEY" 2>/dev/null || true
 fi
 
 if [ -n "$ANTHROPIC_API_KEY" ]; then
     echo "🔐 Setting up ANTHROPIC_API_KEY secret..."
-    echo "$ANTHROPIC_API_KEY" | python -m muxi.utils.add_secret ANTHROPIC_API_KEY 2>/dev/null || true
+    python -m muxi.utils.add_secret ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY" 2>/dev/null || true
 fi
 
 echo ""
