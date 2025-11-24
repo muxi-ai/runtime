@@ -1257,7 +1257,15 @@ class Formation:
         Setup authentication keys for the formation.
 
         Generates or uses configured API keys for user and admin access.
+        
+        This method is idempotent - if keys already exist, it won't regenerate them.
+        This is important because _prepare_services() may be called multiple times
+        (once during load(), again during start_overlord()).
         """
+        # If keys already exist, don't regenerate (idempotent)
+        if self._api_keys.get("client") and self._api_keys.get("admin"):
+            return
+        
         # Get server config
         server_config = self.config.get("server", {}) if self.config else {}
 
