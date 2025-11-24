@@ -51,11 +51,18 @@ agents:
     knowledge:
       enabled: true
       sources:
-        - path: "docs/api-reference.md"
+        - path: "knowledge/api-reference.md"
           description: "API documentation"
-        - path: "knowledge/"
+        - path: "knowledge/docs/"
           description: "Knowledge base directory"
 ```
+
+**Path Rules:**
+- All paths must be relative to formation directory root
+- Absolute paths (starting with `/`) are rejected
+- Parent directory traversal (`..`) is rejected
+- Recommended: Keep knowledge in `knowledge/` subdirectory
+- Files can be anywhere within formation directory
 
 ### Advanced Configuration
 
@@ -68,13 +75,17 @@ agents:
       embed_batch_size: 50      # For large knowledge bases
       max_files_per_source: 10  # Limit files per directory (default: 5)
       sources:
-        - path: "/absolute/path/to/docs"
-          description: "External documentation"
+        - path: "knowledge/manuals/"
+          description: "Product manuals"
           recursive: true
           allowed_extensions: [".md", ".txt", ".pdf"]
           file_limit: 20        # Override max_files_per_source for this source
           max_file_size: 5242880  # 5MB
+        - path: "docs/api/"
+          description: "API docs (can be anywhere in formation)"
 ```
+
+**Security:** Knowledge sources are confined to the formation directory for portability and security. Future versions will support remote sources (S3, HTTP) that are downloaded during deployment.
 
 ## Supported File Formats
 
@@ -175,14 +186,14 @@ agents:
   - id: "support"
     knowledge:
       sources:
-        - path: "./docs/faq/"
+        - path: "knowledge/faq/"
           description: "Support FAQs"
 
 # Agent 2: Sales agent with pricing knowledge
   - id: "sales"
     knowledge:
       sources:
-        - path: "./docs/pricing/"
+        - path: "knowledge/pricing/"
           description: "Pricing information"
 
 # User query: "What's the pricing for the FAQ features?"

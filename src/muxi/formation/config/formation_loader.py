@@ -552,12 +552,12 @@ class FormationLoader:
         self, config: Dict[str, Any], formation_dir: str
     ) -> Dict[str, Any]:
         """
-        Resolve knowledge paths to be relative to formation directory.
+        Resolve and validate knowledge paths relative to formation directory.
 
         This method processes knowledge configuration paths and resolves them relative
-        to the formation directory. Absolute paths (starting with '/') are preserved.
-        Supports both sources as list of dicts with path/description
-        and sources as list of strings.
+        to the formation directory root. Absolute paths and parent directory traversal
+        are rejected for security. Supports both sources as list of dicts with 
+        path/description and sources as list of strings.
 
         Args:
             config: Formation configuration
@@ -565,6 +565,9 @@ class FormationLoader:
 
         Returns:
             Dict[str, Any]: Configuration with resolved knowledge paths
+
+        Raises:
+            ValueError: If any knowledge path is absolute or escapes formation directory
         """
         # Process overlord knowledge configuration
         if "overlord" in config and "knowledge" in config["overlord"]:
@@ -602,23 +605,75 @@ class FormationLoader:
 
     def _resolve_single_path(self, path: str, formation_dir: str) -> str:
         """
-        Resolve a single path relative to formation directory.
+        Resolve and validate a knowledge path relative to formation directory.
+        
+        Security: All paths must be relative to formation root.
+        Absolute paths and parent directory traversal are rejected.
 
         Args:
             path: Original path from configuration
             formation_dir: Formation directory path
 
         Returns:
-            str: Resolved absolute path
+            str: Resolved absolute path within formation directory
+
+        Raises:
+            ValueError: If path is absolute or escapes formation directory
         """
+        # Reject absolute paths
         if os.path.isabs(path):
-            # Absolute path - return as-is
-            return path
-        else:
-            # Relative path - resolve relative to formation_dir/knowledge/
-            knowledge_base_dir = os.path.join(formation_dir, "knowledge")
-            resolved_path = os.path.join(knowledge_base_dir, path)
-            return os.path.abspath(resolved_path)
+            from ...datatypes.observability import InitEventFormatter
+            error_msg = (
+                f"Absolute paths not allowed for knowledge sources: {path}\n"
+                f"Use paths relative to formation directory root.\n"
+                f"Example: 'knowledge/faq/' instead of '{path}'"
+            )
+            print(InitEventFormatter.format_fail(
+                "Invalid knowledge path",
+                error_msg
+            ))
+            raise ValueError(error_msg)
+        
+        # Reject parent directory traversal
+        if '..' in path.split(os.sep):
+            from ...datatypes.observability import InitEventFormatter
+            error_msg = (
+                f"Parent directory traversal not allowed: {path}\n"
+                f"Keep knowledge within formation directory.\n"
+                f"Recommended: Place files in knowledge/ subdirectory"
+            )
+            print(InitEventFormatter.format_fail(
+                "Invalid knowledge path",
+                error_msg
+            ))
+            raise ValueError(error_msg)
+        
+        # Resolve relative to formation root (not formation_dir/knowledge/)
+        resolved_path = os.path.join(formation_dir, path)
+        resolved_path = os.path.abspath(resolved_path)
+        
+        # Ensure resolved path is within formation directory
+        formation_dir_abs = os.path.abspath(formation_dir)
+        try:
+            # Check if resolved path is within formation directory
+            os.path.commonpath([resolved_path, formation_dir_abs])
+            if not resolved_path.startswith(formation_dir_abs + os.sep) and resolved_path != formation_dir_abs:
+                raise ValueError("Path escapes formation directory")
+        except ValueError:
+            from ...datatypes.observability import InitEventFormatter
+            error_msg = (
+                f"Knowledge path escapes formation directory: {path}\n"
+                f"Resolved to: {resolved_path}\n"
+                f"Must be within: {formation_dir_abs}\n"
+                f"Keep all knowledge files within the formation directory."
+            )
+            print(InitEventFormatter.format_fail(
+                "Invalid knowledge path",
+                error_msg
+            ))
+            raise ValueError(error_msg)
+        
+        return resolved_path
 
     def detect_formation_type(self, path: str) -> str:
         """
