@@ -45,50 +45,31 @@ else
 fi
 echo ""
 
-# Check for OPENAI_API_KEY
-echo "5. Checking for OPENAI_API_KEY..."
-if [ -z "$OPENAI_API_KEY" ]; then
-    echo "⚠️  Warning: OPENAI_API_KEY not set in environment"
-    echo "   The formation will fail to start without it."
-    echo ""
-    echo "   Set it with: export OPENAI_API_KEY='your-key-here'"
-    echo ""
-    read -p "Continue anyway? (y/N) " -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-else
-    echo "✅ OPENAI_API_KEY is set"
-fi
+# Note: Formation secrets are handled by the formation itself
+# The test formation (e2e/tests/1_foundation/formations/formation-base/)
+# has its secrets configured via symlinks to e2e/assets/secrets.enc
+echo "5. Note: Secrets handled by formation"
+echo "   Using: e2e/tests/1_foundation/formations/formation-base/"
 echo ""
 
-# Check if secrets exist (formation secrets are in the current directory, not ~/.muxi)
-echo "6. Checking secrets..."
-if [ ! -f "secrets.enc" ]; then
-    echo "⚠️  Secrets file not found in current directory"
-    echo "   Creating and initializing..."
-    
-    # Add secret (this will create secrets.enc in current directory)
-    if [ -n "$OPENAI_API_KEY" ]; then
-        python -m muxi.utils.add_secret OPENAI_API_KEY "$OPENAI_API_KEY"
-        echo "✅ Secret added (secrets.enc created)"
-    else
-        echo "⚠️  Skipping secret initialization (no OPENAI_API_KEY)"
-    fi
-else
-    echo "✅ Secrets file exists (secrets.enc)"
+# The test formation should have its own secrets configured
+# We just check that the formation exists
+echo "6. Checking test formation..."
+if [ ! -f "examples/test-formation.yaml" ]; then
+    echo "❌ Error: examples/test-formation.yaml not found"
+    exit 1
 fi
+echo "✅ Test formation exists"
 echo ""
 
 # Run the server
 echo "7. Starting formation server..."
-echo "   Formation: examples/test-formation.yaml"
-echo "   Port: 8000 (default)"
+echo "   Formation: e2e/tests/1_foundation/formations/formation-base/formation.yaml"
+echo "   Port: 8271 (configured in formation)"
 echo ""
 echo "   Press Ctrl+C to stop"
 echo ""
 echo "=========================================="
 echo ""
 
-python -m muxi.utils.run_formation examples/test-formation.yaml
+python -m muxi.utils.run_formation e2e/tests/1_foundation/formations/formation-base/formation.yaml
