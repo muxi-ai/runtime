@@ -63,24 +63,21 @@ else
 fi
 echo ""
 
-# Check if secrets exist
+# Check if secrets exist (formation secrets are in the current directory, not ~/.muxi)
 echo "6. Checking secrets..."
-if [ ! -f "$HOME/.muxi/secrets.enc" ]; then
-    echo "⚠️  Secrets file not found at ~/.muxi/secrets.enc"
+if [ ! -f "secrets.enc" ]; then
+    echo "⚠️  Secrets file not found in current directory"
     echo "   Creating and initializing..."
     
-    # Create directory
-    mkdir -p "$HOME/.muxi"
-    
-    # Add secret (this will create the file)
+    # Add secret (this will create secrets.enc in current directory)
     if [ -n "$OPENAI_API_KEY" ]; then
         python -m muxi.utils.add_secret OPENAI_API_KEY "$OPENAI_API_KEY"
-        echo "✅ Secret added"
+        echo "✅ Secret added (secrets.enc created)"
     else
         echo "⚠️  Skipping secret initialization (no OPENAI_API_KEY)"
     fi
 else
-    echo "✅ Secrets file exists"
+    echo "✅ Secrets file exists (secrets.enc)"
 fi
 echo ""
 
