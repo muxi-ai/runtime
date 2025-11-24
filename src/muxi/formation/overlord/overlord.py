@@ -2078,11 +2078,12 @@ Response:""".format(
                     )
                     self._model_cache[cache_key] = llm
 
-                response = await llm.generate_text(prompt)
+                # Add timeout to prevent hanging
+                response = await asyncio.wait_for(llm.generate_text(prompt), timeout=5.0)
                 if response and "NON_ACTIONABLE" in response.upper():
                     return True
-            except Exception:
-                # If LLM fails, be conservative and allow workflow to proceed
+            except (Exception, asyncio.TimeoutError):
+                # If LLM fails or times out, be conservative and allow workflow to proceed
                 pass
 
         # Default to actionable if we can't determine
@@ -2128,11 +2129,12 @@ Response:""".format(
                     )
                     self._model_cache[cache_key] = llm
 
-                response = await llm.generate_text(prompt)
+                # Add timeout to prevent hanging
+                response = await asyncio.wait_for(llm.generate_text(prompt), timeout=5.0)
                 if response and "SIMPLE" in response.upper():
                     return True
-            except Exception:
-                # If LLM fails, be conservative and allow workflow to proceed
+            except (Exception, asyncio.TimeoutError):
+                # If LLM fails or times out, be conservative and allow workflow to proceed
                 pass
 
         # Default to complex if we can't determine
