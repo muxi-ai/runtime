@@ -217,7 +217,7 @@ def _delete_agent_file_safe(formation: Any, agent_id: str) -> None:
 class AgentCreate(BaseModel):
     """Model for creating a new agent."""
 
-    schema: str = Field(..., description="Agent schema version")
+    schema_version: str = Field(..., description="Agent schema version", alias="schema")
     id: str = Field(..., description="Unique agent identifier")
     name: str = Field(..., description="Human-readable agent name")
     description: str = Field(..., description="Agent purpose and capabilities")

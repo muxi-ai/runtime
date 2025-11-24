@@ -449,6 +449,23 @@ class UnifiedClarificationSystem:
 
         CRITICAL: Check for recall questions FIRST and search memory before asking for clarification.
         """
+        # STEP 0: Check for simple greetings - never need clarification
+        # Reference: docs/request-lifecycle.md - greetings should not be treated as ambiguous
+        greeting_patterns = [
+            "hello", "hi", "hey", "greetings", "good morning", "good afternoon", 
+            "good evening", "what's up", "whats up", "sup", "howdy", "hiya"
+        ]
+        message_lower = message.strip().lower()
+        if any(message_lower.startswith(g) for g in greeting_patterns) and len(message.split()) <= 3:
+            return {
+                "needs_clarification": False,
+                "reason": "simple_greeting",
+                "mode": "direct",
+                "question": None,
+                "confidence": 1.0,
+                "mcp_service": None,
+            }
+        
         # STEP 1: Check for recall questions and search memory
         # If this is a recall question (e.g., "What is my X?") and memory has the answer, skip clarification
         if await self._is_recall_question_with_answer(message, context):
