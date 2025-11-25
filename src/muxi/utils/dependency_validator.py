@@ -31,9 +31,8 @@ class DependencyValidator:
         """Define dependencies for each Formation service."""
         return {
             "llm": [
-                ServiceDependency("openai", "package", description="OpenAI API client"),
-                ServiceDependency("anthropic", "package", description="Anthropic API client"),
-                ServiceDependency("requests", "package", description="HTTP requests library"),
+                # OneLLM handles all LLM providers and their dependencies
+                ServiceDependency("onellm", "package", description="Unified LLM interface"),
             ],
             "memory": [
                 ServiceDependency("sqlite3", "package", description="SQLite database support"),
