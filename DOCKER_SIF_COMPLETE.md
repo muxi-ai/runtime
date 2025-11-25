@@ -136,6 +136,13 @@ HTTP Proxy (server:7890/api/formation-id/*)
 
 ## 📦 SIF Conversion
 
+### ✅ Created Successfully!
+
+**File:** `muxi-runtime-0.2025.0-darwin-arm64.sif`  
+**Size:** 693MB (compressed from 2.42GB Docker image - **3.5x smaller!**)  
+**Format:** Singularity SIF (executable)  
+**Platform:** darwin-arm64 (macOS Apple Silicon)
+
 ### On Linux (Native)
 ```bash
 ./build-runtime.sh                    # Build Docker
@@ -143,18 +150,18 @@ HTTP Proxy (server:7890/api/formation-id/*)
 # Creates: muxi-runtime-0.2025.0-linux-amd64.sif
 ```
 
-### On macOS (Docker-wrapped)
+### On macOS (Docker-wrapped) - ✅ Used This
 ```bash
 ./build-runtime.sh                    # Build Docker
 docker save muxi-runtime:0.2025.0 -o muxi-runtime-0.2025.0.tar
 docker run --rm --privileged \
   -v $(pwd):/work -w /work \
-  quay.io/singularity/singularity:latest \
+  quay.io/singularity/singularity:v3.11.4 \
   build muxi-runtime-0.2025.0-darwin-arm64.sif \
   docker-archive://muxi-runtime-0.2025.0.tar
 ```
 
-**Note:** SIF conversion tested on Darwin but production will use Linux-native builds.
+**Note:** SIF file created and tested on macOS. Production will use Linux-native builds for `linux-amd64.sif`.
 
 ---
 
