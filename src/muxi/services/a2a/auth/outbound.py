@@ -400,14 +400,16 @@ class A2AAuthManager:
         """
         Load A2A credentials from formation configuration and create SDK schemes.
 
-        Expected format:
-        a2a:
-          outbound:
-            services:
-              - service_id: "external-api"
-                auth:
-                  type: "api_key"
-                  key: "${{ secrets.EXTERNAL_API_KEY }}"
+        Services can be defined in a2a/*.yaml files (auto-discovered) or inline in formation.yaml.
+
+        Expected format (same schema for both):
+          id: "external-api"
+          name: "External API"
+          description: "External API service"
+          url: "https://api.external.com"
+          auth:
+            type: "api_key"
+            key: "${{ secrets.EXTERNAL_API_KEY }}"
         """
         if not formation_config:
             return
@@ -418,7 +420,7 @@ class A2AAuthManager:
 
         for service_config in services:
             try:
-                service_id = service_config.get("service_id")
+                service_id = service_config.get("id")
                 auth_config = service_config.get("auth", {})
 
                 if not service_id or not auth_config:
