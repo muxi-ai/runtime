@@ -24,7 +24,7 @@ python ../../utils/add_secret.py
 This creates:
 - `secrets.enc` - Encrypted secrets file
 - `.key` - Encryption key (keep this secure!)
-- `secrets.example` - Template showing what secrets are needed (auto-generated)
+- `secrets` - Template showing what secrets are needed (auto-generated)
 
 ### In Your Formation YAML
 
@@ -54,7 +54,7 @@ docker compose up muxi
 
 - ✅ `secrets.enc` - Safe to commit (encrypted)
 - ⚠️  `.key` - **NEVER commit this!** (in .gitignore)
-- ✅ `secrets.example` - Safe to commit (no values)
+- ✅ `secrets` - Safe to commit (no values)
 
 The `.key` file must be kept secure and separate from version control.
 

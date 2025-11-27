@@ -32,7 +32,7 @@ class SecretsManager:
         self.formation_dir = Path(formation_dir)
         self.master_key_path = self.formation_dir / ".key"
         self.secrets_file_path = self.formation_dir / "secrets.enc"
-        self.secrets_example_path = self.formation_dir / "secrets.example"
+        self.secrets_example_path = self.formation_dir / "secrets"
         self._fernet: Optional[Fernet] = None
         self._secrets_cache: Optional[Dict[str, Any]] = None
         self._lock = asyncio.Lock()
@@ -143,7 +143,7 @@ class SecretsManager:
             await self._save_secrets_to_file(secrets)
             self._secrets_cache = secrets  # Update cache
 
-            # Update secrets.example file
+            # Update secrets file
             self._update_secrets_example(normalized_name)
 
     async def delete_secret(self, name: str, force: bool = False) -> bool:
@@ -191,7 +191,7 @@ class SecretsManager:
             await self._save_secrets_to_file(secrets)
             self._secrets_cache = secrets  # Update cache
 
-            # Remove from secrets.example file
+            # Remove from secrets file
             self._remove_from_secrets_example(normalized_name)
 
             return True
@@ -214,7 +214,7 @@ class SecretsManager:
             return secrets.get(normalized_name)
 
     def _update_secrets_example(self, secret_name: str) -> None:
-        """Update secrets.example file with ALL keys from secrets.enc."""
+        """Update secrets file with ALL keys from secrets.enc."""
         # Get ALL keys from the secrets cache (which was just updated)
         if self._secrets_cache is None:
             return
@@ -226,7 +226,7 @@ class SecretsManager:
         self.secrets_example_path.write_text('\n'.join(lines) + '\n')
 
     def _remove_from_secrets_example(self, secret_name: str) -> None:
-        """Update secrets.example file with ALL remaining keys from secrets.enc."""
+        """Update secrets file with ALL remaining keys from secrets.enc."""
         # Get ALL keys from the secrets cache (which was just updated)
         if self._secrets_cache is None or not self._secrets_cache:
             # No secrets left, remove the example file

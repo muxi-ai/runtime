@@ -25,13 +25,13 @@ formations/
     ├── formation.yaml      # Formation config
     ├── secrets.enc         # Encrypted secrets ✅ (safe to commit)
     ├── .key                # Decryption key ⚠️  (NEVER commit!)
-    └── secrets.example     # Template (auto-generated)
+    └── secrets             # Template (auto-generated)
 ```
 
 **Security:**
 - ✅ `secrets.enc` - Encrypted, safe to share
 - ⚠️  `.key` - Must be kept secret (in .gitignore)
-- ✅ `secrets.example` - Template only, no values
+- ✅ `secrets` - Template only, no values
 
 ---
 
@@ -194,7 +194,7 @@ All automatically!
 - Keep `.key` files secure and backed up separately
 - Add `.key` to `.gitignore` (already done)
 - Commit `secrets.enc` (it's encrypted)
-- Commit `secrets.example` (template only)
+- Commit `secrets` (template only)
 - Use different `.key` files per environment
 - Share `secrets.enc` with team (key separately)
 
@@ -242,7 +242,7 @@ python ../../utils/add_secret.py
 # Add OPENAI_API_KEY
 
 # Commit encrypted secrets (NOT .key!)
-git add formation.yaml secrets.enc secrets.example
+git add formation.yaml secrets.enc secrets
 git commit -m "Add new feature formation"
 git push
 ```

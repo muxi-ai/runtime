@@ -50,7 +50,7 @@ async def delete_secret_from_formation(secret_name: str):
                 print("   (no secrets found)")
             return False
 
-        # Delete the secret (also updates secrets.example)
+        # Delete the secret (also updates secrets)
         # The SecretsManager will automatically check if the secret is in use
         print(f"\n🔍 Checking if '{secret_name}' is in use...")
 

@@ -43,7 +43,7 @@ class SecretsManager:
         self.formation_dir = Path(formation_dir)
         self.master_key_path = self.formation_dir / ".key"
         self.secrets_file_path = self.formation_dir / "secrets.enc"
-        self.secrets_example_path = self.formation_dir / "secrets.example"
+        self.secrets_example_path = self.formation_dir / "secrets"
         self._fernet: Optional[Fernet] = None
         self._secrets_cache: Optional[Dict[str, Any]] = None
         self._used_secrets: Set[str] = set()  # Track which secrets are actually used
@@ -283,7 +283,7 @@ class SecretsManager:
                 await self._save_secrets_to_file(secrets)
                 self._secrets_cache = secrets
 
-                # Update secrets.example file
+                # Update secrets file
                 self._update_secrets_example(normalized_name)
 
         except Exception as e:
@@ -394,7 +394,7 @@ class SecretsManager:
                 await self._save_secrets_to_file(secrets)
                 self._secrets_cache = secrets
 
-                # Remove from secrets.example file
+                # Remove from secrets file
                 self._remove_from_secrets_example(normalized_name)
 
                 return True
@@ -641,7 +641,7 @@ class SecretsManager:
 
     def _update_secrets_example(self, secret_name: str) -> None:
         """
-        Update secrets.example file with ALL keys from secrets.enc.
+        Update secrets file with ALL keys from secrets.enc.
         This ensures the example file always matches what's actually stored.
 
         Args:
@@ -659,7 +659,7 @@ class SecretsManager:
 
     def _remove_from_secrets_example(self, secret_name: str) -> None:
         """
-        Update secrets.example file with ALL remaining keys from secrets.enc.
+        Update secrets file with ALL remaining keys from secrets.enc.
         This ensures the example file always matches what's actually stored.
 
         Args:

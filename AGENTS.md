@@ -234,4 +234,4 @@ Extended structure details live in `context/project-structure.md`.
 
 ## Operational Notes
 - Always route e2e executions through `bash .claude/scripts/test-and-log.sh e2e/tests/path/to/test.py`.
-- Secrets live beside formation YAMLs in `secrets.env`; avoid environment variables for runtime config.
+- Secrets live beside formation YAMLs in encrypted `secrets.enc` files (with `secrets` template showing required keys); avoid environment variables for runtime config.

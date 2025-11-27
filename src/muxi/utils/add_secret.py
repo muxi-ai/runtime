@@ -37,7 +37,7 @@ async def add_secret_to_formation(secret_name: str, secret_value: str):
         secrets_manager = SecretsManager(formation_dir)
         await secrets_manager.initialize_encryption()
 
-        # Store the secret (also updates secrets.example)
+        # Store the secret (also updates secrets)
         await secrets_manager.store_secret(secret_name, secret_value)
 
         print(f"✅ Secret '{secret_name}' added successfully!")
@@ -45,7 +45,7 @@ async def add_secret_to_formation(secret_name: str, secret_value: str):
         # Show file locations
         key_file = formation_dir / ".key"
         secrets_file = formation_dir / "secrets.enc"
-        example_file = formation_dir / "secrets.example"
+        example_file = formation_dir / "secrets"
 
         print("\n📂 Files updated:")
         print(f"   🔑 Master key: {key_file.absolute()}")
