@@ -1602,7 +1602,7 @@ class Formation:
             )
 
         # Validate scheduler specific fields if enabled
-        if self._scheduler_config.get("enabled", False):
+        if self._scheduler_config.get("enabled", True):
             check_interval = self._scheduler_config.get("check_interval_minutes", 1)
 
             if not isinstance(check_interval, int) or check_interval < 1:

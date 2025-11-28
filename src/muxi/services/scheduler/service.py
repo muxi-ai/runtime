@@ -185,7 +185,7 @@ class SchedulerService:
             return {"status": "already_running", "service": "SchedulerService"}
 
         # Check if scheduler is enabled in formation config
-        if not self._config.get("enabled", False):
+        if not self._config.get("enabled", True):
             return {"status": "disabled", "service": "SchedulerService"}
 
         self._running = True
@@ -237,7 +237,7 @@ class SchedulerService:
 
         return {
             "running": self._running,
-            "enabled": self._config.get("enabled", False),
+            "enabled": self._config.get("enabled", True),
             "jobs_active": active_jobs,
             "active_executions": len(self._active_executions),
             "last_execution": self._last_execution_time,

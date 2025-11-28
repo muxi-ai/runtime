@@ -2352,7 +2352,7 @@ class FormationValidator:
             self.result.add_error("Scheduler configuration must be a dictionary")
             return
 
-        # Validate enabled field (optional, defaults to false)
+        # Validate enabled field (optional, defaults to true)
         if "enabled" in scheduler_config:
             enabled = scheduler_config["enabled"]
             if not isinstance(enabled, bool):
