@@ -108,6 +108,9 @@ class WorkingMemory:
     Supports both local and remote FAISS modes:
     - Local mode: Uses local FAISS for in-memory vector storage
     - Remote mode: Connects to remote FAISS/FAISSx server for distributed vector storage
+
+    When no embedding model is configured, automatically falls back to local
+    sentence-transformer embeddings (all-MiniLM-L6-v2, 384 dimensions).
     """
 
     # Namespaces excluded from FIFO cleanup
@@ -165,7 +168,6 @@ class WorkingMemory:
         self.fifo_interval_min = fifo_interval_min
 
         # Vector search configuration
-        self.dimension = dimension
         self.mode = mode
         self.remote = remote or {}
         self.has_vector_search = True
@@ -173,13 +175,24 @@ class WorkingMemory:
         # Model can be either an LLM instance or a model name string
         self._model = None
         self._model_name = None
+        self._use_local_embeddings = False
+        self._local_embedding_logged = False
+
         if model:
             if isinstance(model, str):
                 # Model name provided - will create LLM instance lazily
                 self._model_name = model
+                self.dimension = dimension
             else:
                 # Assume it's an LLM instance
                 self._model = model
+                self.dimension = dimension
+        else:
+            # No embedding model configured - use local fallback
+            self._use_local_embeddings = True
+            from .local_embeddings import get_local_embedding_dimension
+
+            self.dimension = get_local_embedding_dimension()
 
         # Configure FAISS for remote mode (FAISSx-specific)
         if mode == "remote" and self.remote:
@@ -206,7 +219,37 @@ class WorkingMemory:
 
     @property
     def model(self):
-        """Get the model, creating it lazily if needed."""
+        """Get the model, creating it lazily if needed.
+
+        If no API-based embedding model is configured, returns a LocalEmbeddingProvider
+        that uses sentence-transformers for local embedding generation.
+        """
+        # Check if we should use local embeddings
+        if self._use_local_embeddings:
+            if self._model is None:
+                from .local_embeddings import LocalEmbeddingProvider
+
+                self._model = LocalEmbeddingProvider()
+
+                # Log once about using local embeddings
+                if not self._local_embedding_logged:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.REQUEST_PROCESSING,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "embedding_model": "all-MiniLM-L6-v2",
+                            "dimension": self.dimension,
+                            "type": "local_fallback",
+                        },
+                        description=(
+                            "Using local embedding model for buffer memory (all-MiniLM-L6-v2). "
+                            "For better quality, configure: llm.models.embedding"
+                        ),
+                    )
+                    self._local_embedding_logged = True
+            return self._model
+
+        # API-based embedding model
         if self._model is None and self._model_name:
             # Create LLM instance lazily
             # Note: This is synchronous creation, which should work for most cases

@@ -144,6 +144,9 @@ class LongTermMemory:
     information based on semantic similarity. It offers a comprehensive solution
     for durable, scalable memory storage with rich filtering capabilities and
     collection-based organization.
+
+    When no embedding model is configured, automatically falls back to local
+    sentence-transformer embeddings (all-MiniLM-L6-v2, 384 dimensions).
     """
 
     def __init__(
@@ -161,21 +164,34 @@ class LongTermMemory:
         creates necessary tables, and ensures default user and collection
         exist in single-user mode. Supports configuration of vector dimension,
         default collection, and optional embedding model.
+
+        If no embedding model is provided, uses local sentence-transformer
+        embeddings (all-MiniLM-L6-v2) as a fallback.
         """
-        self.dimension = dimension
         self.default_collection = default_collection
         self.formation_id = formation_id
 
         # Model can be either an LLM instance or a model name string (lazy loading)
         self._embedding_model = None
         self._embedding_model_name = None
+        self._use_local_embeddings = False
+        self._local_embedding_logged = False
+
         if embedding_model:
             if isinstance(embedding_model, str):
                 # Model name provided - will create LLM instance lazily
                 self._embedding_model_name = embedding_model
+                self.dimension = dimension
             else:
                 # Assume it's an LLM instance
                 self._embedding_model = embedding_model
+                self.dimension = dimension
+        else:
+            # No embedding model configured - use local fallback
+            self._use_local_embeddings = True
+            from .local_embeddings import get_local_embedding_dimension
+
+            self.dimension = get_local_embedding_dimension()
 
         # Use provided database manager
         self.db_manager = db_manager
@@ -197,14 +213,43 @@ class LongTermMemory:
 
     @property
     def embedding_model(self):
-        """Get the embedding model, creating it lazily if needed."""
+        """Get the embedding model, creating it lazily if needed.
+
+        If no API-based embedding model is configured, returns a LocalEmbeddingProvider
+        that uses sentence-transformers for local embedding generation.
+        """
+        # Check if we should use local embeddings
+        if self._use_local_embeddings:
+            if self._embedding_model is None:
+                from .local_embeddings import LocalEmbeddingProvider
+
+                self._embedding_model = LocalEmbeddingProvider()
+
+                # Log once about using local embeddings
+                if not self._local_embedding_logged:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.REQUEST_PROCESSING,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "embedding_model": "all-MiniLM-L6-v2",
+                            "dimension": self.dimension,
+                            "type": "local_fallback",
+                        },
+                        description=(
+                            "Using local embedding model (all-MiniLM-L6-v2). "
+                            "For better quality, configure: llm.models.embedding"
+                        ),
+                    )
+                    self._local_embedding_logged = True
+            return self._embedding_model
+
+        # API-based embedding model
         if self._embedding_model is None and self._embedding_model_name:
             # Create LLM instance lazily
             try:
                 from ..llm import LLM as LLMClass
 
                 self._embedding_model = LLMClass(model=self._embedding_model_name)
-                # REMOVE - line 207 (DEBUG runtime trace: lazy loading)
             except Exception as e:
                 observability.observe(
                     event_type=observability.ErrorEvents.LLM_INITIALIZATION_FAILED,

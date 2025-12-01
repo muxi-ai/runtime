@@ -64,6 +64,13 @@ from .working import WorkingMemory
 from .long_term import LongTermMemory
 from .memobase import Memobase
 from .sqlite import SQLiteMemory
+from .local_embeddings import (
+    LocalEmbeddingProvider,
+    get_local_embedding,
+    get_local_embedding_async,
+    get_local_embedding_dimension,
+    LOCAL_EMBEDDING_MODEL_NAME,
+)
 
 __all__ = [
     "BaseMemory",
@@ -71,4 +78,10 @@ __all__ = [
     "LongTermMemory",
     "Memobase",
     "SQLiteMemory",
+    # Local embedding utilities
+    "LocalEmbeddingProvider",
+    "get_local_embedding",
+    "get_local_embedding_async",
+    "get_local_embedding_dimension",
+    "LOCAL_EMBEDDING_MODEL_NAME",
 ]

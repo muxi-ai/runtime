@@ -64,7 +64,7 @@ class ModelConfig(BaseModel):
         description="Temperature for controlling response randomness",
     )
     max_tokens: int = Field(
-        default=1000,
+        default=4096,
         description="Maximum number of tokens in model responses",
     )
     embedding_dimension: int = Field(

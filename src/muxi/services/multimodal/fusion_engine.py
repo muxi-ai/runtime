@@ -238,14 +238,24 @@ Analyze and provide as JSON:
             return {"main_concepts": [], "domain": "general"}
 
     async def _generate_embedding(self, text: str) -> List[float]:
-        """Generate semantic embedding for text"""
+        """Generate semantic embedding for text.
+
+        Uses the LLM's embedding capability if available, otherwise falls back
+        to local sentence-transformer embeddings (all-MiniLM-L6-v2, 384 dimensions).
+        """
         try:
             # Use LLM to generate embedding if available
             if hasattr(self.llm, "get_embedding"):
                 return await self.llm.get_embedding(text)
             else:
-                # Fallback: semantic feature-based embedding
-                return self._generate_semantic_fallback_embedding(text)
+                # Fallback: Use local sentence-transformer model
+                try:
+                    from ..memory.local_embeddings import get_local_embedding_async
+
+                    return await get_local_embedding_async(text)
+                except ImportError:
+                    # If sentence-transformers not available, use linguistic fallback
+                    return self._generate_semantic_fallback_embedding(text)
 
         except Exception as e:
             observability.observe(
@@ -254,7 +264,13 @@ Analyze and provide as JSON:
                 data={"operation": "generate_embedding", "error_type": type(e).__name__, "error": str(e)},
                 description="Embedding generation failed in multimodal fusion",
             )
-            return [0.0] * 512  # Zero embedding as fallback
+            # Try local embeddings as last resort
+            try:
+                from ..memory.local_embeddings import get_local_embedding
+
+                return get_local_embedding(text)
+            except Exception:
+                return [0.0] * 384  # Zero embedding as final fallback (384 for local model)
 
     def _generate_semantic_fallback_embedding(self, text: str) -> List[float]:
         """
