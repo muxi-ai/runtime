@@ -424,43 +424,7 @@ class FormationValidator:
                     "user_credentials.encryption_key must be null or a non-empty string"
                 )
 
-        # Validate security settings for dynamic mode
-        if credentials_config.get("mode") == "dynamic":
-            # Validate allowed_environments
-            if "allowed_environments" in credentials_config:
-                allowed_envs = credentials_config["allowed_environments"]
-                if not isinstance(allowed_envs, list):
-                    self.result.add_error(
-                        "user_credentials.allowed_environments must be a list"
-                    )
-                elif not all(isinstance(env, str) for env in allowed_envs):
-                    self.result.add_error(
-                        "user_credentials.allowed_environments must contain only strings"
-                    )
 
-            # Validate require_https
-            if "require_https" in credentials_config:
-                require_https = credentials_config["require_https"]
-                if not isinstance(require_https, bool):
-                    self.result.add_error(
-                        "user_credentials.require_https must be a boolean"
-                    )
-
-            # Validate credential_ttl_minutes
-            if "credential_ttl_minutes" in credentials_config:
-                ttl = credentials_config["credential_ttl_minutes"]
-                if not isinstance(ttl, (int, float)) or ttl <= 0:
-                    self.result.add_error(
-                        "user_credentials.credential_ttl_minutes must be a positive number"
-                    )
-
-            # Validate max_attempts
-            if "max_attempts" in credentials_config:
-                max_attempts = credentials_config["max_attempts"]
-                if not isinstance(max_attempts, int) or max_attempts <= 0:
-                    self.result.add_error(
-                        "user_credentials.max_attempts must be a positive integer"
-                    )
 
     def _validate_agents(self, agents_config: List[Dict[str, Any]], is_inline: bool = True) -> None:
         """Validate agents configuration.
@@ -1980,11 +1944,6 @@ class FormationValidator:
                     f"clarification.style '{style}' invalid. Valid: {', '.join(valid_styles)}"
                 )
 
-        # Validate persist_learned_info
-        if "persist_learned_info" in clarification_config:
-            if not isinstance(clarification_config["persist_learned_info"], bool):
-                self.result.add_error("clarification.persist_learned_info must be a boolean")
-
     def _validate_overlord_workflow_config(self, workflow_config: Dict[str, Any]) -> None:
         """Validate overlord workflow configuration."""
         if not isinstance(workflow_config, dict):
@@ -2032,11 +1991,6 @@ class FormationValidator:
                 self.result.add_error(
                     f"response.format '{format_val}' invalid. Valid: markdown, json, text"
                 )
-
-        # Validate widgets
-        if "widgets" in response_config:
-            if not isinstance(response_config["widgets"], bool):
-                self.result.add_error("response.widgets must be a boolean")
 
         # Validate streaming
         if "streaming" in response_config:

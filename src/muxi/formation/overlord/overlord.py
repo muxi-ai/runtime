@@ -754,7 +754,7 @@ class Overlord:
         if not self.clarification_config:
             # Fallback to defaults
             self.clarification_config = ClarificationConfig(
-                max_questions=5, style=QuestionStyle.CONVERSATIONAL, persist_learned_info=False
+                max_questions=5, style=QuestionStyle.CONVERSATIONAL
             )
 
         # Create the unified clarification system
@@ -2432,7 +2432,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             # Response configuration
             response_config = overlord_config.get("response", {})
             self.response_format = response_config.get("format", "markdown")
-            self.use_widgets = response_config.get("widgets", True)
             self.streaming = response_config.get("streaming", False)
 
             # Resilience is handled by the resilient workflow executor
@@ -2565,7 +2564,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             #     f"ttl={self.routing_cache_ttl}, "
             #     f"max_extraction_tokens={self.max_extraction_tokens}, "
             #     f"response_format={self.response_format}, "
-            #     f"widgets={self.use_widgets}, "
             #     f"auto_decomposition={self.auto_decomposition}, "
             #     f"plan_approval_threshold={self.plan_approval_threshold}"
             # )

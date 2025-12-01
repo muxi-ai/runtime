@@ -719,7 +719,6 @@ def initialize_clarification_config(formation) -> None:
             max_questions=max_questions,  # Backward compatibility - only if explicitly set
             max_rounds=max_rounds,  # New mode-specific configuration
             style=QuestionStyle(clarification_config.get("style", "conversational")),
-            persist_learned_info=clarification_config.get("persist_learned_info", False),
             timeout_seconds=clarification_config.get("timeout_seconds", 300),
             auto_fill_from_context=clarification_config.get("auto_fill_from_context", True),
             reasoning_requirements=clarification_config.get("reasoning_requirements", True),

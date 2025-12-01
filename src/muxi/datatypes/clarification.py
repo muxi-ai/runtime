@@ -215,7 +215,6 @@ class ClarificationConfig:
     max_questions: Optional[int] = None  # Kept for backward compatibility - None means not explicitly set
     max_rounds: Optional[Dict[str, int]] = None  # New mode-specific configuration
     style: QuestionStyle = QuestionStyle.CONVERSATIONAL
-    persist_learned_info: bool = False
     timeout_seconds: int = 300
     auto_fill_from_context: bool = True
     reasoning_requirements: bool = True

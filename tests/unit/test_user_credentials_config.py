@@ -46,11 +46,7 @@ class TestUserCredentialsConfiguration:
             "description": "Test formation with dynamic mode",
             "user_credentials": {
                 "mode": "dynamic",
-                "encryption_key": "test-encryption-key",
-                "allowed_environments": ["development", "staging"],
-                "require_https": True,
-                "credential_ttl_minutes": 60,
-                "max_attempts": 3
+                "encryption_key": "test-encryption-key"
             }
         }
         
@@ -135,81 +131,6 @@ class TestUserCredentialsConfiguration:
             result = validator.validate(temp_path)
             assert not result.is_valid
             assert any("encryption_key must be null or a non-empty string" in error for error in result.errors)
-        finally:
-            temp_path.unlink()
-
-    def test_invalid_allowed_environments(self):
-        """Test that invalid allowed_environments is rejected."""
-        validator = FormationValidator()
-        
-        config = {
-            "schema": "1.0.0",
-            "id": "test-formation",
-            "description": "Test formation with invalid allowed environments",
-            "user_credentials": {
-                "mode": "dynamic",
-                "allowed_environments": "development"  # Should be a list
-            }
-        }
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            yaml.dump(config, f)
-            temp_path = Path(f.name)
-        
-        try:
-            result = validator.validate(temp_path)
-            assert not result.is_valid
-            assert any("allowed_environments must be a list" in error for error in result.errors)
-        finally:
-            temp_path.unlink()
-
-    def test_invalid_ttl(self):
-        """Test that invalid TTL is rejected."""
-        validator = FormationValidator()
-        
-        config = {
-            "schema": "1.0.0",
-            "id": "test-formation",
-            "description": "Test formation with invalid TTL",
-            "user_credentials": {
-                "mode": "dynamic",
-                "credential_ttl_minutes": -5  # Negative value should be rejected
-            }
-        }
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            yaml.dump(config, f)
-            temp_path = Path(f.name)
-        
-        try:
-            result = validator.validate(temp_path)
-            assert not result.is_valid
-            assert any("credential_ttl_minutes must be a positive number" in error for error in result.errors)
-        finally:
-            temp_path.unlink()
-
-    def test_invalid_max_attempts(self):
-        """Test that invalid max_attempts is rejected."""
-        validator = FormationValidator()
-        
-        config = {
-            "schema": "1.0.0",
-            "id": "test-formation",
-            "description": "Test formation with invalid max attempts",
-            "user_credentials": {
-                "mode": "dynamic",
-                "max_attempts": 0  # Zero should be rejected
-            }
-        }
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            yaml.dump(config, f)
-            temp_path = Path(f.name)
-        
-        try:
-            result = validator.validate(temp_path)
-            assert not result.is_valid
-            assert any("max_attempts must be a positive integer" in error for error in result.errors)
         finally:
             temp_path.unlink()
 
