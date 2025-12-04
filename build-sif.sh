@@ -1,6 +1,7 @@
 #!/bin/bash
 # Convert MUXI Runtime Docker image to Singularity SIF
 # This creates a SIF file with proper naming for MUXI Server
+# Supports building for specific architectures
 
 set -e  # Exit on error
 
@@ -8,6 +9,26 @@ echo "======================================"
 echo "Converting Docker to Singularity SIF"
 echo "======================================"
 echo ""
+
+# Parse arguments
+ARCH=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --arch)
+            ARCH="$2"
+            shift 2
+            ;;
+        --arch=*)
+            ARCH="${1#*=}"
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--arch amd64|arm64]"
+            exit 1
+            ;;
+    esac
+done
 
 # Read version from .version file
 if [ -f "src/muxi/.version" ]; then
@@ -19,31 +40,33 @@ fi
 
 # Configuration
 IMAGE_NAME="muxi-runtime"
-PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
 
-# Normalize architecture names (aarch64 -> arm64, x86_64 -> amd64)
-case "$(uname -m)" in
-    aarch64)
-        ARCH="arm64"
-        ;;
-    x86_64)
-        ARCH="amd64"
-        ;;
-    arm64)
-        ARCH="arm64"
-        ;;
-    *)
-        ARCH="$(uname -m)"
-        ;;
-esac
+# Determine architecture
+if [ -z "$ARCH" ]; then
+    # Auto-detect from Docker image
+    ARCH=$(docker inspect "$IMAGE_NAME:$VERSION" --format '{{.Architecture}}' 2>/dev/null || echo "")
+    if [ -z "$ARCH" ]; then
+        # Fallback to host architecture
+        case "$(uname -m)" in
+            aarch64|arm64)
+                ARCH="arm64"
+                ;;
+            x86_64|amd64)
+                ARCH="amd64"
+                ;;
+            *)
+                ARCH="$(uname -m)"
+                ;;
+        esac
+    fi
+fi
 
-PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')-$ARCH"
 TARBALL="muxi-runtime-$VERSION.tar"
-SIF_FILE="muxi-runtime-$VERSION-$PLATFORM.sif"
+SIF_FILE="muxi-runtime-$VERSION-linux-$ARCH.sif"
 
 echo "📦 Configuration:"
 echo "   Version: $VERSION"
-echo "   Platform: $PLATFORM"
+echo "   Architecture: $ARCH"
 echo "   Docker Image: $IMAGE_NAME:$VERSION"
 echo "   Tarball: $TARBALL"
 echo "   SIF File: $SIF_FILE"
@@ -52,21 +75,11 @@ echo ""
 # Check if Docker image exists
 if ! docker image inspect "$IMAGE_NAME:$VERSION" > /dev/null 2>&1; then
     echo "❌ Error: Docker image $IMAGE_NAME:$VERSION not found"
-    echo "   Run ./build-docker.sh first"
-    exit 1
-fi
-
-# Check if singularity is installed
-if ! command -v singularity &> /dev/null; then
-    echo "❌ Error: singularity command not found"
     echo ""
-    echo "On macOS, Singularity must run inside Docker:"
-    echo "   docker run --rm --privileged -v \$(pwd):/work -w /work \\"
-    echo "          quay.io/singularity/singularity:latest \\"
-    echo "          build $SIF_FILE docker-archive://$TARBALL"
-    echo ""
-    echo "On Linux, install Singularity/Apptainer:"
-    echo "   https://apptainer.org/docs/user/latest/quick_start.html"
+    echo "Build it first:"
+    echo "   ./build-runtime.sh                        # Native arch"
+    echo "   ./build-runtime.sh --platform linux/amd64 # Intel/AMD"
+    echo "   ./build-runtime.sh --platform linux/arm64 # ARM"
     exit 1
 fi
 
@@ -78,7 +91,21 @@ echo ""
 
 # Convert to SIF
 echo "🔄 Converting to Singularity SIF..."
-singularity build "$SIF_FILE" "docker-archive://$TARBALL"
+
+# Check if singularity is installed natively
+if command -v singularity &> /dev/null; then
+    echo "   Using native Singularity..."
+    singularity build "$SIF_FILE" "docker-archive://$TARBALL"
+else
+    echo "   Singularity not found locally, using Docker-wrapped Singularity..."
+    # Use our runtime-runner image which has Singularity
+    docker run --rm --privileged \
+        -v "$(pwd):/work" \
+        -w /work \
+        ghcr.io/muxi-ai/runtime-runner:latest \
+        build "$SIF_FILE" "docker-archive://$TARBALL"
+fi
+
 echo "   ✓ Created $SIF_FILE"
 echo ""
 
@@ -99,9 +126,19 @@ echo ""
 echo "SIF File: $SIF_FILE"
 echo ""
 echo "📝 For MUXI Server:"
-echo "   Place this file in: ~/.muxi/server/runtimes/"
-echo "   Server expects: muxi-runtime-{version}-{platform}.sif"
+echo "   cp $SIF_FILE ~/.muxi/server/runtimes/"
 echo ""
 echo "✨ Test the SIF:"
-echo "   singularity exec $SIF_FILE python -m muxi.utils.run_formation --help"
+echo "   # Using runtime-runner (macOS/Windows):"
+echo "   docker run --rm --privileged \\"
+echo "       -v \$(pwd)/$SIF_FILE:/sif/runtime.sif:ro \\"
+echo "       -v \$(pwd)/formations/example-formation:/formation:ro \\"
+echo "       -p 8001:8001 \\"
+echo "       ghcr.io/muxi-ai/runtime-runner:latest \\"
+echo "       exec --bind /formation:/formation /sif/runtime.sif \\"
+echo "       python -m muxi.utils.run_formation /formation/formation.yaml --port 8001 --host 0.0.0.0"
+echo ""
+echo "💡 Build for specific architecture:"
+echo "   ./build-runtime.sh --platform linux/arm64 && ./build-sif.sh --arch arm64"
+echo "   ./build-runtime.sh --platform linux/amd64 && ./build-sif.sh --arch amd64"
 echo ""
