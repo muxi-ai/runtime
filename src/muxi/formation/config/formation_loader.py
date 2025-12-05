@@ -572,18 +572,28 @@ class FormationLoader:
         # Process overlord knowledge configuration
         if "overlord" in config and "knowledge" in config["overlord"]:
             knowledge_config = config["overlord"]["knowledge"]
-            if knowledge_config.get("enabled", False):
-                sources = knowledge_config.get("sources", [])
-                self._resolve_sources_paths(sources, formation_dir)
+            # Handle both dict format (enabled, sources) and list format (direct sources)
+            if isinstance(knowledge_config, dict):
+                if knowledge_config.get("enabled", False):
+                    sources = knowledge_config.get("sources", [])
+                    self._resolve_sources_paths(sources, formation_dir)
+            elif isinstance(knowledge_config, list) and knowledge_config:
+                # List format: treat as enabled sources directly
+                self._resolve_sources_paths(knowledge_config, formation_dir)
 
         # Process agent knowledge configurations
         if "agents" in config:
             for agent in config["agents"]:
                 if "knowledge" in agent:
                     knowledge_config = agent["knowledge"]
-                    if knowledge_config.get("enabled", False):
-                        sources = knowledge_config.get("sources", [])
-                        self._resolve_sources_paths(sources, formation_dir)
+                    # Handle both dict format (enabled, sources) and list format (direct sources)
+                    if isinstance(knowledge_config, dict):
+                        if knowledge_config.get("enabled", False):
+                            sources = knowledge_config.get("sources", [])
+                            self._resolve_sources_paths(sources, formation_dir)
+                    elif isinstance(knowledge_config, list) and knowledge_config:
+                        # List format: treat as enabled sources directly
+                        self._resolve_sources_paths(knowledge_config, formation_dir)
 
         return config
 
