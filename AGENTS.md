@@ -175,6 +175,7 @@ Extended structure details live in `context/project-structure.md`.
 - **RecursionError spam in tests**: missing async cleanup; use `ensure_async_cleanup()` utility from test helpers.
 - **Formation not loading in tests**: verify symlinks to `.key` and `secrets.enc` use correct relative paths.
 - **Scheduler tests timing out/failing**: avoid RUNTIME pattern; use standalone scripts with direct formation loading for precise timing control.
+- **'list' object has no attribute 'get' during config load**: knowledge config format mismatch. Use dict format (`knowledge: {enabled: true, sources: [...]}`) or remove the field entirely if not needed. Empty list `knowledge: []` is also valid.
 
 ## Development Patterns
 - **Adding services**: implement in `src/muxi/services/`, wire into formation loading, register with the overlord, and update schemas when configuration is exposed.

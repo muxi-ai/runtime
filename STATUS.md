@@ -1,7 +1,7 @@
 # MUXI Runtime - Current Status
 
-**Last Updated:** 2025-11-24  
-**Version:** 1.0.0  
+**Last Updated:** 2025-12-06  
+**Version:** 0.2025.0  
 **Status:** 🔄 Testing & Debugging - API Stabilization
 
 ---
@@ -38,7 +38,11 @@ Approximately 85% coverage across core modules.
 ### Known Issues
 - API contract needs final review before locking
 - Performance optimization pending
-- Docker/SIF packaging not yet implemented
+
+### Deployment Features (Complete)
+- Docker image with multi-stage build
+- SIF container conversion (automated)
+- Multi-arch support (arm64, amd64)
 
 ---
 
@@ -284,9 +288,10 @@ singularity run --bind ./data:/data muxi-runtime.sif
 - [x] Async database operations
 - [x] Memory cleanup (FIFO)
 
-### Deployment Features (Not Started 📝)
-- [ ] Docker image
-- [ ] SIF container
+### Deployment Features (Mostly Complete ✅)
+- [x] Docker image (multi-stage, <500MB)
+- [x] SIF container (automated build)
+- [x] Multi-arch support (arm64, amd64)
 - [ ] OpenAPI specification
 - [ ] API versioning
 - [ ] Performance benchmarks
@@ -299,7 +304,7 @@ singularity run --bind ./data:/data muxi-runtime.sif
 - None currently tracked (API stabilization is a task, not a bug)
 
 ### Recently Fixed
-- All known bugs fixed in previous development phases
+- **2025-12-06**: Fixed knowledge config format handling in formation loader - now supports both dict format (`enabled: true, sources: [...]`) and list format (`knowledge: []` or direct sources list)
 
 ---
 
@@ -433,7 +438,7 @@ pytest tests/integration/
 
 ---
 
-**Last Updated:** 2025-11-24  
+**Last Updated:** 2025-12-06  
 **Maintained by:** MUXI Runtime Team
 
 **See also:**

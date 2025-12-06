@@ -57,6 +57,24 @@ agents:
           description: "Knowledge base directory"
 ```
 
+### Alternative Formats
+
+The knowledge field supports multiple formats:
+
+```yaml
+# Option 1: Dict format with enabled flag (recommended)
+knowledge:
+  enabled: true
+  sources:
+    - path: "knowledge/docs/"
+
+# Option 2: Empty/disabled - just omit the field entirely
+# (no knowledge field)
+
+# Option 3: Empty list (valid, no knowledge loaded)
+knowledge: []
+```
+
 **Path Rules:**
 - All paths must be relative to formation directory root
 - Absolute paths (starting with `/`) are rejected
