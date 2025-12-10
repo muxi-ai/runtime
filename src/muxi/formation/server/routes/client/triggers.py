@@ -5,16 +5,18 @@ These endpoints allow external systems to trigger formation actions
 with template-based message generation from event data.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pathlib import Path
+import re
 
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .....services import observability
 from .....datatypes.api import APIObjectType, APIEventType
 from .....utils.id_generator import generate_request_id
-from ...responses import create_api_response, APIResponse
+from ...responses import create_api_response, create_success_response, create_error_response, APIResponse
 from ...utils import render_trigger_template, get_header_case_insensitive
 
 router = APIRouter(tags=["Triggers"])
@@ -71,6 +73,112 @@ async def list_triggers(request: Request) -> APIResponse:
             status_code=500,
             detail=f"Failed to list triggers: {str(e)}",
         )
+
+
+def _extract_data_placeholders(content: str) -> List[str]:
+    """
+    Extract ${{ data.xxx }} placeholders from trigger template.
+
+    Args:
+        content: Trigger template content
+
+    Returns:
+        List of unique data field paths (e.g., ["user.name", "event.type"])
+    """
+    # Match ${{ data.xxx }} patterns
+    pattern = r'\$\{\{\s*data\.([a-zA-Z0-9_.]+)\s*\}\}'
+    matches = re.findall(pattern, content)
+    # Return unique, sorted list
+    return sorted(set(matches))
+
+
+@router.get("/triggers/{trigger_name}")
+async def get_trigger(request: Request, trigger_name: str) -> JSONResponse:
+    """
+    Get detailed information about a specific trigger.
+
+    Returns the trigger template content and metadata, including:
+    - Full markdown content
+    - Expected data placeholders (parsed from ${{ data.xxx }} patterns)
+
+    **Read-only**: Triggers cannot be modified via API.
+
+    Args:
+        trigger_name: Name of the trigger (without .md extension)
+
+    Returns:
+        Trigger details with content and expected data fields
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    # Validate trigger_name to prevent path traversal attacks
+    if not re.match(r'^[a-zA-Z0-9_-]+$', trigger_name):
+        return JSONResponse(
+            status_code=400,
+            content=create_error_response(
+                error_code="INVALID_REQUEST",
+                message=f"Invalid trigger name {trigger_name!r}: must contain only letters, numbers, hyphens, and underscores",
+                request_id=request_id,
+            ).model_dump(),
+        )
+
+    # Get formation directory
+    formation_path = formation.get_formation_path()
+    if not formation_path:
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                error_code="INTERNAL_ERROR",
+                message="Formation path not available",
+                request_id=request_id,
+            ).model_dump(),
+        )
+
+    formation_dir = Path(formation_path)
+    if formation_dir.is_file():
+        formation_dir = formation_dir.parent
+
+    # Load trigger template
+    trigger_path = formation_dir / "triggers" / f"{trigger_name}.md"
+    if not trigger_path.exists():
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                error_code="TRIGGER_NOT_FOUND",
+                message=f"Trigger '{trigger_name}' not found",
+                request_id=request_id,
+            ).model_dump(),
+        )
+
+    try:
+        content = trigger_path.read_text(encoding="utf-8")
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                error_code="INTERNAL_ERROR",
+                message=f"Failed to read trigger template: {str(e)}",
+                request_id=request_id,
+            ).model_dump(),
+        )
+
+    # Extract expected data placeholders
+    data_fields = _extract_data_placeholders(content)
+
+    response_data = {
+        "name": trigger_name,
+        "content": content,
+        "data_fields": data_fields if data_fields else None,
+    }
+
+    response = create_success_response(
+        APIObjectType.TRIGGER,
+        APIEventType.TRIGGER_RETRIEVED,
+        response_data,
+        request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
 
 
 @router.post("/triggers/{trigger_name}")

@@ -176,7 +176,7 @@ async def list_mcp_servers(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.post("/mcp/servers", response_model=APIResponse)
+# @router.post("/mcp/servers", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def create_mcp_server(request: Request, server: MCPServerCreate) -> JSONResponse:
     """
     Create a new MCP server configuration.
@@ -259,7 +259,7 @@ async def get_mcp_server(request: Request, server_id: str) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.patch("/mcp/servers/{server_id}", response_model=APIResponse)
+# @router.patch("/mcp/servers/{server_id}", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def update_mcp_server(
     request: Request, server_id: str, update: MCPServerUpdate
 ) -> JSONResponse:
@@ -302,7 +302,7 @@ async def update_mcp_server(
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.delete("/mcp/servers/{server_id}", response_model=APIResponse)
+# @router.delete("/mcp/servers/{server_id}", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def delete_mcp_server(request: Request, server_id: str) -> JSONResponse:
     """
     Delete an MCP server configuration.

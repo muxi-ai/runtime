@@ -112,6 +112,10 @@ class APIEventType(str, Enum):
     SOPS_LIST = "sops.list"
     SOP_RETRIEVED = "sop.retrieved"
 
+    # Trigger events
+    TRIGGERS_LIST = "triggers.list"
+    TRIGGER_RETRIEVED = "trigger.retrieved"
+
     # Error events
     ERROR_VALIDATION = "error.validation"
     ERROR_AUTHENTICATION = "error.authentication"
@@ -190,3 +194,7 @@ class APIObjectType(str, Enum):
     # SOP objects
     SOP = "sop"
     SOP_LIST = "sop_list"
+
+    # Trigger objects
+    TRIGGER = "trigger"
+    TRIGGER_LIST = "trigger_list"

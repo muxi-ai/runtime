@@ -273,7 +273,7 @@ async def list_agents(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.post("/agents", response_model=APIResponse)
+# @router.post("/agents", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def create_agent(request: Request, agent: AgentCreate) -> JSONResponse:
     """
     Create a new agent in the formation.
@@ -359,7 +359,7 @@ async def get_agent(request: Request, agent_id: str) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.patch("/agents/{agent_id}", response_model=APIResponse)
+# @router.patch("/agents/{agent_id}", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def update_agent(request: Request, agent_id: str, updates: AgentUpdate) -> JSONResponse:
     """
     Update an existing agent.
@@ -425,7 +425,7 @@ async def update_agent(request: Request, agent_id: str, updates: AgentUpdate) ->
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.delete("/agents/{agent_id}", response_model=APIResponse)
+# @router.delete("/agents/{agent_id}", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def delete_agent(request: Request, agent_id: str) -> JSONResponse:
     """
     Delete an agent from the formation.
