@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test 13A1: List triggers endpoint
-Tests the GET /formations/{formation_id}/triggers endpoint.
+Tests the GET /triggers endpoint.
 """
 
 import asyncio
@@ -38,11 +38,11 @@ async def main():
         print(f"📡 Server running at {base_url}")
 
         # Test list triggers
-        print("\n📋 Testing GET /formations/{formation_id}/triggers...")
+        print("\n📋 Testing GET /triggers...")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
-                f"{base_url}/formations/{formation_id}/triggers",
+                f"{base_url}/triggers",
                 headers={"X-Muxi-Client-Key": client_key},
             )
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test 13A3: Execute nested data trigger (asynchronous)
-Tests POST /formations/{formation_id}/triggers/{trigger_name} with nested data.
+Tests POST /triggers/{trigger_name} with nested data.
 """
 
 import asyncio
@@ -38,11 +38,11 @@ async def main():
         print(f"📡 Server running at {base_url}")
 
         # Test nested trigger execution (async mode)
-        print("\n📋 Testing POST /formations/{formation_id}/triggers/test-nested...")
+        print("\n📋 Testing POST /triggers/test-nested...")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{base_url}/formations/{formation_id}/triggers/test-nested",
+                f"{base_url}/triggers/test-nested",
                 headers={"X-Muxi-Client-Key": client_key, "X-Muxi-User-Id": "test-trigger-user"},
                 json={
                     "data": {

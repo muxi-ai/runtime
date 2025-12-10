@@ -26,22 +26,22 @@ class TestTriggers(BaseE2ETest):
 
             formation_id = "api-test-formation-full"
             async with httpx.AsyncClient(timeout=30.0) as client:
-                # GET /v1/formations/{formation_id}/triggers
-                print("\n2. Testing GET /v1/formations/{formation_id}/triggers...")
-                r = await client.get(f"{self.base_url}/formations/{formation_id}/triggers", headers=self.headers)
+                # GET /v1/triggers
+                print("\n2. Testing GET /v1/triggers...")
+                r = await client.get(f"{self.base_url}/triggers", headers=self.headers)
                 assert r.status_code in [200, 404]
-                print("✅ GET /v1/formations/{formation_id}/triggers verified")
+                print("✅ GET /v1/triggers verified")
 
-                # POST /v1/formations/{formation_id}/triggers/{trigger_name}
-                print("\n3. Testing POST /v1/formations/{formation_id}/triggers/{trigger_name}...")
-                r = await client.post(f"{self.base_url}/formations/{formation_id}/triggers/test_trigger", 
+                # POST /v1/triggers/{trigger_name}
+                print("\n3. Testing POST /v1/triggers/{trigger_name}...")
+                r = await client.post(f"{self.base_url}/triggers/test_trigger", 
                     headers=self.headers, json={"data": {}})
                 assert r.status_code in [200, 400, 404]
-                print("✅ POST /v1/formations/{formation_id}/triggers/{trigger_name} verified")
+                print("✅ POST /v1/triggers/{trigger_name} verified")
 
                 # Auth test
                 print("\n4. Testing authentication...")
-                r = await client.get(f"{self.base_url}/formations/{formation_id}/triggers", headers={"Content-Type": "application/json"})
+                r = await client.get(f"{self.base_url}/triggers", headers={"Content-Type": "application/json"})
                 assert r.status_code == 401
                 print("✅ Authentication enforced")
 

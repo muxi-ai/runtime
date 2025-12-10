@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test 13A4: Execute GitHub issue trigger
-Tests POST /formations/{formation_id}/triggers/{trigger_name} with realistic GitHub webhook data.
+Tests POST /triggers/{trigger_name} with realistic GitHub webhook data.
 """
 
 import asyncio
@@ -38,11 +38,11 @@ async def main():
         print(f"📡 Server running at {base_url}")
 
         # Test GitHub issue trigger with realistic data
-        print("\n📋 Testing POST /formations/{formation_id}/triggers/github-issue...")
+        print("\n📋 Testing POST /triggers/github-issue...")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{base_url}/formations/{formation_id}/triggers/github-issue",
+                f"{base_url}/triggers/github-issue",
                 headers={"X-Muxi-Client-Key": client_key, "X-Muxi-User-Id": "github-webhook"},
                 json={
                     "data": {

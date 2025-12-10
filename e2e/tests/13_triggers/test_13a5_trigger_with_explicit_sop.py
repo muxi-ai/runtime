@@ -42,7 +42,7 @@ async def main():
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
-                f"{base_url}/formations/{formation_id}/triggers/sop-trigger",
+                f"{base_url}/triggers/sop-trigger",
                 headers={"X-Muxi-Client-Key": client_key, "X-Muxi-User-Id": "webhook-user"},
                 json={
                     "data": {

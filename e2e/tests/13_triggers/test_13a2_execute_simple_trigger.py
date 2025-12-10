@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test 13A2: Execute simple trigger (synchronous)
-Tests POST /formations/{formation_id}/triggers/{trigger_name} with simple data.
+Tests POST /triggers/{trigger_name} with simple data.
 """
 
 import asyncio
@@ -38,11 +38,11 @@ async def main():
         print(f"📡 Server running at {base_url}")
 
         # Test simple trigger execution (sync mode)
-        print("\n📋 Testing POST /formations/{formation_id}/triggers/test-simple...")
+        print("\n📋 Testing POST /triggers/test-simple...")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{base_url}/formations/{formation_id}/triggers/test-simple",
+                f"{base_url}/triggers/test-simple",
                 headers={"X-Muxi-Client-Key": client_key, "X-Muxi-User-Id": "test-trigger-user"},
                 json={
                     "data": {"message": "Hello from webhook test"},

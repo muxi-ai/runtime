@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test 13B1: Error handling - Missing trigger template
-Tests POST /formations/{formation_id}/triggers/{trigger_name} with non-existent trigger.
+Tests POST /triggers/{trigger_name} with non-existent trigger.
 """
 
 import asyncio
@@ -38,11 +38,11 @@ async def main():
         print(f"📡 Server running at {base_url}")
 
         # Test non-existent trigger
-        print("\n📋 Testing POST /formations/{formation_id}/triggers/non-existent...")
+        print("\n📋 Testing POST /triggers/non-existent...")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{base_url}/formations/{formation_id}/triggers/non-existent",
+                f"{base_url}/triggers/non-existent",
                 headers={"X-Muxi-Client-Key": client_key, "X-Muxi-User-Id": "test-user"},
                 json={"data": {"message": "This should fail"}},
             )

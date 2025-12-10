@@ -38,13 +38,13 @@ async def main():
         print(f"📡 Server running at {base_url}")
 
         # Test complex trigger that would normally require approval
-        print("\n📋 Testing POST /formations/{formation_id}/triggers/complex-workflow...")
+        print("\n📋 Testing POST /triggers/complex-workflow...")
         print("   This is a complex request that would normally require approval")
         print("   But triggers should bypass approval automatically")
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
-                f"{base_url}/formations/{formation_id}/triggers/complex-workflow",
+                f"{base_url}/triggers/complex-workflow",
                 headers={"X-Muxi-Client-Key": client_key, "X-Muxi-User-Id": "test-trigger-user"},
                 json={
                     "data": {

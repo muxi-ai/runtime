@@ -56,13 +56,13 @@ async def main():
         print(f"   ✅ Very low approval threshold confirmed (2.0)")
 
         # Test production deployment trigger (complex request that will exceed threshold)
-        print("\n📋 Testing POST /formations/{formation_id}/triggers/deploy-request...")
+        print("\n📋 Testing POST /triggers/deploy-request...")
         print("   This request will have complexity > 2.0 normally requiring approval")
         print("   But trigger should bypass approval automatically")
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
-                f"{base_url}/formations/{formation_id}/triggers/deploy-request",
+                f"{base_url}/triggers/deploy-request",
                 headers={"X-Muxi-Client-Key": client_key, "X-Muxi-User-Id": "test-trigger-user"},
                 json={
                     "data": {

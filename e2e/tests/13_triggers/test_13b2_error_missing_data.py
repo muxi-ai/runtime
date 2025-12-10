@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test 13B2: Error handling - Missing required data field
-Tests POST /formations/{formation_id}/triggers/{trigger_name} with incomplete data.
+Tests POST /triggers/{trigger_name} with incomplete data.
 """
 
 import asyncio
@@ -43,7 +43,7 @@ async def main():
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{base_url}/formations/{formation_id}/triggers/github-issue",
+                f"{base_url}/triggers/github-issue",
                 headers={
                     "X-Muxi-Client-Key": client_key,
                     "X-Muxi-User-Id": "test-user"
