@@ -762,8 +762,8 @@ metrics = {
 - `e2e/tests/9_async/` - Complete async test suite
 
 ### Configuration Examples
-- `test-formations/async-example/formation.yaml` - Example async formation
-- `e2e/tests/9_async/formations/formation-async/formation.yaml` - Test formation
+- `test-formations/async-example/formation.afs` - Example async formation
+- `e2e/tests/9_async/formations/formation-async/formation.afs` - Test formation
 
 ---
 

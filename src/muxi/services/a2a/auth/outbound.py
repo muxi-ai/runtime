@@ -400,7 +400,7 @@ class A2AAuthManager:
         """
         Load A2A credentials from formation configuration and create SDK schemes.
 
-        Services can be defined in a2a/*.yaml files (auto-discovered) or inline in formation.yaml.
+        Services can be defined in a2a/*.afs files (auto-discovered) or inline in formation.afs.
 
         Expected format (same schema for both):
           id: "external-api"

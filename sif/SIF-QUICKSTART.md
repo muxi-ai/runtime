@@ -55,7 +55,7 @@ apptainer exec muxi-runtime.sif pip list | grep muxi
 
 ```bash
 # Create test formation
-cat > formation.yaml <<EOF
+cat > formation.afs <<EOF
 schema: "1.0.0"
 id: "hello"
 llm:
@@ -71,10 +71,10 @@ EOF
 
 # Run it
 apptainer run \
-    --bind ./formation.yaml:/formation.yaml \
+    --bind ./formation.afs:/formation.afs \
     --env OPENAI_API_KEY=sk-your-key-here \
     muxi-runtime.sif \
-    --formation /formation.yaml --port 8000
+    --formation /formation.afs --port 8000
 
 # Test in another terminal
 curl -X POST http://localhost:8000/chat \
@@ -100,7 +100,7 @@ formations:
 systemctl restart muxi-server
 
 # 4. Deploy formation
-tar czf formation.tar.gz formation.yaml
+tar czf formation.tar.gz formation.afs
 curl -X POST http://server:7890/rpc/formations/deploy \
   --data-binary @formation.tar.gz
 ```

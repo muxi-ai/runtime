@@ -21,7 +21,7 @@ from muxi.formation.formation import Formation  # noqa: E402
 
 async def main():
     formation_path = Path(__file__).parent.parent / "test-formations" / "formation-api"
-    # await formation.load("../../test-formations/formation-knowledge/formation.yaml")
+    # await formation.load("../../test-formations/formation-knowledge/formation.afs")
 
     formation = None
     shutdown_event = asyncio.Event()

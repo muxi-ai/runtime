@@ -51,7 +51,7 @@ def test_format_fail_complete():
     failure_info = InitFailureInfo(
         component="MCP server: filesystem",
         problem="Connection timeout after 5 seconds",
-        context="formation.yaml:45 (mcp.servers.filesystem)",
+        context="formation.afs:45 (mcp.servers.filesystem)",
         causes=[
             "Server executable not installed or not in PATH",
             "Incorrect command in formation config",
@@ -60,13 +60,13 @@ def test_format_fail_complete():
         fixes=[
             "Test manually: npx @modelcontextprotocol/server-filesystem",
             "Install if needed: npm install -g @modelcontextprotocol/server-filesystem",
-            "Check formation.yaml → mcp.servers.filesystem.command"
+            "Check formation.afs → mcp.servers.filesystem.command"
         ],
         technical="Traceback (most recent call last):\n  File \"test.py\", line 1\nTimeoutError: Server did not respond"
     )
-    
+
     result = InitEventFormatter.format_fail(failure_info)
-    
+
     # Verify all components are present
     assert "[ FAIL ]" in result
     assert "MCP server: filesystem" in result
@@ -75,7 +75,7 @@ def test_format_fail_complete():
     assert "Server executable not installed" in result
     assert "To fix:" in result
     assert "Test manually:" in result
-    assert "Config: formation.yaml:45" in result
+    assert "Config: formation.afs:45" in result
     assert "TimeoutError: Server did not respond" in result
 
 
@@ -84,21 +84,21 @@ def test_format_fail_minimal():
     failure_info = InitFailureInfo(
         component="Database",
         problem="Connection refused",
-        context="formation.yaml:12 (database.connection)",
+        context="formation.afs:12 (database.connection)",
         causes=[],
         fixes=[],
         technical="ConnectionError: Could not connect"
     )
-    
+
     result = InitEventFormatter.format_fail(failure_info)
-    
+
     # Verify minimal components are present
     assert "[ FAIL ]" in result
     assert "Database" in result
     assert "Connection refused" in result
-    assert "Config: formation.yaml:12" in result
+    assert "Config: formation.afs:12" in result
     assert "ConnectionError: Could not connect" in result
-    
+
     # Verify optional sections are not present when empty
     assert "Common causes:" not in result
     assert "To fix:" not in result

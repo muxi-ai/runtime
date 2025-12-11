@@ -155,7 +155,7 @@ Required registries are unreachable:
 
 To resolve this issue, you can:
   1. Start the registry server(s) listed above
-  2. Change startup_policy to 'lenient' in formation.yaml
+  2. Change startup_policy to 'lenient' in formation.afs
   3. Remove the unreachable registries from configuration
 
 ============================================================
@@ -338,7 +338,7 @@ sudo pfctl -s rules | grep 8181
 from muxi.formation.config.validation import FormationValidator
 
 validator = FormationValidator()
-result = validator.validate_file("formation.yaml")
+result = validator.validate_file("formation.afs")
 
 if not result.is_valid:
     print("Configuration errors:")
@@ -354,7 +354,7 @@ if not result.is_valid:
    inbound:
      auth:
        token: "secret"
-   
+
    # Good
    inbound:
      auth:
@@ -367,7 +367,7 @@ if not result.is_valid:
    # Bad - port too low
    inbound:
      port: 80  # Requires root
-   
+
    # Good
    inbound:
      port: 8181  # User-accessible
@@ -379,7 +379,7 @@ if not result.is_valid:
    auth:
      type: "bearer"
      key: "secret"  # Should be 'token'
-   
+
    # Good
    auth:
      type: "bearer"
@@ -433,11 +433,11 @@ async def reset_a2a():
     # Stop A2A server
     if hasattr(overlord, 'a2a_server'):
         await overlord.a2a_server.stop()
-    
+
     # Clear registrations
     if hasattr(overlord, 'registry_client'):
         await overlord.registry_client.deregister_all()
-    
+
     # Restart A2A
     await overlord.a2a_coordinator.startup()
 ```
@@ -477,10 +477,10 @@ async def check_a2a_health(formation_url):
             # Check A2A server
             resp = await client.get(f"{formation_url}/health")
             health = resp.json()
-            
+
             print(f"A2A Status: {health['status']}")
             print(f"Agents: {len(health['agents'])}")
-            
+
             # Check each agent
             for agent_id in health['agents']:
                 agent_resp = await client.get(
@@ -490,7 +490,7 @@ async def check_a2a_health(formation_url):
                     print(f"  ✓ {agent_id}: OK")
                 else:
                     print(f"  ✗ {agent_id}: FAILED")
-                    
+
         except Exception as e:
             print(f"Health check failed: {e}")
 
@@ -516,7 +516,7 @@ When reporting issues, collect:
 
 1. **Formation configuration** (sanitized):
    ```bash
-   cat formation.yaml | grep -A 20 "^a2a:"
+   cat formation.afs | grep -A 20 "^a2a:"
    ```
 
 2. **A2A logs**:

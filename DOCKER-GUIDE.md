@@ -23,7 +23,7 @@ runtime/
 ├── build-docker.sh            ← Build automation
 ├── .dockerignore              ← Build optimization
 ├── examples/                   ← Test formations
-│   └── test-formation.yaml
+│   └── test-formation.afs
 │
 └── sif/                        ← SIF files (Stage 2 - later!)
     ├── build-sif.sh
@@ -64,7 +64,7 @@ docker run --rm -p 8000:8000 \
   -v $(pwd)/examples:/formations \
   -e OPENAI_API_KEY=your-key-here \
   muxi-runtime:latest \
-  python -m muxi.server run --formation /formations/test-formation.yaml
+  python -m muxi.server run --formation /formations/test-formation.afs
 
 # Or using docker-compose
 docker-compose up muxi-runtime
@@ -93,7 +93,7 @@ curl -X POST http://localhost:8000/chat \
 - MUXI Runtime + all dependencies
 - System tools: ffmpeg, tesseract, poppler-utils
 
-**Size:** ~2-3 GB  
+**Size:** ~2-3 GB
 **Use:** Standard formations, development, most deployments
 
 ### Production Runtime (`muxi-runtime:production`)
@@ -104,7 +104,7 @@ curl -X POST http://localhost:8000/chat \
 - FAISSx vector store
 - Supervisor for process management
 
-**Size:** ~3-4 GB  
+**Size:** ~3-4 GB
 **Use:** Complex formations needing database/vector search
 
 ---
@@ -222,12 +222,12 @@ Edit `docker-compose.yaml`:
 environment:
   - OPENAI_API_KEY=${OPENAI_API_KEY}
   - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-  
+
 volumes:
   - ./examples:/formations:ro
   - ./data:/data
   - ./logs:/logs
-  
+
 ports:
   - "8000:8000"
 ```

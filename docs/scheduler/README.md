@@ -69,7 +69,7 @@ import asyncio
 async def main():
     # Load formation with scheduler enabled
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
 
     # Schedule a task using natural language
@@ -445,7 +445,7 @@ python -m pytest tests/scheduler/ --cov=src/muxi/services/scheduler
 ```python
 # Check formation configuration
 if not formation.config.get('scheduler', {}).get('enabled'):
-    print("Scheduler is disabled in formation.yaml")
+    print("Scheduler is disabled in formation.afs")
 
 # Verify database connection
 if not hasattr(overlord, 'db_manager') or not overlord.db_manager:

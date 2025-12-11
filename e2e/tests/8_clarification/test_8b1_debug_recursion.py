@@ -80,7 +80,7 @@ async def test_multi_turn_clarification():
     print("=" * 80)
 
     formation_path = (
-        Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
+        Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
     )
 
     try:

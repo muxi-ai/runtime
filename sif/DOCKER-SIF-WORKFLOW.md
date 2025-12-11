@@ -52,14 +52,14 @@ docker run --rm -p 8000:8000 \
   -v $(pwd)/examples:/formations \
   -e OPENAI_API_KEY=sk-your-key \
   muxi-runtime:latest \
-  python -m muxi.server run --formation /formations/test-formation.yaml
+  python -m muxi.server run --formation /formations/test-formation.afs
 
 # Or in SIF
 apptainer run \
   --bind ./examples:/formations \
   --env OPENAI_API_KEY=sk-your-key \
   muxi-runtime.sif \
-  python -m muxi.server run --formation /formations/test-formation.yaml
+  python -m muxi.server run --formation /formations/test-formation.afs
 ```
 
 ---
@@ -197,11 +197,11 @@ services:
 formations:
   runtime_type: "singularity"
   singularity_image: "/path/to/muxi-runtime.sif"
-  
+
   port_range_start: 8000
   port_range_end: 9000
   bind_host: "127.0.0.1"
-  
+
   auto_restart: true
   max_restart_count: 10
 ```
@@ -221,7 +221,7 @@ docker run --rm -p 8000:8000 \
   -v $(pwd)/examples:/formations \
   -e OPENAI_API_KEY=sk-your-key \
   muxi-runtime:latest \
-  python -m muxi.server run --formation /formations/test-formation.yaml
+  python -m muxi.server run --formation /formations/test-formation.afs
 
 # Health check
 curl http://localhost:8000/health
@@ -243,7 +243,7 @@ apptainer run \
   --bind ./examples:/formations \
   --env OPENAI_API_KEY=sk-your-key \
   muxi-runtime.sif \
-  python -m muxi.server run --formation /formations/test-formation.yaml
+  python -m muxi.server run --formation /formations/test-formation.afs
 
 # Interactive shell
 apptainer shell muxi-runtime.sif

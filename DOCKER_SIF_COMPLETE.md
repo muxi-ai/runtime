@@ -1,7 +1,7 @@
 # Docker & SIF Integration - Complete! ✅
 
-**Date:** 2025-11-25  
-**Status:** Production Ready  
+**Date:** 2025-11-25
+**Status:** Production Ready
 **Version:** 0.2025.0
 
 ---
@@ -25,7 +25,7 @@
 ### 3. **CLI Arguments for Server Control** ✅
 - `--port` flag to override port
 - `--host` flag to override host (default: 127.0.0.1)
-- CLI args override formation.yaml settings
+- CLI args override formation.afs settings
 - Explicit interface for MUXI Server integration
 
 ### 4. **Dependency Validation Fixed** ✅
@@ -78,7 +78,7 @@ docker run --rm \
   -e PORT=8000 -e HOST=0.0.0.0 \
   -p 8000:8000 \
   muxi-runtime:0.2025.0 \
-  /formation/formation.yaml
+  /formation/formation.afs
 ```
 
 **Results:**
@@ -101,7 +101,7 @@ docker run --rm \
 ```
 Host Machine              Docker Container (2.42GB)
 ────────────             ─────────────────────────
-formation.yaml ─mount→   /formation/formation.yaml
+formation.afs ─mount→   /formation/formation.afs
 .key          ─mount→   /formation/.key
 secrets.enc   ─mount→   /formation/secrets.enc
 agents/       ─mount→   /formation/agents/
@@ -138,9 +138,9 @@ HTTP Proxy (server:7890/api/formation-id/*)
 
 ### ✅ Created Successfully!
 
-**File:** `muxi-runtime-0.2025.0-darwin-arm64.sif`  
-**Size:** 693MB (compressed from 2.42GB Docker image - **3.5x smaller!**)  
-**Format:** Singularity SIF (executable)  
+**File:** `muxi-runtime-0.2025.0-darwin-arm64.sif`
+**Size:** 693MB (compressed from 2.42GB Docker image - **3.5x smaller!**)
+**Format:** Singularity SIF (executable)
 **Platform:** darwin-arm64 (macOS Apple Silicon)
 
 ### On Linux (Native)
@@ -193,7 +193,7 @@ if not resolved.is_relative_to(formation_dir):
 ### 3. Self-Contained Formations
 ```
 formation-directory/
-├── formation.yaml      # Configuration
+├── formation.afs      # Configuration
 ├── .key               # Encryption key
 ├── secrets.enc        # Encrypted secrets
 ├── agents/            # Agent definitions
@@ -236,7 +236,7 @@ singularity exec \
   --bind {formation-dir}/current:/formation \
   ~/.muxi/server/runtimes/muxi-runtime-{version}-{platform}.sif \
   python -m muxi.utils.run_formation \
-  /formation/formation.yaml \
+  /formation/formation.afs \
   --port {port} \
   --host 127.0.0.1
 ```
@@ -316,7 +316,7 @@ Issues:
 ### After (Phase 2: YAML-based)
 ```
 Formation Bundle:
-  ├── formation.yaml      # Pure configuration
+  ├── formation.afs      # Pure configuration
   ├── .key               # Encryption key
   ├── secrets.enc        # Encrypted secrets
   ├── agents/            # Agent definitions
@@ -328,7 +328,7 @@ Runtime (separate):
 
 Server Command:
   singularity exec --bind /formation {sif} \
-    python -m muxi.utils.run_formation /formation/formation.yaml \
+    python -m muxi.utils.run_formation /formation/formation.afs \
     --port 8001 --host 127.0.0.1
 
 Benefits:
@@ -480,6 +480,6 @@ Benefits:
 
 ---
 
-**Last Updated:** 2025-11-25  
-**Status:** Complete ✅  
+**Last Updated:** 2025-11-25
+**Status:** Complete ✅
 **Ready for:** Server integration

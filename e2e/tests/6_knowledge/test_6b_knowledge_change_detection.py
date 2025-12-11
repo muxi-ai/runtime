@@ -43,7 +43,7 @@ class KnowledgeChangeDetectionTest:
     async def load_formation(self):
         """Load formation and start overlord"""
         self.formation = Formation()
-        await self.formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
+        await self.formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.afs"))
         self.overlord = await self.formation.start_overlord()
 
         # Get muxi agent and ensure knowledge is loaded
@@ -122,7 +122,7 @@ class KnowledgeChangeDetectionTest:
         test_file_in_buffer = any(self.test_file in s for s in info['buffer_items'])
         test_file_in_cache = any(self.test_file in f for f in info['cache_files'])
         test_file_loaded = test_file_in_buffer or test_file_in_cache
-        
+
         if test_file_loaded:
             print(f"\n✓ Test file '{self.test_file}' is loaded (found in buffer/cache)")
         else:

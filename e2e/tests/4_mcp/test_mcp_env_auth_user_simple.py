@@ -13,7 +13,7 @@ async def test_mcp_env_auth_user_credentials_simple():
 
     # Create formation
     formation = Formation()
-    await formation.load(str(test_dir / "formation.yaml"))
+    await formation.load(str(test_dir / "formation.afs"))
 
     # Start overlord
     await formation.start_overlord()

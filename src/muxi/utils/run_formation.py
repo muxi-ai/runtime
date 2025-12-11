@@ -3,10 +3,10 @@
 Run a MUXI formation for development with auto-reload support.
 
 This module provides a simple way to run formations during development:
-    python -m src.muxi.utils.run_formation path/to/formation.yaml
+    python -m src.muxi.utils.run_formation path/to/formation.afs
 
 For auto-reload with nodemon:
-    nodemon --exec "python -m src.muxi.utils.run_formation formation.yaml" --ext py,yaml
+    nodemon --exec "python -m src.muxi.utils.run_formation formation.afs" --ext py,yaml
 """
 
 import asyncio
@@ -79,7 +79,7 @@ async def run_formation(formation_path: str, port: int = None, host: str = None)
         )
 
         # This will block until the server is stopped
-        # Port and host overrides from CLI take precedence over formation.yaml
+        # Port and host overrides from CLI take precedence over formation.afs
         await formation.start_server(host=host, port=port, block=True)
 
     except KeyboardInterrupt:
@@ -252,37 +252,37 @@ async def run_formation(formation_path: str, port: int = None, host: str = None)
 def main():
     """Main entry point for the module."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(
         description="Run a MUXI formation with its API server",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run with default settings from formation.yaml
-  python -m muxi.utils.run_formation formation.yaml
-  
+  # Run with default settings from formation.afs
+  python -m muxi.utils.run_formation formation.afs
+
   # Override port and host
-  python -m muxi.utils.run_formation formation.yaml --port 8080 --host 0.0.0.0
-  
+  python -m muxi.utils.run_formation formation.afs --port 8080 --host 0.0.0.0
+
   # Auto-reload with nodemon
-  nodemon --exec "python -m muxi.utils.run_formation formation.yaml" --ext py,yaml
+  nodemon --exec "python -m muxi.utils.run_formation formation.afs" --ext py,yaml
         """
     )
-    
+
     parser.add_argument(
         "formation_path",
-        help="Path to formation.yaml file"
+        help="Path to formation.afs file"
     )
     parser.add_argument(
         "--port",
         type=int,
-        help="Port to bind server (overrides formation.yaml)"
+        help="Port to bind server (overrides formation.afs)"
     )
     parser.add_argument(
         "--host",
-        help="Host to bind server (overrides formation.yaml, default: 127.0.0.1)"
+        help="Host to bind server (overrides formation.afs, default: 127.0.0.1)"
     )
-    
+
     args = parser.parse_args()
 
     # Initialize observability system

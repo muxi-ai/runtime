@@ -15,7 +15,7 @@ Response formats control how the Overlord presents AI-generated content to users
 
 ### Formation YAML Configuration
 
-Configure response formats in your `formation.yaml`:
+Configure response formats in your `formation.afs`:
 
 ```yaml
 schema: "1.0.0"
@@ -209,7 +209,7 @@ from muxi.runtime import Formation
 
 # Load formation with default format
 formation = Formation()
-await formation.load("formation.yaml")
+await formation.load("formation.afs")
 overlord = await formation.start_overlord()
 
 # Override format for specific interactions
@@ -450,13 +450,13 @@ Validate your formation configuration:
 
 ```bash
 # Using MUXI CLI (if available)
-muxi validate formation.yaml
+muxi validate formation.afs
 
 # Or check with Python
 python -c "
 from muxi.runtime import Formation
 formation = Formation()
-formation.load('formation.yaml')
+formation.load('formation.afs')
 print('✅ Configuration valid')
 "
 ```
@@ -475,7 +475,7 @@ async def test_format_configuration():
     """Test that formation's configured format works correctly."""
     # Load formation
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
 
     # Test with the formation's default format

@@ -20,7 +20,7 @@ User synopsis automatically generates cached summaries of user context (identity
 
 ## Configuration
 
-The synopsis system is configured in `formation.yaml`:
+The synopsis system is configured in `formation.afs`:
 
 ```yaml
 memory:

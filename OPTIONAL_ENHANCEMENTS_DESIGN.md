@@ -1,7 +1,7 @@
 # Optional Enhancements - Design Document
 
-**Date:** October 25, 2025  
-**Status:** Approved for Implementation  
+**Date:** October 25, 2025
+**Status:** Approved for Implementation
 **Effort:** ~17-21 hours total
 
 ---
@@ -245,13 +245,13 @@ def observe(
     description: str = "",
 ) -> None:
     # ... existing checks ...
-    
+
     # Automatic PII redaction
     if data:
         data = _redact_data_recursive(data)
     if description:
         description = redact_sensitive_content(description)
-    
+
     # ... rest of observe logic ...
 
 def _redact_data_recursive(obj: Any) -> Any:
@@ -291,7 +291,7 @@ def _redact_data_recursive(obj: Any) -> Any:
 ## Implementation Order
 
 1. **Documentation** (this file) ✅
-2. **Schema updates** (`formation.yaml`, `README.md`)
+2. **Schema updates** (`formation.afs`, `README.md`)
 3. **Input limits** - Simplest, clear validation points
 4. **Database timeout** - One-line change
 5. **Workflow timeout** - Simple asyncio.timeout wrapper

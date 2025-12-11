@@ -92,7 +92,7 @@ Production-ready capabilities out of the box:
 Define your AI system declaratively:
 
 ```yaml
-# formation.yaml
+# formation.afs
 schema: "1.0.0"
 id: "my-assistant"
 description: "AI assistant with memory and tools"
@@ -133,7 +133,7 @@ import asyncio
 async def main():
     # Load formation
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
 
     # Start runtime
     overlord = await formation.start_overlord()
@@ -212,7 +212,7 @@ formation = Formation()
 async def test_multi_agent_routing():
     # Load real formation
     formation = Formation()
-    await formation.load("test-formation.yaml")
+    await formation.load("test-formation.afs")
     overlord = await formation.start_overlord()
 
     # Test with real LLM
@@ -326,7 +326,7 @@ import asyncio
 async def quickstart():
     # Create formation
     formation = Formation()
-    await formation.load("examples/basic-formation.yaml")
+    await formation.load("examples/basic-formation.afs")
 
     # Start runtime
     overlord = await formation.start_overlord()

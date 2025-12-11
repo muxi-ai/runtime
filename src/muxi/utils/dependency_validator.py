@@ -183,13 +183,13 @@ class DependencyValidator:
                     if dep.required:
                         errors.append(
                             f"❌ Required configuration '{dep.name}' missing for {service_name} service. "
-                            f"Add to your formation.yaml: {dep.name}: <value>"
+                            f"Add to your formation.afs: {dep.name}: <value>"
                         )
                         missing_dependencies.append(dep)
                     else:
                         warnings.append(
                             f"⚠️  Optional configuration '{dep.name}' missing for {service_name} service. "
-                            f"Add to your formation.yaml: {dep.name}: <value>"
+                            f"Add to your formation.afs: {dep.name}: <value>"
                         )
 
             elif dep.type == "env":

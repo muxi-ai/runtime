@@ -209,7 +209,7 @@ TESTS: 42/42 passing ✅
 │    • Est: 5 lines, 5 tests, 2-3 hours                                       │
 │                                                                              │
 │ 3. Phase 5: Configuration & Monitoring                                      │
-│    • Add security config to formation.yaml schema                           │
+│    • Add security config to formation.afs schema                           │
 │    • Document security settings and best practices                          │
 │    • Create monitoring dashboard                                            │
 │    • Est: 50 lines, 3-4 hours                                               │

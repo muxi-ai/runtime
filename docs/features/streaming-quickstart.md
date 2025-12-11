@@ -6,7 +6,7 @@ Get started with MUXI Runtime streaming in 5 minutes.
 
 ### Enable Streaming
 
-**formation.yaml:**
+**formation.afs:**
 ```yaml
 overlord:
   response:
@@ -20,7 +20,7 @@ overlord:
 from muxi.runtime import Formation
 
 formation = Formation()
-await formation.load("formation.yaml")
+await formation.load("formation.afs")
 overlord = await formation.start_overlord()
 
 # Stream tokens as they arrive
@@ -44,14 +44,14 @@ from muxi.runtime import Formation
 
 async def stream_to_terminal(question: str):
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
-    
+
     async for chunk in overlord.chat_stream(message=question, user_id="cli"):
         if chunk["type"] in ("stream_chunk", "content", "text"):
             content = chunk.get("content") or chunk.get("text", "")
             print(content, end="", flush=True)
-    
+
     print()  # Final newline
     await formation.stop_overlord()
 
@@ -74,7 +74,7 @@ async def stream_chat(message: str, user_id: str):
     async def event_stream():
         async for chunk in overlord.chat_stream(message=message, user_id=user_id):
             yield f"data: {json.dumps(chunk)}\n\n"
-    
+
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 ```
 
@@ -178,7 +178,7 @@ function StreamingChat() {
 ```python
 async for chunk in overlord.chat_stream(message="Question"):
     event_type = chunk.get("type")
-    
+
     if event_type == "stream_chunk":
         print(chunk["content"], end="")
     elif event_type == "progress":
@@ -193,29 +193,29 @@ async for chunk in overlord.chat_stream(message="Question"):
 async def handle_stream(stream):
     """Handle all event types properly."""
     content_parts = []
-    
+
     async for chunk in stream:
         event_type = chunk.get("type", "unknown")
-        
+
         # Content events
         if event_type in ("stream_chunk", "content", "text"):
             content = chunk.get("content") or chunk.get("text", "")
             content_parts.append(content)
             print(content, end="", flush=True)
-        
+
         # Progress events
         elif event_type == "progress":
             status = chunk.get("status", "Processing...")
             progress = chunk.get("progress", 0)
             print(f"\n[{status}] {progress}%", flush=True)
-        
+
         # Final event
         elif event_type == "completed":
             final = chunk.get("content", "")
             if final and not content_parts:
                 # Some models return full content in completed event
                 content_parts.append(final)
-        
+
         # Error handling
         elif event_type == "stream_error":
             error = chunk.get("error", "Unknown error")
@@ -223,7 +223,7 @@ async def handle_stream(stream):
             if not recoverable:
                 raise Exception(f"Streaming error: {error}")
             print(f"\nWarning: {error}", flush=True)
-    
+
     return "".join(content_parts)
 ```
 
@@ -290,9 +290,9 @@ overlord:
 ```python
 async def test_streaming():
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
-    
+
     # Count events
     events = []
     async for chunk in overlord.chat_stream(
@@ -301,16 +301,16 @@ async def test_streaming():
     ):
         events.append(chunk)
         print(f"{chunk.get('type')}: {chunk.get('content', '')[:20]}")
-    
+
     print(f"\nTotal events: {len(events)}")
     content_events = [e for e in events if e.get("type") in ("stream_chunk", "content", "text")]
     print(f"Content events: {len(content_events)}")
-    
+
     if content_events:
         print("✅ Streaming working!")
     else:
         print("❌ No content received")
-    
+
     await formation.stop_overlord()
 ```
 
@@ -321,14 +321,14 @@ import time
 
 async def benchmark_streaming():
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
-    
+
     start = time.time()
     first_chunk = None
     last_chunk = None
     chunks = 0
-    
+
     async for chunk in overlord.chat_stream(
         message="Explain quantum computing in detail",
         user_id="bench"
@@ -338,15 +338,15 @@ async def benchmark_streaming():
             if first_chunk is None:
                 first_chunk = time.time()
             last_chunk = time.time()
-    
+
     total_time = time.time() - start
     first_chunk_latency = first_chunk - start if first_chunk else 0
-    
+
     print(f"Total time: {total_time:.2f}s")
     print(f"First chunk latency: {first_chunk_latency:.2f}s")
     print(f"Total chunks: {chunks}")
     print(f"Avg chunk interval: {(last_chunk - first_chunk) / chunks:.3f}s")
-    
+
     await formation.stop_overlord()
 ```
 
@@ -358,11 +358,11 @@ async def benchmark_streaming():
 async def get_full_response(message: str) -> str:
     """Collect complete response from stream."""
     content = []
-    
+
     async for chunk in overlord.chat_stream(message=message, user_id="user"):
         if chunk.get("type") in ("stream_chunk", "content", "text"):
             content.append(chunk.get("content") or chunk.get("text", ""))
-    
+
     return "".join(content)
 
 # Usage
@@ -378,7 +378,7 @@ from tqdm import tqdm
 async def stream_with_progress(message: str):
     """Stream with progress bar."""
     pbar = None
-    
+
     async for chunk in overlord.chat_stream(message=message, user_id="user"):
         if chunk.get("type") == "progress":
             progress = chunk.get("progress", 0)
@@ -390,7 +390,7 @@ async def stream_with_progress(message: str):
                 pbar.close()
                 pbar = None
             print(chunk.get("content", ""), end="")
-    
+
     if pbar:
         pbar.close()
 ```
@@ -434,7 +434,7 @@ async for chunk in stream:
 # Handle ALL content event types
 async for chunk in stream:
     event_type = chunk.get("type")
-    
+
     # Check all possible content events
     if event_type in ("stream_chunk", "content", "text", "completed"):
         content = chunk.get("content") or chunk.get("text", "")

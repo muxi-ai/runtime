@@ -5,7 +5,7 @@ Test the `overlord.response.progress` configuration setting to verify that when 
 
 ## Test Failure
 
-**Expected**: When `progress=false`, only receive final content events  
+**Expected**: When `progress=false`, only receive final content events
 **Actual**: Received 3 progress events that should have been filtered
 
 ### Events Received (when progress=false)
@@ -19,7 +19,7 @@ Test the `overlord.response.progress` configuration setting to verify that when 
 
 **Location**: `e2e/tests/10_streaming/test_10_a_5.py`
 
-The test loads `formation.yaml` which has `progress: true`:
+The test loads `formation.afs` which has `progress: true`:
 
 ```python
 # Line 24-26
@@ -30,11 +30,11 @@ await test.setup_formation(formation_path=str(formation_path))
 But the test comment says:
 ```python
 # Note: We can't specify a specific YAML with setup_formation,
-# so we setup the formation normally and rely on the formation.yaml
+# so we setup the formation normally and rely on the formation.afs
 # being configured with progress: false
 ```
 
-**Problem**: `formation.yaml` has `progress: true` (line 45)
+**Problem**: `formation.afs` has `progress: true` (line 45)
 
 The test **needs** to load `formation-without-progress.yaml` but `setup_formation()` only accepts a directory path, not a specific YAML file name.
 
@@ -68,17 +68,17 @@ if llm_config and not llm_config.get('progress', True):
 **Option A: Modify `setup_formation()` to accept yaml_name parameter**
 
 ```python
-async def setup_formation(self, formation_path: str, yaml_name: str = "formation.yaml"):
+async def setup_formation(self, formation_path: str, yaml_name: str = "formation.afs"):
     """Setup formation from directory with specific YAML file"""
     formation_yaml_path = Path(formation_path) / yaml_name
     # Load specific YAML file
 ```
 
-**Option B: Swap formation.yaml content**
+**Option B: Swap formation.afs content**
 
 Temporarily rename files:
-- `formation.yaml` → `formation-with-progress.yaml`
-- `formation-without-progress.yaml` → `formation.yaml`
+- `formation.afs` → `formation-with-progress.yaml`
+- `formation-without-progress.yaml` → `formation.afs`
 
 ### Solution 2: Fix Runtime Progress Filtering Logic
 
@@ -135,7 +135,7 @@ When it doesn't work correctly:
 
 **Priority**: MEDIUM (Runtime functionality issue, not critical but affects user experience and costs)
 
-**Impact**: 
+**Impact**:
 - Users who set `progress=false` still get charged for LLM rephrasing
 - Bandwidth waste on unwanted events
 - Confusion for clients expecting content-only responses
@@ -157,6 +157,6 @@ After applying fixes, test should:
 
 ---
 
-**Analysis Date**: October 8, 2025  
-**Test Status**: ❌ FAILED (Runtime bug + test configuration issue)  
+**Analysis Date**: October 8, 2025
+**Test Status**: ❌ FAILED (Runtime bug + test configuration issue)
 **Migration Status**: ✅ COMPLETE (test correctly migrated, failure is due to runtime behavior)

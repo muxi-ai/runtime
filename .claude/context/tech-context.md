@@ -369,7 +369,7 @@ pytest -v
 ### Development
 ```bash
 # Simple local deployment
-python -m muxi.cli serve --formation my-formation.yaml
+python -m muxi.cli serve --formation my-formation.afs
 ```
 
 ### Production
@@ -388,7 +388,7 @@ FROM python:3.11-slim
 WORKDIR /app
 COPY . .
 RUN pip install muxi-runtime
-CMD ["muxi", "serve", "--formation", "/config/formation.yaml"]
+CMD ["muxi", "serve", "--formation", "/config/formation.afs"]
 ```
 
 ## Security Considerations
@@ -419,7 +419,7 @@ from muxi import Formation
 
 # Load and start runtime
 formation = Formation()
-await formation.load("path/to/formation.yaml")
+await formation.load("path/to/formation.afs")
 overlord = await formation.start_overlord()
 
 # Handle requests

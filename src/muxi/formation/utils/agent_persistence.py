@@ -76,8 +76,18 @@ def _validate_and_sanitize_agent_id(agent_id: str, agents_dir: Path) -> Path:
     if Path(agent_id).name != agent_id:
         raise ValueError(f"Agent ID '{agent_id}' appears to contain path traversal elements")
 
-    # Construct the full path
-    agent_file_path = agents_dir / f"{agent_id}.yaml"
+    # Check for existing file with any supported extension (.afs, .yaml, .yml)
+    # Priority: .afs > .yaml > .yml (for existing files)
+    agent_file_path = None
+    for ext in [".afs", ".yaml", ".yml"]:
+        candidate = agents_dir / f"{agent_id}{ext}"
+        if candidate.exists():
+            agent_file_path = candidate
+            break
+
+    # If no existing file found, default to .yaml for new files
+    if agent_file_path is None:
+        agent_file_path = agents_dir / f"{agent_id}.yaml"
 
     # Resolve both paths to absolute paths
     resolved_agents_dir = agents_dir.resolve()

@@ -202,7 +202,7 @@ from concurrent.futures import ThreadPoolExecutor
 def test_formation_loading():
     def run_test():
         formation = Formation()
-        formation.load("path/to/formation.yaml")
+        formation.load("path/to/formation.afs")
         overlord = formation.start_overlord()
 
         # Use asyncio.run() for each chat call
@@ -352,7 +352,7 @@ For operations that need cleanup:
 def test_with_cleanup():
     def run_test():
         formation = Formation()
-        formation.load("formation.yaml")
+        formation.load("formation.afs")
         overlord = formation.start_overlord()
 
         try:

@@ -264,7 +264,7 @@ CREATE TABLE memories (
 
 ```bash
 # Check memory configuration
-cat formation.yaml | grep -A 20 "memory:"
+cat formation.afs | grep -A 20 "memory:"
 
 # Test database connection
 psql $POSTGRES_URI -c "SELECT 1"

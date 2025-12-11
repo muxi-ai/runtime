@@ -6,11 +6,11 @@
 
 ## 🎯 What You Have
 
-✅ **Docker Runtime** - Built and tested (2.82GB)  
-✅ **SIF Build System** - Ready to convert Docker → SIF  
-✅ **Complete Documentation** - 2,100+ lines  
-✅ **Build Automation** - One-command builds  
-✅ **Test Formations** - Included and ready  
+✅ **Docker Runtime** - Built and tested (2.82GB)
+✅ **SIF Build System** - Ready to convert Docker → SIF
+✅ **Complete Documentation** - 2,100+ lines
+✅ **Build Automation** - One-command builds
+✅ **Test Formations** - Included and ready
 
 ---
 
@@ -47,23 +47,23 @@ apptainer exec muxi-runtime.sif python -c "import muxi; print('✅ SIF Ready!')"
 ## 📚 Documentation (Pick Your Path)
 
 ### 🚀 New to This?
-→ Read: **[DOCKER-SIF-WORKFLOW.md](./DOCKER-SIF-WORKFLOW.md)**  
-Complete workflow guide with examples and architecture diagrams.  
+→ Read: **[DOCKER-SIF-WORKFLOW.md](./DOCKER-SIF-WORKFLOW.md)**
+Complete workflow guide with examples and architecture diagrams.
 **Time:** 20 minutes
 
 ### 📋 Need Quick Reference?
-→ Read: **[SIF-QUICKSTART.md](./SIF-QUICKSTART.md)**  
-Cheat sheet with common commands and troubleshooting.  
+→ Read: **[SIF-QUICKSTART.md](./SIF-QUICKSTART.md)**
+Cheat sheet with common commands and troubleshooting.
 **Time:** 5 minutes (keep it open while working!)
 
 ### 📖 Want Deep Dive?
-→ Read: **[SIF-GUIDE.md](./SIF-GUIDE.md)**  
-Comprehensive guide (10 sections) covering everything.  
+→ Read: **[SIF-GUIDE.md](./SIF-GUIDE.md)**
+Comprehensive guide (10 sections) covering everything.
 **Time:** 30-60 minutes
 
 ### 📊 Want Overview?
-→ Read: **[CONTAINER-BUILD-SUMMARY.md](./CONTAINER-BUILD-SUMMARY.md)**  
-What was created, status, metrics, and next steps.  
+→ Read: **[CONTAINER-BUILD-SUMMARY.md](./CONTAINER-BUILD-SUMMARY.md)**
+What was created, status, metrics, and next steps.
 **Time:** 10 minutes
 
 ---
@@ -114,7 +114,7 @@ What was created, status, metrics, and next steps.
 - **CONTAINER-BUILD-SUMMARY.md** - Status and metrics
 
 ### Examples
-- **examples/test-formation.yaml** - Test formation
+- **examples/test-formation.afs** - Test formation
 - **examples/README.md** - Testing instructions
 
 ---
@@ -160,14 +160,14 @@ docker run --rm -p 8000:8000 \
   -v $(pwd)/examples:/formations \
   -e OPENAI_API_KEY=your-key \
   muxi-runtime:latest \
-  python -m muxi.server run --formation /formations/test-formation.yaml
+  python -m muxi.server run --formation /formations/test-formation.afs
 
 # In SIF
 apptainer run \
   --bind ./examples:/formations \
   --env OPENAI_API_KEY=your-key \
   muxi-runtime.sif \
-  python -m muxi.server run --formation /formations/test-formation.yaml
+  python -m muxi.server run --formation /formations/test-formation.afs
 
 # Test it
 curl http://localhost:8000/health
@@ -249,7 +249,7 @@ curl -X POST http://localhost:8000/chat \
 | SIF (production) | 🔜 To build | ~1.3GB |
 | Documentation | ✅ Complete | 2,100+ lines |
 | Build Scripts | ✅ Ready | Automated |
-| Examples | ✅ Included | test-formation.yaml |
+| Examples | ✅ Included | test-formation.afs |
 
 ---
 

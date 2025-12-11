@@ -121,7 +121,7 @@ import asyncio
 async def main():
     # Load a formation
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
 
     # Start the runtime
     overlord = await formation.start_overlord()
@@ -136,7 +136,7 @@ async def main():
 asyncio.run(main())
 ```
 
-**Example formation.yaml:**
+**Example formation.afs:**
 ```yaml
 schema: "1.0.0"
 id: "my-assistant"

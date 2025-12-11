@@ -12,7 +12,7 @@ When secrets are loaded from the formation configuration using placeholder synta
 
 **Example:**
 ```yaml
-# In formation.yaml
+# In formation.afs
 llm:
   api_keys:
     openai: ${{ secrets.OPENAI_API_KEY }}
@@ -37,7 +37,7 @@ When secrets are hardcoded directly in the configuration (not using placeholders
 
 **Example:**
 ```yaml
-# In formation.yaml (hardcoded - not recommended)
+# In formation.afs (hardcoded - not recommended)
 server:
   api_keys:
     admin_key: sk_muxi_admin_actual_key_12345
@@ -104,7 +104,7 @@ The system recognizes common API key patterns:
 - **OpenAI**: `sk-[a-zA-Z0-9]{20,}`, `sk-proj-[a-zA-Z0-9]{20,}`
 - **Anthropic**: `sk-ant-[a-zA-Z0-9-]{40,}`
 - **Google/GCP**: `AIza[a-zA-Z0-9-_]{35}`
-- **Generic patterns**: 
+- **Generic patterns**:
   - Stripe-like: `sk_[a-zA-Z0-9_]{20,}`
   - Hex keys: `[a-f0-9]{32,64}`
   - All caps: `[A-Z0-9]{20,40}`

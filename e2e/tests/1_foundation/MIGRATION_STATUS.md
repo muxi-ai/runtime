@@ -73,7 +73,7 @@ pytest e2e/tests_new/1_foundation -v
 1_foundation/
 ├── formations/
 │   └── formation-base/          # Shared by all Area 1 tests
-│       ├── formation.yaml       # Base configuration
+│       ├── formation.afs       # Base configuration
 │       ├── secrets.enc -> ../../../../../assets/secrets.enc
 │       └── .key -> ../../../../../assets/.key
 ├── test_1a_6_simple_formation.py # Uses minimal template

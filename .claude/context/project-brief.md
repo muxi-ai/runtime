@@ -62,7 +62,7 @@ Command-line tool for managing formations, like Docker CLI for containers:
 ### Docker-Like Paradigm
 | Docker Concept | MUXI Equivalent | Benefit |
 |---------------|-----------------|---------|
-| **Dockerfile** | **Formation.yaml** | Declarative, version-controlled AI system definition |
+| **Dockerfile** | **formation.afs** | Declarative, version-controlled AI system definition |
 | **Docker Image** | **Formation Registry** | Shareable, reusable AI system templates |
 | **Docker Container** | **Running Formation** | Live AI system with isolated resources |
 | **Docker Daemon** | **MUXI Server** | Always-on service managing AI systems |
@@ -80,7 +80,7 @@ Command-line tool for managing formations, like Docker CLI for containers:
 
 ### ✅ Completed Features (Production Ready)
 - **Formation System**: Complete YAML loading, validation, and execution
-- **Overlord Orchestration**: Intelligent routing with intent detection and SOP support  
+- **Overlord Orchestration**: Intelligent routing with intent detection and SOP support
 - **Memory Systems**: Buffer (FIFO + vector), persistent (PostgreSQL/SQLite), multi-user isolation
 - **MCP Protocol**: Full implementation with tool discovery, execution, and multiple transports
 - **Built-in MCPs**: Artifacts System for secure file generation with sandboxed Python execution

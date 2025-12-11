@@ -18,7 +18,7 @@ async def test_knowledge_with_routing():
 
     # Load formation
     formation = Formation()
-    await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
+    await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.afs"))
     overlord = await formation.start_overlord()
 
     print("\n✓ Formation loaded successfully")
@@ -50,7 +50,7 @@ async def test_knowledge_with_routing():
     # Check for Automaze-specific knowledge keywords
     automaze_keywords = ["automation", "workflow", "service", "automaze", "process"]
     keywords_found = sum(1 for kw in automaze_keywords if kw.lower() in response_text.lower())
-    
+
     assert len(response_text) > 100, "Response too short - knowledge likely not used"
     assert keywords_found >= 2, f"Should contain Automaze knowledge keywords, found {keywords_found}/5"
 
@@ -118,7 +118,7 @@ async def test_knowledge_with_routing():
     # Check for architecture/technical keywords
     architecture_keywords = ["architecture", "platform", "system", "component", "service", "api"]
     keywords_found = sum(1 for kw in architecture_keywords if kw.lower() in response_text.lower())
-    
+
     assert len(response_text) > 100, "Response too short - knowledge likely not used"
     assert keywords_found >= 2, f"Should contain architecture knowledge, found {keywords_found}/6 keywords"
 

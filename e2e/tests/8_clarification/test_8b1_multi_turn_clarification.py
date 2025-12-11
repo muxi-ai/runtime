@@ -21,7 +21,7 @@ async def test_multi_turn_clarification():
     print("Test 8B1: Multi-Turn Clarification")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
+    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
     all_passed = True
     checks_passed = []
 

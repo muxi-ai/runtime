@@ -6,7 +6,7 @@ A practical guide to using MUXI Runtime's response format features.
 
 ### 1. Configure Your Formation
 
-Edit your `formation.yaml`:
+Edit your `formation.afs`:
 
 ```yaml
 overlord:
@@ -20,7 +20,7 @@ overlord:
 from muxi.runtime import Formation
 
 formation = Formation()
-await formation.load("formation.yaml")
+await formation.load("formation.afs")
 overlord = await formation.start_overlord()
 
 # Change format at runtime
@@ -117,10 +117,10 @@ print(response.content)  # Clean terminal output
 ```
 Cloud Computing Benefits
 
-1. Cost Efficiency - Reduces infrastructure costs through 
+1. Cost Efficiency - Reduces infrastructure costs through
    pay-as-you-use pricing models.
 
-2. Scalability - Provides elastic resources that grow with 
+2. Scalability - Provides elastic resources that grow with
    your needs automatically.
 ```
 
@@ -178,7 +178,7 @@ from muxi.runtime import Formation
 
 async def test_format():
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
 
     # Test JSON

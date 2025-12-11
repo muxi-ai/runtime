@@ -1,25 +1,25 @@
 # MUXI Runtime Code Review Report
-**Date:** October 25, 2025  
-**Last Updated:** October 25, 2025 (Critical Fixes Committed)  
-**Reviewer:** Code Review System  
-**Codebase:** MUXI Runtime (Production-Ready AI Agent Execution Engine)  
-**Total Files:** 283 Python files  
-**Total Lines:** ~17,843 lines of code  
+**Date:** October 25, 2025
+**Last Updated:** October 25, 2025 (Critical Fixes Committed)
+**Reviewer:** Code Review System
+**Codebase:** MUXI Runtime (Production-Ready AI Agent Execution Engine)
+**Total Files:** 283 Python files
+**Total Lines:** ~17,843 lines of code
 **Status:** ✅ **PRODUCTION READY**
 
 ---
 
 ## 🎉 CRITICAL FIXES COMMITTED
 
-**Commit:** `4067b639` on branch `code-review`  
-**Files Changed:** 27 files (+1,227/-342 lines)  
+**Commit:** `4067b639` on branch `code-review`
+**Files Changed:** 27 files (+1,227/-342 lines)
 **Status:** ✅ All changes committed and verified
 
 The following critical issues have been **RESOLVED and COMMITTED**:
 
 ### 1. ✅ Unbounded Cache Growth - FIXED
 - **Fixed:** Credential resolver now uses `TTLCache(maxsize=10000, ttl=3600)`
-- **Fixed:** Fernet cache now uses `LRUCache(maxsize=10000)`  
+- **Fixed:** Fernet cache now uses `LRUCache(maxsize=10000)`
 - **Impact:** Prevents memory leaks in multi-user deployments
 - **Files Modified:** `credentials/resolver.py`, `credentials/encrypted.py`
 
@@ -44,9 +44,9 @@ The following critical issues have been **RESOLVED and COMMITTED**:
 - **Impact:** Prevents production deployments with weak encryption
 - **Files Modified:** `credentials/encrypted.py`, `datatypes/observability.py`
 
-**Status:** **5 of 5 critical fixes complete and committed** ✅  
-**Git Status:** `working tree clean`  
-**Commit Hash:** `4067b639`  
+**Status:** **5 of 5 critical fixes complete and committed** ✅
+**Git Status:** `working tree clean`
+**Commit Hash:** `4067b639`
 **Branch:** `code-review`
 
 **Remaining Work:**
@@ -60,7 +60,7 @@ The following critical issues have been **RESOLVED and COMMITTED**:
 
 This comprehensive code review analyzed 283 Python files across the MUXI Runtime codebase, focusing on security, performance, and code quality. The codebase demonstrates **strong security practices** and **production-ready architecture**.
 
-**Overall Assessment:** 🟢 **GOOD - Critical Issues Resolved**  
+**Overall Assessment:** 🟢 **GOOD - Critical Issues Resolved**
 **(Upgraded from 🟡 after fixes applied)**
 
 ### Key Strengths ✅
@@ -82,8 +82,8 @@ This comprehensive code review analyzed 283 Python files across the MUXI Runtime
 ## CRITICAL SEVERITY ISSUES 🔴
 
 ### 1. Extreme File Size - overlord.py (9,757 lines)
-**Severity:** 🔴 CRITICAL  
-**Impact:** Maintainability, Testing, Debugging  
+**Severity:** 🔴 CRITICAL
+**Impact:** Maintainability, Testing, Debugging
 **File:** `src/muxi/formation/overlord/overlord.py`
 
 **Problem:**
@@ -128,7 +128,7 @@ Timeline: Within 2 sprints
 ---
 
 ### 2. Large File Sizes Across Codebase
-**Severity:** 🔴 CRITICAL  
+**Severity:** 🔴 CRITICAL
 **Impact:** Code Quality, Maintainability
 
 **Top 10 Largest Files:**
@@ -160,7 +160,7 @@ Refactor files > 1,500 lines by extracting cohesive modules. Focus on:
 ---
 
 ### 3. ~~176 TODO/FIXME Comments~~ ✅ **PARTIALLY RESOLVED**
-**Severity:** ~~🔴 CRITICAL~~ → 🟡 MEDIUM  
+**Severity:** ~~🔴 CRITICAL~~ → 🟡 MEDIUM
 **Impact:** Production Readiness, Technical Debt
 
 **STATUS UPDATE:**
@@ -171,7 +171,7 @@ Refactor files > 1,500 lines by extracting cohesive modules. Focus on:
 ```bash
 Total TODO/FIXME comments: 176 (ORIGINAL)
 Distribution:
-- Observability: 162 (92%) - ✅ REMOVED  
+- Observability: 162 (92%) - ✅ REMOVED
 - Server APIs: 14 (8%) - 🟡 REMAINING
 ```
 
@@ -183,7 +183,7 @@ Distribution:
 ./formation/server/routes/admin/mcp.py:297:        # TODO: Implement MCP server deletion logic
 ./formation/server/routes/admin/memory.py:90:      # TODO: Implement memory buffer clearing
 
-# Formation Server - Client APIs  
+# Formation Server - Client APIs
 ./formation/server/routes/client/jobs.py:54:       # TODO: Implement job cancellation
 ./formation/server/routes/client/memory.py:114:    # TODO: Implement memory deletion
 ./formation/server/routes/admin/logs.py:120:       # FIXME: Replace this placeholder with real event streaming
@@ -206,7 +206,7 @@ Distribution:
 - All observability TODO comments removed
 - Codebase is cleaner and more maintainable
 
-🟡 PRIORITY 2: Server API Completion (14 TODOs) - IN PROGRESS  
+🟡 PRIORITY 2: Server API Completion (14 TODOs) - IN PROGRESS
 - Reference: ../schemas/api/formation-api-v1-final.yaml
 - Implement missing admin endpoints (scheduler, MCP, memory)
 - Implement missing client endpoints (jobs, memory)
@@ -222,7 +222,7 @@ PRIORITY 3: Eliminate All TODOs
 ---
 
 ### 4. ~~Unbounded Cache Growth Risk~~ ✅ **RESOLVED**
-**Severity:** ~~🔴 CRITICAL~~ → ✅ FIXED  
+**Severity:** ~~🔴 CRITICAL~~ → ✅ FIXED
 **Impact:** Memory Leaks PREVENTED
 
 **STATUS UPDATE:**
@@ -279,7 +279,7 @@ class BoundedCache:
     def __init__(self, maxsize=1000):
         self._cache = OrderedDict()
         self._maxsize = maxsize
-    
+
     def set(self, key, value):
         if key in self._cache:
             self._cache.move_to_end(key)
@@ -298,7 +298,7 @@ class BoundedCache:
 ---
 
 ### 5. ~~Fire-and-Forget Async Tasks Without Error Handling~~ ✅ **RESOLVED**
-**Severity:** ~~🔴 CRITICAL~~ → ✅ FIXED  
+**Severity:** ~~🔴 CRITICAL~~ → ✅ FIXED
 **Impact:** Silent Failures PREVENTED
 
 **STATUS UPDATE:**
@@ -356,14 +356,14 @@ async def process_request(self, ...):
 class Overlord:
     def __init__(self):
         self._background_tasks = set()
-    
+
     def create_background_task(self, coro):
         task = asyncio.create_task(coro)
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
         task.add_done_callback(self._handle_task_error)
         return task
-    
+
     def _handle_task_error(self, task):
         try:
             task.result()  # Raises exception if task failed
@@ -397,7 +397,7 @@ async def store_credential(self, ...):
 ## HIGH SEVERITY ISSUES 🟠
 
 ### 6. Database Connection Management - Potential Resource Exhaustion
-**Severity:** 🟠 HIGH  
+**Severity:** 🟠 HIGH
 **Impact:** Resource Leaks, Connection Pool Exhaustion
 
 **Analysis:**
@@ -414,7 +414,7 @@ class DatabaseManager:
             pool_recycle=1800,
             echo=False,
         )
-        
+
     def _create_async_engine(self):
         engine = create_async_engine(
             async_connection_string,
@@ -448,7 +448,7 @@ class DatabaseManager:
         self.sync_pool_size = sync_pool_size
         self.async_pool_size = async_pool_size
         # ... use in engine creation
-        
+
     def get_connection_info(self) -> Dict[str, Any]:
         # Add pool health metrics
         return {
@@ -470,12 +470,12 @@ class DatabaseManager:
 ---
 
 ### 7. SQL Injection Protection - Verify Parameterization
-**Severity:** 🟠 HIGH (Verification Needed)  
+**Severity:** 🟠 HIGH (Verification Needed)
 **Impact:** Security
 
-**Good News:** 
-✅ No string formatting in SQL queries found  
-✅ Using SQLAlchemy ORM properly  
+**Good News:**
+✅ No string formatting in SQL queries found
+✅ Using SQLAlchemy ORM properly
 ✅ Using parameterized queries via `.where()` clauses
 
 **Verification Needed:**
@@ -506,7 +506,7 @@ stmt = (
 ---
 
 ### 8. Credential Encryption - Verify Key Management
-**Severity:** 🟠 HIGH  
+**Severity:** 🟠 HIGH
 **Impact:** Security, Data Protection
 
 **Current Implementation:**
@@ -520,14 +520,14 @@ class EncryptedCredentialResolver(CredentialResolver):
     ):
         # ⚠️ Uses formation_id as default encryption key
         self.custom_key = encryption_key
-        
+
     def derive_user_key(self, user_id: str) -> Fernet:
         # Use custom key if provided, otherwise use formation_id
         base_key = self.custom_key or self.formation_id  # ⚠️
-        
+
         # Combine base key with user_id for per-user isolation
         combined = f"{base_key}:{user_id}".encode("utf-8")
-        
+
         # ⚠️ Static salt - same for all installations
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -554,7 +554,7 @@ def __init__(self, formation_id: str, encryption_key: Optional[str] = None):
             level=observability.EventLevel.WARNING,
             description="Using formation_id as encryption key. Provide encryption_key for production."
         )
-    
+
 # PRIORITY 2: Use random salt per installation
 def _get_installation_salt(self) -> bytes:
     # Store in database, generate once per installation
@@ -582,7 +582,7 @@ def rotate_encryption_key(self, new_key: str):
 ---
 
 ### 9. Async Context Manager Cleanup
-**Severity:** 🟠 HIGH  
+**Severity:** 🟠 HIGH
 **Impact:** Resource Leaks
 
 **Pattern Found:**
@@ -623,17 +623,17 @@ def close(self) -> None:
 class DatabaseManager:
     async def __aenter__(self):
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close_async()
-    
+
     async def close_async(self) -> None:
         """Proper async cleanup"""
         if self._async_engine is not None:
             await self._async_engine.dispose()
         if hasattr(self, "engine"):
             await asyncio.to_thread(self.engine.dispose)
-    
+
     def close(self) -> None:
         """Sync close - logs warning to use close_async()"""
         observability.observe(
@@ -654,7 +654,7 @@ class DatabaseManager:
 ---
 
 ### 10. Long Running Operations Without Timeouts
-**Severity:** 🟠 HIGH  
+**Severity:** 🟠 HIGH
 **Impact:** Deadlocks, Resource Exhaustion
 
 **Patterns Found:**
@@ -664,13 +664,13 @@ class DatabaseManager:
     async def execute_workflow(self, workflow: Workflow) -> Workflow:
         # No timeout on overall workflow execution
         # Only per-task timeouts
-        
+
 # MCP tool calls with configurable but potentially infinite timeout
 ./services/mcp/service.py:
     async def invoke_tool(self, ..., timeout: Optional[float] = None):
         timeout = timeout or self.default_timeout  # ✅ Has default
         # But default could be set very high
-        
+
 # Database queries without timeout in some cases
 ./services/memory/long_term.py:
     async def add(self, ...):
@@ -723,7 +723,7 @@ class DatabaseManager:
 ## MEDIUM SEVERITY ISSUES 🟡
 
 ### 11. Error Handling - Silent Failures
-**Severity:** 🟡 MEDIUM  
+**Severity:** 🟡 MEDIUM
 **Impact:** Debugging Difficulty
 
 **Only 2 Silent Failures Found** (Good!)
@@ -754,7 +754,7 @@ except Exception as e:
 ---
 
 ### 12. Input Validation - Verify User Input Sanitization
-**Severity:** 🟡 MEDIUM  
+**Severity:** 🟡 MEDIUM
 **Impact:** Security
 
 **Found Proper Validation:**
@@ -794,7 +794,7 @@ def validate_message(message: str) -> str:
 ---
 
 ### 13. Logging Sensitivity - PII in Logs
-**Severity:** 🟡 MEDIUM  
+**Severity:** 🟡 MEDIUM
 **Impact:** Privacy, Compliance
 
 **Good Practices Found:**
@@ -803,7 +803,7 @@ def validate_message(message: str) -> str:
 ./utils/security.py:
     def redact_message_preview(message: str, max_length: int = 100) -> str:
         # ✅ Redacts PII from log messages
-        
+
     def sanitize_message_preview(message: str, max_length: int = 200) -> str:
         # ✅ Sanitizes for safe logging
 ```
@@ -825,7 +825,7 @@ def validate_message(message: str) -> str:
 ---
 
 ### 14. Code Duplication - DRY Violations
-**Severity:** 🟡 MEDIUM  
+**Severity:** 🟡 MEDIUM
 **Impact:** Maintainability
 
 **Evidence:**
@@ -841,7 +841,7 @@ class ObservableOperation:
     def __init__(self, operation_name: str, event_type: str):
         self.operation_name = operation_name
         self.event_type = event_type
-    
+
     async def __aenter__(self):
         observability.observe(
             event_type=f"{self.event_type}_STARTED",
@@ -849,7 +849,7 @@ class ObservableOperation:
         )
         self.start_time = time.time()
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         duration = time.time() - self.start_time
         if exc_type:
@@ -874,7 +874,7 @@ async def complex_operation(self):
 ---
 
 ### 15. While True Loops - Potential Infinite Loops
-**Severity:** 🟡 MEDIUM  
+**Severity:** 🟡 MEDIUM
 **Impact:** Resource Exhaustion
 
 **Found 1 Instance:**
@@ -891,11 +891,11 @@ async def subscribe(self, request_id: str, ...) -> AsyncGenerator[Dict, None]:
     while True:  # ⚠️ Infinite loop
         # Wait for new events
         new_events_to_yield = await self._wait_for_new_events(...)
-        
+
         # Exit condition exists ✅
         if not streaming_enabled:
             break
-            
+
         for event in new_events_to_yield:
             yield event
 ```
@@ -923,10 +923,10 @@ async def subscribe(self, request_id: str, ..., max_duration: float = 600.0):
 ## LOW SEVERITY ISSUES 🟢
 
 ### 16. Type Annotations - Verify Coverage
-**Severity:** 🟢 LOW  
+**Severity:** 🟢 LOW
 **Impact:** Code Quality
 
-**Assessment:** ✅ **GOOD**  
+**Assessment:** ✅ **GOOD**
 Type annotations appear comprehensive throughout the codebase. Examples:
 ```python
 def derive_user_key(self, user_id: str) -> Fernet:  # ✅
@@ -942,7 +942,7 @@ def __init__(self, overlord, extraction_model=None, ...):  # ⚠️ Some missing
 ---
 
 ### 17. Documentation Gaps
-**Severity:** 🟢 LOW  
+**Severity:** 🟢 LOW
 **Impact:** Developer Experience
 
 **Observations:**
@@ -959,7 +959,7 @@ def __init__(self, overlord, extraction_model=None, ...):  # ⚠️ Some missing
 ---
 
 ### 18. Test Coverage - Verify E2E Coverage
-**Severity:** 🟢 LOW  
+**Severity:** 🟢 LOW
 **Impact:** Quality Assurance
 
 **Known:** 215+ E2E tests, 100% pass rate
@@ -1210,7 +1210,7 @@ The codebase is **fundamentally sound** with **production-ready architecture**. 
 **All optional enhancements have been implemented! (October 25, 2025)**
 
 ### 1. ✅ Workflow Max Timeout - COMPLETE
-**Status:** ✅ **IMPLEMENTED**  
+**Status:** ✅ **IMPLEMENTED**
 **Implementation:**
 - Added `max_timeout_seconds` to TimeoutConfig (default: 7200s = 2 hours)
 - Wrapped workflow execution with `asyncio.timeout()` for hard ceiling
@@ -1220,7 +1220,7 @@ The codebase is **fundamentally sound** with **production-ready architecture**. 
 **Files Modified:** `workflow/config.py`, `workflow/executor.py`, `datatypes/exceptions.py`
 
 ### 2. ✅ Database Query Timeouts - COMPLETE
-**Status:** ✅ **IMPLEMENTED**  
+**Status:** ✅ **IMPLEMENTED**
 **Implementation:**
 - Added `statement_timeout` to PostgreSQL engines (default: 30s)
 - Applied to both sync and async database connections
@@ -1230,7 +1230,7 @@ The codebase is **fundamentally sound** with **production-ready architecture**. 
 **Files Modified:** `services/db.py`, `formation/initialization.py`
 
 ### 3. ✅ Configurable Credential Salt - COMPLETE
-**Status:** ✅ **IMPLEMENTED**  
+**Status:** ✅ **IMPLEMENTED**
 **Implementation:**
 - Removed hardcoded salt constant
 - Made salt configurable per formation in YAML
@@ -1241,7 +1241,7 @@ The codebase is **fundamentally sound** with **production-ready architecture**. 
 **Files Modified:** `credentials/encrypted.py`, `overlord/overlord.py`
 
 ### 4. ✅ Key Rotation Utility - COMPLETE
-**Status:** ✅ **IMPLEMENTED**  
+**Status:** ✅ **IMPLEMENTED**
 **Implementation:**
 - Created `utils/rotate_credential_keys.py` CLI utility
 - Decrypts with old salt, re-encrypts with new salt
@@ -1252,7 +1252,7 @@ The codebase is **fundamentally sound** with **production-ready architecture**. 
 **Files Created:** `utils/rotate_credential_keys.py`
 
 ### 5. ✅ Input Length Limits - COMPLETE
-**Status:** ✅ **IMPLEMENTED**  
+**Status:** ✅ **IMPLEMENTED**
 **Implementation:**
 - Created InputValidator with configurable limits
 - Validates: messages, files, memory entries, tool outputs, batches
@@ -1260,11 +1260,11 @@ The codebase is **fundamentally sound** with **production-ready architecture**. 
 - Centralized configuration via `input_limits` section
 - Configuration: `input_limits.max_message_length`, `max_file_size_bytes`, etc.
 
-**Files Created:** `overlord/input_validation.py`  
+**Files Created:** `overlord/input_validation.py`
 **Files Modified:** `overlord/overlord.py`
 
 ### 6. ✅ Automatic PII Redaction - COMPLETE
-**Status:** ✅ **IMPLEMENTED**  
+**Status:** ✅ **IMPLEMENTED**
 **Implementation:**
 - Always-on automatic redaction in `observe()` function
 - Recursive redaction for nested data structures (dicts, lists, tuples)
@@ -1281,7 +1281,7 @@ The codebase is **fundamentally sound** with **production-ready architecture**. 
 - ✅ **Backward compatible** - existing formations work without changes
 - ✅ **Sensible defaults** - production-ready out of the box
 - ✅ **Comprehensive documentation** - OPTIONAL_ENHANCEMENTS_DESIGN.md created
-- ✅ **Schema updated** - formation.yaml and README.md documented
+- ✅ **Schema updated** - formation.afs and README.md documented
 
 **Total Implementation Time:** ~19 hours (original estimate: 17-21 hours)
 
@@ -1351,8 +1351,8 @@ The codebase is **fundamentally sound** with **production-ready architecture**. 
 
 ## 🎯 FINAL STATUS
 
-**Report Generated:** October 25, 2025  
-**Last Updated:** October 25, 2025 (Session 2 - Optional Enhancements)  
+**Report Generated:** October 25, 2025
+**Last Updated:** October 25, 2025 (Session 2 - Optional Enhancements)
 **Commits:**
 - Session 1: `4067b639` (Critical fixes)
 - Session 2: Pending commit (Optional enhancements)
@@ -1369,8 +1369,8 @@ The codebase is **fundamentally sound** with **production-ready architecture**. 
 - 🟡 File size refactoring (overlord.py) - **DEFERRED** per user preference
 - 🟡 Cache metrics for monitoring - **NICE-TO-HAVE**
 
-**Next Review:** After API endpoint implementation (optional)  
+**Next Review:** After API endpoint implementation (optional)
 **Questions:** Contact code review team
 
-**🚀 PRODUCTION DEPLOYMENT: FULLY APPROVED**  
+**🚀 PRODUCTION DEPLOYMENT: FULLY APPROVED**
 **✨ ENTERPRISE GRADE: ALL ENHANCEMENTS COMPLETE**

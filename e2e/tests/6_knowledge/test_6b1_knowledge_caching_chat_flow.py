@@ -43,7 +43,7 @@ def test_knowledge_caching_validation():
             print("\nLoading formation for the first time...")
             start_time = time.time()
             formation1 = Formation()
-            await formation1.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
+            await formation1.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.afs"))
 
             print("Starting overlord...")
             overlord1 = await formation1.start_overlord()
@@ -108,7 +108,7 @@ def test_knowledge_caching_validation():
             print("\nLoading formation again (should use cache)...")
             start_time = time.time()
             formation2 = Formation()
-            await formation2.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
+            await formation2.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.afs"))
 
             print("Starting overlord again...")
             overlord2 = await formation2.start_overlord()

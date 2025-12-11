@@ -77,7 +77,7 @@ cp muxi-runtime-*.sif ~/.muxi/server/runtimes/
 
 ### Formation Configuration
 
-Formations specify which runtime version they need in `formation.yaml`:
+Formations specify which runtime version they need in `formation.afs`:
 
 ```yaml
 id: my-formation
@@ -90,13 +90,13 @@ runtime: "0.2025.0"  # Exact version
 
 ### Server Behavior
 
-1. **Formation Deploy:** Server reads `runtime` field from formation.yaml
+1. **Formation Deploy:** Server reads `runtime` field from formation.afs
 2. **Version Resolution:** Resolves constraint to exact version (e.g., "0.2025" → "0.2025.0")
 3. **SIF Lookup:** Finds `muxi-runtime-0.2025.0-{platform}.sif`
 4. **Process Spawn:**
    ```bash
    singularity exec muxi-runtime-0.2025.0-linux-amd64.sif \
-     python -m muxi.utils.run_formation /path/to/formation.yaml \
+     python -m muxi.utils.run_formation /path/to/formation.afs \
      --port 8001 --host 127.0.0.1
    ```
 
@@ -121,7 +121,7 @@ Active formations:
 The runtime now accepts explicit CLI arguments for server integration:
 
 ```bash
-python -m muxi.utils.run_formation formation.yaml \
+python -m muxi.utils.run_formation formation.afs \
   --port 8000 \
   --host 127.0.0.1
 ```
@@ -129,15 +129,15 @@ python -m muxi.utils.run_formation formation.yaml \
 ### Why CLI Args?
 - **Explicit:** Everything visible in process list
 - **Consistent:** Server controls all parameters
-- **Override:** CLI args take precedence over formation.yaml
+- **Override:** CLI args take precedence over formation.afs
 - **Debuggable:** Easy to see what's running
 
 ### Environment Variables (Still Supported)
 
 ```bash
 # Both work - CLI args take precedence
-PORT=8000 HOST=127.0.0.1 python -m muxi.utils.run_formation formation.yaml
-python -m muxi.utils.run_formation formation.yaml --port 8000 --host 127.0.0.1
+PORT=8000 HOST=127.0.0.1 python -m muxi.utils.run_formation formation.afs
+python -m muxi.utils.run_formation formation.afs --port 8000 --host 127.0.0.1
 ```
 
 Server prefers CLI args for explicit control, but supports env vars for compatibility.
@@ -164,7 +164,7 @@ docker run -it --rm \
   -e PORT=8000 -e HOST=0.0.0.0 \
   -p 8000:8000 \
   muxi-runtime:0.2025.0 \
-  /formation/formation.yaml
+  /formation/formation.afs
 ```
 
 ### Test SIF File
@@ -172,7 +172,7 @@ docker run -it --rm \
 ```bash
 singularity exec muxi-runtime-0.2025.0-linux-amd64.sif \
   python -m muxi.utils.run_formation \
-  /path/to/formation.yaml \
+  /path/to/formation.afs \
   --port 8000 --host 127.0.0.1
 ```
 

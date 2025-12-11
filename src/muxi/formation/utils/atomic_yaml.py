@@ -234,7 +234,7 @@ async def update_yaml(
 
         lock = FileLock("config.yaml.lock")
         with lock:
-            await update_yaml("config.yaml", {"key": "value"})
+            await update_yaml("config.afs", {"key": "value"})
         ```
     """
     file_path = Path(file_path)

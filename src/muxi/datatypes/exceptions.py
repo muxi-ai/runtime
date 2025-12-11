@@ -167,7 +167,7 @@ class RegistryConfigurationError(OverlordStartupError):
                 "",
                 "To resolve this issue, you can:",
                 "  1. Start the registry server(s) listed above",
-                "  2. Change startup_policy to 'lenient' in formation.yaml",
+                "  2. Change startup_policy to 'lenient' in formation.afs",
                 "  3. Remove the unreachable registries from configuration",
                 "",
                 "=" * 60,

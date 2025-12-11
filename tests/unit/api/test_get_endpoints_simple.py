@@ -8,7 +8,7 @@ import pytest
 from typing import Dict, Optional
 from tests.api.utils import wait_for_server
 
-# Test configuration - matches test-formations/formation-api/formation.yaml
+# Test configuration - matches test-formations/formation-api/formation.afs
 BASE_URL = "http://0.0.0.0:8271"
 ADMIN_KEY = "sk_muxi_admin_some_api_key"
 CLIENT_KEY = "sk_muxi_client_some_api_key"

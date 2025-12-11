@@ -19,7 +19,7 @@ This enables internal A2A communication between agents in the same formation.
 ```yaml
 a2a:
   enabled: true
-  
+
   # Inbound configuration - for receiving A2A messages
   inbound:
     enabled: true
@@ -34,8 +34,8 @@ a2a:
     auth:               # Authentication for incoming requests
       type: "bearer"
       token: "${{ secrets.A2A_INBOUND_TOKEN }}"
-  
-  # Outbound configuration - for sending A2A messages  
+
+  # Outbound configuration - for sending A2A messages
   outbound:
     enabled: true
     startup_policy: "lenient"      # Registry connection policy: lenient, strict, retry
@@ -114,7 +114,7 @@ Controls how agents are filtered for task planning when there are many available
 ```yaml
 a2a:
   enabled: true
-  
+
   # Intelligent filtering for large agent pools
   filtering:
     enabled: true
@@ -169,7 +169,7 @@ Enable filtering when:
 ```yaml
 a2a:
   enabled: true
-  
+
   filtering:
     enabled: true                    # Turn on intelligent filtering
     threshold: 10                    # Activate when >10 agents available
@@ -292,7 +292,7 @@ Formation that provides services to others:
 ```yaml
 a2a:
   enabled: true
-  
+
   inbound:
     enabled: true
     port: 8181
@@ -309,7 +309,7 @@ Formation that only consumes external services:
 ```yaml
 a2a:
   enabled: true
-  
+
   outbound:
     enabled: true
     registries:
@@ -328,7 +328,7 @@ Formation that both provides and consumes services:
 ```yaml
 a2a:
   enabled: true
-  
+
   inbound:
     enabled: true
     port: 8181
@@ -337,7 +337,7 @@ a2a:
     auth:
       type: "bearer"
       token: "${{ secrets.MY_A2A_TOKEN }}"
-  
+
   outbound:
     enabled: true
     registries:
@@ -356,13 +356,13 @@ Simplified configuration for development:
 ```yaml
 a2a:
   enabled: true
-  
+
   inbound:
     enabled: true
     port: 8181
     auth:
       type: "none"  # No auth for development
-  
+
   outbound:
     enabled: true
     # No auth needed for local development
@@ -423,12 +423,12 @@ a2a:
     registries:
       # Simple format (backward compatible)
       - "https://registry1.com"
-      
+
       # Extended format with per-registry settings
       - url: "https://critical-registry.com"
         required: true                    # Must be reachable
         health_check_timeout_seconds: 10  # Custom timeout
-        
+
       - url: "https://optional-registry.com"
         required: false                   # Can be down
         health_check_timeout_seconds: 5
@@ -470,7 +470,7 @@ Required registries are unreachable:
 
 To resolve this issue, you can:
   1. Start the registry server(s) listed above
-  2. Change startup_policy to 'lenient' in formation.yaml
+  2. Change startup_policy to 'lenient' in formation.afs
   3. Remove the unreachable registries from configuration
 
 ============================================================
@@ -588,7 +588,7 @@ The formation validates A2A configuration on startup:
 
 ```bash
 # Validation happens automatically
-python -m muxi run formation.yaml
+python -m muxi run formation.afs
 
 # Errors will be shown:
 # ConfigurationError: A2A inbound auth requires 'token' field
@@ -637,7 +637,7 @@ The system supports both formats for backward compatibility.
 ### Using Formation Overlays
 
 ```yaml
-# base-formation.yaml
+# base-formation.afs
 a2a:
   enabled: true
   inbound:
@@ -666,8 +666,8 @@ a2a:
 
 ```bash
 # Production
-muxi run base-formation.yaml --overlay production-overlay.yaml
+muxi run base-formation.afs --overlay production-overlay.yaml
 
 # Development
-muxi run base-formation.yaml --overlay development-overlay.yaml
+muxi run base-formation.afs --overlay development-overlay.yaml
 ```

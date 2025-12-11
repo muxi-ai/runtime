@@ -326,7 +326,7 @@ from muxi.runtime import Formation
 
 # Load formation with HTML format for web
 formation = Formation()
-await formation.load("formation.yaml")
+await formation.load("formation.afs")
 overlord = await formation.start_overlord()
 
 # Generate web-ready content

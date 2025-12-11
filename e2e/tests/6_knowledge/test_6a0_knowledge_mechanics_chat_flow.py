@@ -39,7 +39,7 @@ def test_core_knowledge_mechanics():
             # Load formation
             print("\nLoading formation...")
             formation1 = Formation()
-            await formation1.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
+            await formation1.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.afs"))
 
             # Start overlord
             print("Starting overlord...")
@@ -90,7 +90,7 @@ def test_core_knowledge_mechanics():
             # Load formation again
             print("\nLoading formation again...")
             formation2 = Formation()
-            await formation2.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
+            await formation2.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.afs"))
 
             # Start overlord again
             print("Starting overlord again...")

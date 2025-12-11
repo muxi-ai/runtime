@@ -31,25 +31,25 @@ async def test_a2a_discovery():
     try:
         # Setup
         print("\n1. Loading formation...")
-        formation_path = Path(__file__).parent / "formations" / "formation-multi-agent" / "formation.yaml"
-        
+        formation_path = Path(__file__).parent / "formations" / "formation-multi-agent" / "formation.afs"
+
         formation = Formation()
         await formation.load(str(formation_path))
         overlord = await formation.start_overlord()
-        
+
         print("   ✓ Formation loaded")
         print(f"   Local agents: {', '.join(overlord.agents.keys())}")
 
         # Test 1: Check A2A coordinator presence
         print("\n2. Checking A2A coordinator...")
-        
+
         if hasattr(overlord, 'a2a_coordinator') and overlord.a2a_coordinator:
             print("   ✓ A2A coordinator initialized")
             checks_passed.append("A2A coordinator present")
 
             # Test 2: Discover all available agents
             print("\n3. Discovering available agents...")
-            
+
             try:
                 agents = overlord.a2a_coordinator.get_available_agents_for_a2a(
                     requesting_agent_id="test-agent",
@@ -58,16 +58,16 @@ async def test_a2a_discovery():
 
                 agent_count = len(agents)
                 print(f"   ✓ Discovered {agent_count} agents:")
-                
+
                 for agent_id, agent_info in agents.items():
                     description = agent_info.get('description', 'No description')
                     capabilities = agent_info.get('capabilities', [])
                     agent_type = agent_info.get('type', 'unknown')
-                    
+
                     print(f"     - {agent_id}: {description}")
                     print(f"       Capabilities: {capabilities}")
                     print(f"       Type: {agent_type}")
-                
+
                 if agent_count > 0:
                     checks_passed.append(f"Discovered {agent_count} agents")
 
@@ -77,7 +77,7 @@ async def test_a2a_discovery():
 
             # Test 3: Discover by capability
             print("\n4. Testing capability-based discovery...")
-            
+
             try:
                 pm_agents = overlord.a2a_coordinator.get_available_agents_for_a2a(
                     requesting_agent_id="test-agent",
@@ -86,10 +86,10 @@ async def test_a2a_discovery():
 
                 pm_count = len(pm_agents)
                 print(f"   Found {pm_count} project management agents")
-                
+
                 if pm_count > 0:
                     checks_passed.append(f"Capability filtering: {pm_count} PM agents")
-                    
+
                     for agent_id in pm_agents.keys():
                         print(f"     - {agent_id}")
 
@@ -98,14 +98,14 @@ async def test_a2a_discovery():
 
             # Test 4: Check registry configuration
             print("\n5. Checking registry configuration...")
-            
+
             if hasattr(overlord.a2a_coordinator, 'registry_client'):
                 registry_client = overlord.a2a_coordinator.registry_client
-                
+
                 if registry_client:
                     print("   ✓ Registry client configured")
                     checks_passed.append("Registry client configured")
-                    
+
                     # Check if registry is reachable (don't fail if it's not)
                     try:
                         if hasattr(registry_client, 'registry_url'):

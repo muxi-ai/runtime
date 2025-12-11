@@ -195,7 +195,7 @@ class FormationServer:
             print("   because none were provided in your formation configuration.")
             print()
             print("⚠️  WARNING: This is NOT recommended for production use!")
-            print("   Please configure proper API keys in your formation.yaml:")
+            print("   Please configure proper API keys in your formation.afs:")
             print()
             print("   server:")
             print("     api_keys:")

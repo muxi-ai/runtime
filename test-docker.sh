@@ -77,10 +77,10 @@ echo ""
 
 # Test 4: Formation validation (without running - just validate YAML)
 echo -e "${YELLOW}→${NC} Test 4: Testing formation validation..."
-FORMATION_PATH="/app/test_formation.yaml"
+FORMATION_PATH="/app/test_formation.afs"
 
 # Create a minimal test formation
-cat > /tmp/test_formation.yaml << 'EOF'
+cat > /tmp/test_formation.afs << 'EOF'
 schema: "1.0.0"
 id: docker-test
 description: "Docker test formation"
@@ -100,7 +100,7 @@ EOF
 
 # Test loading formation (dry run)
 VALIDATION_RESULT=$(docker run --rm \
-    -v /tmp/test_formation.yaml:${FORMATION_PATH}:ro \
+    -v /tmp/test_formation.afs:${FORMATION_PATH}:ro \
     muxi-runtime:latest \
     python -c "
 import yaml
@@ -153,7 +153,7 @@ echo -e "${GREEN}✓ Test 6 passed: ${PACKAGE_COUNT} packages installed${NC}"
 echo ""
 
 # Cleanup
-rm -f /tmp/test_formation.yaml
+rm -f /tmp/test_formation.afs
 
 # Summary
 echo ""

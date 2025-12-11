@@ -85,7 +85,7 @@ docker run -it --rm \
   -e OPENAI_API_KEY="sk-..." \
   -p 8000:8000 \
   muxi-runtime:test \
-  /formations/test-formation.yaml
+  /formations/test-formation.afs
 ```
 
 **Flags explained:**
@@ -126,7 +126,7 @@ curl -X POST http://localhost:8000/chat \
 
 ```
 my-formation/
-├── formation.yaml
+├── formation.afs
 ├── agents/
 │   └── assistant.yaml
 ├── knowledge/
@@ -143,7 +143,7 @@ docker run -it --rm \
   -e OPENAI_API_KEY="sk-..." \
   -p 8000:8000 \
   muxi-runtime:test \
-  /formation/formation.yaml
+  /formation/formation.afs
 ```
 
 ---
@@ -157,7 +157,7 @@ docker run -it --rm \
 **Solution:**
 ```bash
 # Check your paths
-ls /path/to/formation/formation.yaml
+ls /path/to/formation/formation.afs
 
 # Use absolute paths
 docker run -v "$(pwd)/my-formation:/formation:ro" ...

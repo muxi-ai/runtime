@@ -15,7 +15,7 @@ async def test_mcp_env_auth_hardcoded():
     try:
         # Create formation
         formation = Formation()
-        await formation.load(str(test_dir / "formation.yaml"))
+        await formation.load(str(test_dir / "formation.afs"))
 
         # Start overlord
         overlord = await formation.start_overlord()
@@ -78,7 +78,7 @@ async def test_mcp_env_auth_secrets():
             "BRAVE_API_KEY": "BSAhY6DecKH5SF6pE5FEr-jagPAl_gF"
         }
 
-        await formation.load(test_dir / "formation.yaml")
+        await formation.load(test_dir / "formation.afs")
 
         # Start overlord
         overlord = await formation.start_overlord()
@@ -132,7 +132,7 @@ async def test_mcp_env_auth_user_credentials():
     try:
         # Create formation
         formation = Formation()
-        await formation.load(str(test_dir / "formation.yaml"))
+        await formation.load(str(test_dir / "formation.afs"))
 
         # Set up user credentials using the credential store
         from muxi.services.secrets import UserCredentialStore

@@ -264,7 +264,7 @@ await observability_manager.force_health_check()
 1. Check formation configuration:
    ```bash
    # Verify logging config is loaded
-   grep -A10 "logging:" formation.yaml
+   grep -A10 "logging:" formation.afs
    ```
 
 2. Check event level:

@@ -14,7 +14,7 @@ The MUXI Scheduler transforms your AI assistant from reactive (responds when ask
 
 ## Step 1: Enable Scheduler (2 minutes)
 
-Add scheduler configuration to your `formation.yaml`:
+Add scheduler configuration to your `formation.afs`:
 
 ```yaml
 # formation.afs (or .yaml)
@@ -55,7 +55,7 @@ from muxi.formation.formation import Formation
 async def schedule_daily_reminder():
     # Load formation
     formation = Formation()
-    await formation.load("formation.yaml")  # or Path to your formation directory
+    await formation.load("formation.afs")  # or Path to your formation directory
     overlord = await formation.start_overlord()
 
     # Schedule a task using natural language
@@ -87,7 +87,7 @@ will be executed daily at 9:00 AM. Job ID: job_abc123xyz456
 ```python
 async def check_jobs():
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
 
     # Get all jobs for your user
@@ -395,7 +395,7 @@ try:
     print("✅ Database connection OK")
 except Exception as e:
     print(f"❌ Database error: {e}")
-    print("\nCheck your connection string in formation.yaml:")
+    print("\nCheck your connection string in formation.afs:")
     print("  PostgreSQL: postgresql://user:pass@host:port/db")
     print("  SQLite: sqlite:///./scheduler.db")
 ```

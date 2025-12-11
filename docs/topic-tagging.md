@@ -137,13 +137,13 @@ grep -v "request.topics.extracted" /var/log/muxi.jsonl
 @dataclass
 class RequestAnalysis:
     """Request analysis result from RequestAnalyzer."""
-    
+
     complexity_score: float
     requires_decomposition: bool
     implicit_subtasks: List[str]
     required_capabilities: List[str]
     acceptance_criteria: List[str]
-    
+
     # Topic tagging (added in v1.x)
     topics: List[str] = Field(
         default_factory=list,
@@ -303,7 +303,7 @@ async def consume_topic_events():
 async def process_topic_event(event):
     request_id = event["request_id"]
     topics = event["data"]["topics"]
-    
+
     # Store topic associations
     await db.insert_request_topics(
         request_id=request_id,
@@ -443,16 +443,16 @@ Generate 1-5 topic tags that categorize the request:
 def _parse_llm_analysis(self, response: str) -> RequestAnalysis:
     """Extract and normalize topics from LLM response."""
     data = json.loads(response)
-    
+
     # Extract topics
     topics = data.get("topics", [])
     if not isinstance(topics, list):
         topics = []
-    
+
     # Normalize: strip, lowercase, remove empties, limit to 5
     topics = [str(t).strip().lower() for t in topics if t]
     topics = [t for t in topics if t][:5]
-    
+
     return RequestAnalysis(
         complexity_score=data["complexity_score"],
         # ... other fields ...
@@ -549,7 +549,7 @@ python test_topics_live.py
 
 **Possible Causes:**
 1. ✅ **Heuristic Mode:** Formation not using LLM for analysis
-   - Check: `auto_decomposition: true` in formation.yaml
+   - Check: `auto_decomposition: true` in formation.afs
    - Check: LLM models configured under `llm:` section
 
 2. ✅ **LLM Not Returning Topics:** Prompt not generating topics
@@ -566,7 +566,7 @@ python test_topics_live.py
 
 **Possible Causes:**
 1. ✅ **Observability Disabled:** Logging not enabled
-   - Fix: Add `logging: { enabled: true }` to formation.yaml
+   - Fix: Add `logging: { enabled: true }` to formation.afs
 
 2. ✅ **Log Level Too High:** Events filtered out
    - Fix: Set `logging: { level: info }` or lower

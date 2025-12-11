@@ -34,7 +34,7 @@ MUXI Runtime exists as the execution engine that transforms declarative AI syste
 
 ### Core Runtime Flow
 
-1. **Formation Loading**: Developer creates a formation.yaml defining agents, memory, tools, and configuration. Runtime loads and validates this into a live system.
+1. **Formation Loading**: Developer creates a formation.afs defining agents, memory, tools, and configuration. Runtime loads and validates this into a live system.
 
 2. **Overlord Orchestration**: Central orchestrator receives user messages via `overlord.chat()` and intelligently routes to appropriate agents based on intent and context.
 

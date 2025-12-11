@@ -88,7 +88,7 @@ This is a valid knowledge document that should be loaded successfully.
         print("Loading formation with missing knowledge files...")
 
         formation = Formation()
-        await formation.load(os.path.join(test_formation_dir, "formation.yaml"))
+        await formation.load(os.path.join(test_formation_dir, "formation.afs"))
         overlord = await formation.start_overlord()
 
         print("✓ Formation loaded successfully despite missing files")

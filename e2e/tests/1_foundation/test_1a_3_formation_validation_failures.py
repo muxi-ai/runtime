@@ -44,7 +44,7 @@ class TestFormationValidationFailures(BaseE2ETest):
             print("\n1. Testing non-existent path...")
             formation = Formation()
             try:
-                asyncio.run(formation.load("/nonexistent/path/formation.yaml"))
+                asyncio.run(formation.load("/nonexistent/path/formation.afs"))
                 tests_failed.append("Non-existent path should fail")
             except Exception as e:
                 print(f"   ✅ Correctly failed with: {type(e).__name__}")

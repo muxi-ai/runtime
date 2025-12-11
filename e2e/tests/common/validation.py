@@ -32,10 +32,10 @@ class FormationValidator:
 
         try:
             if formation_path.is_dir():
-                # Look for formation.yaml in directory
-                yaml_path = formation_path / "formation.yaml"
+                # Look for formation.afs in directory
+                yaml_path = formation_path / "formation.afs"
                 if not yaml_path.exists():
-                    return False, [f"No formation.yaml in {formation_path}"]
+                    return False, [f"No formation.afs in {formation_path}"]
                 formation_path = yaml_path
 
             with open(formation_path) as f:

@@ -25,7 +25,7 @@ async def test_sop_workflow():
     print("=" * 80)
 
     formation_path = (
-        Path(__file__).parent / "formations" / "formation-multi-agent-sop" / "formation.yaml"
+        Path(__file__).parent / "formations" / "formation-multi-agent-sop" / "formation.afs"
     )
     all_passed = True
     checks_passed = []

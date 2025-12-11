@@ -34,7 +34,7 @@ async def test_post_agents_empty_payload():
         }
 
         # Write formation config
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(formation_config, f)
 
@@ -94,7 +94,7 @@ async def test_post_agents_required_fields_only():
         }
 
         # Write formation config
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(formation_config, f)
 
@@ -174,7 +174,7 @@ async def test_post_agents_all_fields():
         }
 
         # Write formation config
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(formation_config, f)
 
@@ -295,7 +295,7 @@ async def test_post_agents_with_extra_fields():
         }
 
         # Write formation config
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(formation_config, f)
 
@@ -376,7 +376,7 @@ async def test_post_agents_invalid_secret():
         }
 
         # Write formation config
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(formation_config, f)
 
@@ -462,7 +462,7 @@ async def test_post_agents_valid_secret():
         }
 
         # Write formation config
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(formation_config, f)
 

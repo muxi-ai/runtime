@@ -47,7 +47,7 @@ async def test_secrets_api_operations():
         }
 
         # Write formation config
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(formation_config, f)
 

@@ -251,7 +251,7 @@ from src.muxi.formation import Formation
 async def test_xa1_feature_name():
     """Test description matching test plan."""
     formation = Formation()
-    await formation.load("tests/assets/formations/formation-basic/formation.yaml")
+    await formation.load("tests/assets/formations/formation-basic/formation.afs")
     overlord = await formation.start_overlord()
 
     response = await overlord.chat(

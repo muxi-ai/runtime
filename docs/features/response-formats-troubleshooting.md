@@ -9,7 +9,7 @@ Common issues and solutions when working with MUXI Runtime response formats, bas
 **Symptoms:**
 - Response always comes back in default format (Markdown)
 - Runtime override not working
-- Format set in formation.yaml ignored
+- Format set in formation.afs ignored
 
 **Common Causes:**
 
@@ -141,27 +141,27 @@ def validate_json_response(response):
     """Validate JSON response has required structure."""
     try:
         data = json.loads(response.content)
-        
+
         # Check required fields
         required = ["content", "type", "format"]
         missing = [f for f in required if f not in data]
-        
+
         if missing:
             print(f"❌ Missing fields: {missing}")
             return False
-            
+
         # Check field values
         if data["type"] != "response":
             print(f"❌ Wrong type: {data['type']}")
             return False
-            
+
         if data["format"] != "json":
             print(f"❌ Wrong format: {data['format']}")
             return False
-            
+
         print("✅ Valid JSON response")
         return True
-        
+
     except json.JSONDecodeError as e:
         print(f"❌ JSON parse error: {e}")
         return False
@@ -267,12 +267,12 @@ try:
     soup = BeautifulSoup(response.content, 'html.parser')
     tags = soup.find_all()
     print(f"✅ Valid HTML with {len(tags)} tags")
-    
+
     # Check for semantic tags
     semantic = ['h1', 'h2', 'h3', 'p', 'ul', 'li']
     found = [tag.name for tag in tags if tag.name in semantic]
     print(f"Semantic tags: {set(found)}")
-    
+
 except Exception as e:
     print(f"❌ HTML parsing error: {e}")
 ```
@@ -387,18 +387,18 @@ def strip_formatting(text):
     """Remove markdown and HTML from text."""
     # Remove markdown headers
     text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
-    
+
     # Remove bold/italic
     text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
     text = re.sub(r"\*([^*]+)\*", r"\1", text)
-    
+
     # Remove code blocks
     text = re.sub(r"```[^`]*```", "", text)
     text = re.sub(r"`([^`]+)`", r"\1", text)
-    
+
     # Remove HTML tags
     text = re.sub(r"<[^>]+>", "", text)
-    
+
     return text.strip()
 
 response = await overlord.chat("Explain")
@@ -413,7 +413,7 @@ clean_text = strip_formatting(response.content)
 
 **Expected Times (from e2e tests):**
 - JSON: ~18-22 seconds
-- Markdown: ~17-25 seconds  
+- Markdown: ~17-25 seconds
 - HTML: ~23-36 seconds (validation overhead)
 - Text: ~17-22 seconds
 
@@ -474,17 +474,17 @@ print(times)
 async def diagnose_format_issue():
     """Diagnose format configuration issues."""
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
-    
+
     # Check formation default
     print(f"Formation default: {overlord.response_format}")
-    
+
     # Test each format
     for fmt in ["json", "markdown", "html", "text"]:
         overlord.response_format = fmt
         response = await overlord.chat("Test message")
-        
+
         # Validate format
         is_valid = False
         if fmt == "json":
@@ -499,13 +499,13 @@ async def diagnose_format_issue():
             is_valid = "<" in response.content
         elif fmt == "text":
             is_valid = "<" not in response.content and "```" not in response.content
-        
+
         status = "✅ PASS" if is_valid else "❌ FAIL"
         print(f"{fmt.upper()}: {status}")
-        
+
         if not is_valid:
             print(f"  Content preview: {response.content[:100]}")
-    
+
     await formation.stop_overlord()
 
 # Run diagnosis
@@ -592,31 +592,31 @@ print(f"Format used: {overlord.response_format}")
 ```python
 async def test_format_pipeline():
     """Test complete format pipeline."""
-    
+
     # 1. Load formation
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     print("✅ Formation loaded")
-    
+
     # 2. Start overlord
     overlord = await formation.start_overlord()
     print(f"✅ Overlord started (default: {overlord.response_format})")
-    
+
     # 3. Set format
     overlord.response_format = "json"
     print(f"✅ Format set: {overlord.response_format}")
-    
+
     # 4. Send request
     response = await overlord.chat("Test message")
     print(f"✅ Response received (type: {type(response)})")
-    
+
     # 5. Validate format
     try:
         data = json.loads(response.content)
         print(f"✅ JSON valid: {list(data.keys())}")
     except Exception as e:
         print(f"❌ JSON invalid: {e}")
-    
+
     # 6. Cleanup
     await formation.stop_overlord()
     print("✅ Cleanup complete")

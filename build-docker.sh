@@ -61,7 +61,7 @@ check_docker() {
         echo "  Windows: https://docs.docker.com/desktop/windows/install/"
         exit 1
     fi
-    
+
     # Check if Docker daemon is running
     if ! docker info &> /dev/null; then
         print_error "Docker daemon is not running!"
@@ -69,7 +69,7 @@ check_docker() {
         echo "Please start Docker Desktop or the Docker daemon"
         exit 1
     fi
-    
+
     print_success "Docker is ready: $(docker --version | head -n1)"
 }
 
@@ -77,11 +77,11 @@ check_docker() {
 build_docker() {
     local build_type="$1"
     local extra_args="$2"
-    
+
     # Determine Dockerfile and image tag
     local dockerfile
     local image_tag
-    
+
     case "$build_type" in
         latest|"")
             dockerfile="Dockerfile"
@@ -99,30 +99,30 @@ build_docker() {
             exit 1
             ;;
     esac
-    
+
     print_header "MUXI Runtime Docker Builder"
     echo ""
     print_info "Build Type: $build_type"
     print_info "Dockerfile: $dockerfile"
     print_info "Image Tag: $image_tag"
     echo ""
-    
+
     # Check if Dockerfile exists
     if [[ ! -f "$SCRIPT_DIR/$dockerfile" ]]; then
         print_error "Dockerfile not found: $dockerfile"
         exit 1
     fi
-    
+
     # Build the image
     print_info "Building Docker image..."
     echo ""
-    
+
     docker build \
         -f "$SCRIPT_DIR/$dockerfile" \
         -t "$image_tag" \
         $extra_args \
         "$SCRIPT_DIR"
-    
+
     # Verify build
     if docker image inspect "$image_tag" &> /dev/null; then
         echo ""
@@ -131,7 +131,7 @@ build_docker() {
         print_header "Image Information"
         docker images "$image_tag" --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
         echo ""
-        
+
         # Show next steps
         print_header "Next Steps"
         echo ""
@@ -144,7 +144,7 @@ build_docker() {
             echo "     -v \$(pwd)/examples:/formations \\"
             echo "     -e OPENAI_API_KEY=sk-your-key \\"
             echo "     $image_tag \\"
-            echo "     python -m muxi.server run --formation /formations/test-formation.yaml"
+            echo "     python -m muxi.server run --formation /formations/test-formation.afs"
         else
             echo "   docker run --rm -p 8000:8000 -p 5432:5432 \\"
             echo "     -v \$(pwd)/examples:/formations \\"

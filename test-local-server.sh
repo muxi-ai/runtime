@@ -37,7 +37,7 @@ echo ""
 
 # Run the server
 echo "4. Starting formation server..."
-echo "   Formation: e2e/tests/1_foundation/formations/formation-base/formation.yaml"
+echo "   Formation: e2e/tests/1_foundation/formations/formation-base/formation.afs"
 echo "   Port: 8271 (configured in formation)"
 echo ""
 echo "   Press Ctrl+C to stop"
@@ -45,4 +45,4 @@ echo ""
 echo "=========================================="
 echo ""
 
-python3 -m muxi.utils.run_formation e2e/tests/1_foundation/formations/formation-base/formation.yaml
+python3 -m muxi.utils.run_formation e2e/tests/1_foundation/formations/formation-base/formation.afs

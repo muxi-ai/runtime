@@ -18,7 +18,7 @@ All file generation happens in a secure, sandboxed environment with strict libra
 
 ### Enabling File Generation
 
-By default, all built-in MCPs are enabled. You can control this behavior in your `formation.yaml`:
+By default, all built-in MCPs are enabled. You can control this behavior in your `formation.afs`:
 
 ```yaml
 # Enable all built-in MCPs (default)

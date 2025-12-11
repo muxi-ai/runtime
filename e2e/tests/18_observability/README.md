@@ -102,19 +102,19 @@ python e2e/tests/18_observability/test_init_formatting_failures.py
 [ FAIL ] Database: PostgreSQL
 
   Connection refused (connection refused)
-  
+
   The database server is not accepting connections. Common causes:
     • Database server is not running
     • Incorrect host or port in connection string
     • Firewall blocking the connection
-    
+
   To fix:
     1. Check if PostgreSQL is running: pg_isready -h localhost -p 5432
     2. Verify connection string in formation config
     3. Check firewall/security group settings
-  
-  Config: formation.yaml:12 (memory.persistent.connection_string)
-  
+
+  Config: formation.afs:12 (memory.persistent.connection_string)
+
   Traceback (most recent call last):
     ...
 ```

@@ -1,6 +1,6 @@
 # API & Multi-Formation Isolation Verification Report
 
-**Date:** 2025-11-24  
+**Date:** 2025-11-24
 **Status:** ✅ VERIFIED - Ready for Dockerization
 
 ---
@@ -243,7 +243,7 @@ FAISSx uses **two-level isolation**:
 ### Correct Configuration
 
 ```yaml
-# formation.yaml
+# formation.afs
 memory:
   working:
     mode: "remote"
@@ -282,9 +282,9 @@ Within a single tenant, formations are isolated by metadata:
 - ✅ **FAISSx Remote:** Two-level isolation (tenant for org, formation_id for formations)
 
 ### Ready for Next Steps
-✅ **API documentation complete** - OpenAPI spec exists and matches implementation  
-✅ **Multi-formation isolation verified** - All memory systems namespace by formation_id  
-✅ **FAISSx isolation verified** - Two-level isolation architecture correct  
+✅ **API documentation complete** - OpenAPI spec exists and matches implementation
+✅ **Multi-formation isolation verified** - All memory systems namespace by formation_id
+✅ **FAISSx isolation verified** - Two-level isolation architecture correct
 ✅ **Docker build ready** - Dockerfile exists and optimized
 
 ---

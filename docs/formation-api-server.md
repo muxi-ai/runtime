@@ -65,7 +65,7 @@ from muxi import Formation
 async def main():
     # Load formation
     formation = Formation()
-    await formation.load("my-formation.yaml")
+    await formation.load("my-formation.afs")
 
     # Start server (auto-starts overlord if needed)
     server = formation.start_server()
@@ -134,7 +134,7 @@ If no API keys are provided, the server auto-generates them:
    because none were provided in your formation configuration.
 
 ⚠️  WARNING: This is NOT recommended for production use!
-   Please configure proper API keys in your formation.yaml
+   Please configure proper API keys in your formation.afs
 
 📋 Generated API Keys:
    Admin API Key:  sk_muxi_admin_xyz123...
@@ -297,7 +297,7 @@ class FormationClient {
         if (userId) {
             payload.user_id = userId;
         }
-        
+
         const response = await fetch(`${this.baseUrl}/v1/chat`, {
             method: 'POST',
             headers,
@@ -450,7 +450,7 @@ RuntimeError: A Formation server is already running
 ```
 403 Forbidden: Invalid admin API key
 ```
-**Solution**: Verify API keys in formation.yaml and check header format (`X-Muxi-Admin-Key` vs `X-Muxi-Client-Key`).
+**Solution**: Verify API keys in formation.afs and check header format (`X-Muxi-Admin-Key` vs `X-Muxi-Client-Key`).
 
 #### Overlord Not Available
 ```

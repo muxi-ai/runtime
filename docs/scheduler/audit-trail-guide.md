@@ -51,7 +51,7 @@ from muxi.formation import Formation
 
 # Initialize formation
 formation = Formation()
-await formation.load("formation.yaml")
+await formation.load("formation.afs")
 overlord = await formation.start_overlord()
 
 # Get audit trail for a specific job

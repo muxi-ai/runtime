@@ -1,8 +1,8 @@
 # Docker Image Test Summary
 
-**Date**: October 29, 2025  
-**Image**: `muxi-runtime:latest`  
-**Version**: 0.2025.0  
+**Date**: October 29, 2025
+**Image**: `muxi-runtime:latest`
+**Version**: 0.2025.0
 **Status**: ✅ **ALL TESTS PASSED**
 
 ---
@@ -20,17 +20,17 @@
 ## Test Results
 
 ### ✅ Test 1: MUXI Import
-**Status**: PASSED  
-**Test**: `from muxi import Formation`  
+**Status**: PASSED
+**Test**: `from muxi import Formation`
 **Result**: Import successful, all modules load correctly
 
 ### ✅ Test 2: Version Check
-**Status**: PASSED  
-**Version**: `0.2025.0`  
+**Status**: PASSED
+**Version**: `0.2025.0`
 **Test**: Version file read correctly from container
 
 ### ✅ Test 3: Dependencies Check
-**Status**: PASSED  
+**Status**: PASSED
 **Verified**: All key dependencies present
 - onellm ✓
 - pydantic ✓
@@ -43,20 +43,20 @@
 - google-cloud-aiplatform ✓ (OneLLM Vertex AI provider)
 
 ### ✅ Test 4: Formation Validation
-**Status**: PASSED  
-**Test**: YAML parsing and basic validation  
+**Status**: PASSED
+**Test**: YAML parsing and basic validation
 **Result**: Formation schema validated successfully
 
 ### ✅ Test 5: Container Filesystem
-**Status**: PASSED  
+**Status**: PASSED
 **Verified Directories**:
 - `/data` ✓
 - `/logs` ✓
 - `/formations` ✓
 
 ### ✅ Test 6: Package Installation
-**Status**: PASSED  
-**Total Packages**: 208  
+**Status**: PASSED
+**Total Packages**: 208
 **Result**: All dependencies installed correctly
 
 ---
@@ -69,7 +69,7 @@
 
 **Error**:
 ```
-ImportError: AWS SDK (boto3) is required for Bedrock provider. 
+ImportError: AWS SDK (boto3) is required for Bedrock provider.
 Install it with: pip install boto3
 ```
 
@@ -113,7 +113,7 @@ Key packages:
 /app/
   src/muxi/           # MUXI source code
   .version            # Version file
-  
+
 /data/                # Persistent data
 /logs/                # Application logs
 /formations/          # Formation mount point
@@ -141,7 +141,7 @@ docker run --rm \
   -v $(pwd)/e2e/tests/1_foundation/formations:/formations \
   -e OPENAI_API_KEY=sk-your-key \
   muxi-runtime:latest \
-  python -m muxi run --formation /formations/formation-base/formation.yaml
+  python -m muxi run --formation /formations/formation-base/formation.afs
 ```
 
 ### 4. Start Server
@@ -277,7 +277,7 @@ Ready for:
 
 ---
 
-**Tested by**: Claude (Anthropic)  
-**Build Script**: `./build-docker.sh basic`  
-**Test Script**: `./test-docker.sh`  
+**Tested by**: Claude (Anthropic)
+**Build Script**: `./build-docker.sh basic`
+**Test Script**: `./test-docker.sh`
 **Image Tag**: `muxi-runtime:latest`

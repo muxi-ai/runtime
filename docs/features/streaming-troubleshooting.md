@@ -58,7 +58,7 @@ async for chunk in stream:
 MUXI Runtime can stream content in multiple event types:
 - `"stream_chunk"`: Real-time token streaming
 - `"content"`: Direct content events
-- `"text"`: Text content events  
+- `"text"`: Text content events
 - `"completed"`: Final event with complete response (IMPORTANT!)
 
 The `"completed"` event often contains the full LLM response.
@@ -122,7 +122,7 @@ overlord:
 async for chunk in stream:
     event_type = chunk.get("type")
     print(f"{event_type}: ", end="")
-    
+
     if event_type in ("progress", "thinking", "planning"):
         print("(meta event - expect delay)")
     elif event_type in ("content", "text", "stream_chunk"):
@@ -380,24 +380,24 @@ Handle all event types appropriately:
 ```python
 async for chunk in stream:
     event_type = chunk.get("type", "unknown")
-    
+
     # Content events - display to user
     if event_type in ("stream_chunk", "content", "text", "completed"):
         content = chunk.get("content") or chunk.get("text", "")
         if content:
             print(content, end="")
-    
+
     # Progress events - show status
     elif event_type in ("progress", "thinking", "planning"):
         status = chunk.get("status") or chunk.get("content", "")
         print(f"\n[{status}]", flush=True)
-    
+
     # Control events - handle accordingly
     elif event_type == "stream_error":
         handle_error(chunk)
     elif event_type == "stream_end":
         print("\nComplete!")
-    
+
     # Unknown events - log for debugging
     else:
         print(f"\nUnknown event: {event_type}", flush=True)
@@ -447,7 +447,7 @@ cat formation-dir/secrets.enc  # Should exist
 cat formation-dir/.key          # Should exist
 
 # Check if decryption works
-python -c "from muxi.runtime import Formation; f = Formation(); f.load('formation.yaml')"
+python -c "from muxi.runtime import Formation; f = Formation(); f.load('formation.afs')"
 ```
 
 #### 2. Rate Limiting
@@ -500,7 +500,7 @@ memory_samples = []
 async for chunk in overlord.chat_stream(message="Long response"):
     mem = process.memory_info().rss / 1024 / 1024  # MB
     memory_samples.append(mem)
-    
+
     if len(memory_samples) % 10 == 0:
         print(f"Memory: {mem:.1f} MB")
 
@@ -571,7 +571,7 @@ try:
     async for chunk in overlord.chat_stream(message="Test"):
         if chunk.get("type") in ("content", "text", "completed"):
             content.append(chunk.get("content", ""))
-    
+
     if content:
         print("✅ Streaming works despite database warnings")
     else:
@@ -630,23 +630,23 @@ async def diagnose_streaming_issues():
     """Comprehensive streaming diagnostics."""
     from muxi.runtime import Formation
     import time
-    
+
     print("=== Streaming Diagnostics ===\n")
-    
+
     # 1. Check configuration
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
-    
+
     print(f"✓ Formation loaded")
     print(f"✓ Streaming enabled: {overlord.response.streaming}")
     print(f"✓ Progress enabled: {overlord.response.progress}")
-    
+
     # 2. Test basic streaming
     print("\n=== Basic Stream Test ===")
     events = []
     start = time.time()
-    
+
     try:
         async with asyncio.timeout(30.0):
             async for chunk in overlord.chat_stream(
@@ -656,32 +656,32 @@ async def diagnose_streaming_issues():
                 events.append(chunk)
                 event_type = chunk.get("type")
                 print(f"Event {len(events)}: {event_type}")
-                
+
                 if len(events) >= 20:  # Limit for diagnostics
                     break
     except asyncio.TimeoutError:
         print("! Stream timed out")
-    
+
     duration = time.time() - start
-    
+
     # 3. Analyze events
     print(f"\n=== Event Analysis ===")
     print(f"Total events: {len(events)}")
     print(f"Duration: {duration:.2f}s")
-    
+
     event_types = {}
     for event in events:
         t = event.get("type", "unknown")
         event_types[t] = event_types.get(t, 0) + 1
-    
+
     print("Event types:")
     for t, count in event_types.items():
         print(f"  {t}: {count}")
-    
+
     # 4. Check for content
     content_events = [e for e in events if e.get("type") in ("content", "text", "stream_chunk", "completed")]
     print(f"\nContent events: {len(content_events)}")
-    
+
     if content_events:
         print("✅ Content streaming working")
         for i, event in enumerate(content_events[:3]):  # Show first 3
@@ -689,7 +689,7 @@ async def diagnose_streaming_issues():
             print(f"  Sample {i+1}: {content[:50]}...")
     else:
         print("❌ No content events received")
-    
+
     # 5. Check for errors
     error_events = [e for e in events if e.get("type") == "stream_error"]
     if error_events:
@@ -698,16 +698,16 @@ async def diagnose_streaming_issues():
             print(f"  {err.get('error')}")
     else:
         print("\n✓ No error events")
-    
+
     # 6. Performance metrics
     if len(events) > 1:
         timestamps = [time.time() for _ in events]  # Approximate
         intervals = [timestamps[i+1] - timestamps[i] for i in range(len(timestamps)-1)]
         avg_interval = sum(intervals) / len(intervals) if intervals else 0
         print(f"\nAverage interval: {avg_interval:.3f}s")
-    
+
     await formation.stop_overlord()
-    
+
     print("\n=== Diagnostic Complete ===")
 
 # Run diagnostics
@@ -766,7 +766,7 @@ When reporting streaming issues:
 |---------|-----------|
 | No content | Include `"completed"` event type in content extraction |
 | Slow streaming | Normal for meta events; check `complexity_threshold` |
-| No streaming | Set `streaming: true` in formation.yaml |
+| No streaming | Set `streaming: true` in formation.afs |
 | Timeout | Increase timeout or remove for long operations |
 | No progress | Set `progress: true` and enable workflows |
 | API errors | Check API keys and fallback configuration |
@@ -780,12 +780,12 @@ When reporting streaming issues:
 async def test_fix():
     """Test if streaming issues are resolved."""
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
-    
+
     # Test content extraction
     content_parts = []
-    
+
     async for chunk in overlord.chat_stream(
         message="Say 'hello world'",
         user_id="test"
@@ -795,14 +795,14 @@ async def test_fix():
             content = chunk.get("content") or chunk.get("text", "")
             if content:
                 content_parts.append(content)
-    
+
     full_content = "".join(content_parts)
-    
+
     if "hello" in full_content.lower():
         print("✅ Streaming fix working - got content!")
     else:
         print(f"❌ Still broken - content: {full_content}")
-    
+
     await formation.stop_overlord()
 
 asyncio.run(test_fix())

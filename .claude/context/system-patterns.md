@@ -31,7 +31,7 @@ MUXI Runtime follows a formation-based architecture where declarative YAML confi
 ### Component Relationships
 
 1. **Formation Engine**: The entry point that loads and validates YAML formations
-   - Parses and validates formation.yaml against schemas
+   - Parses and validates formation.afs against schemas
    - Initializes all runtime components (LLM, memory, agents, MCP)
    - Manages lifecycle (start, stop, reload)
    - Handles environment variable substitution
@@ -74,7 +74,7 @@ MUXI Runtime follows a formation-based architecture where declarative YAML confi
 
 1. **Formation-First Architecture**
    ```yaml
-   # Everything starts with a formation.yaml
+   # Everything starts with a formation.afs
    schema: "1.0.0"
    id: "my-ai-system"
    llm:
@@ -680,7 +680,7 @@ class Agent:
 # No mocks - test against real services
 async def test_openai_integration():
     formation = Formation()
-    await formation.load("test-formation.yaml")
+    await formation.load("test-formation.afs")
 
     # Real API call
     response = await overlord.chat("Hello", user_id="test")

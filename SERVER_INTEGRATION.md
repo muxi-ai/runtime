@@ -70,7 +70,7 @@ Server manages formations with version directories:
 ```
 ~/.muxi/server/formations/{formation-id}/
 ├── current/                          ← Active version
-│   ├── formation.yaml                ← Formation configuration
+│   ├── formation.afs                ← Formation configuration
 │   ├── .key                          ← Encryption key
 │   ├── secrets.enc                   ← Encrypted secrets
 │   ├── agents/                       ← Agent definitions
@@ -96,7 +96,7 @@ singularity exec \
   --bind {formation-dir}/current:/formation \
   ~/.muxi/server/runtimes/muxi-runtime-{version}-{platform}.sif \
   python -m muxi.utils.run_formation \
-  /formation/formation.yaml \
+  /formation/formation.afs \
   --port {allocated-port} \
   --host 127.0.0.1
 ```
@@ -111,7 +111,7 @@ singularity exec \
   --bind ~/.muxi/server/formations/my-chatbot/current:/formation \
   ~/.muxi/server/runtimes/muxi-runtime-0.2025.0-linux-amd64.sif \
   python -m muxi.utils.run_formation \
-  /formation/formation.yaml \
+  /formation/formation.afs \
   --port 8001 \
   --host 127.0.0.1
 ```
@@ -131,7 +131,7 @@ singularity exec \
   --env HOST=127.0.0.1 \
   --bind ~/.muxi/server/formations/my-chatbot/current:/formation \
   ~/.muxi/server/runtimes/muxi-runtime-0.2025.0-linux-amd64.sif \
-  python -m muxi.utils.run_formation /formation/formation.yaml
+  python -m muxi.utils.run_formation /formation/formation.afs
 ```
 
 **Recommendation:** Use CLI args for explicitness and debuggability.
@@ -140,7 +140,7 @@ singularity exec \
 
 ### Formation Runtime Specification
 
-Formations specify runtime version in `formation.yaml`:
+Formations specify runtime version in `formation.afs`:
 
 ```yaml
 schema: "1.0.0"
@@ -193,24 +193,24 @@ When a formation is deployed:
 python -m muxi.utils.run_formation <formation-path>
 ```
 
-- `formation-path`: Absolute path to formation.yaml file
+- `formation-path`: Absolute path to formation.afs file
 
 ### Optional Arguments
 
 ```bash
---port PORT              # Port to bind server (overrides formation.yaml)
---host HOST              # Host to bind server (overrides formation.yaml, default: 127.0.0.1)
+--port PORT              # Port to bind server (overrides formation.afs)
+--host HOST              # Host to bind server (overrides formation.afs, default: 127.0.0.1)
 ```
 
 ### Argument Precedence
 
 1. CLI arguments (highest priority)
 2. Environment variables
-3. formation.yaml configuration (lowest priority)
+3. formation.afs configuration (lowest priority)
 
 **Example:**
 ```yaml
-# formation.yaml specifies:
+# formation.afs specifies:
 server:
   port: 3000
   host: 0.0.0.0
@@ -248,7 +248,7 @@ singularity exec \
   --bind /tmp:/tmp \                   # Explicit temp binding
   --bind {formation-dir}:/formation \  # Only formation access
   {sif-path} \
-  python -m muxi.utils.run_formation /formation/formation.yaml
+  python -m muxi.utils.run_formation /formation/formation.afs
 ```
 
 ## Server Code Integration
@@ -274,7 +274,7 @@ func (pm *ProcessManager) SpawnFormation(formation *Formation) error {
         pm.formationsDir,
         formation.ID,
         "current",
-        "formation.yaml",
+        "formation.afs",
     )
 
     // 4. Build Singularity command
@@ -282,7 +282,7 @@ func (pm *ProcessManager) SpawnFormation(formation *Formation) error {
         "--bind", fmt.Sprintf("%s:/formation", filepath.Dir(formationPath)),
         sifPath,
         "python", "-m", "muxi.utils.run_formation",
-        "/formation/formation.yaml",
+        "/formation/formation.afs",
         "--port", fmt.Sprintf("%d", formation.Port),
         "--host", "127.0.0.1",
     )
@@ -308,7 +308,7 @@ After spawning, server should wait for formation to be ready:
 ```go
 func (pm *ProcessManager) WaitForFormationReady(formation *Formation) error {
     url := fmt.Sprintf("http://127.0.0.1:%d/", formation.Port)
-    
+
     for i := 0; i < 30; i++ {  // 30 second timeout
         resp, err := http.Get(url)
         if err == nil && resp.StatusCode == 200 {
@@ -317,7 +317,7 @@ func (pm *ProcessManager) WaitForFormationReady(formation *Formation) error {
         }
         time.Sleep(1 * time.Second)
     }
-    
+
     return fmt.Errorf("formation failed to become ready within timeout")
 }
 ```
@@ -337,7 +337,7 @@ docker run --rm \
   -e PORT=8000 -e HOST=0.0.0.0 \
   -p 8000:8000 \
   muxi-runtime:0.2025.0 \
-  /formation/formation.yaml
+  /formation/formation.afs
 
 # Access endpoints
 curl http://localhost:8000/                # Status: "Up"
@@ -355,7 +355,7 @@ singularity exec \
   --bind /path/to/formation:/formation \
   muxi-runtime-0.2025.0-linux-amd64.sif \
   python -m muxi.utils.run_formation \
-  /formation/formation.yaml \
+  /formation/formation.afs \
   --port 8000 --host 127.0.0.1 &
 
 # Wait for startup
@@ -376,7 +376,7 @@ muxi formation deploy my-chatbot.tar.gz
 
 # Server extracts to:
 ~/.muxi/server/formations/my-chatbot/current/
-├── formation.yaml      # Specifies runtime: "0.2025"
+├── formation.afs      # Specifies runtime: "0.2025"
 ├── .key
 ├── secrets.enc
 ├── agents/
@@ -387,8 +387,8 @@ muxi formation deploy my-chatbot.tar.gz
 ### 2. Runtime Resolution
 
 ```go
-// Server reads formation.yaml
-runtime := "0.2025"  // From formation.yaml
+// Server reads formation.afs
+runtime := "0.2025"  // From formation.afs
 
 // Resolves to exact version
 version := resolver.Resolve(runtime)  // "0.2025.0"
@@ -410,7 +410,7 @@ singularity exec \
   --bind ~/.muxi/server/formations/my-chatbot/current:/formation \
   ~/.muxi/server/runtimes/muxi-runtime-0.2025.0-linux-amd64.sif \
   python -m muxi.utils.run_formation \
-  /formation/formation.yaml \
+  /formation/formation.afs \
   --port 8001 \
   --host 127.0.0.1
 ```
@@ -472,7 +472,7 @@ tail -f ~/.muxi/server/logs/formation-my-chatbot.log
 ```
 
 **Solution:**
-Update formation.yaml:
+Update formation.afs:
 ```yaml
 # Wrong:
 knowledge:
@@ -506,7 +506,7 @@ cmd := exec.Command("singularity", "exec",
     "--bind", formationDir + ":/formation",
     sifPath,
     "python", "-m", "muxi.utils.run_formation",
-    "/formation/formation.yaml",
+    "/formation/formation.afs",
     "--port", port,
     "--host", "127.0.0.1",
 )
@@ -554,7 +554,7 @@ ls ~/.muxi/server/runtimes/muxi-runtime-*
 
 # Spawn formation
 singularity exec --bind {formation-dir}:/formation {sif-path} \
-  python -m muxi.utils.run_formation /formation/formation.yaml \
+  python -m muxi.utils.run_formation /formation/formation.afs \
   --port {port} --host 127.0.0.1
 
 # Health check

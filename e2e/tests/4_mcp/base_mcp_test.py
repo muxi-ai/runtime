@@ -26,7 +26,7 @@ class BaseMCPTest(BaseE2ETest):
 
     # MCP server configurations
     MCP_CONFIGS = {
-        "weather": "formation.yaml",  # Default with weather MCP
+        "weather": "formation.afs",  # Default with weather MCP
         "memory": "formation-memory.yaml",  # With memory MCP
         "filesystem": "formation-filesystem.yaml",  # File system access
         "multi": "formation-multi.yaml",  # Multiple MCP servers
@@ -44,13 +44,13 @@ class BaseMCPTest(BaseE2ETest):
         """Setup formation with MCP servers.
 
         Args:
-            mcp_config: One of the MCP_CONFIGS keys (currently all use formation.yaml)
+            mcp_config: One of the MCP_CONFIGS keys (currently all use formation.afs)
 
         Returns:
             Configured Formation instance
         """
-        # All configs use the same formation.yaml for now
-        config_file = "formation.yaml"
+        # All configs use the same formation.afs for now
+        config_file = "formation.afs"
         formation_path = self.FORMATION_DIR / config_file
 
         self.formation = Formation()

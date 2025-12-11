@@ -22,17 +22,17 @@ from utils.async_cleanup import standard_test_cleanup
 
 async def test_something():
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
-    
+
     try:
         # ... your test code ...
         pass
-        
+
     except Exception as e:
         print(f"Test failed: {e}")
         raise
-        
+
     finally:
         # Standard cleanup with task waiting
         await standard_test_cleanup(
@@ -59,7 +59,7 @@ All-in-one cleanup for formation-based tests. Handles:
 
 **Parameters:**
 - `formation`: The Formation instance to clean up
-- `wait_for_tasks`: If True, wait for background tasks before shutdown  
+- `wait_for_tasks`: If True, wait for background tasks before shutdown
 - `timeout`: Maximum seconds to wait for tasks
 - `verbose`: Print cleanup progress
 

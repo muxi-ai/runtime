@@ -19,7 +19,7 @@ async def test_context_switch_detection():
     print("Test 8B2: Context Switch Detection")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
+    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
     all_passed = True
     checks_passed = []
 
@@ -45,10 +45,10 @@ async def test_context_switch_detection():
 
         content1 = response1.content if hasattr(response1, "content") else str(response1)
         print(f"   Response received ({len(content1)} chars)")
-        
+
         clarification_indicators = ["what", "which", "type", "project"]
         has_clarification = any(indicator in content1.lower() for indicator in clarification_indicators)
-        
+
         if has_clarification:
             print("   ✅ Clarification started")
             checks_passed.append("Clarification initiated")
@@ -59,7 +59,7 @@ async def test_context_switch_detection():
         print("\n3. Turn 2: Switching context to unrelated topic...")
         print("   Request: 'Tell me a joke' (unrelated to project)")
         await asyncio.sleep(1)
-        
+
         response2 = await overlord.chat(
             message="Tell me a joke",
             user_id=user_id,
@@ -70,15 +70,15 @@ async def test_context_switch_detection():
         content2 = response2.content if hasattr(response2, "content") else str(response2)
         print(f"   Response received ({len(content2)} chars)")
         print(f"   Preview: {content2[:150]}...")
-        
+
         # Check if system abandoned clarification and responded to joke request
         joke_indicators = ["joke", "funny", "why", "laugh"]
         has_joke_response = any(indicator in content2.lower() for indicator in joke_indicators)
-        
+
         # Check if system continues asking about project (not detecting context switch)
         project_indicators = ["project", "what kind", "what type"]
         still_on_project = any(indicator in content2.lower() for indicator in project_indicators)
-        
+
         if has_joke_response and not still_on_project:
             print("   ✅ Context switch detected - responded to new request")
             checks_passed.append("Context switch handled correctly")
@@ -93,7 +93,7 @@ async def test_context_switch_detection():
         print("\n4. Turn 3: Testing if can return to original context...")
         print("   Request: 'Actually, about that project...'")
         await asyncio.sleep(1)
-        
+
         response3 = await overlord.chat(
             message="Actually, about that project - it's a web application",
             user_id=user_id,
@@ -104,7 +104,7 @@ async def test_context_switch_detection():
         content3 = response3.content if hasattr(response3, "content") else str(response3)
         print(f"   Response received ({len(content3)} chars)")
         print(f"   Preview: {content3[:150]}...")
-        
+
         # System should either resume clarification or start new clarification
         if any(indicator in content3.lower() for indicator in ["web", "application", "feature", "technology"]):
             print("   ✅ System can resume/restart project discussion")
@@ -130,7 +130,7 @@ async def test_context_switch_detection():
     print(f"Checks Passed: {len(checks_passed)}")
     for check in checks_passed:
         print(f"  ✓ {check}")
-    
+
     print("\n📝 NOTE: Context switch behavior can vary:")
     print("   - System may detect switch and respond to new request")
     print("   - System may continue original clarification (valid)")

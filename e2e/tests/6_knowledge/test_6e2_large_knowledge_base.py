@@ -106,7 +106,7 @@ knowledge:
         start_time = time.time()
 
         formation = Formation()
-        await formation.load(os.path.join(test_formation_dir, "formation.yaml"))
+        await formation.load(os.path.join(test_formation_dir, "formation.afs"))
         overlord = await formation.start_overlord()
 
         load_time = time.time() - start_time

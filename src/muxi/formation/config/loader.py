@@ -35,7 +35,7 @@
 #   # Load and process a configuration file
 #   loader = ConfigLoader()
 #   secrets_manager = SecretsManager(formation_dir)
-#   config = loader.load_and_process("path/to/config.yaml", secrets_manager)
+#   config = loader.load_and_process("path/to/config.afs", secrets_manager)
 # =============================================================================
 
 import re

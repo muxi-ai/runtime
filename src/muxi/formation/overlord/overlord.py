@@ -48,18 +48,18 @@
 #
 # Basic Setup:
 #   overlord = Overlord()
-#   await overlord.load_formation_from_path("formation.yaml")
+#   await overlord.load_formation_from_path("formation.afs")
 #   response = await overlord.chat("Hello, how can you help me?")
 #   # → Automatically routes to appropriate agent based on formation config
 #
 # Development Testing:
 #   overlord = Overlord()
-#   await overlord.load_formation_from_path("formation.yaml")
+#   await overlord.load_formation_from_path("formation.afs")
 #   response = await overlord.run_agent("Debug this code", "code-assistant")
 #   # → Directly invoke specific agent for testing
 #
 # Formation File Structure:
-#   # formation.yaml
+#   # formation.afs
 #   agents:
 #     - id: assistant
 #       system_message: "You are a helpful assistant"
@@ -1398,7 +1398,7 @@ class Overlord:
             if not hasattr(self, "db_manager") or not self.db_manager:
                 raise ValueError(
                     "Scheduler is enabled but no database connection is configured. "
-                    "Please configure 'memory.persistent.connection_string' in formation.yaml "
+                    "Please configure 'memory.persistent.connection_string' in formation.afs "
                     "or disable scheduler with 'scheduler.enabled: false'"
                 )
 

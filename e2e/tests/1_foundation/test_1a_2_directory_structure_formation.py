@@ -42,7 +42,7 @@ class TestDirectoryStructureFormation(BaseE2ETest):
             assert formation_dir.is_dir(), f"Formation directory not found: {formation_dir}"
 
             # Check for expected files
-            expected_files = ["formation.yaml", "secrets.enc", ".key"]
+            expected_files = ["formation.afs", "secrets.enc", ".key"]
             for file_name in expected_files:
                 file_path = formation_dir / file_name
                 if not file_path.exists():

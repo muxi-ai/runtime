@@ -26,7 +26,7 @@ async def test_workflow_plan_only():
 
     # Use formation-workflow-approval to ensure approval is triggered
     formation_path = (
-        Path(__file__).parent / "formations" / "formation-workflow-approval" / "formation.yaml"
+        Path(__file__).parent / "formations" / "formation-workflow-approval" / "formation.afs"
     )
     all_passed = True
     checks_passed = []

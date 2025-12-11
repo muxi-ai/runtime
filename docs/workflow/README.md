@@ -79,7 +79,7 @@ overlord:
     auto_decomposition: true
     complexity_threshold: 6.0        # When to trigger workflows (1-10)
     plan_approval_threshold: 7.0     # When to require approval (1-10)
-    
+
     routing_strategy: "capability_based"
     parallel_execution: true
 
@@ -91,7 +91,7 @@ overlord:
       backoff_factor: 2.0
 ```
 
-**Note:** Configuration is under `overlord.workflow` in formation.yaml. Both thresholds are optional and default to 7.0.
+**Note:** Configuration is under `overlord.workflow` in formation.afs. Both thresholds are optional and default to 7.0.
 
 ## 🛠️ Development
 

@@ -33,7 +33,7 @@
 ### Examples
 | File | Purpose |
 |------|---------|
-| **examples/test-formation.yaml** | Test formation for validation |
+| **examples/test-formation.afs** | Test formation for validation |
 | **examples/README.md** | Testing instructions |
 
 **Total:** 14 files, ~3,500 lines of code and documentation
@@ -90,7 +90,7 @@ docker run --rm -p 8000:8000 \
   -v $(pwd)/examples:/formations \
   -e OPENAI_API_KEY=your-key-here \
   muxi-runtime:latest \
-  python -m muxi.server run --formation /formations/test-formation.yaml
+  python -m muxi.server run --formation /formations/test-formation.afs
 ```
 
 ### Step 3: Convert to SIF (Next Step)
@@ -285,14 +285,14 @@ docker run --rm -p 8000:8000 \
   -v $(pwd)/examples:/formations \
   -e OPENAI_API_KEY=your-key \
   muxi-runtime:latest \
-  python -m muxi.server run --formation /formations/test-formation.yaml
+  python -m muxi.server run --formation /formations/test-formation.afs
 
 # SIF
 apptainer run \
   --bind ./examples:/formations \
   --env OPENAI_API_KEY=your-key \
   muxi-runtime.sif \
-  python -m muxi.server run --formation /formations/test-formation.yaml
+  python -m muxi.server run --formation /formations/test-formation.afs
 
 # Test endpoints
 curl http://localhost:8000/health
@@ -337,8 +337,8 @@ curl -X POST http://localhost:8000/chat \
 ### Short Term (Next few days)
 
 1. **Test with Formation:**
-   - Run test-formation.yaml in Docker
-   - Run test-formation.yaml in SIF
+   - Run test-formation.afs in Docker
+   - Run test-formation.afs in SIF
    - Verify both work identically
 
 2. **Integrate with MUXI Server:**

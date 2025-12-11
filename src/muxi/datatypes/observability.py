@@ -1421,7 +1421,7 @@ class InitFailureInfo:
     """Plain English summary of what went wrong"""
 
     context: str
-    """Where in formation config (e.g., 'formation.yaml:45 (mcp.servers.filesystem)')"""
+    """Where in formation config (e.g., 'formation.afs:45 (mcp.servers.filesystem)')"""
 
     causes: list[str]
     """List of likely reasons for the failure"""
@@ -1572,9 +1572,9 @@ class InitEventFormatter:
               To fix:
                 1. Test manually: npx @modelcontextprotocol/server-filesystem
                 2. Install if needed: npm install -g @modelcontextprotocol/server-filesystem
-                3. Check formation.yaml → mcp.servers.filesystem.command
+                3. Check formation.afs → mcp.servers.filesystem.command
 
-              Config: formation.yaml:45 (mcp.servers.filesystem)
+              Config: formation.afs:45 (mcp.servers.filesystem)
 
               Traceback (most recent call last):
                 File "src/muxi/services/mcp/registry.py", line 156, in register_server

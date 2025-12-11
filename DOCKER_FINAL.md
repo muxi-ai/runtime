@@ -1,8 +1,8 @@
 # MUXI Runtime Docker - Final Configuration
 
-**Date**: October 29, 2025  
-**Status**: ✅ Production Ready  
-**Image**: `muxi-runtime:latest`  
+**Date**: October 29, 2025
+**Status**: ✅ Production Ready
+**Image**: `muxi-runtime:latest`
 **Size**: 2.41 GB (optimized)
 
 ---
@@ -55,7 +55,7 @@ docker run --rm \
   -v $(pwd)/formations:/formations \
   -e OPENAI_API_KEY=sk-your-key \
   muxi-runtime:latest \
-  python -m muxi run --formation /formations/my-formation.yaml
+  python -m muxi run --formation /formations/my-formation.afs
 
 # Start server
 docker run -d \

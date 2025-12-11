@@ -19,7 +19,7 @@ async def test_clarification_modes():
     print("Test 8C1: Clarification Modes")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
+    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
     all_passed = True
     checks_passed = []
 

@@ -21,7 +21,7 @@ async def test_knowledge_namespace():
         # Load formation with knowledge
         print("Loading formation with knowledge configuration...")
         formation = Formation()
-        await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
+        await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.afs"))
         overlord = await formation.start_overlord()
 
         print("✓ Formation loaded successfully")

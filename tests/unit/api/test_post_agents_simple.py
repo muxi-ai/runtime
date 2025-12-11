@@ -44,7 +44,7 @@ async def test_post_agents_empty_payload():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create config
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(get_base_config(), f)
 
@@ -91,7 +91,7 @@ async def test_post_agents_required_fields_only():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create config
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(get_base_config(), f)
 
@@ -142,7 +142,7 @@ async def test_post_agents_with_invalid_secret():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create config
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(get_base_config(), f)
 
@@ -207,7 +207,7 @@ async def test_post_agents_with_valid_secret():
         await secrets_manager.store_secret("OPENAI_API_KEY", "sk-valid-key-123")
 
         # Create config
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(get_base_config(), f)
 
@@ -276,7 +276,7 @@ async def test_post_agents_with_all_fields():
         await secrets_manager.store_secret("AGENT_KEY", "sk-test-123")
 
         # Create config
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(get_base_config(), f)
 
@@ -363,7 +363,7 @@ async def test_post_agents_duplicate_id():
             "description": "Already exists"
         }]
 
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(config, f)
 
@@ -410,7 +410,7 @@ async def test_post_agents_add_same_agent_twice():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create config with no existing agents
-        config_path = os.path.join(tmpdir, "formation.yaml")
+        config_path = os.path.join(tmpdir, "formation.afs")
         with open(config_path, "w") as f:
             yaml.dump(get_base_config(), f)
 

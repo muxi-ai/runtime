@@ -40,7 +40,7 @@
 #
 #   # Load flattened formation
 #   loader = FormationLoader()
-#   config = await loader.load("formation.yaml", secrets_manager)
+#   config = await loader.load("formation.afs", secrets_manager)
 #
 #   # Load modular formation
 #   config = await loader.load("./formation-template/", secrets_manager)
@@ -176,16 +176,16 @@ class FormationLoader:
 
         Expected directory structure:
         formation-directory/
-        ├── formation.yaml         # Main formation configuration
+        ├── formation.afs         # Main formation configuration
         ├── agents/               # Agent configurations
-        │   ├── agent1.yaml
-        │   └── agent2.yaml
+        │   ├── agent1.afs
+        │   └── agent2.afs
         ├── mcp/                  # MCP server configurations
-        │   ├── tool1.yaml
-        │   └── tool2.yaml
+        │   ├── tool1.afs
+        │   └── tool2.afs
         ├── a2a/                  # A2A service configurations
-        │   ├── service1.yaml
-        │   └── service2.yaml
+        │   ├── service1.afs
+        │   └── service2.afs
         ├── knowledge/            # Knowledge base files
         │   ├── docs/
         │   └── guides/
@@ -560,7 +560,7 @@ class FormationLoader:
 
         This method processes knowledge configuration paths and resolves them relative
         to the formation directory root. Absolute paths and parent directory traversal
-        are rejected for security. Supports both sources as list of dicts with 
+        are rejected for security. Supports both sources as list of dicts with
         path/description and sources as list of strings.
 
         Args:
@@ -620,7 +620,7 @@ class FormationLoader:
     def _resolve_single_path(self, path: str, formation_dir: str) -> str:
         """
         Resolve and validate a knowledge path relative to formation directory.
-        
+
         Security: All paths must be relative to formation root.
         Absolute paths and parent directory traversal are rejected.
 
@@ -647,7 +647,7 @@ class FormationLoader:
                 error_msg
             ))
             raise ValueError(error_msg)
-        
+
         # Reject parent directory traversal
         if '..' in path.split(os.sep):
             from ...datatypes.observability import InitEventFormatter
@@ -661,11 +661,11 @@ class FormationLoader:
                 error_msg
             ))
             raise ValueError(error_msg)
-        
+
         # Resolve relative to formation root (not formation_dir/knowledge/)
         resolved_path = os.path.join(formation_dir, path)
         resolved_path = os.path.abspath(resolved_path)
-        
+
         # Ensure resolved path is within formation directory
         formation_dir_abs = os.path.abspath(formation_dir)
         try:
@@ -686,7 +686,7 @@ class FormationLoader:
                 error_msg
             ))
             raise ValueError(error_msg)
-        
+
         return resolved_path
 
     def detect_formation_type(self, path: str) -> str:
@@ -723,7 +723,7 @@ class FormationLoader:
                 if has_agents or has_mcp or has_a2a:
                     return "modular"
                 else:
-                    return "simple_directory"  # Directory with just formation.yaml
+                    return "simple_directory"  # Directory with just formation.afs
             else:
                 return "unknown"
         else:

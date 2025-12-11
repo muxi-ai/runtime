@@ -24,7 +24,7 @@ async def test_basic_clarification():
     print("=" * 80)
 
     formation_path = (
-        Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
+        Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
     )
     all_passed = True
     checks_passed = []

@@ -199,19 +199,19 @@ From: python:3.10-slim
 
 %help
     MUXI Runtime Container
-    
+
     This container packages the MUXI runtime for executing AI formations.
-    
+
     Usage:
         # Run formation server (default)
         singularity run muxi-runtime.sif
-        
+
         # Execute specific Python script
         singularity exec muxi-runtime.sif python your_script.py
-        
+
         # Interactive shell
         singularity shell muxi-runtime.sif
-    
+
     Environment Variables:
         MUXI_FORMATIONS_DIR - Directory for formation files
         MUXI_LOGS_DIR - Directory for logs
@@ -301,13 +301,13 @@ From: python:3.10-slim
 
     # Create directories
     mkdir -p /data /logs /formations /var/run/postgresql /var/lib/postgresql/17
-    
+
     # Initialize PostgreSQL
     chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql
     su - postgres -c "/usr/lib/postgresql/17/bin/initdb -D /var/lib/postgresql/17/main"
     echo "listen_addresses = '*'" >> /var/lib/postgresql/17/main/postgresql.conf
     echo "max_connections = 200" >> /var/lib/postgresql/17/main/postgresql.conf
-    
+
     # Clean up
     apt-get clean
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -340,7 +340,7 @@ From: python:3.10-slim
 
 ### 1. Create Test Formation
 
-Create a simple formation YAML (`test-formation.yaml`):
+Create a simple formation YAML (`test-formation.afs`):
 
 ```yaml
 schema: "1.0.0"
@@ -383,11 +383,11 @@ apptainer exec muxi-runtime.sif python -c "from muxi import Formation; print('�
 
 # Test 4: Run formation (bind mount formation file)
 apptainer exec \
-    --bind ./test-formation.yaml:/formation.yaml \
+    --bind ./test-formation.afs:/formation.afs \
     --bind $(pwd)/data:/data \
     --env OPENAI_API_KEY=sk-your-key-here \
     muxi-runtime.sif \
-    python -m muxi.server run --formation /formation.yaml
+    python -m muxi.server run --formation /formation.afs
 ```
 
 ### 3. Integration with MUXI Server
@@ -406,13 +406,13 @@ server:
 formations:
   runtime_type: "singularity"  # Enable SIF runtime
   singularity_image: "/path/to/muxi-runtime.sif"
-  
+
   port_range_start: 8000
   port_range_end: 9000
   logs_dir: "~/.muxi-server/logs"
   formations_dir: "~/.muxi-server/formations"
   bind_host: "127.0.0.1"
-  
+
   auto_restart: true
   max_restart_count: 10
   restart_delay: 1
@@ -430,7 +430,7 @@ cd ../server
 
 ```bash
 # Create formation bundle
-tar czf formation.tar.gz test-formation.yaml
+tar czf formation.tar.gz test-formation.afs
 
 # Deploy to server
 curl -X POST http://localhost:7890/rpc/formations/deploy \
@@ -521,14 +521,14 @@ muxi-runtime.sif (read-only image)
     # Clean package manager cache
     apt-get clean
     rm -rf /var/lib/apt/lists/*
-    
+
     # Remove pip cache
     pip cache purge
-    
+
     # Remove build dependencies after install
     apt-get remove -y build-essential gcc g++
     apt-get autoremove -y
-    
+
     # Clear tmp directories
     rm -rf /tmp/* /var/tmp/*
 ```
@@ -543,7 +543,7 @@ Combine related commands to reduce layers:
     apt-get update
     apt-get install -y python3
     pip install numpy
-    
+
     # ✅ GOOD: Combined in one section
     apt-get update && apt-get install -y python3 && \
         pip install numpy && \
@@ -584,13 +584,13 @@ From: python:3.10.12-slim  # Exact version, not just 3.10
 %test
     # Verify Python installation
     python --version
-    
+
     # Verify MUXI runtime
     python -c "import muxi; print(muxi.__version__)"
-    
+
     # Test dependencies
     python -c "import fastapi, onellm, muxi"
-    
+
     # Verify system tools
     which ffmpeg tesseract
 ```
@@ -756,7 +756,7 @@ apptainer run --env-file .env muxi-runtime.sif
 
 # Test in shell mode
 apptainer shell muxi-runtime.sif
-# Inside: python -m muxi.server run --formation /formation.yaml
+# Inside: python -m muxi.server run --formation /formation.afs
 ```
 
 ---
@@ -912,12 +912,12 @@ apptainer run myimage.sif  # $HOME is bound automatically
 
 **Building SIF images for MUXI formations provides:**
 
-✅ **Isolation:** Clean server, no dependency conflicts  
-✅ **Portability:** Single-file distribution  
-✅ **Reproducibility:** Consistent behavior everywhere  
-✅ **Security:** Read-only, signed images  
-✅ **Performance:** Native speed, minimal overhead  
-✅ **Scalability:** Multi-tenant support with resource limits  
+✅ **Isolation:** Clean server, no dependency conflicts
+✅ **Portability:** Single-file distribution
+✅ **Reproducibility:** Consistent behavior everywhere
+✅ **Security:** Read-only, signed images
+✅ **Performance:** Native speed, minimal overhead
+✅ **Scalability:** Multi-tenant support with resource limits
 
 **Next Steps:**
 

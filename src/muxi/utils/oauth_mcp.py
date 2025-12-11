@@ -572,7 +572,7 @@ def display_usage(token):
     print("   cd /path/to/formation")
     print(f'   python -m muxi.utils.add_secret MCP_TOKEN "{token}"')
 
-    print("\n2. Configure your MCP server (mcp/server.yaml):")
+    print("\n2. Configure your MCP server (mcp/server.afs):")
     print("   auth:")
     print('     type: "bearer"')
     print('     token: "${{ secrets.MCP_TOKEN }}"')

@@ -113,10 +113,10 @@ class FormationManager:
         # Copy template
         template_path = cls.BASE_PATH / cls.TEMPLATES[template]
         if template_path.exists():
-            # Copy formation.yaml
-            template_yaml = template_path / "formation.yaml"
+            # Copy formation.afs
+            template_yaml = template_path / "formation.afs"
             if template_yaml.exists():
-                shutil.copy2(template_yaml, formation_dir / "formation.yaml")
+                shutil.copy2(template_yaml, formation_dir / "formation.afs")
 
             # Copy agents if present
             agents_src = template_path / "agents"
@@ -170,7 +170,7 @@ class FormationManager:
             # This would write the actual YAML config
             # For now, just copy template and modify
             if template_path.exists():
-                template_yaml = template_path / "formation.yaml"
+                template_yaml = template_path / "formation.afs"
                 if template_yaml.exists():
                     shutil.copy2(template_yaml, yaml_path)
 

@@ -72,7 +72,7 @@ class BaseOrchestrationTest(BaseE2ETest):
         Returns:
             Configured Formation instance
         """
-        formation_path = self.FORMATION_DIR / "formation.yaml"
+        formation_path = self.FORMATION_DIR / "formation.afs"
 
         self.formation = Formation()
         await self.formation.load(str(formation_path))

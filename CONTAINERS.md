@@ -34,7 +34,7 @@ runtime/
 ├── DOCKER-GUIDE.md         ← Read this next! ⭐
 │
 ├── examples/
-│   └── test-formation.yaml ← Test with this
+│   └── test-formation.afs ← Test with this
 │
 └── sif/                    ← Ignore for now!
     ├── SIF-GUIDE.md        ← Read after Docker works
@@ -117,7 +117,7 @@ When Docker works perfectly, this guide shows:
 - ✅ `docker-compose.yaml` - Easy testing
 - ✅ `build-docker.sh` - Build automation
 - ✅ `DOCKER-GUIDE.md` - Complete guide
-- ✅ `examples/test-formation.yaml` - Test formation
+- ✅ `examples/test-formation.afs` - Test formation
 
 ### Files to Ignore For Now
 
@@ -128,19 +128,19 @@ When Docker works perfectly, this guide shows:
 
 ## 🤔 FAQ
 
-**Q: Why Docker first?**  
+**Q: Why Docker first?**
 A: Easier to debug, faster iteration, familiar tooling
 
-**Q: When do we move to SIF?**  
+**Q: When do we move to SIF?**
 A: When Docker is tested and working perfectly
 
-**Q: Can I skip Docker and go straight to SIF?**  
+**Q: Can I skip Docker and go straight to SIF?**
 A: Not recommended - harder to debug SIF issues
 
-**Q: What if Docker doesn't work?**  
+**Q: What if Docker doesn't work?**
 A: Check DOCKER-GUIDE.md troubleshooting section
 
-**Q: Do I need Singularity/Apptainer now?**  
+**Q: Do I need Singularity/Apptainer now?**
 A: No! Only Docker needed for Stage 1
 
 ---

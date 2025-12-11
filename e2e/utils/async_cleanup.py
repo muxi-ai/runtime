@@ -219,7 +219,7 @@ async def standard_test_cleanup(
     Example:
         async def test_something():
             formation = Formation()
-            await formation.load("formation.yaml")
+            await formation.load("formation.afs")
             overlord = await formation.start_overlord()
 
             try:

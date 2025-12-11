@@ -20,7 +20,7 @@ async def test_domain_knowledge_search():
     # Load formation
     print("Loading formation...")
     formation = Formation()
-    await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
+    await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.afs"))
     overlord = await formation.start_overlord()
 
     print("✓ Formation loaded successfully")

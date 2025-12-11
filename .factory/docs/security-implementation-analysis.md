@@ -1,7 +1,7 @@
 # Security Implementation Analysis - Issue #76
 
-**Date:** 2025-01-13  
-**Issue:** [#76: Security Hardening Strategy](https://github.com/muxi-ai/runtime/issues/76)  
+**Date:** 2025-01-13
+**Issue:** [#76: Security Hardening Strategy](https://github.com/muxi-ai/runtime/issues/76)
 **Status:** Analysis Complete
 
 ---
@@ -10,11 +10,11 @@
 
 **Verdict: The plan is excellent but can be simplified significantly.**
 
-✅ **Keep:** Single-pass LLM approach (brilliant!)  
-✅ **Keep:** Pattern pre-filter (fast path)  
-✅ **Keep:** Reuse existing observability redaction  
-⚠️ **Simplify:** No need for new AgentRouter class  
-⚠️ **Simplify:** Integrate directly into existing flow  
+✅ **Keep:** Single-pass LLM approach (brilliant!)
+✅ **Keep:** Pattern pre-filter (fast path)
+✅ **Keep:** Reuse existing observability redaction
+⚠️ **Simplify:** No need for new AgentRouter class
+⚠️ **Simplify:** Integrate directly into existing flow
 ⚠️ **Risk Reduction:** Minimal changes, maximum safety
 
 ---
@@ -139,10 +139,10 @@ class AgentRouter:
         r"api[_-]?key",  # API keys
         r"Bearer\s+[a-zA-Z0-9]",  # Tokens
     ]
-    
+
     async def select_agent_for_message(self, message: str, request_id: Optional[str] = None) -> str:
         """Select agent with security pre-filter."""
-        
+
         # NEW: Quick security check (1ms)
         if self._quick_security_check(message):
             # Log security violation
@@ -157,12 +157,12 @@ class AgentRouter:
             )
             # Raise exception that overlord will catch
             raise SecurityViolation("Message blocked by security filter")
-        
+
         # EXISTING CODE: Rest of method unchanged
         if not self.overlord.agents:
             raise NoAvailableAgentsError("No agents available")
         # ... (existing logic continues)
-    
+
     def _quick_security_check(self, message: str) -> bool:
         """Fast pattern matching for obvious attacks."""
         message_lower = message.lower()
@@ -188,18 +188,18 @@ class AgentRouter:
 ```python
 def _create_routing_prompt(self, message: str) -> str:
     """Create routing prompt with security awareness."""
-    
+
     # Build agent descriptions (EXISTING CODE)
     agent_descriptions = []
     for agent_id in self.overlord.agents.keys():
         description = self.overlord.agent_descriptions.get(
-            agent_id, 
+            agent_id,
             "General purpose agent"
         )
         agent_descriptions.append(f"- {agent_id}: {description}")
-    
+
     agents_info = "\n".join(agent_descriptions)
-    
+
     # ENHANCED: Add security context
     return f"""You are an intelligent agent router with security awareness.
 
@@ -235,27 +235,27 @@ Your response: [agent-id] or SECURITY_BLOCK"""
 ```python
 def _parse_routing_response(self, response: str) -> str:
     """Parse routing response with security awareness."""
-    
+
     # NEW: Check for security block
     if "SECURITY_BLOCK" in response.upper():
         raise SecurityViolation("LLM detected security threat")
-    
+
     # EXISTING CODE: Parse agent selection
     response = response.strip()
-    
+
     # Remove markdown if present
     if response.startswith("```"):
         response = response.split("\n", 1)[1] if "\n" in response else response
     if response.endswith("```"):
         response = response.rsplit("\n", 1)[0] if "\n" in response else response
-    
+
     # Extract agent ID from response (first word/line)
     agent_id = response.split("\n")[0].strip()
-    
+
     # EXISTING: Validate agent exists
     if agent_id not in self.overlord.agents:
         return None  # Fallback to intelligent selection
-    
+
     return agent_id
 ```
 
@@ -274,9 +274,9 @@ def _parse_routing_response(self, response: str) -> str:
 ```python
 async def _process_sync_chat(self, ...):
     """Process chat with security handling."""
-    
+
     # ... (existing code for clarifications, credentials, etc.)
-    
+
     # ENHANCED: Wrap agent selection in try-catch
     try:
         if not agent_name:
@@ -299,7 +299,7 @@ async def _process_sync_chat(self, ...):
             status=RequestStatus.FAILED,
             request_id=request_id
         )
-    
+
     # EXISTING CODE: Rest of method unchanged
     agent = self.agents.get(agent_name)
     # ... (continue processing)
@@ -320,17 +320,17 @@ async def _process_sync_chat(self, ...):
 ```python
 async def _process_sync_chat(self, ...):
     """Process chat with output redaction."""
-    
+
     # ... (all existing processing)
-    
+
     # ENHANCED: Always redact response before returning
     from ...utils.security import redact_sensitive_content
-    
+
     if isinstance(final_response, str):
         final_response = redact_sensitive_content(final_response)
     elif hasattr(final_response, 'content') and isinstance(final_response.content, str):
         final_response.content = redact_sensitive_content(final_response.content)
-    
+
     return final_response
 ```
 
@@ -373,21 +373,21 @@ TOTAL:                     ~115 lines (5x smaller!)
 
 ## What We Keep from Original Plan
 
-✅ **Pattern Pre-Filter:** Fast rejection of obvious attacks  
-✅ **Single LLM Call:** No additional latency  
-✅ **Security-Aware Routing:** LLM checks for threats  
-✅ **Observability Events:** Log security violations  
-✅ **PII Redaction:** Use existing `redact_sensitive_content()`  
+✅ **Pattern Pre-Filter:** Fast rejection of obvious attacks
+✅ **Single LLM Call:** No additional latency
+✅ **Security-Aware Routing:** LLM checks for threats
+✅ **Observability Events:** Log security violations
+✅ **PII Redaction:** Use existing `redact_sensitive_content()`
 ✅ **Defense in Depth:** Two layers (patterns + LLM)
 
 ---
 
 ## What We Simplify
 
-❌ **No New AgentRouter Class:** Enhance existing one  
-❌ **No JSON Response Format:** Use simple string check  
-❌ **No Complex Parsing:** Rely on existing logic  
-❌ **No Backward Compatibility Layer:** Not needed  
+❌ **No New AgentRouter Class:** Enhance existing one
+❌ **No JSON Response Format:** Use simple string check
+❌ **No Complex Parsing:** Rely on existing logic
+❌ **No Backward Compatibility Layer:** Not needed
 ❌ **No Structural Changes:** Additive only
 
 ---
@@ -443,7 +443,7 @@ TOTAL:                     ~115 lines (5x smaller!)
 3. **Deploy:** Always-on protection
 
 ### Phase 5: Configuration & Monitoring (Low Risk)
-1. Add security config to formation.yaml
+1. Add security config to formation.afs
 2. Add security dashboard/metrics
 3. **Monitor:** False positive rate
 4. **Tune:** Adjust patterns and prompt
@@ -504,21 +504,21 @@ async def test_end_to_end_security_block():
 ### Minimal Configuration Required
 
 ```yaml
-# formation.yaml
+# formation.afs
 overlord:
   security:
     enabled: true  # Master switch
-    
+
     # Pattern pre-filter
     pattern_filter:
       enabled: true
       log_violations: true
-    
+
     # LLM security check
     llm_check:
       enabled: true
       block_suspicious: true
-    
+
     # Output redaction
     redaction:
       enabled: true
@@ -597,7 +597,7 @@ overlord:
 
 ### Recommendation
 
-**Implement the simplified plan.** 
+**Implement the simplified plan.**
 
 It achieves all the security goals of the original plan while:
 - Reducing implementation complexity by 80%

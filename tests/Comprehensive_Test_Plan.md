@@ -41,26 +41,26 @@ Before implementing the comprehensive test plan, the following prerequisites mus
 ### ✅ **Step 4: Essential Test Formations (COMPLETED)**
 - ✅ Create fundamental formation configurations following the schema structure:
   - `tests/assets/formations/formation-basic/` - Single agent, minimal memory
-    - `formation.yaml` - Main formation configuration
+    - `formation.afs` - Main formation configuration
     - `agents/` - Agent definitions
     - `secrets.enc` - Encrypted secrets file (symlink to shared)
   - `tests/assets/formations/formation-file-generation/` - Built-in MCP enabled
-    - `formation.yaml` - Formation with Artifacts System
+    - `formation.afs` - Formation with Artifacts System
     - `agents/` - Agent configurations
     - `mcp/` - MCP service definitions
     - `secrets.enc` - Symlink to shared secrets
   - `tests/assets/formations/formation-multi-agent/` - Multiple agents for routing tests
-    - `formation.yaml` - Multi-agent setup
+    - `formation.afs` - Multi-agent setup
     - `agents/` - Multiple agent definitions
     - `a2a/` - Agent-to-agent communication configs
     - `secrets.enc` - Symlink to shared secrets
   - `tests/assets/formations/formation-memory/` - Buffer and persistent memory
-    - `formation.yaml` - Memory configuration
+    - `formation.afs` - Memory configuration
     - `agents/` - Memory-enabled agents
     - `sqlite.db` - Persistent storage
     - `secrets.enc` - Symlink to shared secrets
   - `tests/assets/formations/formation-complete/` - Comprehensive formation with all components
-    - `formation.yaml` - Multi-agent with MCP and A2A
+    - `formation.afs` - Multi-agent with MCP and A2A
     - `agents/` - Orchestrator, analyst, developer agents
     - `mcp/` - File generation, calculator, web tools
     - `a2a/` - Communication protocols and workflows
@@ -693,7 +693,7 @@ agents:
 All tests use proper chat flow integration:
 ```python
 formation = Formation()
-await formation.load("tests/assets/formations/formation-knowledge/formation.yaml")
+await formation.load("tests/assets/formations/formation-knowledge/formation.afs")
 overlord = await formation.start_overlord()
 
 response = await overlord.chat(
@@ -1032,7 +1032,7 @@ user_id (user isolation)
 
 **Formation Configuration:**
 ```yaml
-# e2e/tests/9_async/formation-async/formation.yaml
+# e2e/tests/9_async/formation-async/formation.afs
 overlord:
   response:
     async:
@@ -1228,7 +1228,7 @@ response = await overlord.chat("Create a simple guide on the benefits of cloud c
 ### Formation Configuration
 
 ```yaml
-# e2e/tests/11_formatting/formation-formatting/formation.yaml
+# e2e/tests/11_formatting/formation-formatting/formation.afs
 overlord:
   response:
     format: "markdown"  # "json", "text", "markdown", "html"

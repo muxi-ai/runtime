@@ -19,7 +19,7 @@ async def test_overlord_routing_with_knowledge():
     # Load formation
     print("\nLoading formation...")
     formation = Formation()
-    await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
+    await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.afs"))
     overlord = await formation.start_overlord()
 
     print("\n✓ Formation loaded with agents:")

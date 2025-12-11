@@ -18,7 +18,7 @@ USAGE:
     docker run -v /path/to/formation:/formation \\
                -e OPENAI_API_KEY=your-key \\
                -p 8000:8000 \\
-               muxi-runtime /formation/formation.yaml
+               muxi-runtime /formation/formation.afs
 
 ENVIRONMENT VARIABLES:
     OPENAI_API_KEY          OpenAI API key (if using OpenAI models)
@@ -36,14 +36,14 @@ EXAMPLES:
     docker run -v ./my-formation:/formation \\
                -e OPENAI_API_KEY=sk-... \\
                -p 8000:8000 \\
-               muxi-runtime /formation/formation.yaml
+               muxi-runtime /formation/formation.afs
 
     # Run with custom port
     docker run -v ./my-formation:/formation \\
                -e OPENAI_API_KEY=sk-... \\
                -e FORMATION_PORT=9000 \\
                -p 9000:9000 \\
-               muxi-runtime /formation/formation.yaml
+               muxi-runtime /formation/formation.afs
 
 EOF
 }
@@ -64,11 +64,11 @@ if [ ! -f "$FORMATION_PATH" ]; then
     echo ""
     echo "Make sure you:"
     echo "  1. Mount your formation directory as a volume"
-    echo "  2. Provide the correct path to formation.yaml"
+    echo "  2. Provide the correct path to formation.afs"
     echo ""
     echo "Example:"
     echo "  docker run -v ./my-formation:/formation \\"
-    echo "             muxi-runtime /formation/formation.yaml"
+    echo "             muxi-runtime /formation/formation.afs"
     echo ""
     exit 1
 fi

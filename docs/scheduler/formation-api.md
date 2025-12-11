@@ -19,7 +19,7 @@ from muxi.formation import Formation
 
 # Initialize and start formation
 formation = Formation()
-await formation.load("formation.yaml")
+await formation.load("formation.afs")
 overlord = await formation.start_overlord()
 
 # Now scheduler methods are available

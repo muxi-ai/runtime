@@ -13,7 +13,7 @@
 | **muxi-runtime.def** | Basic runtime definition | ~3.7 KB |
 | **muxi-runtime-production.def** | Production definition with services | ~6.1 KB |
 | **build-sif.sh** | Automated build script | ~6.9 KB |
-| **examples/test-formation.yaml** | Test formation | ~0.6 KB |
+| **examples/test-formation.afs** | Test formation | ~0.6 KB |
 | **examples/README.md** | Examples documentation | ~2.9 KB |
 
 **Total:** ~48 KB of documentation and tooling
@@ -42,10 +42,10 @@ apptainer exec muxi-runtime.sif python -c "import muxi; print('✅ Works!')"
 
 # Run test formation
 apptainer run \
-    --bind ./examples/test-formation.yaml:/formation.yaml \
+    --bind ./examples/test-formation.afs:/formation.afs \
     --env OPENAI_API_KEY=sk-your-key \
     muxi-runtime.sif \
-    --formation /formation.yaml --port 8000
+    --formation /formation.afs --port 8000
 ```
 
 ### 3. **Integrate with MUXI Server**
@@ -144,7 +144,7 @@ Automated build tool with:
 
 ### **Examples** (Test Formations)
 
-**examples/test-formation.yaml**
+**examples/test-formation.afs**
 - Simple chat assistant
 - OpenAI GPT-4o-mini
 - Validates SIF runtime
@@ -224,10 +224,10 @@ apptainer exec muxi-runtime.sif python -c "import muxi; print('✅ Works!')"
 
 ```bash
 apptainer run \
-    --bind ./examples/test-formation.yaml:/formation.yaml \
+    --bind ./examples/test-formation.afs:/formation.afs \
     --env OPENAI_API_KEY=sk-your-key \
     muxi-runtime.sif \
-    --formation /formation.yaml --port 8000
+    --formation /formation.afs --port 8000
 
 # Test in another terminal
 curl -X POST http://localhost:8000/chat \

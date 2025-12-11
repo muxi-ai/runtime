@@ -71,7 +71,7 @@ llm:
 #### `llm.models.streaming`
 - **Type**: `string`
 - **Description**: LLM model to use for streaming responses
-- **Examples**: 
+- **Examples**:
   - `"anthropic/claude-3-5-haiku-latest"`
   - `"openai/gpt-4o-mini"`
   - `"openai/gpt-4o"`
@@ -85,7 +85,7 @@ from muxi.runtime import Formation
 
 # Load formation
 formation = Formation()
-await formation.load("formation.yaml")
+await formation.load("formation.afs")
 overlord = await formation.start_overlord()
 
 # Stream a response
@@ -262,7 +262,7 @@ stream = overlord.chat_stream(
 # Consume some events
 async for chunk in stream:
     print(chunk["content"], end="")
-    
+
     # Stop after certain condition
     if some_condition:
         await stream.aclose()  # Stop the stream
@@ -296,7 +296,7 @@ Extract complete content from stream:
 async def collect_stream_content(stream):
     """Collect all content from a stream."""
     content_parts = []
-    
+
     async for chunk in stream:
         # Content can come in multiple event types
         if chunk["type"] in ("content", "text", "stream_chunk"):
@@ -307,7 +307,7 @@ async def collect_stream_content(stream):
             final_content = chunk.get("content", "")
             if final_content:
                 content_parts.append(final_content)
-    
+
     return "".join(content_parts)
 
 # Usage
@@ -328,7 +328,7 @@ try:
             error_code = chunk.get("code")
             error_msg = chunk.get("error")
             recoverable = chunk.get("recoverable", False)
-            
+
             if recoverable:
                 print(f"Warning: {error_msg} (continuing...)")
             else:
@@ -336,7 +336,7 @@ try:
                 break
         elif chunk["type"] == "stream_chunk":
             print(chunk["content"], end="")
-            
+
 except asyncio.TimeoutError:
     print("Stream timed out")
 except Exception as e:
@@ -357,7 +357,7 @@ app = FastAPI()
 @app.post("/chat/stream")
 async def chat_stream(message: str, user_id: str):
     """Stream chat responses using Server-Sent Events."""
-    
+
     async def event_generator():
         async for chunk in overlord.chat_stream(
             message=message,
@@ -366,7 +366,7 @@ async def chat_stream(message: str, user_id: str):
         ):
             # Format as SSE
             yield f"data: {json.dumps(chunk)}\n\n"
-    
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream"
@@ -380,7 +380,7 @@ const eventSource = new EventSource('/chat/stream?message=Hello&user_id=123');
 
 eventSource.onmessage = (event) => {
     const chunk = JSON.parse(event.data);
-    
+
     if (chunk.type === 'stream_chunk') {
         document.getElementById('response').textContent += chunk.content;
     } else if (chunk.type === 'progress') {
@@ -407,9 +407,9 @@ import asyncio
 async def ask(question: str):
     """Ask a question with streaming response."""
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
-    
+
     # Stream to terminal
     async for chunk in overlord.chat_stream(
         message=question,
@@ -421,7 +421,7 @@ async def ask(question: str):
         elif chunk["type"] == "progress":
             # Show progress in status line
             click.echo(f"\n[{chunk['status']}]", err=True)
-    
+
     click.echo("\n")  # Final newline
     await formation.stop_overlord()
 
@@ -480,7 +480,7 @@ function StreamingChat() {
     <div>
       <div className="status">{status}</div>
       <div className="content">{content}</div>
-      <button 
+      <button
         onClick={() => askQuestion('Explain quantum computing')}
         disabled={isStreaming}
       >
@@ -606,7 +606,7 @@ async for chunk in stream:
 # ✅ Correct: Handle all event types
 async for chunk in stream:
     event_type = chunk.get("type", "unknown")
-    
+
     if event_type in ("stream_chunk", "content", "text"):
         content = chunk.get("content") or chunk.get("text", "")
         print(content, end="")
@@ -643,7 +643,7 @@ async for chunk in stream:
     if chunk["type"] in ("stream_chunk", "content", "text"):
         content = chunk.get("content") or chunk.get("text", "")
         content_buffer.append(content)
-        
+
         # Flush buffer periodically (every 10 chunks)
         if len(content_buffer) >= 10:
             full_content = "".join(content_buffer)
@@ -696,17 +696,17 @@ See [Streaming Troubleshooting Guide](streaming-troubleshooting.md) for detailed
 async def diagnose_streaming():
     """Diagnose streaming issues."""
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
-    
+
     # Check configuration
     print(f"Streaming enabled: {overlord.response.streaming}")
     print(f"Progress enabled: {overlord.response.progress}")
-    
+
     # Test basic streaming
     event_count = 0
     content_count = 0
-    
+
     async for chunk in overlord.chat_stream(
         message="Test message",
         user_id="test"
@@ -715,15 +715,15 @@ async def diagnose_streaming():
         if chunk.get("type") in ("stream_chunk", "content", "text"):
             content_count += 1
         print(f"Event {event_count}: {chunk.get('type')}")
-    
+
     print(f"\nTotal events: {event_count}")
     print(f"Content events: {content_count}")
-    
+
     if content_count == 0:
         print("❌ No content events received!")
     else:
         print("✅ Streaming working")
-    
+
     await formation.stop_overlord()
 ```
 

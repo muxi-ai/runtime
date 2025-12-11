@@ -24,7 +24,7 @@ Welcome to the MUXI Scheduler tutorial! By the end of this guide, you'll underst
 
 ### Step 1: Enable Scheduler in Formation
 
-Create or update your `formation.yaml` file:
+Create or update your `formation.afs` file:
 
 ```yaml
 # formation.afs (or .yaml)
@@ -65,7 +65,7 @@ from muxi.formation import Formation
 async def setup_scheduler():
     # Load formation with scheduler enabled
     formation = Formation()
-    await formation.load("formation.yaml")  # Must await!
+    await formation.load("formation.afs")  # Must await!
     overlord = await formation.start_overlord()  # Must await!
 
     # Schedule a daily reminder using natural language
@@ -635,7 +635,7 @@ async def troubleshooting_guide():
 
     if not status['running']:
         print("❌ Issue: Scheduler not running")
-        print("   Solution: Check formation.yaml has scheduler.enabled: true")
+        print("   Solution: Check formation.afs has scheduler.enabled: true")
         return
 
     # Check database connectivity
@@ -644,7 +644,7 @@ async def troubleshooting_guide():
         print("✅ Database connection OK")
     except Exception as e:
         print(f"❌ Database issue: {e}")
-        print("   Solution: Verify connection string in formation.yaml")
+        print("   Solution: Verify connection string in formation.afs")
         return
 
     # Check for paused jobs
@@ -696,7 +696,7 @@ await enable_debug_mode()
 ### Production Configuration
 
 ```yaml
-# production-formation.yaml
+# production-formation.afs
 scheduler:
   enabled: true
   check_interval_minutes: 1

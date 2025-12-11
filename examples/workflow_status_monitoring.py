@@ -138,7 +138,7 @@ async def main():
     )
 
     # You would normally load a formation here
-    # await overlord.load_formation_from_path("formation.yaml")
+    # await overlord.load_formation_from_path("formation.afs")
 
     # For demo purposes, create a mock agent
     from unittest.mock import Mock, AsyncMock

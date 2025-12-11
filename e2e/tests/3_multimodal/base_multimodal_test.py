@@ -23,7 +23,7 @@ class BaseMultimodalTest:
     FORMATION_DIR = Path(__file__).parent / "formations" / "formation-multimodal"
 
     # Default formation file
-    DEFAULT_FORMATION = "formation.yaml"
+    DEFAULT_FORMATION = "formation.afs"
 
     # Test file types
     TEST_FILES = {
@@ -60,7 +60,7 @@ class BaseMultimodalTest:
         """Setup formation with multimodal capabilities.
 
         Args:
-            formation_file: Optional specific formation file, defaults to formation.yaml
+            formation_file: Optional specific formation file, defaults to formation.afs
 
         Returns:
             Configured Formation instance

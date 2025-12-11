@@ -142,7 +142,7 @@ async def test_something():
     print("Test 8X: Test Name")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
+    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
     all_passed = True
     checks_passed = []
 
@@ -151,16 +151,16 @@ async def test_something():
         formation = Formation()
         await formation.load(str(formation_path))
         overlord = await formation.start_overlord()
-        
+
         # 2. Run test scenarios
         response = await overlord.chat(...)
-        
+
         # 3. Validate responses
         if validation_passes:
             checks_passed.append("Description of what passed")
         else:
             all_passed = False
-        
+
         # 4. Cleanup
         await formation.stop_overlord()
         formation.stop()

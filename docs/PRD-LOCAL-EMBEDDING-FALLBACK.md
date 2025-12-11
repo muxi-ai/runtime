@@ -2,7 +2,7 @@
 
 ## Overview
 
-When no embedding model is configured in `formation.yaml`, the runtime should automatically fall back to a local sentence-transformer model (`all-MiniLM-L6-v2`) instead of using the current basic linguistic fallback.
+When no embedding model is configured in `formation.afs`, the runtime should automatically fall back to a local sentence-transformer model (`all-MiniLM-L6-v2`) instead of using the current basic linguistic fallback.
 
 ## Problem
 
@@ -77,21 +77,21 @@ _model_lock = threading.Lock()
 def get_local_embedding(text: str, model_name: str = "all-MiniLM-L6-v2") -> List[float]:
     """
     Generate embedding using local sentence-transformer model.
-    
+
     Args:
         text: Text to embed
         model_name: Model name (default: all-MiniLM-L6-v2)
-    
+
     Returns:
         List of floats (384 dimensions for MiniLM)
     """
     global _model
-    
+
     with _model_lock:
         if _model is None:
             from sentence_transformers import SentenceTransformer
             _model = SentenceTransformer(model_name)
-    
+
     embedding = _model.encode(text, convert_to_numpy=True)
     return embedding.tolist()
 
@@ -123,7 +123,7 @@ Update these locations to use local embeddings when no model configured:
 
 No new configuration needed - this is automatic fallback behavior.
 
-Optional future enhancement in `formation.yaml`:
+Optional future enhancement in `formation.afs`:
 ```yaml
 llm:
   settings:

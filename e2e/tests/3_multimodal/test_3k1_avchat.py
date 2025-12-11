@@ -26,7 +26,7 @@ async def test_3k7_transcript():
     formation = Formation()
 
     # Load the formation
-    await formation.load(str(formation_path / "formation.yaml"))
+    await formation.load(str(formation_path / "formation.afs"))
     print("\nStarting overlord...")
     overlord = await formation.start_overlord()
     print("✓ Overlord started")

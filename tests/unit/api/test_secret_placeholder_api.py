@@ -84,14 +84,14 @@ async def formation_with_secrets():
             "api_key": "${{ secrets.OVERLORD_KEY }}"
         }
     }
-    
+
     # Create temp directory and files
     with tempfile.TemporaryDirectory() as temp_dir:
         # Write formation config
-        config_path = Path(temp_dir) / "formation.yaml"
+        config_path = Path(temp_dir) / "formation.afs"
         with open(config_path, "w") as f:
             yaml.dump(formation_config, f)
-        
+
         # Create secrets file
         secrets_path = Path(temp_dir) / "secrets.enc"
         secrets = {
@@ -106,26 +106,26 @@ async def formation_with_secrets():
         # Save as JSON (unencrypted for testing)
         with open(secrets_path, "w") as f:
             json.dump(secrets, f)
-        
+
         # Create mock secrets manager
         class MockSecretsManager:
             async def get_secret(self, key):
                 return secrets.get(key, f"missing-{key}")
-            
+
             def get_secret_sync(self, key):
                 return secrets.get(key, f"missing-{key}")
-        
+
         # Create and load formation with mock secrets
         formation = Formation()
         formation.secrets_manager = MockSecretsManager()
         await formation.load(str(config_path))
-        
+
         # Start server
         server = FormationServer(formation)
         await server.start_server()
-        
+
         yield formation, server
-        
+
         # Cleanup
         await server.stop_server()
 
@@ -136,24 +136,24 @@ async def test_formation_endpoint_no_secrets(formation_with_secrets):
     formation, server = formation_with_secrets
     base_url = f"http://127.0.0.1:{server.port}"
     admin_key = formation.config["server"]["api_keys"]["admin_key"]
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{base_url}/v1/formation",
             headers={"X-Muxi-Admin-Key": admin_key}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Check LLM secrets
         llm_config = data["data"]["llm"]
         assert llm_config["api_keys"]["openai"] == "${{ secrets.OPENAI_API_KEY }}"
         assert "actual-openai-key" not in str(data)
-        
+
         # Direct keys should not be exposed
         assert "direct-key-should-not-show" not in str(data)
-        
+
         # Check server secrets
         server_config = data["data"]["server"]
         assert server_config["api_keys"]["admin_key"] == "${{ secrets.ADMIN_KEY }}"
@@ -168,16 +168,16 @@ async def test_llm_settings_endpoint_no_secrets(formation_with_secrets):
     formation, server = formation_with_secrets
     base_url = f"http://127.0.0.1:{server.port}"
     admin_key = formation.config["server"]["api_keys"]["admin_key"]
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{base_url}/v1/llm/settings",
             headers={"X-Muxi-Admin-Key": admin_key}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Check that secrets are restored to placeholders
         api_keys = data["data"]["api_keys"]
         assert api_keys["openai"] == "${{ secrets.OPENAI_API_KEY }}"
@@ -190,16 +190,16 @@ async def test_agents_list_endpoint_no_secrets(formation_with_secrets):
     formation, server = formation_with_secrets
     base_url = f"http://127.0.0.1:{server.port}"
     admin_key = formation.config["server"]["api_keys"]["admin_key"]
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{base_url}/v1/agents",
             headers={"X-Muxi-Admin-Key": admin_key}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Check agent secrets
         agents = data["data"]["agents"]
         assert len(agents) > 0
@@ -214,16 +214,16 @@ async def test_individual_agent_endpoint_no_secrets(formation_with_secrets):
     formation, server = formation_with_secrets
     base_url = f"http://127.0.0.1:{server.port}"
     admin_key = formation.config["server"]["api_keys"]["admin_key"]
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{base_url}/v1/agents/agent1",
             headers={"X-Muxi-Admin-Key": admin_key}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Check agent secrets
         agent = data["data"]
         assert agent["model"]["api_key"] == "${{ secrets.AGENT_API_KEY }}"
@@ -236,16 +236,16 @@ async def test_mcp_servers_endpoint_no_secrets(formation_with_secrets):
     formation, server = formation_with_secrets
     base_url = f"http://127.0.0.1:{server.port}"
     admin_key = formation.config["server"]["api_keys"]["admin_key"]
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{base_url}/v1/mcp/servers",
             headers={"X-Muxi-Admin-Key": admin_key}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Check MCP server secrets
         servers = data["data"]
         assert len(servers) > 0
@@ -262,16 +262,16 @@ async def test_overlord_endpoint_no_secrets(formation_with_secrets):
     formation, server = formation_with_secrets
     base_url = f"http://127.0.0.1:{server.port}"
     admin_key = formation.config["server"]["api_keys"]["admin_key"]
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{base_url}/v1/overlord",
             headers={"X-Muxi-Admin-Key": admin_key}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Check overlord secrets
         overlord_config = data["data"]
         assert overlord_config["api_key"] == "${{ secrets.OVERLORD_KEY }}"
@@ -284,16 +284,16 @@ async def test_config_endpoint_summary_no_secrets(formation_with_secrets):
     formation, server = formation_with_secrets
     base_url = f"http://127.0.0.1:{server.port}"
     admin_key = formation.config["server"]["api_keys"]["admin_key"]
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{base_url}/v1/config",
             headers={"X-Muxi-Admin-Key": admin_key}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Config endpoint returns summary, not full config
         # But ensure no secrets leak through
         assert "actual-" not in str(data)

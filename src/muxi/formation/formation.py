@@ -4,7 +4,7 @@
 # Title:        Formation - Muxi Runtime Operational Platform
 # Description:  Handles configuration loading, service initialization, and overlord lifecycle
 # Role:         Operations layer that manages infrastructure and coordinates services
-# Usage:        formation = Formation(); formation.load("config.yaml"); muxi = formation.start_overlord()
+# Usage:        formation = Formation(); formation.load("config.afs"); muxi = formation.start_overlord()
 # Author:       Muxi Framework Team
 #
 # The Formation manages the operational lifecycle of the Muxi runtime, handling all
@@ -17,7 +17,7 @@
 #   from muxi import Formation  # noqa: E402
 #
 #   formation = Formation()
-#   formation.load("my-formation.yaml")
+#   formation.load("my-formation.afs")
 #   muxi = formation.start_overlord()
 #
 #   # Use the intelligence
@@ -175,7 +175,7 @@ class Formation:
 
         # Thread safety for config modifications
         self._config_lock = threading.Lock()
-        
+
         # Async lock for config modifications (async operations)
         # Initialized in load() since asyncio.Lock requires event loop
         self._async_config_lock: Optional[asyncio.Lock] = None
@@ -329,7 +329,7 @@ class Formation:
 
         Example:
             formation = Formation()
-            await formation.load("path/to/formation.yaml")  # Must await!
+            await formation.load("path/to/formation.afs")  # Must await!
         """
         if self._is_running:
             raise OverlordStateError(
@@ -491,12 +491,12 @@ class Formation:
                 causes=[
                     "The file path is incorrect or misspelled",
                     "The formation directory doesn't exist yet",
-                    "The formation.yaml file is missing from the directory"
+                    "The formation.afs file is missing from the directory"
                 ],
                 fixes=[
                     f"Double-check the path: {path}",
                     "Verify the path you passed to formation.load()",
-                    "Make sure formation.yaml exists in that directory"
+                    "Make sure formation.afs exists in that directory"
                 ],
                 technical=str(e)
             )
@@ -523,7 +523,7 @@ class Formation:
                     "Field values don't match expected format"
                 ],
                 fixes=[
-                    "Check your formation.yaml for syntax errors (indentation, colons, quotes)",
+                    "Check your formation.afs for syntax errors (indentation, colons, quotes)",
                     "Compare with a working example formation",
                     "Make sure all required fields are present (llm, agents, etc.)"
                 ],
@@ -553,11 +553,11 @@ class Formation:
             config_path: Path to formation YAML file or directory
 
         Returns:
-            str: Normalized path to formation.yaml file
+            str: Normalized path to formation.afs file
 
         Raises:
             ConfigurationNotFoundError: If neither file nor directory exists
-            ConfigurationValidationError: If directory exists but has no formation.yaml
+            ConfigurationValidationError: If directory exists but has no formation.afs
         """
 
         if not os.path.exists(config_path):
@@ -596,10 +596,10 @@ class Formation:
                     "operation": "find_formation_config",
                     "directory_checked": config_path,
                     "suggestion": (
-                        f"Create a formation.yaml file in the directory '{config_path}' or "
+                        f"Create a formation.afs file in the directory '{config_path}' or "
                         "provide the direct path to your formation configuration file"
                     ),
-                    "example": f"Try: formation.load('{config_path}/formation.yaml') or create the missing file",
+                    "example": f"Try: formation.load('{config_path}/formation.afs') or create the missing file",
                 },
             )
 
@@ -608,9 +608,9 @@ class Formation:
             {
                 "config_path": config_path,
                 "operation": "validate_config_path",
-                "suggestion": "Provide either a path to a formation.yaml file or a directory containing formation.yaml",
+                "suggestion": "Provide either a path to a formation.afs file or a directory containing formation.afs",
                 "examples": [
-                    "formation.load('path/to/formation.yaml')",
+                    "formation.load('path/to/formation.afs')",
                     "formation.load('path/to/formation/directory')",
                 ],
             },
@@ -654,7 +654,7 @@ class Formation:
 
         Args:
             config_path: Original path passed to load() (directory or file)
-            normalized_config_path: Normalized path to formation.yaml file
+            normalized_config_path: Normalized path to formation.afs file
 
         Returns:
             Loaded configuration dictionary
@@ -863,7 +863,7 @@ class Formation:
 
         Args:
             config_path: Original path passed to load() (directory or file)
-            normalized_config_path: Normalized path to formation.yaml file
+            normalized_config_path: Normalized path to formation.afs file
 
         Returns:
             Loaded configuration dictionary
@@ -1264,7 +1264,7 @@ class Formation:
         Setup authentication keys for the formation.
 
         Generates or uses configured API keys for user and admin access.
-        
+
         This method is idempotent - if keys already exist, it won't regenerate them.
         This is important because _prepare_services() may be called multiple times
         (once during load(), again during start_overlord()).
@@ -1272,7 +1272,7 @@ class Formation:
         # If keys already exist, don't regenerate (idempotent)
         if self._api_keys.get("client") and self._api_keys.get("admin"):
             return
-        
+
         # Get server config
         server_config = self.config.get("server", {}) if self.config else {}
 
@@ -1319,7 +1319,7 @@ class Formation:
                 ["LLM configuration must be a dictionary"],
                 {
                     "current_type": type(self._llm_config).__name__,
-                    "suggestion": "Update your formation.yaml to have 'llm:' as a dictionary section",
+                    "suggestion": "Update your formation.afs to have 'llm:' as a dictionary section",
                     "example": {
                         "llm": {
                             "api_keys": {"openai": "your-api-key"},
@@ -1336,7 +1336,7 @@ class Formation:
                     "LLM configuration cannot be empty - at least one LLM provider must be configured"
                 ],
                 {
-                    "suggestion": "Add LLM configuration to your formation.yaml",
+                    "suggestion": "Add LLM configuration to your formation.afs",
                     "required_sections": ["api_keys", "models"],
                     "example": {
                         "llm": {
@@ -1413,7 +1413,7 @@ class Formation:
                 ["Memory configuration must be a dictionary"],
                 {
                     "current_type": type(self._memory_config).__name__,
-                    "suggestion": "Update your formation.yaml to have 'memory:' as a dictionary section",
+                    "suggestion": "Update your formation.afs to have 'memory:' as a dictionary section",
                     "example": {"memory": {"type": "local", "path": "./memory"}},
                 },
             )
@@ -1597,7 +1597,7 @@ class Formation:
                 ["Scheduler configuration must be a dictionary"],
                 {
                     "current_type": type(self._scheduler_config).__name__,
-                    "suggestion": "Update your formation.yaml to have 'scheduler:' as a dictionary section",
+                    "suggestion": "Update your formation.afs to have 'scheduler:' as a dictionary section",
                     "example": {
                         "scheduler": {
                             "enabled": True,
@@ -1632,7 +1632,7 @@ class Formation:
                 ["Runtime configuration must be a dictionary"],
                 {
                     "current_type": type(self._runtime_config).__name__,
-                    "suggestion": "Update your formation.yaml to have 'runtime:' as a dictionary section",
+                    "suggestion": "Update your formation.afs to have 'runtime:' as a dictionary section",
                     "example": {
                         "runtime": {"built_in_mcps": True}  # or ["file-generation", "web-search"]
                     },
@@ -1649,7 +1649,7 @@ class Formation:
                 ["Agents configuration must be a list"],
                 {
                     "current_type": type(self._agents_config).__name__,
-                    "suggestion": "Update your formation.yaml to have 'agents:' as a list of agent configurations",
+                    "suggestion": "Update your formation.afs to have 'agents:' as a list of agent configurations",
                     "example": {
                         "agents": [
                             {
@@ -2067,7 +2067,7 @@ class Formation:
         Example:
             formation = Formation()
             formation.suppress_mcp_errors_on_exit()  # Register handler
-            await formation.load("formation.yaml")
+            await formation.load("formation.afs")
             # ... use formation normally ...
             # Errors will be suppressed when Python exits
         """
@@ -2445,7 +2445,7 @@ class Formation:
 
         Example:
             formation = Formation()
-            await formation.load("path/to/formation.yaml")
+            await formation.load("path/to/formation.afs")
             overlord = await formation.start_overlord()  # Must await!
         """
         if not self.config:
@@ -2482,7 +2482,7 @@ class Formation:
             # Get workflow configuration (check overlord.workflow first, then root workflow)
             overlord_config = self.config.get("overlord", {})
             workflow_config = overlord_config.get("workflow", self.config.get("workflow", {}))
-            
+
             # Create overlord with pre-configured services
             self._overlord = Overlord(
                 # Pre-configured services from Formation
@@ -2586,7 +2586,7 @@ class Formation:
                     "error_type": "configuration_error",
                     "suggestion": "Review and fix the formation configuration",
                     "next_steps": [
-                        "Validate your formation.yaml syntax",
+                        "Validate your formation.afs syntax",
                         "Check required fields are present",
                         "Verify data types match expected values",
                         f"Review configuration at: {self._formation_path}",
@@ -2925,7 +2925,7 @@ class Formation:
         Example:
             async def main():
                 formation = Formation()
-                await formation.load("formation.yaml")
+                await formation.load("formation.afs")
                 overlord = await formation.start_overlord()
 
                 # ... use overlord ...
@@ -2983,7 +2983,7 @@ class Formation:
 
         Example:
             formation = Formation()
-            await formation.load("formation.yaml")
+            await formation.load("formation.afs")
             await formation.start_overlord()
 
             # Something goes catastrophically wrong...
@@ -3037,8 +3037,8 @@ class Formation:
         (formation management) and client operations (user interactions).
 
         Args:
-            host: Override host from formation.yaml (default: use config value)
-            port: Override port from formation.yaml (default: use config value)
+            host: Override host from formation.afs (default: use config value)
+            port: Override port from formation.afs (default: use config value)
             block: Whether to block until server starts (default: True)
                    If True, this method will block until the server is started.
                    If False, returns an awaitable that resolves when startup completes.
@@ -3052,12 +3052,12 @@ class Formation:
         Example:
             # Block mode (typical for standalone server)
             formation = Formation()
-            await formation.load("my-formation.yaml")
+            await formation.load("my-formation.afs")
             server = await formation.start_server()  # Auto-starts overlord, then blocks
 
             # Non-blocking mode with proper error handling
             formation = Formation()
-            await formation.load("my-formation.yaml")
+            await formation.load("my-formation.afs")
 
             try:
                 server = await formation.start_server(block=False)
@@ -3075,7 +3075,7 @@ class Formation:
         # Ensure we have server configuration
         if not hasattr(self, "_server_config"):
             raise RuntimeError(
-                "Server configuration not found. Ensure your formation.yaml "
+                "Server configuration not found. Ensure your formation.afs "
                 "has a 'server' section."
             )
 
@@ -3223,7 +3223,7 @@ class Formation:
 
         Example:
             formation = Formation()
-            await formation.load("formation.yaml")
+            await formation.load("formation.afs")
             await formation.start_overlord()
 
             # Use the formation...

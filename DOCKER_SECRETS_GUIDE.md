@@ -22,7 +22,7 @@ MUXI uses **encrypted secrets files**, NOT environment variables or `.env` files
 ```
 formations/
 └── my-formation/
-    ├── formation.yaml      # Formation config
+    ├── formation.afs      # Formation config
     ├── secrets.enc         # Encrypted secrets ✅ (safe to commit)
     ├── .key                # Decryption key ⚠️  (NEVER commit!)
     └── secrets             # Template (auto-generated)
@@ -43,7 +43,7 @@ formations/
 mkdir -p formations/my-agent
 cd formations/my-agent
 
-cat > formation.yaml << 'EOF'
+cat > formation.afs << 'EOF'
 schema: "1.0.0"
 id: my-agent
 
@@ -179,7 +179,7 @@ volumes:
 ```
 
 This mounts:
-- `formations/my-agent/formation.yaml`
+- `formations/my-agent/formation.afs`
 - `formations/my-agent/secrets.enc`
 - `formations/my-agent/.key`
 
@@ -213,7 +213,7 @@ All automatically!
 ### Development
 ```
 formations/my-agent-dev/
-├── formation.yaml
+├── formation.afs
 ├── secrets.enc       # Dev API keys
 └── .key              # Dev key
 ```
@@ -221,7 +221,7 @@ formations/my-agent-dev/
 ### Production
 ```
 formations/my-agent-prod/
-├── formation.yaml
+├── formation.afs
 ├── secrets.enc       # Prod API keys (different!)
 └── .key              # Prod key (different!)
 ```
@@ -242,7 +242,7 @@ python ../../utils/add_secret.py
 # Add OPENAI_API_KEY
 
 # Commit encrypted secrets (NOT .key!)
-git add formation.yaml secrets.enc secrets
+git add formation.afs secrets.enc secrets
 git commit -m "Add new feature formation"
 git push
 ```
@@ -363,7 +363,7 @@ llm:
   api_keys:
     # Required
     openai: "${{ secrets.OPENAI_API_KEY }}"
-    
+
     # Optional - only needed for certain features
     anthropic: "${{ secrets.ANTHROPIC_API_KEY || '' }}"
 ```

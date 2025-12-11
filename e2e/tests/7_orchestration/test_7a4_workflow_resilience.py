@@ -20,7 +20,7 @@ async def test_workflow_resilience():
     print("Test 7A4: Workflow Resilience")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-multi-agent" / "formation.yaml"
+    formation_path = Path(__file__).parent / "formations" / "formation-multi-agent" / "formation.afs"
     all_passed = True
     checks_passed = []
 

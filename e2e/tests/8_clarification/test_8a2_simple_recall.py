@@ -18,7 +18,7 @@ async def test_simple_recall():
     print("Simple Recall Test")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
+    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
 
     try:
         formation = Formation()

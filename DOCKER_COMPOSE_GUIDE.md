@@ -234,10 +234,10 @@ curl http://localhost:8001/health
 # Directory structure
 formations/
 ├── agent-1/
-│   ├── formation.yaml
+│   ├── formation.afs
 │   └── secrets.env
 ├── agent-2/
-│   ├── formation.yaml
+│   ├── formation.afs
 │   └── secrets.env
 └── shared/
     └── common-config.yaml

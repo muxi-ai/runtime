@@ -14,7 +14,7 @@ async def formation():
     """Load test formation with LLM configured."""
     formation_dir = Path(__file__).parent / "formations" / "formation-topic-tagging"
     formation_obj = Formation()
-    await formation_obj.load(str(formation_dir / "formation.yaml"))
+    await formation_obj.load(str(formation_dir / "formation.afs"))
     overlord = await formation_obj.start_overlord()
 
     yield overlord

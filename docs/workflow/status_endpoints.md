@@ -124,7 +124,7 @@ from muxi.formation.overlord.overlord import Overlord
 
 # Initialize with workflow support
 overlord = Overlord(enable_workflow_by_default=True)
-await overlord.load_formation_from_path("formation.yaml")
+await overlord.load_formation_from_path("formation.afs")
 
 # Submit a complex request
 response = await overlord.chat(

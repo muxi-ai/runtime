@@ -62,7 +62,7 @@ from src.muxi import Formation
 
 async def main():
     formation = Formation()
-    await formation.load("formation.yaml")
+    await formation.load("formation.afs")
     overlord = await formation.start_overlord()
 
     # Use overlord...

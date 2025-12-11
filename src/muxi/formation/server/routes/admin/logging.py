@@ -162,7 +162,7 @@ async def create_logging_destination(
         data=None,
         error_data={
             "reason": "Dynamic logging destination creation requires formation config persistence",
-            "workaround": "Add logging destinations directly to your formation.yaml file",
+            "workaround": "Add logging destinations directly to your formation.afs file",
             "required_implementation": [
                 "Formation config update mechanism",
                 "Logging subsystem reload/reconfiguration",
@@ -200,7 +200,7 @@ async def update_logging_destination(
         data=None,
         error_data={
             "reason": "Dynamic logging destination updates require formation config persistence",
-            "workaround": "Update logging destinations directly in your formation.yaml file and restart",
+            "workaround": "Update logging destinations directly in your formation.afs file and restart",
             "required_implementation": [
                 "Formation config update mechanism",
                 "Logging subsystem reload/reconfiguration",
@@ -235,7 +235,7 @@ async def delete_logging_destination(request: Request, destination_id: str) -> J
         data=None,
         error_data={
             "reason": "Dynamic logging destination deletion requires formation config persistence",
-            "workaround": "Remove logging destinations directly from your formation.yaml file and restart",
+            "workaround": "Remove logging destinations directly from your formation.afs file and restart",
             "required_implementation": [
                 "Formation config update mechanism",
                 "Logging subsystem reload/reconfiguration",

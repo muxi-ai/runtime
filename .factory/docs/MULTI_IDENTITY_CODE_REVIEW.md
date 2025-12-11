@@ -103,10 +103,10 @@ internal_user_id, muxi_user_id = await resolve_user_identifier(
 SELECT * FROM users WHERE external_user_id = :user_id
 
 -- AFTER (correct):
-SELECT u.* 
+SELECT u.*
 FROM users u
 JOIN user_identifiers ui ON u.id = ui.user_id
-WHERE ui.identifier = :user_id 
+WHERE ui.identifier = :user_id
   AND ui.formation_id = :formation_id
 ```
 
@@ -295,7 +295,7 @@ if not self.is_multi_user:
 - 1 clarification test file
 
 ### Configuration (1 file)
-1. ✅ `e2e/tests/4_mcp/formations/formation-mcp/formation.yaml` - Changed to dynamic mode
+1. ✅ `e2e/tests/4_mcp/formations/formation-mcp/formation.afs` - Changed to dynamic mode
 
 ---
 
@@ -364,7 +364,7 @@ The multi-identity feature is **COMPLETE, TESTED, and READY FOR PRODUCTION**. Al
 
 **Total Changes:**
 - **Source files:** 6 modified
-- **Test files:** 21 modified  
+- **Test files:** 21 modified
 - **Tests verified:** 21 tests (all passing or verified)
 - **Bugs fixed:** 4 critical bugs
 - **Linter errors fixed:** 6 errors across 3 files

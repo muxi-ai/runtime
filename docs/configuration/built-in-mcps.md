@@ -38,16 +38,16 @@ mcp:
   # Connection/retry settings (for transient failures)
   default_retry_attempts: 3           # Retry attempts for server connection issues
   default_timeout_seconds: 30         # Timeout per individual tool call
-  
+
   # Tool execution settings (for intelligent chaining)
   max_tool_iterations: 10             # Max loops of (execute → analyze → decide)
-  max_tool_calls: 50                  # Max total individual tool calls  
+  max_tool_calls: 50                  # Max total individual tool calls
   max_repeated_errors: 3              # Number of same errors before stopping
-  
+
   # Timeout settings
   max_timeout_in_seconds: 300         # Total timeout for entire operation
   max_tool_timeout_in_seconds: 30     # Timeout per individual tool call
-  
+
   # External MCP servers
   servers:
     - id: "github"
@@ -169,7 +169,7 @@ Check that:
 ```python
 # List registered MCP servers
 formation = Formation()
-await formation.load("formation.yaml")
+await formation.load("formation.afs")
 overlord = await formation.start_overlord()
 
 # Check available MCPs
@@ -190,11 +190,11 @@ mcp:
     - id: "production-server"
       url: "https://api.example.com/mcp"
       active: true     # This server will be loaded and used
-      
+
     - id: "development-server"
       url: "https://dev.example.com/mcp"
       active: false    # This server will be ignored completely
-      
+
     - id: "legacy-server"
       url: "https://legacy.example.com/mcp"
       # active defaults to true if not specified

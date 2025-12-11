@@ -179,7 +179,7 @@ Create a `.md` file in your formation's `sops/` directory:
 
 ```
 formation-directory/
-├── formation.yaml
+├── formation.afs
 ├── agents/
 └── sops/
     ├── system-report.md
@@ -211,7 +211,7 @@ Generate a comprehensive analysis of system performance metrics.
    Collect CPU, memory, disk, and network statistics.
    Include historical data for trend analysis.
 
-2. **Analyze performance** 
+2. **Analyze performance**
    Calculate performance scores and identify bottlenecks.
    Compare against baseline metrics and thresholds.
 

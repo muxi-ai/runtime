@@ -32,7 +32,7 @@ Decrypt secrets once at formation startup and cache in memory for the entire ses
 class SecretsManager:
     def __init__(self, formation_dir: str):
         self._secrets_cache: Optional[Dict[str, Any]] = None
-        
+
     async def initialize_encryption(self):
         # Load all secrets into cache immediately
         if self.secrets_file_path.exists():
@@ -65,12 +65,12 @@ Cache resolved user credentials by `user_id:service` to avoid repeated database 
 class CredentialResolver:
     def __init__(self, async_session_maker, formation_id: str, llm_model: Optional[str] = None):
         self._cache = {}  # In-memory cache: {user_id: {service: credentials}}
-        
+
     async def resolve(self, user_id: str, service: str) -> Optional[Dict]:
         # Check cache first
         if user_id in self._cache and service in self._cache[user_id]:
             return self._cache[user_id][service]
-        
+
         # Query database only on cache miss
         # Then cache the result
 ```
@@ -105,7 +105,7 @@ from onellm import init_cache as onellm_init_cache
 def initialize_onellm_cache(config: Optional[Dict[str, Any]] = None):
     """Initialize OneLLM's semantic similarity cache."""
     cache_config = config or {}
-    
+
     onellm_init_cache(
         max_entries=cache_config.get('max_entries', 10000),
         p=cache_config.get('p', 0.95),
@@ -124,7 +124,7 @@ def initialize_onellm_cache(config: Optional[Dict[str, Any]] = None):
 - **Hit Rate**: 40-60% typical, up to 90% for repetitive workflows
 
 ### Configuration
-**Schema:** `schemas/formation/formation.yaml`
+**Schema:** `schemas/formation/formation.afs`
 
 ```yaml
 llm:
@@ -187,10 +187,10 @@ class SOPSystem:
     def __init__(self, formation_path: Optional[Path] = None):
         self.embeddings_cache = {}  # Cached embeddings
         self.file_hashes = {}        # MD5 hashes for change detection
-        
+
         # Hydrate WorkingMemory from cache on startup
         self._hydrate_from_cache()
-        
+
     def _hydrate_from_cache(self):
         """Load embeddings from JSON cache with hash validation"""
         embeddings_file = cache_dir / "embeddings.json"
@@ -241,7 +241,7 @@ class MCPToolDiscovery:
     def __init__(self):
         self._cached_tools: List[Dict[str, Any]] = []
         self._cache_valid = False
-        
+
     async def discover_tools(self, transport: BaseTransport, use_cache: bool = True):
         if self._cache_valid and use_cache:
             return self._cached_tools
@@ -341,7 +341,7 @@ class A2ACacheManager:
     def __init__(self, cache_dir: Path):
         self._cache_dir = cache_dir
         self._memory_cache = {}
-        
+
     def get_cached_card(self, card_id: str, content_hash: str):
         # Check memory cache first
         # Then check disk cache with hash validation
@@ -417,7 +417,7 @@ Cache LLM model instances to avoid repeated initialization overhead.
 class Overlord:
     def __init__(self, ...):
         self._llm_cache = {}  # Cache model instances
-        
+
     def _get_llm_model(self, model_name: str):
         if model_name in self._llm_cache:
             return self._llm_cache[model_name]
@@ -487,7 +487,7 @@ Automated monitoring:
 ## Unified Cache Configuration (Future)
 
 ### Proposed Schema
-**File:** `schemas/formation/formation.yaml`
+**File:** `schemas/formation/formation.afs`
 
 ```yaml
 caching:
@@ -498,7 +498,7 @@ caching:
     enabled: true                    # Master switch for all caching
     emit_statistics: true            # Enable cache statistics events
     statistics_interval: 300         # Emit stats every 5 minutes
-    
+
   # ===================================================================
   # LLM RESPONSE CACHING
   # ===================================================================
@@ -509,21 +509,21 @@ caching:
     ttl: 86400                       # 24 hours
     hash_only: false                 # Use exact matching instead of semantic
     stream_chunk_strategy: sentence  # sentence|token|word
-    
+
   # ===================================================================
   # SECRETS CACHING (Always Enabled)
   # ===================================================================
   secrets:
     # Loaded once on initialization, never expires
     # No configuration needed - documented for completeness
-    
+
   # ===================================================================
   # USER CREDENTIALS CACHING (Always Enabled)
   # ===================================================================
   credentials:
     # Cached until session end or credential update
     # No configuration needed - documented for completeness
-    
+
   # ===================================================================
   # SOP EMBEDDINGS CACHING
   # ===================================================================
@@ -532,7 +532,7 @@ caching:
     disk_cache: true
     cache_dir: ~/.muxi/cache/sops   # Can override default
     validate_hash: true              # Recompute if files change
-    
+
   # ===================================================================
   # TOOL DISCOVERY CACHING
   # ===================================================================
@@ -541,7 +541,7 @@ caching:
     cache_transport_types: true      # Remember SSE vs HTTP
     cache_tool_lists: true
     # No TTL - cached for formation lifetime
-    
+
   # ===================================================================
   # INTENT DETECTION CACHING
   # ===================================================================
@@ -549,7 +549,7 @@ caching:
     enabled: true
     max_entries: 10000
     ttl: 3600                        # 1 hour
-    
+
   # ===================================================================
   # A2A CARDS CACHING
   # ===================================================================
@@ -558,7 +558,7 @@ caching:
     disk_cache: true
     cache_dir: ~/.muxi/cache/a2a_cards
     validate_hash: true              # Invalidate if card content changes
-    
+
   # ===================================================================
   # SCHEDULER OPERATIONS CACHING
   # ===================================================================
@@ -566,7 +566,7 @@ caching:
     enabled: true
     max_entries: 1000
     ttl: 300                         # 5 minutes
-    
+
   # ===================================================================
   # MODEL INSTANCES CACHING (Always Enabled)
   # ===================================================================
@@ -666,7 +666,7 @@ caching:
 | Scheduler | ~1KB | 1MB | 10MB |
 | Model Instances | ~50MB | 150MB (3 models) | 500MB (10 models) |
 
-**Total Typical Memory**: ~180MB  
+**Total Typical Memory**: ~180MB
 **Total Max Memory**: ~750MB
 
 ---

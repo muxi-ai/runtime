@@ -205,7 +205,7 @@ See AGENTS.md "Development Patterns" section.
 - `src/muxi/formation/workflow/` - Workflow execution and SOPs
 - `src/muxi/formation/resilience/` - Error recovery layer
 - `src/muxi/services/` - All runtime services
-- `schemas/formation/formation.yaml` - Configuration schema
+- `schemas/formation/formation.afs` - Configuration schema
 
 ## Tone and Behavior
 - Be skeptical and concise

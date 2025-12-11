@@ -88,10 +88,10 @@ Return: (internal_id=123, muxi_id="usr_abc123")
 ```
 Cache miss
      ↓
-Query: SELECT u.id, u.public_id 
-       FROM user_identifiers ui 
+Query: SELECT u.id, u.public_id
+       FROM user_identifiers ui
        JOIN users u ON ui.user_id = u.id
-       WHERE ui.identifier = 'alice@email.com' 
+       WHERE ui.identifier = 'alice@email.com'
        AND ui.formation_id = 'formation_abc'
      ↓
 Found: (123, "usr_abc123")
@@ -128,7 +128,7 @@ Return: (123, "usr_abc123")
 from muxi.formation import Formation
 
 # Initialize formation
-formation = Formation("formation.yaml")
+formation = Formation("formation.afs")
 
 # User identified by email
 response = await formation.chat(

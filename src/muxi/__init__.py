@@ -54,7 +54,7 @@ __all__ = [
 # Usage:
 # from muxi import Formation  # noqa: E402
 # formation = Formation()
-# formation.load("formation.yaml")
+# formation.load("formation.afs")
 # muxi = formation.start_overlord()  # Returns Overlord instance
 # response = muxi.chat("Hello!")
 # formation.stop_overlord()

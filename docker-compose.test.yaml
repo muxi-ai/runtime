@@ -16,12 +16,12 @@ services:
       # API Keys (set these before running)
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      
+
       # Optional: Override server config
       # FORMATION_HOST: "0.0.0.0"
       # FORMATION_PORT: "8000"
-    command: /formations/test-formation.yaml
-    
+    command: /formations/test-formation.afs
+
     # Health check
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -29,7 +29,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    
+
     # Resource limits (optional)
     deploy:
       resources:
@@ -39,10 +39,10 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
-    
+
     # Restart policy
     restart: unless-stopped
-    
+
     # Logging
     logging:
       driver: "json-file"

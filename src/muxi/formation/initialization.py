@@ -331,30 +331,30 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
 def _validate_query_timeout(persistent_config: Dict[str, Any]) -> int:
     """
     Validate and extract query_timeout_seconds from persistent memory config.
-    
+
     Args:
         persistent_config: Persistent memory configuration dict
-        
+
     Returns:
         Validated positive integer timeout value
-        
+
     Raises:
         ValueError: If timeout is invalid (non-integer, zero, or negative)
     """
     raw_timeout = persistent_config.get("query_timeout_seconds", 30)
-    
+
     try:
         timeout = int(raw_timeout)
     except (ValueError, TypeError):
         raise ValueError(
             f"Invalid query_timeout_seconds: {raw_timeout!r}. Must be a positive integer."
         )
-    
+
     if timeout <= 0:
         raise ValueError(
             f"Invalid query_timeout_seconds: {timeout}. Must be a positive integer (got {timeout})."
         )
-    
+
     return timeout
 
 
@@ -609,7 +609,7 @@ async def initialize_mcp_services(formation) -> None:
             ],
             fixes=[
                 "Check the full error trace below",
-                "Verify MCP configuration in formation.yaml",
+                "Verify MCP configuration in formation.afs",
                 "Check system dependencies are installed"
             ],
             technical=str(e)

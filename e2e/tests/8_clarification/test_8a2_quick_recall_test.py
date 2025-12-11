@@ -21,7 +21,7 @@ async def test_recall_consistency():
     print("Testing 5 times to check consistency with improved prompt")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
+    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
 
     results = []
 

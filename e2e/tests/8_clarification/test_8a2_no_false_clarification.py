@@ -22,7 +22,7 @@ async def test_no_false_clarification():
     print("Test 8A2: No False Clarification Requests")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
+    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
     all_passed = True
     checks_passed = []
 

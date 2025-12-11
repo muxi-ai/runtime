@@ -31,15 +31,15 @@ MY_CUSTOM_SECRET=...
 
 ### 2. File Locations
 
-Secrets files are placed **alongside the formation.yaml**:
+Secrets files are placed **alongside the formation.afs**:
 
 ```
 my-formation/
-├── formation.yaml      # Formation configuration (safe to share)
+├── formation.afs      # Formation configuration (safe to share)
 ├── secrets.enc         # Encrypted secrets
 └── .key               # Encryption key (NEVER commit to git!)
 
-### 3. Using Secrets in formation.yaml
+### 3. Using Secrets in formation.afs
 
 Reference secrets in your formation YAML using the `${{ secrets.KEY_NAME }}` syntax:
 
@@ -145,7 +145,7 @@ rm test.txt
 
 ### Formation YAML Files Stay Clean
 
-By using `${{ secrets.KEY_NAME }}` syntax, your formation.yaml files:
+By using `${{ secrets.KEY_NAME }}` syntax, your formation.afs files:
 - Can be shared publicly without exposing secrets
 - Can be version controlled safely
 - Remain readable and maintainable
@@ -160,7 +160,7 @@ By using `${{ secrets.KEY_NAME }}` syntax, your formation.yaml files:
 
 ## Quick Reference
 
-### Example formation.yaml using secrets:
+### Example formation.afs using secrets:
 
 ```yaml
 name: my-formation
@@ -189,7 +189,7 @@ agents:
 
 ```bash
 # Check files exist
-ls -la formation.yaml secrets.enc .key
+ls -la formation.afs secrets.enc .key
 
 # .key should have restricted permissions
 # -rw------- (600) is ideal
@@ -197,9 +197,9 @@ ls -la formation.yaml secrets.enc .key
 
 ## Summary
 
-- **Purpose**: Keep formation.yaml files safe to share by separating secrets
+- **Purpose**: Keep formation.afs files safe to share by separating secrets
 - **Usage**: Reference secrets with `${{ secrets.KEY_NAME }}` in YAML
-- **Storage**: Secrets are encrypted in `secrets.enc` alongside formation.yaml
+- **Storage**: Secrets are encrypted in `secrets.enc` alongside formation.afs
 - **Security**: NEVER commit `.key` files - back them up securely
 - **No env vars**: MUXI ignores environment variables for secrets
 

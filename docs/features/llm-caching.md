@@ -184,7 +184,7 @@ llm:
 ### Development
 
 ```yaml
-# development-formation.yaml
+# development-formation.afs
 llm:
   settings:
     caching:
@@ -194,7 +194,7 @@ llm:
 ### Production
 
 ```yaml
-# production-formation.yaml
+# production-formation.afs
 llm:
   settings:
     caching:
@@ -209,7 +209,7 @@ llm:
 ### High-Volume Production
 
 ```yaml
-# high-volume-formation.yaml
+# high-volume-formation.afs
 llm:
   settings:
     caching:

@@ -4,7 +4,7 @@ This directory contains example formations and configurations for testing MUXI R
 
 ## Test Formation
 
-**File:** `test-formation.yaml`
+**File:** `test-formation.afs`
 
 A simple formation for validating SIF builds and testing basic functionality.
 
@@ -19,18 +19,18 @@ cd ..
 
 # Test the formation
 apptainer exec \
-    --bind ./examples/test-formation.yaml:/formation.yaml \
+    --bind ./examples/test-formation.afs:/formation.afs \
     --bind $(pwd)/data:/data \
     --env OPENAI_API_KEY=sk-your-key-here \
     muxi-runtime.sif \
-    python -m muxi.server run --formation /formation.yaml
+    python -m muxi.server run --formation /formation.afs
 ```
 
 #### 2. Test with MUXI Server
 
 ```bash
 # Create formation bundle
-tar czf test-formation.tar.gz test-formation.yaml
+tar czf test-formation.tar.gz test-formation.afs
 
 # Deploy to server
 curl -X POST http://localhost:7890/rpc/formations/deploy \
@@ -55,7 +55,7 @@ apptainer run \
     --bind $(pwd)/data:/data \
     --env OPENAI_API_KEY=sk-your-key-here \
     muxi-runtime.sif \
-    --formation /formations/test-formation.yaml \
+    --formation /formations/test-formation.afs \
     --port 8000
 
 # In another terminal, test the endpoint
@@ -108,7 +108,7 @@ apptainer exec muxi-runtime.sif python -c "import muxi; print(muxi.__version__)"
 **Solution:**
 ```bash
 # Check file permissions
-ls -la examples/test-formation.yaml
+ls -la examples/test-formation.afs
 
 # Make sure bind mounts are correct
 apptainer run --bind ./examples:/formations:ro muxi-runtime.sif
