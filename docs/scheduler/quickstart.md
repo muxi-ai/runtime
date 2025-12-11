@@ -17,7 +17,7 @@ The MUXI Scheduler transforms your AI assistant from reactive (responds when ask
 Add scheduler configuration to your `formation.yaml`:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 scheduler:
   enabled: true
   check_interval_minutes: 1

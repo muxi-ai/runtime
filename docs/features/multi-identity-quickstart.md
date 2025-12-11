@@ -132,7 +132,7 @@ await formation.chat("Query", user_id=api_key)
 No configuration needed! Just use it:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 memory:
   provider: sqlite
   database: "./data/muxi.db"
@@ -143,7 +143,7 @@ memory:
 Switch to PostgreSQL for true multi-tenant:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 memory:
   provider: postgres
   host: localhost

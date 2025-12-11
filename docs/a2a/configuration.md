@@ -7,7 +7,7 @@ This guide explains how to configure A2A (Agent-to-Agent) communication in your 
 ### Minimal A2A Setup
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 a2a:
   enabled: true  # Enable A2A functionality
 ```

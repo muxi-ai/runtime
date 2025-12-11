@@ -4,7 +4,7 @@
 
 ### Basic Configuration
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 overlord:
   workflow:
     auto_decomposition: true

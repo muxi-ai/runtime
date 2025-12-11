@@ -17,7 +17,7 @@ Built-in MCPs are:
 Enable or disable all built-in MCPs with a boolean value:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 
 # Enable all built-in MCPs (default behavior)
 runtime:
@@ -33,7 +33,7 @@ runtime:
 Configure advanced MCP behavior including intelligent tool chaining:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 mcp:
   # Connection/retry settings (for transient failures)
   default_retry_attempts: 3           # Retry attempts for server connection issues
@@ -65,7 +65,7 @@ mcp:
 Control individual MCPs by specifying a list:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 
 # Enable only specific built-in MCPs
 runtime:
@@ -184,7 +184,7 @@ print(mcp_servers)
 Use the `active` field to control which MCP servers are loaded:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 mcp:
   servers:
     - id: "production-server"

@@ -27,7 +27,7 @@ Welcome to the MUXI Scheduler tutorial! By the end of this guide, you'll underst
 Create or update your `formation.yaml` file:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 scheduler:
   enabled: true
   check_interval_minutes: 1

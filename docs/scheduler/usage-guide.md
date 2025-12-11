@@ -7,7 +7,7 @@ The MUXI Scheduler enables your AI formation to execute tasks automatically at s
 ### Enable Scheduler in Your Formation
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 scheduler:
   enabled: true
   check_interval_minutes: 1

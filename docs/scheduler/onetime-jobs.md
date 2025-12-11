@@ -189,7 +189,7 @@ class JobManager:
 No additional configuration is required. The feature works with existing scheduler settings:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 scheduler:
   enabled: true
   check_interval_minutes: 1

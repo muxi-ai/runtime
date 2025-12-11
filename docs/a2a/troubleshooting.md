@@ -178,7 +178,7 @@ python -m muxi.tools.a2a_registry --port 9090
 
 **Option 2: Change to Lenient Policy**
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 a2a:
   outbound:
     startup_policy: "lenient"  # Allow startup even if registry is down
@@ -188,7 +188,7 @@ a2a:
 
 **Option 3: Use Retry Policy**
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 a2a:
   outbound:
     startup_policy: "retry"           # Retry connections

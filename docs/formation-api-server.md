@@ -41,7 +41,7 @@ The Formation API Server is a FastAPI-based HTTP server that exposes MUXI format
 Add a `server` section to your formation config file:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 schema: "1.0.0"
 id: "my-api-formation"
 

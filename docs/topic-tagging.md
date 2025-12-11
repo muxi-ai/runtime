@@ -92,7 +92,7 @@ Topic tagging is **automatically enabled** when:
 ### Formation Example
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 
 # Observability must be enabled to capture topic events
 logging:

@@ -44,7 +44,7 @@ Tool chaining includes several safety mechanisms to prevent infinite loops:
 Tool chaining is configured in the formation's MCP section:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 mcp:
   # Connection/retry settings (for transient failures)
   default_retry_attempts: 3           # Retry attempts for server connection issues

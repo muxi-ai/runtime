@@ -21,7 +21,7 @@ The Agent-to-Agent (A2A) communication system in MUXI Runtime enables agents to 
 ### Enable A2A in Your Formation
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 a2a:
   enabled: true
 

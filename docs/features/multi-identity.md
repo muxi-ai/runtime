@@ -202,7 +202,7 @@ identifiers = [
 SQLite deployments automatically use identifier "0":
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 memory:
   provider: sqlite
   database: "./data/muxi.db"
@@ -215,7 +215,7 @@ All operations internally use `user_id="0"`, maintaining backward compatibility.
 PostgreSQL deployments enable full multi-identity:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 memory:
   provider: postgres
   host: localhost

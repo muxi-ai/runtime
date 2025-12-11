@@ -22,7 +22,7 @@ The response format system uses **LLM persona instructions** to generate natural
 Configure the default response format in your formation:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 schema: "1.0.0"
 id: "my-assistant"
 

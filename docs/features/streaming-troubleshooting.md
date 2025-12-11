@@ -597,7 +597,7 @@ Or configure PostgreSQL properly:
 createuser -s ran
 
 # Or use different connection string
-# formation.yaml:
+# formation.afs (or .yaml):
 memory:
   persistent:
     connection_string: "${{ secrets.POSTGRES_URI }}"

@@ -96,7 +96,7 @@ asyncio.run(main())
 ### Enable Scheduler in Formation
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 scheduler:
   enabled: true
   check_interval_minutes: 1

@@ -44,7 +44,7 @@ my-formation/
 Reference secrets in your formation YAML using the `${{ secrets.KEY_NAME }}` syntax:
 
 ```yaml
-# formation.yaml
+# formation.afs (or .yaml)
 llm:
   models:
     - text: "openai/gpt-4o"
