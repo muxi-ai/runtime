@@ -199,7 +199,7 @@ Extended structure details live in `context/project-structure.md`.
 - `src/muxi/datatypes/observability.py` — 157 event type definitions (ConversationEvents, SystemEvents, ErrorEvents).
 - `scripts/validate_events.py` — event validation utility (100% coverage required).
 - `docs/audits/phase-2-observability/` — comprehensive observability audit documentation.
-- `schemas/formation/formation.yaml` — formation schema definition.
+- `schemas/formation/formation.yaml` — formation schema definition. Supported extensions: `.afs` (preferred), `.yaml`, `.yml`.
 - `e2e/tests/` — 12 test areas (215+ tests) covering all runtime functionality.
 - `e2e/results/` — migration reports and test execution documentation.
 
