@@ -1583,8 +1583,8 @@ class Overlord:
         if not muxi_agents_dir.exists():
             return
 
-        # Load all YAML files from the directory
-        for agent_file in muxi_agents_dir.glob("*.yaml"):
+        # Load all config files from the directory (support .afs, .yaml, .yml)
+        for agent_file in list(muxi_agents_dir.glob("*.afs")) + list(muxi_agents_dir.glob("*.yaml")) + list(muxi_agents_dir.glob("*.yml")):
             try:
                 with open(agent_file, "r") as f:
                     agent_config = yaml.safe_load(f)

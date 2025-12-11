@@ -510,11 +510,10 @@ def list_agent_files(formation_path: str, agents_subdir: str = "agents") -> list
         if not agents_dir.exists():
             return []
 
-        # Find all YAML files (both .yaml and .yml extensions)
-        # Explicitly check for the two desired extensions
+        # Find all config files (.afs, .yaml, .yml extensions)
         agent_files = []
         for file_path in agents_dir.iterdir():
-            if file_path.is_file() and file_path.suffix in {".yaml", ".yml"}:
+            if file_path.is_file() and file_path.suffix in {".afs", ".yaml", ".yml"}:
                 agent_files.append(str(file_path))
 
         return sorted(agent_files)

@@ -188,7 +188,7 @@ class FormationValidator:
         try:
             # Load and parse the file
             with open(file_path, "r", encoding="utf-8") as f:
-                if file_path.suffix.lower() in [".yaml", ".yml"]:
+                if file_path.suffix.lower() in [".afs", ".yaml", ".yml"]:
                     config = yaml.safe_load(f)
                 elif file_path.suffix.lower() == ".json":
                     config = json.load(f)
@@ -229,13 +229,15 @@ class FormationValidator:
     def _validate_modular_formation(self, dir_path: Path, secrets_manager: Optional[Any]) -> None:
         """Validate a modular formation directory."""
         try:
-            # Check for formation.yaml
-            formation_file = dir_path / "formation.yaml"
+            # Check for formation config file (priority: .afs > .yaml > .yml)
+            formation_file = dir_path / "formation.afs"
+            if not formation_file.exists():
+                formation_file = dir_path / "formation.yaml"
             if not formation_file.exists():
                 formation_file = dir_path / "formation.yml"
 
             if not formation_file.exists():
-                self.result.add_error("Missing formation.yaml file in modular formation")
+                self.result.add_error("Missing formation config file (formation.afs/yaml/yml) in modular formation")
                 return
 
             # Load main formation config
@@ -262,7 +264,7 @@ class FormationValidator:
         """Check if a file is an agent configuration file."""
         try:
             with open(file_path, "r", encoding="utf-8") as f:
-                if file_path.suffix.lower() in [".yaml", ".yml"]:
+                if file_path.suffix.lower() in [".afs", ".yaml", ".yml"]:
                     config = yaml.safe_load(f)
                 elif file_path.suffix.lower() == ".json":
                     config = json.load(f)
@@ -295,7 +297,7 @@ class FormationValidator:
         """Validate a standalone agent configuration file."""
         try:
             with open(file_path, "r", encoding="utf-8") as f:
-                if file_path.suffix.lower() in [".yaml", ".yml"]:
+                if file_path.suffix.lower() in [".afs", ".yaml", ".yml"]:
                     config = yaml.safe_load(f)
                 elif file_path.suffix.lower() == ".json":
                     config = json.load(f)
@@ -1036,8 +1038,8 @@ class FormationValidator:
             self.result.add_error("'agents' must be a directory")
             return
 
-        # Check for agent files
-        agent_files = list(agents_dir.glob("*.yaml")) + list(agents_dir.glob("*.yml"))
+        # Check for agent files (support .afs, .yaml, .yml)
+        agent_files = list(agents_dir.glob("*.afs")) + list(agents_dir.glob("*.yaml")) + list(agents_dir.glob("*.yml"))
         if not agent_files:
             self.result.add_warning("No agent configuration files found in agents/ directory")
 
@@ -1071,8 +1073,8 @@ class FormationValidator:
             self.result.add_error("'mcp' must be a directory")
             return
 
-        # Check for MCP files
-        mcp_files = list(mcp_dir.glob("*.yaml")) + list(mcp_dir.glob("*.yml"))
+        # Check for MCP files (support .afs, .yaml, .yml)
+        mcp_files = list(mcp_dir.glob("*.afs")) + list(mcp_dir.glob("*.yaml")) + list(mcp_dir.glob("*.yml"))
         if not mcp_files:
             self.result.add_warning("No MCP configuration files found in mcp/ directory")
 
@@ -1106,8 +1108,8 @@ class FormationValidator:
             self.result.add_error("'a2a' must be a directory")
             return
 
-        # Check for A2A files
-        a2a_files = list(a2a_dir.glob("*.yaml")) + list(a2a_dir.glob("*.yml"))
+        # Check for A2A files (support .afs, .yaml, .yml)
+        a2a_files = list(a2a_dir.glob("*.afs")) + list(a2a_dir.glob("*.yaml")) + list(a2a_dir.glob("*.yml"))
         if not a2a_files:
             self.result.add_warning("No A2A configuration files found in a2a/ directory")
             return

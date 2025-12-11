@@ -61,7 +61,7 @@ class ConfigLoader:
         Load a configuration file from the given path.
 
         This method detects the file format based on extension and loads the
-        configuration using the appropriate parser. It supports YAML (.yaml, .yml)
+        configuration using the appropriate parser. It supports AFS/YAML (.afs, .yaml, .yml)
         and JSON (.json) formats.
 
         Args:
@@ -82,7 +82,7 @@ class ConfigLoader:
         with open(file_path, "r") as f:
             content = f.read()
 
-            if file_path.suffix.lower() in [".yaml", ".yml"]:
+            if file_path.suffix.lower() in [".afs", ".yaml", ".yml"]:
                 return yaml.safe_load(content)
 
             elif file_path.suffix.lower() == ".json":
@@ -91,7 +91,7 @@ class ConfigLoader:
             else:
                 raise ValueError(
                     f"Unsupported file format: {file_path.suffix}. "
-                    "Supported formats: .yaml, .yml, .json"
+                    "Supported formats: .afs, .yaml, .yml, .json"
                 )
 
     @staticmethod

@@ -405,7 +405,7 @@ class SOPSystem:
 
         Tries in order:
         1. MUXI_FORMATION_DIR environment variable
-        2. Current directory with formation.yaml
+        2. Current directory with formation config (formation.afs/yaml/yml)
 
         Returns:
             Path to formation directory or None
@@ -417,9 +417,13 @@ class SOPSystem:
         if formation_dir:
             return Path(formation_dir)
 
-        # Try current directory for formation.yaml
+        # Try current directory for formation config (priority: .afs > .yaml > .yml)
         current_dir = Path.cwd()
+        if (current_dir / "formation.afs").exists():
+            return current_dir
         if (current_dir / "formation.yaml").exists():
+            return current_dir
+        if (current_dir / "formation.yml").exists():
             return current_dir
 
         # No formation path found

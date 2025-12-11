@@ -253,8 +253,8 @@ class SecretsManager:
         normalized_name = self._normalize_secret_name(secret_name)
         usages = []
 
-        # Search in all YAML files (.yaml and .yml) in formation directory and subdirectories
-        yaml_patterns = ['*.yaml', '*.yml']
+        # Search in all config files (.afs, .yaml, .yml) in formation directory and subdirectories
+        yaml_patterns = ['*.afs', '*.yaml', '*.yml']
         for pattern in yaml_patterns:
             for yaml_file in self.formation_dir.rglob(pattern):
                 try:

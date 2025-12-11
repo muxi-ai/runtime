@@ -567,15 +567,20 @@ class Formation:
 
         # If it's a file, return as-is
         if os.path.isfile(config_path):
-            if not config_path.endswith((".yaml", ".yml")):
+            if not config_path.endswith((".afs", ".yaml", ".yml")):
                 raise ConfigurationValidationError(
-                    [f"Formation file must be YAML format (.yaml or .yml): {config_path}"],
+                    [f"Formation file must be AFS/YAML format (.afs, .yaml, or .yml): {config_path}"],
                     {"config_path": config_path, "operation": "validate_file_extension"},
                 )
             return config_path
 
-        # If it's a directory, look for formation.yaml
+        # If it's a directory, look for formation config file
+        # Priority: .afs (preferred) > .yaml > .yml
         if os.path.isdir(config_path):
+            formation_file_afs = os.path.join(config_path, "formation.afs")
+            if os.path.isfile(formation_file_afs):
+                return formation_file_afs
+
             formation_file = os.path.join(config_path, "formation.yaml")
             if os.path.isfile(formation_file):
                 return formation_file
@@ -692,13 +697,15 @@ class Formation:
         """
         formation_dir = Path(directory_path)
 
-        # Load main formation.yaml file
-        main_config_path = formation_dir / "formation.yaml"
+        # Load main formation config file (priority: .afs > .yaml > .yml)
+        main_config_path = formation_dir / "formation.afs"
+        if not main_config_path.exists():
+            main_config_path = formation_dir / "formation.yaml"
         if not main_config_path.exists():
             main_config_path = formation_dir / "formation.yml"
 
         if not main_config_path.exists():
-            raise FileNotFoundError(f"Main formation.yaml not found in directory: {directory_path}")
+            raise FileNotFoundError(f"Main formation config (formation.afs/yaml/yml) not found in directory: {directory_path}")
 
         with open(main_config_path, "r") as f:
             config = yaml.safe_load(f)
@@ -713,8 +720,8 @@ class Formation:
             if "agents" not in config:
                 config["agents"] = []
 
-            # Load each agent file
-            for agent_file in sorted(agents_dir.glob("*.yaml")) + sorted(agents_dir.glob("*.yml")):
+            # Load each agent file (support .afs, .yaml, .yml)
+            for agent_file in sorted(agents_dir.glob("*.afs")) + sorted(agents_dir.glob("*.yaml")) + sorted(agents_dir.glob("*.yml")):
                 try:
                     with open(agent_file, "r") as f:
                         agent_config = yaml.safe_load(f)
@@ -755,8 +762,8 @@ class Formation:
             if "services" not in config["a2a"]["outbound"]:
                 config["a2a"]["outbound"]["services"] = []
 
-            # Load each A2A service file
-            for a2a_file in sorted(a2a_dir.glob("*.yaml")) + sorted(a2a_dir.glob("*.yml")):
+            # Load each A2A service file (support .afs, .yaml, .yml)
+            for a2a_file in sorted(a2a_dir.glob("*.afs")) + sorted(a2a_dir.glob("*.yaml")) + sorted(a2a_dir.glob("*.yml")):
                 try:
                     with open(a2a_file, "r") as f:
                         a2a_config = yaml.safe_load(f)

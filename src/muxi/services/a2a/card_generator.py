@@ -538,8 +538,8 @@ class AgentCardGenerator:
 
         cards = {}
 
-        # Find all YAML config files
-        config_files = list(config_dir.glob("*.yaml")) + list(config_dir.glob("*.yml"))
+        # Find all config files (support .afs, .yaml, .yml)
+        config_files = list(config_dir.glob("*.afs")) + list(config_dir.glob("*.yaml")) + list(config_dir.glob("*.yml"))
 
         pass  # REMOVED: init-phase observe() call
 

@@ -203,10 +203,14 @@ class FormationLoader:
         """
         formation_dir = Path(directory_path)
 
-        # Load main formation.yaml file
-        main_config_path = formation_dir / "formation.yaml"
+        # Load main formation config file (priority: .afs > .yaml > .yml)
+        main_config_path = formation_dir / "formation.afs"
         if not main_config_path.exists():
-            raise FileNotFoundError(f"Main formation.yaml not found in directory: {directory_path}")
+            main_config_path = formation_dir / "formation.yaml"
+        if not main_config_path.exists():
+            main_config_path = formation_dir / "formation.yml"
+        if not main_config_path.exists():
+            raise FileNotFoundError(f"Main formation config (formation.afs/yaml/yml) not found in directory: {directory_path}")
 
         # Load the main configuration
         main_config = self.config_loader.load(str(main_config_path))
@@ -259,9 +263,9 @@ class FormationLoader:
             #  AGENT_MESSAGE_PROCESSING
             return
 
-        # Find all YAML files in agents directory
+        # Find all config files in agents directory (support .afs, .yaml, .yml)
         agent_files = []
-        for pattern in ["*.yaml", "*.yml"]:
+        for pattern in ["*.afs", "*.yaml", "*.yml"]:
             agent_files.extend(agents_dir.glob(pattern))
 
         if not agent_files:
@@ -395,9 +399,9 @@ class FormationLoader:
             #  MCP_SERVER_CONNECTING
             return
 
-        # Find all YAML files in mcp directory
+        # Find all config files in mcp directory (support .afs, .yaml, .yml)
         mcp_files = []
-        for pattern in ["*.yaml", "*.yml"]:
+        for pattern in ["*.afs", "*.yaml", "*.yml"]:
             mcp_files.extend(mcp_dir.glob(pattern))
 
         if not mcp_files:
@@ -484,9 +488,9 @@ class FormationLoader:
             #  A2A_MESSAGE_SENT
             return
 
-        # Find all YAML files in a2a directory
+        # Find all config files in a2a directory (support .afs, .yaml, .yml)
         a2a_files = []
-        for pattern in ["*.yaml", "*.yml"]:
+        for pattern in ["*.afs", "*.yaml", "*.yml"]:
             a2a_files.extend(a2a_dir.glob(pattern))
 
         if not a2a_files:
@@ -700,11 +704,16 @@ class FormationLoader:
         if not path_obj.exists():
             return "unknown"
 
-        if path_obj.is_file() and path_obj.suffix in [".yaml", ".yml"]:
+        if path_obj.is_file() and path_obj.suffix in [".afs", ".yaml", ".yml"]:
             return "flattened"
         elif path_obj.is_dir():
-            # Check if it has formation.yaml and component directories
-            main_config = path_obj / "formation.yaml"
+            # Check if it has formation config and component directories
+            # Priority: .afs > .yaml > .yml
+            main_config = path_obj / "formation.afs"
+            if not main_config.exists():
+                main_config = path_obj / "formation.yaml"
+            if not main_config.exists():
+                main_config = path_obj / "formation.yml"
             if main_config.exists():
                 # Look for component directories
                 has_agents = (path_obj / "agents").exists()
