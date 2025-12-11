@@ -2,6 +2,8 @@
 
 Welcome to the MUXI Runtime documentation. This directory contains comprehensive guides and references for all MUXI features and capabilities.
 
+> **Formation Config Files:** MUXI supports three extensions for formation configuration (in priority order): `.afs` (Agent Formation Schema - preferred), `.yaml`, and `.yml`.
+
 ## 🚀 Quick Start
 
 New to MUXI? Start here:

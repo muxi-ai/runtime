@@ -34,9 +34,11 @@ The Formation API Server is a FastAPI-based HTTP server that exposes MUXI format
 
 ## Quick Start
 
+> **Note:** Formation config files support three extensions (in priority order): `.afs` (Agent Formation Schema - preferred), `.yaml`, and `.yml`.
+
 ### 1. Configuration
 
-Add a `server` section to your `formation.yaml`:
+Add a `server` section to your formation config file:
 
 ```yaml
 # formation.yaml

@@ -2,7 +2,9 @@
 
 ## Overview
 
-MUXI uses **encrypted secrets files** (`secrets.enc`) to keep sensitive configuration separate from formation YAML files. This allows `formation.yaml` files to be safely shared and version controlled while keeping API keys, tokens, and credentials secure.
+MUXI uses **encrypted secrets files** (`secrets.enc`) to keep sensitive configuration separate from formation config files. This allows formation files to be safely shared and version controlled while keeping API keys, tokens, and credentials secure.
+
+> **Note:** Formation config files support three extensions (in priority order): `.afs` (Agent Formation Schema - preferred), `.yaml`, and `.yml`.
 
 ## Key Principles
 
