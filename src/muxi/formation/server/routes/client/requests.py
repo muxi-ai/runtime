@@ -98,12 +98,17 @@ async def list_requests(
 
 
 @router.get("/requests/{request_id}", response_model=APIResponse)
-async def get_request_status(request: Request, request_id: str) -> JSONResponse:
+async def get_request_status(
+    request: Request,
+    request_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+) -> JSONResponse:
     """
     Get status of any request (active or completed within retention period).
 
     Args:
         request_id: Unique identifier of the request
+        x_user_id: User ID from X-Muxi-User-ID header
 
     Returns:
         Request status information
@@ -112,11 +117,20 @@ async def get_request_status(request: Request, request_id: str) -> JSONResponse:
     overlord = getattr(formation, "_overlord", None)
     api_request_id = getattr(request.state, "request_id", None)
 
+    # Validate user_id from header
+    user_id, error_response = _get_user_id(x_user_id, api_request_id)
+    if error_response:
+        return error_response
+
     if not overlord:
         response = create_error_response(
             "SERVICE_UNAVAILABLE", "Overlord service not available", None, api_request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=503)
+
+    # Normalize user_id to "0" for single-user mode (same as chat())
+    if not getattr(overlord, "is_multi_user", False):
+        user_id = "0"
 
     # Get request state from tracker
     request_state = await overlord.request_tracker.get_request(request_id)
@@ -126,6 +140,13 @@ async def get_request_status(request: Request, request_id: str) -> JSONResponse:
             "REQUEST_NOT_FOUND", "Request not found", None, api_request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=404)
+
+    # Verify request belongs to user
+    if request_state.user_id != user_id:
+        response = create_error_response(
+            "FORBIDDEN", "Request does not belong to this user", None, api_request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=403)
 
     # Build response data
     data = {
