@@ -3,21 +3,17 @@ Audit log endpoints.
 
 These endpoints provide access to the formation audit trail,
 requiring admin API key authentication.
+
+NOTE: Audit logging is not yet implemented. See docs/features/audit-logging.md
+for the implementation plan.
 """
 
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
-from ...audit import AuditLogger
-from ...responses import (
-    APIResponse,
-    create_success_response,
-    create_error_response,
-)
-from .....datatypes.api import APIEventType, APIObjectType
+from ...responses import APIResponse, create_error_response
 
 router = APIRouter(tags=["Audit"])
 
@@ -37,76 +33,23 @@ async def get_audit_log(
     """
     Get audit log entries with optional filtering.
 
-    Returns audit trail of all formation-modifying operations.
-    Results are returned in reverse chronological order (most recent first).
+    **Status: Not Yet Implemented**
 
-    **Log Location:** `~/.muxi/formations/{formation_id}/audit.log`
+    Will return audit trail of formation initialization and runtime operations.
+    See docs/features/audit-logging.md for the implementation plan.
 
-    **Format:** JSONL (one JSON object per line) with human-readable message field
-
-    **Tracked Operations:**
-    - Agent create/update/delete
-    - Secret create/delete
-    - MCP server create/update/delete
-    - Scheduler job create/delete and config changes
-    - Logging destination create/update/delete and config changes
-    - Async config changes (webhook URL, etc.)
-    - Memory delete operations (admin)
-
-    Args:
-        limit: Maximum number of entries to return (default: 100, max: 1000)
-        action: Filter by action type (e.g., "agent.created", "secret.deleted")
-        resource_type: Filter by resource type
-        since: Return entries since this ISO 8601 timestamp
-
-    Returns:
-        Audit log entries with metadata
+    **Planned Tracked Operations:**
+    - Initialization: agent.registered, mcp.server.registered, etc.
+    - Runtime: secret.created, secret.deleted, memory.buffer.cleared
     """
-    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Initialize audit logger
-    audit_logger = AuditLogger(formation.formation_id)
-
-    # Parse since parameter
-    since_dt = None
-    if since:
-        try:
-            since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content=create_error_response(
-                    error_code="INVALID_REQUEST",
-                    message=f"Invalid ISO 8601 timestamp: {since}",
-                    request_id=request_id,
-                ).model_dump(),
-            )
-
-    # Get entries
-    entries = await audit_logger.get_entries(
-        limit=limit,
-        action=action,
-        resource_type=resource_type,
-        since=since_dt,
+    response = create_error_response(
+        error_code="NOT_IMPLEMENTED",
+        message="Audit logging is not yet implemented. See docs/features/audit-logging.md",
+        request_id=request_id,
     )
-
-    # Get total count
-    total_entries = audit_logger.get_total_entries()
-
-    response_data = {
-        "entries": entries,
-        "count": len(entries),
-        "total_entries": total_entries,
-    }
-
-    response = create_success_response(
-        APIObjectType.AUDIT_LOG,
-        APIEventType.AUDIT_RETRIEVED,
-        response_data,
-        request_id,
-    )
-    return JSONResponse(content=response.model_dump(), status_code=200)
+    return JSONResponse(content=response.model_dump(), status_code=501)
 
 
 @router.delete("/audit", response_model=APIResponse)
@@ -117,50 +60,15 @@ async def clear_audit_log(
     """
     Clear the audit log file.
 
-    **Use with caution!** This action is irreversible.
+    **Status: Not Yet Implemented**
 
-    **This action itself is audited** - creates a final entry documenting
-    who cleared the log and when, then resets the log to contain only that entry.
-
-    Requires explicit confirmation parameter `confirm=clear-audit-log` to prevent
-    accidental deletion.
-
-    Args:
-        confirm: Must be exactly "clear-audit-log" to proceed
-
-    Returns:
-        Confirmation of log clearing with previous entry count
+    See docs/features/audit-logging.md for the implementation plan.
     """
-    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Validate confirmation
-    if not confirm or confirm != "clear-audit-log":
-        return JSONResponse(
-            status_code=400,
-            content=create_error_response(
-                error_code="INVALID_REQUEST",
-                message="Confirmation required: add ?confirm=clear-audit-log",
-                request_id=request_id,
-            ).model_dump(),
-        )
-
-    # Initialize audit logger
-    audit_logger = AuditLogger(formation.formation_id)
-
-    # Clear the log (this creates a "cleared" entry)
-    previous_count = await audit_logger.clear(user="admin", request_id=request_id)
-
-    response_data = {
-        "message": "Audit log cleared successfully",
-        "previous_entries_count": previous_count,
-        "cleared_by": "admin",
-    }
-
-    response = create_success_response(
-        APIObjectType.AUDIT_LOG,
-        APIEventType.AUDIT_CLEARED,
-        response_data,
-        request_id,
+    response = create_error_response(
+        error_code="NOT_IMPLEMENTED",
+        message="Audit logging is not yet implemented. See docs/features/audit-logging.md",
+        request_id=request_id,
     )
-    return JSONResponse(content=response.model_dump(), status_code=200)
+    return JSONResponse(content=response.model_dump(), status_code=501)
