@@ -257,7 +257,7 @@ def get_session(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.delete("/sessions/{session_id}", response_model=APIResponse)
+# @router.delete("/sessions/{session_id}", response_model=APIResponse)  # REMOVED: Sessions are ephemeral buffer state
 def clear_session(
     request: Request,
     session_id: str,
@@ -265,6 +265,10 @@ def clear_session(
 ) -> JSONResponse:
     """
     Clear a session and its buffer memory.
+
+    REMOVED: Sessions are ephemeral buffer state, not persistent resources.
+    Buffer rolls off automatically and clears on restart. This endpoint
+    exposed implementation details that shouldn't be part of the API surface.
 
     Args:
         session_id: Session ID
