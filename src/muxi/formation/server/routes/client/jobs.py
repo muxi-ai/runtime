@@ -1,7 +1,7 @@
 """
-Job management endpoints for users.
+Job and request management endpoints for users.
 
-These endpoints provide job tracking and cancellation,
+These endpoints provide job tracking, request status, and cancellation,
 requiring client API key authentication.
 """
 
@@ -17,6 +17,59 @@ from ...responses import (
 from .....datatypes.api import APIObjectType, APIEventType
 
 router = APIRouter(tags=["Jobs"])
+
+
+@router.get("/requests/{request_id}", response_model=APIResponse)
+async def get_request_status(request: Request, request_id: str) -> JSONResponse:
+    """
+    Get status of any request (active or completed within retention period).
+
+    Args:
+        request_id: Unique identifier of the request
+
+    Returns:
+        Request status information
+    """
+    formation = request.app.state.formation
+    overlord = getattr(formation, "_overlord", None)
+    api_request_id = getattr(request.state, "request_id", None)
+
+    if not overlord:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Overlord service not available", None, api_request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    # Get request state from tracker
+    request_state = await overlord.request_tracker.get_request(request_id)
+
+    if not request_state:
+        response = create_error_response(
+            "REQUEST_NOT_FOUND", "Request not found", None, api_request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=404)
+
+    # Build response data
+    data = {
+        "request_id": request_id,
+        "status": request_state.status.value,
+        "progress": request_state.progress,
+        "created_at": request_state.get_created_timestamp(),
+    }
+
+    if request_state.end_time:
+        data["completed_at"] = request_state.end_time
+
+    if request_state.error:
+        data["error"] = request_state.error
+
+    response = create_success_response(
+        APIObjectType.REQUEST_STATUS,
+        APIEventType.REQUEST_STATUS_RETRIEVED,
+        data,
+        api_request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
 
 
 @router.get("/jobs/{user_id}", response_model=APIResponse)

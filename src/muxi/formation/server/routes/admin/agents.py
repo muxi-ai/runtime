@@ -268,8 +268,8 @@ async def list_agents(request: Request) -> JSONResponse:
     # Get agents with secret placeholders restored
     agents = _restore_agents_with_secrets(formation)
 
-    # Create structured response using spec-compliant format
-    response = agent_list_response(agents, request_id, use_generic_type=True)
+    # Create structured response using spec-compliant format (agent_list object type)
+    response = agent_list_response(agents, request_id, use_generic_type=False)
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 

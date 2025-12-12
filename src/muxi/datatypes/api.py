@@ -39,27 +39,29 @@ class APIEventType(str, Enum):
     MEMORY_RETRIEVED = "memory.retrieved"
     MEMORY_DELETED = "memory.deleted"
     MEMORY_LIST = "memory.list"
+    MEMORY_CONFIG_RETRIEVED = "memory.config.retrieved"
+    MEMORY_CONFIG_UPDATED = "memory.config.updated"
 
     JOB_RETRIEVED = "job.retrieved"
     JOB_DELETED = "job.deleted"
     JOB_LIST = "job.list"
 
     # Configuration events
-    OVERLORD_RETRIEVED = "overlord.retrieved"
-    OVERLORD_UPDATED = "overlord.updated"
+    OVERLORD_CONFIG_RETRIEVED = "overlord.config.retrieved"
+    OVERLORD_CONFIG_UPDATED = "overlord.config.updated"
     PERSONA_RETRIEVED = "persona.retrieved"
     PERSONA_UPDATED = "persona.updated"
-    MCP_RETRIEVED = "mcp.retrieved"
-    MCP_UPDATED = "mcp.updated"
-    MCP_SERVER_LIST = "mcp_server.list"
-    MCP_SERVER_CREATED = "mcp_server.created"
-    MCP_SERVER_RETRIEVED = "mcp_server.retrieved"
-    MCP_SERVER_UPDATED = "mcp_server.updated"
-    MCP_SERVER_DELETED = "mcp_server.deleted"
+    MCP_DEFAULTS_RETRIEVED = "mcp.defaults.retrieved"
+    MCP_DEFAULTS_UPDATED = "mcp.defaults.updated"
+    MCP_SERVER_LIST = "mcp.server.list"
+    MCP_SERVER_CREATED = "mcp.server.created"
+    MCP_SERVER_RETRIEVED = "mcp.server.retrieved"
+    MCP_SERVER_UPDATED = "mcp.server.updated"
+    MCP_SERVER_DELETED = "mcp.server.deleted"
     MCP_TOOL_LIST = "mcp_tool.list"
     MCP_TOOL_EXECUTED = "mcp_tool.executed"
-    LLM_RETRIEVED = "llm.retrieved"
-    LLM_UPDATED = "llm.updated"
+    LLM_SETTINGS_RETRIEVED = "llm.settings.retrieved"
+    LLM_SETTINGS_UPDATED = "llm.settings.updated"
     LLM_RESET = "llm.reset"
     LOGGING_RETRIEVED = "logging.retrieved"
     LOGGING_UPDATED = "logging.updated"
@@ -69,8 +71,8 @@ class APIEventType(str, Enum):
     SCHEDULER_UPDATED = "scheduler.updated"
     A2A_RETRIEVED = "a2a.retrieved"
     A2A_UPDATED = "a2a.updated"
-    CONFIG_RETRIEVED = "config.retrieved"
-    STATUS_RETRIEVED = "status.retrieved"
+    FORMATION_CONFIG_RETRIEVED = "formation.config.retrieved"
+    FORMATION_STATUS_RETRIEVED = "formation.status.retrieved"
 
     # Scheduler job events (for scheduled jobs management)
     SCHEDULER_JOBS_LIST = "scheduler.jobs.list"
@@ -87,8 +89,12 @@ class APIEventType(str, Enum):
 
     # User identifier events
     USER_IDENTIFIERS_LIST = "user.identifiers.list"
+    USER_IDENTIFIERS_ASSOCIATED = "user.identifiers.associated"
     USER_IDENTIFIER_DELETED = "user.identifier.deleted"
     USER_RESOLVED = "user.resolved"
+
+    # Request status events
+    REQUEST_STATUS_RETRIEVED = "request.status.retrieved"
 
     # Logging destination events (for log destination management)
     LOGGING_DESTINATIONS_LIST = "logging.destinations.list"
@@ -139,6 +145,7 @@ class APIObjectType(str, Enum):
     SECRET_LIST = "secret_list"
     MEMORY = "memory"
     MEMORY_LIST = "memory_list"
+    MEMORY_CONFIG = "memory_config"
     JOB = "job"
     JOB_LIST = "job_list"
     ERROR = "error"
@@ -151,14 +158,14 @@ class APIObjectType(str, Enum):
     REQUEST_CANCELLATION = "request_cancellation"
 
     # Configuration objects
-    OVERLORD = "overlord"
+    OVERLORD_CONFIG = "overlord_config"
     PERSONA = "persona"
-    MCP = "mcp"
+    MCP_DEFAULTS = "mcp_defaults"
     MCP_SERVER = "mcp_server"
     MCP_SERVER_LIST = "mcp_server_list"
     MCP_TOOL_LIST = "mcp_tool_list"
     MCP_TOOL_RESULT = "mcp_tool_result"
-    LLM = "llm"
+    LLM_SETTINGS = "llm_settings"
     LOGGING = "logging"
     ASYNC = "async"
     SCHEDULER = "scheduler"
@@ -175,6 +182,9 @@ class APIObjectType(str, Enum):
     # Session objects
     SESSION = "session"
     SESSION_LIST = "session_list"
+
+    # Request status objects
+    REQUEST_STATUS = "request_status"
 
     # User identifier objects
     USER = "user"

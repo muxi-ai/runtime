@@ -54,10 +54,12 @@ async def get_a2a_config(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.patch("/a2a/outbound", response_model=APIResponse)
+# @router.patch("/a2a/outbound", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def update_a2a_outbound(request: Request, settings: A2AOutboundUpdate) -> JSONResponse:
     """
     Update A2A outbound settings.
+
+    DEPRECATED: A2A configuration should be changed via formation YAML and redeployment.
 
     Args:
         settings: New A2A outbound configuration
@@ -93,10 +95,12 @@ async def update_a2a_outbound(request: Request, settings: A2AOutboundUpdate) -> 
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.delete("/a2a/outbound/{item}", response_model=APIResponse)
+# @router.delete("/a2a/outbound/{item}", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def reset_a2a_outbound_setting(request: Request, item: str) -> JSONResponse:
     """
     Reset a specific A2A outbound setting to default.
+
+    DEPRECATED: A2A configuration should be changed via formation YAML and redeployment.
 
     Args:
         item: Setting item to reset (e.g., specific endpoint name)

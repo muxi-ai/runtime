@@ -51,15 +51,17 @@ async def get_llm_config(request: Request) -> JSONResponse:
     llm_config = temp_config.get("llm", {})
 
     response = create_success_response(
-        APIObjectType.LLM, APIEventType.LLM_RETRIEVED, llm_config, request_id
+        APIObjectType.LLM_SETTINGS, APIEventType.LLM_SETTINGS_RETRIEVED, llm_config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.patch("/llm/settings", response_model=APIResponse)
+# @router.patch("/llm/settings", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def update_llm_settings(request: Request, settings: LLMSettingsUpdate) -> JSONResponse:
     """
     Update LLM settings.
+
+    DEPRECATED: LLM configuration should be changed via formation YAML and redeployment.
 
     Args:
         settings: New LLM settings to apply
@@ -91,18 +93,20 @@ async def update_llm_settings(request: Request, settings: LLMSettingsUpdate) -> 
         llm_settings[key] = value
 
     response = create_success_response(
-        APIObjectType.LLM,
-        APIEventType.LLM_UPDATED,
+        APIObjectType.LLM_SETTINGS,
+        APIEventType.LLM_SETTINGS_UPDATED,
         {"settings": llm_settings},
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.delete("/llm/settings/{item}", response_model=APIResponse)
+# @router.delete("/llm/settings/{item}", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def reset_llm_setting(request: Request, item: str) -> JSONResponse:
     """
     Reset a specific LLM setting to default.
+
+    DEPRECATED: LLM configuration should be changed via formation YAML and redeployment.
 
     Args:
         item: Setting item to reset
@@ -133,7 +137,7 @@ async def reset_llm_setting(request: Request, item: str) -> JSONResponse:
         # Note: This only updates the in-memory config, not persisted
 
     response = create_success_response(
-        APIObjectType.LLM,
+        APIObjectType.LLM_SETTINGS,
         APIEventType.LLM_RESET,
         {"message": f"LLM setting '{item}' reset to default"},
         request_id,

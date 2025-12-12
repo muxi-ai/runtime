@@ -6,10 +6,11 @@ requiring client API key authentication.
 """
 
 from datetime import timezone
-from typing import Optional
+from typing import Optional, List, Any, Union
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from ...responses import (
     APIResponse,
@@ -21,6 +22,12 @@ from .....utils.user_resolution import resolve_user_identifier
 from .....services import observability
 
 router = APIRouter(tags=["Users"])
+
+
+class AssociateIdentifiersRequest(BaseModel):
+    """Request model for associating multiple identifiers to a user."""
+    muxi_user_id: Optional[str] = Field(None, description="MUXI user ID to associate identifiers to. If not provided, creates a new user.")
+    identifiers: List[Any] = Field(..., description="List of identifiers (strings, [id, type] arrays, or {identifier, type} objects)")
 
 
 @router.get("/users/identifiers/{user_id}", response_model=APIResponse)
@@ -122,6 +129,153 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
         response = create_error_response(
             "INTERNAL_ERROR",
             f"Failed to retrieve user identifiers: {e!r}",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+
+@router.post("/users/identifiers", response_model=APIResponse)
+async def associate_user_identifiers(request: Request, body: AssociateIdentifiersRequest) -> JSONResponse:
+    """
+    Associate multiple identifiers to a user.
+
+    Links multiple external identifiers (email, Slack ID, Telegram handle, etc.)
+    to a single MUXI user. Enables context and memory carryover across channels.
+
+    Args:
+        body: Request with muxi_user_id (optional) and identifiers list
+
+    Returns:
+        User info with all associated identifiers
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    db_manager = formation.get_db_manager()
+    if not db_manager:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Database service is not available",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    try:
+        from .....services.memory.long_term import User, UserIdentifier
+        from sqlalchemy import select
+        import uuid
+
+        async with db_manager.get_session() as session:
+            user = None
+            muxi_user_id = body.muxi_user_id
+
+            # Find or create user
+            if muxi_user_id:
+                result = await session.execute(
+                    select(User).where(User.public_id == muxi_user_id)
+                )
+                user = result.scalar_one_or_none()
+                if not user:
+                    response = create_error_response(
+                        "RESOURCE_NOT_FOUND",
+                        f"User not found: {muxi_user_id!r}",
+                        None,
+                        request_id,
+                    )
+                    return JSONResponse(content=response.model_dump(), status_code=404)
+            else:
+                # Create new user
+                new_public_id = f"usr_{uuid.uuid4().hex[:12]}"
+                user = User(public_id=new_public_id)
+                session.add(user)
+                await session.flush()
+                muxi_user_id = new_public_id
+
+            # Parse and associate identifiers
+            associated = []
+            for item in body.identifiers:
+                identifier = None
+                identifier_type = None
+
+                if isinstance(item, str):
+                    identifier = item
+                elif isinstance(item, list) and len(item) >= 2:
+                    identifier = item[0]
+                    identifier_type = item[1]
+                elif isinstance(item, dict):
+                    identifier = item.get("identifier")
+                    identifier_type = item.get("type")
+
+                if not identifier:
+                    continue
+
+                # Check if identifier already exists
+                result = await session.execute(
+                    select(UserIdentifier).where(
+                        UserIdentifier.identifier == identifier,
+                        UserIdentifier.formation_id == formation.formation_id
+                    )
+                )
+                existing = result.scalar_one_or_none()
+
+                if existing:
+                    if existing.user_id != user.id:
+                        # Update to point to new user
+                        existing.user_id = user.id
+                        if identifier_type:
+                            existing.identifier_type = identifier_type
+                else:
+                    # Create new identifier mapping
+                    new_identifier = UserIdentifier(
+                        user_id=user.id,
+                        identifier=identifier,
+                        identifier_type=identifier_type,
+                        formation_id=formation.formation_id,
+                    )
+                    session.add(new_identifier)
+
+                associated.append({
+                    "identifier": identifier,
+                    "type": identifier_type or "unknown",
+                })
+
+                # Invalidate cache
+                kv_cache = formation.get_kv_cache()
+                if kv_cache:
+                    cache_key = f"user_id:{formation.formation_id}:{identifier}"
+                    await kv_cache.delete(cache_key)
+
+            await session.commit()
+
+            data = {
+                "muxi_user_id": muxi_user_id,
+                "identifiers": associated,
+                "count": len(associated),
+            }
+
+            response = create_success_response(
+                APIObjectType.USER_IDENTIFIER_LIST,
+                APIEventType.USER_IDENTIFIERS_ASSOCIATED,
+                data,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=200)
+
+    except Exception as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.ERROR,
+            description=f"Failed to associate user identifiers: {e!r}",
+            data={
+                "error": str(e),
+                "error_type": type(e).__name__,
+            },
+        )
+        response = create_error_response(
+            "INTERNAL_ERROR",
+            f"Failed to associate identifiers: {e!r}",
             None,
             request_id,
         )

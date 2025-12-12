@@ -104,26 +104,41 @@ MCP_TOOLS = {
 @router.get("/mcp", response_model=APIResponse)
 async def get_mcp_config(request: Request) -> JSONResponse:
     """
-    Get complete MCP configuration.
+    Get MCP defaults configuration.
 
     Returns:
-        Full MCP YAML as JSON with defaults filled
+        MCP defaults including retry attempts, timeout, and server list
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
     mcp_config = formation.config.get("mcp", {})
 
+    # Build defaults response per API spec
+    defaults_response = {
+        "default_retry_attempts": mcp_config.get("defaults", {}).get("retry_attempts", 3),
+        "default_timeout_seconds": mcp_config.get("defaults", {}).get("timeout_seconds", 30),
+        "max_tool_iterations": mcp_config.get("defaults", {}).get("max_tool_iterations", 10),
+        "max_tool_calls": mcp_config.get("defaults", {}).get("max_tool_calls", 50),
+        "max_repeated_errors": mcp_config.get("defaults", {}).get("max_repeated_errors", 3),
+        "max_timeout_in_seconds": mcp_config.get("defaults", {}).get("max_timeout_in_seconds", 300),
+        "max_tool_timeout_in_seconds": mcp_config.get("defaults", {}).get("max_tool_timeout_in_seconds", 30),
+        "enhance_user_prompts": mcp_config.get("defaults", {}).get("enhance_user_prompts", True),
+        "servers": mcp_config.get("servers", []),
+    }
+
     response = create_success_response(
-        APIObjectType.MCP, APIEventType.MCP_RETRIEVED, mcp_config, request_id
+        APIObjectType.MCP_DEFAULTS, APIEventType.MCP_DEFAULTS_RETRIEVED, defaults_response, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.patch("/mcp", response_model=APIResponse)
+# @router.patch("/mcp", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def update_mcp_defaults(request: Request, defaults: MCPDefaultsUpdate) -> JSONResponse:
     """
     Update MCP default settings.
+
+    DEPRECATED: MCP configuration should be changed via formation YAML and redeployment.
 
     Args:
         defaults: New MCP default settings
@@ -144,7 +159,7 @@ async def update_mcp_defaults(request: Request, defaults: MCPDefaultsUpdate) -> 
         mcp_defaults[key] = value
 
     response = create_success_response(
-        APIObjectType.MCP, APIEventType.MCP_UPDATED, {"defaults": mcp_defaults}, request_id
+        APIObjectType.MCP_DEFAULTS, APIEventType.MCP_DEFAULTS_UPDATED, {"defaults": mcp_defaults}, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -168,9 +183,9 @@ async def list_mcp_servers(request: Request) -> JSONResponse:
 
     # Wrap servers list in dict for APIResponse schema compliance
     response = create_success_response(
-        APIObjectType.LIST,
+        APIObjectType.MCP_SERVER_LIST,
         APIEventType.MCP_SERVER_LIST,
-        {"servers": servers},
+        {"servers": servers, "count": len(servers)},
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
@@ -375,13 +390,13 @@ async def list_mcp_tools(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.post("/mcp/tools/call", response_model=APIResponse)
+# @router.post("/mcp/tools/call", response_model=APIResponse)  # REMOVED: Direct tool execution bypasses orchestration
 async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONResponse:
     """
     Execute an MCP tool.
 
-    Routes to appropriate handler based on tool name.
-    This endpoint is admin-only so admin can execute any tool.
+    REMOVED: Direct tool execution bypasses agent/overlord orchestration and poses security risks.
+    Use /chat endpoint instead to execute tools through the normal flow.
 
     Args:
         tool_call: Tool name and arguments
@@ -402,7 +417,7 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
     tool_def = MCP_TOOLS[tool_call.tool]
 
     # Get user_id from case-insensitive header if provided
-    x_user_id = get_header_case_insensitive(request.headers, "X-User-Id")
+    x_user_id = get_header_case_insensitive(request.headers, "X-Muxi-User-ID")
 
     # Add user_id to arguments if provided and tool is client-level
     if tool_def["access"] == "client" and x_user_id:

@@ -385,7 +385,7 @@ class FormationLoader:
         placeholder_registry: Optional[Dict[str, str]] = None,
     ) -> None:
         """
-        Discover MCP server configurations in the mcp/ directory and merge them.
+        Discover MCP server configurations in the mcp/ or mcps/ directory and merge them.
 
         Args:
             config: Main formation configuration to merge into
@@ -394,7 +394,10 @@ class FormationLoader:
             secrets_in_use: Set to accumulate secret names in use
             placeholder_registry: Registry to accumulate placeholder mappings
         """
-        mcp_dir = formation_dir / "mcp"
+        # Support both mcp/ and mcps/ directory names
+        mcp_dir = formation_dir / "mcps"
+        if not mcp_dir.exists():
+            mcp_dir = formation_dir / "mcp"
         if not mcp_dir.exists():
             #  MCP_SERVER_CONNECTING
             return
@@ -715,9 +718,9 @@ class FormationLoader:
             if not main_config.exists():
                 main_config = path_obj / "formation.yml"
             if main_config.exists():
-                # Look for component directories
+                # Look for component directories (support both mcp/ and mcps/)
                 has_agents = (path_obj / "agents").exists()
-                has_mcp = (path_obj / "mcp").exists()
+                has_mcp = (path_obj / "mcp").exists() or (path_obj / "mcps").exists()
                 has_a2a = (path_obj / "a2a").exists()
 
                 if has_agents or has_mcp or has_a2a:

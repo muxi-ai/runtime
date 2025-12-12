@@ -66,10 +66,12 @@ async def get_scheduler_config(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.patch("/scheduler", response_model=APIResponse)
+# @router.patch("/scheduler", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 def update_scheduler(request: Request, config: SchedulerUpdate) -> JSONResponse:
     """
     Update scheduler configuration.
+
+    DEPRECATED: Scheduler configuration should be changed via formation YAML and redeployment.
 
     Args:
         config: New scheduler configuration

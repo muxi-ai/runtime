@@ -62,7 +62,11 @@ if [ -z "$ARCH" ]; then
 fi
 
 TARBALL="muxi-runtime-$VERSION.tar"
-SIF_FILE="muxi-runtime-$VERSION-linux-$ARCH.sif"
+SIF_DIR="sif-builds"
+SIF_FILE="$SIF_DIR/muxi-runtime-$VERSION-linux-$ARCH.sif"
+
+# Ensure sif-builds directory exists
+mkdir -p "$SIF_DIR"
 
 echo "📦 Configuration:"
 echo "   Version: $VERSION"
@@ -128,6 +132,7 @@ echo ""
 echo "📝 For MUXI Server:"
 echo "   cp $SIF_FILE ~/.muxi/server/runtimes/"
 echo ""
+SIF_FILENAME=$(basename "$SIF_FILE")
 echo "✨ Test the SIF:"
 echo "   # Using runtime-runner (macOS/Windows):"
 echo "   docker run --rm --privileged \\"

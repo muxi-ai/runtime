@@ -8,7 +8,7 @@ requiring client API key authentication.
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
-from fastapi import APIRouter, Request, Query
+from fastapi import APIRouter, Request, Query, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -30,10 +30,23 @@ class MemoryCreate(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
-@router.get("/memories/{user_id}", response_model=APIResponse)
+def _get_user_id(x_user_id: Optional[str], request_id: Optional[str]) -> tuple[Optional[str], Optional[JSONResponse]]:
+    """Extract and validate user_id from X-Muxi-User-ID header."""
+    if not x_user_id:
+        response = create_error_response(
+            "INVALID_REQUEST",
+            "X-Muxi-User-ID header is required",
+            None,
+            request_id,
+        )
+        return None, JSONResponse(content=response.model_dump(), status_code=400)
+    return x_user_id, None
+
+
+@router.get("/memories", response_model=APIResponse)
 async def get_user_memories(
     request: Request,
-    user_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of memories to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
 ) -> JSONResponse:
@@ -41,7 +54,7 @@ async def get_user_memories(
     Get memories for a user.
 
     Args:
-        user_id: User ID to get memories for
+        x_user_id: User ID from X-Muxi-User-ID header
         limit: Maximum number of memories to return
         offset: Offset for pagination
 
@@ -50,6 +63,11 @@ async def get_user_memories(
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Validate user_id from header
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
 
     # Check if persistent memory is configured
     if not formation.has_persistent_memory():
@@ -90,20 +108,29 @@ async def get_user_memories(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.post("/memories/{user_id}", response_model=APIResponse)
-async def create_user_memory(request: Request, user_id: str, memory: MemoryCreate) -> JSONResponse:
+@router.post("/memories", response_model=APIResponse)
+async def create_user_memory(
+    request: Request,
+    memory: MemoryCreate,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+) -> JSONResponse:
     """
     Create a memory for a user.
 
     Args:
-        user_id: User ID to create memory for
         memory: Memory content and metadata
+        x_user_id: User ID from X-Muxi-User-ID header
 
     Returns:
         Created memory details
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Validate user_id from header
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
 
     # Check if persistent memory is configured
     if not formation.has_persistent_memory():
@@ -147,20 +174,29 @@ async def create_user_memory(request: Request, user_id: str, memory: MemoryCreat
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.delete("/memories/{user_id}/{memory_id}", response_model=APIResponse)
-async def delete_user_memory(request: Request, user_id: str, memory_id: str) -> JSONResponse:
+@router.delete("/memories/{memory_id}", response_model=APIResponse)
+async def delete_user_memory(
+    request: Request,
+    memory_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+) -> JSONResponse:
     """
     Delete a user memory.
 
     Args:
-        user_id: User ID who owns the memory
         memory_id: Memory ID to delete
+        x_user_id: User ID from X-Muxi-User-ID header
 
     Returns:
         Success response
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Validate user_id from header
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
 
     # Check if persistent memory is configured
     if not formation.has_persistent_memory():
@@ -207,19 +243,27 @@ async def delete_user_memory(request: Request, user_id: str, memory_id: str) -> 
 
 
 # Buffer Memory Operations
-@router.get("/memory/buffer/{user_id}", response_model=APIResponse)
-def get_buffer_status(request: Request, user_id: str) -> JSONResponse:
+@router.get("/memory/buffer", response_model=APIResponse)
+def get_buffer_status(
+    request: Request,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+) -> JSONResponse:
     """
     Get buffer memory status for a user.
 
     Args:
-        user_id: User ID
+        x_user_id: User ID from X-Muxi-User-ID header
 
     Returns:
         Buffer status with message counts and session info
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Validate user_id from header
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
 
     try:
         # Get overlord for buffer access
@@ -300,19 +344,27 @@ def get_buffer_status(request: Request, user_id: str) -> JSONResponse:
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.delete("/memory/buffer/{user_id}", response_model=APIResponse)
-def clear_user_buffer(request: Request, user_id: str) -> JSONResponse:
+@router.delete("/memory/buffer", response_model=APIResponse)
+def clear_user_buffer(
+    request: Request,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+) -> JSONResponse:
     """
     Clear all buffer memory for a user across all sessions.
 
     Args:
-        user_id: User ID
+        x_user_id: User ID from X-Muxi-User-ID header
 
     Returns:
         Success response with cleared counts
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Validate user_id from header
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
 
     try:
         # Get overlord for buffer access
@@ -392,20 +444,29 @@ def clear_user_buffer(request: Request, user_id: str) -> JSONResponse:
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.delete("/memory/buffer/{user_id}/{session_id}", response_model=APIResponse)
-def clear_session_buffer(request: Request, user_id: str, session_id: str) -> JSONResponse:
+@router.delete("/memory/buffer/{session_id}", response_model=APIResponse)
+def clear_session_buffer(
+    request: Request,
+    session_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+) -> JSONResponse:
     """
     Clear buffer memory for a specific session.
 
     Args:
-        user_id: User ID
         session_id: Session ID
+        x_user_id: User ID from X-Muxi-User-ID header
 
     Returns:
         Success response with cleared message count
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Validate user_id from header
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
 
     try:
         # Get overlord for buffer access

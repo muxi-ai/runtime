@@ -51,7 +51,7 @@ async def get_memory_config(request: Request) -> JSONResponse:
     memory_config = formation.config.get("memory", {})
 
     response = create_success_response(
-        APIObjectType.CONFIG, APIEventType.CONFIG_RETRIEVED, memory_config, request_id
+        APIObjectType.MEMORY_CONFIG, APIEventType.MEMORY_CONFIG_RETRIEVED, memory_config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -191,10 +191,12 @@ async def clear_memory_buffers(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.patch("/memory", response_model=APIResponse)
+# @router.patch("/memory", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def update_memory_config(request: Request, config: MemoryConfigUpdate) -> JSONResponse:
     """
     Update memory configuration.
+
+    DEPRECATED: Memory configuration should be changed via formation YAML and redeployment.
 
     Args:
         config: Memory configuration updates
@@ -232,15 +234,17 @@ async def update_memory_config(request: Request, config: MemoryConfigUpdate) -> 
     # This is by design for runtime configuration management
 
     response = create_success_response(
-        APIObjectType.CONFIG, APIEventType.CONFIG_UPDATED, current_config, request_id
+        APIObjectType.MEMORY_CONFIG, APIEventType.MEMORY_CONFIG_UPDATED, current_config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.delete("/memory/{item}", response_model=APIResponse)
+# @router.delete("/memory/{item}", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def reset_memory_setting(request: Request, item: str) -> JSONResponse:
     """
     Reset a specific memory setting to default value.
+
+    DEPRECATED: Memory configuration should be changed via formation YAML and redeployment.
 
     Args:
         item: Memory setting to reset (e.g., buffer_size, working_max_memory_mb)
@@ -272,8 +276,8 @@ async def reset_memory_setting(request: Request, item: str) -> JSONResponse:
                 del section[path[1]]
 
     response = create_success_response(
-        APIObjectType.CONFIG,
-        APIEventType.CONFIG_UPDATED,
+        APIObjectType.MEMORY_CONFIG,
+        APIEventType.MEMORY_CONFIG_UPDATED,
         {"message": f"Memory setting '{item}' reset to default"},
         request_id,
     )

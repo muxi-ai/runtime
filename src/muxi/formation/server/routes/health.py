@@ -8,8 +8,6 @@ and formation status without requiring authentication.
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from ..responses import APIResponse, create_success_response
-from ....datatypes.api import APIEventType, APIObjectType
 from ....services import observability
 
 router = APIRouter(tags=["Health"])
@@ -97,38 +95,37 @@ async def v1_status(request: Request) -> HTMLResponse:
     return await root_status(request)
 
 
-@router.get("/health", response_model=APIResponse)
+@router.get("/health")
 async def health_check(request: Request) -> JSONResponse:
     """
     Basic health check endpoint.
 
     Returns:
-        Standardized health status response with envelope format
+        Simple health response per API spec (not wrapped in envelope)
     """
+    import time
+
     formation = request.app.state.formation
-    request_id = getattr(request.state, "request_id", None)
 
     # Check if the formation is healthy
     is_healthy = _check_formation_health(formation)
 
-    # Build health data
+    # Get uptime
+    server = getattr(formation, '_server', None)
+    uptime_seconds = 0
+    if server and hasattr(server, '_start_time'):
+        uptime_seconds = int(time.time() - server._start_time)
+
+    # Build simple health response per spec
     health_data = {
         "status": "healthy" if is_healthy else "unhealthy",
-        "formation_id": (
-            formation.config.get("id", "unknown")
-            if is_healthy and hasattr(formation, "config") and isinstance(formation.config, dict)
-            else "unknown"
-        ),
         "version": (
             formation.config.get("version", "1.0.0")
             if is_healthy and hasattr(formation, "config") and isinstance(formation.config, dict)
             else "1.0.0"
         ),
+        "uptime_seconds": uptime_seconds,
     }
 
-    response = create_success_response(
-        APIObjectType.STATUS, APIEventType.STATUS_RETRIEVED, health_data, request_id
-    )
-
     status_code = 200 if is_healthy else 503
-    return JSONResponse(content=response.model_dump(), status_code=status_code)
+    return JSONResponse(content=health_data, status_code=status_code)

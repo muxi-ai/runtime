@@ -56,10 +56,12 @@ async def get_async_config(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.patch("/async", response_model=APIResponse)
+# @router.patch("/async", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def update_async_settings(request: Request, settings: AsyncSettingsUpdate) -> JSONResponse:
     """
     Update async processing settings.
+
+    DEPRECATED: Async configuration should be changed via formation YAML and redeployment.
 
     Args:
         settings: New async settings to apply

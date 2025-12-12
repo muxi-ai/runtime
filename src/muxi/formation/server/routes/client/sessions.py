@@ -7,7 +7,7 @@ requiring client API key authentication.
 
 from typing import Optional
 
-from fastapi import APIRouter, Request, Query
+from fastapi import APIRouter, Request, Query, Header
 from fastapi.responses import JSONResponse
 
 from ...responses import (
@@ -21,10 +21,23 @@ from .....services import observability
 router = APIRouter(tags=["Sessions"])
 
 
-@router.get("/sessions/{user_id}", response_model=APIResponse)
+def _get_user_id(x_user_id: Optional[str], request_id: Optional[str]) -> tuple[Optional[str], Optional[JSONResponse]]:
+    """Extract and validate user_id from X-Muxi-User-ID header."""
+    if not x_user_id:
+        response = create_error_response(
+            "INVALID_REQUEST",
+            "X-Muxi-User-ID header is required",
+            None,
+            request_id,
+        )
+        return None, JSONResponse(content=response.model_dump(), status_code=400)
+    return x_user_id, None
+
+
+@router.get("/sessions", response_model=APIResponse)
 def list_user_sessions(
     request: Request,
-    user_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
     active_only: bool = Query(default=False, description="Only return active sessions"),
     limit: int = Query(default=50, ge=1, le=1000, description="Maximum number of sessions"),
 ) -> JSONResponse:
@@ -32,7 +45,7 @@ def list_user_sessions(
     List all sessions for a user.
 
     Args:
-        user_id: User ID
+        x_user_id: User ID from X-Muxi-User-ID header
         active_only: Only return active sessions (default: False)
         limit: Maximum number of sessions to return (default: 50)
 
@@ -41,6 +54,11 @@ def list_user_sessions(
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Validate user_id from header
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
 
     try:
         # Get overlord for buffer access
@@ -138,20 +156,29 @@ def list_user_sessions(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.get("/sessions/{user_id}/{session_id}", response_model=APIResponse)
-def get_session(request: Request, user_id: str, session_id: str) -> JSONResponse:
+@router.get("/sessions/{session_id}", response_model=APIResponse)
+def get_session(
+    request: Request,
+    session_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+) -> JSONResponse:
     """
     Get detailed information about a specific session.
 
     Args:
-        user_id: User ID
         session_id: Session ID
+        x_user_id: User ID from X-Muxi-User-ID header
 
     Returns:
         Session details including metadata
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Validate user_id from header
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
 
     try:
         # Get overlord for buffer access
@@ -230,20 +257,29 @@ def get_session(request: Request, user_id: str, session_id: str) -> JSONResponse
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.delete("/sessions/{user_id}/{session_id}", response_model=APIResponse)
-def clear_session(request: Request, user_id: str, session_id: str) -> JSONResponse:
+@router.delete("/sessions/{session_id}", response_model=APIResponse)
+def clear_session(
+    request: Request,
+    session_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+) -> JSONResponse:
     """
     Clear a session and its buffer memory.
 
     Args:
-        user_id: User ID
         session_id: Session ID
+        x_user_id: User ID from X-Muxi-User-ID header
 
     Returns:
         Success response with cleared message count
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Validate user_id from header
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
 
     try:
         # Get overlord for buffer access
@@ -323,11 +359,11 @@ def clear_session(request: Request, user_id: str, session_id: str) -> JSONRespon
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.get("/sessions/{user_id}/{session_id}/messages", response_model=APIResponse)
+@router.get("/sessions/{session_id}/messages", response_model=APIResponse)
 def get_session_messages(
     request: Request,
-    user_id: str,
     session_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
     limit: int = Query(default=50, ge=1, le=1000, description="Maximum messages"),
     before: Optional[str] = Query(default=None, description="Get messages before this timestamp"),
 ) -> JSONResponse:
@@ -335,8 +371,8 @@ def get_session_messages(
     Retrieve chat message history for a session.
 
     Args:
-        user_id: User ID
         session_id: Session ID
+        x_user_id: User ID from X-Muxi-User-ID header
         limit: Maximum number of messages (default: 50)
         before: Get messages before this ISO 8601 timestamp
 
@@ -345,6 +381,11 @@ def get_session_messages(
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Validate user_id from header
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
 
     try:
         # Get overlord for buffer access

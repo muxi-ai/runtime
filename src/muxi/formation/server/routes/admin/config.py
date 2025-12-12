@@ -78,7 +78,7 @@ async def get_formation_config(request: Request) -> JSONResponse:
     }
 
     response = create_success_response(
-        APIObjectType.FORMATION_CONFIG, APIEventType.CONFIG_RETRIEVED, config_summary, request_id
+        APIObjectType.FORMATION_CONFIG, APIEventType.FORMATION_CONFIG_RETRIEVED, config_summary, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -99,7 +99,7 @@ async def get_formation_config_detailed(request: Request) -> JSONResponse:
     config = restore_secret_placeholders(config, formation.secret_placeholders)
 
     response = create_success_response(
-        APIObjectType.FORMATION_CONFIG, APIEventType.CONFIG_RETRIEVED, config, request_id
+        APIObjectType.FORMATION_CONFIG, APIEventType.FORMATION_CONFIG_RETRIEVED, config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -187,6 +187,6 @@ async def get_formation_status(request: Request) -> JSONResponse:
     }
 
     response = create_success_response(
-        APIObjectType.FORMATION_STATUS, APIEventType.STATUS_RETRIEVED, status, request_id
+        APIObjectType.FORMATION_STATUS, APIEventType.FORMATION_STATUS_RETRIEVED, status, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
