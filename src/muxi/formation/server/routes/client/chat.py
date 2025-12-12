@@ -94,10 +94,10 @@ async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingRe
     # Get overlord for chat processing
     overlord = formation._overlord
 
-    # Async mode support: Returns job_id immediately, processes in background
-    # User can poll GET /v1/jobs or subscribe to GET /v1/events (with X-Muxi-User-ID header)
+    # Async mode support: Returns request_id immediately, processes in background
+    # User can poll GET /v1/requests or subscribe to GET /v1/events (with X-Muxi-User-ID header)
     if chat_request.mode == "async":
-        # Async mode is supported via job tracking system
+        # Async mode is supported via request tracking system
         # Implementation requires webhook configuration or SSE subscription for results
         raise HTTPException(
             status_code=501, 

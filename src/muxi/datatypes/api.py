@@ -96,6 +96,8 @@ class APIEventType(str, Enum):
 
     # Request status events
     REQUEST_STATUS_RETRIEVED = "request.status.retrieved"
+    REQUEST_LIST_RETRIEVED = "request.list.retrieved"
+    REQUEST_CANCELLED = "request.cancelled"
 
     # Logging destination events (for log destination management)
     LOGGING_DESTINATIONS_LIST = "logging.destinations.list"
@@ -186,6 +188,7 @@ class APIObjectType(str, Enum):
 
     # Request status objects
     REQUEST_STATUS = "request_status"
+    REQUEST_LIST = "request_list"
 
     # User identifier objects
     USER = "user"
