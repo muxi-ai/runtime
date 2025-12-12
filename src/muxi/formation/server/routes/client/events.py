@@ -7,19 +7,24 @@ requiring client API key authentication.
 
 import asyncio
 import json
-from fastapi import APIRouter, HTTPException, Request
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Request, Header
 from fastapi.responses import StreamingResponse
 
 router = APIRouter(tags=["Events"])
 
 
-@router.get("/events/{user_id}")
-async def user_events(request: Request, user_id: str) -> StreamingResponse:
+@router.get("/events")
+async def user_events(
+    request: Request,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+) -> StreamingResponse:
     """
     SSE stream for async updates for a specific user.
 
     Args:
-        user_id: User ID to get events for
+        x_user_id: User ID from X-Muxi-User-ID header
 
     Returns:
         Server-sent event stream
@@ -27,8 +32,14 @@ async def user_events(request: Request, user_id: str) -> StreamingResponse:
     Note:
         Client API key authentication is enforced at the router level
     """
+    if not x_user_id:
+        raise HTTPException(status_code=400, detail="X-Muxi-User-ID header is required")
+
     formation = request.app.state.formation
     overlord = getattr(formation, "_overlord", None)
+
+    # Normalize user_id to "0" for single-user mode
+    user_id = "0" if overlord and not getattr(overlord, "is_multi_user", False) else x_user_id
 
     if not overlord:
         raise HTTPException(
@@ -92,21 +103,21 @@ async def user_events(request: Request, user_id: str) -> StreamingResponse:
     )
 
 
-@router.get("/stream/{user_id}/{session_id}/{request_id}")
+@router.get("/stream/{session_id}/{request_id}")
 async def stream_request(
     request: Request,
-    user_id: str,
     session_id: str,
-    request_id: str
+    request_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
 ) -> StreamingResponse:
     """
     SSE stream for real-time request processing events.
 
     Args:
         request: FastAPI request object (contains server reference)
-        user_id: User ID for security validation
         session_id: Session ID for security validation
         request_id: Request ID to stream events for
+        x_user_id: User ID from X-Muxi-User-ID header
 
     Returns:
         Server-sent event stream of processing events
@@ -116,6 +127,14 @@ async def stream_request(
         - User/session validation ensures proper access control
         - Real-time streaming - no event replay
     """
+    if not x_user_id:
+        raise HTTPException(status_code=400, detail="X-Muxi-User-ID header is required")
+
+    # Normalize user_id to "0" for single-user mode
+    formation = request.app.state.formation
+    overlord = getattr(formation, "_overlord", None)
+    user_id = "0" if overlord and not getattr(overlord, "is_multi_user", False) else x_user_id
+
     from ....services.streaming import streaming_manager
 
     async def event_generator():

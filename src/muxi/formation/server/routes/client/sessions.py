@@ -73,6 +73,10 @@ def list_user_sessions(
             )
             return JSONResponse(content=response.model_dump(), status_code=503)
 
+        # Normalize user_id to "0" for single-user mode (same as chat())
+        if not getattr(overlord, "is_multi_user", False):
+            user_id = "0"
+
         # Get buffer memory
         buffer = getattr(overlord, "buffer_memory", None)
         if buffer is None:
@@ -193,6 +197,10 @@ def get_session(
             )
             return JSONResponse(content=response.model_dump(), status_code=503)
 
+        # Normalize user_id to "0" for single-user mode (same as chat())
+        if not getattr(overlord, "is_multi_user", False):
+            user_id = "0"
+
         # Get buffer memory
         buffer = getattr(overlord, "buffer_memory", None)
         if buffer is None:
@@ -204,21 +212,35 @@ def get_session(
             )
             return JSONResponse(content=response.model_dump(), status_code=404)
 
-        # Get session details
+        # Get session details by scanning buffer
         session_data = None
-        if hasattr(buffer, "get_session"):
-            session_data = buffer.get_session(user_id, session_id)
-        else:
-            # Fallback: construct from buffer entries
-            if hasattr(buffer, "get_messages"):
-                messages = buffer.get_messages(user_id=user_id, session_id=session_id)
-                if messages:
-                    session_data = {
-                        "session_id": session_id,
-                        "user_id": user_id,
-                        "message_count": len(messages),
-                        "active": True,
-                    }
+        if hasattr(buffer, "buffer"):
+            message_count = 0
+            first_timestamp = None
+            last_timestamp = None
+            
+            for item in buffer.buffer:
+                if not isinstance(item, dict):
+                    continue
+                metadata = item.get("metadata", {})
+                if metadata.get("user_id") == user_id and metadata.get("session_id") == session_id:
+                    message_count += 1
+                    ts = item.get("timestamp") or metadata.get("timestamp")
+                    if ts:
+                        if first_timestamp is None or ts < first_timestamp:
+                            first_timestamp = ts
+                        if last_timestamp is None or ts > last_timestamp:
+                            last_timestamp = ts
+            
+            if message_count > 0:
+                session_data = {
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "message_count": message_count,
+                    "active": True,
+                    "created_at": first_timestamp,
+                    "last_activity": last_timestamp,
+                }
 
         if not session_data:
             response = create_error_response(
@@ -404,6 +426,10 @@ def get_session_messages(
             )
             return JSONResponse(content=response.model_dump(), status_code=503)
 
+        # Normalize user_id to "0" for single-user mode (same as chat())
+        if not getattr(overlord, "is_multi_user", False):
+            user_id = "0"
+
         # Get buffer memory
         buffer = getattr(overlord, "buffer_memory", None)
         if buffer is None:
@@ -542,6 +568,10 @@ async def restore_session(
                 request_id,
             )
             return JSONResponse(content=response.model_dump(), status_code=503)
+
+        # Normalize user_id to "0" for single-user mode (same as chat())
+        if not getattr(overlord, "is_multi_user", False):
+            user_id = "0"
 
         # Get buffer memory
         buffer = getattr(overlord, "buffer_memory", None)
