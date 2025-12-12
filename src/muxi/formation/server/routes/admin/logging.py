@@ -131,12 +131,15 @@ async def list_logging_destinations(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.post("/logging/destinations", response_model=APIResponse)
+# @router.post("/logging/destinations", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def create_logging_destination(
     request: Request, destination: LoggingDestinationCreate
 ) -> JSONResponse:
     """
     Add a new logging destination.
+
+    DEPRECATED: Logging configuration should be changed via formation YAML and redeployment.
+    Runtime changes would be lost on next deploy.
 
     Args:
         destination: Destination configuration
@@ -173,12 +176,15 @@ async def create_logging_destination(
     return JSONResponse(content=response.model_dump(), status_code=501)
 
 
-@router.patch("/logging/destinations/{destination_id}", response_model=APIResponse)
+# @router.patch("/logging/destinations/{destination_id}", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def update_logging_destination(
     request: Request, destination_id: str, update: LoggingDestinationUpdate
 ) -> JSONResponse:
     """
     Update a logging destination.
+
+    DEPRECATED: Logging configuration should be changed via formation YAML and redeployment.
+    Runtime changes would be lost on next deploy.
 
     Args:
         destination_id: ID of the destination
@@ -211,10 +217,13 @@ async def update_logging_destination(
     return JSONResponse(content=response.model_dump(), status_code=501)
 
 
-@router.delete("/logging/destinations/{destination_id}", response_model=APIResponse)
+# @router.delete("/logging/destinations/{destination_id}", response_model=APIResponse)  # DEPRECATED: Use deployment instead
 async def delete_logging_destination(request: Request, destination_id: str) -> JSONResponse:
     """
     Remove a logging destination.
+
+    DEPRECATED: Logging configuration should be changed via formation YAML and redeployment.
+    Runtime changes would be lost on next deploy.
 
     Args:
         destination_id: ID of the destination to remove
