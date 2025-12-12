@@ -5,10 +5,11 @@ These endpoints provide session lifecycle management and history access,
 requiring client API key authentication.
 """
 
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Request, Query, Header
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from ...responses import (
     APIResponse,
@@ -74,7 +75,7 @@ def list_user_sessions(
 
         # Get buffer memory
         buffer = getattr(overlord, "buffer_memory", None)
-        if not buffer:
+        if buffer is None:
             # Return empty list if no buffer
             data = {"sessions": [], "count": 0}
             response = create_success_response(
@@ -194,7 +195,7 @@ def get_session(
 
         # Get buffer memory
         buffer = getattr(overlord, "buffer_memory", None)
-        if not buffer:
+        if buffer is None:
             response = create_error_response(
                 "RESOURCE_NOT_FOUND",
                 f"Session '{session_id}' not found",
@@ -299,7 +300,7 @@ def clear_session(
 
         # Get buffer memory
         buffer = getattr(overlord, "buffer_memory", None)
-        if not buffer:
+        if buffer is None:
             response = create_error_response(
                 "SERVICE_UNAVAILABLE",
                 "Buffer memory is not available",
@@ -405,7 +406,7 @@ def get_session_messages(
 
         # Get buffer memory
         buffer = getattr(overlord, "buffer_memory", None)
-        if not buffer:
+        if buffer is None:
             data = {
                 "session_id": session_id,
                 "messages": [],
@@ -480,6 +481,115 @@ def get_session_messages(
         response = create_error_response(
             "INTERNAL_ERROR",
             f"Failed to get session messages: {str(e)}",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+
+class SessionMessage(BaseModel):
+    """A message to restore into a session."""
+    role: str = Field(..., description="Message role: user, assistant, or system")
+    content: str = Field(..., description="Message content")
+    timestamp: str = Field(..., description="ISO 8601 timestamp")
+    agent_id: Optional[str] = Field(None, description="Agent ID for assistant messages")
+    metadata: Optional[dict] = Field(None, description="Additional metadata")
+
+
+class SessionRestoreRequest(BaseModel):
+    """Request body for session restore."""
+    messages: List[SessionMessage] = Field(..., description="Messages to load into session")
+
+
+@router.post("/sessions/{session_id}/restore", response_model=APIResponse)
+async def restore_session(
+    request: Request,
+    session_id: str,
+    payload: SessionRestoreRequest,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+) -> JSONResponse:
+    """
+    Restore a session from external storage.
+
+    Hydrate a session's buffer memory with messages from external storage.
+    This enables developers to implement persistent chat history in their own
+    database while using MUXI's ephemeral buffer for active conversations.
+
+    Args:
+        session_id: Session ID to restore
+        payload: Messages to load
+        x_user_id: User ID from X-Muxi-User-ID header
+
+    Returns:
+        Success response with counts of loaded/dropped messages
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    # Validate user_id from header
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
+
+    try:
+        # Get overlord for buffer access
+        overlord = getattr(formation, "_overlord", None)
+        if not overlord:
+            response = create_error_response(
+                "SERVICE_UNAVAILABLE",
+                "Overlord service is not available",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=503)
+
+        # Get buffer memory
+        buffer = getattr(overlord, "buffer_memory", None)
+        if buffer is None:
+            response = create_error_response(
+                "SERVICE_UNAVAILABLE",
+                "Buffer memory is not available",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=503)
+
+        # Convert Pydantic models to dicts
+        messages = [msg.model_dump() for msg in payload.messages]
+
+        # Restore the session
+        result = await buffer.restore_session(user_id, session_id, messages)
+
+        data = {
+            "session_id": session_id,
+            "messages_loaded": result["messages_loaded"],
+            "messages_dropped": result["messages_dropped"],
+            "message": "Session restored successfully",
+        }
+
+        response = create_success_response(
+            APIObjectType.SESSION,
+            APIEventType.SESSION_RESTORED,
+            data,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=200)
+
+    except Exception as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.ERROR,
+            description=f"Failed to restore session: {str(e)}",
+            data={
+                "user_id": user_id,
+                "session_id": session_id,
+                "error": str(e),
+                "error_type": type(e).__name__,
+            },
+        )
+        response = create_error_response(
+            "INTERNAL_ERROR",
+            f"Failed to restore session: {str(e)}",
             None,
             request_id,
         )

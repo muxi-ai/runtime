@@ -1,6 +1,6 @@
-# Session Restore - PRD
+# Session Restore
 
-**Status:** Planned  
+**Status:** Implemented  
 **Created:** 2025-12-12  
 **Endpoint:** `POST /sessions/{session_id}/restore`
 

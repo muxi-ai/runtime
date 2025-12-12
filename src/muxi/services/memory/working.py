@@ -1083,6 +1083,99 @@ class WorkingMemory:
         self.kv_store.clear()
         self.kv_expiry.clear()
 
+    async def restore_session(
+        self,
+        user_id: str,
+        session_id: str,
+        messages: List[Dict[str, Any]],
+    ) -> Dict[str, int]:
+        """
+        Restore a session by clearing existing messages and loading new ones.
+
+        This enables developers to implement persistent chat history in their own
+        database while using MUXI's ephemeral buffer for active conversations.
+
+        Args:
+            user_id: User ID to restore messages for
+            session_id: Session ID to restore
+            messages: List of messages to load, each with:
+                - role: "user", "assistant", or "system"
+                - content: Message content
+                - timestamp: ISO 8601 timestamp string
+                - agent_id: Optional agent ID (for assistant messages)
+                - metadata: Optional additional metadata
+
+        Returns:
+            Dict with:
+                - messages_loaded: Number of messages successfully loaded
+                - messages_dropped: Number of messages dropped due to buffer limits
+        """
+        from datetime import datetime
+
+        # First, remove existing messages for this user+session
+        items_to_keep = []
+        for item in self.buffer:
+            metadata = item.get("metadata", {})
+            if metadata.get("user_id") == user_id and metadata.get("session_id") == session_id:
+                continue  # Skip - will be replaced
+            items_to_keep.append(item)
+
+        # Clear and rebuild buffer with remaining items
+        self.buffer.clear()
+        for item in items_to_keep:
+            self.buffer.append(item)
+
+        # Sort incoming messages by timestamp
+        def parse_timestamp(msg):
+            ts = msg.get("timestamp", "")
+            if isinstance(ts, str):
+                try:
+                    return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+                except ValueError:
+                    return 0.0
+            return float(ts) if ts else 0.0
+
+        sorted_messages = sorted(messages, key=parse_timestamp)
+
+        # Calculate how many we can load
+        available_space = self.buffer_size - len(self.buffer)
+        messages_to_load = sorted_messages[-available_space:] if len(sorted_messages) > available_space else sorted_messages
+        messages_dropped = len(sorted_messages) - len(messages_to_load)
+
+        # Add messages to buffer
+        for msg in messages_to_load:
+            timestamp = parse_timestamp(msg)
+            metadata = {
+                "user_id": user_id,
+                "session_id": session_id,
+                "role": msg.get("role", "user"),
+                "timestamp": timestamp,
+                "formation_id": self.formation_id,
+            }
+            if msg.get("agent_id"):
+                metadata["agent_id"] = msg["agent_id"]
+            if msg.get("metadata"):
+                metadata.update(msg["metadata"])
+
+            # Add without embedding for now (restored messages don't need vector search)
+            item = {
+                "text": msg.get("content", ""),
+                "metadata": metadata,
+                "timestamp": timestamp,
+                "namespace": "buffer",
+                "embedding": None,
+            }
+            self.buffer.append(item)
+
+        # Mark index for rebuild if we have vector search
+        if self.model and messages_to_load:
+            self.needs_rebuild = True
+
+        return {
+            "messages_loaded": len(messages_to_load),
+            "messages_dropped": messages_dropped,
+        }
+
     async def kv_set(self, key: str, value: dict, ttl: int = 300, namespace: str = None) -> None:
         """
         Store key-value data with TTL and optional namespace.

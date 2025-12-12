@@ -279,7 +279,7 @@ def get_buffer_status(
 
         # Get buffer memory
         buffer = getattr(overlord, "buffer_memory", None)
-        if not buffer:
+        if buffer is None:
             # Return empty status if no buffer
             data = {
                 "user_id": user_id,
@@ -380,7 +380,7 @@ def clear_user_buffer(
 
         # Get buffer memory
         buffer = getattr(overlord, "buffer_memory", None)
-        if not buffer:
+        if buffer is None:
             response = create_error_response(
                 "SERVICE_UNAVAILABLE",
                 "Buffer memory is not available",
@@ -482,7 +482,7 @@ def clear_session_buffer(
 
         # Get buffer memory
         buffer = getattr(overlord, "buffer_memory", None)
-        if not buffer:
+        if buffer is None:
             response = create_error_response(
                 "SERVICE_UNAVAILABLE",
                 "Buffer memory is not available",

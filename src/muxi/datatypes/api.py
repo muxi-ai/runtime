@@ -86,6 +86,7 @@ class APIEventType(str, Enum):
     SESSION_CLEARED = "session.cleared"
     SESSION_DELETED = "session.deleted"
     SESSION_MESSAGES_LIST = "session.messages.list"
+    SESSION_RESTORED = "session.restored"
 
     # User identifier events
     USER_IDENTIFIERS_LIST = "user.identifiers.list"
