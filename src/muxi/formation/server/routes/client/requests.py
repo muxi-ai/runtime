@@ -40,8 +40,10 @@ def _check_auth_and_user_id(
     formation = request.app.state.formation
 
     # Get keys from formation config
-    admin_key = getattr(formation, "_admin_key", None) or formation.config.get("server", {}).get("admin_api_key")
-    client_key = getattr(formation, "_client_key", None) or formation.config.get("server", {}).get("client_api_key")
+    # Get keys from formation._api_keys (where they're actually stored)
+    api_keys = getattr(formation, "_api_keys", {})
+    admin_key = api_keys.get("admin", "")
+    client_key = api_keys.get("client", "")
 
     # Check which auth was used
     provided_admin_key = request.headers.get("x-muxi-admin-key")
