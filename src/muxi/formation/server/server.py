@@ -563,29 +563,37 @@ class FormationServer:
 
     def _register_client_routes(self, app: FastAPI) -> None:
         """Register client interaction endpoints."""
-        from .auth import ClientKeyAuth
+        from .auth import ClientKeyAuth, DualKeyAuth
         from fastapi import Depends
 
         # Import all client route modules
         from .routes.client import chat, events, requests, memory, triggers, users, sessions, sops
 
-        # Create auth dependency
+        # Create auth dependencies
         client_auth = ClientKeyAuth(self.client_key)
+        dual_auth = DualKeyAuth(self.admin_key, self.client_key)
 
-        # Register all client routers with auth dependency
-        client_routers = [
+        # Routers that accept only ClientKey
+        client_only_routers = [
             chat.router,
-            events.router,
-            requests.router,
-            memory.router,
             triggers.router,
             users.router,
             sessions.router,
             sops.router,
         ]
 
-        for router in client_routers:
+        # Routers that accept both ClientKey and AdminKey
+        dual_auth_routers = [
+            events.router,
+            requests.router,
+            memory.router,
+        ]
+
+        for router in client_only_routers:
             app.include_router(router, prefix="/v1", dependencies=[Depends(client_auth)])
+
+        for router in dual_auth_routers:
+            app.include_router(router, prefix="/v1", dependencies=[Depends(dual_auth)])
 
     async def start(self, block: bool = True, install_signal_handlers: bool = True) -> None:
         """
