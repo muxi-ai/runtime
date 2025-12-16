@@ -56,7 +56,7 @@ async def get_memory_config(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.get("/memory/buffer/stats", response_model=APIResponse)
+@router.get("/memory/stats", response_model=APIResponse)
 async def get_buffer_stats(request: Request) -> JSONResponse:
     """
     Get aggregate buffer statistics across all users.
@@ -135,7 +135,7 @@ async def get_buffer_stats(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-# NOTE: /memory/buffers endpoints are deprecated - use /memory/buffer/stats instead
+# NOTE: /memory/buffers endpoints are deprecated - use /memory/stats instead
 
 
 # Legacy endpoints kept for backward compatibility - will be removed in future version
