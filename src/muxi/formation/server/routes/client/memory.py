@@ -492,6 +492,103 @@ def clear_buffer(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
+@router.get("/memory/buffer/stats", response_model=APIResponse)
+def get_buffer_stats(
+    request: Request,
+) -> JSONResponse:
+    """
+    Get aggregate buffer statistics across all users.
+
+    Admin only endpoint. Returns total entries, user count, session count,
+    and utilization metrics.
+
+    Returns:
+        Aggregate buffer statistics
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    # Admin-only: verify AdminKey
+    admin_key = getattr(formation, "_admin_key", None) or formation.config.get("server", {}).get("admin_api_key")
+    provided_admin_key = request.headers.get("x-muxi-admin-key")
+
+    if not (provided_admin_key and admin_key and secrets.compare_digest(provided_admin_key, admin_key)):
+        response = create_error_response(
+            "UNAUTHORIZED",
+            "Admin API key required for this endpoint",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=401)
+
+    overlord = getattr(formation, "_overlord", None)
+    if not overlord:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Overlord service is not available",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    buffer = getattr(overlord, "buffer_memory", None)
+    if not buffer:
+        data = {
+            "total_entries": 0,
+            "total_users": 0,
+            "total_sessions": 0,
+            "buffer_size_kb": 0,
+            "max_size": 0,
+            "utilization": 0.0,
+        }
+        response = create_success_response(
+            APIObjectType.MEMORY,
+            APIEventType.MEMORY_RETRIEVED,
+            data,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=200)
+
+    total_entries = 0
+    if hasattr(buffer, "buffer"):
+        total_entries = len(buffer.buffer)
+
+    max_size = getattr(buffer, "size", 0)
+    utilization = (total_entries / max_size) if max_size > 0 else 0.0
+
+    users = set()
+    sessions = set()
+    buffer_size_bytes = 0
+
+    if hasattr(buffer, "buffer"):
+        import sys
+        for msg in buffer.buffer:
+            if isinstance(msg, dict):
+                metadata = msg.get("metadata", {})
+                if metadata.get("user_id"):
+                    users.add(metadata["user_id"])
+                if metadata.get("session_id"):
+                    sessions.add(metadata["session_id"])
+        buffer_size_bytes = sys.getsizeof(str(list(buffer.buffer)))
+
+    data = {
+        "total_entries": total_entries,
+        "total_users": len(users),
+        "total_sessions": len(sessions),
+        "buffer_size_kb": round(buffer_size_bytes / 1024, 2),
+        "max_size": max_size,
+        "utilization": round(utilization, 2),
+    }
+
+    response = create_success_response(
+        APIObjectType.MEMORY,
+        APIEventType.MEMORY_RETRIEVED,
+        data,
+        request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
 @router.delete("/memory/buffer/{session_id}", response_model=APIResponse)
 def clear_session_buffer(
     request: Request,
