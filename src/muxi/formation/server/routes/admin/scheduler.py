@@ -1,11 +1,14 @@
 """
 Scheduler configuration endpoints.
 
-These endpoints provide scheduler configuration access and job management,
-requiring admin API key authentication.
+These endpoints provide scheduler configuration access and job management.
+GET /scheduler/jobs supports both ClientKey and AdminKey:
+- ClientKey: X-Muxi-User-ID required (returns only user's jobs)
+- AdminKey: X-Muxi-User-ID optional (omit for all, provide to filter)
 """
 
-from typing import Dict, Any, List, Optional
+import secrets
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
 
 import croniter
@@ -21,6 +24,51 @@ from ...responses import (
 )
 from .....datatypes.api import APIEventType, APIObjectType
 
+
+def _check_auth_and_user_id(
+    request: Request,
+    api_request_id: Optional[str],
+) -> Tuple[Optional[str], bool, Optional[JSONResponse]]:
+    """
+    Check authentication type and validate user_id requirement.
+
+    Returns:
+        Tuple of (user_id, is_admin, error_response)
+    """
+    formation = request.app.state.formation
+
+    admin_key = getattr(formation, "_admin_key", None) or formation.config.get("server", {}).get("admin_api_key")
+    client_key = getattr(formation, "_client_key", None) or formation.config.get("server", {}).get("client_api_key")
+
+    provided_admin_key = request.headers.get("x-muxi-admin-key")
+    provided_client_key = request.headers.get("x-muxi-client-key")
+    x_user_id = request.headers.get("x-muxi-user-id")
+
+    is_admin = False
+    if provided_admin_key and admin_key and secrets.compare_digest(provided_admin_key, admin_key):
+        is_admin = True
+    elif provided_client_key and client_key and secrets.compare_digest(provided_client_key, client_key):
+        is_admin = False
+    else:
+        response = create_error_response(
+            "UNAUTHORIZED",
+            "Valid API key required",
+            None,
+            api_request_id,
+        )
+        return None, False, JSONResponse(content=response.model_dump(), status_code=401)
+
+    if not is_admin and not x_user_id:
+        response = create_error_response(
+            "INVALID_REQUEST",
+            "X-Muxi-User-ID header is required when using client API key",
+            None,
+            api_request_id,
+        )
+        return None, False, JSONResponse(content=response.model_dump(), status_code=400)
+
+    return x_user_id, is_admin, None
+
 router = APIRouter(tags=["Scheduler"])
 
 
@@ -35,13 +83,19 @@ class SchedulerUpdate(BaseModel):
 class ScheduledJobCreate(BaseModel):
     """Model for creating a scheduled job."""
 
-    type: str = Field(default="one_time", description="Job type: one_time or recurring")
-    schedule: Optional[str] = Field(default=None, description="Cron expression for recurring jobs")
-    run_at: Optional[str] = Field(default=None, description="ISO 8601 timestamp for one_time jobs")
-    message: str = Field(..., description="Message to send when job executes")
-    user_id: str = Field(..., description="User ID for job execution context")
-    session_id: Optional[str] = Field(default=None, description="Optional session ID")
-    enabled: bool = Field(default=True, description="Whether job is enabled")
+    type: str = Field(..., description="Job type: 'one_time' or 'recurring'")
+    schedule: str = Field(..., description="Cron expression (recurring) or ISO 8601 datetime (one_time)")
+    message: str = Field(..., description="Prompt to send to the AI when job executes")
+
+
+# Default scheduler configuration values
+SCHEDULER_DEFAULTS = {
+    "enabled": True,
+    "timezone": "UTC",
+    "check_interval_minutes": 1,
+    "max_concurrent_jobs": 10,
+    "max_failures_before_pause": 3,
+}
 
 
 @router.get("/scheduler", response_model=APIResponse)
@@ -55,7 +109,9 @@ async def get_scheduler_config(request: Request) -> JSONResponse:
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    scheduler_config = formation.config.get("scheduler", {})
+    # Get raw config and merge with defaults
+    raw_config = formation.config.get("scheduler", {})
+    scheduler_config = {**SCHEDULER_DEFAULTS, **raw_config}
 
     response = create_success_response(
         APIObjectType.SCHEDULER,
@@ -99,13 +155,21 @@ def update_scheduler(request: Request, config: SchedulerUpdate) -> JSONResponse:
 @router.get("/scheduler/jobs", response_model=APIResponse)
 async def list_scheduled_jobs(request: Request) -> JSONResponse:
     """
-    List all scheduled jobs.
+    List scheduled jobs.
+
+    With ClientKey: X-Muxi-User-ID required, returns only user's jobs.
+    With AdminKey: X-Muxi-User-ID optional, omit for all jobs.
 
     Returns:
-        List of all scheduled jobs with their configuration and status
+        List of scheduled jobs with their configuration and status
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Check auth type and validate user_id requirement
+    user_id_filter, is_admin, error_response = _check_auth_and_user_id(request, request_id)
+    if error_response:
+        return error_response
 
     # Get scheduler service
     scheduler = getattr(formation, "_scheduler", None)
@@ -150,6 +214,10 @@ async def list_scheduled_jobs(request: Request) -> JSONResponse:
             data={"error": str(e), "error_type": type(e).__name__},
         )
 
+    # Filter by user_id if header provided
+    if user_id_filter:
+        jobs = [job for job in jobs if job.get("user_id") == user_id_filter]
+
     response = create_success_response(
         APIObjectType.SCHEDULED_JOB_LIST,
         APIEventType.SCHEDULER_JOBS_LIST,
@@ -164,12 +232,18 @@ def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONRespo
     """
     Create a new scheduled job.
 
+    User ID is taken from X-Muxi-User-ID header.
+
+    **Schedule format:**
+    - For type=recurring: cron expression (e.g., "0 9 * * 1")
+    - For type=one_time: ISO 8601 datetime (e.g., "2025-10-25T14:00:00Z")
+
     **Database Storage**: Scheduler jobs are stored in the database and require
     persistent memory (PostgreSQL or MySQL). Returns 422 error if formation uses
     SQLite or no persistent memory.
 
     Args:
-        job: Job configuration (one-time or recurring)
+        job: Job configuration (type, schedule, message)
 
     Returns:
         Created job with ID and next execution time
@@ -177,70 +251,100 @@ def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONRespo
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Check for persistent memory (non-SQLite database required)
-    if not formation.has_persistent_memory():
-        response = create_error_response(
-            error_code="UNPROCESSABLE_ENTITY",
-            message="Scheduler jobs require persistent memory (non-SQLite database)",
-            trace=None,
-            request_id=request_id,
-            idempotency_key=None,
-            data=None,
-            error_data={
-                "reason": "Formation has no persistent memory configured",
-                "required": "PostgreSQL or MySQL for scheduler job persistence",
-                "current_memory_type": "none",
-            },
-        )
-        return JSONResponse(content=response.model_dump(), status_code=422)
-
-    # Check if using SQLite (not suitable for persistent jobs)
-    is_multi_user = getattr(formation, "_is_multi_user", False)
-    if not is_multi_user:
-        # SQLite is detected - not suitable for scheduler jobs
-        response = create_error_response(
-            error_code="UNPROCESSABLE_ENTITY",
-            message="Scheduler jobs require persistent memory (non-SQLite database)",
-            trace=None,
-            request_id=request_id,
-            idempotency_key=None,
-            data=None,
-            error_data={
-                "reason": "Formation is using SQLite or no persistent memory",
-                "required": "PostgreSQL or MySQL for scheduler job persistence",
-                "current_memory_type": "sqlite",
-            },
-        )
-        return JSONResponse(content=response.model_dump(), status_code=422)
+    # Get user_id from header
+    user_id = request.headers.get("X-Muxi-User-ID", "0")
 
     # Validate job type
     if job.type not in ["one_time", "recurring"]:
         response = create_error_response(
-            "INVALID_REQUEST",
+            "VALIDATION_ERROR",
             f"Invalid job type '{job.type}'. Must be 'one_time' or 'recurring'",
             None,
             request_id,
         )
         return JSONResponse(content=response.model_dump(), status_code=400)
 
-    # Validate required fields based on type
-    if job.type == "recurring" and not job.schedule:
-        response = create_error_response(
-            "INVALID_REQUEST",
-            "Field 'schedule' (cron expression) is required for recurring jobs",
-            None,
-            request_id,
-        )
-        return JSONResponse(content=response.model_dump(), status_code=400)
+    # Validate schedule format based on type
+    if job.type == "recurring":
+        # Validate cron expression
+        try:
+            base_time = datetime.now(timezone.utc)
+            cron = croniter.croniter(job.schedule, base_time)
+            next_run_dt = cron.get_next(datetime)
+            next_run = next_run_dt.astimezone(timezone.utc).isoformat()
+        except (ValueError, KeyError, croniter.CroniterBadCronError, croniter.CroniterBadDateError) as e:
+            response = create_error_response(
+                error_code="VALIDATION_ERROR",
+                message="Invalid cron expression for recurring job",
+                trace=None,
+                request_id=request_id,
+                idempotency_key=None,
+                data=None,
+                error_data={
+                    "field": "schedule",
+                    "value": job.schedule,
+                    "expected": "Valid cron expression (e.g., '0 9 * * 1')",
+                    "error": str(e),
+                },
+            )
+            return JSONResponse(content=response.model_dump(), status_code=422)
+    else:
+        # Validate ISO 8601 datetime for one_time jobs
+        try:
+            from dateutil.parser import isoparse
+            run_at_dt = isoparse(job.schedule)
+            # Ensure timezone aware
+            if run_at_dt.tzinfo is None:
+                run_at_dt = run_at_dt.replace(tzinfo=timezone.utc)
+            # Check if in the future
+            if run_at_dt <= datetime.now(timezone.utc):
+                response = create_error_response(
+                    error_code="VALIDATION_ERROR",
+                    message="Schedule datetime must be in the future",
+                    trace=None,
+                    request_id=request_id,
+                    idempotency_key=None,
+                    data=None,
+                    error_data={
+                        "field": "schedule",
+                        "value": job.schedule,
+                        "expected": "Future ISO 8601 datetime",
+                    },
+                )
+                return JSONResponse(content=response.model_dump(), status_code=422)
+            next_run = run_at_dt.isoformat()
+        except (ValueError, TypeError) as e:
+            response = create_error_response(
+                error_code="VALIDATION_ERROR",
+                message="Invalid datetime format for one_time job",
+                trace=None,
+                request_id=request_id,
+                idempotency_key=None,
+                data=None,
+                error_data={
+                    "field": "schedule",
+                    "value": job.schedule,
+                    "expected": "ISO 8601 datetime (e.g., '2025-10-25T14:00:00Z')",
+                    "error": str(e),
+                },
+            )
+            return JSONResponse(content=response.model_dump(), status_code=422)
 
-    if job.type == "one_time" and not job.run_at:
+    # Check for persistent memory (SQLite or PostgreSQL/MySQL)
+    if not formation.has_persistent_memory():
         response = create_error_response(
-            "INVALID_REQUEST",
-            "Field 'run_at' (ISO 8601 timestamp) is required for one_time jobs",
-            None,
-            request_id,
+            error_code="UNPROCESSABLE_ENTITY",
+            message="Scheduler jobs require persistent memory",
+            trace=None,
+            request_id=request_id,
+            idempotency_key=None,
+            data=None,
+            error_data={
+                "reason": "Formation has no persistent memory configured",
+                "required": "Configure memory.persistent in formation (SQLite, PostgreSQL, or MySQL)",
+            },
         )
-        return JSONResponse(content=response.model_dump(), status_code=400)
+        return JSONResponse(content=response.model_dump(), status_code=422)
 
     # Get scheduler service
     scheduler = getattr(formation, "_scheduler", None)
@@ -261,16 +365,11 @@ def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONRespo
     job_data = {
         "id": job_id,
         "type": job.type,
+        "schedule": job.schedule,
         "message": job.message,
-        "user_id": job.user_id,
-        "session_id": job.session_id,
-        "enabled": job.enabled,
+        "user_id": user_id,
+        "next_run": next_run,
     }
-
-    if job.type == "recurring":
-        job_data["schedule"] = job.schedule
-    else:
-        job_data["run_at"] = job.run_at
 
     # Add job to scheduler
     try:
@@ -281,36 +380,6 @@ def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONRespo
             if not hasattr(scheduler, "jobs"):
                 scheduler.jobs = {}
             scheduler.jobs[job_id] = job_data
-
-        # Calculate next run time
-        next_run = None
-        if job.type == "recurring":
-            # Calculate next run from cron expression using croniter
-            try:
-                base_time = datetime.now(timezone.utc)
-                cron = croniter.croniter(job.schedule, base_time)
-                next_run_dt = cron.get_next(datetime)
-                # Convert to ISO 8601 UTC string
-                next_run = next_run_dt.astimezone(timezone.utc).isoformat()
-            except (ValueError, KeyError, croniter.CroniterBadCronError, croniter.CroniterBadDateError) as e:
-                # Invalid cron expression - log and set to None
-                from .....services import observability
-                observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                    level=observability.EventLevel.WARNING,
-                    description=f"Invalid cron expression '{job.schedule}': {str(e)}",
-                    data={
-                        "job_id": job_id,
-                        "schedule": job.schedule,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                    },
-                )
-                next_run = None  # Will need manual intervention
-        else:
-            next_run = job.run_at
-
-        job_data["next_run"] = next_run
 
     except Exception as e:
         response = create_error_response(

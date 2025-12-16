@@ -1,45 +1,96 @@
 """
 Event streaming endpoints.
 
-These endpoints provide SSE streams for async updates,
-requiring client API key authentication.
+These endpoints provide SSE streams for user-facing events.
+Supports both ClientKey and AdminKey authentication:
+- ClientKey: X-Muxi-User-ID required (user's events only)
+- AdminKey: X-Muxi-User-ID optional (omit for all, provide to filter)
 """
 
 import asyncio
 import json
-from typing import Optional
+import secrets
+from typing import Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Request, Header
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
+
+from ...responses import create_error_response
 
 router = APIRouter(tags=["Events"])
+
+
+def _check_auth_and_user_id(
+    request: Request,
+    x_user_id: Optional[str],
+) -> Tuple[Optional[str], bool, Optional[JSONResponse]]:
+    """
+    Check authentication type and validate user_id requirement.
+
+    Returns:
+        Tuple of (user_id, is_admin, error_response)
+    """
+    formation = request.app.state.formation
+
+    admin_key = getattr(formation, "_admin_key", None) or formation.config.get("server", {}).get("admin_api_key")
+    client_key = getattr(formation, "_client_key", None) or formation.config.get("server", {}).get("client_api_key")
+
+    provided_admin_key = request.headers.get("x-muxi-admin-key")
+    provided_client_key = request.headers.get("x-muxi-client-key")
+
+    is_admin = False
+    if provided_admin_key and admin_key and secrets.compare_digest(provided_admin_key, admin_key):
+        is_admin = True
+    elif provided_client_key and client_key and secrets.compare_digest(provided_client_key, client_key):
+        is_admin = False
+    else:
+        response = create_error_response(
+            "UNAUTHORIZED",
+            "Valid API key required",
+            None,
+            None,
+        )
+        return None, False, JSONResponse(content=response.model_dump(), status_code=401)
+
+    if not is_admin and not x_user_id:
+        response = create_error_response(
+            "INVALID_REQUEST",
+            "X-Muxi-User-ID header is required when using client API key",
+            None,
+            None,
+        )
+        return None, False, JSONResponse(content=response.model_dump(), status_code=400)
+
+    return x_user_id, is_admin, None
 
 
 @router.get("/events")
 async def user_events(
     request: Request,
     x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
-) -> StreamingResponse:
+):
     """
-    SSE stream for async updates for a specific user.
+    SSE stream of user-facing events.
 
-    Args:
-        x_user_id: User ID from X-Muxi-User-ID header
+    With ClientKey: X-Muxi-User-ID required (streams only user's events)
+    With AdminKey: X-Muxi-User-ID optional (omit for all events, provide to filter)
 
     Returns:
         Server-sent event stream
-
-    Note:
-        Client API key authentication is enforced at the router level
     """
-    if not x_user_id:
-        raise HTTPException(status_code=400, detail="X-Muxi-User-ID header is required")
+    # Check auth and validate user_id requirement
+    user_id_filter, is_admin, error_response = _check_auth_and_user_id(request, x_user_id)
+    if error_response:
+        return error_response
 
     formation = request.app.state.formation
     overlord = getattr(formation, "_overlord", None)
 
-    # Normalize user_id to "0" for single-user mode
-    user_id = "0" if overlord and not getattr(overlord, "is_multi_user", False) else x_user_id
+    # Normalize user_id to "0" for single-user mode (only if user_id provided)
+    if user_id_filter:
+        user_id = "0" if overlord and not getattr(overlord, "is_multi_user", False) else user_id_filter
+    else:
+        user_id = None  # Admin without filter - all events
 
     if not overlord:
         raise HTTPException(
@@ -58,9 +109,11 @@ async def user_events(
 
     async def event_generator():
         try:
-            # Subscribe to observability event stream filtered to this user
+            # Subscribe to observability event stream
             # Only stream user-facing events (not internal system events)
-            filters = {"user_id": user_id}
+            filters = {}
+            if user_id:
+                filters["user_id"] = user_id
 
             async for event in observability_manager.subscribe(filters):
                 # Check if client disconnected
@@ -103,68 +156,146 @@ async def user_events(
     )
 
 
-@router.get("/stream/{session_id}/{request_id}")
-async def stream_request(
+@router.get("/events/{session_id}")
+async def session_events(
+    request: Request,
+    session_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+):
+    """
+    SSE stream of events for a specific session.
+
+    With ClientKey: X-Muxi-User-ID required, session must belong to user
+    With AdminKey: X-Muxi-User-ID optional, can access any session
+
+    Returns:
+        Server-sent event stream for the session
+    """
+    # Check auth and validate user_id requirement
+    user_id_filter, is_admin, error_response = _check_auth_and_user_id(request, x_user_id)
+    if error_response:
+        return error_response
+
+    formation = request.app.state.formation
+    overlord = getattr(formation, "_overlord", None)
+
+    # Normalize user_id to "0" for single-user mode (only if user_id provided)
+    if user_id_filter:
+        user_id = "0" if overlord and not getattr(overlord, "is_multi_user", False) else user_id_filter
+    else:
+        user_id = None  # Admin without filter
+
+    if not overlord:
+        raise HTTPException(status_code=503, detail="Overlord service not available")
+
+    # Get observability manager
+    observability_manager = overlord.observability_manager if hasattr(overlord, 'observability_manager') else None
+
+    if not observability_manager or not hasattr(observability_manager, 'subscribe'):
+        raise HTTPException(
+            status_code=503,
+            detail="Live event streaming not available - observability manager not configured"
+        )
+
+    async def event_generator():
+        try:
+            # Subscribe to observability event stream filtered by session
+            filters = {"session_id": session_id}
+            if user_id:
+                filters["user_id"] = user_id
+
+            async for event in observability_manager.subscribe(filters):
+                if await request.is_disconnected():
+                    break
+
+                event_type = event.get("event_type", "")
+                if event_type.startswith(("chat.", "agent.", "workflow.", "task.")):
+                    event_data = {
+                        "type": event_type,
+                        "timestamp": event.get("timestamp"),
+                        "message": event.get("description"),
+                        "session_id": event.get("session_id"),
+                        "request_id": event.get("request_id"),
+                    }
+                    yield f"data: {json.dumps(event_data)}\\n\\n"
+
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            error_event = {"error": True, "message": "Streaming error occurred"}
+            yield f"data: {json.dumps(error_event)}\\n\\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
+
+@router.get("/events/{session_id}/{request_id}")
+async def request_events(
     request: Request,
     session_id: str,
     request_id: str,
     x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
-) -> StreamingResponse:
+):
     """
-    SSE stream for real-time request processing events.
+    SSE stream for events on a specific request.
 
-    Args:
-        request: FastAPI request object (contains server reference)
-        session_id: Session ID for security validation
-        request_id: Request ID to stream events for
-        x_user_id: User ID from X-Muxi-User-ID header
+    With ClientKey: X-Muxi-User-ID required, request must belong to user
+    With AdminKey: X-Muxi-User-ID optional, can access any request
+
+    Includes stream lifecycle events (open/completed), tokens for streaming
+    responses, and errors.
 
     Returns:
-        Server-sent event stream of processing events
-
-    Note:
-        - Client API key authentication is enforced at the router level
-        - User/session validation ensures proper access control
-        - Real-time streaming - no event replay
+        Server-sent event stream for the request
     """
-    if not x_user_id:
-        raise HTTPException(status_code=400, detail="X-Muxi-User-ID header is required")
+    # Check auth and validate user_id requirement
+    user_id_filter, is_admin, error_response = _check_auth_and_user_id(request, x_user_id)
+    if error_response:
+        return error_response
 
-    # Normalize user_id to "0" for single-user mode
     formation = request.app.state.formation
     overlord = getattr(formation, "_overlord", None)
-    user_id = "0" if overlord and not getattr(overlord, "is_multi_user", False) else x_user_id
+
+    # Normalize user_id to "0" for single-user mode (only if user_id provided)
+    if user_id_filter:
+        user_id = "0" if overlord and not getattr(overlord, "is_multi_user", False) else user_id_filter
+    else:
+        user_id = None  # Admin - can access any request
 
     from ....services.streaming import streaming_manager
 
     async def event_generator():
         try:
-            # Subscribe to real-time events with security validation
-            subscription = streaming_manager.subscribe(request_id, user_id, session_id)
+            # For admin without user_id, pass None to skip user validation
+            subscription = streaming_manager.subscribe(
+                request_id,
+                user_id if user_id else None,
+                session_id if user_id else None,  # Skip session check for admin
+            )
 
             if subscription is None:
-                # Not authorized or request not streaming
                 yield f"data: {json.dumps({'error': 'Unauthorized or request not streaming'})}\n\n"
                 return
 
-            # Notify client that stream is successfully opened
-            yield f"data: {json.dumps({'type': 'stream_open'})}\n\n"
+            yield f"data: {json.dumps({'type': 'stream_open', 'session_id': session_id, 'request_id': request_id})}\n\n"
 
-            # Stream events in real-time
             async for event in subscription:
                 yield f"data: {json.dumps(event)}\n\n"
 
-            # Stream completed (request_id deleted from streaming_manager)
-            yield f"data: {json.dumps({'type': 'stream_completed'})}\n\n"
+            yield f"data: {json.dumps({'type': 'stream_completed', 'session_id': session_id, 'request_id': request_id})}\n\n"
 
         except asyncio.CancelledError:
-            # Client disconnected - clean shutdown, no error message
             pass
         except Exception as e:
-            # Real error - notify client (sanitize and truncate)
             error_msg = str(e).strip() if e else "Stream error"
             if error_msg:
-                # Remove newlines and limit length for SSE safety
                 error_msg = error_msg.replace('\n', ' ').replace('\r', '')[:200]
             yield f"data: {json.dumps({'error': error_msg})}\n\n"
 
@@ -177,3 +308,6 @@ async def stream_request(
             "Connection": "keep-alive"
         }
     )
+
+
+# NOTE: /stream/{session_id}/{request_id} has been consolidated into /events/{session_id}/{request_id}

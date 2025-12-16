@@ -3,7 +3,7 @@
 from . import (
     chat,
     events,
-    jobs,
+    requests,
     memory,
     sessions,
     sops,
@@ -14,7 +14,7 @@ from . import (
 __all__ = [
     "chat",
     "events",
-    "jobs",
+    "requests",
     "memory",
     "sessions",
     "sops",

@@ -38,7 +38,7 @@ def _compile_event_type_pattern(filter_value: str) -> Pattern:
     return re.compile(pattern_str)
 
 
-@router.get("/logs/stream")
+@router.get("/logs")
 async def stream_logs(
     request: Request,
     user_id: Optional[str] = None,
@@ -65,9 +65,9 @@ async def stream_logs(
         SSE stream of log events
 
     Example:
-        GET /logs/stream?level=ERROR
-        GET /logs/stream?user_id=alice&level=ERROR
-        GET /logs/stream?agent_id=weather-assistant
+        GET /logs?level=ERROR
+        GET /logs?user_id=alice&level=ERROR
+        GET /logs?agent_id=weather-assistant
     """
 
     # Validate that at least one filter is provided
@@ -97,7 +97,7 @@ async def stream_logs(
         description="Admin log streaming started",
         data={
             "service": "formation_api_server",
-            "endpoint": "/logs/stream",
+            "endpoint": "/logs",
             "filters": active_filters,
         },
     )
@@ -186,7 +186,7 @@ async def stream_logs(
                 description="Admin log streaming ended",
                 data={
                     "service": "formation_api_server",
-                    "endpoint": "/logs/stream",
+                    "endpoint": "/logs",
                     "filters": active_filters,
                 },
             )

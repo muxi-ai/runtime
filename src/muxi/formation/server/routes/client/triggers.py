@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from .....services import observability
 from .....datatypes.api import APIObjectType, APIEventType
 from .....utils.id_generator import generate_request_id
+from .....utils.response_converter import extract_response_content
 from ...responses import create_api_response, create_success_response, create_error_response, APIResponse
 from ...utils import render_trigger_template, get_header_case_insensitive
 
@@ -348,13 +349,18 @@ async def execute_trigger(
         try:
             # Use overlord's chat method (non-streaming for triggers)
             # Bypass workflow approval for triggers (automated execution)
+            # Explicitly disable streaming to get actual content, not a generator
             response = await overlord.chat(
                 rendered_message,
                 user_id=user_id,
                 session_id=trigger_request.session_id,
                 request_id=request_id,
                 bypass_workflow_approval=True,
+                stream=False,
             )
+
+            # Extract content from response (handles async generators, MuxiResponse, strings, etc.)
+            response_content = await extract_response_content(response)
 
             observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_COMPLETED,
@@ -367,10 +373,6 @@ async def execute_trigger(
                 },
                 description=f"Trigger '{trigger_name}' completed synchronously",
             )
-
-            # Return standard sync response with LLM response
-            # Extract response content from overlord response object
-            response_content = response.content if hasattr(response, 'content') else str(response)
 
             return create_api_response(
                 object_type=APIObjectType.REQUEST,

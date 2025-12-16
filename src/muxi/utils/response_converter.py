@@ -5,9 +5,10 @@ This module provides utilities to convert between OneLLM's OpenAI-compatible
 types and MUXI's unified response format, maintaining separation of concerns.
 """
 
+import inspect
 import time
 import traceback
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any, Union, AsyncGenerator
 
 from onellm.types.common import ContentItem as OneLLMContentItem
 from ..datatypes.response import MuxiContentItem, MuxiUnifiedResponse, MuxiErrorDetails
@@ -353,3 +354,57 @@ def create_error_response(exception: Exception, include_trace: bool = False) -> 
             description=f"Error response creation failed: {str(e)}",
         )
         raise
+
+
+async def extract_response_content(response: Any) -> str:
+    """
+    Extract text content from various response types.
+
+    Handles:
+    - Async generators (streaming responses) - consumes and joins chunks
+    - MuxiResponse objects with .content attribute
+    - String responses
+    - Any other type (converted to string)
+
+    Args:
+        response: Response from overlord.chat() - can be async generator,
+                  MuxiResponse, string, or other types
+
+    Returns:
+        Extracted text content as string
+    """
+    # Handle async generator (streaming response)
+    if inspect.isasyncgen(response):
+        chunks = []
+        async for chunk in response:
+            if isinstance(chunk, str):
+                chunks.append(chunk)
+            elif hasattr(chunk, 'content'):
+                content = chunk.content
+                if content:
+                    chunks.append(str(content) if not isinstance(content, str) else content)
+        return "".join(chunks)
+
+    # Handle MuxiResponse or similar objects with .content attribute
+    if hasattr(response, 'content'):
+        content = response.content
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, list):
+            # Extract text from content items (multi-modal responses)
+            text_parts = []
+            for item in content:
+                if hasattr(item, 'text') and item.text:
+                    text_parts.append(item.text)
+                elif isinstance(item, dict) and item.get('text'):
+                    text_parts.append(item['text'])
+            return " ".join(text_parts)
+        else:
+            return str(content) if content else ""
+
+    # Handle string responses
+    if isinstance(response, str):
+        return response
+
+    # Fallback for other types
+    return str(response)

@@ -1,12 +1,15 @@
 """
 User memory management endpoints.
 
-These endpoints provide memory CRUD operations for users,
-requiring client API key authentication.
+These endpoints provide memory CRUD operations for users.
+Buffer endpoints support both ClientKey and AdminKey:
+- ClientKey: X-Muxi-User-ID required (user's buffer only)
+- AdminKey: X-Muxi-User-ID optional (omit for all, provide to filter)
 """
 
+import secrets
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
 from fastapi import APIRouter, Request, Query, Header
 from fastapi.responses import JSONResponse
@@ -41,6 +44,51 @@ def _get_user_id(x_user_id: Optional[str], request_id: Optional[str]) -> tuple[O
         )
         return None, JSONResponse(content=response.model_dump(), status_code=400)
     return x_user_id, None
+
+
+def _check_auth_and_user_id(
+    request: Request,
+    x_user_id: Optional[str],
+    request_id: Optional[str],
+) -> Tuple[Optional[str], bool, Optional[JSONResponse]]:
+    """
+    Check authentication type and validate user_id requirement for buffer ops.
+
+    Returns:
+        Tuple of (user_id, is_admin, error_response)
+    """
+    formation = request.app.state.formation
+
+    admin_key = getattr(formation, "_admin_key", None) or formation.config.get("server", {}).get("admin_api_key")
+    client_key = getattr(formation, "_client_key", None) or formation.config.get("server", {}).get("client_api_key")
+
+    provided_admin_key = request.headers.get("x-muxi-admin-key")
+    provided_client_key = request.headers.get("x-muxi-client-key")
+
+    is_admin = False
+    if provided_admin_key and admin_key and secrets.compare_digest(provided_admin_key, admin_key):
+        is_admin = True
+    elif provided_client_key and client_key and secrets.compare_digest(provided_client_key, client_key):
+        is_admin = False
+    else:
+        response = create_error_response(
+            "UNAUTHORIZED",
+            "Valid API key required",
+            None,
+            request_id,
+        )
+        return None, False, JSONResponse(content=response.model_dump(), status_code=401)
+
+    if not is_admin and not x_user_id:
+        response = create_error_response(
+            "INVALID_REQUEST",
+            "X-Muxi-User-ID header is required when using client API key",
+            None,
+            request_id,
+        )
+        return None, False, JSONResponse(content=response.model_dump(), status_code=400)
+
+    return x_user_id, is_admin, None
 
 
 @router.get("/memories", response_model=APIResponse)
@@ -249,10 +297,10 @@ def get_buffer_status(
     x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
 ) -> JSONResponse:
     """
-    Get buffer memory status for a user.
+    Get buffer memory data for a specific user.
 
-    Args:
-        x_user_id: User ID from X-Muxi-User-ID header
+    Accepts both ClientKey and AdminKey, but X-Muxi-User-ID is required for both.
+    For aggregate stats, use GET /memory/buffer/stats instead.
 
     Returns:
         Buffer status with message counts and session info
@@ -260,7 +308,7 @@ def get_buffer_status(
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Validate user_id from header
+    # User ID is required for this endpoint (both ClientKey and AdminKey)
     user_id, error_response = _get_user_id(x_user_id, request_id)
     if error_response:
         return error_response
@@ -345,15 +393,15 @@ def get_buffer_status(
 
 
 @router.delete("/memory/buffer", response_model=APIResponse)
-def clear_user_buffer(
+def clear_buffer(
     request: Request,
     x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
 ) -> JSONResponse:
     """
-    Clear all buffer memory for a user across all sessions.
+    Clear buffer memory.
 
-    Args:
-        x_user_id: User ID from X-Muxi-User-ID header
+    With ClientKey: X-Muxi-User-ID required (clears user's buffer)
+    With AdminKey: X-Muxi-User-ID optional (omit to clear all, provide to clear specific user)
 
     Returns:
         Success response with cleared counts
@@ -361,8 +409,8 @@ def clear_user_buffer(
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Validate user_id from header
-    user_id, error_response = _get_user_id(x_user_id, request_id)
+    # Check auth and validate user_id requirement
+    user_id, is_admin, error_response = _check_auth_and_user_id(request, x_user_id, request_id)
     if error_response:
         return error_response
 
@@ -453,9 +501,8 @@ def clear_session_buffer(
     """
     Clear buffer memory for a specific session.
 
-    Args:
-        session_id: Session ID
-        x_user_id: User ID from X-Muxi-User-ID header
+    With ClientKey: X-Muxi-User-ID required, session must belong to user
+    With AdminKey: X-Muxi-User-ID optional, can clear any session
 
     Returns:
         Success response with cleared message count
@@ -463,8 +510,8 @@ def clear_session_buffer(
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Validate user_id from header
-    user_id, error_response = _get_user_id(x_user_id, request_id)
+    # Check auth and validate user_id requirement
+    user_id, is_admin, error_response = _check_auth_and_user_id(request, x_user_id, request_id)
     if error_response:
         return error_response
 

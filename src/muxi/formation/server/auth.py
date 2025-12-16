@@ -119,3 +119,55 @@ class ClientKeyAuth:
             )
 
         return api_key
+
+
+class DualKeyAuth:
+    """
+    Authentication dependency that accepts either Admin or Client API key.
+
+    Sets request.state.auth_type to "admin" or "client" for downstream use.
+    """
+
+    def __init__(self, admin_key: str, client_key: str):
+        """
+        Initialize with both keys.
+
+        Args:
+            admin_key: The valid admin API key
+            client_key: The valid client API key
+        """
+        self.admin_key = admin_key
+        self.client_key = client_key
+
+    async def __call__(self, request: Request) -> str:
+        """
+        Validate either admin or client API key.
+
+        Sets request.state.auth_type to "admin" or "client".
+
+        Returns:
+            The validated API key
+
+        Raises:
+            HTTPException: If no valid API key is provided
+        """
+        # Try admin key first
+        admin_api_key = request.headers.get("x-muxi-admin-key")
+        if admin_api_key and self.admin_key:
+            if secrets.compare_digest(admin_api_key, self.admin_key):
+                request.state.auth_type = "admin"
+                return admin_api_key
+
+        # Try client key
+        client_api_key = request.headers.get("x-muxi-client-key")
+        if client_api_key and self.client_key:
+            if secrets.compare_digest(client_api_key, self.client_key):
+                request.state.auth_type = "client"
+                return client_api_key
+
+        # Neither key was valid
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="A valid API key is required. Provide either 'X-Muxi-Admin-Key' or 'X-Muxi-Client-Key' header.",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )

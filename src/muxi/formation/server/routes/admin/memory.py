@@ -56,18 +56,20 @@ async def get_memory_config(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.get("/memory/buffers", response_model=APIResponse)
-async def list_memory_buffers(request: Request) -> JSONResponse:
+@router.get("/memory/buffer/stats", response_model=APIResponse)
+async def get_buffer_stats(request: Request) -> JSONResponse:
     """
-    List all memory buffers.
+    Get aggregate buffer statistics across all users.
+
+    Admin only endpoint. Returns total entries, user count, session count,
+    and utilization metrics.
 
     Returns:
-        List of memory buffer entries
+        Aggregate buffer statistics
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Get overlord for buffer access
     overlord = getattr(formation, "_overlord", None)
     if not overlord:
         response = create_error_response(
@@ -78,10 +80,92 @@ async def list_memory_buffers(request: Request) -> JSONResponse:
         )
         return JSONResponse(content=response.model_dump(), status_code=503)
 
-    # Get buffer memory
     buffer = getattr(overlord, "buffer_memory", None)
     if not buffer:
-        # Return empty list if no buffer
+        data = {
+            "total_entries": 0,
+            "total_users": 0,
+            "total_sessions": 0,
+            "buffer_size_kb": 0,
+            "max_size": 0,
+            "utilization": 0.0,
+        }
+        response = create_success_response(
+            APIObjectType.MEMORY,
+            APIEventType.MEMORY_RETRIEVED,
+            data,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=200)
+
+    # Calculate aggregate stats
+    total_entries = 0
+    if hasattr(buffer, "buffer"):
+        total_entries = len(buffer.buffer)
+
+    max_size = getattr(buffer, "size", 0)
+    utilization = (total_entries / max_size) if max_size > 0 else 0.0
+
+    # Count unique users and sessions from buffer entries
+    users = set()
+    sessions = set()
+    buffer_size_bytes = 0
+
+    if hasattr(buffer, "buffer"):
+        import sys
+        for msg in buffer.buffer:
+            if isinstance(msg, dict):
+                metadata = msg.get("metadata", {})
+                if metadata.get("user_id"):
+                    users.add(metadata["user_id"])
+                if metadata.get("session_id"):
+                    sessions.add(metadata["session_id"])
+        buffer_size_bytes = sys.getsizeof(str(list(buffer.buffer)))
+
+    data = {
+        "total_entries": total_entries,
+        "total_users": len(users),
+        "total_sessions": len(sessions),
+        "buffer_size_kb": round(buffer_size_bytes / 1024, 2),
+        "max_size": max_size,
+        "utilization": round(utilization, 2),
+    }
+
+    response = create_success_response(
+        APIObjectType.MEMORY,
+        APIEventType.MEMORY_RETRIEVED,
+        data,
+        request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
+# NOTE: /memory/buffers endpoints are deprecated - use /memory/buffer/stats instead
+
+
+# Legacy endpoints kept for backward compatibility - will be removed in future version
+@router.get("/memory/buffers", response_model=APIResponse, deprecated=True)
+async def list_memory_buffers(request: Request) -> JSONResponse:
+    """
+    DEPRECATED: Use GET /memory/buffer with AdminKey instead.
+
+    List all memory buffers.
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    overlord = getattr(formation, "_overlord", None)
+    if not overlord:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Overlord service is not available",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    buffer = getattr(overlord, "buffer_memory", None)
+    if not buffer:
         response = create_success_response(
             APIObjectType.LIST,
             APIEventType.MEMORY_LIST,
@@ -90,7 +174,6 @@ async def list_memory_buffers(request: Request) -> JSONResponse:
         )
         return JSONResponse(content=response.model_dump(), status_code=200)
 
-    # Get buffer statistics
     total_entries = 0
     if hasattr(buffer, "buffer"):
         total_entries = len(buffer.buffer)
@@ -98,9 +181,7 @@ async def list_memory_buffers(request: Request) -> JSONResponse:
     max_size = getattr(buffer, "size", 0)
     utilization = (total_entries / max_size) if max_size > 0 else 0
 
-    # Get KV store namespaces if available
     kv_namespaces = {}
-    # Guard: ensure kv_store exists, is not None, and is dict-like
     kv_store = getattr(buffer, "kv_store", None)
     if kv_store is not None and (hasattr(kv_store, "keys") or isinstance(kv_store, dict)):
         for key in kv_store.keys():
@@ -114,7 +195,6 @@ async def list_memory_buffers(request: Request) -> JSONResponse:
         "kv_namespaces": kv_namespaces,
     }
 
-    # Wrap buffers list in dict for APIResponse schema compliance
     response = create_success_response(
         APIObjectType.LIST,
         APIEventType.MEMORY_LIST,
@@ -124,18 +204,16 @@ async def list_memory_buffers(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.delete("/memory/buffers", response_model=APIResponse)
+@router.delete("/memory/buffers", response_model=APIResponse, deprecated=True)
 async def clear_memory_buffers(request: Request) -> JSONResponse:
     """
-    Clear all memory buffers.
+    DEPRECATED: Use DELETE /memory/buffer with AdminKey instead.
 
-    Returns:
-        Success response with cleared counts
+    Clear all memory buffers.
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Get overlord for buffer access
     overlord = getattr(formation, "_overlord", None)
     if not overlord:
         response = create_error_response(
@@ -146,7 +224,6 @@ async def clear_memory_buffers(request: Request) -> JSONResponse:
         )
         return JSONResponse(content=response.model_dump(), status_code=503)
 
-    # Get buffer memory
     buffer = getattr(overlord, "buffer_memory", None)
     if not buffer:
         response = create_error_response(
@@ -157,16 +234,13 @@ async def clear_memory_buffers(request: Request) -> JSONResponse:
         )
         return JSONResponse(content=response.model_dump(), status_code=503)
 
-    # Clear all buffer entries
     entries_cleared = 0
     if hasattr(buffer, "buffer"):
         from collections import deque
         entries_cleared = len(buffer.buffer)
-        # Preserve maxlen if it exists, otherwise create unbounded deque
         existing_maxlen = getattr(buffer.buffer, "maxlen", None)
         buffer.buffer = deque(maxlen=existing_maxlen) if existing_maxlen is not None else deque()
 
-    # Clear KV store
     kv_entries_cleared = 0
     if hasattr(buffer, "kv_store"):
         kv_entries_cleared = len(buffer.kv_store)
