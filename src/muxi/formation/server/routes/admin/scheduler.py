@@ -25,6 +25,34 @@ from ...responses import (
 from .....datatypes.api import APIEventType, APIObjectType
 
 
+def _require_admin_key(
+    request: Request,
+    request_id: Optional[str],
+) -> Optional[JSONResponse]:
+    """
+    Require AdminKey for this endpoint. Returns error response if ClientKey used.
+
+    Returns:
+        Error response if ClientKey was used, None if AdminKey was used
+    """
+    formation = request.app.state.formation
+    api_keys = getattr(formation, "_api_keys", {})
+    admin_key = api_keys.get("admin", "")
+
+    provided_admin_key = request.headers.get("x-muxi-admin-key")
+    if provided_admin_key and admin_key and secrets.compare_digest(provided_admin_key, admin_key):
+        return None  # AdminKey OK
+
+    # Not admin - reject
+    response = create_error_response(
+        "UNAUTHORIZED",
+        "Admin API key required for this endpoint",
+        None,
+        request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=401)
+
+
 def _check_auth_and_user_id(
     request: Request,
     api_request_id: Optional[str],
@@ -103,13 +131,18 @@ SCHEDULER_DEFAULTS = {
 @router.get("/scheduler", response_model=APIResponse)
 async def get_scheduler_config(request: Request) -> JSONResponse:
     """
-    Get complete scheduler configuration.
+    Get complete scheduler configuration. AdminKey only.
 
     Returns:
         Full scheduler YAML as JSON with defaults filled
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Require AdminKey
+    error_response = _require_admin_key(request, request_id)
+    if error_response:
+        return error_response
 
     # Get raw config and merge with defaults
     raw_config = formation.config.get("scheduler", {})
@@ -232,7 +265,7 @@ async def list_scheduled_jobs(request: Request) -> JSONResponse:
 @router.post("/scheduler/jobs", response_model=APIResponse)
 def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONResponse:
     """
-    Create a new scheduled job.
+    Create a new scheduled job. AdminKey only.
 
     User ID is taken from X-Muxi-User-ID header.
 
@@ -252,6 +285,11 @@ def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONRespo
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Require AdminKey
+    error_response = _require_admin_key(request, request_id)
+    if error_response:
+        return error_response
 
     # Get user_id from header
     user_id = request.headers.get("X-Muxi-User-ID", "0")
@@ -404,7 +442,7 @@ def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONRespo
 @router.get("/scheduler/jobs/{job_id}", response_model=APIResponse)
 def get_scheduled_job(request: Request, job_id: str) -> JSONResponse:
     """
-    Get details for a specific scheduled job.
+    Get details for a specific scheduled job. AdminKey only.
 
     Args:
         job_id: ID of the scheduled job
@@ -414,6 +452,11 @@ def get_scheduled_job(request: Request, job_id: str) -> JSONResponse:
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Require AdminKey
+    error_response = _require_admin_key(request, request_id)
+    if error_response:
+        return error_response
 
     # Get scheduler service
     scheduler = getattr(formation, "_scheduler", None)
@@ -463,7 +506,7 @@ def get_scheduled_job(request: Request, job_id: str) -> JSONResponse:
 @router.delete("/scheduler/jobs/{job_id}", response_model=APIResponse)
 def remove_scheduled_job(request: Request, job_id: str) -> JSONResponse:
     """
-    Remove a scheduled job.
+    Remove a scheduled job. AdminKey only.
 
     Args:
         job_id: ID of the scheduled job to remove
@@ -473,6 +516,11 @@ def remove_scheduled_job(request: Request, job_id: str) -> JSONResponse:
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Require AdminKey
+    error_response = _require_admin_key(request, request_id)
+    if error_response:
+        return error_response
 
     # Get scheduler service
     scheduler = getattr(formation, "_scheduler", None)

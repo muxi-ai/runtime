@@ -553,7 +553,7 @@ class FormationServer:
             logs.router,
             memory.router,
             async_router,
-            scheduler.router,
+            # scheduler.router moved to dual_auth_routers (GET /scheduler/jobs needs both keys)
             a2a.router,
             audit.router,
         ]
@@ -568,6 +568,8 @@ class FormationServer:
 
         # Import all client route modules
         from .routes.client import chat, events, requests, memory, triggers, users, sessions, sops
+        # Import scheduler from admin routes (has dual-auth endpoint GET /scheduler/jobs)
+        from .routes.admin import scheduler
 
         # Create auth dependencies
         client_auth = ClientKeyAuth(self.client_key)
@@ -587,6 +589,7 @@ class FormationServer:
             events.router,
             requests.router,
             memory.router,
+            scheduler.router,  # GET /scheduler/jobs needs both keys
         ]
 
         for router in client_only_routers:
