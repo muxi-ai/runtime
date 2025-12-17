@@ -44,8 +44,9 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Get database manager
-    db_manager = formation.get_db_manager()
+    # Get database manager from overlord
+    overlord = getattr(formation, "_overlord", None)
+    db_manager = getattr(overlord, "db_manager", None) if overlord else None
     if not db_manager:
         response = create_error_response(
             "SERVICE_UNAVAILABLE",
@@ -152,7 +153,9 @@ async def associate_user_identifiers(request: Request, body: AssociateIdentifier
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    db_manager = formation.get_db_manager()
+    # Get database manager from overlord
+    overlord = getattr(formation, "_overlord", None)
+    db_manager = getattr(overlord, "db_manager", None) if overlord else None
     if not db_manager:
         response = create_error_response(
             "SERVICE_UNAVAILABLE",
@@ -241,11 +244,11 @@ async def associate_user_identifiers(request: Request, body: AssociateIdentifier
                     "type": identifier_type or "unknown",
                 })
 
-                # Invalidate cache
-                kv_cache = formation.get_kv_cache()
-                if kv_cache:
-                    cache_key = f"user_id:{formation.formation_id}:{identifier}"
-                    await kv_cache.delete(cache_key)
+                # Invalidate cache (KV cache not yet implemented)
+                # kv_cache = None
+                # if kv_cache:
+                #     cache_key = f"user_id:{formation.formation_id}:{identifier}"
+                #     await kv_cache.delete(cache_key)
 
             await session.commit()
 
@@ -296,8 +299,9 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Get database manager
-    db_manager = formation.get_db_manager()
+    # Get database manager from overlord
+    overlord = getattr(formation, "_overlord", None)
+    db_manager = getattr(overlord, "db_manager", None) if overlord else None
     if not db_manager:
         response = create_error_response(
             "SERVICE_UNAVAILABLE",
@@ -344,11 +348,11 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
             )
             await session.commit()
 
-            # Invalidate cache
-            kv_cache = formation.get_kv_cache()
-            if kv_cache:
-                cache_key = f"user_id:{formation.formation_id}:{identifier}"
-                await kv_cache.delete(cache_key)
+            # Invalidate cache (KV cache not yet implemented)
+            # kv_cache = None
+            # if kv_cache:
+            #     cache_key = f"user_id:{formation.formation_id}:{identifier}"
+            #     await kv_cache.delete(cache_key)
 
             observability.observe(
                 event_type=observability.SystemEvents.OPERATION_COMPLETED,
@@ -413,8 +417,10 @@ async def lookup_identifier(request: Request, identifier: str) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     try:
-        db_manager = formation.get_db_manager()
-        kv_cache = formation.get_kv_cache()
+        # Get database manager from overlord
+        overlord = getattr(formation, "_overlord", None)
+        db_manager = getattr(overlord, "db_manager", None) if overlord else None
+        kv_cache = None  # KV cache not yet implemented
 
         if not db_manager:
             response = create_error_response(
@@ -524,8 +530,10 @@ async def resolve_identifier(request: Request) -> JSONResponse:
         body = await request.json()
         resolve_req = ResolveRequest(**body)
 
-        db_manager = formation.get_db_manager()
-        kv_cache = formation.get_kv_cache()
+        # Get database manager from overlord
+        overlord = getattr(formation, "_overlord", None)
+        db_manager = getattr(overlord, "db_manager", None) if overlord else None
+        kv_cache = None  # KV cache not yet implemented
 
         if not db_manager:
             response = create_error_response(
