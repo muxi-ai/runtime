@@ -117,6 +117,45 @@ def _check_auth_and_user_id(
     return x_user_id, is_admin, None
 
 
+@router.get("/credentials/services", response_model=APIResponse)
+async def list_credential_services(
+    request: Request,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+) -> JSONResponse:
+    """
+    List available services that can use user credentials.
+    
+    Returns the list of MCP servers configured with user credential placeholders.
+    Developers should check this list before storing credentials.
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    # Check auth and validate user_id requirement
+    user_id, is_admin, error_response = _check_auth_and_user_id(request, x_user_id, request_id)
+    if error_response:
+        return error_response
+
+    # Get MCP servers that use user credentials
+    mcp_servers = getattr(formation, "_mcp_servers_with_user_credentials", {})
+
+    services = []
+    for server_id, config in mcp_servers.items():
+        services.append({
+            "service": config.get("service", server_id),
+            "server_id": server_id,
+            "description": f"MCP server requiring user authentication",
+        })
+
+    response = create_success_response(
+        APIObjectType.CREDENTIAL_LIST,
+        APIEventType.CREDENTIALS_LISTED,
+        {"services": services, "count": len(services)},
+        request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
 @router.get("/credentials", response_model=APIResponse)
 async def list_credentials(
     request: Request,
@@ -207,6 +246,17 @@ async def create_credential(
     if error_response:
         return error_response
 
+    # Validate service name: lowercase, no spaces
+    service = body.service.lower().strip()
+    if " " in service:
+        response = create_error_response(
+            "VALIDATION_ERROR",
+            "Service name cannot contain spaces",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=400)
+
     # Get credential resolver from overlord
     overlord = getattr(formation, "_overlord", None)
     credential_resolver = getattr(overlord, "credential_resolver", None) if overlord else None
@@ -224,7 +274,7 @@ async def create_credential(
         # Store the credential
         credential_id = await credential_resolver.store(
             user_id=user_id,
-            service=body.service.lower(),
+            service=service,
             credentials=body.credential,
             name=body.name,
         )
@@ -238,8 +288,8 @@ async def create_credential(
             APIEventType.CREDENTIAL_CREATED,
             {
                 "credential_id": credential_id,
-                "service": body.service.lower(),
-                "name": body.name or body.service.lower(),
+                "service": service,
+                "name": body.name or service,
                 "credential_preview": _redact_credential(body.credential),
                 "created_at": created_at,
             },
