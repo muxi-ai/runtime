@@ -53,45 +53,86 @@ All events follow a consistent JSON-Lines format:
 
 ## Configuration
 
-Observability is configured in the formation YAML under the `logging` section:
+Observability is configured in the formation YAML under the `logging` section using a **two-tier architecture**:
+
+- **System tier**: Infrastructure events (SystemEvents, ErrorEvents, ServerEvents, APIEvents)
+- **Conversation tier**: User-facing events (ConversationEvents)
 
 ```yaml
 logging:
-  level: info                    # Minimum level: debug, info, warning, error
-  output: stdout                 # Output destination: stdout, file, stream, trail
-  path: /var/log/muxi.jsonl     # For file output
-  events:                       # Event filter patterns (optional)
-    - "request.*"
-    - "agent.*"
-    - "memory.*"
-  streams:                      # Advanced streaming configuration
-    - transport: stream
-      destination: https://logs.example.com/events
-      format: jsonl
-      auth:
-        type: bearer
-        token: "${{ secrets.LOG_TOKEN }}"
+  # System events: Infrastructure, debugging, errors
+  system:
+    level: debug              # Minimum level: debug, info, warning, error
+    destination: stdout       # stdout or file path (e.g., /var/log/muxi-system.log)
+
+  # Conversation events: User request lifecycle
+  conversation:
+    enabled: true             # Enable conversation logging (default: false)
+    streams:
+      - transport: stdout     # stdout, file, stream, or trail
+        level: info
+        format: jsonl
+        events:               # Event filter patterns (optional)
+          - "request.*"
+          - "agent.*"
+      - transport: file
+        destination: /var/log/muxi.jsonl
+        level: debug
+      - transport: stream
+        destination: https://logs.example.com/events
+        format: jsonl
+        auth:
+          type: bearer
+          token: "${{ secrets.LOG_TOKEN }}"
 ```
 
-### Output Destinations
+### Two-Tier Event Routing
 
-1. **stdout** (default): Events printed to standard output
+| Event Category | Route To | Purpose |
+|----------------|----------|---------|
+| SystemEvents | `logging.system.destination` | Server startup, service initialization |
+| ErrorEvents | `logging.system.destination` | Validation errors, system failures |
+| ServerEvents | `logging.system.destination` | HTTP request/response lifecycle |
+| APIEvents | `logging.system.destination` | API-level operations |
+| ConversationEvents | `logging.conversation.streams` | User requests, agent responses, memory ops |
+
+### System Configuration
+
+The `system` tier controls infrastructure event routing:
+
+```yaml
+logging:
+  system:
+    level: debug        # Filter level for system events
+    destination: stdout # stdout or absolute file path
+```
+
+- **level**: Minimum event level to emit (debug, info, warning, error)
+- **destination**: Where to send system events
+  - `stdout`: Print to standard output (default)
+  - File path: Write to file (e.g., `/var/log/muxi-system.log`)
+
+### Conversation Streams
+
+The `conversation` tier supports multiple output streams:
+
+1. **stdout**: Events printed to standard output
 2. **file**: Events written to specified file path
 3. **stream**: HTTP/HTTPS streaming to external endpoints
 4. **trail**: MUXI Trail integration for centralized logging
 
 ### Level Filtering
 
-Events are filtered by level hierarchy:
+Events are filtered by level hierarchy (applies to both tiers):
 - `debug`: All events
 - `info`: Info, warning, and error events
 - `warning`: Warning and error events only
 - `error`: Error events only
 
-### Event Filtering
+### Event Filtering (Conversation Only)
 
-Use glob patterns to filter specific events:
-- `"*"`: All events
+Use glob patterns to filter specific conversation events:
+- `"*"`: All events (default)
 - `"request.*"`: All request events
 - `"agent.selected"`: Specific event
 - `"memory.long_term.*"`: All long-term memory events

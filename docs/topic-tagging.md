@@ -96,9 +96,14 @@ Topic tagging is **automatically enabled** when:
 
 # Observability must be enabled to capture topic events
 logging:
-  enabled: true
-  level: info
-  output: stdout
+  system:
+    level: info
+    destination: stdout
+  conversation:
+    enabled: true
+    streams:
+      - transport: stdout
+        level: info
   # Topics will appear as request.topics.extracted events
 
 # LLM configuration required for topic generation
@@ -565,17 +570,17 @@ python test_topics_live.py
 **Symptom:** No `request.topics.extracted` events in logs
 
 **Possible Causes:**
-1. ✅ **Observability Disabled:** Logging not enabled
-   - Fix: Add `logging: { enabled: true }` to formation.afs
+1. ✅ **Observability Disabled:** Conversation logging not enabled
+   - Fix: Add `logging.conversation.enabled: true` to formation.afs
 
 2. ✅ **Log Level Too High:** Events filtered out
-   - Fix: Set `logging: { level: info }` or lower
+   - Fix: Set stream `level: info` or lower in `logging.conversation.streams`
 
 3. ✅ **Topics Empty:** No topics generated (see above)
    - Event only emitted when topics list is non-empty
 
 4. ✅ **Event Filter:** Logs filtering out topic events
-   - Check: `logging.events` filter patterns
+   - Check: `logging.conversation.streams[].events` filter patterns
    - Add: `- "request.*"` to include all request events
 
 ### Malformed Topics

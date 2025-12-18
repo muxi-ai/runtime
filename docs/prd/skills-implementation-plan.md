@@ -12,6 +12,119 @@ author: MUXI Team
 
 This document outlines the plan for implementing Agent Skills support in MUXI Runtime, following the open [Agent Skills specification](https://agentskills.io/specification). Skills represent a "knowledge++" capability - extending beyond static reference documents to include executable scripts, templates, and structured workflows.
 
+---
+
+## Design Decisions
+
+### Skill Location
+
+Skills live in a fixed, explicit location within the formation directory:
+
+```
+formation/
+├── formation.yaml
+├── skills/
+│   ├── pdf-processing/
+│   │   ├── SKILL.md
+│   │   ├── scripts/
+│   │   └── references/
+│   ├── data-analysis/
+│   │   └── SKILL.md
+│   └── ticket-handling/
+│       └── SKILL.md
+└── agents/
+    └── ...
+```
+
+### Explicit Loading (No Auto-Discovery)
+
+Unlike MCP tools and agents, skills are **not** auto-loaded. They must be explicitly declared:
+
+```yaml
+# formation.yaml
+
+# Formation-level skills - "public", available to all agents
+skills:
+  - pdf-processing
+  - data-analysis
+
+agents:
+  - name: support-agent
+    description: "Handles customer support tickets"
+    # Agent-specific skills - belongs to this agent only
+    skills:
+      - ticket-handling
+```
+
+### Skill Scoping
+
+| Scope | Declaration | Availability |
+|-------|-------------|--------------|
+| **Public** | Formation-level `skills:` | All agents can use |
+| **Private** | Agent-level `skills:` | Only that agent |
+
+### Overlord Routing Enhancement
+
+Skill descriptions are injected into agent specialties to improve routing decisions:
+
+```python
+# During formation loading, agent metadata is enhanced:
+
+support_agent.specialties = [
+    "Handles customer support tickets",       # from agent description
+    "Handle support tickets and escalations", # from ticket-handling skill description
+]
+
+# Overlord knows which skills each agent has:
+support_agent.skills = {
+    "private": ["ticket-handling"],
+    "public": ["pdf-processing", "data-analysis"],
+}
+```
+
+This allows Overlord to make smarter routing decisions:
+- "User needs PDF extraction" -> route to agent with `pdf-processing` skill
+- "User has a support ticket" -> route to `support-agent` (has `ticket-handling`)
+
+---
+
+## Agent Skills Specification Summary
+
+### Core Concepts
+
+```
+skill-name/
+├── SKILL.md          # Required: YAML frontmatter + instructions
+├── scripts/          # Optional: executable code
+├── references/       # Optional: additional documentation
+└── assets/           # Optional: templates, resources
+```
+
+### SKILL.md Format
+
+```yaml
+---
+name: pdf-processing           # Required: 1-64 chars, lowercase + hyphens
+description: Extract text...   # Required: 1-1024 chars
+license: Apache-2.0            # Optional
+compatibility: Claude Code     # Optional: environment requirements
+metadata:                      # Optional: arbitrary key-value
+  author: example-org
+  version: "1.0"
+allowed-tools: Bash Read       # Optional/Experimental: pre-approved tools
+---
+
+# Instructions (markdown body)
+```
+
+### Progressive Disclosure
+
+1. **Discovery** (~100 tokens): Load only name + description at startup
+2. **Activation** (<5000 tokens): Load full SKILL.md when matched
+3. **Execution** (as needed): Load scripts/references/assets on demand
+
+---
+
 ## Current State Analysis
 
 ### Existing Systems
@@ -40,102 +153,96 @@ MUXI currently has two related systems that handle similar concerns:
 - WorkingMemory integration for vector storage
 - YAML frontmatter conventions
 
-## Agent Skills Specification Summary
-
-### Core Concepts
-
-```
-skill-name/
-├── SKILL.md          # Required: YAML frontmatter + instructions
-├── scripts/          # Optional: executable code
-├── references/       # Optional: additional documentation
-└── assets/           # Optional: templates, resources
-```
-
-### SKILL.md Format
-
-```yaml
----
-name: pdf-processing           # Required: 1-64 chars, lowercase + hyphens
-description: Extract text...   # Required: 1-1024 chars
-license: Apache-2.0            # Optional
-compatibility: Claude Code     # Optional: environment requirements
-metadata:                      # Optional: arbitrary key-value
-  author: example-org
-  version: "1.0"
-allowed-tools: Bash Read      # Optional/Experimental: pre-approved tools
 ---
 
-# Instructions (markdown body)
-```
+## Architecture
 
-### Progressive Disclosure
-
-1. **Discovery** (~100 tokens): Load only name + description at startup
-2. **Activation** (<5000 tokens): Load full SKILL.md when matched
-3. **Execution** (as needed): Load scripts/references/assets on demand
-
-## Design Proposal
-
-### Architecture Overview
+### Component Overview
 
 ```
 Formation YAML
      │
+     ├── skills: [pdf-processing, data-analysis]  (public)
+     │
+     └── agents:
+           └── support-agent:
+                 └── skills: [ticket-handling]    (private)
+     │
      ▼
 ┌─────────────────┐
-│  SkillManager   │  ← New component
+│  SkillLoader    │  <- Formation loading
 ├─────────────────┤
-│ - discovery     │  Scan directories for SKILL.md files
-│ - indexing      │  Store embeddings in WorkingMemory
-│ - activation    │  Load full skill on match
-│ - execution     │  Handle script execution (sandboxed)
+│ - parse config  │  Read skills: arrays
+│ - load metadata │  Parse SKILL.md frontmatter only
+│ - validate      │  Check skill exists in skills/
 └────────┬────────┘
          │
-    ┌────┴────┬──────────────┐
-    ▼         ▼              ▼
-Knowledge   SOPs          Skills
-Handler    System        (new)
-    │         │              │
-    └─────────┴──────────────┘
-              │
-              ▼
-      WorkingMemory/FAISS
-      (unified search)
+         ▼
+┌─────────────────┐
+│  SkillManager   │  <- Runtime component
+├─────────────────┤
+│ - indexing      │  Store embeddings in WorkingMemory
+│ - activation    │  Load full SKILL.md on demand
+│ - routing info  │  Provide skill metadata to Overlord
+└────────┬────────┘
+         │
+         ▼
+   WorkingMemory/FAISS
+   (semantic search)
 ```
 
-### Phase 1: Core Skill Support
-
-**Goal**: Basic skill discovery, activation, and injection into agent context.
-
-#### 1.1 SkillManager Component
+### SkillManager Component
 
 Location: `src/muxi/formation/skills/`
 
 ```python
-# skill_manager.py
+@dataclass
+class SkillMetadata:
+    """Lightweight skill info (~100 tokens) - loaded at startup."""
+    name: str
+    description: str
+    path: Path
+    scope: Literal["public", "private"]
+    owner_agent: Optional[str] = None  # Agent name if private
+    license: Optional[str] = None
+    compatibility: Optional[str] = None
+    metadata: Dict[str, str] = field(default_factory=dict)
+    allowed_tools: List[str] = field(default_factory=list)
+
+
+@dataclass
+class SkillContent:
+    """Full skill content - loaded on activation."""
+    metadata: SkillMetadata
+    instructions: str  # Markdown body
+    scripts: List[str]  # Available script paths
+    references: List[str]  # Available reference paths
+    assets: List[str]  # Available asset paths
+
+
 class SkillManager:
     """
-    Manages skill discovery, indexing, and activation.
+    Manages skill loading, indexing, and activation.
     
-    Follows progressive disclosure pattern:
-    1. At startup: load only metadata (name, description)
-    2. On match: load full SKILL.md content
-    3. On demand: load scripts/references/assets
+    Skills are explicitly loaded based on formation config,
+    NOT auto-discovered from the skills/ directory.
     """
     
     def __init__(
         self,
-        skills_dirs: List[Path],           # Configured skill directories
-        working_memory: WorkingMemory,      # For vector storage
-        formation_path: Optional[Path] = None,
+        formation_path: Path,
+        working_memory: WorkingMemory,
     ):
-        self.skills_dirs = skills_dirs
-        self.working_memory = working_memory
         self.formation_path = formation_path
+        self.skills_dir = formation_path / "skills"
+        self.working_memory = working_memory
         
-        # Metadata-only index (loaded at startup)
-        self.skills_metadata: Dict[str, SkillMetadata] = {}
+        # Loaded skill metadata (keyed by skill name)
+        self.skills: Dict[str, SkillMetadata] = {}
+        
+        # Skill-to-agent mapping
+        self.public_skills: List[str] = []
+        self.agent_skills: Dict[str, List[str]] = {}  # agent_name -> [skill_names]
         
         # Full content cache (loaded on activation)
         self._content_cache: Dict[str, SkillContent] = {}
@@ -143,16 +250,44 @@ class SkillManager:
         # MD5 hashes for change detection
         self._file_hashes: Dict[str, str] = {}
     
-    async def discover_skills(self) -> int:
-        """Scan directories and index skill metadata."""
-        
+    def load_public_skills(self, skill_names: List[str]) -> None:
+        """Load formation-level (public) skills."""
+        for name in skill_names:
+            self._load_skill(name, scope="public")
+            self.public_skills.append(name)
+    
+    def load_agent_skills(self, agent_name: str, skill_names: List[str]) -> None:
+        """Load agent-specific (private) skills."""
+        self.agent_skills[agent_name] = []
+        for name in skill_names:
+            self._load_skill(name, scope="private", owner_agent=agent_name)
+            self.agent_skills[agent_name].append(name)
+    
+    def get_agent_skill_descriptions(self, agent_name: str) -> List[str]:
+        """Get skill descriptions for agent specialty enhancement."""
+        descriptions = []
+        # Add private skills
+        for skill_name in self.agent_skills.get(agent_name, []):
+            if skill_name in self.skills:
+                descriptions.append(self.skills[skill_name].description)
+        # Add public skills
+        for skill_name in self.public_skills:
+            if skill_name in self.skills:
+                descriptions.append(self.skills[skill_name].description)
+        return descriptions
+    
+    def get_available_skills(self, agent_name: str) -> List[str]:
+        """Get all skills available to an agent (private + public)."""
+        private = self.agent_skills.get(agent_name, [])
+        return private + self.public_skills
+    
     async def search_skills(
         self,
         query: str,
+        agent_name: Optional[str] = None,
         top_k: int = 3,
-        threshold: float = 0.7,
     ) -> List[SkillMetadata]:
-        """Semantic search for relevant skills."""
+        """Semantic search for relevant skills (scoped to agent if provided)."""
         
     async def activate_skill(self, skill_name: str) -> SkillContent:
         """Load full skill content for agent context."""
@@ -163,152 +298,111 @@ class SkillManager:
         relative_path: str,
     ) -> str:
         """Load a specific file from skill directory."""
-
-
-@dataclass
-class SkillMetadata:
-    """Lightweight skill info (~100 tokens)."""
-    name: str
-    description: str
-    path: Path
-    license: Optional[str] = None
-    compatibility: Optional[str] = None
-    metadata: Dict[str, str] = field(default_factory=dict)
-    allowed_tools: List[str] = field(default_factory=list)
-
-
-@dataclass
-class SkillContent:
-    """Full skill content for agent context."""
-    metadata: SkillMetadata
-    instructions: str  # Markdown body
-    scripts: List[str]  # Available script paths
-    references: List[str]  # Available reference paths
-    assets: List[str]  # Available asset paths
 ```
 
-#### 1.2 Formation Configuration
-
-```yaml
-# formation.yaml
-skills:
-  enabled: true
-  
-  # Skill directories (searched in order)
-  directories:
-    - path: ./skills              # Relative to formation
-    - path: ~/.muxi/skills        # User skills
-    - path: /opt/muxi/skills      # System skills
-  
-  # Discovery settings
-  discovery:
-    recursive: true               # Scan subdirectories
-    max_skills: 100               # Limit total skills loaded
-  
-  # Activation settings
-  activation:
-    auto_activate: true           # Auto-activate on query match
-    threshold: 0.75               # Semantic similarity threshold
-    max_active: 3                 # Max concurrent activated skills
-  
-  # Security settings
-  execution:
-    allow_scripts: false          # Disable script execution by default
-    sandbox: true                 # Run scripts in sandbox (when enabled)
-    allowed_tools: []             # Override allowed-tools from skills
-    timeout_seconds: 30           # Script execution timeout
-```
-
-#### 1.3 Integration with Overlord
+### Formation Loading Integration
 
 ```python
-# In overlord.py
+# In formation_loader.py
 
-async def _route_message(self, message: str, user_id: str) -> str:
-    # 1. Search for relevant skills
-    if self.skill_manager and self.skill_manager.enabled:
+async def _load_skills(self, config: Dict[str, Any]) -> None:
+    """Load skills based on explicit configuration."""
+    
+    # Initialize SkillManager
+    self.skill_manager = SkillManager(
+        formation_path=self.formation_path,
+        working_memory=self.working_memory,
+    )
+    
+    # Load public (formation-level) skills
+    public_skills = config.get("skills", [])
+    if public_skills:
+        self.skill_manager.load_public_skills(public_skills)
+    
+    # Load private (agent-level) skills
+    for agent_config in config.get("agents", []):
+        agent_name = agent_config.get("name")
+        agent_skills = agent_config.get("skills", [])
+        if agent_skills:
+            self.skill_manager.load_agent_skills(agent_name, agent_skills)
+```
+
+### Overlord Integration
+
+```python
+# In overlord.py - during agent initialization
+
+def _enhance_agent_specialties(self, agent: Agent) -> None:
+    """Enhance agent specialties with skill descriptions."""
+    if self.skill_manager:
+        skill_descriptions = self.skill_manager.get_agent_skill_descriptions(
+            agent.name
+        )
+        agent.specialties.extend(skill_descriptions)
+
+
+# In overlord.py - during message routing
+
+async def _route_with_skills(self, message: str, agent: Agent) -> str:
+    """Check for relevant skills and inject into context."""
+    if self.skill_manager:
+        available_skills = self.skill_manager.get_available_skills(agent.name)
         matching_skills = await self.skill_manager.search_skills(
             query=message,
-            top_k=3,
-            threshold=0.75,
+            agent_name=agent.name,
+            top_k=2,
         )
         
         if matching_skills:
-            # 2. Activate best matching skill
+            # Activate and inject best match
             skill = await self.skill_manager.activate_skill(
                 matching_skills[0].name
             )
-            
-            # 3. Inject skill into context
             context_enhancement = self._format_skill_context(skill)
-            # ... continue with enhanced context
+            # ... inject into agent context
 ```
 
-### Phase 2: Script Execution (Future)
+---
 
-**Goal**: Safe execution of skill scripts with sandboxing.
+## Script Execution
 
-#### 2.1 Script Executor
+**Status**: To be determined. See [RCE Sandboxing PRD](./rce-sandboxing.md) for related infrastructure.
 
-```python
-class SkillScriptExecutor:
-    """Execute skill scripts with security controls."""
-    
-    async def execute(
-        self,
-        script_path: Path,
-        args: Dict[str, Any],
-        timeout: float = 30.0,
-    ) -> ExecutionResult:
-        """Execute a skill script in sandboxed environment."""
-```
+This section will be updated after discussing integration approach.
 
-#### 2.2 Security Considerations
-
-- **Sandboxing**: Container/subprocess isolation
-- **Allowlisting**: Only approved tools/commands
-- **Confirmation**: User approval for sensitive operations
-- **Logging**: Full audit trail of executions
-- **Resource limits**: CPU, memory, network constraints
-
-### Phase 3: Ecosystem Integration (Future)
-
-**Goal**: Skill marketplace, versioning, and distribution.
-
-- Skill validation CLI (`muxi skills validate`)
-- Skill packaging and distribution
-- Version management and updates
-- Community skill repository
+---
 
 ## Implementation Roadmap
 
-### Sprint 1: Foundation (Week 1-2)
+### Phase 1: Core Skill Support (Weeks 1-3)
 
 1. Create `src/muxi/formation/skills/` module structure
 2. Implement `SkillMetadata` and `SkillContent` dataclasses
 3. Implement SKILL.md parsing (frontmatter + body)
-4. Basic skill discovery from directories
+4. Explicit skill loading from formation config
+5. Public vs private skill scoping
+6. Agent specialty enhancement with skill descriptions
 
-### Sprint 2: Integration (Week 3-4)
+### Phase 2: Semantic Search (Weeks 4-5)
 
 1. WorkingMemory integration for skill embeddings
-2. Semantic search for skill matching
-3. Formation configuration schema
-4. Overlord integration for context injection
+2. Semantic search scoped to available skills
+3. Skill activation and context injection
+4. MD5 caching for change detection
 
-### Sprint 3: Polish (Week 5-6)
+### Phase 3: Script Execution (TBD)
 
-1. Caching with MD5 change detection
-2. Progressive disclosure optimization
-3. E2E tests for skill workflows
-4. Documentation and examples
+- Integration with RCE infrastructure
+- Security controls and sandboxing
+- Artifact handling
 
-### Future Sprints
+### Phase 4: Polish (Week 6)
 
-- Script execution with sandboxing
-- Tool integration (MCP connection)
-- Skill validation CLI
-- Skill marketplace integration
+1. E2E tests for skill workflows
+2. Documentation and examples
+3. Validation CLI (`muxi skills validate`)
+
+---
 
 ## Relationship to Existing Systems
 
@@ -318,45 +412,31 @@ class SkillScriptExecutor:
 |--------|-----------|--------|
 | Purpose | Reference information | Executable procedures |
 | Content | Documents, PDFs, etc. | Instructions + scripts |
-| Discovery | Semantic search | Semantic search |
+| Loading | Auto-discovered | Explicit declaration |
+| Scope | Per-agent only | Public or per-agent |
 | Execution | Read-only | May execute scripts |
-| Scope | Per-agent | Formation-wide |
 
 ### SOPs vs Skills
 
 | Aspect | SOPs | Skills |
 |--------|------|--------|
 | Format | Custom YAML frontmatter | Agent Skills spec |
+| Loading | Auto-discovered from sops/ | Explicit declaration |
 | Portability | MUXI-specific | Cross-platform |
 | Scripts | Template-based | Full script support |
-| Discovery | Semantic search | Semantic search |
 | Ecosystem | Internal | Community-driven |
 
-### Unification Opportunity
-
-Consider a future "Capability" abstraction that unifies:
-- Knowledge sources (reference docs)
-- SOPs (internal procedures)
-- Skills (portable capabilities)
-
-## Open Questions
-
-1. **Script execution**: Should we support script execution in v1, or defer to Phase 2?
-
-2. **Tool integration**: How do skills interact with MCP tools? Should `allowed-tools` map to MCP tool names?
-
-3. **Agent scope**: Should skills be formation-wide or per-agent? The spec doesn't specify.
-
-4. **SOP migration**: Should we provide a migration path from SOPs to Skills format?
-
-5. **Priority**: When both an SOP and a Skill match a query, which takes precedence?
+---
 
 ## Success Metrics
 
-1. **Discovery latency**: <100ms for skill search
-2. **Context efficiency**: <500 tokens average for activated skill
-3. **Developer adoption**: 10+ skills created within 3 months
-4. **Compatibility**: Pass `skills-ref validate` for all bundled skills
+1. **Loading time**: <50ms per skill metadata load
+2. **Search latency**: <100ms for skill search
+3. **Context efficiency**: <500 tokens average for activated skill
+4. **Developer adoption**: 10+ skills created within 3 months
+5. **Compatibility**: Pass `skills-ref validate` for all bundled skills
+
+---
 
 ## References
 
@@ -364,3 +444,4 @@ Consider a future "Capability" abstraction that unifies:
 - [Integration Guide](https://agentskills.io/integrate-skills)
 - [skills-ref Reference Library](https://github.com/agentskills/agentskills/tree/main/skills-ref)
 - [Anthropic Skills Examples](https://github.com/anthropics/skills)
+- [MUXI RCE Sandboxing PRD](./rce-sandboxing.md)
