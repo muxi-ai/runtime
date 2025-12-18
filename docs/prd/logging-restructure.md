@@ -97,6 +97,7 @@ logging:
 | `formation/initialization.py` | Parse new `logging.system` and `logging.conversation` structure |
 | `services/observability/logger.py` | Remove hardcoded stdout routing; route based on event type to system or conversation destination |
 | `formation/config/validation.py` | Update schema validation for new logging structure |
+| `formation/server/routes/admin/logging.py` | Update `GET /logging` and `GET /logging/destinations` response format |
 
 ### Test Files
 
@@ -114,9 +115,65 @@ logging:
 
 ## 4. API Endpoint Behavior
 
-### Existing Endpoints (No Changes Required)
+### Admin Endpoints (Changes Required)
 
-The API endpoints stream events via `ObservabilityManager.subscribe()`, which filters events from an internal queue. The routing change happens at **emit time**, not at subscription time.
+#### `GET /logging`
+Returns full logging configuration. Must reflect new structure.
+
+**Current Response:**
+```json
+{
+  "enabled": true,
+  "streams": [...]
+}
+```
+
+**New Response:**
+```json
+{
+  "system": {
+    "level": "debug",
+    "destination": "stdout"
+  },
+  "conversation": {
+    "enabled": true,
+    "streams": [...]
+  }
+}
+```
+
+**File:** `src/muxi/formation/server/routes/admin/logging.py` - `get_logging_config()`
+
+#### `GET /logging/destinations`
+Lists logging destinations. Must return conversation streams only (system is not a "destination" in the same sense).
+
+**Current Response:**
+```json
+{
+  "destinations": [...],
+  "count": 2
+}
+```
+
+**New Response:**
+```json
+{
+  "system": {
+    "level": "debug", 
+    "destination": "stdout"
+  },
+  "conversation": {
+    "destinations": [...],
+    "count": 2
+  }
+}
+```
+
+**File:** `src/muxi/formation/server/routes/admin/logging.py` - `list_logging_destinations()`
+
+### SSE Streaming Endpoints (No Changes Required)
+
+The SSE endpoints stream events via `ObservabilityManager.subscribe()`, which filters events from an internal queue. The routing change happens at **emit time**, not at subscription time.
 
 #### `/events` (Client - SSE)
 - **Current**: Filters for `chat.`, `agent.`, `workflow.`, `task.` events
