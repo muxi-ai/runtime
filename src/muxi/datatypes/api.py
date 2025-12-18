@@ -125,6 +125,12 @@ class APIEventType(str, Enum):
     TRIGGERS_LIST = "triggers.list"
     TRIGGER_RETRIEVED = "trigger.retrieved"
 
+    # Credential events
+    CREDENTIALS_LISTED = "credentials.listed"
+    CREDENTIAL_CREATED = "credentials.created"
+    CREDENTIAL_RETRIEVED = "credentials.retrieved"
+    CREDENTIAL_DELETED = "credentials.deleted"
+
     # Error events
     ERROR_VALIDATION = "error.validation"
     ERROR_AUTHENTICATION = "error.authentication"
@@ -194,6 +200,10 @@ class APIObjectType(str, Enum):
     USER = "user"
     USER_IDENTIFIER = "user_identifier"
     USER_IDENTIFIER_LIST = "user_identifier_list"
+
+    # Credential objects
+    CREDENTIAL = "credential"
+    CREDENTIAL_LIST = "credential_list"
 
     # Logging destination objects (for log destination management)
     LOGGING_DESTINATION = "logging_destination"

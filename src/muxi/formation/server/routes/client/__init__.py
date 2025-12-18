@@ -2,6 +2,7 @@
 
 from . import (
     chat,
+    credentials,
     events,
     requests,
     memory,
@@ -13,6 +14,7 @@ from . import (
 
 __all__ = [
     "chat",
+    "credentials",
     "events",
     "requests",
     "memory",

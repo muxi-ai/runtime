@@ -567,7 +567,7 @@ class FormationServer:
         from fastapi import Depends
 
         # Import all client route modules
-        from .routes.client import chat, events, requests, memory, triggers, users, sessions, sops
+        from .routes.client import chat, credentials, events, requests, memory, triggers, users, sessions, sops
         # Import scheduler from admin routes (has dual-auth endpoint GET /scheduler/jobs)
         from .routes.admin import scheduler
 
@@ -586,6 +586,7 @@ class FormationServer:
 
         # Routers that accept both ClientKey and AdminKey
         dual_auth_routers = [
+            credentials.router,
             events.router,
             requests.router,
             memory.router,
