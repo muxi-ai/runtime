@@ -366,9 +366,138 @@ async def _route_with_skills(self, message: str, agent: Agent) -> str:
 
 ## Script Execution
 
-**Status**: To be determined. See [RCE Sandboxing PRD](./rce-sandboxing.md) for related infrastructure.
+### Spec Analysis
 
-This section will be updated after discussing integration approach.
+The Agent Skills specification is **intentionally agnostic** about script execution. Looking at Anthropic's reference skills (e.g., `pdf`, `docx`):
+
+1. **Scripts are standalone CLI tools** - Standard executables accepting command-line arguments
+2. **No async/callback standard** - Execution model depends on the "Skill Client" (runtime)
+3. **Simple I/O contract**:
+   - Input: command-line arguments, stdin, environment variables
+   - Output: stdout, stderr, exit codes, generated files
+4. **SKILL.md documents usage** - Instructions tell the agent how to invoke scripts
+
+Example from `pdf` skill:
+```
+scripts/
+├── check_fillable_fields.py      # python check_fillable_fields.py input.pdf
+├── extract_form_field_info.py    # python extract_form_field_info.py --output fields.json input.pdf
+├── fill_pdf_form_with_annotations.py
+└── convert_pdf_to_images.py
+```
+
+**Implication**: Pre-existing skills are portable to MUXI as long as we support standard CLI execution.
+
+### MUXI Executor Container
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│  MUXI Runtime                                       │
+│  ├── SkillManager                                   │
+│  ├── Future: RCE, custom tools                      │
+│  └── ExecutorClient (ZeroMQ)                        │
+└──────────────────┬──────────────────────────────────┘
+                   │ ZeroMQ (REQ/REP)
+                   ▼
+┌─────────────────────────────────────────────────────┐
+│  muxi/executor container                            │
+│  ├── ZeroMQ server (configurable port)              │
+│  ├── Python 3.11+, Node 20+, Bash, common libs      │
+│  ├── /skills (mounted read-only from formation)     │
+│  └── Process isolation per execution                │
+└─────────────────────────────────────────────────────┘
+```
+
+**Lifecycle:**
+1. Runtime starts -> spawn `muxi/executor` container
+2. Mount `{formation}/skills/` to `/skills` (read-only)
+3. Container runs ZeroMQ server, awaits requests
+4. Monitor restarts container on crash
+
+**Message Protocol:**
+
+```python
+# Request
+{
+    "id": "req-123",
+    "type": "execute",
+    "command": "python",
+    "args": ["/skills/pdf-processing/scripts/extract.py", "/tmp/input.pdf"],
+    "cwd": "/tmp",
+    "timeout": 30,
+    "env": {}  # optional
+}
+
+# Response
+{
+    "id": "req-123",
+    "status": "success" | "error" | "timeout",
+    "stdout": "...",
+    "stderr": "...",
+    "exit_code": 0,
+    "duration_ms": 1234
+}
+```
+
+**Key Design Points:**
+
+1. **Standard CLI execution** - Matches spec pattern, enables skill portability
+2. **Replaceable Dockerfile** - Ship default, developers can customize
+3. **ZeroMQ REQ/REP** - Matches FAISSx pattern, async-friendly
+4. **Process isolation** - Each script in subprocess within container
+5. **Mounted skills/** - Read-only, scripts can access sibling files
+6. **Monitor/restart** - Ephemeral execution, container restarts on crash
+
+**Default Container Contents:**
+
+```dockerfile
+FROM python:3.11-slim
+
+# Common tools
+RUN apt-get update && apt-get install -y \
+    nodejs npm \
+    poppler-utils \
+    qpdf \
+    tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
+
+# Common Python libraries (from Anthropic skills)
+RUN pip install --no-cache-dir \
+    pypdf pdfplumber reportlab \
+    python-docx openpyxl python-pptx \
+    pillow pytesseract pdf2image \
+    pandas numpy \
+    pyzmq
+
+# ZeroMQ executor server
+COPY executor_server.py /app/
+CMD ["python", "/app/executor_server.py"]
+```
+
+**Configuration:**
+
+```yaml
+# formation.yaml
+executor:
+  enabled: true
+  image: muxi/executor:latest  # or custom image
+  port: 5560
+  timeout_default: 30
+  restart_policy: always
+  resource_limits:
+    memory: 2g
+    cpu: 1.0
+```
+
+### Reusability
+
+The executor container is a general-purpose component that can serve:
+- **Skill script execution** (first consumer)
+- **RCE for ad-hoc code** (future)
+- **Custom tool execution** (future)
+- **Sandbox for persistent agents** (future, see rce-sandboxing.md)
 
 ---
 
@@ -390,17 +519,22 @@ This section will be updated after discussing integration approach.
 3. Skill activation and context injection
 4. MD5 caching for change detection
 
-### Phase 3: Script Execution (TBD)
+### Phase 3: Executor Container (Weeks 6-8)
 
-- Integration with RCE infrastructure
-- Security controls and sandboxing
-- Artifact handling
+1. Create `muxi/executor` Docker image
+2. Implement ZeroMQ executor server
+3. Implement `ExecutorClient` in runtime
+4. Container lifecycle management (spawn, monitor, restart)
+5. Integration with SkillManager for script execution
+6. Configuration schema for executor settings
 
-### Phase 4: Polish (Week 6)
+### Phase 4: Polish (Weeks 9-10)
 
 1. E2E tests for skill workflows
-2. Documentation and examples
-3. Validation CLI (`muxi skills validate`)
+2. E2E tests for script execution
+3. Documentation and examples
+4. Validation CLI (`muxi skills validate`)
+5. Pre-built skills bundle (pdf, docx, etc.)
 
 ---
 
@@ -435,6 +569,41 @@ This section will be updated after discussing integration approach.
 3. **Context efficiency**: <500 tokens average for activated skill
 4. **Developer adoption**: 10+ skills created within 3 months
 5. **Compatibility**: Pass `skills-ref validate` for all bundled skills
+
+---
+
+## Skill Portability
+
+**Goal**: Enable developers to use pre-existing skills from the community without modification.
+
+**Requirements for portability:**
+
+1. Standard CLI execution pattern (command + args)
+2. Common libraries pre-installed in executor container
+3. Read-only access to skill directory (`/skills/{skill-name}/`)
+4. Standard I/O (stdout, stderr, exit codes)
+
+**Testing portability:**
+
+```bash
+# Validate skill structure
+muxi skills validate ./skills/pdf-processing
+
+# Test script execution
+muxi skills exec pdf-processing scripts/extract.py --input test.pdf
+```
+
+**Bundling community skills:**
+
+```yaml
+# formation.yaml
+skills:
+  - pdf           # from skills/ directory
+  - docx
+  - xlsx
+```
+
+Developers can copy skills from [anthropics/skills](https://github.com/anthropics/skills) directly into their formation's `skills/` directory.
 
 ---
 
