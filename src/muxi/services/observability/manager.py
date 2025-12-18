@@ -73,38 +73,60 @@ class ObservabilityManager:
         return self._subscriber_lock
 
     def _create_event_logger(self) -> EventLogger:
-        """Create event logger from configuration."""
+        """Create event logger from configuration.
+
+        Two-tier logging architecture:
+        - system: Infrastructure events (level + destination)
+        - conversation: User-facing events (enabled + streams)
+        """
         logging_config = self.config.get("logging", {})
 
-        # Parse level
-        level_str = logging_config.get("level", "info").lower()
-        valid_levels = [level.value for level in EventLevel]
-        level = EventLevel(level_str) if level_str in valid_levels else EventLevel.INFO
+        # Parse system config (defaults: level=debug, destination=stdout)
+        system_config = logging_config.get("system", {})
+        system_level_str = system_config.get("level", "debug").lower()
+        system_destination = system_config.get("destination", "stdout")
 
-        # Parse output configuration
-        output = logging_config.get("output", "stdout")
+        # Parse conversation config
+        conversation_config = logging_config.get("conversation", {})
+        conversation_enabled = conversation_config.get("enabled", False)
+        streams = conversation_config.get("streams", [])
+
+        # Determine conversation output from first file stream (if any)
+        level = EventLevel.INFO
+        output = "stdout"
         output_config = {}
+        events = None
 
-        if output == "file":
-            output_config["path"] = logging_config.get(
-                "path", f"{get_observability_dir()}/muxi.jsonl"
-            )
-        elif output == "stream":
-            output_config["url"] = logging_config.get("stream_url", "")
-        elif output == "trail":
-            output_config["trail"] = {
-                "url": logging_config.get("trail_url", ""),
-                "api_key": logging_config.get("trail_api_key", ""),
-            }
-
-        # Parse event filters
-        events = logging_config.get("events")
+        if conversation_enabled and streams:
+            for stream in streams:
+                if stream.get("transport") == "file" and stream.get("destination"):
+                    level_str = stream.get("level", "info").lower()
+                    valid_levels = [lvl.value for lvl in EventLevel]
+                    level = EventLevel(level_str) if level_str in valid_levels else EventLevel.INFO
+                    output = "file"
+                    output_config["path"] = stream.get("destination")
+                    events = stream.get("events")
+                    break
+                elif stream.get("transport") == "stream" and stream.get("destination"):
+                    output = "stream"
+                    output_config["url"] = stream.get("destination")
+                    break
+                elif stream.get("transport") == "trail":
+                    output = "trail"
+                    auth = stream.get("auth", {})
+                    output_config["trail"] = {
+                        "url": auth.get("url", ""),
+                        "api_key": auth.get("api_key", ""),
+                    }
+                    break
 
         return EventLogger(
             level=level,
             output=output,
             output_config=output_config,
             events=events,
+            system_level=system_level_str,
+            system_destination=system_destination,
         )
 
     async def _initialize_streams(self) -> None:
@@ -113,7 +135,8 @@ class ObservabilityManager:
             return
 
         logging_config = self.config.get("logging", {})
-        streams_config = logging_config.get("streams", [])
+        conversation_config = logging_config.get("conversation", {})
+        streams_config = conversation_config.get("streams", [])
 
         if streams_config:
             await self.stream_processor.initialize(streams_config)

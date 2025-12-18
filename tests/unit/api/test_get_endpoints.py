@@ -191,8 +191,8 @@ class TestGetEndpoints:
         data = await self._make_get_request("/v1/logging", headers)
 
         assert data["object"] == "logging_config"
-        assert "enabled" in data["data"]
-        assert "streams" in data["data"]
+        assert "system" in data["data"]
+        assert "conversation" in data["data"]
         print("  ✅ Logging config endpoint validated")
 
     # Memory Tests
