@@ -79,9 +79,13 @@ memory:
     embedding_model: "openai/text-embedding-3-small"
 
 logging:
-  enabled: true
-  streams:
-    # File example
-    - transport: "stdout"
-      level: "info"
-      format: "jsonl"
+  system:
+    level: "error"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      # File example
+      - transport: "stdout"
+        level: "info"
+        format: "jsonl"

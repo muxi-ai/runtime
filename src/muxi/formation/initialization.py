@@ -56,31 +56,45 @@ def initialize_observability(formation) -> None:
 
     This MUST be the first initialization to ensure all subsequent
     events go to the configured destination instead of stdout.
+
+    Two-tier logging architecture:
+    - system: Infrastructure events (SystemEvents, ErrorEvents, ServerEvents, APIEvents)
+    - conversation: User-facing events (ConversationEvents)
     """
     # Use the pre-configured logging config
     logging_config = formation._logging_config if hasattr(formation, "_logging_config") else {}
 
-    # Determine event logger configuration
+    # Parse system logging config (defaults: level=debug, destination=stdout)
+    system_config = logging_config.get("system", {})
+    system_level_str = system_config.get("level", "debug").lower()
+    system_destination = system_config.get("destination", "stdout")
+
+    # Parse conversation logging config
+    conversation_config = logging_config.get("conversation", {})
+    conversation_enabled = conversation_config.get("enabled", False)
+    conversation_streams = conversation_config.get("streams", [])
+
+    # Determine event logger configuration for conversation events
     event_logger = None
 
-    # Only create custom logger if logging is enabled and has file output
-    if logging_config.get("enabled", True):
-        streams = logging_config.get("streams", [])
-
-        # Find file stream configuration
-        for stream in streams:
+    # Only create custom logger if conversation logging is enabled and has file output
+    if conversation_enabled:
+        # Find file stream configuration for conversation events
+        for stream in conversation_streams:
             if stream.get("transport") == "file" and stream.get("destination"):
                 # Parse level
                 level_str = stream.get("level", "info").lower()
                 valid_levels = [level.value for level in EventLevel]
                 level = EventLevel(level_str) if level_str in valid_levels else EventLevel.INFO
 
-                # Create EventLogger with file output
+                # Create EventLogger with file output and system config
                 event_logger = EventLogger(
                     level=level,
                     output="file",
                     output_config={"path": stream.get("destination")},
                     events=(stream.get("events", ["*"]) if stream.get("events") != ["*"] else None),
+                    system_level=system_level_str,
+                    system_destination=system_destination,
                 )
 
                 break
@@ -99,8 +113,15 @@ def initialize_observability(formation) -> None:
             f"Observability logging to: {event_logger.output_config.get('path')}"
         ))
     else:
-        # Use default stdout logger
-        formation._observability_manager = observability.ObservabilityManager({})
+        # Use default logger with system config
+        default_logger = EventLogger(
+            system_level=system_level_str,
+            system_destination=system_destination,
+        )
+        formation._observability_manager = observability.ObservabilityManager(
+            {"event_logger": default_logger}
+        )
+        set_event_logger(default_logger)
 
 
 def initialize_llm_config(formation) -> None:

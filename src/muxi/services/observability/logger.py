@@ -27,7 +27,12 @@ from ...utils.version import get_version
 
 
 class EventLogger:
-    """Central event logging component with configurable outputs."""
+    """Central event logging component with configurable outputs.
+
+    Two-tier logging architecture:
+    - System events (SystemEvents, ErrorEvents, ServerEvents, APIEvents) -> system_destination
+    - Conversation events (ConversationEvents) -> configured output (file, stdout, stream, trail)
+    """
 
     def __init__(
         self,
@@ -35,13 +40,33 @@ class EventLogger:
         output: str = "stdout",
         output_config: Optional[Dict[str, Any]] = None,
         events: Optional[List[str]] = None,
+        system_level: str = "debug",
+        system_destination: str = "stdout",
     ):
+        # Conversation event configuration
         self.level = level
         self.output = output
         self.output_config = output_config or {}
         self.events = set(events) if events else None
+
+        # System event configuration
+        self.system_level = self._parse_level(system_level)
+        self.system_destination = system_destination
+        self._system_file_handle = None
+
         self.muxi_version = get_version()
         self._server_id = self._get_server_id()
+
+    def _parse_level(self, level_str: str) -> EventLevel:
+        """Parse level string to EventLevel enum."""
+        level_map = {
+            "debug": EventLevel.DEBUG,
+            "info": EventLevel.INFO,
+            "warning": EventLevel.WARNING,
+            "warn": EventLevel.WARNING,
+            "error": EventLevel.ERROR,
+        }
+        return level_map.get(level_str.lower(), EventLevel.DEBUG)
 
     def _get_server_id(self) -> str:
         """Get server identifier for event tracking."""
@@ -50,9 +75,18 @@ class EventLogger:
         except Exception:
             return "unknown"
 
-    def _should_emit_event(self, event_type: str, level: EventLevel) -> bool:
-        """Check if event should be emitted based on configuration."""
-        # Check level filter
+    def _should_emit_event(
+        self,
+        event_type: Union[ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents, str],
+        event_type_str: str,
+        level: EventLevel
+    ) -> bool:
+        """Check if event should be emitted based on configuration.
+
+        Uses different level checks for system vs conversation events:
+        - System events: Check against system_level
+        - Conversation events: Check against self.level and events filter
+        """
         level_priority = {
             EventLevel.DEBUG: 0,
             EventLevel.INFO: 1,
@@ -60,11 +94,18 @@ class EventLogger:
             EventLevel.ERROR: 3,
         }
 
+        # System events use system_level
+        if isinstance(event_type, (SystemEvents, ErrorEvents, ServerEvents, APIEvents)):
+            if level_priority[level] < level_priority[self.system_level]:
+                return False
+            return True
+
+        # Conversation events use conversation level and events filter
         if level_priority[level] < level_priority[self.level]:
             return False
 
         # Check specific event filter (wildcard '*' allows all events)
-        if self.events is not None and '*' not in self.events and event_type not in self.events:
+        if self.events is not None and '*' not in self.events and event_type_str not in self.events:
             return False
 
         return True
@@ -85,7 +126,7 @@ class EventLogger:
         else:
             event_type_str = event_type
 
-        if not self._should_emit_event(event_type_str, level):
+        if not self._should_emit_event(event_type, event_type_str, level):
             return ""
 
         # Generate event ID
@@ -142,14 +183,19 @@ class EventLogger:
             ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents, str
         ],
     ) -> None:
-        """Emit event to the configured output destination."""
+        """Emit event to the configured output destination.
+
+        Two-tier routing:
+        - SystemEvents, ErrorEvents, ServerEvents, APIEvents -> system_destination
+        - ConversationEvents -> configured output (file, stdout, stream, trail)
+        """
         try:
             # JSON-L format for easy parsing
             event_line = json.dumps(event, separators=(",", ":"))
 
-            # Route SystemEvents, ServerEvents, APIEvents and ErrorEvents to stdout only, regardless of configuration
+            # Route SystemEvents, ServerEvents, APIEvents and ErrorEvents to system_destination
             if isinstance(event_type, (SystemEvents, ErrorEvents, ServerEvents, APIEvents)):
-                print(event_line, flush=True)
+                self._emit_to_system(event_line)
                 return
 
             # Route ConversationEvents to configured output
@@ -165,6 +211,20 @@ class EventLogger:
         except Exception:
             # Silent failures to avoid disrupting main application flow
             pass
+
+    def _emit_to_system(self, event_line: str) -> None:
+        """Emit system event to system_destination (stdout or file path)."""
+        if self.system_destination == "stdout":
+            print(event_line, flush=True)
+        else:
+            # File path - write to system log file
+            try:
+                with open(self.system_destination, "a") as f:
+                    f.write(event_line + "\n")
+                    f.flush()
+            except Exception:
+                # Fallback to stdout on file write error
+                print(event_line, flush=True)
 
     def _emit_to_file(self, event_line: str) -> None:
         """Emit event to file output."""

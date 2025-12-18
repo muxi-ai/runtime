@@ -95,10 +95,15 @@ memory:
     vector_search: true
 
 logging:
-  streams:
-    - transport: "stdout"
-      level: "info"
-      format: "jsonl"
+  system:
+    level: "debug"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "info"
+        format: "jsonl"
 
 mcp:
   enhance_user_prompts: true  # Enable message enhancement for better tool selection

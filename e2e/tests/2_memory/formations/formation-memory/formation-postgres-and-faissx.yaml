@@ -40,9 +40,14 @@ memory:
     embedding_model: "openai/text-embedding-3-small"
 
 logging:
-  streams:
-    - transport: "stdout"
-      level: "debug"
-      format: "jsonl"
+  system:
+    level: "debug"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "debug"
+        format: "jsonl"
 
 # Agent will be auto-discovered from agents/ directory

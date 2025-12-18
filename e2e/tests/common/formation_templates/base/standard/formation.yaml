@@ -50,8 +50,12 @@ async:
 
 # Logging configuration
 logging:
-  enabled: true
-  streams:
-    - transport: "stdout"
-      level: "info"
-      format: "jsonl"
+  system:
+    level: "error"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "info"
+        format: "jsonl"

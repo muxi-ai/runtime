@@ -21,10 +21,15 @@ memory:
     embedding_model: "openai/text-embedding-3-small"
 
 logging:
-  streams:
-    - transport: "stdout"
-      level: "info"
-      format: "jsonl"
+  system:
+    level: "debug"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "info"
+        format: "jsonl"
 
 overlord:
   clarification:

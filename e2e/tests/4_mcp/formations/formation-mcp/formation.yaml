@@ -57,11 +57,15 @@ memory:
     embedding_model: "openai/text-embedding-3-small"
 
 logging:
-  enabled: true
-  streams:
-    # File example
-    - transport: "file"
-      level: "debug"
-      format: "jsonl"
-      destination: "/Users/ran/Desktop/mcp.log"
-      events: ["*"]
+  system:
+    level: "error"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      # File example
+      - transport: "file"
+        level: "debug"
+        format: "jsonl"
+        destination: "/Users/ran/Desktop/mcp.log"
+        events: ["*"]

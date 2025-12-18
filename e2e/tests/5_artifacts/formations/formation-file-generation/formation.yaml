@@ -28,9 +28,14 @@ memory:
     vector_search: true
 
 logging:
-  streams:
-    - transport: "stdout"
-      level: "info"
-      format: "jsonl"
+  system:
+    level: "debug"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "info"
+        format: "jsonl"
 
 # Agent and MCP configuration will be auto-discovered from directories

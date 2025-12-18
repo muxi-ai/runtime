@@ -93,11 +93,14 @@ memory:
       cache_ttl: 3600    # Cache TTL in seconds (default: 1 hour)
 
 logging:
-  enabled: false  # Disabled for cleaner streaming demo output
-  streams:
-    # File example
-    - transport: "stdout"
-      level: "error"  # Only show errors if logging is re-enabled
+  system:
+    level: "error"
+    destination: "stdout"
+  conversation:
+    enabled: false  # Disabled for cleaner streaming demo output
+    streams:
+      - transport: "stdout"
+        level: "error"  # Only show errors if logging is re-enabled
       format: "jsonl"
 
 # Agent configuration

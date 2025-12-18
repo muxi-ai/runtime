@@ -43,11 +43,15 @@ async:
   webhook_url: "http://127.0.0.1:8765/"  # Default webhook URL for async completion notifications
 
 logging:
-  enabled: true
-  streams:
-    # File example
-    - transport: "file"
-      level: "debug"
-      format: "text"
-      destination: "/Users/ran/Desktop/multimodal.log"
-      events: ["*"]
+  system:
+    level: "error"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      # File example
+      - transport: "file"
+        level: "debug"
+        format: "text"
+        destination: "/Users/ran/Desktop/multimodal.log"
+        events: ["*"]

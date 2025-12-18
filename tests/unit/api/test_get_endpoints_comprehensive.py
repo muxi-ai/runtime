@@ -262,7 +262,7 @@ class TestFormationAPIGetEndpoints:
 
         endpoints = [
             ("/v1/llm/settings", "llm_settings", ["temperature", "max_tokens"]),
-            ("/v1/logging", "logging", ["enabled", "streams"]),
+            ("/v1/logging", "logging", ["system", "conversation"]),
             ("/v1/memory", "memory", ["working", "buffer"]),
             ("/v1/async", "async", ["threshold_seconds", "enable_estimation"]),
             ("/v1/scheduler", "scheduler", ["enabled", "timezone"]),

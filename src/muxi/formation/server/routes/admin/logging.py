@@ -80,7 +80,9 @@ async def list_logging_destinations(request: Request) -> JSONResponse:
     List all logging destinations.
 
     Returns:
-        List of all configured logging destinations
+        Logging destinations with two-tier structure:
+        - system: Infrastructure event configuration
+        - conversation: User-facing event streams
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
@@ -88,9 +90,17 @@ async def list_logging_destinations(request: Request) -> JSONResponse:
     # Get logging config from formation
     logging_config = formation.config.get("logging", {})
 
-    # Extract destinations (streams in YAML)
+    # Parse system config (defaults)
+    system_config = logging_config.get("system", {})
+    system_data = {
+        "level": system_config.get("level", "debug"),
+        "destination": system_config.get("destination", "stdout"),
+    }
+
+    # Parse conversation config and extract destinations
+    conversation_config = logging_config.get("conversation", {})
     destinations = []
-    streams = logging_config.get("streams", [])
+    streams = conversation_config.get("streams", [])
 
     for idx, stream in enumerate(streams):
         # Defensive type check for malformed YAML entries
@@ -118,8 +128,11 @@ async def list_logging_destinations(request: Request) -> JSONResponse:
         destinations.append(dest)
 
     data = {
-        "destinations": destinations,
-        "count": len(destinations),
+        "system": system_data,
+        "conversation": {
+            "destinations": destinations,
+            "count": len(destinations),
+        },
     }
 
     response = create_success_response(

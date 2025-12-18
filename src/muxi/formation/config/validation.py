@@ -1652,33 +1652,66 @@ class FormationValidator:
             self.result.add_error("Document models sentence_transformer must be a non-empty string")
 
     def _validate_logging_config(self, logging_config: Dict[str, Any]) -> None:
-        """Validate logging configuration according to multi-stream schema."""
+        """Validate logging configuration with two-tier system/conversation architecture."""
         if not isinstance(logging_config, dict):
             self.result.add_error("Logging configuration must be a dictionary")
             return
 
+        # Validate system config (optional)
+        if "system" in logging_config:
+            self._validate_logging_system_config(logging_config["system"])
+
+        # Validate conversation config (optional)
+        if "conversation" in logging_config:
+            self._validate_logging_conversation_config(logging_config["conversation"])
+
+    def _validate_logging_system_config(self, system_config: Dict[str, Any]) -> None:
+        """Validate logging.system configuration."""
+        if not isinstance(system_config, dict):
+            self.result.add_error("Logging 'system' must be a dictionary")
+            return
+
+        # Validate level (optional, defaults to "debug")
+        if "level" in system_config:
+            level = system_config["level"]
+            valid_levels = ["debug", "info", "warning", "error"]
+            if level not in valid_levels:
+                self.result.add_error(
+                    f"Logging system invalid level '{level}'. "
+                    f"Valid levels: {', '.join(valid_levels)}"
+                )
+
+        # Validate destination (optional, defaults to "stdout")
+        if "destination" in system_config:
+            destination = system_config["destination"]
+            if not isinstance(destination, str):
+                self.result.add_error("Logging system 'destination' must be a string")
+
+    def _validate_logging_conversation_config(self, conversation_config: Dict[str, Any]) -> None:
+        """Validate logging.conversation configuration."""
+        if not isinstance(conversation_config, dict):
+            self.result.add_error("Logging 'conversation' must be a dictionary")
+            return
+
         # Validate enabled (boolean)
-        if "enabled" in logging_config:
-            enabled = logging_config["enabled"]
+        if "enabled" in conversation_config:
+            enabled = conversation_config["enabled"]
             if not isinstance(enabled, bool):
-                self.result.add_error("Logging 'enabled' field must be a boolean")
+                self.result.add_error("Logging conversation 'enabled' field must be a boolean")
 
-        # Validate streams array (required)
-        if "streams" not in logging_config:
-            self.result.add_error("Logging configuration must include 'streams' array")
-            return
+        # Validate streams array (optional - if conversation exists, streams is expected)
+        if "streams" in conversation_config:
+            streams = conversation_config["streams"]
+            if not isinstance(streams, list):
+                self.result.add_error("Logging conversation 'streams' must be an array")
+                return
 
-        streams = logging_config["streams"]
-        if not isinstance(streams, list):
-            self.result.add_error("Logging 'streams' must be an array")
-            return
+            if len(streams) == 0:
+                self.result.add_warning("Logging conversation streams array is empty - no conversation logging will occur")
 
-        if len(streams) == 0:
-            self.result.add_warning("Logging streams array is empty - no logging will occur")
-
-        # Validate each stream
-        for i, stream in enumerate(streams):
-            self._validate_logging_stream(stream, i)
+            # Validate each stream
+            for i, stream in enumerate(streams):
+                self._validate_logging_stream(stream, i)
 
     def _validate_logging_stream(self, stream: Dict[str, Any], index: int) -> None:
         """Validate a single logging stream configuration."""

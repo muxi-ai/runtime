@@ -88,9 +88,12 @@ memory:
     embedding_model: "openai/text-embedding-3-small"
 
 logging:
-  enabled: false  # Disabled for cleaner streaming demo output
-  streams:
-    # File example
-    - transport: "stdout"
-      level: "error"  # Only show errors if logging is re-enabled
-      format: "jsonl"
+  system:
+    level: "error"
+    destination: "stdout"
+  conversation:
+    enabled: false  # Disabled for cleaner streaming demo output
+    streams:
+      - transport: "stdout"
+        level: "error"  # Only show errors if logging is re-enabled
+        format: "jsonl"

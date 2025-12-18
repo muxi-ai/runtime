@@ -26,11 +26,15 @@ overlord:
     streaming: false
 
 logging:
-  enabled: true  # Enable to capture REQUEST_TOPICS_EXTRACTED events
-  streams:
-    - transport: "stdout"
-      level: "info"  # Capture topic extraction events
-      format: "jsonl"
+  system:
+    level: "error"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "info"  # Capture topic extraction events
+        format: "jsonl"
 
 # Simple memory configuration
 memory:

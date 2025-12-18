@@ -108,12 +108,16 @@ a2a:
 
 # Logging configuration
 logging:
-  enabled: true
-  streams:
-    - transport: "stdout"
-      level: "debug"
-      format: "jsonl"
-    - transport: "file"
-      destination: "./test.log"
-      level: "debug"
-      format: "text"
+  system:
+    level: "error"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "debug"
+        format: "jsonl"
+      - transport: "file"
+        destination: "./test.log"
+        level: "debug"
+        format: "text"
