@@ -147,7 +147,12 @@ class EventLogger:
             # JSON-L format for easy parsing
             event_line = json.dumps(event, separators=(",", ":"))
 
-            # Route all events to configured output (events filter is applied in _should_emit_event)
+            # Route SystemEvents, ServerEvents, APIEvents and ErrorEvents to stdout only, regardless of configuration
+            if isinstance(event_type, (SystemEvents, ErrorEvents, ServerEvents, APIEvents)):
+                print(event_line, flush=True)
+                return
+
+            # Route ConversationEvents to configured output
             if self.output == "stdout":
                 print(event_line, flush=True)
             elif self.output == "file":
