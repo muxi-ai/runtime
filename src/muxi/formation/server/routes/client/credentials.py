@@ -120,21 +120,17 @@ def _check_auth_and_user_id(
 @router.get("/credentials/services", response_model=APIResponse)
 async def list_credential_services(
     request: Request,
-    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
 ) -> JSONResponse:
     """
     List available services that can use user credentials.
     
     Returns the list of MCP servers configured with user credential placeholders.
     Developers should check this list before storing credentials.
+    
+    No X-Muxi-User-ID required - this returns formation-level configuration.
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
-
-    # Check auth and validate user_id requirement
-    user_id, is_admin, error_response = _check_auth_and_user_id(request, x_user_id, request_id)
-    if error_response:
-        return error_response
 
     # Get MCP servers that use user credentials
     mcp_servers = getattr(formation, "_mcp_servers_with_user_credentials", {})
