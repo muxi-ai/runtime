@@ -63,8 +63,8 @@ class EventLogger:
         if level_priority[level] < level_priority[self.level]:
             return False
 
-        # Check specific event filter
-        if self.events is not None and event_type not in self.events:
+        # Check specific event filter (wildcard '*' allows all events)
+        if self.events is not None and '*' not in self.events and event_type not in self.events:
             return False
 
         return True

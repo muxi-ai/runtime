@@ -1238,6 +1238,10 @@ class Formation:
         # 9. Load agents configuration
         load_agents_from_configuration(self)
 
+        # 10. Start observability manager (enables event processing and logging)
+        if hasattr(self, "_observability_manager") and self._observability_manager:
+            await self._observability_manager.start()
+
         # Update configured services with initialized instances
         self._configured_services.update(
             {
