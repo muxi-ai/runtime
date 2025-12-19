@@ -111,6 +111,12 @@ else
 fi
 
 echo "   ✓ Created $SIF_FILE"
+
+# Also create a "latest" version for server fallback
+# The MUXI Server downloads this when formation doesn't specify a version
+LATEST_SIF_FILE="$SIF_DIR/muxi-runtime-latest-linux-${ARCH}.sif"
+cp "$SIF_FILE" "$LATEST_SIF_FILE"
+echo "   ✓ Created $LATEST_SIF_FILE (for server fallback)"
 echo ""
 
 # Show file sizes
@@ -127,10 +133,13 @@ echo ""
 
 echo "✅ Conversion Complete!"
 echo ""
-echo "SIF File: $SIF_FILE"
+echo "SIF Files:"
+echo "   Versioned: $SIF_FILE"
+echo "   Latest:    $LATEST_SIF_FILE"
 echo ""
-echo "📝 For MUXI Server:"
+echo "📝 For MUXI Server (copy both to runtimes directory):"
 echo "   cp $SIF_FILE ~/.muxi/server/runtimes/"
+echo "   cp $LATEST_SIF_FILE ~/.muxi/server/runtimes/"
 echo ""
 SIF_FILENAME=$(basename "$SIF_FILE")
 echo "✨ Test the SIF:"
