@@ -54,8 +54,16 @@ class EventLogger:
         self.system_destination = system_destination
         self._system_file_handle = None
 
+        # Server ready flag - when False, skip JSONL output to stdout
+        # This prevents cluttering console during startup
+        self._server_ready = False
+
         self.muxi_version = get_version()
         self._server_id = self._get_server_id()
+
+    def set_server_ready(self, ready: bool = True) -> None:
+        """Mark server as ready to enable JSONL output to stdout."""
+        self._server_ready = ready
 
     def _parse_level(self, level_str: str) -> EventLevel:
         """Parse level string to EventLevel enum."""
@@ -213,17 +221,29 @@ class EventLogger:
             pass
 
     def _emit_to_system(self, event_line: str) -> None:
-        """Emit system event to system_destination (stdout or file path)."""
+        """Emit system event to system_destination (stdout or file path).
+
+        When system_destination is stdout:
+        - Skip JSONL output during startup (before server is ready)
+        - Once server is ready, emit JSONL to stdout normally
+
+        This prevents cluttering console during initialization while
+        still providing full observability after server starts.
+        """
         if self.system_destination == "stdout":
-            print(event_line, flush=True)
-        else:
-            # File path - write to system log file
-            try:
-                with open(self.system_destination, "a") as f:
-                    f.write(event_line + "\n")
-                    f.flush()
-            except Exception:
-                # Fallback to stdout on file write error
+            # Only emit to stdout after server is ready
+            if self._server_ready:
+                print(event_line, flush=True)
+            return
+
+        # File path - write to system log file
+        try:
+            with open(self.system_destination, "a") as f:
+                f.write(event_line + "\n")
+                f.flush()
+        except Exception:
+            # Fallback to stdout if file write fails (only when server ready)
+            if self._server_ready:
                 print(event_line, flush=True)
 
     def _emit_to_file(self, event_line: str) -> None:

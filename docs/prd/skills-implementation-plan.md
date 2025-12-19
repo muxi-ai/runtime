@@ -125,36 +125,6 @@ allowed-tools: Bash Read       # Optional/Experimental: pre-approved tools
 
 ---
 
-## Current State Analysis
-
-### Existing Systems
-
-MUXI currently has two related systems that handle similar concerns:
-
-1. **Knowledge System** (`src/muxi/formation/agents/knowledge/`)
-   - FileKnowledge for loading local files and directories
-   - Vector embeddings via FAISS for semantic search
-   - Document chunking with DocumentChunkManager
-   - MD5-based caching for smart reindexing
-   - Supports markitdown for diverse file formats (PDF, DOCX, etc.)
-
-2. **SOP System** (`src/muxi/formation/workflow/sops.py`)
-   - YAML frontmatter metadata parsing
-   - Semantic search for procedure discovery
-   - Template and guide execution modes
-   - File reference resolution (`[file:path]`)
-   - WorkingMemory/FAISS integration
-
-### Key Patterns to Leverage
-
-- Progressive disclosure (metadata at startup, full content on activation)
-- Semantic search for discovery
-- MD5 hash caching for change detection
-- WorkingMemory integration for vector storage
-- YAML frontmatter conventions
-
----
-
 ## Architecture
 
 ### Component Overview
@@ -491,6 +461,45 @@ executor:
     cpu: 1.0
 ```
 
+### Agent Tool Interface
+
+Agents don't interact with ZeroMQ directly. We expose a built-in tool:
+
+```python
+# Tool available to agents with skills
+skill_exec(
+    skill: str,           # Skill name (e.g., "pdf")
+    script: str,          # Script path relative to skill (e.g., "scripts/extract.py")
+    args: List[str] = []  # Command-line arguments
+) -> SkillExecResult
+```
+
+**Example agent interaction:**
+
+```
+SKILL.md says: "Run scripts/extract_form_field_info.py input.pdf to get field names"
+
+Agent calls: skill_exec("pdf", "scripts/extract_form_field_info.py", ["input.pdf"])
+
+Agent receives:
+{
+    "success": true,
+    "stdout": '{"fields": ["name", "date", "signature"]}',
+    "stderr": "",
+    "exit_code": 0,
+    "files": [
+        {"name": "fields.json", "path": "/tmp/job-123/fields.json", "size": 156}
+    ]
+}
+```
+
+**Artifact handling:**
+
+- Each execution gets a temp working directory
+- Executor scans workdir after execution for created files
+- Files returned in response with metadata
+- Agent interprets based on SKILL.md context (no schema needed)
+
 ### Reusability
 
 The executor container is a general-purpose component that can serve:
@@ -503,7 +512,7 @@ The executor container is a general-purpose component that can serve:
 
 ## Implementation Roadmap
 
-### Phase 1: Core Skill Support (Weeks 1-3)
+### Phase 1: Core Skill Support
 
 1. Create `src/muxi/formation/skills/` module structure
 2. Implement `SkillMetadata` and `SkillContent` dataclasses
@@ -511,64 +520,31 @@ The executor container is a general-purpose component that can serve:
 4. Explicit skill loading from formation config
 5. Public vs private skill scoping
 6. Agent specialty enhancement with skill descriptions
+7. Skill activation and context injection
 
-### Phase 2: Semantic Search (Weeks 4-5)
+### Phase 2: Executor Container
 
-1. WorkingMemory integration for skill embeddings
-2. Semantic search scoped to available skills
-3. Skill activation and context injection
-4. MD5 caching for change detection
-
-### Phase 3: Executor Container (Weeks 6-8)
-
-1. Create `muxi/executor` Docker image
+1. Create `muxi/executor` Docker image with common libs
 2. Implement ZeroMQ executor server
 3. Implement `ExecutorClient` in runtime
 4. Container lifecycle management (spawn, monitor, restart)
-5. Integration with SkillManager for script execution
-6. Configuration schema for executor settings
+5. `skill_exec` tool for agents
+6. Artifact collection from workdir
 
-### Phase 4: Polish (Weeks 9-10)
+### Phase 3: Polish
 
-1. E2E tests for skill workflows
-2. E2E tests for script execution
-3. Documentation and examples
-4. Validation CLI (`muxi skills validate`)
-5. Pre-built skills bundle (pdf, docx, etc.)
+1. E2E tests
+2. Copy Anthropic reference skills (pdf, docx, xlsx)
+3. Validation CLI (`muxi skills validate`)
 
 ---
 
-## Relationship to Existing Systems
+## Success Criteria
 
-### Knowledge vs Skills
-
-| Aspect | Knowledge | Skills |
-|--------|-----------|--------|
-| Purpose | Reference information | Executable procedures |
-| Content | Documents, PDFs, etc. | Instructions + scripts |
-| Loading | Auto-discovered | Explicit declaration |
-| Scope | Per-agent only | Public or per-agent |
-| Execution | Read-only | May execute scripts |
-
-### SOPs vs Skills
-
-| Aspect | SOPs | Skills |
-|--------|------|--------|
-| Format | Custom YAML frontmatter | Agent Skills spec |
-| Loading | Auto-discovered from sops/ | Explicit declaration |
-| Portability | MUXI-specific | Cross-platform |
-| Scripts | Template-based | Full script support |
-| Ecosystem | Internal | Community-driven |
-
----
-
-## Success Metrics
-
-1. **Loading time**: <50ms per skill metadata load
-2. **Search latency**: <100ms for skill search
-3. **Context efficiency**: <500 tokens average for activated skill
-4. **Developer adoption**: 10+ skills created within 3 months
-5. **Compatibility**: Pass `skills-ref validate` for all bundled skills
+1. **Portability**: Anthropic reference skills (pdf, docx, xlsx) work without modification
+2. **Loading**: <100ms to load skill metadata at startup
+3. **Execution**: Scripts execute and return results correctly
+4. **Artifacts**: Generated files are captured and returned to agent
 
 ---
 

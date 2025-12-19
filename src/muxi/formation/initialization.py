@@ -59,7 +59,10 @@ def initialize_observability(formation) -> None:
 
     Two-tier logging architecture:
     - system: Infrastructure events (SystemEvents, ErrorEvents, ServerEvents, APIEvents)
-    - conversation: User-facing events (ConversationEvents)
+    - conversation: User-facing events (ConversationEvents) - enabled AFTER server starts
+
+    Note: Conversation logging (JSONL) is deferred until after the server starts
+    to avoid issues with file logging during initialization.
     """
     # Use the pre-configured logging config
     logging_config = formation._logging_config if hasattr(formation, "_logging_config") else {}
@@ -69,59 +72,85 @@ def initialize_observability(formation) -> None:
     system_level_str = system_config.get("level", "debug").lower()
     system_destination = system_config.get("destination", "stdout")
 
-    # Parse conversation logging config
+    # Store conversation config for later enablement (after server starts)
     conversation_config = logging_config.get("conversation", {})
+    formation._conversation_logging_config = conversation_config
+    formation._system_logging_config = {
+        "level": system_level_str,
+        "destination": system_destination,
+    }
+
+    # Initially, only set up system logging (conversation logging enabled after server starts)
+    default_logger = EventLogger(
+        system_level=system_level_str,
+        system_destination=system_destination,
+    )
+    formation._observability_manager = observability.ObservabilityManager(
+        {"event_logger": default_logger}
+    )
+    set_event_logger(default_logger)
+
+
+def enable_conversation_logging(formation) -> None:
+    """
+    Enable conversation logging after server has started.
+
+    This is called by the server after successful startup to:
+    1. Enable JSONL conversation logging to configured destinations
+    2. Mark the server as ready (enables system event JSONL to stdout)
+
+    Logging is deferred to avoid cluttering console during initialization
+    and to ensure the server is healthy before starting observability.
+    """
+    # First, mark server as ready so system events start flowing
+    from ..services.observability.context import get_current_event_logger
+    current_logger = get_current_event_logger()
+    if current_logger and hasattr(current_logger, 'set_server_ready'):
+        current_logger.set_server_ready(True)
+
+    conversation_config = getattr(formation, "_conversation_logging_config", {})
+    system_config = getattr(formation, "_system_logging_config", {})
+
     conversation_enabled = conversation_config.get("enabled", False)
     conversation_streams = conversation_config.get("streams", [])
 
-    # Determine event logger configuration for conversation events
-    event_logger = None
+    if not conversation_enabled:
+        return
 
-    # Only create custom logger if conversation logging is enabled and has file output
-    if conversation_enabled:
-        # Find file stream configuration for conversation events
-        for stream in conversation_streams:
-            if stream.get("transport") == "file" and stream.get("destination"):
-                # Parse level
-                level_str = stream.get("level", "info").lower()
-                valid_levels = [level.value for level in EventLevel]
-                level = EventLevel(level_str) if level_str in valid_levels else EventLevel.INFO
+    system_level_str = system_config.get("level", "debug")
+    system_destination = system_config.get("destination", "stdout")
 
-                # Create EventLogger with file output and system config
-                event_logger = EventLogger(
-                    level=level,
-                    output="file",
-                    output_config={"path": stream.get("destination")},
-                    events=(stream.get("events", ["*"]) if stream.get("events") != ["*"] else None),
-                    system_level=system_level_str,
-                    system_destination=system_destination,
-                )
+    # Find file stream configuration for conversation events
+    for stream in conversation_streams:
+        if stream.get("transport") == "file" and stream.get("destination"):
+            # Parse level
+            level_str = stream.get("level", "info").lower()
+            valid_levels = [level.value for level in EventLevel]
+            level = EventLevel(level_str) if level_str in valid_levels else EventLevel.INFO
 
-                break
+            # Create EventLogger with file output and system config
+            event_logger = EventLogger(
+                level=level,
+                output="file",
+                output_config={"path": stream.get("destination")},
+                events=(stream.get("events", ["*"]) if stream.get("events") != ["*"] else None),
+                system_level=system_level_str,
+                system_destination=system_destination,
+            )
+            # Mark as server ready since we're enabling after server start
+            event_logger.set_server_ready(True)
 
-    # Create ObservabilityManager with appropriate configuration
-    if event_logger:
-        # Use custom event logger
-        formation._observability_manager = observability.ObservabilityManager(
-            {"enabled": True, "event_logger": event_logger}
-        )
-        # CRITICAL: Set the logger in context so observe() uses it
-        set_event_logger(event_logger)
+            # Update ObservabilityManager with new logger
+            formation._observability_manager = observability.ObservabilityManager(
+                {"enabled": True, "event_logger": event_logger}
+            )
+            # CRITICAL: Set the logger in context so observe() uses it
+            set_event_logger(event_logger)
 
-        # Convert to InitEventFormatter
-        print(observability.InitEventFormatter.format_info(
-            f"Observability logging to: {event_logger.output_config.get('path')}"
-        ))
-    else:
-        # Use default logger with system config
-        default_logger = EventLogger(
-            system_level=system_level_str,
-            system_destination=system_destination,
-        )
-        formation._observability_manager = observability.ObservabilityManager(
-            {"event_logger": default_logger}
-        )
-        set_event_logger(default_logger)
+            print(observability.InitEventFormatter.format_info(
+                f"Conversation logging enabled: {event_logger.output_config.get('path')}"
+            ))
+            break
 
 
 def initialize_llm_config(formation) -> None:

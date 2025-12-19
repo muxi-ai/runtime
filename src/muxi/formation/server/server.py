@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 
 from ...services import observability
 from ...utils.version import get_version
+from ..initialization import enable_conversation_logging
 
 if TYPE_CHECKING:
     from ..formation import Formation  # noqa: E402
@@ -151,7 +152,8 @@ class FormationServer:
         This context manager handles startup and shutdown tasks,
         ensuring graceful initialization and cleanup.
         """
-        # Startup
+        # Startup events - these won't emit JSONL until server is confirmed ready
+        # (enable_conversation_logging is called after "API Worker: listening")
         observability.observe(
             event_type=observability.ServerEvents.SERVER_STARTED,
             level=observability.EventLevel.INFO,
@@ -733,6 +735,8 @@ class FormationServer:
                             f"API Worker: listening on {self.host}:{self.port}",
                             f"http://{self.host if self.host != '0.0.0.0' else '127.0.0.1'}:{self.port}"
                         ))
+                        # Enable observability logging now that server is confirmed ready
+                        enable_conversation_logging(self.formation)
                         return
             except Exception as e:
                 last_error = e

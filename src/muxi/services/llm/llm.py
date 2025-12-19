@@ -1005,8 +1005,8 @@ class LLM:
             params["stop"] = kwargs["stop"]
 
         # Add any additional kwargs not already handled
-        # Note: caching is excluded because it's a MUXI/OneLLM global setting,
-        # not a per-request parameter for the underlying provider APIs
+        # Note: caching and timeout_seconds are excluded because they're MUXI/OneLLM
+        # settings, not per-request parameters for the underlying provider APIs
         excluded_params = {
             "temperature",
             "max_tokens",
@@ -1016,7 +1016,10 @@ class LLM:
             "stop",
             "files",
             "timeout",
+            "timeout_seconds",  # MUXI-specific, used for HTTP timeout not API param
             "caching",  # MUXI-specific, not an API parameter
+            "max_retries",  # MUXI-specific, not an API parameter
+            "fallback_model",  # MUXI-specific, not an API parameter
         }
         additional_kwargs = {k: v for k, v in kwargs.items() if k not in excluded_params}
         params.update(additional_kwargs)
