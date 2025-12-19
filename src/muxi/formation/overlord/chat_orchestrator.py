@@ -634,16 +634,8 @@ class ChatOrchestrator:
             bypass_workflow_approval=bypass_workflow_approval,
         )
 
-        # Send the response content as a streaming event
-        if result and hasattr(result, "content") and result.content:
-            streaming.stream(
-                "content",
-                result.content if isinstance(result.content, str) else str(result.content),
-                agent_name=agent_name,
-            )
-        
-        # Send completion event
-        streaming.stream("completed", "done")
+        # Note: overlord._process_sync_chat already emits streaming events
+        # including "completed" with actual content - don't duplicate here
 
         # Store overlord's final response in buffer memory (fire-and-forget)
         if result and hasattr(result, "content") and result.content:

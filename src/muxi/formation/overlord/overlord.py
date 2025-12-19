@@ -2160,26 +2160,25 @@ Response:""".format(
         Returns:
             Formatted response with persona applied
         """
-        # CRITICAL CHANGE: Use formation's text model (from formation.llm.models[0].text)
-        # NOT the overlord's specialized decomposition model
-        # The _capability_models dict contains the formation's LLM models
-        text_model_config = self._capability_models.get("text")
-        if not text_model_config:
-            # Fallback if no text model configured in formation
-            return raw_response or "I understand. How can I help you?"
-
-        # text_model_config contains the formation's text model from formation.llm.models[0].text
-        model_name = text_model_config.get("model")
-        api_key = text_model_config.get("api_key")
-
-        # Get or create LLM instance for persona/conversation
-        cache_key = f"persona_{model_name}"
-        if cache_key in self._model_cache:
-            llm = self._model_cache[cache_key]
+        # Use overlord's routing model for persona (faster for simple rephrasing)
+        # Falls back to text model if routing_model not available
+        if hasattr(self, "routing_model") and self.routing_model:
+            llm = self.routing_model
         else:
-            # Create LLM using formation's text model (not overlord's specialized model)
-            llm = await self.create_model(model=model_name, api_key=api_key, temperature=0.7)
-            self._model_cache[cache_key] = llm
+            # Fallback to formation's text model
+            text_model_config = self._capability_models.get("text")
+            if not text_model_config:
+                return raw_response or "I understand. How can I help you?"
+
+            model_name = text_model_config.get("model")
+            api_key = text_model_config.get("api_key")
+
+            cache_key = f"persona_{model_name}"
+            if cache_key in self._model_cache:
+                llm = self._model_cache[cache_key]
+            else:
+                llm = await self.create_model(model=model_name, api_key=api_key, temperature=0.7)
+                self._model_cache[cache_key] = llm
 
         try:
             if raw_response is None:

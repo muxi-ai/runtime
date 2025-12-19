@@ -311,8 +311,10 @@ def stream(event_type: str, content: str, **metadata):
                 # Check if LLM rephrasing is enabled
                 # NEVER rephrase final content events - these should be passed through unchanged
                 # Also skip rephrasing if explicitly requested via metadata
+                # Skip 'progress' and 'planning' events to avoid semantic cache returning same content
+                # Only 'thinking' events get rephrased (the first contextual event)
                 skip_rephrase = evt_metadata.get('skip_rephrase', False)
-                exclude_types = ('completed', 'content', 'finalizing')
+                exclude_types = ('completed', 'content', 'finalizing', 'progress', 'planning')
                 if config and config.get('enabled', False) and evt_type not in exclude_types and not skip_rephrase:
                     # Phase 2: LLM rephrasing for progress/thinking events only
                     # Run async function in sync context
