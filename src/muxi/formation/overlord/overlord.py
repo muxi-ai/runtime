@@ -1980,8 +1980,14 @@ class Overlord:
             True if message needs work done (questions, commands, requests)
             False if message is conversational/informational only
         """
+        import re
+
+        # Extract actual user message from context format if present
+        match = re.search(r'User:\s*([^\n]+)', message)
+        actual_message = match.group(1).strip() if match else message
+
         # First try fast heuristics for common cases
-        message_lower = message.lower().strip()
+        message_lower = actual_message.lower().strip()
 
         # Definite non-actionable patterns
         if message_lower in ["hi", "hello", "hey", "thanks", "thank you", "ok", "okay", "got it"]:
@@ -6286,6 +6292,14 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 description="Non-actionable message detected, using fast conversational path",
             )
 
+            # Emit thinking event for fast path
+            streaming.stream(
+                "thinking",
+                "Processing greeting...",
+                stage="fast_path",
+                skip_rephrase=True,
+            )
+
             # Skip all heavy processing - go straight to persona
             response = await self._apply_persona(None, message)
 
@@ -6305,6 +6319,15 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     ),
                     name=f"store_response_{request_id}",
                 )
+
+            # Emit streaming completed event for fast path
+            streaming.stream(
+                "completed",
+                response,
+                status="success",
+                processing_time_ms=int((time.time() - start_time) * 1000),
+                fast_path=True,
+            )
 
             return MuxiResponse(
                 role="assistant",
