@@ -454,9 +454,6 @@ Respond in JSON format:
             if is_valid:
                 # NOW store the validated credential
                 try:
-                    print(
-                        f"DEBUG: Storing credential for user_id={user_id}, service={pending['service']}"
-                    )
                     status = await self.overlord.credential_resolver.store_credential(
                         user_id=user_id,
                         service=pending["service"],
