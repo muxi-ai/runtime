@@ -6292,14 +6292,6 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                 description="Non-actionable message detected, using fast conversational path",
             )
 
-            # Emit thinking event for fast path
-            streaming.stream(
-                "thinking",
-                "Processing greeting...",
-                stage="fast_path",
-                skip_rephrase=True,
-            )
-
             # Skip all heavy processing - go straight to persona
             response = await self._apply_persona(None, message)
 
