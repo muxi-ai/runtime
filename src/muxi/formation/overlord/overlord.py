@@ -5462,6 +5462,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             ),  # Redact PII before streaming
             agent_name=agent_name,
             skip_clarification=skip_clarification,
+            skip_rephrase=True,
         )
 
         # ===================================================================
