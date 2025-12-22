@@ -7028,6 +7028,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             stage="response_preparation",
             has_persona=bool(getattr(self, "_default_persona", None)),
             response_format=getattr(self, "response_format", "markdown"),
+            skip_rephrase=True,
         )
 
         # Apply persona to format the response (except for clarifications)
