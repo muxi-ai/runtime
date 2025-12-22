@@ -6224,6 +6224,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                         clarification_question=(
                             clarification_result.question if clarification_result else None
                         ),
+                        skip_rephrase=True,
                     )
                     # Store minimal info - just request_id for reuse
                     if session_id:
@@ -8120,6 +8121,7 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                     "Synthesizing results from all completed tasks...",
                     stage="workflow_synthesis",
                     workflow_id=workflow_id,
+                    skip_rephrase=True,
                 )
 
             # Synthesize final response from task results
