@@ -6293,6 +6293,12 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
             )
 
             # Skip all heavy processing - go straight to persona
+            streaming.stream(
+                "progress",
+                "Preparing response...",
+                stage="response_preparation",
+                skip_rephrase=True,
+            )
             response = await self._apply_persona(None, message)
 
             # Store assistant response in memory (user message already stored at entry) - fire-and-forget with tracking
