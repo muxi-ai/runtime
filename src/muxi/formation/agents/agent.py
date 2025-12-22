@@ -1810,6 +1810,17 @@ class Agent:
                         server_id = None
                         actual_tool_name = tool_name
 
+                    # Emit streaming event for tool call
+                    display_name = server_id.replace("-", " ").replace("_", " ").title() if server_id else actual_tool_name
+                    streaming.stream(
+                        "progress",
+                        f"Using the {display_name} tool...",
+                        stage="tool_call",
+                        tool_name=actual_tool_name,
+                        server_id=server_id,
+                        skip_rephrase=True,
+                    )
+
                     # Invoke the tool
                     result = await self.invoke_tool(
                         tool_name=actual_tool_name,
