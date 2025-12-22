@@ -545,9 +545,9 @@ class UnifiedClarificationSystem:
 
         from ..prompts.loader import PromptLoader
 
-        prompt = PromptLoader.get(
+        system_prompt = PromptLoader.get(
             "clarification_analysis.md",
-            conversation=conversation,
+            conversation="",  # Conversation goes in user message for proper cache comparison
             context=json.dumps(context) if context else "{}",
             capabilities=", ".join(capabilities) if capabilities else "Conversation",
             mcp_services="\n".join(mcp_services_detail) if mcp_services_detail else "None",
@@ -569,7 +569,10 @@ class UnifiedClarificationSystem:
                 "mcp_service": None,
             }
 
-        messages = [{"role": "user", "content": prompt}]
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": conversation},
+        ]
         response = await self.llm.chat(messages, temperature=0, max_tokens=250)
         content = response.content if hasattr(response, "content") else str(response)
 
@@ -650,15 +653,18 @@ class UnifiedClarificationSystem:
 
         from ..prompts.loader import PromptLoader
 
-        prompt = PromptLoader.get(
+        system_prompt = PromptLoader.get(
             "clarification_need_more.md",
-            original_request=state["original_request"],
+            original_request="",  # Goes in user message
             collected_info=state["collected_info"],
             mode=state["mode"],
             style=self.style,
         )
 
-        messages = [{"role": "user", "content": prompt}]
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": state["original_request"]},
+        ]
         response = await self.llm.chat(messages, temperature=0, max_tokens=150)
         content = response.content if hasattr(response, "content") else str(response)
 
@@ -681,14 +687,17 @@ class UnifiedClarificationSystem:
 
         from ..prompts.loader import PromptLoader
 
-        prompt = PromptLoader.get(
+        system_prompt = PromptLoader.get(
             "clarification_context_switch.md",
             original_request=state["original_request"],
             last_question=last_question,
-            response=response,
+            response="",  # Goes in user message
         )
 
-        messages = [{"role": "user", "content": prompt}]
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": response},
+        ]
         result = await self.llm.chat(messages, temperature=0, max_tokens=20)
         content = result.content if hasattr(result, "content") else str(result)
         return "different" in content.lower()
@@ -701,17 +710,16 @@ class UnifiedClarificationSystem:
         if not self.llm:
             return False  # Assume no stop intent without LLM
 
-        prompt = f"""
-        Does this response indicate the user wants to stop clarification?
+        system_prompt = """Does this response indicate the user wants to stop clarification?
 
-        User said: {response}
+Look for phrases like "enough", "just do it", "stop asking", "never mind", etc.
 
-        Look for phrases like "enough", "just do it", "stop asking", "never mind", etc.
+Return just "true" or "false"."""
 
-        Return just "true" or "false".
-        """
-
-        messages = [{"role": "user", "content": prompt}]
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": response},
+        ]
         result = await self.llm.chat(messages, temperature=0, max_tokens=10)
         content = result.content if hasattr(result, "content") else str(result)
         return "true" in content.lower()
@@ -1258,7 +1266,7 @@ Please check {mcp_service}'s documentation for specific instructions on obtainin
                             break
 
             # Check if it looks like a recall question using LLM (fast, focused prompt)
-            recall_check_prompt = f"""Is this a recall/memory question about something the user previously stated?
+            recall_system_prompt = """Is this a recall/memory question about something the user previously stated?
 
 Examples of recall questions:
 - "What is my name?"
@@ -1271,14 +1279,15 @@ NOT recall questions:
 - "How do I do X?" (asking for help)
 - "Can you X?" (making a request)
 
-Question: "{clean_message}"
-
 Answer with just: YES or NO"""
 
             try:
                 if self.llm:
                     response = await self.llm.chat(
-                        [{"role": "user", "content": recall_check_prompt}],
+                        [
+                            {"role": "system", "content": recall_system_prompt},
+                            {"role": "user", "content": clean_message},
+                        ],
                         temperature=0,
                         max_tokens=10,
                     )

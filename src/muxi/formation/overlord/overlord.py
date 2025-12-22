@@ -1997,9 +1997,20 @@ class Overlord:
         if self._capability_models.get("text"):
             try:
                 # Quick LLM check with formation's text model
-                from ..prompts.loader import PromptLoader
+                # System prompt contains instructions, user message is just the message to classify
+                system_prompt = """Is this message requesting action or just providing information/greeting?
 
-                prompt = PromptLoader.get("overlord_actionability_check.md", message=message)
+Examples of ACTIONABLE messages (questions, requests, commands):
+- "What database should I use?" → ACTIONABLE (question needing answer)
+- "How do I implement authentication?" → ACTIONABLE (question needing help)
+- "Create a file" → ACTIONABLE (command to execute)
+
+Examples of NON_ACTIONABLE messages (information, context, greetings):
+- "I'm working on an e-commerce platform" → NON_ACTIONABLE (just context)
+- "Hi" → NON_ACTIONABLE (greeting)
+- "Thanks" → NON_ACTIONABLE (acknowledgment)
+
+Reply with only: ACTIONABLE or NON_ACTIONABLE"""
 
                 # Use formation's text model for this quick check
                 text_model_config = self._capability_models.get("text")
@@ -2020,7 +2031,11 @@ class Overlord:
                     )
                     self._model_cache[cache_key] = llm
 
-                response = await llm.generate_text(prompt)
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": actual_message},  # Use extracted message, not full context
+                ]
+                response = await llm.chat(messages)
                 if response and "NON_ACTIONABLE" in response.upper():
                     return False
             except Exception:
@@ -2045,9 +2060,7 @@ class Overlord:
         # Use LLM to determine if this is non-actionable
         if self._capability_models.get("text"):
             try:
-                prompt = """Determine if this message is non-actionable (greeting, acknowledgment, or pure information).
-
-Message: "{}"
+                system_prompt = """Determine if this message is non-actionable (greeting, acknowledgment, or pure information).
 
 Non-actionable messages include:
 - Greetings or pleasantries in any language
@@ -2056,11 +2069,7 @@ Non-actionable messages include:
 - Simple responses like "yes", "no", "ok" in any language
 
 If the message is a greeting, acknowledgment, or pure information with no action needed, respond with: NON_ACTIONABLE
-If the message requests action, asks a question, or needs a response, respond with: ACTIONABLE
-
-Response:""".format(
-                    message_lower
-                )
+If the message requests action, asks a question, or needs a response, respond with: ACTIONABLE"""
 
                 # Use cached model if available
                 text_model_config = self._capability_models.get("text")
@@ -2083,7 +2092,11 @@ Response:""".format(
                     )
                     self._model_cache[cache_key] = llm
 
-                response = await llm.generate_text(prompt)
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": message_lower},
+                ]
+                response = await llm.chat(messages)
                 if response and "NON_ACTIONABLE" in response.upper():
                     return True
             except Exception:
@@ -2186,17 +2199,25 @@ Response:""".format(
                 llm = await self.create_model(model=model_name, api_key=api_key, temperature=0.7)
                 self._model_cache[cache_key] = llm
 
+        # Extract actual user message from context format if present
+        import re
+        match = re.search(r'User:\s*([^\n]+)', user_message)
+        actual_user_message = match.group(1).strip() if match else user_message
+
         try:
             if raw_response is None:
                 # NON-ACTIONABLE PATH: Direct conversational response
                 from ..prompts.loader import PromptLoader
 
-                prompt = PromptLoader.get(
+                system_prompt = PromptLoader.get(
                     "overlord_greeting_response.md",
                     default_persona=self._default_persona,
-                    user_message=user_message,
+                    user_message="",  # User message goes in separate message
                 )
-                messages = [{"role": "user", "content": prompt}]
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": actual_user_message},  # Use extracted message
+                ]
                 # Force non-streaming for persona application
                 response = await llm.chat(messages, max_tokens=300, temperature=0.7, stream=False)
 
@@ -2231,15 +2252,18 @@ Response:""".format(
                         )
                     # Note: JSON format will be handled by post-processing wrapper
 
-                prompt = f"""{self._default_persona}
-
-User request: {user_message}
-Agent response: {raw_response}
+                system_prompt = f"""{self._default_persona}
 
 Reformat the agent's response to match your persona while preserving all technical details and information.
 Make it conversational and friendly while keeping accuracy.{format_instruction}"""
 
-                messages = [{"role": "user", "content": prompt}]
+                user_content = f"""User request: {actual_user_message}
+Agent response: {raw_response}"""
+
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content},
+                ]
                 # Force non-streaming for persona application
                 response = await llm.chat(messages, max_tokens=2000, temperature=0.7, stream=False)
 

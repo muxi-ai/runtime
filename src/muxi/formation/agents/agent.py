@@ -3340,8 +3340,9 @@ class Agent:
             description=f"Agent {self.agent_id} starting planning with {len(tool_names)} tools",
         )
 
-        planning_prompt = "Analyze this request and create an execution plan.\n"
-        planning_prompt += f"\nRequest: {user_message}"
+        # Build context for planning (user message + available resources)
+        # NOTE: Instructions go in system message, user content stays here
+        planning_prompt = f"Request: {user_message}"
 
         # Section 1: Available tools (agent's own MCP tools)
         planning_prompt += "\n\n## Available tools:\n"
@@ -3441,12 +3442,14 @@ class Agent:
 
         try:
             # Create messages for planning
+            # System message contains instructions, user message contains the request + context
             planning_messages = [
                 {
                     "role": "system",
                     "content": (
-                        "You are a planning assistant. Analyze requests and "
-                        "create structured execution plans. Always respond with valid JSON only."
+                        "You are a planning assistant. Analyze the user's request and "
+                        "create a structured execution plan using the available tools and agents. "
+                        "Always respond with valid JSON only."
                     ),
                 },
                 {"role": "user", "content": planning_prompt},

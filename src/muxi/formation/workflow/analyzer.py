@@ -312,10 +312,14 @@ class RequestAnalyzer:
         Returns:
             LLM-powered analysis results
         """
-        analysis_prompt = self._create_analysis_prompt(user_message, context)
+        system_prompt, user_content = self._create_analysis_messages(user_message, context)
 
         try:
-            response = await self.llm.generate_text(analysis_prompt, max_tokens=1000)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ]
+            response = await self.llm.chat(messages, max_tokens=1000)
             return self._parse_llm_analysis(response)
 
         except Exception as e:
@@ -333,18 +337,18 @@ class RequestAnalyzer:
             )
             return self._heuristic_analyze_request(user_message)
 
-    def _create_analysis_prompt(
+    def _create_analysis_messages(
         self, user_message: str, context: Optional[Dict[str, Any]] = None
-    ) -> str:
+    ) -> tuple:
         """
-        Create prompt for LLM-based request analysis.
+        Create messages for LLM-based request analysis.
 
         Args:
             user_message: User's request
             context: Optional conversation context
 
         Returns:
-            Analysis prompt for LLM
+            Tuple of (system_prompt, user_content) for proper caching
         """
         context_info = ""
         if context:
@@ -358,12 +362,16 @@ class RequestAnalyzer:
                 sop_context = f"\nAvailable SOPs: {', '.join(sop_list)}"
 
         from ..prompts.loader import PromptLoader
-        return PromptLoader.get(
+        # Get the system instructions (without user message embedded)
+        system_prompt = PromptLoader.get(
             'workflow_request_analysis.md',
-            user_message=user_message,
+            user_message="",  # User message goes separately for proper caching
             context_info=context_info,
             sop_context=sop_context
         )
+
+        # Return system prompt and user message separately
+        return system_prompt, user_message
 
     def _parse_llm_analysis(self, response: str) -> RequestAnalysis:
         """
