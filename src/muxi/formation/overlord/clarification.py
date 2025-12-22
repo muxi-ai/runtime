@@ -501,13 +501,11 @@ class UnifiedClarificationSystem:
             "brief": "very concise, minimal words",
         }.get(self.style, "natural, friendly, like a helpful colleague")
 
-        # Extract conversation context if it exists, otherwise use the full message
-        if "=== CONVERSATION CONTEXT (Most Recent First) ===" in message:
-            conversation = message.split("=== CONVERSATION CONTEXT (Most Recent First) ===")[
-                -1
-            ].strip()
-        elif "=== CURRENT REQUEST ===" in message:
-            # Use the entire enhanced message if no conversation context
+        # Extract conversation for clarification analysis
+        # IMPORTANT: Always include the current request + context for proper analysis
+        if "=== CURRENT REQUEST ===" in message:
+            # Use the full enhanced message - it has current request first, then context
+            # This ensures the LLM sees both the current question AND history
             conversation = message
         else:
             # Fallback to raw message
