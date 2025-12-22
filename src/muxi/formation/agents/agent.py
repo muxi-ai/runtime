@@ -1984,6 +1984,15 @@ class Agent:
 
                 # Add guidance for error recovery if needed
                 if current_errors:
+                    # Emit streaming event for tool failure retry
+                    streaming.stream(
+                        "thinking",
+                        "That didn't work, trying another approach...",
+                        stage="tool_retry",
+                        failed_tools=[e["tool"] for e in current_errors],
+                        skip_rephrase=True,
+                    )
+
                     self._messages.append(
                         {
                             "role": "system",
