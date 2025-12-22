@@ -120,11 +120,9 @@ class CredentialHandler:
 
         services_str = ", ".join([s["service"] for s in available_services])
 
-        prompt = f"""Analyze the user's message to determine if it requires credentials for external services.
+        system_prompt = f"""Analyze user messages to determine if they require credentials for external services.
 
 Available credential services: {services_str}
-
-User message: {message}
 
 Detection rules:
 1. CREDENTIAL_REQUEST - User explicitly wants to add/update/configure credentials:
@@ -167,7 +165,12 @@ Respond in JSON format:
 }}"""
 
         try:
-            response = await llm.generate_text(prompt)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message},
+            ]
+            response_obj = await llm.chat(messages)
+            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
 
             # Parse JSON response
             # Extract JSON from response if it contains other text
@@ -559,9 +562,7 @@ Respond in JSON format:
             )
             self.overlord._model_cache[cache_key] = llm
 
-        prompt = f"""Analyze this message to determine if the user is asking to ADD or CONFIGURE new credentials.
-
-User message: {message}
+        system_prompt = """Analyze messages to determine if the user is asking to ADD or CONFIGURE new credentials.
 
 Examples of credential requests:
 - "I need to add a new GitHub account"
@@ -577,7 +578,12 @@ Examples of NON-credential requests:
 Respond with only "YES" if requesting to add credentials, "NO" otherwise."""
 
         try:
-            response = await llm.generate_text(prompt)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message},
+            ]
+            response_obj = await llm.chat(messages)
+            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
 
             result = response.strip().upper()
             return result == "YES"
@@ -704,8 +710,7 @@ Respond with only "YES" if requesting to add credentials, "NO" otherwise."""
             "oauth": "OAuth token",
         }.get(auth_type, "credentials")
 
-        prompt = f"""
-Generate a natural, friendly message asking the user to provide their {auth_description} for {service}.
+        system_prompt = """Generate a natural, friendly message asking the user to provide their credentials.
 
 Important:
 - Be conversational and friendly
@@ -718,7 +723,7 @@ Example good responses:
 - "I'll need your GitHub personal access token to continue. Could you share it with me?"
 - "To access your GitHub repositories, I'll need your access token. Don't worry, I'll store it securely."
 
-Generate the message now:"""
+Generate only the message, nothing else."""
 
         try:
             # Get or create LLM instance
@@ -738,7 +743,12 @@ Generate the message now:"""
             else:
                 llm = self.overlord._model_cache[cache_key]
 
-            response = await llm.generate_text(prompt)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Service: {service}, Credential type: {auth_description}"},
+            ]
+            response_obj = await llm.chat(messages)
+            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
             return response.strip()
         except Exception as e:
             print(f"Warning: Failed to generate credential prompt via LLM: {e}")
@@ -753,34 +763,32 @@ Generate the message now:"""
 
     async def _is_cancellation(self, message: str) -> bool:
         """Check if user wants to cancel credential entry using LLM."""
-        prompt = f"""The user is in the middle of providing credentials.
-        They just said: "{message}"
+        system_prompt = """The user is in the middle of providing credentials.
+Determine if they are trying to cancel/abort/skip the credential entry process.
 
-        Are they trying to cancel/abort/skip the credential entry process?
+Examples of cancellation (in any language):
+- "nevermind"
+- "forget it"
+- "cancel"
+- "I don't want to"
+- "skip this"
+- "later"
+- "stop"
+- "no thanks"
+- "pas maintenant" (French: not now)
+- "cancelar" (Spanish: cancel)
+- "やめる" (Japanese: stop)
 
-        Examples of cancellation (in any language):
-        - "nevermind"
-        - "forget it"
-        - "cancel"
-        - "I don't want to"
-        - "skip this"
-        - "later"
-        - "stop"
-        - "no thanks"
-        - "pas maintenant" (French: not now)
-        - "cancelar" (Spanish: cancel)
-        - "やめる" (Japanese: stop)
+IMPORTANT: These are NOT cancellations - they are HELP REQUESTS:
+- "I don't know how to get a token"
+- "How do I get this?"
+- "Can you help me?"
+- "Where do I find this?"
+- "What is this?"
 
-        IMPORTANT: These are NOT cancellations - they are HELP REQUESTS:
-        - "I don't know how to get a token"
-        - "How do I get this?"
-        - "Can you help me?"
-        - "Where do I find this?"
-        - "What is this?"
+If the user is asking for help or guidance, respond NO (not a cancellation).
 
-        If the user is asking for help or guidance, respond NO (not a cancellation).
-
-        Respond with only YES or NO."""
+Respond with only YES or NO."""
 
         try:
             # Use properly configured LLM from overlord/formation
@@ -800,7 +808,12 @@ Generate the message now:"""
                 message_lower = message.lower()
                 return any(pattern in message_lower for pattern in cancel_patterns)
 
-            response = await llm.generate_text(prompt)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message},
+            ]
+            response_obj = await llm.chat(messages)
+            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
             return response.strip().upper().startswith("YES")
         except Exception as e:
             logger.debug(f"Failed to check cancellation with LLM: {e}")
@@ -809,31 +822,29 @@ Generate the message now:"""
 
     async def _is_help_request(self, message: str) -> bool:
         """Check if user is asking for help/guidance on getting credentials."""
-        prompt = f"""The user is in the middle of providing credentials.
-        They just said: "{message}"
+        system_prompt = """The user is in the middle of providing credentials.
+Determine if they are asking for HELP or GUIDANCE on how to obtain credentials.
 
-        Are they asking for HELP or GUIDANCE on how to obtain credentials?
+Examples of help requests (in any language):
+- "I don't know how to get a token"
+- "How do I get this?"
+- "Can you help me?"
+- "Where do I find this?"
+- "What is this?"
+- "How do I create one?"
+- "I need help"
+- "Show me how"
+- "¿Cómo obtengo esto?" (Spanish: How do I get this?)
+- "Comment obtenir ça?" (French: How to get this?)
+- "これをどうやって入手しますか？" (Japanese: How do I get this?)
 
-        Examples of help requests (in any language):
-        - "I don't know how to get a token"
-        - "How do I get this?"
-        - "Can you help me?"
-        - "Where do I find this?"
-        - "What is this?"
-        - "How do I create one?"
-        - "I need help"
-        - "Show me how"
-        - "¿Cómo obtengo esto?" (Spanish: How do I get this?)
-        - "Comment obtenir ça?" (French: How to get this?)
-        - "これをどうやって入手しますか？" (Japanese: How do I get this?)
+IMPORTANT: These are NOT help requests - they are PROVIDING credentials:
+- "Thanks for the help! Here's my token: xyz123"
+- "Here is my key: abc789"
+- "My token is: ghp_xxxxx"
+- If the message contains what looks like an actual credential/token, respond NO
 
-        IMPORTANT: These are NOT help requests - they are PROVIDING credentials:
-        - "Thanks for the help! Here's my token: xyz123"
-        - "Here is my key: abc789"
-        - "My token is: ghp_xxxxx"
-        - If the message contains what looks like an actual credential/token, respond NO
-
-        Respond with only YES or NO."""
+Respond with only YES or NO."""
 
         try:
             llm = await self._get_configured_llm(cache_suffix="help", max_tokens=10)
@@ -858,7 +869,12 @@ Generate the message now:"""
                 ]
                 return any(pattern in message_lower for pattern in help_patterns)
 
-            response = await llm.generate_text(prompt)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message},
+            ]
+            response_obj = await llm.chat(messages)
+            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
             return response.strip().upper().startswith("YES")
         except Exception as e:
             logger.debug(f"Failed to check help request with LLM: {e}")

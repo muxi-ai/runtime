@@ -314,52 +314,40 @@ class UserContextManager:
         if not memory_texts or not self.overlord.extraction_model:
             return ""
 
-        # Build synthesis prompt based on type
+        # Build synthesis prompt based on type - separate system and user content
         memories_str = "\n".join(memory_texts)
 
         if synopsis_type == "identity":
-            prompt = f"""You are analyzing user identity information. Below are facts about a user:
-
-{memories_str}
-
-Synthesize these facts into 1-2 natural sentences about who they are. Focus ONLY on:
+            system_prompt = """You are analyzing user identity information.
+Synthesize the facts into 1-2 natural sentences about who they are. Focus ONLY on:
 - Name, role, occupation
 - Team/relationships
 - Work projects
 
-Write in third person. Be concise and factual.
-
-Identity Synopsis:"""
+Write in third person. Be concise and factual."""
         elif synopsis_type == "context":
-            prompt = f"""You are analyzing user preferences and activities. Below are facts about a user:
-
-{memories_str}
-
-Synthesize these facts into 1-2 natural sentences about their current context. Focus ONLY on:
+            system_prompt = """You are analyzing user preferences and activities.
+Synthesize the facts into 1-2 natural sentences about their current context. Focus ONLY on:
 - Communication preferences and style
 - Current activities and interests
 - Recent focus areas
 
-Write in third person. Be concise and factual. Use present tense.
-
-Context Synopsis:"""
+Write in third person. Be concise and factual. Use present tense."""
         else:
             # Combined fallback (shouldn't be used with two-tier system)
-            prompt = f"""You are analyzing user profile information. Below are facts about a user:
-
-{memories_str}
-
-Synthesize these facts into a coherent, natural 2-3 sentence user profile summary. Focus on:
+            system_prompt = """You are analyzing user profile information.
+Synthesize the facts into a coherent, natural 2-3 sentence user profile summary. Focus on:
 - Who they are (name, role, identity)
 - Key preferences and communication style
 - Current activities or projects
 
-Write in third person. Be concise and factual. If contradictory, use recent facts.
-
-User Synopsis:"""
+Write in third person. Be concise and factual. If contradictory, use recent facts."""
 
         try:
-            messages = [{"role": "user", "content": prompt}]
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Facts about the user:\n{memories_str}"},
+            ]
             response = await self.overlord.extraction_model.chat(
                 messages, temperature=0.3, max_tokens=100
             )

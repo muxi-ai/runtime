@@ -2121,9 +2121,23 @@ If the message requests action, asks a question, or needs a response, respond wi
         # Use LLM to determine if this is a simple question
         if self._capability_models.get("text"):
             try:
-                from ..prompts.loader import PromptLoader
+                # System prompt for simple question detection
+                system_prompt = """Determine if the user's message is a simple question that can be answered directly.
 
-                prompt = PromptLoader.get("overlord_simple_question.md", message=message_lower)
+A simple question is one that:
+- Asks for a recommendation or suggestion
+- Seeks basic information or clarification
+- Can be answered in a few sentences
+- Doesn't require multiple steps or complex analysis
+- Is asking "what", "how", "why", "when", "where", "who" about something specific
+
+Complex questions that need workflows:
+- Multi-part requests requiring several steps
+- Requests to build, create, or implement something
+- Tasks requiring research AND analysis AND action
+
+If this is a simple question that can be answered directly, respond with: SIMPLE
+If this requires complex multi-step work, respond with: COMPLEX"""
 
                 # Use cached model if available
                 text_model_config = self._capability_models.get("text")
@@ -2146,7 +2160,12 @@ If the message requests action, asks a question, or needs a response, respond wi
                     )
                     self._model_cache[cache_key] = llm
 
-                response = await llm.generate_text(prompt)
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": message_lower},
+                ]
+                response_obj = await llm.chat(messages)
+                response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
                 if response and "SIMPLE" in response.upper():
                     return True
             except Exception:

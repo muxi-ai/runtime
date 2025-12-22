@@ -479,10 +479,8 @@ class CredentialResolver:
             tools_text = "\n".join(tool_list)
 
             # Ask LLM to identify the best identity discovery tool
-            discovery_prompt = (
+            system_prompt = (
                 f"You are helping discover a meaningful name for a {service} credential by calling an identity tool."
-                f"\n\nAvailable tools from {server_id}:"
-                f"\n{tools_text}"
                 "\n\nPlease identify the BEST tool for discovering the authenticated user's identity/account info "
                 "(like get_me, whoami, get_authenticated_user, user_info, auth_test, etc.)."
                 "\n\nRespond with ONLY the exact tool name (no explanation, no quotes, no extra text). "
@@ -492,7 +490,10 @@ class CredentialResolver:
             # Get LLM recommendation
             try:
                 response = await discovery_llm.chat(
-                    messages=[{"role": "user", "content": discovery_prompt}],
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Available tools from {server_id}:\n{tools_text}"},
+                    ],
                     max_tokens=20,
                     temperature=0,
                 )
@@ -626,19 +627,16 @@ class CredentialResolver:
 
             extraction_llm = LLM(model=self.llm_model)
 
-            extraction_prompt = f"""
-Extract the account's identifier (username/login/etc.) from the context below.
+            system_prompt = """Extract the account's identifier (username/login/etc.) from the provided context.
 Look for username, login, account name, or similar unique identifier.
 Respond with ONLY the identifier (no explanation, no quotes, no extra text).
-If no suitable identifier found, respond with "NONE".
-
-<context>
-{response_text}
-</context>
-"""
+If no suitable identifier found, respond with "NONE"."""
 
             result = await extraction_llm.chat(
-                messages=[{"role": "user", "content": extraction_prompt}],
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": response_text},
+                ],
                 max_tokens=50,
                 temperature=0,
             )
@@ -718,19 +716,17 @@ If no suitable identifier found, respond with "NONE".
             extraction_llm = LLM(model=self.llm_model)
 
             data_str = str(data)
-            extraction_prompt = f"""
-Extract the most meaningful account identifier from this {service} user data.
-
-Data: {data_str}
-
+            system_prompt = f"""Extract the most meaningful account identifier from {service} user data.
 Look for username, login, account name, or similar unique identifier.
 Prefer usernames over display names, and unique identifiers over generic ones.
 Respond with ONLY the identifier (no explanation, no quotes, no extra text).
-If no suitable identifier found, respond with "NONE".
-"""
+If no suitable identifier found, respond with "NONE"."""
 
             result = await extraction_llm.chat(
-                messages=[{"role": "user", "content": extraction_prompt}],
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": data_str},
+                ],
                 max_tokens=50,
                 temperature=0,
             )
