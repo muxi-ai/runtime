@@ -211,21 +211,14 @@ class TaskDecomposer:
             else (request[:max_request_length] + "\n\n[... request truncated for safety ...]")
         )
 
-        decomposition_prompt = self._create_decomposition_prompt(
+        system_prompt, user_content = self._create_decomposition_messages(
             truncated_request, context, analysis
         )
 
         # Skip observability call that might trigger recursion
         # Debug logging is commented out to avoid potential issues:
-        # prompt_length = len(decomposition_prompt)
+        # prompt_length = len(system_prompt) + len(user_content)
         # print(f"🔍 Decomposition prompt size: {prompt_length:,} chars, request size: {len(request):,} chars")
-
-        # # DEBUG: Print full decomposition prompt to console for debugging tests
-        # print("\n" + "=" * 80)
-        # print("📋 FULL DECOMPOSITION PROMPT:")
-        # print("=" * 80)
-        # print(decomposition_prompt)
-        # print("=" * 80)
 
         try:
             # Event 5: COMMENTED OUT - duplicate planning event
@@ -241,12 +234,18 @@ class TaskDecomposer:
 
             # Safety check: Limit prompt size to prevent recursion issues
             # Very large prompts (>100k chars) can cause recursion in LLM processing
-            if len(decomposition_prompt) > 100000:
+            total_size = len(system_prompt) + len(user_content)
+            if total_size > 100000:
                 raise ValueError(
-                    f"Decomposition prompt too large ({len(decomposition_prompt)} chars), using heuristic"
+                    f"Decomposition prompt too large ({total_size} chars), using heuristic"
                 )
 
-            response = await self.llm.generate_text(decomposition_prompt, max_tokens=2000)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ]
+            response_obj = await self.llm.chat(messages, max_tokens=2000)
+            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
 
             # # DEBUG: Print LLM response for debugging
             # print("\n" + "🤖 LLM DECOMPOSITION RESPONSE:")
@@ -331,14 +330,14 @@ class TaskDecomposer:
 
             return self._heuristic_decompose_request(workflow_id, request, analysis)
 
-    def _create_decomposition_prompt(
+    def _create_decomposition_messages(
         self,
         request: str,
         context: Optional[Dict[str, Any]] = None,
         analysis: Optional[RequestAnalysis] = None,
-    ) -> str:
+    ) -> tuple:
         """
-        Create sophisticated decomposition prompt for LLM from template file.
+        Create system and user messages for LLM decomposition.
 
         Args:
             request: User's request
@@ -346,7 +345,7 @@ class TaskDecomposer:
             analysis: Optional analysis results
 
         Returns:
-            Decomposition prompt for LLM
+            Tuple of (system_prompt, user_content) for proper caching
         """
         # Read the prompt template from PromptLoader
         from ..prompts.loader import PromptLoader
@@ -362,7 +361,7 @@ class TaskDecomposer:
                 "<capabilities>{{capabilities_info}}</capabilities>"
             )
 
-        # Prepare template variables
+        # Prepare context info
         context_info = ""
         if context:
             # Safety: Ensure context doesn't contain circular references
@@ -394,6 +393,7 @@ class TaskDecomposer:
                 )
                 context_info = "\nContext: <unavailable>"
 
+        # Prepare analysis info
         analysis_info = ""
         if analysis:
             analysis_info = f"""
@@ -405,13 +405,16 @@ Analysis Results:
 
         capabilities_info = self._get_available_capabilities_info()
 
-        # Replace template placeholders
-        return (
-            template.replace("{{request}}", request)
+        # System prompt: template with placeholder for request (instructions)
+        system_prompt = (
+            template.replace("{{request}}", "[USER REQUEST BELOW]")
             .replace("{{context_info}}", context_info)
             .replace("{{analysis_info}}", analysis_info)
             .replace("{{capabilities_info}}", capabilities_info)
         )
+
+        # User content: the actual request
+        return system_prompt, request
 
     def _get_available_capabilities_info(self) -> str:
         """
@@ -846,11 +849,8 @@ Analysis Results:
             Human-readable plan preview
         """
         try:
-            plan_prompt = (
-                "Convert this technical workflow into a clear plan that a user can easily understand and approve.\n\n"
-                f"Original Request: {original_request}\n\n"
-                f"Technical Workflow:\n"
-                f"{self._workflow_to_text(workflow)}\n\n"
+            system_prompt = (
+                "Convert technical workflows into clear plans that users can easily understand and approve.\n\n"
                 "Instructions:\n"
                 '1. Start with "Here\'s my proposed approach for your request:"\n'
                 "2. Explain the workflow steps in logical order\n"
@@ -864,7 +864,18 @@ Analysis Results:
                 "IMPORTANT: Always reply in the same language as the user's original request\n"
             )
 
-            plan_preview = await self.llm.generate_text(plan_prompt, max_tokens=800)
+            user_content = (
+                f"Original Request: {original_request}\n\n"
+                f"Technical Workflow:\n"
+                f"{self._workflow_to_text(workflow)}"
+            )
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ]
+            response_obj = await self.llm.chat(messages, max_tokens=800)
+            plan_preview = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
             return plan_preview
 
         except Exception as e:

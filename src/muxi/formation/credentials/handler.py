@@ -906,14 +906,31 @@ Respond with only YES or NO."""
             # Detect user language from context
             user_language = self._detect_user_language()
 
-            # Load prompt template
-            from ..prompts.loader import PromptLoader
+            # System prompt for credential help generation
+            system_prompt = f"""You are helping a user obtain API credentials.
 
-            prompt = PromptLoader.get(
-                "credential_help_generator.md", service=service, user_language=user_language
-            )
+Based on your world knowledge, provide clear step-by-step instructions in {user_language} for obtaining an API key or access token.
 
-            response = await llm.generate_text(prompt, max_tokens=500)
+If you know the service:
+- Include the sign-in URL
+- Explain where to find API/developer settings
+- Detail how to generate the credential
+- Mention any important permissions/scopes
+- Note any security considerations
+
+If you don't have specific knowledge about the service:
+- Provide generic instructions in {user_language}
+- Guide them to look for "Settings", "API", or "Developer" sections
+- Explain the general process of finding and generating API credentials
+
+Be helpful and specific when you can, or provide useful generic guidance if you can't."""
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"I need help getting credentials for: {service}"},
+            ]
+            response_obj = await llm.chat(messages, max_tokens=500)
+            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
 
             if response:
                 return response.strip()
@@ -946,21 +963,19 @@ Once you have your credentials, paste them here."""
 
     async def _extract_credential_from_text(self, message: str) -> str:
         """Extract credential from natural language using LLM."""
-        prompt = f"""The user is providing an API credential/token.
-        They said: "{message}"
+        system_prompt = """The user is providing an API credential/token.
+Extract ONLY the actual credential/token/key from their message.
+If the message appears to be just the credential itself, return it as-is.
 
-        Extract ONLY the actual credential/token/key from their message.
-        If the message appears to be just the credential itself, return it as-is.
+Examples:
+- "Here's my token: abc123" → "abc123"
+- "The key is xyz789" → "xyz789"
+- "ghp_1234567890" → "ghp_1234567890"
+- "mi token es abc123" (Spanish) → "abc123"
+- "voici mon jeton: xyz" (French) → "xyz"
+- "abc123" → "abc123"
 
-        Examples:
-        - "Here's my token: abc123" → "abc123"
-        - "The key is xyz789" → "xyz789"
-        - "ghp_1234567890" → "ghp_1234567890"
-        - "mi token es abc123" (Spanish) → "abc123"
-        - "voici mon jeton: xyz" (French) → "xyz"
-        - "abc123" → "abc123"
-
-        Return ONLY the credential itself, no quotes, no explanation."""
+Return ONLY the credential itself, no quotes, no explanation."""
 
         try:
             # Use properly configured LLM from overlord/formation
@@ -970,7 +985,12 @@ Once you have your credentials, paste them here."""
                 # Assume the whole message is the credential
                 return message.strip().strip('"').strip("'")
 
-            extracted = await llm.generate_text(prompt)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message},
+            ]
+            response_obj = await llm.chat(messages)
+            extracted = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
             # Clean up any quotes the LLM might have added
             return extracted.strip().strip('"').strip("'")
         except Exception as e:
@@ -989,24 +1009,22 @@ Once you have your credentials, paste them here."""
                 f"or create a new one in your {service} settings."
             )
 
-        prompt = f"""The user just provided a {service} credential but it failed validation.
+        system_prompt = """Generate a helpful, understanding message when a user's credential fails validation.
 
-Generate a helpful, understanding message that:
-- Gently explains the token didn't work
-- Suggests they double-check the token
-- Mentions they should check their {service} account settings to create a new token if needed
-- Is supportive, not frustrating
-- Keeps it brief (2-3 sentences)
+The message should:
+- Gently explain the token didn't work
+- Suggest they double-check the token
+- Mention they should check their account settings to create a new token if needed
+- Be supportive, not frustrating
+- Keep it brief (2-3 sentences)
 - Do NOT include specific URLs
 - Let them know they can provide a different token or move on
 
 Example good responses:
-- "Hmm, that token didn't seem to work. Could you double-check it? "
-  "You can also create a new one in your {service} settings."
-- "I couldn't validate that token. Please make sure it's correct, "
-  "or you can generate a new one in your {service} account settings."
+- "Hmm, that token didn't seem to work. Could you double-check it? You can also create a new one in your settings."
+- "I couldn't validate that token. Please make sure it's correct, or you can generate a new one in your account settings."
 
-Generate the message now:"""
+Generate only the message, nothing else."""
 
         try:
             # Create LLM instance from config
@@ -1019,7 +1037,12 @@ Generate the message now:"""
                 max_tokens=100,
                 **text_model_config.get("settings", {}),
             )
-            response = await llm.generate_text(prompt)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"The credential for {service} failed validation."},
+            ]
+            response_obj = await llm.chat(messages)
+            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
             return response.strip()
         except Exception as e:
             print(f"Warning: Failed to generate failure message via LLM: {e}")
@@ -1036,17 +1059,17 @@ Generate the message now:"""
             # Fallback if no LLM available
             return f"That {service} token is already stored in your account. You're all set!"
 
-        prompt = f"""The user just provided a {service} credential but it's already stored (duplicate).
+        system_prompt = """Generate a friendly message when a user provides a credential that's already stored.
 
-Generate a friendly message that:
-- Explains the token is already in their account
-- Reassures them they can use it
-- Is understanding, not frustrating
-- Keeps it brief (1-2 sentences)
+The message should:
+- Explain the token is already in their account
+- Reassure them they can use it
+- Be understanding, not frustrating
+- Keep it brief (1-2 sentences)
 
 Example good responses:
-- "That token is already saved in your account! You're all set to use {service}."
-- "I already have that {service} token stored for you. Ready to go!"
+- "That token is already saved in your account! You're all set to use the service."
+- "I already have that token stored for you. Ready to go!"
 
 Return ONLY the message text, no quotes."""
 
@@ -1070,7 +1093,12 @@ Return ONLY the message text, no quotes."""
             else:
                 llm = self.overlord._model_cache[cache_key]
 
-            response = await llm.generate_text(prompt)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"The {service} credential is already stored."},
+            ]
+            response_obj = await llm.chat(messages)
+            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
             return response.strip()
         except Exception as e:
             print(f"Warning: Failed to generate duplicate message via LLM: {e}")
@@ -1085,21 +1113,20 @@ Return ONLY the message text, no quotes."""
             # Fallback if no LLM available
             return f"Successfully connected to {service} as {account_name}!"
 
-        prompt = f"""The user just provided their credentials and successfully authenticated with {service}.
-Their account name is: {account_name}
+        system_prompt = """Generate a brief, friendly confirmation message for successful credential authentication.
 
-Generate a brief, friendly confirmation message that:
-- Confirms successful connection
-- Mentions the account name
-- Is conversational and positive
-- Keeps it to 1 sentence
+The message should:
+- Confirm successful connection
+- Mention the account name
+- Be conversational and positive
+- Keep it to 1 sentence
 
 Example good responses:
-- "Great! I've successfully connected to GitHub as {account_name}."
-- "Perfect! You're now connected to GitHub as {account_name}."
-- "All set! I can now access your GitHub account ({account_name})."
+- "Great! I've successfully connected to your account."
+- "Perfect! You're now connected as the specified account."
+- "All set! I can now access your account."
 
-Generate the message now:"""
+Generate only the message, nothing else."""
 
         try:
             # Get or create LLM instance
@@ -1119,7 +1146,12 @@ Generate the message now:"""
             else:
                 llm = self.overlord._model_cache[cache_key]
 
-            response = await llm.generate_text(prompt)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Successfully connected to {service} as {account_name}."},
+            ]
+            response_obj = await llm.chat(messages)
+            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
             return response.strip()
         except Exception as e:
             print(f"Warning: Failed to generate success message via LLM: {e}")
@@ -1132,20 +1164,20 @@ Generate the message now:"""
         if not text_model_config:
             return "No problem! Let me know if you'd like to add credentials later."
 
-        prompt = """The user just cancelled providing their API credentials.
+        system_prompt = """Generate a brief, understanding message when a user cancels providing credentials.
 
-Generate a brief, understanding message that:
-- Acknowledges their choice
-- Is supportive and not pushy
-- Mentions they can add credentials later if needed
-- Keeps it to 1-2 sentences
+The message should:
+- Acknowledge their choice
+- Be supportive and not pushy
+- Mention they can add credentials later if needed
+- Keep it to 1-2 sentences
 
 Example good responses:
 - "No problem! Let me know if you'd like to add credentials later."
 - "Sure, no worries! You can always add your credentials when you're ready."
 - "Understood! Feel free to add credentials anytime you need them."
 
-Generate the message now:"""
+Generate only the message, nothing else."""
 
         try:
             # Get or create LLM instance
@@ -1165,7 +1197,12 @@ Generate the message now:"""
             else:
                 llm = self.overlord._model_cache[cache_key]
 
-            response = await llm.generate_text(prompt)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": "User cancelled providing credentials."},
+            ]
+            response_obj = await llm.chat(messages)
+            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
             return response.strip()
         except Exception as e:
             print(f"Warning: Failed to generate cancellation message via LLM: {e}")
