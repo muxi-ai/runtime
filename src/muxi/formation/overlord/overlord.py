@@ -6236,6 +6236,15 @@ Make it conversational and friendly while keeping accuracy.{format_instruction}"
                             },
                         )
 
+                    # Emit completed event so SDKs/CLIs know it's user's turn
+                    streaming.stream(
+                        "completed",
+                        clarification_result.question,
+                        status="awaiting_clarification",
+                        processing_time_ms=int((time.time() - start_time) * 1000),
+                        clarification=True,
+                    )
+
                     return MuxiResponse(
                         role="assistant",
                         content=clarification_result.question,
