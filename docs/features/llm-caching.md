@@ -140,6 +140,26 @@ Failed to initialize OneLLM cache: [error details]
 
 The system continues without caching (fail-safe behavior).
 
+## Per-Call Cache Control
+
+You can bypass the cache for specific LLM calls by passing `caching=False`:
+
+```python
+# Bypass cache for this specific call
+response = await llm.chat(
+    messages,
+    temperature=0.7,
+    caching=False  # Skip cache lookup and storage
+)
+```
+
+This is useful for:
+- **User-facing responses** that should vary (e.g., persona/personality layer)
+- **Creative generation** where repetition is undesirable
+- **Testing** prompt changes without cache interference
+
+The MUXI runtime uses this internally for the persona stage to ensure repeated questions get naturally varied phrasing.
+
 ## Advanced Configuration
 
 ### Fine-Tuning Similarity Threshold

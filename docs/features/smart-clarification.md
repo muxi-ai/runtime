@@ -1,66 +1,72 @@
 # Smart Clarification Feature
 
-**Status:** Proposed
+**Status:** Implemented
 **Created:** 2024-12-23
+**Updated:** 2025-12-23
 
-## Problem
+## Overview
 
-Current clarification behavior is too aggressive. When a user asks an ambiguous follow-up question like "what about israel?" after asking "what's the capital of france?", the system asks for clarification instead of inferring the likely intent.
+Smart clarification provides intelligent context inference for follow-up questions, reducing unnecessary clarification requests while maintaining accuracy for truly ambiguous queries.
 
-## Current Behavior (Bad)
+## Features
 
+### 1. Context Inference for Follow-ups
+
+When a user asks a follow-up question like "what about israel?" after "what's the capital of france?", the system infers the likely intent from conversation context instead of asking for clarification.
+
+**Example:**
 ```
 User: what's the capital of france?
-System: Paris...
+System: The capital of France is Paris.
 
 User: what about israel?
-System: Could you please clarify what specific information you are looking for about Israel?
-
-User: whats the capital?
-System: Jerusalem
+System: The capital of Israel is Jerusalem.
 ```
 
-## Desired Behavior (ChatGPT-style)
+### 2. Repeated Question Acknowledgment
 
+When users ask the same question multiple times, the system acknowledges it was already answered while providing varied phrasing:
+
+**Example:**
 ```
 User: what's the capital of france?
-System: Paris...
+System: The capital of France is Paris.
 
-User: what about israel?
-System: The capital of Israel is Jerusalem. Let me know if you were asking about something else!
+User: what's the capital of france?
+System: Just to confirm what I mentioned earlier, the capital of France is Paris.
+
+User: what's the capital of france?
+System: As I said before, the capital of France is indeed Paris. Such a beautiful city!
 ```
 
-## Implementation Approach
+### 3. Concise Responses
 
-1. **Clarification analyzer returns richer response:**
-   ```python
-   {
-       "needs_clarification": True,
-       "likely_intent": "asking about capital of Israel",
-       "likely_answer": "Jerusalem",
-       "confidence": 0.85,
-       "clarification_question": "Were you asking about the capital?"
-   }
-   ```
+Response length matches question complexity - simple questions get brief answers without unnecessary markdown headers or bullet points.
 
-2. **Confidence-based response strategy:**
-   - `confidence > 0.7`: Answer with likely intent + soft clarification suffix
-   - `confidence 0.4-0.7`: Answer with likely intent + explicit clarification question
-   - `confidence < 0.4`: Ask for clarification first
+## Implementation Details
 
-3. **Soft clarification suffixes:**
-   - "Let me know if you meant something else!"
-   - "Is this what you were looking for?"
-   - "Feel free to clarify if I misunderstood."
+### Context Inference Rules
+Added to `clarification_analysis.md`:
+- Follow-up patterns ("what about X?", "and Y?", "how about Z?") infer topic from recent context
+- Pronouns and references resolved against conversation history
+- High-confidence inferences proceed without clarification
 
-## Benefits
+### Repeated Question Detection
+Implemented in `overlord.py` `_apply_persona()`:
+- Normalizes questions (lowercase, strip punctuation)
+- Compares against conversation context
+- Adds acknowledgment instruction to persona prompt
+- Disables caching to ensure varied responses
 
-- More natural conversation flow
-- Fewer round-trips for common follow-up patterns
-- Better user experience (matches ChatGPT behavior)
-- Still handles truly ambiguous cases
+### Cache Bypass for Variety
+- Persona stage uses `caching=False` for user-facing responses
+- Ensures repeated questions get naturally varied phrasing
+- `caching` parameter passes through to OneLLM for per-call control
 
 ## Related Files
 
-- `src/muxi/formation/overlord/clarification.py`
-- `src/muxi/formation/prompts/clarification_analysis.md`
+- `src/muxi/formation/overlord/overlord.py` - Persona application with repeated detection
+- `src/muxi/formation/overlord/chat_orchestrator.py` - Context loading
+- `src/muxi/formation/prompts/clarification_analysis.md` - Context inference rules
+- `src/muxi/formation/prompts/conversation_awareness_protocol.md` - Repeated question handling
+- `src/muxi/services/llm/llm.py` - Cache bypass support
