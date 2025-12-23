@@ -48,6 +48,7 @@ import time
 from typing import Any, Dict, List, Optional, Union
 
 from ..artifacts.extractor import extract_artifacts_from_tool_results
+from ..background.cancellation import RequestCancelledException
 from ..credentials import MissingCredentialError
 from ...utils.id_generator import generate_nanoid
 from ...datatypes.response import MuxiResponse
@@ -1192,6 +1193,9 @@ class Agent:
                                         }
                                         continue
 
+                                    # Check for cancellation before tool execution
+                                    await self._check_cancellation(request_id)
+
                                     # Execute the tool with validated parameters
                                     tool_result = await self.invoke_tool(
                                         tool_name=actual_tool_name,
@@ -1552,6 +1556,9 @@ class Agent:
                         # Message enhancement failed, continue with original message
                         pass
 
+                # Check for cancellation before LLM call
+                await self._check_cancellation(request_id)
+
                 raw_response = await self.model.chat_with_tools(self._messages, tools=tools)
             except Exception as e:
                 # Log error and fallback to no tools
@@ -1565,6 +1572,8 @@ class Agent:
                     },
                     description=f"Failed to call LLM with tools for agent {self.agent_id}: {str(e)}",
                 )
+                # Check for cancellation before fallback LLM call
+                await self._check_cancellation(request_id)
                 # Fallback to no tools
                 raw_response = await self.model.chat(self._messages)
         else:
@@ -1593,6 +1602,8 @@ class Agent:
                     # Use the A2A response as the agent's response
                     raw_response = a2a_response
                 else:
+                    # Check for cancellation before LLM call
+                    await self._check_cancellation(request_id)
                     # Normal chat without tools
                     raw_response = await self.model.chat(self._messages)
             else:
@@ -1608,6 +1619,8 @@ class Agent:
                         },
                         description=f"Agent {self.agent_id} reached max A2A attempts limit",
                     )
+                # Check for cancellation before LLM call
+                await self._check_cancellation(request_id)
                 raw_response = await self.model.chat(self._messages)
 
         # Extract the actual content string from the response
@@ -1820,6 +1833,9 @@ class Agent:
                         server_id=server_id,
                         skip_rephrase=True,
                     )
+
+                    # Check for cancellation before tool execution
+                    await self._check_cancellation(request_id)
 
                     # Invoke the tool
                     result = await self.invoke_tool(
@@ -2342,6 +2358,27 @@ class Agent:
                 tool_calls = message["tool_calls"]
 
         return tool_calls
+
+    async def _check_cancellation(self, request_id: Optional[str]) -> None:
+        """
+        Check if the request has been cancelled and raise exception if so.
+
+        This is called at strategic points during message processing to allow
+        cooperative cancellation of long-running requests.
+
+        Args:
+            request_id: The request ID to check
+
+        Raises:
+            RequestCancelledException: If the request is cancelled
+        """
+        if not request_id or not self.overlord:
+            return
+
+        tracker = getattr(self.overlord, "request_tracker", None)
+        if tracker and tracker.is_cancelled(request_id):
+            await tracker.clear_cancelled(request_id)
+            raise RequestCancelledException(request_id)
 
     def _clean_response_content(self, content: str) -> str:
         """
