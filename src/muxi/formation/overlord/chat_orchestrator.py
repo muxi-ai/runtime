@@ -1002,7 +1002,7 @@ class ChatOrchestrator:
                 conv_protocol = PromptLoader.get('conversation_awareness_protocol.md')
                 enhanced_parts.append(conv_protocol)
                 enhanced_parts.append("")
-            except KeyError:
+            except Exception:
                 pass  # Continue without protocol if not found
             enhanced_parts.append("=== CONVERSATION CONTEXT (Most Recent First) ===")
             enhanced_parts.append(context_text)
