@@ -125,7 +125,7 @@ def initialize_onellm_cache(cache_config: Optional[Dict[str, Any]] = None) -> bo
         cache_config: Dictionary with cache configuration:
             - enabled: bool (default: True)
             - max_entries: int (default: 10000)
-            - p: float (default: 0.95)
+            - p: float (default: 0.98)
             - hash_only: bool (default: False)
             - stream_chunk_strategy: str (default: "sentences")
             - stream_chunk_length: int (default: 1)
@@ -156,7 +156,7 @@ def initialize_onellm_cache(cache_config: Optional[Dict[str, Any]] = None) -> bo
     # Extract cache parameters with defaults optimized for MUXI
     cache_params = {
         "max_entries": cache_config.get("max_entries", 10000),
-        "p": cache_config.get("p", 0.95),
+        "p": cache_config.get("p", 0.98),
         "hash_only": cache_config.get("hash_only", False),
         "stream_chunk_strategy": cache_config.get("stream_chunk_strategy", "sentences"),
         "stream_chunk_length": cache_config.get("stream_chunk_length", 1),
