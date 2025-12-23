@@ -996,6 +996,14 @@ class ChatOrchestrator:
 
         # 5. Conversation context (lowest priority - truncated first if needed)
         if context_text:
+            # Load conversation awareness protocol from prompts
+            from ..prompts.loader import PromptLoader
+            try:
+                conv_protocol = PromptLoader.get('conversation_awareness_protocol.md')
+                enhanced_parts.append(conv_protocol)
+                enhanced_parts.append("")
+            except KeyError:
+                pass  # Continue without protocol if not found
             enhanced_parts.append("=== CONVERSATION CONTEXT (Most Recent First) ===")
             enhanced_parts.append(context_text)
 
