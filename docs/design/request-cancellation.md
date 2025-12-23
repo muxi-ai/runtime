@@ -1,7 +1,8 @@
 # Request Cancellation Design
 
-**Status:** Draft (Revised)
+**Status:** Implemented
 **Created:** 2025-12-23
+**Updated:** 2025-12-23
 
 ## Problem
 
@@ -54,7 +55,7 @@ class RequestTracker:
         """Remove from cancelled set (called when cancellation is processed)."""
         async with self._lock:
             self._cancelled.discard(request_id)
-    
+
     async def remove_request(self, request_id: str) -> bool:
         """Remove a request from tracking."""
         async with self._lock:
@@ -83,11 +84,11 @@ class RequestCancelledException(Exception):
 def cancellable(request_tracker):
     """
     Factory that creates a cancellable decorator using the given tracker.
-    
+
     Usage:
         # At module level or in class
         check_cancelled = cancellable(overlord.request_tracker)
-        
+
         @check_cancelled
         async def some_function(...):
             ...
@@ -112,10 +113,10 @@ def cancellable(request_tracker):
 @router.delete("/requests/{request_id}")
 async def cancel_request(...):
     # ... existing validation ...
-    
+
     # Mark for cooperative cancellation (NEW)
     await overlord.request_tracker.mark_cancelled(request_id)
-    
+
     # Existing: also try asyncio cancellation
     result = await overlord.cancel_request(request_id)
     # ...
@@ -135,7 +136,7 @@ except RequestCancelledException as e:
         event_type=observability.ConversationEvents.REQUEST_FAILED,
         level=observability.EventLevel.INFO,
         data={
-            "request_id": e.request_id, 
+            "request_id": e.request_id,
             "reason": "cancelled_by_user",
             "cancelled": True
         },
@@ -148,10 +149,10 @@ except RequestCancelledException as e:
 
 ```python
 # In overlord.py (during initialization or as class method)
-self._check_cancelled = cancellable(self.request_tracker)
+self._cancellable = cancellable(self.request_tracker)
 
 # Then use on key methods:
-@self._check_cancelled
+@self._cancellable
 async def _call_agent(self, ...): ...
 ```
 
@@ -172,12 +173,12 @@ DELETE /requests/{id}
   ├─► request_tracker.mark_cancelled(id)
   │
   └─► overlord.cancel_request(id) ─► task_ref.cancel()
-  
+
 Processing continues until:
   │
   └─► Checkpoint reached (decorated function or inline check)
         │
-        ├─► is_cancelled(id)? 
+        ├─► is_cancelled(id)?
         │     │
         │     ├─► Yes: clear_cancelled(id), raise RequestCancelledException
         │     │         │
@@ -221,10 +222,33 @@ Only add checks at meaningful boundaries:
 
 ## Implementation Order
 
-1. Add `_cancelled` set and methods to `RequestTracker`
-2. Create `cancellation.py` with exception and decorator
-3. Modify DELETE endpoint to call `mark_cancelled()`
-4. Add exception handler in `_process_sync_chat`
-5. Add inline checks to 2-3 key locations (start simple)
-6. Add tests
-7. Expand checkpoints as needed
+1. Add `_cancelled` set and methods to `RequestTracker` - DONE
+2. Create `cancellation.py` with exception and decorator - DONE
+3. Modify DELETE endpoint to call `mark_cancelled()` - DONE
+4. Add exception handler in `_process_sync_chat` - DONE
+5. Add inline checks to 2-3 key locations (start simple) - DONE
+6. Add tests - TODO
+7. Expand checkpoints as needed - TODO
+
+## Implementation Notes
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `formation/background/request_tracker.py` | Added `_cancelled` set, `mark_cancelled()`, `is_cancelled()`, `clear_cancelled()` |
+| `formation/background/cancellation.py` | NEW - `RequestCancelledException`, `cancellable()` decorator, `check_cancellation()` |
+| `formation/server/routes/client/requests.py` | Added `mark_cancelled()` call before `cancel_request()` |
+| `formation/overlord/chat_orchestrator.py` | Added try/except for `RequestCancelledException` in `_process_sync_chat` |
+| `formation/overlord/overlord.py` | Added inline cancellation checks before agent processing and workflow execution |
+
+### Current Checkpoints
+
+1. **Before agent processing** - `overlord.py` line ~6930
+2. **Before workflow execution** - `overlord.py` line ~8152
+
+### Future Checkpoints (if needed)
+
+- Before individual LLM calls in `LLM.chat()`
+- Before tool execution in agent
+- Inside workflow executor for each task

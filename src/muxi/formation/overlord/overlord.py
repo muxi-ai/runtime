@@ -92,6 +92,7 @@ import os
 
 from ..agents import Agent
 from ..background.request_tracker import RequestStatus
+from ..background.cancellation import RequestCancelledException
 from .clarification import UnifiedClarificationSystem
 
 # ClarificationHandler removed - using UnifiedClarificationSystem
@@ -6926,6 +6927,11 @@ Agent response: {raw_response}"""
                 "progress", "Processing request...", stage="agent_processing", agent_name=agent_name
             )
 
+            # Check for cancellation before agent processing
+            if request_id and self.request_tracker.is_cancelled(request_id):
+                await self.request_tracker.clear_cancelled(request_id)
+                raise RequestCancelledException(request_id)
+
             # Process the message using the agent
             result = await agent.process_message(
                 message,
@@ -8142,6 +8148,11 @@ Agent response: {raw_response}"""
         # Validate inputs
         self._validate_workflow_inputs(message, user_id, session_id, request_id)
         self._validate_workflow_object(workflow)
+
+        # Check for cancellation before workflow execution
+        if request_id and self.request_tracker.is_cancelled(request_id):
+            await self.request_tracker.clear_cancelled(request_id)
+            raise RequestCancelledException(request_id)
 
         if stream:
             # Return async generator for streaming

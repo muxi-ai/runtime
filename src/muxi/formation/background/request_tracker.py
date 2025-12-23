@@ -9,7 +9,7 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 
 class RequestStatus(Enum):
@@ -72,6 +72,7 @@ class RequestTracker:
 
     def __init__(self):
         self._requests: Dict[str, RequestState] = {}
+        self._cancelled: Set[str] = set()  # For cooperative cancellation
         self._lock = asyncio.Lock()
 
     async def track_request(self, request_id: str, initial_state: RequestState) -> None:
@@ -135,6 +136,47 @@ class RequestTracker:
         async with self._lock:
             return self._requests.get(request_id)
 
+    async def mark_cancelled(self, request_id: str) -> None:
+        """
+        Mark request as cancelled for cooperative cancellation.
+        
+        This adds the request_id to a set that processing checkpoints
+        will check. When a checkpoint detects cancellation, it will
+        raise RequestCancelledException.
+
+        Args:
+            request_id: Unique identifier for the request to cancel
+        """
+        async with self._lock:
+            self._cancelled.add(request_id)
+
+    def is_cancelled(self, request_id: str) -> bool:
+        """
+        Check if request is marked as cancelled.
+        
+        This is intentionally synchronous (no lock) for use in
+        the cancellable decorator without blocking.
+
+        Args:
+            request_id: Unique identifier for the request
+
+        Returns:
+            True if request is marked as cancelled
+        """
+        return request_id in self._cancelled
+
+    async def clear_cancelled(self, request_id: str) -> None:
+        """
+        Remove request from cancelled set.
+        
+        Called when cancellation has been processed (exception raised).
+
+        Args:
+            request_id: Unique identifier for the request
+        """
+        async with self._lock:
+            self._cancelled.discard(request_id)
+
     async def remove_request(self, request_id: str) -> bool:
         """
         Remove a request from tracking.
@@ -146,6 +188,7 @@ class RequestTracker:
             True if request was found and removed, False otherwise
         """
         async with self._lock:
+            self._cancelled.discard(request_id)  # Cleanup cancelled set too
             if request_id in self._requests:
                 del self._requests[request_id]
                 return True

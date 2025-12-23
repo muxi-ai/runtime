@@ -271,7 +271,10 @@ async def cancel_request(
         )
         return JSONResponse(content=response.model_dump(), status_code=403)
 
-    # Cancel the request
+    # Mark for cooperative cancellation (checkpoints will check this)
+    await overlord.request_tracker.mark_cancelled(request_id)
+
+    # Also try asyncio task cancellation
     result = await overlord.cancel_request(request_id)
 
     if result["success"]:

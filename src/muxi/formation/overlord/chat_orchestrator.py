@@ -10,6 +10,7 @@ import time
 import traceback
 from typing import Optional, Any, Union, Dict, AsyncGenerator, List
 from ..background.request_tracker import RequestStatus, RequestState
+from ..background.cancellation import RequestCancelledException
 from ...utils.id_generator import generate_nanoid
 from ...services import observability
 from ...datatypes.response import MuxiResponse
@@ -623,16 +624,35 @@ class ChatOrchestrator:
             The response string or MuxiResponse with artifacts
         """
         # Delegate to overlord's sync processing method
-        result = await self.overlord._process_sync_chat(
-            message=message,
-            agent_name=agent_name,
-            user_id=user_id,
-            session_id=session_id,
-            request_id=request_id,
-            use_async=use_async,
-            webhook_url=webhook_url,
-            bypass_workflow_approval=bypass_workflow_approval,
-        )
+        try:
+            result = await self.overlord._process_sync_chat(
+                message=message,
+                agent_name=agent_name,
+                user_id=user_id,
+                session_id=session_id,
+                request_id=request_id,
+                use_async=use_async,
+                webhook_url=webhook_url,
+                bypass_workflow_approval=bypass_workflow_approval,
+            )
+        except RequestCancelledException as e:
+            # Request was cancelled by user - log and return empty response
+            observability.observe(
+                event_type=observability.ConversationEvents.REQUEST_FAILED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "request_id": e.request_id,
+                    "reason": "cancelled_by_user",
+                    "cancelled": True,
+                },
+                description=f"Request {e.request_id} cancelled by user",
+            )
+            # Return empty response - the DELETE endpoint already responded
+            return MuxiResponse(
+                role="assistant",
+                content="",
+                metadata={"cancelled": True, "request_id": e.request_id},
+            )
 
         # Note: overlord._process_sync_chat already emits streaming events
         # including "completed" with actual content - don't duplicate here
