@@ -362,16 +362,16 @@ class RequestAnalyzer:
                 sop_context = f"\nAvailable SOPs: {', '.join(sop_list)}"
 
         from ..prompts.loader import PromptLoader
-        # Get the system instructions (without user message embedded)
+        # Get the system instructions with user message for context
         system_prompt = PromptLoader.get(
             'workflow_request_analysis.md',
-            user_message="",  # User message goes separately for proper caching
+            user_message=user_message,
             context_info=context_info,
             sop_context=sop_context
         )
 
-        # Return system prompt and user message separately
-        return system_prompt, user_message
+        # Return system prompt and user message separately (for cache differentiation)
+        return system_prompt, f"Analyze this request: {user_message}"
 
     def _parse_llm_analysis(self, response: str) -> RequestAnalysis:
         """

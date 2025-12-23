@@ -2231,11 +2231,11 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                 system_prompt = PromptLoader.get(
                     "overlord_greeting_response.md",
                     default_persona=self._default_persona,
-                    user_message="",  # User message goes in separate message
+                    user_message=actual_user_message,
                 )
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": actual_user_message},  # Use extracted message
+                    {"role": "user", "content": f"Respond to: {actual_user_message}"},
                 ]
                 # Force non-streaming for persona application
                 response = await llm.chat(messages, max_tokens=300, temperature=0.7, stream=False)
@@ -6247,8 +6247,35 @@ Agent response: {raw_response}"""
                         # SERVICE_USE now always returns None from detection
                         # so it won't reach here
 
-                    # Check if we need to enhance message with credential info for clarification
+                    # Build enhanced message with buffer memory context for clarification
                     enhanced_message = message
+                    if self.buffer_memory_manager and session_id:
+                        try:
+                            buffer_entries = await self.buffer_memory_manager.search_buffer_memory(
+                                query="",
+                                k=10,
+                                filter_metadata={"user_id": user_id, "session_id": session_id},
+                            )
+                            if buffer_entries:
+                                context_lines = []
+                                for entry in reversed(buffer_entries):
+                                    role = entry.get("metadata", {}).get("role", "user")
+                                    content = entry.get("text", "")
+                                    if content:
+                                        if role == "user":
+                                            context_lines.append(f"User: {content}")
+                                        elif role == "assistant":
+                                            context_lines.append(f"Assistant: {content}")
+                                if context_lines:
+                                    enhanced_message = (
+                                        f"=== CONVERSATION CONTEXT ===\n"
+                                        f"{chr(10).join(context_lines)}\n\n"
+                                        f"=== CURRENT REQUEST ===\n"
+                                        f"User: {message}"
+                                    )
+                        except Exception:
+                            pass  # Fall back to raw message if buffer search fails
+
                     clarification_context = {"user_id": user_id}
 
                     # This is a new request - check if clarification is needed
