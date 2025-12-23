@@ -237,6 +237,11 @@ async def cancel_request(
     Returns:
         Success response
     """
+    # DEBUG: Log cancellation request
+    print(f"\n{'='*60}")
+    print(f"[DEBUG] CANCEL REQUEST RECEIVED: {request_id}")
+    print(f"{'='*60}\n")
+
     formation = request.app.state.formation
     overlord = getattr(formation, "_overlord", None)
     api_request_id = getattr(request.state, "request_id", None)
@@ -272,10 +277,14 @@ async def cancel_request(
         return JSONResponse(content=response.model_dump(), status_code=403)
 
     # Mark for cooperative cancellation (checkpoints will check this)
+    print(f"[DEBUG] Marking request {request_id} as cancelled...")
     await overlord.request_tracker.mark_cancelled(request_id)
+    print(f"[DEBUG] Request {request_id} marked as cancelled")
 
     # Also try asyncio task cancellation
+    print(f"[DEBUG] Calling overlord.cancel_request({request_id})...")
     result = await overlord.cancel_request(request_id)
+    print(f"[DEBUG] cancel_request result: {result}")
 
     if result["success"]:
         response = create_success_response(

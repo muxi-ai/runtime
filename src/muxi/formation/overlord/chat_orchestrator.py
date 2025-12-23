@@ -280,6 +280,17 @@ class ChatOrchestrator:
             internal_user_id=internal_user_id,
             muxi_user_id=muxi_user_id,
         ) as context:
+            # Track request in RequestTracker for cancellation support
+            initial_state = RequestState(
+                id=request_id,
+                status=RequestStatus.PROCESSING,
+                start_time=timestamp,
+                original_message=message,
+                user_id=user_id,
+                session_id=session_id,
+            )
+            await self.overlord.request_tracker.track_request(request_id, initial_state)
+
             # Note: REQUEST_RECEIVED is already emitted by observability_manager.track_request
             # So we don't need to emit it again here
 
