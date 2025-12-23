@@ -73,11 +73,6 @@ async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingRe
     header_user_id = get_header_case_insensitive(request.headers, "X-Muxi-User-Id")
     effective_user_id = header_user_id or chat_request.user_id or "0"
 
-    # Generate session_id if not provided (ensures conversation continuity)
-    if not chat_request.session_id:
-        from .....utils.identifiers import generate_nano_id
-        chat_request.session_id = f"sess_{generate_nano_id()}"
-
     # Log chat request
     observability.observe(
         event_type=observability.ConversationEvents.REQUEST_RECEIVED,
@@ -127,10 +122,15 @@ async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingRe
             from ...responses import create_success_response
             from .....datatypes.api import APIObjectType, APIEventType
 
+            # Extract session_id from response metadata if available (overlord may have generated one)
+            response_session_id = chat_request.session_id
+            if hasattr(response, 'metadata') and response.metadata:
+                response_session_id = response.metadata.get('session_id', chat_request.session_id)
+
             data = {
                 "message": response,
                 "user_id": effective_user_id,
-                "session_id": chat_request.session_id,
+                "session_id": response_session_id,
                 "request_id": chat_request.request_id,
             }
 

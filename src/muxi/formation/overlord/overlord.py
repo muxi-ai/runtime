@@ -4975,6 +4975,11 @@ Agent response: {raw_response}"""
             )
             stream = False  # Disable streaming when async is active
 
+        # Generate session_id if not provided (ensures conversation continuity)
+        if not session_id:
+            from ...utils.identifiers import generate_nano_id
+            session_id = f"sess_{generate_nano_id()}"
+
         return await self.chat_orchestrator.chat(
             message=message,
             agent_name=agent_name,

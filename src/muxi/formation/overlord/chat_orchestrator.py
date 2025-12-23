@@ -675,10 +675,18 @@ class ChatOrchestrator:
                 name=f"store_assistant_response_{request_id}"
             )
 
-        # ALWAYS return MuxiResponse objects
+        # ALWAYS return MuxiResponse objects with session_id in metadata
         from ...datatypes.response import MuxiResponse
 
+        # Build metadata with session_id for API layer
+        response_metadata = {"session_id": session_id} if session_id else {}
+
         if isinstance(result, MuxiResponse):
+            # Merge session_id into existing metadata
+            if result.metadata:
+                result.metadata["session_id"] = session_id
+            else:
+                result.metadata = response_metadata
             return result
 
         # If we didn't get a MuxiResponse, create one
@@ -687,18 +695,21 @@ class ChatOrchestrator:
             return MuxiResponse(
                 role="assistant",
                 content=result.content if isinstance(result.content, str) else str(result.content),
-                artifacts=result.artifacts if hasattr(result, 'artifacts') and result.artifacts else None
+                artifacts=result.artifacts if hasattr(result, 'artifacts') and result.artifacts else None,
+                metadata=response_metadata
             )
         elif isinstance(result, str):
             return MuxiResponse(
                 role="assistant",
-                content=result
+                content=result,
+                metadata=response_metadata
             )
         else:
             # Fallback for unexpected types
             return MuxiResponse(
                 role="assistant",
-                content=str(result) if result else ""
+                content=str(result) if result else "",
+                metadata=response_metadata
             )
 
     async def _store_user_message_async(
