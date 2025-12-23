@@ -2223,6 +2223,20 @@ If this requires complex multi-step work, respond with: COMPLEX"""
         match = re.search(r'User:\s*([^\n]+)', user_message)
         actual_user_message = match.group(1).strip() if match else user_message
 
+        # Detect if this is a repeated question from conversation context
+        is_repeated_question = False
+        if "=== CONVERSATION CONTEXT" in user_message and actual_user_message:
+            # Count how many times this question appears in context
+            context_section = user_message.split("=== CONVERSATION CONTEXT")[1] if "=== CONVERSATION CONTEXT" in user_message else ""
+            # Normalize for comparison (lowercase, strip punctuation)
+            normalized_question = re.sub(r'[^\w\s]', '', actual_user_message.lower().strip())
+            if normalized_question and len(normalized_question) > 10:  # Only check non-trivial questions
+                # Count occurrences in context
+                context_lines = context_section.split('\n')
+                question_count = sum(1 for line in context_lines 
+                                   if 'User:' in line and normalized_question in re.sub(r'[^\w\s]', '', line.lower()))
+                is_repeated_question = question_count > 0
+
         try:
             if raw_response is None:
                 # NON-ACTIONABLE PATH: Direct conversational response
@@ -2271,10 +2285,20 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                         )
                     # Note: JSON format will be handled by post-processing wrapper
 
+                # Add repeated question instruction if detected
+                repeated_instruction = ""
+                if is_repeated_question:
+                    repeated_instruction = (
+                        "\n\nIMPORTANT: The user has asked this same question before in this conversation. "
+                        "Acknowledge this briefly with phrases like 'As I mentioned', 'To reiterate', or "
+                        "'Just to confirm what I said earlier'. Keep the acknowledgment brief, then provide "
+                        "a concise version of the answer."
+                    )
+
                 system_prompt = f"""{self._default_persona}
 
 Reformat the agent's response to match your persona while preserving all technical details and information.
-Make it conversational and friendly while keeping accuracy.{format_instruction}"""
+Make it conversational and friendly while keeping accuracy.{format_instruction}{repeated_instruction}"""
 
                 user_content = f"""User request: {actual_user_message}
 Agent response: {raw_response}"""
