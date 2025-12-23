@@ -33,6 +33,18 @@ IMPORTANT RULES:
 - If we lack the tools/capabilities, don't clarify (fail fast)
 - Detect if user wants brainstorming/planning vs direct action
 
+CONVERSATION CONTEXT INFERENCE RULES:
+- **CRITICAL**: Use the conversation transcript above to infer intent for follow-up questions
+- If the user's message references or continues a previous topic, infer their intent from context
+- Examples of follow-up questions that should NOT need clarification:
+  * Previous: "What's the capital of France?" → Follow-up: "What about Germany?" → Infer: asking about Germany's capital
+  * Previous: "How much is a Tesla Model 3?" → Follow-up: "And the Model Y?" → Infer: asking about Model Y's price
+  * Previous: "List my repositories" → Follow-up: "Delete the first one" → Infer: delete the first repository listed
+  * Previous: "Show me the weather in Paris" → Follow-up: "And tomorrow?" → Infer: weather in Paris tomorrow
+- Pattern: If user says "what about X?", "and X?", "how about X?", "the same for X", look at previous question to understand the pattern
+- If context makes the intent clear, set needs_clarification=false even if the message alone would be ambiguous
+- Only ask for clarification if the intent remains truly unclear even WITH the conversation context
+
 MULTIMODAL CONTENT RULES:
 - If user provides documents/images/files WITH explicit action verbs, that's clear - don't clarify
 - Explicit actions include: summarize, analyze, list, extract, describe, compare, transcribe, translate, explain
