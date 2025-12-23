@@ -6116,6 +6116,37 @@ Agent response: {raw_response}"""
         # )
 
         # ===================================================================
+        # STORE USER MESSAGE IN BUFFER MEMORY
+        # ===================================================================
+        # Store the user's message BEFORE any processing so it's available
+        # for conversation context in clarification and other checks
+        if self.buffer_memory_manager and session_id:
+            try:
+                # Extract clean message if it has context format
+                clean_user_message = message
+                if "=== CURRENT REQUEST ===" in message:
+                    lines = message.split("\n")
+                    for i, line in enumerate(lines):
+                        if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                            next_line = lines[i + 1].strip()
+                            if next_line.startswith("User:"):
+                                clean_user_message = next_line[5:].strip()
+                                break
+
+                await self.buffer_memory_manager.add_to_buffer_memory(
+                    message=clean_user_message,
+                    metadata={
+                        "user_id": user_id,
+                        "session_id": session_id,
+                        "role": "user",
+                        "timestamp": time.time(),
+                        "request_id": request_id,
+                    },
+                )
+            except Exception:
+                pass  # Don't fail on memory storage error
+
+        # ===================================================================
         # CLARIFICATION CHECK - MUST HAPPEN BEFORE ANY AGENT SELECTION
         # ===================================================================
 
