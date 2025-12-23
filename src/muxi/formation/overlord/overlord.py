@@ -2299,7 +2299,10 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                 system_prompt = f"""{self._default_persona}
 
 Reformat the agent's response to match your persona while preserving all technical details and information.
-Make it conversational and friendly while keeping accuracy.{format_instruction}{repeated_instruction}"""
+Make it conversational and friendly while keeping accuracy.
+
+IMPORTANT: Match response length to the question complexity. Simple questions get brief answers. 
+Don't pad responses with unnecessary headers, bullet points, or filler. Be concise.{format_instruction}{repeated_instruction}"""
 
                 user_content = f"""User request: {actual_user_message}
 Agent response: {raw_response}"""
