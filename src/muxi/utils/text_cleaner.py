@@ -97,7 +97,13 @@ def clean_response_text(text: str) -> str:
     # Remove invisible characters
     text = remove_invisible_characters(text)
 
-    # Additional cleaning can be added here if needed
-    # For now, just remove invisible characters
+    # Remove decorative separator lines (box drawing characters)
+    # These sometimes appear when LLM adds visual separators
+    import re
+    text = re.sub(r'^[─━═┄┅┈┉\-_]{3,}\s*$', '', text, flags=re.MULTILINE)
+    
+    # Strip leading/trailing whitespace and normalize multiple newlines
+    text = text.strip()
+    text = re.sub(r'\n{3,}', '\n\n', text)
 
     return text

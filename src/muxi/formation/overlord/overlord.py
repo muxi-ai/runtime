@@ -2224,18 +2224,37 @@ If this requires complex multi-step work, respond with: COMPLEX"""
         actual_user_message = match.group(1).strip() if match else user_message
 
         # Detect if this is a repeated question from conversation context
+        # Only trigger if there's actual prior context AND the question was previously asked AND answered
         is_repeated_question = False
-        if "=== CONVERSATION CONTEXT (Most Recent First) ===" in user_message and actual_user_message:
-            # Extract context section after the marker
-            context_section = user_message.split("=== CONVERSATION CONTEXT (Most Recent First) ===")[1]
-            # Normalize current question for comparison (lowercase, strip punctuation)
-            normalized_question = re.sub(r'[^\w\s]', '', actual_user_message.lower().strip())
-            if normalized_question and len(normalized_question) > 10:  # Only check non-trivial questions
-                # Count occurrences of this question in context
-                context_lines = context_section.split('\n')
-                question_count = sum(1 for line in context_lines 
-                                   if 'User:' in line and normalized_question in re.sub(r'[^\w\s]', '', line.lower()))
-                is_repeated_question = question_count > 0
+        if "=== CONVERSATION CONTEXT ===" in user_message and actual_user_message:
+            # Extract context section between markers
+            try:
+                context_start = user_message.index("=== CONVERSATION CONTEXT ===")
+                context_end = user_message.index("=== CURRENT REQUEST ===") if "=== CURRENT REQUEST ===" in user_message else len(user_message)
+                context_section = user_message[context_start:context_end]
+                
+                # Normalize current question for comparison (lowercase, strip punctuation)
+                normalized_question = re.sub(r'[^\w\s]', '', actual_user_message.lower().strip())
+                
+                # Only check non-trivial questions with actual context content
+                if normalized_question and len(normalized_question) > 10 and "User:" in context_section:
+                    # Count occurrences of this question in context (must have both User AND Assistant response)
+                    context_lines = context_section.split('\n')
+                    has_prior_question = False
+                    has_prior_answer = False
+                    
+                    for i, line in enumerate(context_lines):
+                        if 'User:' in line and normalized_question in re.sub(r'[^\w\s]', '', line.lower()):
+                            has_prior_question = True
+                            # Check if there's an Assistant response after this
+                            for j in range(i + 1, min(i + 3, len(context_lines))):
+                                if 'Assistant:' in context_lines[j]:
+                                    has_prior_answer = True
+                                    break
+                    
+                    is_repeated_question = has_prior_question and has_prior_answer
+            except (ValueError, IndexError):
+                pass
 
         try:
             if raw_response is None:
