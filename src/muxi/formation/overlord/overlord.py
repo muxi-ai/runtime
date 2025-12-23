@@ -2225,13 +2225,13 @@ If this requires complex multi-step work, respond with: COMPLEX"""
 
         # Detect if this is a repeated question from conversation context
         is_repeated_question = False
-        if "=== CONVERSATION CONTEXT" in user_message and actual_user_message:
-            # Count how many times this question appears in context
-            context_section = user_message.split("=== CONVERSATION CONTEXT")[1] if "=== CONVERSATION CONTEXT" in user_message else ""
-            # Normalize for comparison (lowercase, strip punctuation)
+        if "=== CONVERSATION CONTEXT (Most Recent First) ===" in user_message and actual_user_message:
+            # Extract context section after the marker
+            context_section = user_message.split("=== CONVERSATION CONTEXT (Most Recent First) ===")[1]
+            # Normalize current question for comparison (lowercase, strip punctuation)
             normalized_question = re.sub(r'[^\w\s]', '', actual_user_message.lower().strip())
             if normalized_question and len(normalized_question) > 10:  # Only check non-trivial questions
-                # Count occurrences in context
+                # Count occurrences of this question in context
                 context_lines = context_section.split('\n')
                 question_count = sum(1 for line in context_lines 
                                    if 'User:' in line and normalized_question in re.sub(r'[^\w\s]', '', line.lower()))
@@ -2292,7 +2292,8 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                         "\n\nIMPORTANT: The user has asked this same question before in this conversation. "
                         "Acknowledge this briefly with phrases like 'As I mentioned', 'To reiterate', or "
                         "'Just to confirm what I said earlier'. Keep the acknowledgment brief, then provide "
-                        "a concise version of the answer."
+                        "a concise version of the answer. DO NOT use the exact same phrasing as before - "
+                        "vary your response while keeping the same factual content."
                     )
 
                 system_prompt = f"""{self._default_persona}
