@@ -2251,8 +2251,8 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Respond to: {actual_user_message}"},
                 ]
-                # Force non-streaming for persona application
-                response = await llm.chat(messages, max_tokens=300, temperature=0.7, stream=False)
+                # Force non-streaming for persona application, disable caching for varied responses
+                response = await llm.chat(messages, max_tokens=300, temperature=0.7, stream=False, caching=False)
 
                 if hasattr(response, "content"):
                     return clean_response_text(response.content)
@@ -2309,13 +2309,13 @@ Agent response: {raw_response}"""
                     {"role": "user", "content": user_content},
                 ]
                 # Force non-streaming for persona application
-                # Disable caching for repeated questions to ensure varied responses
+                # Disable caching to ensure varied responses (persona is final stage)
                 response = await llm.chat(
                     messages, 
                     max_tokens=2000, 
                     temperature=0.7, 
                     stream=False,
-                    caching=not is_repeated_question  # Skip cache for repeated questions
+                    caching=False
                 )
 
                 if hasattr(response, "content"):
