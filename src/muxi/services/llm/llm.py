@@ -1480,17 +1480,20 @@ Provide a helpful, conversational response that directly addresses what the user
         self, messages: List[Dict[str, str]], files: Optional[List[Union[str, Path]]], **kwargs
     ) -> str:
         """Basic file processing implementation"""
+        # Extract caching flag before it gets filtered out
+        use_caching = kwargs.get("caching", True)
 
         async def _chat_request():
             # Prepare parameters using helper
             params = await self._prepare_chat_request(messages, files, **kwargs)
 
             # Check cache first (but exclude files from cache key for security)
+            # Also skip cache if caching=False was explicitly passed
             cache_params = {k: v for k, v in params.items() if k != "files"}
             cache_key = _get_cache_key("chat", **cache_params)
 
-            # Only use cache if no files are attached
-            if not files:
+            # Only use cache if no files are attached AND caching is enabled
+            if not files and use_caching:
                 cached_response = _get_cached_response(cache_key)
                 if cached_response is not None:
                     return cached_response
@@ -1510,8 +1513,8 @@ Provide a helpful, conversational response that directly addresses what the user
             # Extract content from response using helper
             content = self._extract_content_from_response(response)
 
-            # Cache the response only if no files were involved
-            if not files:
+            # Cache the response only if no files were involved AND caching is enabled
+            if not files and use_caching:
                 _cache_response(cache_key, content)
 
             return content
