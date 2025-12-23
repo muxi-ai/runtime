@@ -6172,6 +6172,7 @@ Agent response: {raw_response}"""
             )
 
         # Check if clarification is needed using unified system with request_id
+        print(f"DEBUG CLARIFICATION CHECK: skip={skip_clarification}, agent_name={agent_name}, clarification={self.clarification is not None}, request_id={request_id}")
         if (
             not skip_clarification
             # and not is_clarification_response
@@ -6179,6 +6180,7 @@ Agent response: {raw_response}"""
             and self.clarification
             and request_id
         ):
+            print("DEBUG: Entered clarification check block")
             # Check if we have pending clarification to handle response
             clarification_info = (
                 await self._get_pending_clarification(session_id) if session_id else None
@@ -6280,6 +6282,7 @@ Agent response: {raw_response}"""
 
                     # Build enhanced message with buffer memory context for clarification
                     enhanced_message = message
+                    print(f"DEBUG CONTEXT: buffer_memory_manager={self.buffer_memory_manager is not None}, session_id={session_id}")
                     if self.buffer_memory_manager and session_id:
                         try:
                             buffer_entries = await self.buffer_memory_manager.search_buffer_memory(
@@ -6287,11 +6290,13 @@ Agent response: {raw_response}"""
                                 k=10,
                                 filter_metadata={"user_id": user_id, "session_id": session_id},
                             )
+                            print(f"DEBUG: Buffer entries found: {len(buffer_entries) if buffer_entries else 0}")
                             if buffer_entries:
                                 context_lines = []
                                 for entry in reversed(buffer_entries):
                                     role = entry.get("metadata", {}).get("role", "user")
                                     content = entry.get("text", "")
+                                    print(f"DEBUG: Entry role={role}, content={content[:50] if content else 'empty'}...")
                                     if content:
                                         if role == "user":
                                             context_lines.append(f"User: {content}")
@@ -6304,7 +6309,9 @@ Agent response: {raw_response}"""
                                         f"=== CURRENT REQUEST ===\n"
                                         f"User: {message}"
                                     )
-                        except Exception:
+                                    print(f"DEBUG: Enhanced message:\n{enhanced_message[:500]}...")
+                        except Exception as e:
+                            print(f"DEBUG: Buffer search error: {e}")
                             pass  # Fall back to raw message if buffer search fails
 
                     clarification_context = {"user_id": user_id}
