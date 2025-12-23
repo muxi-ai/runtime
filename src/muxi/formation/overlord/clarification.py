@@ -507,9 +507,19 @@ class UnifiedClarificationSystem:
             # Use the full enhanced message - it has current request first, then context
             # This ensures the LLM sees both the current question AND history
             conversation = message
+            # Extract just the current user message for cache differentiation
+            current_message = message
+            lines = message.split("\n")
+            for i, line in enumerate(lines):
+                if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    if next_line.startswith("User:"):
+                        current_message = next_line[5:].strip()
+                        break
         else:
             # Fallback to raw message
             conversation = f"User: {message}"
+            current_message = message
 
         # Check for available credentials for each MCP service BEFORE calling LLM
         # This allows the LLM to know when multiple credentials exist
@@ -547,7 +557,7 @@ class UnifiedClarificationSystem:
 
         system_prompt = PromptLoader.get(
             "clarification_analysis.md",
-            conversation="",  # Conversation goes in user message for proper cache comparison
+            conversation=conversation,  # Full conversation history for context
             context=json.dumps(context) if context else "{}",
             capabilities=", ".join(capabilities) if capabilities else "Conversation",
             mcp_services="\n".join(mcp_services_detail) if mcp_services_detail else "None",
@@ -571,7 +581,7 @@ class UnifiedClarificationSystem:
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": conversation},
+            {"role": "user", "content": current_message},  # Just current message for cache
         ]
         response = await self.llm.chat(messages, temperature=0, max_tokens=250)
         content = response.content if hasattr(response, "content") else str(response)
@@ -655,7 +665,7 @@ class UnifiedClarificationSystem:
 
         system_prompt = PromptLoader.get(
             "clarification_need_more.md",
-            original_request="",  # Goes in user message
+            original_request=state["original_request"],
             collected_info=state["collected_info"],
             mode=state["mode"],
             style=self.style,
@@ -663,7 +673,7 @@ class UnifiedClarificationSystem:
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": state["original_request"]},
+            {"role": "user", "content": f"Collected info: {state['collected_info']}"},
         ]
         response = await self.llm.chat(messages, temperature=0, max_tokens=150)
         content = response.content if hasattr(response, "content") else str(response)
@@ -691,12 +701,12 @@ class UnifiedClarificationSystem:
             "clarification_context_switch.md",
             original_request=state["original_request"],
             last_question=last_question,
-            response="",  # Goes in user message
+            response=response,
         )
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": response},
+            {"role": "user", "content": f"User response: {response}"},
         ]
         result = await self.llm.chat(messages, temperature=0, max_tokens=20)
         content = result.content if hasattr(result, "content") else str(result)
