@@ -2241,11 +2241,14 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                 # Only check non-trivial questions with actual context content
                 if normalized_question and len(normalized_question) > 10 and "User:" in context_section:
                     # Check if this exact question appears in context with an answer
+                    # Note: Context is in reverse chronological order (Most Recent First)
+                    # So Assistant responses appear BEFORE User questions in the list
                     context_lines = context_section.split('\n')
                     for i, line in enumerate(context_lines):
                         if 'User:' in line and normalized_question in re.sub(r'[^\w\s]', '', line.lower()):
-                            # Found the question - check if there's an Assistant response after
-                            for j in range(i + 1, min(i + 5, len(context_lines))):
+                            # Found the question - check if there's an Assistant response BEFORE it
+                            # (since context is reverse chronological)
+                            for j in range(max(0, i - 5), i):
                                 if 'Assistant:' in context_lines[j]:
                                     is_repeated_question = True
                                     break
