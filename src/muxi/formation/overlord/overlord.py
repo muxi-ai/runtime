@@ -4977,8 +4977,8 @@ Agent response: {raw_response}"""
 
         # Generate session_id if not provided (ensures conversation continuity)
         if not session_id:
-            from ...utils.identifiers import generate_nano_id
-            session_id = f"sess_{generate_nano_id()}"
+            from ...utils.id_generator import generate_nanoid
+            session_id = f"sess_{generate_nanoid()}"
 
         return await self.chat_orchestrator.chat(
             message=message,
