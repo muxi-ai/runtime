@@ -2309,7 +2309,14 @@ Agent response: {raw_response}"""
                     {"role": "user", "content": user_content},
                 ]
                 # Force non-streaming for persona application
-                response = await llm.chat(messages, max_tokens=2000, temperature=0.7, stream=False)
+                # Disable caching for repeated questions to ensure varied responses
+                response = await llm.chat(
+                    messages, 
+                    max_tokens=2000, 
+                    temperature=0.7, 
+                    stream=False,
+                    caching=not is_repeated_question  # Skip cache for repeated questions
+                )
 
                 if hasattr(response, "content"):
                     return clean_response_text(response.content)
