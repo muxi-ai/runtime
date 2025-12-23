@@ -83,3 +83,30 @@ def check_cancellation(request_tracker: "RequestTracker", request_id: str) -> No
     """
     if request_tracker.is_cancelled(request_id):
         raise RequestCancelledException(request_id)
+
+
+async def check_cancellation_from_context(request_tracker: "RequestTracker") -> None:
+    """
+    Check cancellation using request_id from current context.
+    
+    This is useful when you don't have direct access to request_id
+    but the request context has been set via set_request_context().
+    
+    Usage:
+        async def some_method(self, ...):
+            # ... do some long operation ...
+            await check_cancellation_from_context(overlord.request_tracker)
+            # ... continue if not cancelled ...
+    
+    Args:
+        request_tracker: The RequestTracker instance
+        
+    Raises:
+        RequestCancelledException: If the request is cancelled
+    """
+    from ...services.observability.context import get_current_request_context
+    
+    ctx = get_current_request_context()
+    if ctx and ctx.id and request_tracker.is_cancelled(ctx.id):
+        await request_tracker.clear_cancelled(ctx.id)
+        raise RequestCancelledException(ctx.id)

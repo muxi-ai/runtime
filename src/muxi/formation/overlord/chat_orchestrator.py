@@ -707,7 +707,7 @@ class ChatOrchestrator:
             )
 
         # ALWAYS return MuxiResponse objects with session_id in metadata
-        from ...datatypes.response import MuxiResponse
+        # Note: MuxiResponse is imported at module level
 
         # Build metadata with session_id for API layer
         response_metadata = {"session_id": session_id} if session_id else {}

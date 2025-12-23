@@ -2372,13 +2372,22 @@ class Agent:
         Raises:
             RequestCancelledException: If the request is cancelled
         """
+        # DEBUG
+        print(f"[DEBUG] _check_cancellation called with request_id={request_id}")
+
         if not request_id or not self.overlord:
+            print(f"[DEBUG] Early return: request_id={request_id}, overlord={self.overlord is not None}")
             return
 
         tracker = getattr(self.overlord, "request_tracker", None)
-        if tracker and tracker.is_cancelled(request_id):
-            await tracker.clear_cancelled(request_id)
-            raise RequestCancelledException(request_id)
+        print(f"[DEBUG] tracker={tracker is not None}")
+        if tracker:
+            is_cancelled = tracker.is_cancelled(request_id)
+            print(f"[DEBUG] is_cancelled({request_id})={is_cancelled}")
+            if is_cancelled:
+                print(f"[DEBUG] Request {request_id} IS CANCELLED - raising exception")
+                await tracker.clear_cancelled(request_id)
+                raise RequestCancelledException(request_id)
 
     def _clean_response_content(self, content: str) -> str:
         """
@@ -2921,6 +2930,10 @@ class Agent:
                     credential_resolver=credential_resolver,
                     conversation_context=conversation_context,
                 )
+                # Check cancellation after MCP call returns
+                from ..background.cancellation import check_cancellation_from_context
+                if self.overlord and hasattr(self.overlord, "request_tracker"):
+                    await check_cancellation_from_context(self.overlord.request_tracker)
             else:
                 # Try to find the tool in any available server
                 servers = await self._mcp_service.list_servers()
@@ -2942,6 +2955,11 @@ class Agent:
 
                 if result is None:
                     raise Exception(f"Tool '{tool_name}' not found in any connected server")
+
+                # Check cancellation after MCP call returns
+                from ..background.cancellation import check_cancellation_from_context
+                if self.overlord and hasattr(self.overlord, "request_tracker"):
+                    await check_cancellation_from_context(self.overlord.request_tracker)
 
             observability.observe(
                 event_type=observability.ConversationEvents.MCP_TOOL_CALL_COMPLETED,
@@ -3233,6 +3251,11 @@ class Agent:
                 timeout=60,  # Give more time for complex requests
             )
 
+            # Check cancellation after A2A call returns
+            from ..background.cancellation import check_cancellation_from_context
+            if self.overlord and hasattr(self.overlord, "request_tracker"):
+                await check_cancellation_from_context(self.overlord.request_tracker)
+
             if response:
                 # Initialize variables
                 result_content = None
@@ -3498,6 +3521,11 @@ class Agent:
                 temperature=0.1,  # Low temperature for structured output
                 max_tokens=1000,
             )
+
+            # Check cancellation after LLM call returns
+            from ..background.cancellation import check_cancellation_from_context
+            if self.overlord and hasattr(self.overlord, "request_tracker"):
+                await check_cancellation_from_context(self.overlord.request_tracker)
 
             # Extract content from response
             if hasattr(plan_response, "content"):

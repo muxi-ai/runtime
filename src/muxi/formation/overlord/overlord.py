@@ -2176,6 +2176,20 @@ If this requires complex multi-step work, respond with: COMPLEX"""
         # Default to complex if we can't determine
         return False
 
+    async def _check_cancelled(self, request_id: Optional[str], checkpoint: str = "") -> None:
+        """
+        Check if request is cancelled and raise exception if so.
+        
+        Args:
+            request_id: The request ID to check
+            checkpoint: Optional description of checkpoint for debug logging
+        """
+        if request_id and self.request_tracker.is_cancelled(request_id):
+            if checkpoint:
+                print(f"[DEBUG] Cancelled at checkpoint: {checkpoint}")
+            await self.request_tracker.clear_cancelled(request_id)
+            raise RequestCancelledException(request_id)
+
     def _safe_format_traceback(self) -> str:
         """
         Safely format the current exception traceback.
@@ -2341,6 +2355,10 @@ Agent response: {raw_response}"""
                     stream=False,
                     caching=False
                 )
+
+                # Check cancellation after LLM call returns
+                from ..background.cancellation import check_cancellation_from_context
+                await check_cancellation_from_context(self.request_tracker)
 
                 if hasattr(response, "content"):
                     return clean_response_text(response.content)
@@ -5528,6 +5546,14 @@ Agent response: {raw_response}"""
         # Track processing time
         start_time = time.time()
 
+        # Check for cancellation at start of sync processing
+        print(f"[DEBUG] _process_sync_chat: checking cancellation for {request_id}")
+        if request_id and self.request_tracker.is_cancelled(request_id):
+            print(f"[DEBUG] _process_sync_chat: Request {request_id} IS CANCELLED at start!")
+            await self.request_tracker.clear_cancelled(request_id)
+            raise RequestCancelledException(request_id)
+        print(f"[DEBUG] _process_sync_chat: Request {request_id} NOT cancelled, continuing")
+
         # Check if streaming is enabled for this request
         is_streaming = streaming_manager.is_streaming_enabled(request_id) if request_id else False
 
@@ -6380,6 +6406,12 @@ Agent response: {raw_response}"""
 
                     clarification_context = {"user_id": user_id}
 
+                    # Check for cancellation before clarification analysis
+                    if request_id and self.request_tracker.is_cancelled(request_id):
+                        print(f"[DEBUG] Cancelled before clarification analysis")
+                        await self.request_tracker.clear_cancelled(request_id)
+                        raise RequestCancelledException(request_id)
+
                     # This is a new request - check if clarification is needed
                     clarification_result = await self.clarification.needs_clarification(
                         message=enhanced_message,
@@ -6588,6 +6620,12 @@ Agent response: {raw_response}"""
                 if self._ensure_sop_system() and self.sop_system.enabled:
                     analysis_context["available_sops"] = list(self.sop_system.sops.keys())
 
+                # Check for cancellation before request analysis
+                if request_id and self.request_tracker.is_cancelled(request_id):
+                    print(f"[DEBUG] Cancelled before request analysis")
+                    await self.request_tracker.clear_cancelled(request_id)
+                    raise RequestCancelledException(request_id)
+
                 analysis = await self.request_analyzer.analyze_request(
                     actual_message, context=analysis_context
                 )
@@ -6766,6 +6804,9 @@ Agent response: {raw_response}"""
                                 relevant_sop=None,
                                 bypass_workflow_approval=bypass_workflow_approval,
                             )
+            except RequestCancelledException:
+                # Re-raise cancellation exceptions - don't catch them here
+                raise
             except Exception as e:
                 # Log error but continue with normal flow
                 observability.observe(
@@ -6928,9 +6969,12 @@ Agent response: {raw_response}"""
             )
 
             # Check for cancellation before agent processing
+            print(f"[DEBUG] Overlord: checking cancellation for {request_id}")
             if request_id and self.request_tracker.is_cancelled(request_id):
+                print(f"[DEBUG] Overlord: Request {request_id} IS CANCELLED!")
                 await self.request_tracker.clear_cancelled(request_id)
                 raise RequestCancelledException(request_id)
+            print(f"[DEBUG] Overlord: Request {request_id} NOT cancelled, proceeding")
 
             # Process the message using the agent
             result = await agent.process_message(
