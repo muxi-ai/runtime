@@ -2176,17 +2176,14 @@ If this requires complex multi-step work, respond with: COMPLEX"""
         # Default to complex if we can't determine
         return False
 
-    async def _check_cancelled(self, request_id: Optional[str], checkpoint: str = "") -> None:
+    async def _check_cancelled(self, request_id: Optional[str]) -> None:
         """
         Check if request is cancelled and raise exception if so.
         
         Args:
             request_id: The request ID to check
-            checkpoint: Optional description of checkpoint for debug logging
         """
         if request_id and self.request_tracker.is_cancelled(request_id):
-            if checkpoint:
-                print(f"[DEBUG] Cancelled at checkpoint: {checkpoint}")
             await self.request_tracker.clear_cancelled(request_id)
             raise RequestCancelledException(request_id)
 
@@ -6408,7 +6405,6 @@ Agent response: {raw_response}"""
 
                     # Check for cancellation before clarification analysis
                     if request_id and self.request_tracker.is_cancelled(request_id):
-                        print(f"[DEBUG] Cancelled before clarification analysis")
                         await self.request_tracker.clear_cancelled(request_id)
                         raise RequestCancelledException(request_id)
 
@@ -6622,7 +6618,6 @@ Agent response: {raw_response}"""
 
                 # Check for cancellation before request analysis
                 if request_id and self.request_tracker.is_cancelled(request_id):
-                    print(f"[DEBUG] Cancelled before request analysis")
                     await self.request_tracker.clear_cancelled(request_id)
                     raise RequestCancelledException(request_id)
 

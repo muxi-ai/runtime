@@ -61,7 +61,7 @@ def cancellable(request_tracker: "RequestTracker"):
     return decorator
 
 
-def check_cancellation(request_tracker: "RequestTracker", request_id: str) -> None:
+async def check_cancellation(request_tracker: "RequestTracker", request_id: str) -> None:
     """
     Inline cancellation check for use without decorator.
     
@@ -71,7 +71,7 @@ def check_cancellation(request_tracker: "RequestTracker", request_id: str) -> No
     Usage:
         async def some_method(self, request_id, ...):
             # ... do some work ...
-            check_cancellation(self.request_tracker, request_id)
+            await check_cancellation(self.request_tracker, request_id)
             # ... do more work ...
     
     Args:
@@ -82,6 +82,7 @@ def check_cancellation(request_tracker: "RequestTracker", request_id: str) -> No
         RequestCancelledException: If the request is cancelled
     """
     if request_tracker.is_cancelled(request_id):
+        await request_tracker.clear_cancelled(request_id)
         raise RequestCancelledException(request_id)
 
 

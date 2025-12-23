@@ -2372,22 +2372,13 @@ class Agent:
         Raises:
             RequestCancelledException: If the request is cancelled
         """
-        # DEBUG
-        print(f"[DEBUG] _check_cancellation called with request_id={request_id}")
-
         if not request_id or not self.overlord:
-            print(f"[DEBUG] Early return: request_id={request_id}, overlord={self.overlord is not None}")
             return
 
         tracker = getattr(self.overlord, "request_tracker", None)
-        print(f"[DEBUG] tracker={tracker is not None}")
-        if tracker:
-            is_cancelled = tracker.is_cancelled(request_id)
-            print(f"[DEBUG] is_cancelled({request_id})={is_cancelled}")
-            if is_cancelled:
-                print(f"[DEBUG] Request {request_id} IS CANCELLED - raising exception")
-                await tracker.clear_cancelled(request_id)
-                raise RequestCancelledException(request_id)
+        if tracker and tracker.is_cancelled(request_id):
+            await tracker.clear_cancelled(request_id)
+            raise RequestCancelledException(request_id)
 
     def _clean_response_content(self, content: str) -> str:
         """
