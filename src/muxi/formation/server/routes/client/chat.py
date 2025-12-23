@@ -26,7 +26,7 @@ class ChatRequest(BaseModel):
     user_id: Optional[str] = None  # Deprecated: use X-Muxi-User-Id header instead
     agent_id: Optional[str] = None
     session_id: Optional[str] = None
-    group_id: Optional[str] = None  # Support for group permissions
+    group_id: Optional[str] = None  # Reserved for future use: group-based permission filtering
     request_id: Optional[str] = None
     mode: Optional[str] = "sync"  # sync or async
     files: Optional[List[Dict[str, Any]]] = None
