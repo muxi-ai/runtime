@@ -584,6 +584,12 @@ class UnifiedClarificationSystem:
             {"role": "user", "content": current_message},  # Just current message for cache
         ]
         response = await self.llm.chat(messages, temperature=0, max_tokens=250)
+        
+        # Check cancellation after LLM call
+        from ..background.cancellation import check_cancellation_from_context
+        if hasattr(self.overlord, "request_tracker"):
+            await check_cancellation_from_context(self.overlord.request_tracker)
+        
         content = response.content if hasattr(response, "content") else str(response)
 
         # Parse JSON
@@ -676,6 +682,12 @@ class UnifiedClarificationSystem:
             {"role": "user", "content": f"Collected info: {state['collected_info']}"},
         ]
         response = await self.llm.chat(messages, temperature=0, max_tokens=150)
+        
+        # Check cancellation after LLM call
+        from ..background.cancellation import check_cancellation_from_context
+        if hasattr(self.overlord, "request_tracker"):
+            await check_cancellation_from_context(self.overlord.request_tracker)
+        
         content = response.content if hasattr(response, "content") else str(response)
 
         try:
@@ -1301,6 +1313,12 @@ Answer with just: YES or NO"""
                         temperature=0,
                         max_tokens=10,
                     )
+                    
+                    # Check cancellation after LLM call
+                    from ..background.cancellation import check_cancellation_from_context
+                    if hasattr(self.overlord, "request_tracker"):
+                        await check_cancellation_from_context(self.overlord.request_tracker)
+                    
                     content = response.content if hasattr(response, "content") else str(response)
 
                     if "YES" not in content.upper():

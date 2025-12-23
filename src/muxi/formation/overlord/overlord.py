@@ -6616,7 +6616,7 @@ Agent response: {raw_response}"""
                                 break
 
                 # Build context with available SOPs for the analyzer
-                analysis_context = {}
+                analysis_context = {"request_tracker": self.request_tracker}
                 if self._ensure_sop_system() and self.sop_system.enabled:
                     analysis_context["available_sops"] = list(self.sop_system.sops.keys())
 

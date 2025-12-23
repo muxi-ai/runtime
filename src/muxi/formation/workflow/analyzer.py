@@ -320,6 +320,13 @@ class RequestAnalyzer:
                 {"role": "user", "content": user_content},
             ]
             response = await self.llm.chat(messages, max_tokens=1000)
+            
+            # Check cancellation after LLM call (uses context to find request_tracker)
+            from ..background.cancellation import check_cancellation_from_context
+            # Note: request_tracker is passed via context if available
+            if context and context.get("request_tracker"):
+                await check_cancellation_from_context(context["request_tracker"])
+            
             return self._parse_llm_analysis(response)
 
         except Exception as e:

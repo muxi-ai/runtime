@@ -245,6 +245,12 @@ class TaskDecomposer:
                 {"role": "user", "content": user_content},
             ]
             response_obj = await self.llm.chat(messages, max_tokens=2000)
+            
+            # Check cancellation after LLM call
+            from ..background.cancellation import check_cancellation_from_context
+            if context and context.get("request_tracker"):
+                await check_cancellation_from_context(context["request_tracker"])
+            
             response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
 
             # # DEBUG: Print LLM response for debugging
