@@ -241,14 +241,21 @@ Only add checks at meaningful boundaries:
 | `formation/server/routes/client/requests.py` | Added `mark_cancelled()` call before `cancel_request()` |
 | `formation/overlord/chat_orchestrator.py` | Added try/except for `RequestCancelledException` in `_process_sync_chat` |
 | `formation/overlord/overlord.py` | Added inline cancellation checks before agent processing and workflow execution |
+| `formation/agents/agent.py` | Added `_check_cancellation()` helper and checkpoints before LLM calls and tool executions |
 
 ### Current Checkpoints
 
 1. **Before agent processing** - `overlord.py` line ~6930
 2. **Before workflow execution** - `overlord.py` line ~8152
+3. **Before LLM calls in agent** - `agent.py` (multiple locations)
+   - Before `chat_with_tools()` call
+   - Before fallback `chat()` call
+   - Before normal `chat()` call (no tools)
+4. **Before tool executions in agent** - `agent.py`
+   - Before planning tool execution
+   - Before tool chain execution
 
 ### Future Checkpoints (if needed)
 
-- Before individual LLM calls in `LLM.chat()`
-- Before tool execution in agent
 - Inside workflow executor for each task
+- Before A2A requests
