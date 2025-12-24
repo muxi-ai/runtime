@@ -229,7 +229,7 @@ class FormationServer:
 
             # Minimal console output for configured keys
             if self.admin_key and self.client_key:
-                print("🔒 API keys loaded from configuration")
+                print(observability.InitEventFormatter.format_ok("API keys", "loaded from configuration"))
             print()
 
         yield
@@ -621,7 +621,7 @@ class FormationServer:
             app=self._app,
             host=self.host,
             port=self.port,
-            log_level="info",
+            log_level="warning",  # Suppress uvicorn startup logs, use MUXI's format
             access_log=self.access_log,
         )
 
