@@ -5105,6 +5105,16 @@ Agent response: {raw_response}"""
                     "For video or other files, use chat() with the files parameter."
                 )
 
+        # Emit progress event for audio transcription
+        from ...services import streaming
+        streaming.stream(
+            "progress",
+            "Transcribing audio...",
+            stage="audio_transcription",
+            file_count=len(files),
+            skip_rephrase=True,
+        )
+
         # Transcribe audio and use transcription as the message
         transcribed_text = ""
         for file_data in files:

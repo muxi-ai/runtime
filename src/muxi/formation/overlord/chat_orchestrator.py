@@ -332,6 +332,15 @@ class ChatOrchestrator:
             # Process files if provided
             file_results = None
             if files:
+                # Emit progress event for file processing
+                streaming.stream(
+                    "progress",
+                    "Processing files...",
+                    stage="file_processing",
+                    file_count=len(files),
+                    skip_rephrase=True,
+                )
+
                 try:
                     # Process documents but don't return early - continue with normal flow
                     context = {"agent_name": agent_name} if agent_name else {}
