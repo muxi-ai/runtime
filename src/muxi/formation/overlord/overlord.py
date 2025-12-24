@@ -5027,9 +5027,9 @@ Agent response: {raw_response}"""
             bypass_workflow_approval=bypass_workflow_approval,
         )
 
-    async def avchat(
+    async def audiochat(
         self,
-        files: List[Dict[str, Any]],  # Required media files
+        files: List[Dict[str, Any]],  # Required audio files
         agent_name: Optional[str] = None,
         user_id: Any = None,
         session_id: Optional[str] = None,
@@ -5037,17 +5037,20 @@ Agent response: {raw_response}"""
         webhook_url: Optional[str] = None,
         threshold_seconds: Optional[float] = None,
         stream: Optional[bool] = None,
-        prompt_template: Optional[str] = None,
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
         """
-        Process audio/video files as primary conversation input.
+        Process audio files (voice notes) as primary conversation input.
 
-        Automatically transcribes audio or analyzes video content and uses
-        the result as the conversation prompt. Perfect for voice messages,
-        video clips, and other media-first interactions.
+        Transcribes audio first, then uses the transcription as the user's message.
+        Designed for voice note interactions (WhatsApp, Telegram, etc.) where
+        the audio IS the user's message, not an attachment to analyze.
+
+        For file attachments with a text prompt, use chat() with files parameter instead.
+
         Args:
-            files: List of media files (audio/video) to process. Required.
+            files: List of audio files to transcribe. Required.
                 Each file should be a dict with filename, content, content_type, size.
+                Only audio/* MIME types are accepted.
             agent_name: Optional specific agent to use.
             user_id: Optional user ID for multi-user support.
             session_id: Optional session ID for conversation tracking.
@@ -5055,88 +5058,68 @@ Agent response: {raw_response}"""
             webhook_url: Optional webhook URL for async completion.
             threshold_seconds: Optional threshold for async decision.
             stream: Optional streaming behavior control.
-            prompt_template: Optional custom prompt template. If not provided,
-                generates appropriate prompt based on media type.
 
         Returns:
             Same as chat() - response content, async dict, or stream generator.
 
         Example:
-            # Handle Telegram voice message
-            response = await overlord.avchat(
+            # Handle WhatsApp voice note
+            response = await overlord.audiochat(
                 files=[voice_file_dict],
-                user_id="telegram_user_123"
+                user_id="whatsapp_user_123"
             )
         """
         # Validate files parameter
         if not files:
-            raise ValueError("files parameter is required for avchat()")
+            raise ValueError("files parameter is required for audiochat()")
 
-        # Detect media types
-        media_types = [f.get("content_type", "") for f in files]
-        has_audio = any(ct.startswith("audio/") for ct in media_types)
-        has_video = any(ct.startswith("video/") for ct in media_types)
-
-        # For audio-only: transcribe first and use transcription as the message
-        # This is the primary use case for voice notes (WhatsApp, Telegram, etc.)
-        if has_audio and not has_video:
-            transcribed_text = ""
-            for file_data in files:
-                content_type = file_data.get("content_type", "")
-                if content_type.startswith("audio/"):
-                    try:
-                        result = await self._process_audio_content(file_data)
-                        # Extract just the transcription text (remove prefix if present)
-                        if result.startswith("Audio transcription of"):
-                            # Format: "Audio transcription of filename.mp3: actual text"
-                            parts = result.split(": ", 1)
-                            if len(parts) > 1:
-                                transcribed_text += parts[1] + " "
-                            else:
-                                transcribed_text += result + " "
-                        else:
-                            transcribed_text += result + " "
-                    except Exception as e:
-                        observability.observe(
-                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                            level=observability.EventLevel.ERROR,
-                            data={"error": str(e), "filename": file_data.get("filename")},
-                            description=f"Audio transcription failed: {e}",
-                        )
-
-            transcribed_text = transcribed_text.strip()
-
-            # If transcription is empty, ask for clarification
-            if not transcribed_text:
-                return MuxiResponse(
-                    role="assistant",
-                    content="I couldn't detect any speech in the audio. Could you please try again or send a text message?",
-                    metadata={"error": "empty_transcription"},
+        # Validate all files are audio
+        for file_data in files:
+            content_type = file_data.get("content_type", file_data.get("mime_type", ""))
+            if not content_type.startswith("audio/"):
+                raise ValueError(
+                    f"Only audio files are accepted. Got: {content_type}. "
+                    "For video or other files, use chat() with the files parameter."
                 )
 
-            # Use transcription as the message - no files needed
-            return await self.chat(
-                message=transcribed_text,
-                agent_name=agent_name,
-                user_id=user_id,
-                session_id=session_id,
-                use_async=use_async,
-                webhook_url=webhook_url,
-                threshold_seconds=threshold_seconds,
-                stream=stream,
+        # Transcribe audio and use transcription as the message
+        transcribed_text = ""
+        for file_data in files:
+            content_type = file_data.get("content_type", file_data.get("mime_type", ""))
+            if content_type.startswith("audio/"):
+                try:
+                    result = await self._process_audio_content(file_data)
+                    # Extract just the transcription text (remove prefix if present)
+                    if result.startswith("Audio transcription of"):
+                        # Format: "Audio transcription of filename.mp3: actual text"
+                        parts = result.split(": ", 1)
+                        if len(parts) > 1:
+                            transcribed_text += parts[1] + " "
+                        else:
+                            transcribed_text += result + " "
+                    else:
+                        transcribed_text += result + " "
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.ERROR,
+                        data={"error": str(e), "filename": file_data.get("filename")},
+                        description=f"Audio transcription failed: {e}",
+                    )
+
+        transcribed_text = transcribed_text.strip()
+
+        # If transcription is empty, return helpful message
+        if not transcribed_text:
+            return MuxiResponse(
+                role="assistant",
+                content="I couldn't detect any speech in the audio. Could you please try again or send a text message?",
+                metadata={"error": "empty_transcription"},
             )
 
-        # For video or mixed content: use the original file-processing approach
-        if prompt_template:
-            prompt = prompt_template
-        elif has_video:
-            prompt = "Analyze this video and respond directly to its content."
-        else:
-            prompt = "Analyze these files and respond appropriately."
-
+        # Use transcription as the message - no files needed
         return await self.chat(
-            message=prompt,
-            files=files,
+            message=transcribed_text,
             agent_name=agent_name,
             user_id=user_id,
             session_id=session_id,

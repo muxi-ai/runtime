@@ -33,15 +33,18 @@ class ChatRequest(BaseModel):
     stream: Optional[bool] = True  # Enable/disable streaming (default: True)
 
 
-class AVChatRequest(BaseModel):
-    """Model for audio/video chat requests."""
+class AudioChatRequest(BaseModel):
+    """Model for audio chat requests (voice notes).
+    
+    The audio is transcribed first, then the transcription is used as the user's message.
+    Only audio/* MIME types are accepted.
+    """
 
-    files: List[Dict[str, Any]]  # Required: list of file objects with content
+    files: List[Dict[str, Any]]  # Required: list of audio file objects with content
     user_id: Optional[str] = None  # Deprecated: use X-Muxi-User-Id header instead
     agent_id: Optional[str] = None
     session_id: Optional[str] = None
     request_id: Optional[str] = None
-    prompt_template: Optional[str] = None  # Custom prompt for processing
     stream: Optional[bool] = True  # Enable/disable streaming (default: True)
 
 
@@ -233,16 +236,21 @@ async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingRe
     )
 
 
-@router.post("/avchat", response_model=None)
-async def avchat(request: Request, avchat_request: AVChatRequest) -> Union[StreamingResponse, JSONResponse]:
+@router.post("/audiochat", response_model=None)
+async def audiochat(request: Request, audiochat_request: AudioChatRequest) -> Union[StreamingResponse, JSONResponse]:
     """
-    Send audio or video files for transcription/analysis and response.
+    Send audio files (voice notes) for transcription and conversational response.
 
-    This endpoint processes audio/video content, transcribes or analyzes it,
-    and returns a response based on the content.
+    The audio is transcribed first using a speech-to-text model (e.g., Whisper),
+    then the transcribed text is used as the user's message for the conversation.
+
+    This endpoint is designed for voice note interactions (WhatsApp, Telegram, etc.)
+    where the audio IS the user's message, not an attachment to analyze.
+
+    For file attachments with a text prompt, use /chat with the files parameter instead.
 
     Args:
-        avchat_request: The A/V chat request containing files
+        audiochat_request: The audio chat request containing audio files
 
     Headers:
         X-Muxi-User-Id: User ID for request context (optional, defaults to "0")
@@ -257,50 +265,62 @@ async def avchat(request: Request, avchat_request: AVChatRequest) -> Union[Strea
         raise HTTPException(status_code=503, detail="Overlord not available")
 
     # Validate files are provided
-    if not avchat_request.files:
+    if not audiochat_request.files:
         from ...responses import create_error_response
         response = create_error_response(
             "VALIDATION_ERROR",
-            "files parameter is required for avchat()",
+            "files parameter is required for audiochat()",
             {"field": "files"},
-            avchat_request.request_id,
+            audiochat_request.request_id,
         )
         return JSONResponse(content=response.model_dump(), status_code=400)
 
+    # Validate all files are audio
+    for file_data in audiochat_request.files:
+        content_type = file_data.get("content_type", file_data.get("mime_type", ""))
+        if not content_type.startswith("audio/"):
+            from ...responses import create_error_response
+            response = create_error_response(
+                "VALIDATION_ERROR",
+                "Only audio files (audio/*) are accepted. For video or other files, use /chat with the files parameter.",
+                {"field": "files", "invalid_content_type": content_type},
+                audiochat_request.request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=400)
+
     # Get user_id from header first, fallback to body, then default
     header_user_id = get_header_case_insensitive(request.headers, "X-Muxi-User-Id")
-    effective_user_id = header_user_id or avchat_request.user_id or "0"
+    effective_user_id = header_user_id or audiochat_request.user_id or "0"
 
-    # Log A/V chat request
+    # Log audio chat request
     observability.observe(
         event_type=observability.ConversationEvents.REQUEST_RECEIVED,
         level=observability.EventLevel.INFO,
         data={
             "service": "formation_api_server",
-            "endpoint": "/api/avchat",
+            "endpoint": "/api/audiochat",
             "user_id": effective_user_id,
-            "session_id": avchat_request.session_id,
-            "request_id": avchat_request.request_id,
-            "agent_id": avchat_request.agent_id,
-            "file_count": len(avchat_request.files),
+            "session_id": audiochat_request.session_id,
+            "request_id": audiochat_request.request_id,
+            "agent_id": audiochat_request.agent_id,
+            "file_count": len(audiochat_request.files),
             "formation_id": formation.formation_id,
         },
-        description="A/V chat request received via Formation API",
+        description="Audio chat request received via Formation API",
     )
 
     # Get overlord for processing
     overlord = formation._overlord
 
-    # Handle non-streaming mode - use avchat() which transcribes audio first
-    if avchat_request.stream is False:
+    # Handle non-streaming mode - use audiochat() which transcribes audio first
+    if audiochat_request.stream is False:
         try:
-            response = await overlord.avchat(
-                files=avchat_request.files,
+            response = await overlord.audiochat(
+                files=audiochat_request.files,
                 user_id=effective_user_id,
-                session_id=avchat_request.session_id,
-                agent_name=avchat_request.agent_id,
+                session_id=audiochat_request.session_id,
+                agent_name=audiochat_request.agent_id,
                 stream=False,
-                prompt_template=avchat_request.prompt_template,
             )
 
             from ...responses import create_success_response
@@ -309,15 +329,15 @@ async def avchat(request: Request, avchat_request: AVChatRequest) -> Union[Strea
             data = {
                 "message": response,
                 "user_id": effective_user_id,
-                "session_id": avchat_request.session_id,
-                "request_id": avchat_request.request_id,
+                "session_id": audiochat_request.session_id,
+                "request_id": audiochat_request.request_id,
             }
 
             api_response = create_success_response(
                 APIObjectType.MESSAGE,
                 APIEventType.CHAT_COMPLETED,
                 data,
-                avchat_request.request_id,
+                audiochat_request.request_id,
             )
 
             return JSONResponse(content=api_response.model_dump(), status_code=200)
@@ -331,27 +351,26 @@ async def avchat(request: Request, avchat_request: AVChatRequest) -> Union[Strea
                 level=observability.EventLevel.ERROR,
                 data={
                     "service": "formation_api_server",
-                    "endpoint": "/api/avchat",
+                    "endpoint": "/api/audiochat",
                     "user_id": effective_user_id,
                     "error": str(e),
                     "error_type": type(e).__name__,
                     "formation_id": formation.formation_id,
                 },
-                description=f"A/V chat request failed: {e}",
+                description=f"Audio chat request failed: {e}",
             )
             raise HTTPException(status_code=500, detail=str(e)) from e
 
-    # Streaming mode - use avchat() which transcribes audio first
+    # Streaming mode - use audiochat() which transcribes audio first
     async def generate_stream():
         """Generate SSE stream from overlord response."""
         try:
-            response = await overlord.avchat(
-                files=avchat_request.files,
+            response = await overlord.audiochat(
+                files=audiochat_request.files,
                 user_id=effective_user_id,
-                session_id=avchat_request.session_id,
-                agent_name=avchat_request.agent_id,
+                session_id=audiochat_request.session_id,
+                agent_name=audiochat_request.agent_id,
                 stream=True,
-                prompt_template=avchat_request.prompt_template,
             )
 
             async for token in response:
@@ -368,13 +387,13 @@ async def avchat(request: Request, avchat_request: AVChatRequest) -> Union[Strea
                 level=observability.EventLevel.ERROR,
                 data={
                     "service": "formation_api_server",
-                    "endpoint": "/api/avchat",
+                    "endpoint": "/api/audiochat",
                     "user_id": effective_user_id,
                     "error": str(e),
                     "error_type": type(e).__name__,
                     "formation_id": formation.formation_id,
                 },
-                description=f"A/V chat request failed: {e}",
+                description=f"Audio chat request failed: {e}",
             )
 
             error_msg = str(e).strip() if e else "Request failed"
