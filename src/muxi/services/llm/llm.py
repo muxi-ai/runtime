@@ -1483,9 +1483,22 @@ Provide a helpful, conversational response that directly addresses what the user
         # Extract caching flag before it gets filtered out
         use_caching = kwargs.get("caching", True)
 
+        # Auto-detect file processing results in messages and bypass cache
+        # This prevents semantic cache from returning stale responses for file requests
+        if use_caching:
+            for msg in messages:
+                content = msg.get("content", "")
+                if isinstance(content, str) and "FILE PROCESSING RESULTS" in content:
+                    use_caching = False
+                    break
+
         async def _chat_request():
             # Prepare parameters using helper
             params = await self._prepare_chat_request(messages, files, **kwargs)
+
+            # Pass caching flag to OneLLM to control semantic cache
+            if not use_caching:
+                params["caching"] = False
 
             # Check cache first (but exclude files from cache key for security)
             # Also skip cache if caching=False was explicitly passed
