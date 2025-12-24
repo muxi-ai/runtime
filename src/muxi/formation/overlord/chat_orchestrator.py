@@ -332,7 +332,15 @@ class ChatOrchestrator:
             # Process files if provided
             file_results = None
             if files:
-                # Emit progress event for file processing
+                # Log file processing start
+                observability.observe(
+                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={"file_count": len(files), "filenames": [f.get("filename", "unknown") for f in files]},
+                    description=f"Starting file processing for {len(files)} file(s)",
+                )
+
+                # Emit progress event for file processing (only works when streaming is enabled)
                 streaming.stream(
                     "progress",
                     "Processing files...",

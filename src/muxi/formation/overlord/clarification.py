@@ -583,7 +583,13 @@ class UnifiedClarificationSystem:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": current_message},  # Just current message for cache
         ]
-        response = await self.llm.chat(messages, temperature=0, max_tokens=250)
+
+        # Bypass cache if file processing results are present in the conversation
+        # This prevents cached clarification responses from being returned when files are attached
+        has_file_results = "FILE PROCESSING RESULTS" in conversation or "File Processing Result" in conversation
+        response = await self.llm.chat(
+            messages, temperature=0, max_tokens=250, caching=not has_file_results
+        )
         
         # Check cancellation after LLM call
         from ..background.cancellation import check_cancellation_from_context
