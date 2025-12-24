@@ -153,10 +153,11 @@ formation/
 **Go-to-Market Model (OSS + Support First):**
 ```
 OSS (Free)              → Community growth, ecosystem adoption
-Support Access          → $1K/mo, expert guidance (GitHub Sponsors)
-Startup Plan            → $5K/mo, guided deployment, one formation
+Priority Support        → $1K/mo, group Slack, expert guidance (GitHub Sponsors)
+Private Support         → $2.5K/mo, private channel, monthly calls, faster SLA
 Deployment Pilot        → $25K total, white-glove 3-month engagement
-Enterprise Platform     → $10-15K/mo, RBAC + ongoing support (annual)
+Enterprise              → $10-15K/mo, RBAC + ongoing support (annual)
+Strategic Partner       → $20-25K/mo, dedicated engineer, product influence (annual)
 Trail (Future, ~6mo)    → Observability SaaS dashboard
 Cloud (Future, ~12mo+)  → Hosted platform (deferred to build community first)
 ```
