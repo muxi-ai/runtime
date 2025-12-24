@@ -1598,6 +1598,9 @@ Provide a helpful, conversational response that directly addresses what the user
         Raises:
             LLMError: For various error conditions with appropriate classification.
         """
+        # Skip embedding for empty strings - APIs don't handle these well
+        if not text or not text.strip():
+            return []
 
         async def _embed_request():
             # Default to openai/text-embedding-3-small if no embedding model is specified

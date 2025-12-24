@@ -86,6 +86,10 @@ def get_local_embedding(
         >>> len(embedding)
         384
     """
+    # Skip embedding for empty strings
+    if not text or not text.strip():
+        return []
+
     global _model, _model_name, _initialization_logged
 
     with _model_lock:

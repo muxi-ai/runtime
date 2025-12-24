@@ -305,8 +305,8 @@ class WorkingMemory:
             "namespace": namespace,
         }
 
-        # Generate embedding if model is available
-        if self.model:
+        # Generate embedding if model is available and text is not empty
+        if self.model and text and text.strip():
             try:
                 # Generate embedding for the text
                 embedding = await self.model.embed(text)
@@ -730,6 +730,16 @@ class WorkingMemory:
 
         # If we have no embeddings in the index, use recency search
         if self.index_count == 0:
+            return self._recency_search(
+                limit,
+                filter_metadata,
+                use_entire_buffer=True,
+                namespace=namespace,
+                session_id=session_id,
+            )
+
+        # If query vector is empty (e.g., from empty query string), use recency search
+        if not query_vector or len(query_vector) == 0:
             return self._recency_search(
                 limit,
                 filter_metadata,
