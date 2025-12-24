@@ -2279,6 +2279,14 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                     default_persona=self._default_persona,
                     user_message=actual_user_message,
                 )
+                
+                # For ongoing sessions, skip greeting responses
+                if "=== CONVERSATION CONTEXT" in user_message:
+                    system_prompt += (
+                        "\n\nThis is an ongoing conversation - do NOT start with greetings like "
+                        "'Hey there', 'Hi', 'Hello', etc. Get straight to the point."
+                    )
+                
                 messages = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Respond to: {actual_user_message}"},
@@ -2328,13 +2336,21 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                         "vary your response while keeping the same factual content."
                     )
 
+                # Detect ongoing session - skip greetings if there's conversation history
+                ongoing_session_instruction = ""
+                if "=== CONVERSATION CONTEXT" in user_message:
+                    ongoing_session_instruction = (
+                        "\n\nThis is an ongoing conversation - do NOT start with greetings like "
+                        "'Hey there', 'Hi', 'Hello', etc. Get straight to the answer."
+                    )
+
                 system_prompt = f"""{self._default_persona}
 
 Reformat the agent's response to match your persona while preserving all technical details and information.
 Make it conversational and friendly while keeping accuracy.
 
 IMPORTANT: Match response length to the question complexity. Simple questions get brief answers. 
-Don't pad responses with unnecessary headers, bullet points, or filler. Be concise.{format_instruction}{repeated_instruction}"""
+Don't pad responses with unnecessary headers, bullet points, or filler. Be concise.{format_instruction}{repeated_instruction}{ongoing_session_instruction}"""
 
                 user_content = f"""User request: {actual_user_message}
 Agent response: {raw_response}"""
