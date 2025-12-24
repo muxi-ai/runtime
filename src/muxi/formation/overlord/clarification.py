@@ -586,7 +586,8 @@ class UnifiedClarificationSystem:
 
         # Bypass cache if file processing results are present in the conversation
         # This prevents cached clarification responses from being returned when files are attached
-        has_file_results = "FILE PROCESSING RESULTS" in conversation or "File Processing Result" in conversation
+        # Check for both the marker and the content prefix
+        has_file_results = "FILE PROCESSING RESULTS" in conversation or "[File Processing Result]" in conversation
         response = await self.llm.chat(
             messages, temperature=0, max_tokens=250, caching=not has_file_results
         )

@@ -1028,8 +1028,12 @@ class ChatOrchestrator:
             enhanced_parts.append("")
 
         # 3. File processing results (high priority)
+        # Include a unique request marker to prevent semantic cache matching
+        # with previous requests that had similar text but no files
         if file_results:
-            enhanced_parts.append("=== FILE PROCESSING RESULTS ===")
+            import uuid
+            cache_bust_id = str(uuid.uuid4())[:8]  # Short unique ID
+            enhanced_parts.append(f"=== FILE PROCESSING RESULTS [req:{cache_bust_id}] ===")
             enhanced_parts.append(file_results)
             enhanced_parts.append("")
 
