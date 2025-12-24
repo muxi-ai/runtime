@@ -9,8 +9,28 @@ For auto-reload with nodemon:
     nodemon --exec "python -m src.muxi.utils.run_formation formation.afs" --ext py,yaml
 """
 
-import asyncio
 import sys
+
+# Print banner immediately before heavy imports
+def _print_banner():
+    from ..utils.version import get_version
+    version = get_version()
+    print("\n" + "="*68)
+    print(" __  __ _    ___   _______   ____             _   _")
+    print("|  \\/  | |  | \\ \\ / /_   _| |    \\_   _ _ __ | | (_)_ __ ___   ___")
+    print("| \\  / | |  | |\\ V /  | |   | [ ] || | | '_ \\| __| | '_ ` _ \\ / _ \\")
+    print("| |\\/| | |__| |/ . \\ _| |_  |  _ / |_| | | | | |_| | | | | | |  __/")
+    print("|_|  |_|\\____//_/ \\_\\_____| |_| \\_\\__/_| |_|\\__|_|_| |_| |_|\\___|")
+    print(" ")
+    print(f"Starting MUXI Runtime v{version}...")
+    print("="*68 + "\n")
+    sys.stdout.flush()
+
+# Only print banner when running as main script
+if __name__ == "__main__" or "run_formation" in sys.argv[0]:
+    _print_banner()
+
+import asyncio
 import traceback
 from pathlib import Path
 

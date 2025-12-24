@@ -343,23 +343,9 @@ class Formation:
             # Import at start of method for availability everywhere
             from ..datatypes.observability import InitEventFormatter
             from ..services import observability
-            from ..utils.version import get_version
 
             # Disable observability during initialization (prevent JSON mixing with formatted output)
             observability.disable()
-
-            import sys
-            version = get_version()
-            print("\n" + "="*68)
-            print(" __  __ _    ___   _______   ____             _   _")
-            print("|  \\/  | |  | \\ \\ / /_   _| |    \\_   _ _ __ | | (_)_ __ ___   ___")
-            print("| \\  / | |  | |\\ V /  | |   | [ ] || | | '_ \\| __| | '_ ` _ \\ / _ \\")
-            print("| |\\/| | |__| |/ . \\ _| |_  |  _ / |_| | | | | |_| | | | | | |  __/")
-            print("|_|  |_|\\____//_/ \\_\\_____| |_| \\_\\__/_| |_|\\__|_|_| |_| |_|\\___|")
-            print(" ")
-            print(f"Starting MUXI Runtime v{version}...")
-            print("="*68 + "\n")
-            sys.stdout.flush()  # Ensure banner prints immediately
 
             # Normalize and validate config path (file or directory)
             normalized_path = self._normalize_config_path(config_path)
