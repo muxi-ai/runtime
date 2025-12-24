@@ -348,6 +348,7 @@ class Formation:
             # Disable observability during initialization (prevent JSON mixing with formatted output)
             observability.disable()
 
+            import sys
             version = get_version()
             print("\n" + "="*68)
             print(" __  __ _    ___   _______   ____             _   _")
@@ -358,6 +359,7 @@ class Formation:
             print(" ")
             print(f"Starting MUXI Runtime v{version}...")
             print("="*68 + "\n")
+            sys.stdout.flush()  # Ensure banner prints immediately
 
             # Normalize and validate config path (file or directory)
             normalized_path = self._normalize_config_path(config_path)
