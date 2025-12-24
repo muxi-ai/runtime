@@ -143,7 +143,7 @@ Extended structure details live in `context/project-structure.md`.
     - **⚠️ DO NOT attempt to "fix" this two-level lookup—it's intentional and correct**
 
 ## Observability Standards
-- **Event types**: 157 typed ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents covering complete request lifecycle.
+- **Event types**: 349 typed events across 5 categories (SystemEvents, ConversationEvents, ServerEvents, APIEvents, ErrorEvents) covering complete request lifecycle.
 - **Validation requirement**: 100% validation mandatory—run `python3 scripts/validate_events.py` before committing any observe() changes.
 - **Event naming conventions**:
   - Past tense for completion: `_COMPLETED`, `_FAILED`, `_SELECTED`
@@ -201,7 +201,7 @@ Extended structure details live in `context/project-structure.md`.
 - `src/muxi/formation/workflow/` — SOP execution pipeline.
 - `src/muxi/formation/resilience/` — error recovery and user messaging.
 - `src/muxi/services/` — runtime services catalog.
-- `src/muxi/datatypes/observability.py` — 157 event type definitions (ConversationEvents, SystemEvents, ErrorEvents).
+- `src/muxi/datatypes/observability.py` — 349 event type definitions across 5 categories.
 - `scripts/validate_events.py` — event validation utility (100% coverage required).
 - `docs/audits/phase-2-observability/` — comprehensive observability audit documentation.
 - `schemas/formation/formation.afs` — formation schema definition. Supported extensions: `.afs` (preferred), `.yaml`, `.yml`.

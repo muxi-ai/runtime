@@ -172,7 +172,7 @@ muxi-ai/
 **Key Capabilities:**
 - Overlord orchestration engine (~9,800 lines)
 - 3-tier memory architecture (Buffer → Persistent → Vector)
-- 157 typed observability events
+- 349 typed observability events across 5 categories
 - MCP protocol integration (1,000+ tools)
 - Agent Skills (SKILL.md) support
 - Multi-user isolation via Memobase

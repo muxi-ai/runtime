@@ -215,7 +215,7 @@ Vector Memory (FAISSx)
 
 ### D. Production-Grade Observability
 
-- 157 distinct, strictly validated event types
+- 349 distinct, strictly validated event types across 5 categories
 - Multiple formatters (Datadog, Splunk, Elastic, etc.)
 - Baked in from Day 1 (not bolted on)
 - Complete request lifecycle tracing
@@ -326,7 +326,7 @@ The technical foundation is complete. The race is now for **adoption and network
 The 114,000+ lines of code reveal a distinct engineering philosophy:
 
 - **No Mocks Rule**: Testing against real LLM APIs forces production reliability, not CI-only success
-- **157 Event Types**: Born from production debugging experience, not theoretical design
+- **349 Event Types**: Born from production debugging experience, not theoretical design
 - **Overlord State Machine**: Kernel-level robustness applied to AI orchestration
 - **Go + Python Split**: Right tool for each job, not one-size-fits-all
 
