@@ -4347,8 +4347,31 @@ Agent response: {raw_response}"""
         Document User Experience
 
         Generate persona-consistent acknowledgments and summaries.
+        For audio files, includes the transcription directly so LLM can see it.
         """
         try:
+            # Check if any audio files were processed - include transcriptions directly
+            audio_transcriptions = []
+            for doc in processed_docs:
+                if doc.get("modality") == "audio" and doc.get("content"):
+                    # Extract transcription from content list
+                    for content_item in doc.get("content", []):
+                        if content_item and isinstance(content_item, str):
+                            # Clean up the transcription prefix if present
+                            if content_item.startswith("Audio transcription of"):
+                                parts = content_item.split(": ", 1)
+                                if len(parts) > 1:
+                                    audio_transcriptions.append(parts[1])
+                                else:
+                                    audio_transcriptions.append(content_item)
+                            else:
+                                audio_transcriptions.append(content_item)
+
+            # If we have audio transcriptions, return them directly
+            if audio_transcriptions:
+                transcription_text = " ".join(audio_transcriptions).strip()
+                return f"Audio transcription:\n\n{transcription_text}"
+
             if self.document_acknowledger:
                 # Generate acknowledgment using the component
                 doc_list = [(doc["doc_id"], doc["filename"]) for doc in processed_docs]
