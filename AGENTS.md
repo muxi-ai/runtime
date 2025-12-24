@@ -8,9 +8,11 @@ Your fast-reference for building, debugging, and extending the MUXI Runtime with
 
 This repository is part of the larger MUXI ecosystem.
 
-**📋 Complete architectural overview:** See [MUXI-ARCHITECTURE.md](../MUXI-ARCHITECTURE.md) - explains how all 9 repositories fit together, dependencies, status, and roadmap.
+**Complete architectural overview:** See [MUXI-ARCHITECTURE.md](../MUXI-ARCHITECTURE.md) - explains how all 9 repositories fit together, dependencies, status, and roadmap.
 
-**🎯 This repo (runtime):** The formation execution environment - FastAPI-based Python runtime that will be packaged as SIF container. Currently testing & debugging API contract.
+**Strategic moat analysis:** See [MUXI_TECHNICAL_MOAT_ANALYSIS.md](./MUXI_TECHNICAL_MOAT_ANALYSIS.md) - covers the 5-layer strategic moat (standards capture, network effects, auto-extend, ecosystem compatibility, enterprise permissions).
+
+**This repo (runtime):** The formation execution environment - FastAPI-based Python runtime packaged as SIF container. API is finalized; target public launch January 2026.
 
 ---
 
@@ -46,11 +48,14 @@ This repository is part of the larger MUXI ecosystem.
 ## Project Layout
 ```
 runtime/
-├── src/muxi/runtime/      # Core runtime engine
-├── tests/                 # Comprehensive test suite
+├── src/muxi/              # Core runtime package
+│   ├── formation/         # Formation engine, overlord, agents, workflows
+│   ├── services/          # Memory, MCP, observability, scheduler
+│   └── datatypes/         # Type definitions
+├── tests/                 # Unit + integration tests
+├── e2e/                   # End-to-end tests (215+ across 12 areas)
 ├── docs/                  # Documentation
-├── test-formations/       # Example formations
-├── schemas/               # YAML schema definitions
+├── schemas/               # YAML schema definitions (linked from ../schemas)
 ├── examples/              # Usage examples
 └── migrations/            # Database migrations
 ```
@@ -203,7 +208,31 @@ Extended structure details live in `context/project-structure.md`.
 - `e2e/tests/` — 12 test areas (215+ tests) covering all runtime functionality.
 - `e2e/results/` — migration reports and test execution documentation.
 
-## Future Work Targets
+## Upcoming Features (Q1 2026)
+
+### Agent Skills (SKILL.md)
+Implementation of the open [Agent Skills specification](https://agentskills.io/specification):
+- Skills directory: `formation/skills/{skill-name}/SKILL.md`
+- Progressive disclosure: metadata at startup, full content on activation
+- Executor container for script execution (ZeroMQ-based)
+- See `docs/prd/skills-implementation-plan.md` for details
+
+### Enterprise Permissions
+Group-based permission filtering via `muxi-enterprise` package:
+- YAML-based group definitions with inheritance
+- Agent/MCP filtering by group membership
+- Auto-discovery from `groups/` directory
+- Runtime patching (zero changes to OSS code)
+- See `context/enterprise/prd.md` for details
+
+### Auto-Extend (Future)
+Self-evolving formations that detect capability gaps and extend themselves:
+- Capability gap detection via LLM analysis
+- Permission-aware marketplace search
+- Auto-approval rules for trusted sources
+- See `context/enterprise/auto-extend-vision.md` for details
+
+## Technical Debt Targets
 1. Validate declared model capabilities vs assigned responsibilities.
 2. Improve performance via model instance caching.
 3. Build richer fallback chains for capability gaps.
