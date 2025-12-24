@@ -230,7 +230,6 @@ class FormationServer:
             # Minimal console output for configured keys
             if self.admin_key and self.client_key:
                 print(observability.InitEventFormatter.format_info("🔒 API keys loaded from configuration"))
-            print()
 
         yield
 
