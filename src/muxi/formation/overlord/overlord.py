@@ -5077,18 +5077,63 @@ Agent response: {raw_response}"""
         has_audio = any(ct.startswith("audio/") for ct in media_types)
         has_video = any(ct.startswith("video/") for ct in media_types)
 
-        # Generate or use custom prompt
+        # For audio-only: transcribe first and use transcription as the message
+        # This is the primary use case for voice notes (WhatsApp, Telegram, etc.)
+        if has_audio and not has_video:
+            transcribed_text = ""
+            for file_data in files:
+                content_type = file_data.get("content_type", "")
+                if content_type.startswith("audio/"):
+                    try:
+                        result = await self._process_audio_content(file_data)
+                        # Extract just the transcription text (remove prefix if present)
+                        if result.startswith("Audio transcription of"):
+                            # Format: "Audio transcription of filename.mp3: actual text"
+                            parts = result.split(": ", 1)
+                            if len(parts) > 1:
+                                transcribed_text += parts[1] + " "
+                            else:
+                                transcribed_text += result + " "
+                        else:
+                            transcribed_text += result + " "
+                    except Exception as e:
+                        observability.observe(
+                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                            level=observability.EventLevel.ERROR,
+                            data={"error": str(e), "filename": file_data.get("filename")},
+                            description=f"Audio transcription failed: {e}",
+                        )
+
+            transcribed_text = transcribed_text.strip()
+
+            # If transcription is empty, ask for clarification
+            if not transcribed_text:
+                return MuxiResponse(
+                    role="assistant",
+                    content="I couldn't detect any speech in the audio. Could you please try again or send a text message?",
+                    metadata={"error": "empty_transcription"},
+                )
+
+            # Use transcription as the message - no files needed
+            return await self.chat(
+                message=transcribed_text,
+                agent_name=agent_name,
+                user_id=user_id,
+                session_id=session_id,
+                use_async=use_async,
+                webhook_url=webhook_url,
+                threshold_seconds=threshold_seconds,
+                stream=stream,
+            )
+
+        # For video or mixed content: use the original file-processing approach
         if prompt_template:
             prompt = prompt_template
         elif has_video:
-            prompt = "Analyze this video and respond directly to its content, as if it was the original prompt. Do not mention analyzing a video."  # noqa: E501
-        elif has_audio:
-            prompt = "Transcribe this audio and respond directly to what was said, as if it was the original prompt. Do not mention receiving audio or transcribing it."  # noqa: E501
+            prompt = "Analyze this video and respond directly to its content."
         else:
-            # Fallback for other file types (images, documents)
             prompt = "Analyze these files and respond appropriately."
 
-        # Pass through to chat() with files
         return await self.chat(
             message=prompt,
             files=files,

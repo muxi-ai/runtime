@@ -291,20 +291,16 @@ async def avchat(request: Request, avchat_request: AVChatRequest) -> Union[Strea
     # Get overlord for processing
     overlord = formation._overlord
 
-    # Build message from prompt template or default
-    message = avchat_request.prompt_template or "Please process and respond to this audio/video content."
-
-    # Handle non-streaming mode
+    # Handle non-streaming mode - use avchat() which transcribes audio first
     if avchat_request.stream is False:
         try:
-            response = await overlord.chat(
-                message=message,
+            response = await overlord.avchat(
+                files=avchat_request.files,
                 user_id=effective_user_id,
                 session_id=avchat_request.session_id,
-                request_id=avchat_request.request_id,
                 agent_name=avchat_request.agent_id,
-                files=avchat_request.files,
                 stream=False,
+                prompt_template=avchat_request.prompt_template,
             )
 
             from ...responses import create_success_response
@@ -345,18 +341,17 @@ async def avchat(request: Request, avchat_request: AVChatRequest) -> Union[Strea
             )
             raise HTTPException(status_code=500, detail=str(e)) from e
 
-    # Streaming mode
+    # Streaming mode - use avchat() which transcribes audio first
     async def generate_stream():
         """Generate SSE stream from overlord response."""
         try:
-            response = await overlord.chat(
-                message=message,
+            response = await overlord.avchat(
+                files=avchat_request.files,
                 user_id=effective_user_id,
                 session_id=avchat_request.session_id,
-                request_id=avchat_request.request_id,
                 agent_name=avchat_request.agent_id,
-                files=avchat_request.files,
                 stream=True,
+                prompt_template=avchat_request.prompt_template,
             )
 
             async for token in response:
