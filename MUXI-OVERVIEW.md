@@ -402,12 +402,13 @@ MUXI prioritizes **open-source adoption and community building** over traditiona
 |------|-----------|-----|-----|
 | Priority Support | 40 | $40K | $480K |
 | Private Support | 20 | $50K | $600K |
+| Deployment Pilots | 15 | - | $375K (one-time) |
 | Enterprise | 15 | $180K | $2.16M |
 | Strategic Partner | 5 | $100K | $1.2M |
 | Trail SaaS | 100+ | $50K | $600K |
 | Cloud Platform | 200+ | $20K | $240K |
 
-**Year 2 Total: ~$5.3M ARR**
+**Year 2 Total: ~$5.3M ARR + $375K pilots = ~$5.7M revenue**
 
 These projections assume founder-led sales with limited marketing spend. With dedicated sales resources and marketing investment, these numbers could 2-3x.
 
