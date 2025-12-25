@@ -26,6 +26,8 @@ While thousands of companies are building AI agents, almost none have solved the
 
 **Competitive Moat:** A well-funded competitor starting today would need **18-24 months** to reach technical parity - and by then, MUXI's network effects (registry), standards adoption (Linux Foundation), and data moat (auto-extend) will have created an insurmountable lead. This is not a market where "move fast and break things" works; production infrastructure requires the kind of battle-tested engineering that only comes from years of development.
 
+MUXI (`/muk-siː/`) stands for **MU**ltiplexed, e**X**tensible, **I**ntelligence.
+
 ---
 
 ## The AI Agent Revolution (Context)
