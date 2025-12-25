@@ -28,6 +28,37 @@ While thousands of companies are building AI agents, almost none have solved the
 
 ---
 
+## The AI Agent Revolution (Context)
+
+### What Are AI Agents?
+
+AI agents are autonomous software systems that use large language models (LLMs) to reason, plan, and take actions. Unlike chatbots that simply respond to prompts, agents can:
+
+- **Break down complex tasks** into steps and execute them
+- **Use tools** - search the web, query databases, send emails, write code
+- **Collaborate** with other agents to solve multi-faceted problems
+- **Maintain memory** of past interactions and learn from context
+- **Make decisions** based on goals rather than explicit instructions
+
+**Examples of AI agents in production:**
+- Customer support systems that resolve tickets end-to-end
+- Research assistants that gather, synthesize, and report findings
+- Code review bots that analyze PRs and suggest improvements
+- Compliance monitors that scan documents and flag issues
+- Personal assistants that manage calendars, draft emails, and coordinate tasks
+
+### Why Now?
+
+The convergence of three factors has made AI agents viable:
+
+1. **Capable LLMs** - GPT-4, Claude, and others can now reason well enough to be useful
+2. **Tool ecosystems** - Protocols like MCP provide access to thousands of APIs
+3. **Enterprise demand** - Companies are moving beyond chatbots to autonomous systems
+
+**The market is exploding.** Every enterprise is exploring AI agents. But almost none have figured out how to run them reliably in production. That's the gap MUXI fills.
+
+---
+
 ## The Problem
 
 ### The AI Infrastructure Gap
