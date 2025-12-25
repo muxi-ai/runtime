@@ -382,26 +382,33 @@ MUXI prioritizes **open-source adoption and community building** over traditiona
 - **Cloud** (~12+ months): Hosted platform for teams who don't want to self-host
 - **Marketplace** (future): 20% commission on agent/tool transactions
 
-### Revenue Projections (Conservative)
+### Revenue Projections
 
 **Year 1 Target (12 months post-launch):**
-- 20 Priority Support customers @ $1K = $20K MRR
-- 5 Private Support customers @ $2.5K = $12.5K MRR  
-- 4 Deployment Pilots @ $25K = $100K one-time
-- 3 Enterprise customers @ $12K avg = $36K MRR
-- 1 Strategic Partner @ $20K = $20K MRR
 
-**Year 1 Total: ~$1.1M ARR + $100K pilots**
+| Tier | Customers | MRR | ARR |
+|------|-----------|-----|-----|
+| Priority Support | 20 | $20K | $240K |
+| Private Support | 10 | $25K | $300K |
+| Deployment Pilots | 8 | - | $200K (one-time) |
+| Enterprise | 6 | $72K | $864K |
+| Strategic Partner | 2 | $40K | $480K |
+
+**Year 1 Total: ~$1.9M ARR + $200K pilots = $2.1M revenue**
 
 **Year 2 Target:**
-- Support tier growth: $50K MRR
-- Enterprise expansion: $150K MRR (10-15 customers)
-- Trail SaaS launch: $30K MRR
-- Strategic Partners: $60K MRR (3 customers)
 
-**Year 2 Total: ~$3.5M ARR**
+| Tier | Customers | MRR | ARR |
+|------|-----------|-----|-----|
+| Priority Support | 40 | $40K | $480K |
+| Private Support | 20 | $50K | $600K |
+| Enterprise | 15 | $180K | $2.16M |
+| Strategic Partner | 5 | $100K | $1.2M |
+| Trail SaaS | 50 | $25K | $300K |
 
-These projections are conservative and assume founder-led sales only. With dedicated sales resources, these numbers could 2-3x.
+**Year 2 Total: ~$4.7M ARR**
+
+These projections assume founder-led sales with limited marketing spend. With dedicated sales resources and marketing investment, these numbers could 2-3x.
 
 ### Why This Model Works
 
