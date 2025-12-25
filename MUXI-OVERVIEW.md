@@ -13,12 +13,14 @@ December 2025
 While thousands of companies are building AI agents, almost none have solved the infrastructure problem: How do you deploy, orchestrate, scale, and manage multi-agent systems reliably? MUXI answers this question with production-grade infrastructure that treats agents as native primitives.
 
 **Key Facts:**
+
 - 114,000+ lines of production code
 - 349 typed observability events
 - 63,000+ lines of tests
 - 9-repository ecosystem (server, runtime, CLI, SDKs, registry)
-- API finalized, targeting January 2026 public launch
+- API finalized
 - Formation specification being donated to the Linux Foundation (Agentic AI Foundation)
+- Targeting January 2026 public launch
 
 **The Opportunity:** The AI agent infrastructure market is nascent but growing rapidly. Most teams today spend 3-6 months building custom orchestration before shipping their first agent. MUXI eliminates this entirely, reducing time-to-production from months to days.
 
@@ -33,6 +35,7 @@ While thousands of companies are building AI agents, almost none have solved the
 Every company building AI agents faces the same challenge: **the gap between "demo" and "production" is enormous.**
 
 Building a demo agent is easy:
+
 ```python
 response = openai.chat("Hello, world!")
 ```
@@ -74,14 +77,14 @@ MUXI is a complete infrastructure platform that treats AI agents as first-class 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                      MUXI Server (Go)                   │
-│        Orchestration, routing, auth, lifecycle          │
+│                    MUXI Server (Go)                     │
+│         Orchestration, routing, auth, lifecycle         │
 ├─────────────────────────────────────────────────────────┤
-│                     MUXI Runtime (Python)               │
+│                  MUXI Runtime (Python)                  │
 │     Agent execution, memory, tools, observability       │
 ├─────────────────────────────────────────────────────────┤
-│                    Formation Files (.afs)               │
-│        Declarative agent definitions (like Dockerfiles) │
+│                  Formation Files (.afs)                 │
+│     Declarative agent definitions (like Dockerfile)     │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -92,12 +95,12 @@ MUXI is a complete infrastructure platform that treats AI agents as first-class 
 | Server | Go | Orchestration, routing, process management |
 | Runtime | Python | Agent execution, LLM calls, memory, tools |
 | CLI | Go | Deployment and management commands |
-| Registry | - | Formation distribution (like Docker Hub) |
+| Registry | PHP | Formation distribution (like Docker Hub) |
 | SDKs | Multi-language | Client libraries for integration |
 
 ### The Formation Standard
 
-MUXI introduces the **Agent Formation Standard** - a declarative specification for AI agent systems. Like Dockerfiles for containers, formations define complete agent systems in portable, version-controlled files.
+MUXI introduces the **Agent Formation Schema** - a declarative specification for AI agent systems. Like Dockerfiles for containers, formations define complete agent systems in portable, version-controlled files.
 
 ```yaml
 # formation.afs - A complete AI system definition
@@ -124,14 +127,15 @@ memory:
 
 mcps:
   - id: slack
-    server: "@anthropic/slack"
+    server: "@acme/slack"
   - id: zendesk
     server: "@company/zendesk"
 ```
 
 **One command to deploy:**
+
 ```bash
-muxi deploy customer-support.afs
+muxi deploy customer-support
 ```
 
 The formation specification is being donated to the **Agentic AI Foundation** (Linux Foundation), positioning it as the open industry standard for AI agent definitions.
@@ -145,6 +149,7 @@ The formation specification is being donated to the **Agentic AI Foundation** (L
 At the heart of MUXI is the **Overlord** - a 9,800-line orchestration engine that manages the complexity of multi-agent systems.
 
 **Capabilities:**
+
 - Dynamic agent selection based on intent and context
 - Task decomposition for complex requests
 - Parallel execution with dependency management
@@ -249,9 +254,19 @@ MUXI is executing the same playbook. If the formation spec becomes *the* standar
 The **MUXI Registry** is a complete formation distribution hub - like Docker Hub for agents.
 
 **The Flywheel:**
+
 ```
-More formations → More capability gaps discovered → More marketplace items →
-More creators → Better coverage → More valuable formations → More users → REPEAT
+More formations using MUXI
+  → More capability gaps discovered
+  → More marketplace searches
+  → More agent installations
+  → More revenue for creators
+  → More creators publish agents
+  → Better marketplace coverage
+  → Higher success rate
+  → More valuable formations
+  → More enterprise customers
+  → REPEAT (exponential growth)
 ```
 
 Two-sided marketplaces are notoriously difficult to bootstrap. Once spinning, they're nearly impossible to displace.
@@ -296,7 +311,7 @@ But here's the critical insight: **ecosystem parity may never be achieved.** Whi
 
 **The window for competition is closing.** Every month of MUXI's head start makes the moat deeper.
 
-### Why Hyperscalers Won't Compete
+### Why Hyperscalers Unlikely To Compete
 
 | Threat | Likelihood | Reality |
 |--------|------------|---------|
@@ -345,6 +360,7 @@ permissions:
 MUXI prioritizes **open-source adoption and community building** over traditional SaaS. The cloud offering is intentionally deferred 12+ months to build stronger foundations.
 
 **Strategic Rationale:**
+
 - Direct customer feedback from production deployments
 - Community-driven development and trust
 - Support revenue funds platform development
@@ -352,25 +368,73 @@ MUXI prioritizes **open-source adoption and community building** over traditiona
 
 ### Revenue Model
 
+| Tier | Price | Value Proposition | Target |
+|------|-------|-------------------|--------|
+| **OSS** | Free | Full platform, self-supported | Developers, community |
+| **Priority Support** | $1K/mo | Group Slack, expert guidance, 36hr SLA | Technical teams who can self-deploy |
+| **Private Support** | $2.5K/mo | Private channel, monthly calls, 18hr SLA | Production users needing faster response |
+| **Deployment Pilot** | $25K total | White-glove 3-month engagement, we deploy everything | Enterprise proof-of-value |
+| **Enterprise** | $10-15K/mo | RBAC + ongoing support (annual commitment) | Mid-market, compliance-driven |
+| **Strategic Partner** | $20-25K/mo | Dedicated engineer, product influence (annual) | Fortune 500, design partners |
+
+**Future Revenue Streams:**
+- **Trail** (~6 months): Observability SaaS dashboard
+- **Cloud** (~12+ months): Hosted platform for teams who don't want to self-host
+- **Marketplace** (future): 20% commission on agent/tool transactions
+
+### Revenue Projections (Conservative)
+
+**Year 1 Target (12 months post-launch):**
+- 20 Priority Support customers @ $1K = $20K MRR
+- 5 Private Support customers @ $2.5K = $12.5K MRR  
+- 4 Deployment Pilots @ $25K = $100K one-time
+- 3 Enterprise customers @ $12K avg = $36K MRR
+- 1 Strategic Partner @ $20K = $20K MRR
+
+**Year 1 Total: ~$1.1M ARR + $100K pilots**
+
+**Year 2 Target:**
+- Support tier growth: $50K MRR
+- Enterprise expansion: $150K MRR (10-15 customers)
+- Trail SaaS launch: $30K MRR
+- Strategic Partners: $60K MRR (3 customers)
+
+**Year 2 Total: ~$3.5M ARR**
+
+These projections are conservative and assume founder-led sales only. With dedicated sales resources, these numbers could 2-3x.
+
+### Why This Model Works
+
+**1. Support revenue before cloud infrastructure**
+- No expensive cloud to build and maintain
+- Direct customer relationships from day one
+- Revenue funds product development
+
+**2. Natural upsell path**
 ```
-OSS (Free)              → Community growth, ecosystem adoption
-Priority Support        → $1K/mo, group Slack, expert guidance
-Private Support         → $2.5K/mo, private channel, monthly calls
-Deployment Pilot        → $25K total, white-glove 3-month engagement
-Enterprise              → $10-15K/mo, RBAC + ongoing support (annual)
-Strategic Partner       → $20-25K/mo, dedicated engineer, product influence
-Trail (Future, ~6mo)    → Observability SaaS dashboard
-Cloud (Future, ~12mo+)  → Hosted platform
+OSS → Priority ($1K) → Private ($2.5K) → Pilot ($25K) → Enterprise ($10-15K) → Strategic ($20-25K)
 ```
+
+**3. Enterprise RBAC justifies premium pricing**
+- Only platform with this capability
+- Building RBAC in-house costs $100K+ in engineering
+- $120-180K/year is a bargain by comparison
+
+**4. Annual commitments reduce churn**
+- Enterprise and Strategic Partner tiers require annual commitment
+- Creates predictable revenue base
+- Aligns incentives for long-term success
 
 ### Target Customers
 
 **Platform Builders:**
+
 - AI-native SaaS companies embedding agents in their products
 - Need: deployment infrastructure, LLM abstraction, observability
 - Examples: Legal AI, enterprise search, content platforms
 
 **Internal Tool Builders:**
+
 - Mid-market and enterprise teams deploying internal AI assistants
 - Need: Slack bots, compliance monitors, research tools with RBAC
 - Examples: Customer support automation, document processing, data analysis
@@ -436,20 +500,21 @@ Most analyst projections focus on AI models and applications. The infrastructure
 | Timeline | Milestone |
 |----------|-----------|
 | January 2026 | Public launch |
-| Q1 2026 | Agent Skills (SKILL.md) implementation |
+| Q1 2026 | Performacnce and feature enhancements |
 | Q1 2026 | Enterprise RBAC package |
 | H1 2026 | Trail observability SaaS |
 | H2 2026+ | Cloud platform |
 
 ---
 
-## Team & Background
+## Founder & Background
 
 **Created by Ran Aroussi** - 30+ years building production infrastructure, with open-source projects receiving 10M+ monthly downloads.
 
 Author of *Production Agentic AI*, the definitive technical guide to running AI agents at scale (600+ pages).
 
 **Development Philosophy:**
+
 - No VC funding, no board pressures, no exit timeline
 - Built for long-term sustainability
 - Transparent development, public roadmap
@@ -485,6 +550,7 @@ Author of *Production Agentic AI*, the definitive technical guide to running AI 
 ### The Ask
 
 MUXI is currently bootstrapped and seeking strategic partners who can accelerate:
+
 - Enterprise customer introductions
 - Developer community growth
 - Standards body participation
@@ -510,10 +576,10 @@ The OSS-first go-to-market strategy prioritizes community and adoption over shor
 
 ## Contact
 
-- **Website:** https://muxi.org
-- **GitHub:** https://github.com/muxi-ai
-- **Email:** hello@muxi.org
-- **Founder:** Ran Aroussi (@aroussi)
+- **Website:** [muxi.org](https://muxi.org)
+- **GitHub:** [github.com/muxi-ai](https://github.com/muxi-ai)
+- **Email:** [hi@muxi.org](mailto:hi@muxi.org)
+- **Founder:** Ran Aroussi ([@aroussi](https://x.com/@aroussi))
 
 ---
 
