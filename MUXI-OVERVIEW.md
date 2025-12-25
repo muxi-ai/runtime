@@ -227,8 +227,9 @@ MUXI's competitive advantage is not a single feature but **five concentric rings
 - 349 observability events
 - 3-tier memory system
 - Real integration testing (no mocks)
+- **Astrategia**: Fine-tuned LLM optimized specifically for Overlord orchestration tasks - better agent selection, smarter task decomposition, lower inference costs
 
-**This represents 15,000-20,000 engineering hours.** A well-funded competitor starting today would need 18-24 months to reach feature parity.
+**This represents 15,000-20,000 engineering hours.** A well-funded competitor starting today would need 18-24 months to reach feature parity. And they'd still lack Astrategia - training a purpose-built orchestration model requires the data and expertise that only comes from running MUXI at scale.
 
 ### Ring 2: Ecosystem Compatibility
 
@@ -508,8 +509,7 @@ Most analyst projections focus on AI models and applications. The infrastructure
 
 | Timeline | Milestone |
 |----------|-----------|
-| January 2026 | Public launch |
-| Q1 2026 | Agent Skills (SKILL.md) implementation |
+| January 2026 | Public launch (includes Agent Skills) |
 | Q1 2026 | Enterprise RBAC package |
 | Q1 2026 | Astrategia - fine-tuned LLM optimized for Overlord orchestration (better decisions, lower costs) |
 | Q1 2026 | Performance and feature enhancements |
