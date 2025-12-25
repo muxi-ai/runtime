@@ -394,7 +394,7 @@ MUXI prioritizes **open-source adoption and community building** over traditiona
 | Enterprise | 6 | $72K | $864K |
 | Strategic Partner | 2 | $40K | $480K |
 
-**Year 1 Total: ~$1.9M ARR + $200K pilots = $2.1M revenue**
+**Year 1 Total: ~$1.9M ARR + $200K pilots = ~$2.1M revenue**
 
 **Year 2 Target:**
 
@@ -402,13 +402,13 @@ MUXI prioritizes **open-source adoption and community building** over traditiona
 |------|-----------|-----|-----|
 | Priority Support | 40 | $40K | $480K |
 | Private Support | 20 | $50K | $600K |
-| Deployment Pilots | 15 | - | $375K (one-time) |
+| Deployment Pilots | 20 | - | $500K (one-time) |
 | Enterprise | 15 | $180K | $2.16M |
 | Strategic Partner | 5 | $100K | $1.2M |
-| Trail SaaS | 100+ | $50K | $600K |
-| Cloud Platform | 200+ | $20K | $240K |
+| Trail SaaS | 100+ | $50K+ | $600K+ |
+| Cloud Platform | 200+ | $20K+ | $240K+ |
 
-**Year 2 Total: ~$5.3M ARR + $375K pilots = ~$5.7M revenue**
+**Year 2 Total: ~$5.3M+ ARR + $500K pilots = ~$5.8M+ revenue**
 
 These projections assume founder-led sales with limited marketing spend. With dedicated sales resources and marketing investment, these numbers could 2-3x.
 
@@ -509,8 +509,10 @@ Most analyst projections focus on AI models and applications. The infrastructure
 | Timeline | Milestone |
 |----------|-----------|
 | January 2026 | Public launch |
-| Q1 2026 | Performacnce and feature enhancements |
+| Q1 2026 | Agent Skills (SKILL.md) implementation |
 | Q1 2026 | Enterprise RBAC package |
+| Q1 2026 | Astrategia - fine-tuned LLM optimized for Overlord orchestration (better decisions, lower costs) |
+| Q1 2026 | Performance and feature enhancements |
 | H1 2026 | Trail observability SaaS |
 | H2 2026+ | Cloud platform |
 
