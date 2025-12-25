@@ -22,6 +22,8 @@ While thousands of companies are building AI agents, almost none have solved the
 
 **The Opportunity:** The AI agent infrastructure market is nascent but growing rapidly. Most teams today spend 3-6 months building custom orchestration before shipping their first agent. MUXI eliminates this entirely, reducing time-to-production from months to days.
 
+**Competitive Moat:** A well-funded competitor starting today would need **18-24 months** to reach technical parity - and by then, MUXI's network effects (registry), standards adoption (Linux Foundation), and data moat (auto-extend) will have created an insurmountable lead. This is not a market where "move fast and break things" works; production infrastructure requires the kind of battle-tested engineering that only comes from years of development.
+
 ---
 
 ## The Problem
@@ -268,6 +270,42 @@ This generates proprietary intelligence:
 - Which approval rules work
 
 **Self-improving systems compound their advantage.** Competitors cannot replicate this without equivalent usage volume.
+
+---
+
+## Competitive Timeline Analysis
+
+**A well-funded competitor (Series A/B, $10M+) starting today would face this timeline:**
+
+| Phase | Duration | What They'd Build | MUXI's Lead |
+|-------|----------|-------------------|-------------|
+| Phase 1 | 1-2 months | Basic agent framework | No orchestration, memory, or security |
+| Phase 2 | 3-5 months | Surface feature parity | Crashes under load; no production stability |
+| Phase 3 | 6-9 months | Infrastructure hardening | Building memory tiers, sandboxing, events |
+| Phase 4 | 10-14 months | Production readiness | Still missing edge-case coverage |
+| Phase 5 | 15-18 months | Ecosystem bootstrap | No registry, no marketplace, no network effects |
+| Phase 6 | 18-24 months | Standards adoption | Linux Foundation governance takes years |
+
+**Total catch-up time: 18-24 months for technical parity.**
+
+But here's the critical insight: **ecosystem parity may never be achieved.** While a competitor spends 18 months building, MUXI's network effects compound:
+- Registry grows with more formations
+- Standards adoption accelerates
+- Auto-extend learns from usage data
+- Enterprise customers lock in with RBAC
+
+**The window for competition is closing.** Every month of MUXI's head start makes the moat deeper.
+
+### Why Hyperscalers Won't Compete
+
+| Threat | Likelihood | Reality |
+|--------|------------|---------|
+| OpenAI/Anthropic build competing infra | Low | Focused on models, not orchestration |
+| Google/Microsoft enter the space | Low-Medium | Would take 12+ months; not core business |
+| AWS/Azure offer similar service | Medium | MUXI is self-hosted; different market |
+| Acquisition of MUXI | Possible | Best outcome; validates the market |
+
+Hyperscalers are focused on models and APIs. The "boring" infrastructure layer is not their core competency - just as Amazon didn't build Kubernetes; they adopted it.
 
 ---
 
