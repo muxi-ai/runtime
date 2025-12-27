@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2025-12-18T09:57:19Z",
+  "generated_at": "2025-12-27T16:01:50Z",
   "root": "/Users/ran/Projects/muxi/code/runtime",
   "language": "python",
   "nodes": {
@@ -377,16 +377,16 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py::__init__",
         "name": "__init__",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-        "line_start": 70,
-        "line_end": 215,
+        "line_start": 71,
+        "line_end": 216,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py::batch_embed",
         "name": "batch_embed",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-        "line_start": 249,
-        "line_end": 270,
+        "line_start": 250,
+        "line_end": 271,
         "kind": "function"
       },
       {
@@ -446,11 +446,43 @@
         "kind": "function"
       },
       {
+        "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py::__init__",
+        "name": "__init__",
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py",
+        "line_start": 22,
+        "line_end": 24,
+        "kind": "function"
+      },
+      {
+        "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py::cancellable",
+        "name": "cancellable",
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py",
+        "line_start": 27,
+        "line_end": 60,
+        "kind": "function"
+      },
+      {
+        "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py::decorator",
+        "name": "decorator",
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py",
+        "line_start": 49,
+        "line_end": 59,
+        "kind": "function"
+      },
+      {
+        "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py::wrapper",
+        "name": "wrapper",
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py",
+        "line_start": 51,
+        "line_end": 58,
+        "kind": "function"
+      },
+      {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/request_tracker.py::__init__",
         "name": "__init__",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/request_tracker.py",
         "line_start": 72,
-        "line_end": 74,
+        "line_end": 75,
         "kind": "function"
       },
       {
@@ -553,8 +585,8 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/config/validation.py::check_secrets",
         "name": "check_secrets",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/config/validation.py",
-        "line_start": 2522,
-        "line_end": 2525,
+        "line_start": 2555,
+        "line_end": 2558,
         "kind": "function"
       },
       {
@@ -593,7 +625,7 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py::handle_credential_response",
         "name": "handle_credential_response",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
-        "line_start": 393,
+        "line_start": 396,
         "line_end": 525,
         "kind": "function"
       },
@@ -817,72 +849,72 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py::__init__",
         "name": "__init__",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
-        "line_start": 127,
-        "line_end": 209,
+        "line_start": 128,
+        "line_end": 210,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py::_clean_exit_handler",
         "name": "_clean_exit_handler",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
-        "line_start": 2080,
-        "line_end": 2091,
+        "line_start": 2073,
+        "line_end": 2084,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py::_initialize_operation",
         "name": "_initialize_operation",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
-        "line_start": 1775,
-        "line_end": 1811,
+        "line_start": 1768,
+        "line_end": 1804,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py::_load_operation",
         "name": "_load_operation",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
-        "line_start": 874,
-        "line_end": 971,
+        "line_start": 863,
+        "line_end": 960,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py::_timeout_operation",
         "name": "_timeout_operation",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
-        "line_start": 887,
-        "line_end": 896,
+        "line_start": 876,
+        "line_end": 885,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py::interpolate_value",
         "name": "interpolate_value",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
-        "line_start": 806,
-        "line_end": 838,
+        "line_start": 795,
+        "line_end": 827,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py::run_in_thread",
         "name": "run_in_thread",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
-        "line_start": 3744,
-        "line_end": 3755,
+        "line_start": 3736,
+        "line_end": 3747,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py::start_overlord",
         "name": "start_overlord",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
-        "line_start": 2424,
-        "line_end": 2621,
+        "line_start": 2417,
+        "line_end": 2613,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py::wait_for_shutdown",
         "name": "wait_for_shutdown",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
-        "line_start": 2649,
-        "line_end": 2656,
+        "line_start": 2641,
+        "line_end": 2648,
         "kind": "function"
       },
       {
@@ -1049,40 +1081,40 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py::__init__",
         "name": "__init__",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-        "line_start": 33,
-        "line_end": 40,
+        "line_start": 34,
+        "line_end": 41,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py::_execute_with_context",
         "name": "_execute_with_context",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-        "line_start": 562,
-        "line_end": 574,
+        "line_start": 591,
+        "line_end": 603,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py::_stream_request",
         "name": "_stream_request",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-        "line_start": 1075,
-        "line_end": 1079,
+        "line_start": 1138,
+        "line_end": 1142,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py::create_task_with_context",
         "name": "create_task_with_context",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-        "line_start": 128,
-        "line_end": 129,
+        "line_start": 129,
+        "line_end": 130,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py::delayed_process",
         "name": "delayed_process",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-        "line_start": 65,
-        "line_end": 125,
+        "line_start": 66,
+        "line_end": 126,
         "kind": "function"
       },
       {
@@ -1145,160 +1177,160 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::__init__",
         "name": "__init__",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 298,
-        "line_end": 825,
+        "line_start": 299,
+        "line_end": 826,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::_actually_delete_agent",
         "name": "_actually_delete_agent",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 3394,
-        "line_end": 3418,
+        "line_start": 3529,
+        "line_end": 3553,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::_actually_shutdown_overlord",
         "name": "_actually_shutdown_overlord",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 3420,
-        "line_end": 3456,
+        "line_start": 3555,
+        "line_end": 3591,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::_create_agent_from_config",
         "name": "_create_agent_from_config",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 1681,
-        "line_end": 1735,
+        "line_start": 1682,
+        "line_end": 1736,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::_deregister_agent_from_external_registry",
         "name": "_deregister_agent_from_external_registry",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 3347,
-        "line_end": 3371,
+        "line_start": 3482,
+        "line_end": 3506,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::_deregister_all_agents_from_external_registry",
         "name": "_deregister_all_agents_from_external_registry",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 3373,
-        "line_end": 3392,
+        "line_start": 3508,
+        "line_end": 3527,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::_disable_parallel_execution_temporarily",
         "name": "_disable_parallel_execution_temporarily",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 1657,
-        "line_end": 1679,
+        "line_start": 1658,
+        "line_end": 1680,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::_execute_workflow_background",
         "name": "_execute_workflow_background",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 7653,
-        "line_end": 7748,
+        "line_start": 7978,
+        "line_end": 8073,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::_initialize_a2a_client_factory",
         "name": "_initialize_a2a_client_factory",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 2747,
-        "line_end": 2772,
+        "line_start": 2882,
+        "line_end": 2907,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::_initialize_collections",
         "name": "_initialize_collections",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 2723,
-        "line_end": 2745,
+        "line_start": 2858,
+        "line_end": 2880,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::_initialize_extraction_model",
         "name": "_initialize_extraction_model",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 2584,
-        "line_end": 2721,
+        "line_start": 2719,
+        "line_end": 2856,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::_initialize_routing_model",
         "name": "_initialize_routing_model",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 2402,
-        "line_end": 2582,
+        "line_start": 2537,
+        "line_end": 2717,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::_send_completion_webhook",
         "name": "_send_completion_webhook",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 7765,
-        "line_end": 7820,
+        "line_start": 8090,
+        "line_end": 8145,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::_wait_for_background_tasks",
         "name": "_wait_for_background_tasks",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 905,
-        "line_end": 923,
+        "line_start": 906,
+        "line_end": 924,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::progress_callback",
         "name": "progress_callback",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 7963,
-        "line_end": 7998,
+        "line_start": 8293,
+        "line_end": 8328,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::streaming_progress_callback",
         "name": "streaming_progress_callback",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 8266,
-        "line_end": 8272,
+        "line_start": 8597,
+        "line_end": 8603,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::task_done_callback",
         "name": "task_done_callback",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 849,
-        "line_end": 881,
+        "line_start": 850,
+        "line_end": 882,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::timeout_handler",
         "name": "timeout_handler",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 1848,
-        "line_end": 1852,
+        "line_start": 1849,
+        "line_end": 1853,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::update_credential_name",
         "name": "update_credential_name",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 5535,
-        "line_end": 5549,
+        "line_start": 5745,
+        "line_end": 5759,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::update_name",
         "name": "update_name",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 9348,
-        "line_end": 9355,
+        "line_start": 9679,
+        "line_end": 9686,
         "kind": "function"
       },
       {
@@ -1465,8 +1497,8 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py::generate_stream",
         "name": "generate_stream",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py",
-        "line_start": 165,
-        "line_end": 217,
+        "line_start": 173,
+        "line_end": 225,
         "kind": "function"
       },
       {
@@ -1521,56 +1553,56 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py::__init__",
         "name": "__init__",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
-        "line_start": 93,
-        "line_end": 143,
+        "line_start": 94,
+        "line_end": 144,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py::create_http_exception_handler",
         "name": "create_http_exception_handler",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
-        "line_start": 52,
-        "line_end": 79,
+        "line_start": 53,
+        "line_end": 80,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py::handler",
         "name": "handler",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
-        "line_start": 56,
-        "line_end": 77,
+        "line_start": 57,
+        "line_end": 78,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py::lifespan",
         "name": "lifespan",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
-        "line_start": 146,
-        "line_end": 291,
+        "line_start": 147,
+        "line_end": 292,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py::signal_handler",
         "name": "signal_handler",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
-        "line_start": 629,
-        "line_end": 640,
+        "line_start": 631,
+        "line_end": 642,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py::sync_signal_handler",
         "name": "sync_signal_handler",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
-        "line_start": 650,
-        "line_end": 666,
+        "line_start": 652,
+        "line_end": 668,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py::validation_exception_handler",
         "name": "validation_exception_handler",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
-        "line_start": 449,
-        "line_end": 491,
+        "line_start": 450,
+        "line_end": 492,
         "kind": "function"
       },
       {
@@ -2353,24 +2385,24 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::_chat_request",
         "name": "_chat_request",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1480,
-        "line_end": 1513,
+        "line_start": 1494,
+        "line_end": 1532,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::_chat_request_with_tools",
         "name": "_chat_request_with_tools",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1544,
-        "line_end": 1575,
+        "line_start": 1563,
+        "line_end": 1594,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::_circuit_breaker_func",
         "name": "_circuit_breaker_func",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1196,
-        "line_end": 1197,
+        "line_start": 1199,
+        "line_end": 1200,
         "kind": "function"
       },
       {
@@ -2393,24 +2425,24 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::_embed_batch_request",
         "name": "_embed_batch_request",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1723,
-        "line_end": 1768,
+        "line_start": 1745,
+        "line_end": 1790,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::_embed_request",
         "name": "_embed_request",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1595,
-        "line_end": 1634,
+        "line_start": 1617,
+        "line_end": 1656,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::_execute_with_resilience",
         "name": "_execute_with_resilience",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1141,
-        "line_end": 1285,
+        "line_start": 1144,
+        "line_end": 1288,
         "kind": "function"
       },
       {
@@ -2441,16 +2473,16 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::_transcribe_request",
         "name": "_transcribe_request",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1657,
-        "line_end": 1701,
+        "line_start": 1679,
+        "line_end": 1723,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::_wrapped_func",
         "name": "_wrapped_func",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1147,
-        "line_end": 1191,
+        "line_start": 1150,
+        "line_end": 1194,
         "kind": "function"
       },
       {
@@ -2465,8 +2497,8 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::clear_llm_cache",
         "name": "clear_llm_cache",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1819,
-        "line_end": 1828,
+        "line_start": 1841,
+        "line_end": 1850,
         "kind": "function"
       },
       {
@@ -2489,40 +2521,40 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::get_cache_stats",
         "name": "get_cache_stats",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1843,
-        "line_end": 1848,
+        "line_start": 1865,
+        "line_end": 1870,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::get_circuit_breaker_stats",
         "name": "get_circuit_breaker_stats",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1871,
-        "line_end": 1881,
+        "line_start": 1893,
+        "line_end": 1903,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::get_retry_stats",
         "name": "get_retry_stats",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1851,
-        "line_end": 1868,
+        "line_start": 1873,
+        "line_end": 1890,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::reset_all_stats",
         "name": "reset_all_stats",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1884,
-        "line_end": 1901,
+        "line_start": 1906,
+        "line_end": 1923,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py::set_cache_ttl",
         "name": "set_cache_ttl",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
-        "line_start": 1831,
-        "line_end": 1840,
+        "line_start": 1853,
+        "line_end": 1862,
         "kind": "function"
       },
       {
@@ -2961,8 +2993,8 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/local_embeddings.py::__init__",
         "name": "__init__",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/local_embeddings.py",
-        "line_start": 270,
-        "line_end": 278,
+        "line_start": 274,
+        "line_end": 282,
         "kind": "function"
       },
       {
@@ -3041,8 +3073,8 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/working.py::parse_timestamp",
         "name": "parse_timestamp",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/working.py",
-        "line_start": 1128,
-        "line_end": 1135,
+        "line_start": 1138,
+        "line_end": 1145,
         "kind": "function"
       },
       {
@@ -3137,8 +3169,8 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/logger.py::__init__",
         "name": "__init__",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/logger.py",
-        "line_start": 31,
-        "line_end": 43,
+        "line_start": 36,
+        "line_end": 61,
         "kind": "function"
       },
       {
@@ -3161,16 +3193,16 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/manager.py::subscribe",
         "name": "subscribe",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/manager.py",
-        "line_start": 151,
-        "line_end": 183,
+        "line_start": 174,
+        "line_end": 206,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/manager.py::track_request",
         "name": "track_request",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/manager.py",
-        "line_start": 284,
-        "line_end": 359,
+        "line_start": 307,
+        "line_end": 382,
         "kind": "function"
       },
       {
@@ -3426,7 +3458,7 @@
         "name": "_emit_in_background",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/streaming.py",
         "line_start": 308,
-        "line_end": 362,
+        "line_end": 364,
         "kind": "function"
       },
       {
@@ -3458,7 +3490,7 @@
         "name": "stream",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/streaming.py",
         "line_start": 269,
-        "line_end": 379,
+        "line_end": 381,
         "kind": "function"
       },
       {
@@ -3622,19 +3654,27 @@
         "kind": "function"
       },
       {
+        "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py::_print_banner",
+        "name": "_print_banner",
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
+        "line_start": 14,
+        "line_end": 26,
+        "kind": "function"
+      },
+      {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py::main",
         "name": "main",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
-        "line_start": 251,
-        "line_end": 291,
+        "line_start": 271,
+        "line_end": 311,
         "kind": "function"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py::run_formation",
         "name": "run_formation",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
-        "line_start": 57,
-        "line_end": 248,
+        "line_start": 77,
+        "line_end": 268,
         "kind": "function"
       }
     ],
@@ -3644,15 +3684,15 @@
         "name": "APIEventType",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/datatypes/api.py",
         "line_start": 10,
-        "line_end": 136,
+        "line_end": 142,
         "kind": "class"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/datatypes/api.py::APIObjectType",
         "name": "APIObjectType",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/datatypes/api.py",
-        "line_start": 139,
-        "line_end": 213,
+        "line_start": 145,
+        "line_end": 223,
         "kind": "class"
       },
       {
@@ -5323,8 +5363,8 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py::Agent",
         "name": "Agent",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-        "line_start": 61,
-        "line_end": 4430,
+        "line_start": 62,
+        "line_end": 4522,
         "kind": "class"
       },
       {
@@ -5376,6 +5416,14 @@
         "kind": "class"
       },
       {
+        "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py::RequestCancelledException",
+        "name": "RequestCancelledException",
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py",
+        "line_start": 14,
+        "line_end": 24,
+        "kind": "class"
+      },
+      {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/request_tracker.py::RequestState",
         "name": "RequestState",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/request_tracker.py",
@@ -5396,7 +5444,7 @@
         "name": "RequestTracker",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/request_tracker.py",
         "line_start": 69,
-        "line_end": 171,
+        "line_end": 214,
         "kind": "class"
       },
       {
@@ -5492,7 +5540,7 @@
         "name": "FormationValidator",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/config/validation.py",
         "line_start": 124,
-        "line_end": 2416,
+        "line_end": 2449,
         "kind": "class"
       },
       {
@@ -5540,7 +5588,7 @@
         "name": "CredentialHandler",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
         "line_start": 12,
-        "line_end": 1214,
+        "line_end": 1264,
         "kind": "class"
       },
       {
@@ -5556,7 +5604,7 @@
         "name": "CredentialResolver",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/resolver.py",
         "line_start": 44,
-        "line_end": 775,
+        "line_end": 771,
         "kind": "class"
       },
       {
@@ -5827,8 +5875,8 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py::Formation",
         "name": "Formation",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
-        "line_start": 112,
-        "line_end": 4392,
+        "line_start": 113,
+        "line_end": 4384,
         "kind": "class"
       },
       {
@@ -5860,7 +5908,7 @@
         "name": "UserContextManager",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/memory/user_context.py",
         "line_start": 10,
-        "line_end": 376,
+        "line_end": 364,
         "kind": "class"
       },
       {
@@ -5892,15 +5940,15 @@
         "name": "AgentRouter",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/agent_router.py",
         "line_start": 14,
-        "line_end": 390,
+        "line_end": 392,
         "kind": "class"
       },
       {
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py::ChatOrchestrator",
         "name": "ChatOrchestrator",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-        "line_start": 24,
-        "line_end": 1079,
+        "line_start": 25,
+        "line_end": 1142,
         "kind": "class"
       },
       {
@@ -5916,7 +5964,7 @@
         "name": "UnifiedClarificationSystem",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/clarification.py",
         "line_start": 18,
-        "line_end": 1341,
+        "line_end": 1383,
         "kind": "class"
       },
       {
@@ -5955,8 +6003,8 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::Overlord",
         "name": "Overlord",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "line_start": 243,
-        "line_end": 9863,
+        "line_start": 244,
+        "line_end": 10194,
         "kind": "class"
       },
       {
@@ -6240,11 +6288,11 @@
         "kind": "class"
       },
       {
-        "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py::AVChatRequest",
-        "name": "AVChatRequest",
+        "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py::AudioChatRequest",
+        "name": "AudioChatRequest",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py",
         "line_start": 35,
-        "line_end": 44,
+        "line_end": 47,
         "kind": "class"
       },
       {
@@ -6253,6 +6301,14 @@
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py",
         "line_start": 21,
         "line_end": 32,
+        "kind": "class"
+      },
+      {
+        "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/credentials.py::CredentialCreate",
+        "name": "CredentialCreate",
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/credentials.py",
+        "line_start": 25,
+        "line_end": 29,
         "kind": "class"
       },
       {
@@ -6315,8 +6371,8 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py::FormationServer",
         "name": "FormationServer",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
-        "line_start": 82,
-        "line_end": 822,
+        "line_start": 83,
+        "line_end": 826,
         "kind": "class"
       },
       {
@@ -6348,7 +6404,7 @@
         "name": "RequestAnalyzer",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/analyzer.py",
         "line_start": 19,
-        "line_end": 585,
+        "line_end": 600,
         "kind": "class"
       },
       {
@@ -6475,8 +6531,8 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/decomposer.py::ApprovalManager",
         "name": "ApprovalManager",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/decomposer.py",
-        "line_start": 1155,
-        "line_end": 1248,
+        "line_start": 1172,
+        "line_end": 1265,
         "kind": "class"
       },
       {
@@ -6484,7 +6540,7 @@
         "name": "TaskDecomposer",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/decomposer.py",
         "line_start": 19,
-        "line_end": 1152,
+        "line_end": 1169,
         "kind": "class"
       },
       {
@@ -6956,7 +7012,7 @@
         "name": "LLM",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
         "line_start": 708,
-        "line_end": 1815,
+        "line_end": 1837,
         "kind": "class"
       },
       {
@@ -7331,8 +7387,8 @@
         "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/local_embeddings.py::LocalEmbeddingProvider",
         "name": "LocalEmbeddingProvider",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/local_embeddings.py",
-        "line_start": 251,
-        "line_end": 302,
+        "line_start": 255,
+        "line_end": 306,
         "kind": "class"
       },
       {
@@ -7388,7 +7444,7 @@
         "name": "WorkingMemory",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/working.py",
         "line_start": 92,
-        "line_end": 1260,
+        "line_end": 1270,
         "kind": "class"
       },
       {
@@ -7636,7 +7692,7 @@
         "name": "EventLogger",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/logger.py",
         "line_start": 28,
-        "line_end": 215,
+        "line_end": 295,
         "kind": "class"
       },
       {
@@ -7644,7 +7700,7 @@
         "name": "ObservabilityManager",
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/manager.py",
         "line_start": 20,
-        "line_end": 563,
+        "line_end": 586,
         "kind": "class"
       },
       {
@@ -8393,153 +8449,173 @@
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-        "module": "..credentials",
+        "module": "..background.cancellation",
         "line": 50
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-        "module": "...utils.id_generator",
+        "module": "..credentials",
         "line": 51
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-        "module": "...datatypes.response",
+        "module": "...utils.id_generator",
         "line": 52
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-        "module": "...datatypes.intent",
+        "module": "...datatypes.response",
         "line": 53
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-        "module": "...services.mcp.service",
+        "module": "...datatypes.intent",
         "line": 54
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-        "module": "...services.llm",
+        "module": "...services.mcp.service",
         "line": 55
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-        "module": "...services.intent",
+        "module": "...services.llm",
         "line": 56
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-        "module": "...services",
+        "module": "...services.intent",
         "line": 57
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-        "module": "...utils.security",
+        "module": "...services",
         "line": 58
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
+        "module": "...utils.security",
+        "line": 59
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "collections",
-        "line": 147
+        "line": 148
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "...services.a2a.client",
-        "line": 199
+        "line": 200
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": ".knowledge.handler",
-        "line": 237
+        "line": 238
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "datetime",
-        "line": 734
+        "line": 735
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "..credentials",
-        "line": 1222
+        "line": 1226
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "...services.mcp.service",
-        "line": 1223
+        "line": 1227
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "...datatypes.clarification",
-        "line": 1400
+        "line": 1404
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "..credentials",
-        "line": 1470
+        "line": 1474
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "...services.mcp.service",
-        "line": 1471
+        "line": 1475
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "json as json_lib",
-        "line": 1628
+        "line": 1641
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "re",
-        "line": 1665
+        "line": 1678
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "...datatypes.clarification",
-        "line": 1821
+        "line": 1848
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "re",
-        "line": 2338
+        "line": 2395
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
+        "module": "..background.cancellation",
+        "line": 2924
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
+        "module": "..background.cancellation",
+        "line": 2950
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "..credentials",
-        "line": 2904
+        "line": 2970
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "...services.mcp.service",
-        "line": 2905
+        "line": 2971
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "...utils.id_generator",
-        "line": 3123
+        "line": 3189
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
+        "module": "..background.cancellation",
+        "line": 3245
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "json",
-        "line": 3228
+        "line": 3299
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "..prompts.loader",
-        "line": 3401
+        "line": 3473
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
+        "module": "..background.cancellation",
+        "line": 3516
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "json",
-        "line": 3450
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-        "module": "..prompts.loader",
-        "line": 4355
+        "line": 3529
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
         "module": "json",
-        "line": 4373
+        "line": 4465
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/knowledge/__init__.py",
@@ -8865,6 +8941,31 @@
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/__init__.py",
         "module": ".time_estimator",
         "line": 9
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py",
+        "module": "functools",
+        "line": 7
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py",
+        "module": "typing",
+        "line": 8
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py",
+        "module": ".request_tracker",
+        "line": 11
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py",
+        "module": "...services.observability.context",
+        "line": 52
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py",
+        "module": "...services.observability.context",
+        "line": 107
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/request_tracker.py",
@@ -9244,32 +9345,32 @@
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
         "module": "json",
-        "line": 173
+        "line": 176
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
         "module": "aiohttp",
-        "line": 321
+        "line": 324
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
         "module": "asyncio",
-        "line": 322
+        "line": 325
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
         "module": "muxi.services.mcp.handler",
-        "line": 352
+        "line": 355
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
         "module": "asyncio",
-        "line": 353
+        "line": 356
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
         "module": "time",
-        "line": 414
+        "line": 417
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
@@ -9279,37 +9380,32 @@
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
         "module": "time",
-        "line": 638
+        "line": 641
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
         "module": "...services.llm",
-        "line": 727
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
-        "module": "..prompts.loader",
-        "line": 893
+        "line": 729
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
         "module": "...services",
-        "line": 906
+        "line": 936
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
         "module": "...services.llm",
-        "line": 996
+        "line": 1027
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
         "module": "...services.llm",
-        "line": 1092
+        "line": 1132
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
         "module": "...services.llm",
-        "line": 1138
+        "line": 1183
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/resolver.py",
@@ -9374,22 +9470,22 @@
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/resolver.py",
         "module": "...services.llm",
-        "line": 624
+        "line": 625
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/resolver.py",
         "module": "json",
-        "line": 673
+        "line": 671
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/resolver.py",
         "module": "re",
-        "line": 689
+        "line": 687
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/resolver.py",
         "module": "...services.llm",
-        "line": 715
+        "line": 713
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/documents/__init__.py",
@@ -9954,157 +10050,152 @@
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..datatypes.observability",
-        "line": 342
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
-        "module": "..services",
         "line": 343
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
-        "module": "..utils.version",
+        "module": "..services",
         "line": 344
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..datatypes.observability",
-        "line": 484
+        "line": 473
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..datatypes.observability",
-        "line": 513
+        "line": 502
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..datatypes.schema",
-        "line": 1048
+        "line": 1037
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": ".prompts.loader",
-        "line": 1198
+        "line": 1187
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..services.mcp.built_in",
-        "line": 1492
+        "line": 1485
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "re",
-        "line": 1923
+        "line": 1916
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "re",
-        "line": 1942
+        "line": 1935
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..datatypes.observability",
-        "line": 2345
+        "line": 2338
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..datatypes.observability",
-        "line": 2376
+        "line": 2369
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..datatypes.observability",
-        "line": 2403
+        "line": 2396
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..datatypes.observability",
-        "line": 2418
+        "line": 2411
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..datatypes.observability",
-        "line": 2459
+        "line": 2452
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "time",
-        "line": 2467
+        "line": 2460
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..datatypes.observability",
-        "line": 2471
+        "line": 2464
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..services",
-        "line": 2472
+        "line": 2465
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": ".overlord.overlord",
-        "line": 2476
+        "line": 2469
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..datatypes.observability",
-        "line": 2662
+        "line": 2654
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "sys",
-        "line": 2881
+        "line": 2873
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "os",
-        "line": 2882
+        "line": 2874
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "sys",
-        "line": 2935
+        "line": 2927
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "os",
-        "line": 2936
+        "line": 2928
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "sys",
-        "line": 2992
+        "line": 2984
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": ".server",
-        "line": 3102
+        "line": 3094
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "threading",
-        "line": 3739
+        "line": 3731
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": ".utils.agent_persistence",
-        "line": 3844
+        "line": 3836
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": ".utils.agent_persistence",
-        "line": 3874
+        "line": 3866
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..datatypes.exceptions",
-        "line": 4019
+        "line": 4011
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
         "module": "..datatypes.exceptions",
-        "line": 4196
+        "line": 4188
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
@@ -10163,108 +10254,113 @@
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
+        "module": "..services.observability.context",
+        "line": 105
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
         "module": "..services.llm.llm",
-        "line": 123
+        "line": 173
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
         "module": "..services.streaming",
-        "line": 179
+        "line": 229
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
         "module": "..services.memory.long_term",
-        "line": 397
+        "line": 447
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
         "module": "..services.db",
-        "line": 398
+        "line": 448
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
         "module": "..services.memory.sqlite",
-        "line": 414
+        "line": 464
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
         "module": "..services.db",
-        "line": 415
+        "line": 465
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
         "module": "..services.memory.memobase",
-        "line": 437
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
-        "module": "..services.db",
-        "line": 438
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
-        "module": "..services.memory.long_term",
-        "line": 481
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
-        "module": "..formation.credentials.resolver",
-        "line": 484
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
-        "module": "..services.scheduler.models",
         "line": 487
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
         "module": "..services.db",
-        "line": 490
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
-        "module": "..services.mcp",
-        "line": 557
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
-        "module": ".artifacts.artifact_service",
-        "line": 626
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
-        "module": ".background",
-        "line": 662
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
-        "module": ".background",
-        "line": 667
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
-        "module": "..services.memory.memobase",
-        "line": 1015
+        "line": 488
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
         "module": "..services.memory.long_term",
-        "line": 1016
+        "line": 531
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
+        "module": "..formation.credentials.resolver",
+        "line": 534
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
+        "module": "..services.scheduler.models",
+        "line": 537
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
         "module": "..services.db",
-        "line": 1017
+        "line": 540
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
+        "module": "..services.mcp",
+        "line": 607
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
+        "module": ".artifacts.artifact_service",
+        "line": 676
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
+        "module": ".background",
+        "line": 712
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
+        "module": ".background",
+        "line": 717
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
+        "module": "..services.memory.memobase",
+        "line": 1065
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
+        "module": "..services.memory.long_term",
+        "line": 1066
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
+        "module": "..services.db",
+        "line": 1067
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
         "module": "..services.memory.sqlite",
-        "line": 1046
+        "line": 1096
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/initialization.py",
         "module": "..services.db",
-        "line": 1047
+        "line": 1097
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/memory/__init__.py",
@@ -10518,83 +10614,93 @@
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-        "module": "...utils.id_generator",
+        "module": "..background.cancellation",
         "line": 12
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-        "module": "...services",
+        "module": "...utils.id_generator",
         "line": 13
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-        "module": "...datatypes.response",
+        "module": "...services",
         "line": 14
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-        "module": "...services",
+        "module": "...datatypes.response",
         "line": 15
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-        "module": "...services.observability.context",
+        "module": "...services",
         "line": 16
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
+        "module": "...services.observability.context",
+        "line": 17
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
         "module": "contextvars",
-        "line": 61
+        "line": 62
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
         "module": "...services.observability.context",
-        "line": 67
+        "line": 68
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
         "module": "random",
-        "line": 81
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-        "module": "...services",
         "line": 82
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
+        "module": "...services",
+        "line": 83
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
         "module": "...datatypes.exceptions",
-        "line": 198
+        "line": 199
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
         "module": "...utils.user_resolution",
-        "line": 250
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-        "module": "...datatypes.response",
-        "line": 686
+        "line": 251
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
         "module": "...services",
-        "line": 870
+        "line": 921
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
         "module": "datetime",
-        "line": 948
+        "line": 999
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
+        "module": "uuid",
+        "line": 1033
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
         "module": "..prompts.loader",
-        "line": 987
+        "line": 1042
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
+        "module": "..prompts.loader",
+        "line": 1062
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
         "module": "...services.streaming",
-        "line": 1077
+        "line": 1140
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/clarification.py",
@@ -10629,22 +10735,37 @@
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/clarification.py",
         "module": "..prompts.loader",
-        "line": 547
+        "line": 555
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/clarification.py",
+        "module": "..background.cancellation",
+        "line": 595
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/clarification.py",
         "module": "..prompts.loader",
-        "line": 652
+        "line": 676
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/clarification.py",
+        "module": "..background.cancellation",
+        "line": 693
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/clarification.py",
         "module": "..prompts.loader",
-        "line": 683
+        "line": 716
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/clarification.py",
         "module": "re",
-        "line": 812
+        "line": 847
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/clarification.py",
+        "module": "..background.cancellation",
+        "line": 1324
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/input_validation.py",
@@ -10763,423 +10884,443 @@
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": ".clarification",
+        "module": "..background.cancellation",
         "line": 94
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...services",
-        "line": 97
+        "module": ".clarification",
+        "line": 95
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...datatypes.response",
+        "module": "...services",
         "line": 98
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...datatypes.clarification",
+        "module": "...datatypes.response",
         "line": 99
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...services.mcp.service",
+        "module": "...datatypes.clarification",
         "line": 100
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...services.memory.working",
+        "module": "...services.mcp.service",
         "line": 101
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...services.memory.long_term",
+        "module": "...services.memory.working",
         "line": 102
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...services.memory.memobase",
+        "module": "...services.memory.long_term",
         "line": 103
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...services.llm",
+        "module": "...services.memory.memobase",
         "line": 104
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...services.a2a.registry_client",
+        "module": "...services.llm",
         "line": 105
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...services.a2a.server",
+        "module": "...services.a2a.registry_client",
         "line": 106
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "..credentials",
+        "module": "...services.a2a.server",
         "line": 107
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": ".agent_router",
+        "module": "..credentials",
         "line": 108
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": ".chat_orchestrator",
+        "module": ".agent_router",
         "line": 109
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": ".mcp_coordinator",
+        "module": ".chat_orchestrator",
         "line": 110
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": ".a2a_coordinator",
+        "module": ".mcp_coordinator",
         "line": 111
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": ".input_validation",
+        "module": ".a2a_coordinator",
         "line": 112
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...services.scheduler.service",
+        "module": ".input_validation",
         "line": 113
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "..initialization",
+        "module": "...services.scheduler.service",
         "line": 114
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...datatypes.exceptions",
+        "module": "..initialization",
         "line": 115
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
+        "module": "...datatypes.exceptions",
+        "line": 116
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "...services.secrets.secrets_manager",
-        "line": 118
+        "line": 119
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "...services.mcp.built_in",
-        "line": 121
+        "line": 122
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..workflow",
-        "line": 124
+        "line": 125
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..workflow.resilient_executor",
-        "line": 131
+        "line": 132
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..workflow.config",
-        "line": 133
+        "line": 134
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "...datatypes.workflow",
-        "line": 147
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...datatypes.task_status",
         "line": 148
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "..utils",
-        "line": 151
+        "module": "...datatypes.task_status",
+        "line": 149
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...utils.security",
+        "module": "..utils",
         "line": 152
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...utils.text_cleaner",
+        "module": "...utils.security",
         "line": 153
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
+        "module": "...utils.text_cleaner",
+        "line": 154
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": ".secrets_manager",
-        "line": 156
+        "line": 157
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..memory",
-        "line": 159
+        "line": 160
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": ".active_agents_tracker",
-        "line": 167
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...datatypes.exceptions",
         "line": 168
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...services.multimodal",
-        "line": 176
+        "module": "...datatypes.exceptions",
+        "line": 169
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "..workflow.synthesis",
+        "module": "...services.multimodal",
         "line": 177
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
+        "module": "..workflow.synthesis",
+        "line": 178
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "...services.multimodal",
-        "line": 180
+        "line": 181
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..documents.storage",
-        "line": 193
+        "line": 194
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..documents.experience",
-        "line": 198
+        "line": 199
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..documents.workflow",
-        "line": 203
+        "line": 204
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..background",
-        "line": 210
+        "line": 211
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "...datatypes.clarification",
-        "line": 217
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "...utils.user_dirs",
         "line": 218
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
+        "module": "...utils.user_dirs",
+        "line": 219
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "...services.streaming",
-        "line": 220
+        "line": 221
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "markitdown",
-        "line": 223
+        "line": 224
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "...services.a2a.cache_manager",
-        "line": 395
+        "line": 396
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": ".a2a_messaging",
-        "line": 407
+        "line": 408
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..credentials",
-        "line": 485
+        "line": 486
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "...services.memory.extractor",
-        "line": 579
+        "line": 580
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "muxi.formation.workflow.sops",
-        "line": 961
+        "line": 962
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "...datatypes.observability",
-        "line": 1152
+        "line": 1153
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "pathlib",
-        "line": 1576
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "yaml",
         "line": 1577
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "..prompts.loader",
-        "line": 1931
+        "module": "yaml",
+        "line": 1578
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..prompts.loader",
-        "line": 1993
+        "line": 1932
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "..prompts.loader",
-        "line": 2104
+        "module": "re",
+        "line": 1983
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "traceback",
-        "line": 2145
+        "line": 2195
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
+        "module": "re",
+        "line": 2233
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..prompts.loader",
-        "line": 2186
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-        "module": "..initialization",
         "line": 2274
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
+        "module": "..background.cancellation",
+        "line": 2372
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..initialization",
-        "line": 2295
+        "line": 2409
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
+        "module": "..initialization",
+        "line": 2430
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..workflow.analyzer",
-        "line": 2538
+        "line": 2673
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "a2a.client",
-        "line": 2750
+        "line": 2885
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "...services.a2a.agent_transport",
-        "line": 2751
+        "line": 2886
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "tempfile",
-        "line": 4065
+        "line": 4200
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "...services.llm",
-        "line": 4409
+        "line": 4567
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "base64",
-        "line": 4523
+        "line": 4681
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "io",
-        "line": 4528
+        "line": 4686
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
+        "module": "...utils.id_generator",
+        "line": 5035
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
+        "module": "...services",
+        "line": 5108
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "traceback",
-        "line": 5215
+        "line": 5416
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "json",
-        "line": 5512
+        "line": 5722
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "re",
-        "line": 5630
+        "line": 5840
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..credentials",
-        "line": 6761
+        "line": 7085
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "json as json_lib",
-        "line": 7018
+        "line": 7343
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "json as json_lib",
-        "line": 7069
+        "line": 7394
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "bs4",
-        "line": 7077
+        "line": 7402
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..prompts.loader",
-        "line": 7238
+        "line": 7563
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..background.request_tracker",
-        "line": 7644
+        "line": 7969
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "time",
-        "line": 7676
+        "line": 8001
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "time",
-        "line": 7724
+        "line": 8049
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..background.request_tracker",
-        "line": 7832
+        "line": 8157
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "time",
-        "line": 7881
+        "line": 8206
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "asyncio",
-        "line": 8275
+        "line": 8606
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "...services.llm",
-        "line": 8522
+        "line": 8853
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "re",
-        "line": 8673
+        "line": 9004
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
         "module": "..clarification.credential_handler",
-        "line": 9244
+        "line": 9575
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/secrets_manager.py",
@@ -12149,27 +12290,77 @@
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py",
         "module": "...responses",
-        "line": 121
+        "line": 124
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py",
         "module": ".....datatypes.api",
-        "line": 122
+        "line": 125
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py",
         "module": "...responses",
-        "line": 255
+        "line": 268
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py",
         "module": "...responses",
-        "line": 304
+        "line": 281
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py",
+        "module": "...responses",
+        "line": 325
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py",
         "module": ".....datatypes.api",
-        "line": 305
+        "line": 326
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/credentials.py",
+        "module": "json",
+        "line": 7
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/credentials.py",
+        "module": "secrets",
+        "line": 8
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/credentials.py",
+        "module": "typing",
+        "line": 9
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/credentials.py",
+        "module": "fastapi",
+        "line": 11
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/credentials.py",
+        "module": "fastapi.responses",
+        "line": 12
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/credentials.py",
+        "module": "pydantic",
+        "line": 13
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/credentials.py",
+        "module": "...responses",
+        "line": 15
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/credentials.py",
+        "module": ".....datatypes.api",
+        "line": 20
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/credentials.py",
+        "module": "datetime",
+        "line": 278
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/events.py",
@@ -12618,88 +12809,93 @@
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
+        "module": "..initialization",
+        "line": 23
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
         "module": "..formation",
-        "line": 25
+        "line": 26
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
         "module": ".responses",
-        "line": 54
+        "line": 55
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
         "module": ".middleware",
-        "line": 321
+        "line": 322
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
         "module": "fastapi.exceptions",
-        "line": 341
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
-        "module": "starlette.exceptions",
         "line": 342
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
-        "module": ".responses",
+        "module": "starlette.exceptions",
         "line": 343
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
+        "module": ".responses",
+        "line": 344
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
         "module": ".routes.health",
-        "line": 507
+        "line": 508
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
         "module": ".auth",
-        "line": 520
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
-        "module": "fastapi",
         "line": 521
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
+        "module": "fastapi",
+        "line": 522
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
         "module": ".routes.admin",
-        "line": 524
+        "line": 525
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
         "module": ".routes.admin.async_routes",
-        "line": 538
+        "line": 539
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
         "module": ".auth",
-        "line": 565
-      },
-      {
-        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
-        "module": "fastapi",
         "line": 566
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
+        "module": "fastapi",
+        "line": 567
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
         "module": ".routes.client",
-        "line": 569
+        "line": 570
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
         "module": ".routes.admin",
-        "line": 571
+        "line": 572
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
         "module": "socket",
-        "line": 696
+        "line": 698
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
         "module": "...datatypes.observability",
-        "line": 697
+        "line": 699
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/utils.py",
@@ -12948,8 +13144,13 @@
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/analyzer.py",
+        "module": "..background.cancellation",
+        "line": 324
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/analyzer.py",
         "module": "..prompts.loader",
-        "line": 359
+        "line": 370
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/config.py",
@@ -13004,17 +13205,22 @@
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/decomposer.py",
         "module": "...services",
-        "line": 231
+        "line": 224
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/decomposer.py",
+        "module": "..background.cancellation",
+        "line": 249
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/decomposer.py",
         "module": "sys",
-        "line": 310
+        "line": 315
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/decomposer.py",
         "module": "..prompts.loader",
-        "line": 351
+        "line": 356
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/executor.py",
@@ -14174,27 +14380,27 @@
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
         "module": "...services.observability.context",
-        "line": 1500
+        "line": 1519
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
         "module": "...services.observability.context",
-        "line": 1564
+        "line": 1583
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
         "module": "...services.observability.context",
-        "line": 1618
+        "line": 1640
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
         "module": "...services.observability.context",
-        "line": 1691
+        "line": 1713
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
         "module": "...services.observability.context",
-        "line": 1746
+        "line": 1768
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/service.py",
@@ -15209,17 +15415,17 @@
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/local_embeddings.py",
         "module": "sentence_transformers",
-        "line": 111
+        "line": 115
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/local_embeddings.py",
         "module": "asyncio",
-        "line": 196
+        "line": 200
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/local_embeddings.py",
         "module": "sentence_transformers",
-        "line": 229
+        "line": 233
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/long_term.py",
@@ -15484,12 +15690,12 @@
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/working.py",
         "module": "datetime",
-        "line": 1112
+        "line": 1122
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/working.py",
         "module": "time",
-        "line": 1274
+        "line": 1284
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/multimodal/__init__.py",
@@ -16244,32 +16450,32 @@
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/manager.py",
         "module": "asyncio",
-        "line": 161
+        "line": 184
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/manager.py",
         "module": "re",
-        "line": 201
+        "line": 224
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/manager.py",
         "module": "asyncio",
-        "line": 232
+        "line": 255
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/manager.py",
         "module": ".context",
-        "line": 310
+        "line": 333
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/manager.py",
         "module": ".",
-        "line": 315
+        "line": 338
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/manager.py",
         "module": ".context",
-        "line": 355
+        "line": 378
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/request_manager.py",
@@ -17553,58 +17759,63 @@
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
-        "module": "asyncio",
+        "module": "sys",
         "line": 11
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
-        "module": "sys",
-        "line": 12
+        "module": "..utils.version",
+        "line": 15
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
+        "module": "asyncio",
+        "line": 32
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
         "module": "traceback",
-        "line": 13
+        "line": 33
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
         "module": "pathlib",
-        "line": 14
+        "line": 34
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
         "module": "...formation",
-        "line": 18
+        "line": 38
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
         "module": "...services",
-        "line": 19
+        "line": 39
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
         "module": "...datatypes.exceptions",
-        "line": 20
+        "line": 40
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
         "module": "src.muxi.formation",
-        "line": 43
+        "line": 63
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
         "module": "src.muxi.services",
-        "line": 44
+        "line": 64
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
         "module": "src.muxi.datatypes.exceptions",
-        "line": 45
+        "line": 65
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/run_formation.py",
         "module": "argparse",
-        "line": 253
+        "line": 273
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/security.py",
@@ -17620,6 +17831,11 @@
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/text_cleaner.py",
         "module": "unicodedata",
         "line": 4
+      },
+      {
+        "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/text_cleaner.py",
+        "module": "re",
+        "line": 101
       },
       {
         "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/utils/user_dirs.py",
@@ -17699,9 +17915,9 @@
     ]
   },
   "summary": {
-    "total_files": 285,
-    "total_functions": 454,
-    "total_classes": 534,
+    "total_files": 287,
+    "total_functions": 459,
+    "total_classes": 536,
     "total_interfaces": 0,
     "key_modules": [
       {

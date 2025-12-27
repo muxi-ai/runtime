@@ -4,15 +4,15 @@
     "name": "APIEventType",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/datatypes/api.py",
     "line_start": 10,
-    "line_end": 136,
+    "line_end": 142,
     "kind": "class"
   },
   {
     "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/datatypes/api.py::APIObjectType",
     "name": "APIObjectType",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/datatypes/api.py",
-    "line_start": 139,
-    "line_end": 213,
+    "line_start": 145,
+    "line_end": 223,
     "kind": "class"
   },
   {
@@ -1683,8 +1683,8 @@
     "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py::Agent",
     "name": "Agent",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/agents/agent.py",
-    "line_start": 61,
-    "line_end": 4430,
+    "line_start": 62,
+    "line_end": 4522,
     "kind": "class"
   },
   {
@@ -1736,6 +1736,14 @@
     "kind": "class"
   },
   {
+    "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py::RequestCancelledException",
+    "name": "RequestCancelledException",
+    "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/cancellation.py",
+    "line_start": 14,
+    "line_end": 24,
+    "kind": "class"
+  },
+  {
     "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/request_tracker.py::RequestState",
     "name": "RequestState",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/request_tracker.py",
@@ -1756,7 +1764,7 @@
     "name": "RequestTracker",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/background/request_tracker.py",
     "line_start": 69,
-    "line_end": 171,
+    "line_end": 214,
     "kind": "class"
   },
   {
@@ -1852,7 +1860,7 @@
     "name": "FormationValidator",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/config/validation.py",
     "line_start": 124,
-    "line_end": 2416,
+    "line_end": 2449,
     "kind": "class"
   },
   {
@@ -1900,7 +1908,7 @@
     "name": "CredentialHandler",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/handler.py",
     "line_start": 12,
-    "line_end": 1214,
+    "line_end": 1264,
     "kind": "class"
   },
   {
@@ -1916,7 +1924,7 @@
     "name": "CredentialResolver",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/credentials/resolver.py",
     "line_start": 44,
-    "line_end": 775,
+    "line_end": 771,
     "kind": "class"
   },
   {
@@ -2187,8 +2195,8 @@
     "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py::Formation",
     "name": "Formation",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py",
-    "line_start": 112,
-    "line_end": 4392,
+    "line_start": 113,
+    "line_end": 4384,
     "kind": "class"
   },
   {
@@ -2220,7 +2228,7 @@
     "name": "UserContextManager",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/memory/user_context.py",
     "line_start": 10,
-    "line_end": 376,
+    "line_end": 364,
     "kind": "class"
   },
   {
@@ -2252,15 +2260,15 @@
     "name": "AgentRouter",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/agent_router.py",
     "line_start": 14,
-    "line_end": 390,
+    "line_end": 392,
     "kind": "class"
   },
   {
     "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py::ChatOrchestrator",
     "name": "ChatOrchestrator",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/chat_orchestrator.py",
-    "line_start": 24,
-    "line_end": 1079,
+    "line_start": 25,
+    "line_end": 1142,
     "kind": "class"
   },
   {
@@ -2276,7 +2284,7 @@
     "name": "UnifiedClarificationSystem",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/clarification.py",
     "line_start": 18,
-    "line_end": 1341,
+    "line_end": 1383,
     "kind": "class"
   },
   {
@@ -2315,8 +2323,8 @@
     "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py::Overlord",
     "name": "Overlord",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/overlord/overlord.py",
-    "line_start": 243,
-    "line_end": 9863,
+    "line_start": 244,
+    "line_end": 10194,
     "kind": "class"
   },
   {
@@ -2600,11 +2608,11 @@
     "kind": "class"
   },
   {
-    "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py::AVChatRequest",
-    "name": "AVChatRequest",
+    "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py::AudioChatRequest",
+    "name": "AudioChatRequest",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py",
     "line_start": 35,
-    "line_end": 44,
+    "line_end": 47,
     "kind": "class"
   },
   {
@@ -2613,6 +2621,14 @@
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/chat.py",
     "line_start": 21,
     "line_end": 32,
+    "kind": "class"
+  },
+  {
+    "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/credentials.py::CredentialCreate",
+    "name": "CredentialCreate",
+    "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/routes/client/credentials.py",
+    "line_start": 25,
+    "line_end": 29,
     "kind": "class"
   },
   {
@@ -2675,8 +2691,8 @@
     "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py::FormationServer",
     "name": "FormationServer",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/server/server.py",
-    "line_start": 82,
-    "line_end": 822,
+    "line_start": 83,
+    "line_end": 826,
     "kind": "class"
   },
   {
@@ -2708,7 +2724,7 @@
     "name": "RequestAnalyzer",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/analyzer.py",
     "line_start": 19,
-    "line_end": 585,
+    "line_end": 600,
     "kind": "class"
   },
   {
@@ -2835,8 +2851,8 @@
     "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/decomposer.py::ApprovalManager",
     "name": "ApprovalManager",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/decomposer.py",
-    "line_start": 1155,
-    "line_end": 1248,
+    "line_start": 1172,
+    "line_end": 1265,
     "kind": "class"
   },
   {
@@ -2844,7 +2860,7 @@
     "name": "TaskDecomposer",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/formation/workflow/decomposer.py",
     "line_start": 19,
-    "line_end": 1152,
+    "line_end": 1169,
     "kind": "class"
   },
   {
@@ -3316,7 +3332,7 @@
     "name": "LLM",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/llm/llm.py",
     "line_start": 708,
-    "line_end": 1815,
+    "line_end": 1837,
     "kind": "class"
   },
   {
@@ -3691,8 +3707,8 @@
     "id": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/local_embeddings.py::LocalEmbeddingProvider",
     "name": "LocalEmbeddingProvider",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/local_embeddings.py",
-    "line_start": 251,
-    "line_end": 302,
+    "line_start": 255,
+    "line_end": 306,
     "kind": "class"
   },
   {
@@ -3748,7 +3764,7 @@
     "name": "WorkingMemory",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/memory/working.py",
     "line_start": 92,
-    "line_end": 1260,
+    "line_end": 1270,
     "kind": "class"
   },
   {
@@ -3996,7 +4012,7 @@
     "name": "EventLogger",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/logger.py",
     "line_start": 28,
-    "line_end": 215,
+    "line_end": 295,
     "kind": "class"
   },
   {
@@ -4004,7 +4020,7 @@
     "name": "ObservabilityManager",
     "file": "/Users/ran/Projects/muxi/code/runtime/src/muxi/services/observability/manager.py",
     "line_start": 20,
-    "line_end": 563,
+    "line_end": 586,
     "kind": "class"
   },
   {
