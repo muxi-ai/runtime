@@ -106,7 +106,7 @@ if not name:
     sys.exit(1)
 
 # Version from .version file (for CI/CD)
-version_file = os.path.join("src", "muxi", ".version")
+version_file = os.path.join("src", "muxi", "runtime", ".version")
 try:
     with open(version_file, "r") as f:
         version = f.read().strip()
@@ -146,7 +146,7 @@ setup(
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     package_data={
-        "muxi": [
+        "muxi.runtime": [
             ".version",
             "**/*.md",
             "**/*.yaml",

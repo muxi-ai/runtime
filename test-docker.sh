@@ -34,7 +34,7 @@ echo ""
 
 # Test 1: Basic import
 echo -e "${YELLOW}→${NC} Test 1: Verifying MUXI import..."
-if docker run --rm muxi-runtime:latest python -c "from muxi import Formation; print('✓ Import successful')" &> /dev/null; then
+if docker run --rm muxi-runtime:latest python -c "from muxi.runtime import Formation; print('✓ Import successful')" &> /dev/null; then
     echo -e "${GREEN}✓ Test 1 passed: MUXI imports correctly${NC}"
 else
     echo -e "${RED}✗ Test 1 failed: Import error${NC}"
@@ -44,7 +44,7 @@ echo ""
 
 # Test 2: Version check
 echo -e "${YELLOW}→${NC} Test 2: Checking version..."
-VERSION=$(docker run --rm muxi-runtime:latest python -c "from muxi.utils.version import get_version; print(get_version())")
+VERSION=$(docker run --rm muxi-runtime:latest python -c "from muxi.runtime.utils.version import get_version; print(get_version())")
 echo -e "${GREEN}✓ Test 2 passed: Version ${VERSION}${NC}"
 echo ""
 

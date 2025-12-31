@@ -5,7 +5,7 @@ Mock A2A Registry Server
 A standalone development server that simulates external A2A (Agent-to-Agent)
 registries for testing MUXI framework integration. This server:
 
-- Accepts agent registrations from MUXI formations using Google A2A protocol
+- Accepts agent registrations from muxi.runtime formations using Google A2A protocol
 - Provides hardcoded test agents in A2A-compliant format
 - Implements A2A-compliant discovery endpoints
 - Enables testing of external registry integration

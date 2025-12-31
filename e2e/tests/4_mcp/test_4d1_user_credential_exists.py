@@ -61,7 +61,7 @@ class Test4D1UserCredentialExists(BaseMCPTest):
             # Test GitHub repository creation request
             print("\n  1. Testing GitHub issue creation with existing credentials...")
             github_request = (
-                "Create a GitHub issue on the muxi repo with title 'Test Issue from MUXI' "
+                "Create a GitHub issue on the muxi repo with title 'Test Issue from muxi.runtime' "
                 "and body 'This is a test issue created by the MUXI runtime to verify "
                 "user credential functionality.'"
             )

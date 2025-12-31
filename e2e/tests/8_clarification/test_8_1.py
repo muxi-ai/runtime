@@ -31,7 +31,7 @@ async def test_basic_clarification():
 
     try:
         print("\n1. Loading formation...")
-        from muxi.formation import Formation  # noqa: E402
+        from muxi.runtime.formation import Formation  # noqa: E402
 
         formation = Formation()
         await formation.load(str(formation_path))

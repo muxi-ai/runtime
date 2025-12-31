@@ -35,7 +35,7 @@ class MockObservability:
 
 
 # Mock the observability module before importing scheduler components
-import muxi.services.observability as obs_module  # noqa: E402
+import muxi.runtime.services.observability as obs_module  # noqa: E402
 
 mock_obs = MockObservability()
 obs_module.SystemEvents = mock_obs.SystemEvents
@@ -44,9 +44,9 @@ obs_module.observe = mock_obs.observe
 obs_module.emit_event = mock_obs.emit_event
 
 
-from muxi.services.scheduler.manager import JobManager  # noqa: E402
-from muxi.services.scheduler.parser import ScheduleParser  # noqa: E402
-from muxi.services.db import DatabaseManager  # noqa: E402
+from muxi.runtime.services.scheduler.manager import JobManager  # noqa: E402
+from muxi.runtime.services.scheduler.parser import ScheduleParser  # noqa: E402
+from muxi.runtime.services.db import DatabaseManager  # noqa: E402
 
 
 class MinimalSchedulerTest:

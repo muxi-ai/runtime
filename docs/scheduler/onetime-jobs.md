@@ -35,7 +35,7 @@ Users can now schedule tasks that execute once at a specific time, in addition t
 The scheduler uses pattern matching and LLM analysis to detect job types:
 
 ```python
-from muxi.services.scheduler.parser import ScheduleParser
+from muxi.runtime.services.scheduler.parser import ScheduleParser
 
 parser = ScheduleParser()
 
@@ -72,7 +72,7 @@ result = await parser._parse_specific_datetime(
 Create jobs programmatically with the enhanced API:
 
 ```python
-from muxi.services.scheduler.manager import JobManager
+from muxi.runtime.services.scheduler.manager import JobManager
 from datetime import datetime, timedelta
 import pytz
 
@@ -218,7 +218,7 @@ Existing recurring jobs continue to work without changes. They are automatically
 
 ```python
 import asyncio
-from muxi.formation import Formation
+from muxi.runtime.formation import Formation
 
 async def demo_onetime_jobs():
     # Load formation with scheduler enabled
@@ -252,8 +252,8 @@ asyncio.run(demo_onetime_jobs())
 ### Programmatic Usage
 
 ```python
-from muxi.services.scheduler.parser import ScheduleParser
-from muxi.services.scheduler.manager import JobManager
+from muxi.runtime.services.scheduler.parser import ScheduleParser
+from muxi.runtime.services.scheduler.manager import JobManager
 from datetime import datetime, timedelta
 import pytz
 

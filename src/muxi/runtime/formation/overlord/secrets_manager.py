@@ -6,7 +6,7 @@ This module handles secrets interpolation and management for formation configura
 
 from typing import Any, Dict, Optional
 
-from muxi.datatypes import observability
+from muxi.runtime.datatypes import observability
 
 
 class SecretsInterpolator:

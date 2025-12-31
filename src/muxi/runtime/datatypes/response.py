@@ -85,7 +85,7 @@ class MuxiMessageContent(BaseModel):
     the LLM multi-modal content format.
 
     Used for internal communication (MUXI <> agents, overlord <> agents).
-    Distinct from MuxiContentItem which is for external communication (user <> MUXI).
+    Distinct from muxi.runtimeContentItem which is for external communication (user <> MUXI).
 
     """
 

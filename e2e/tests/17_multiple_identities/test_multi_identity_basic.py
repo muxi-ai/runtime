@@ -163,9 +163,9 @@ async def test_formation_isolation():
 
     This ensures formation-scoped user isolation works correctly.
     """
-    from muxi.utils.user_resolution import resolve_user_identifier
-    from muxi.services.db import get_async_session_maker
-    from muxi.services.memory.kv import InMemoryKV
+    from muxi.runtime.utils.user_resolution import resolve_user_identifier
+    from muxi.runtime.services.db import get_async_session_maker
+    from muxi.runtime.services.memory.kv import InMemoryKV
 
     # Use test database
     db_url = os.getenv("DATABASE_URL", "sqlite:///:memory:")
@@ -210,11 +210,11 @@ async def test_identifier_association():
 
     This tests the associate_user_identifiers function.
     """
-    from muxi.utils.user_resolution import (
+    from muxi.runtime.utils.user_resolution import (
         resolve_user_identifier,
         associate_user_identifiers,
     )
-    from muxi.services.db import get_async_session_maker
+    from muxi.runtime.services.db import get_async_session_maker
 
     db_url = os.getenv("DATABASE_URL", "sqlite:///:memory:")
     async_session_maker = get_async_session_maker(db_url)
@@ -320,7 +320,7 @@ async def test_request_context_user_ids(runtime_from_yaml):
 
     try:
         # Make a request and capture context
-        from muxi.datatypes.observability import get_context
+        from muxi.runtime.datatypes.observability import get_context
 
         response = await overlord.chat(
             message="Testing context propagation",
@@ -348,7 +348,7 @@ async def test_no_external_user_id_queries():
 
     This is a negative test to ensure migrations were applied correctly.
     """
-    from muxi.services.memory.long_term import User
+    from muxi.runtime.services.memory.long_term import User
     import inspect
 
     # Check User model doesn't have external_user_id

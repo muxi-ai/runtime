@@ -60,7 +60,7 @@ overlord:
 ### 2. Start the Server
 
 ```python
-from muxi import Formation
+from muxi.runtime import Formation
 
 async def main():
     # Load formation

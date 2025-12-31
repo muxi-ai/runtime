@@ -23,12 +23,12 @@ class TestAVChat:
              patch('muxi.formation.overlord.intent_detector.IntentDetector'), \
              patch('muxi.formation.workflow.sops.SOPCoordinator'), \
              patch('muxi.formation.resilience.resilient_executor.ResilientWorkflowExecutor'):
-            
-            from muxi.formation.overlord.overlord import Overlord
-            
+
+            from muxi.runtime.formation.overlord.overlord import Overlord
+
             # Create mocked instances
             mock_obs.return_value = MagicMock()
-            
+
             overlord = Overlord(
                 formation_config={'id': 'test'},
                 observability=mock_obs.return_value
@@ -45,9 +45,9 @@ class TestAVChat:
             'content_type': 'audio/mp3',
             'filename': 'test.mp3'
         }]
-        
+
         await mock_overlord.avchat(files=audio_files, user_id="test")
-        
+
         mock_overlord.chat.assert_called_once()
         call_args = mock_overlord.chat.call_args[1]
         assert call_args['message'] == "Please transcribe this audio and respond to what was said."
@@ -61,9 +61,9 @@ class TestAVChat:
             'content_type': 'video/mp4',
             'filename': 'test.mp4'
         }]
-        
+
         await mock_overlord.avchat(files=video_files)
-        
+
         call_args = mock_overlord.chat.call_args[1]
         expected_prompt = "Please analyze this video, transcribe any speech, and respond appropriately to the content."
         assert call_args['message'] == expected_prompt
@@ -73,9 +73,9 @@ class TestAVChat:
         """Test that custom prompt templates are used."""
         files = [{'content': 'data', 'content_type': 'audio/wav', 'filename': 'audio.wav'}]
         custom_prompt = "Summarize the key points"
-        
+
         await mock_overlord.avchat(files=files, prompt_template=custom_prompt)
-        
+
         call_args = mock_overlord.chat.call_args[1]
         assert call_args['message'] == custom_prompt
 
@@ -86,9 +86,9 @@ class TestAVChat:
             {'content': 'audio', 'content_type': 'audio/mp3', 'filename': 'audio.mp3'},
             {'content': 'video', 'content_type': 'video/quicktime', 'filename': 'video.mov'}
         ]
-        
+
         await mock_overlord.avchat(files=mixed_files)
-        
+
         call_args = mock_overlord.chat.call_args[1]
         assert "video" in call_args['message'].lower()
 
@@ -100,9 +100,9 @@ class TestAVChat:
             'content_type': 'application/pdf',
             'filename': 'document.pdf'
         }]
-        
+
         await mock_overlord.avchat(files=doc_files)
-        
+
         call_args = mock_overlord.chat.call_args[1]
         assert call_args['message'] == "Please analyze these files and respond appropriately."
 
@@ -111,7 +111,7 @@ class TestAVChat:
         """Test that empty files list raises ValueError."""
         with pytest.raises(ValueError) as exc_info:
             await mock_overlord.avchat(files=[])
-        
+
         assert str(exc_info.value) == "files parameter is required for avchat()"
 
     @pytest.mark.asyncio
@@ -119,14 +119,14 @@ class TestAVChat:
         """Test that None files raises ValueError."""
         with pytest.raises(ValueError) as exc_info:
             await mock_overlord.avchat(files=None)
-        
+
         assert "files parameter is required" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_all_parameters_passed_through(self, mock_overlord):
         """Test that all parameters are correctly passed to chat()."""
         files = [{'content': 'audio', 'content_type': 'audio/mp3', 'filename': 'test.mp3'}]
-        
+
         await mock_overlord.avchat(
             files=files,
             agent_name='test-agent',
@@ -137,7 +137,7 @@ class TestAVChat:
             threshold_seconds=10.0,
             stream=True
         )
-        
+
         call_args = mock_overlord.chat.call_args[1]
         assert call_args['agent_name'] == 'test-agent'
         assert call_args['user_id'] == 'user123'
@@ -151,12 +151,12 @@ class TestAVChat:
     async def test_return_value_passthrough(self, mock_overlord):
         """Test that return values are passed through correctly."""
         files = [{'content': 'audio', 'content_type': 'audio/mp3', 'filename': 'test.mp3'}]
-        
+
         # Test string response
         mock_overlord.chat.return_value = "String response"
         result = await mock_overlord.avchat(files=files)
         assert result == "String response"
-        
+
         # Test dict response
         mock_overlord.chat.return_value = {"type": "response", "content": "test"}
         result = await mock_overlord.avchat(files=files)
@@ -172,7 +172,7 @@ class TestAVChat:
             ('audio/ogg', 'test.ogg'),
             ('audio/mpeg', 'test.mpeg')
         ]
-        
+
         for content_type, filename in audio_formats:
             mock_overlord.chat.reset_mock()
             files = [{
@@ -180,9 +180,9 @@ class TestAVChat:
                 'content_type': content_type,
                 'filename': filename
             }]
-            
+
             await mock_overlord.avchat(files=files)
-            
+
             call_args = mock_overlord.chat.call_args[1]
             assert call_args['message'] == "Please transcribe this audio and respond to what was said."
 
@@ -195,7 +195,7 @@ class TestAVChat:
             ('video/webm', 'test.webm'),
             ('video/x-msvideo', 'test.avi')
         ]
-        
+
         for content_type, filename in video_formats:
             mock_overlord.chat.reset_mock()
             files = [{
@@ -203,9 +203,9 @@ class TestAVChat:
                 'content_type': content_type,
                 'filename': filename
             }]
-            
+
             await mock_overlord.avchat(files=files)
-            
+
             call_args = mock_overlord.chat.call_args[1]
             expected_prompt = "Please analyze this video, transcribe any speech, and respond appropriately to the content."
             assert call_args['message'] == expected_prompt

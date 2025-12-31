@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import asyncio  # noqa: E402
 from concurrent.futures import ThreadPoolExecutor  # noqa: E402
 
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 def test_update_linear_issue():

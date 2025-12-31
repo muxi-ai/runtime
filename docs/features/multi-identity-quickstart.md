@@ -11,7 +11,7 @@ await formation.chat("Hi", user_id="U12345ABC")  # Slack ID
 await formation.chat("Hey", user_id="alice_gh")  # GitHub
 
 # Want to link them? Use associate_user_identifiers()
-from muxi.utils.user_resolution import associate_user_identifiers
+from muxi.runtime.utils.user_resolution import associate_user_identifiers
 
 await associate_user_identifiers(
     identifiers=["alice@email.com", "U12345ABC", "alice_gh"],
@@ -80,7 +80,7 @@ async def handle_message(event):
 Link email, Slack, and GitHub to one user:
 
 ```python
-from muxi.utils.user_resolution import associate_user_identifiers
+from muxi.runtime.utils.user_resolution import associate_user_identifiers
 
 # Link all identifiers
 result = await associate_user_identifiers(
@@ -293,23 +293,23 @@ except ValueError as e:
 
 ## FAQ
 
-**Q: Do I need PostgreSQL?**  
+**Q: Do I need PostgreSQL?**
 A: No! SQLite works fine for single-user or testing. Use PostgreSQL for multi-tenant production.
 
-**Q: What if I call with different user_id values?**  
+**Q: What if I call with different user_id values?**
 A: Each unique identifier creates a separate user (unless you link them with `associate_user_identifiers`).
 
-**Q: Is user data shared across formations?**  
+**Q: Is user data shared across formations?**
 A: No. Each formation has isolated user namespaces.
 
-**Q: Can I change a user's identifier?**  
+**Q: Can I change a user's identifier?**
 A: Yes, use `associate_user_identifiers` to add new identifiers. Old ones remain valid.
 
-**Q: What happens if KV cache is down?**  
+**Q: What happens if KV cache is down?**
 A: System falls back to database queries. Slower but still works.
 
-**Q: How do I delete a user?**  
+**Q: How do I delete a user?**
 A: Delete from `users` table. Cascade deletes all identifiers and user data.
 
-**Q: Can one identifier belong to multiple users?**  
+**Q: Can one identifier belong to multiple users?**
 A: No. One identifier → One user (per formation). Attempting otherwise raises `IntegrityError`.

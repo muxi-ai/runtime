@@ -122,7 +122,7 @@ def main():
         sys.exit(1)
 
     parser = argparse.ArgumentParser(
-        description="Delete secrets from MUXI Formation in current directory",
+        description="Delete secrets from muxi.runtime Formation in current directory",
         epilog="""
 Examples:
   cd /path/to/formation

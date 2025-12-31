@@ -125,7 +125,7 @@ Return: (123, "usr_abc123")
 ### Basic Usage (Single Identifier)
 
 ```python
-from muxi.formation import Formation
+from muxi.runtime.formation import Formation
 
 # Initialize formation
 formation = Formation("formation.afs")
@@ -142,7 +142,7 @@ response = await formation.chat(
 Use the `associate_user_identifiers()` function to link multiple identifiers:
 
 ```python
-from muxi.utils.user_resolution import associate_user_identifiers
+from muxi.runtime.utils.user_resolution import associate_user_identifiers
 
 # Link email, Slack, and GitHub to one user
 result = await associate_user_identifiers(
@@ -166,7 +166,7 @@ print(f"New identifiers: {result['new_identifiers']}")
 For custom integrations, use the resolution function directly:
 
 ```python
-from muxi.utils.user_resolution import resolve_user_identifier
+from muxi.runtime.utils.user_resolution import resolve_user_identifier
 
 # Resolve any identifier to user IDs
 internal_id, muxi_id = await resolve_user_identifier(

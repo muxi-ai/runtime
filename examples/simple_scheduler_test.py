@@ -15,9 +15,9 @@ from datetime import datetime
 # Add the runtime path so we can import muxi
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from muxi.services.scheduler.manager import JobManager  # noqa: E402
-from muxi.services.scheduler.parser import ScheduleParser  # noqa: E402
-from muxi.services.db import get_database_manager  # noqa: E402
+from muxi.runtime.services.scheduler.manager import JobManager  # noqa: E402
+from muxi.runtime.services.scheduler.parser import ScheduleParser  # noqa: E402
+from muxi.runtime.services.db import get_database_manager  # noqa: E402
 
 
 class SimpleSchedulerTest:

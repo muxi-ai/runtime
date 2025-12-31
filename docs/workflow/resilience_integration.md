@@ -139,7 +139,7 @@ The Overlord automatically uses the resilient executor:
 
 ```python
 # In overlord.py
-from muxi.formation.workflow.resilient_executor import ResilientWorkflowExecutor
+from muxi.runtime.formation.workflow.resilient_executor import ResilientWorkflowExecutor
 
 # During initialization
 self.workflow_executor = ResilientWorkflowExecutor(

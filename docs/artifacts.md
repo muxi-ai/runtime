@@ -284,7 +284,7 @@ for artifact in response.artifacts:
 ### Session-Based Organization
 
 ```python
-from muxi.formation.artifacts.storage import (
+from muxi.runtime.formation.artifacts.storage import (
     store_artifact, get_recent_artifacts
 )
 

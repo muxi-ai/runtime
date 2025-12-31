@@ -7,7 +7,7 @@ Tests the new logging architecture:
 """
 
 import pytest
-from muxi.formation.config.validation import FormationValidator
+from muxi.runtime.formation.config.validation import FormationValidator
 
 
 class TestLoggingValidation:

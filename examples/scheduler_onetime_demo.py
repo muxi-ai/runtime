@@ -23,10 +23,10 @@ import pytz
 # Add the runtime path so we can import muxi
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from muxi.formation import Formation
-from muxi.services.scheduler.parser import ScheduleParser
-from muxi.services.scheduler.manager import JobManager
-from muxi.services.db import get_database_manager
+from muxi.runtime.formation import Formation
+from muxi.runtime.services.scheduler.parser import ScheduleParser
+from muxi.runtime.services.scheduler.manager import JobManager
+from muxi.runtime.services.db import get_database_manager
 
 
 async def demo_one_time_job_detection():

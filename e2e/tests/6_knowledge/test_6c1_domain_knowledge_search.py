@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def test_domain_knowledge_search():

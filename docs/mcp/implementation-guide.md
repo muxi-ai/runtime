@@ -20,7 +20,7 @@ npm install -g @modelcontextprotocol/server-sqlite
 ### Basic Usage
 
 ```python
-from muxi.services.mcp.service import MCPService
+from muxi.runtime.services.mcp.service import MCPService
 import asyncio
 
 async def basic_mcp_example():
@@ -122,7 +122,7 @@ await service.register_mcp_server(
 
 ```python
 import asyncio
-from muxi.services.mcp.service import MCPService
+from muxi.runtime.services.mcp.service import MCPService
 
 async def data_pipeline_example():
     service = MCPService.get_instance()
@@ -170,7 +170,7 @@ asyncio.run(data_pipeline_example())
 ### Error Handling Best Practices
 
 ```python
-from muxi.services.mcp.base import MCPConnectionError, MCPRequestError
+from muxi.runtime.services.mcp.base import MCPConnectionError, MCPRequestError
 import asyncio
 
 async def robust_mcp_usage():

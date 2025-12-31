@@ -2,7 +2,7 @@
 
 **Complete architectural overview of the MUXI ecosystem**
 
-Version: 2.0.0  
+Version: 2.0.0
 Last Updated: 2025-12-24
 
 ---
@@ -322,7 +322,7 @@ muxi registry search "customer support"
 
 ```python
 # Python SDK
-from muxi import Client
+from muxi.runtime import Client
 
 client = Client(profile="production")
 response = client.formation("my-agent").chat("Hello!")
@@ -615,6 +615,6 @@ See individual repository LICENSE files for details.
 
 ---
 
-**Last Updated:** 2025-12-24  
-**Version:** 2.0.0  
+**Last Updated:** 2025-12-24
+**Version:** 2.0.0
 **Maintainer:** MUXI Core Team

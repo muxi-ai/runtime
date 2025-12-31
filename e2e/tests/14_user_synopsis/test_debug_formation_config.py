@@ -47,7 +47,7 @@ async def debug_formation_config():
 
         # Now decrypt secrets and check
         print("\n[3] Decrypting secrets...")
-        from muxi.services.secrets.secrets_manager import SecretsManager
+        from muxi.runtime.services.secrets.secrets_manager import SecretsManager
         secrets_obj = SecretsManager(str(formation_path))
 
         # Get POSTGRES_URI specifically

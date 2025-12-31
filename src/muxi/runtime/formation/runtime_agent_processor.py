@@ -13,7 +13,7 @@ as agents loaded during initialization, including:
 import logging
 from typing import Dict, Any, Tuple, TYPE_CHECKING
 from pathlib import Path
-from muxi.formation.config.loader import ConfigLoader
+from muxi.runtime.formation.config.loader import ConfigLoader
 
 if TYPE_CHECKING:
     from .formation import Formation  # noqa: E402

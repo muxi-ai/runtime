@@ -15,7 +15,7 @@ The MUXI Scheduler provides a comprehensive API through the Formation class, ena
 All scheduler retrieval methods are available through the Formation instance after the overlord has been started.
 
 ```python
-from muxi.formation import Formation
+from muxi.runtime.formation import Formation
 
 # Initialize and start formation
 formation = Formation()
@@ -354,7 +354,7 @@ All Formation scheduler methods can raise the following exceptions:
 Raised when trying to access scheduler methods before the overlord is started.
 
 ```python
-from muxi.datatypes.exceptions import OverlordStateError
+from muxi.runtime.datatypes.exceptions import OverlordStateError
 
 try:
     jobs = await formation.get_active_jobs()

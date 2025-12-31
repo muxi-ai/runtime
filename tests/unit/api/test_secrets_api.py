@@ -9,9 +9,9 @@ import yaml
 import json
 from fastapi.testclient import TestClient
 
-from muxi.formation import Formation  # noqa: E402
-from muxi.formation.server.app import create_app
-from muxi.services.secrets.secrets_manager import SecretsManager
+from muxi.runtime.formation import Formation  # noqa: E402
+from muxi.runtime.formation.server.app import create_app
+from muxi.runtime.services.secrets.secrets_manager import SecretsManager
 
 
 @pytest.mark.asyncio

@@ -7,8 +7,8 @@ import logging
 from unittest.mock import AsyncMock, MagicMock
 from io import StringIO
 
-from muxi.services.logging.filters import CredentialRedactionFilter
-from muxi.formation.overlord.clarification import UnifiedClarificationSystem
+from muxi.runtime.services.logging.filters import CredentialRedactionFilter
+from muxi.runtime.formation.overlord.clarification import UnifiedClarificationSystem
 
 
 class TestLogRedaction:

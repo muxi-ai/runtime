@@ -9,9 +9,9 @@ import yaml
 import json
 from fastapi.testclient import TestClient
 
-from muxi.formation import Formation  # noqa: E402
-from muxi.formation.server.server import FormationServer
-from muxi.services.secrets.secrets_manager import SecretsManager
+from muxi.runtime.formation import Formation  # noqa: E402
+from muxi.runtime.formation.server.server import FormationServer
+from muxi.runtime.services.secrets.secrets_manager import SecretsManager
 
 
 def get_base_config():

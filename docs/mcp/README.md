@@ -42,7 +42,7 @@ npm install -g @modelcontextprotocol/server-sqlite
 ### Basic Usage
 
 ```python
-from muxi.services.mcp.service import MCPService
+from muxi.runtime.services.mcp.service import MCPService
 import asyncio
 
 async def main():
@@ -260,7 +260,7 @@ services:
 ### Error Handling
 
 ```python
-from muxi.services.mcp.base import (
+from muxi.runtime.services.mcp.base import (
     MCPConnectionError, MCPTimeoutError, MCPRequestError
 )
 

@@ -1,7 +1,7 @@
 """Test InitEventFormatter and InitFailureInfo."""
 
 import pytest
-from muxi.datatypes.observability import InitEventFormatter, InitFailureInfo
+from muxi.runtime.datatypes.observability import InitEventFormatter, InitFailureInfo
 
 
 def test_format_ok_basic():

@@ -6,8 +6,8 @@ for the RequestAnalysis topic tagging functionality.
 """
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from muxi.datatypes.workflow import RequestAnalysis
-from muxi.formation.workflow.analyzer import RequestAnalyzer, ComplexityMethod
+from muxi.runtime.datatypes.workflow import RequestAnalysis
+from muxi.runtime.formation.workflow.analyzer import RequestAnalyzer, ComplexityMethod
 
 
 # Helper function to create mock LLM with PromptLoader patched
@@ -33,7 +33,7 @@ class TestTopicTaggingDataclass:
             confidence_score=0.8,
             topics=["writing", "blog", "quarterly-reports"]
         )
-        
+
         assert analysis.topics == ["writing", "blog", "quarterly-reports"]
         assert len(analysis.topics) == 3
 
@@ -48,7 +48,7 @@ class TestTopicTaggingDataclass:
             acceptance_criteria=["Done"],
             confidence_score=0.7,
         )
-        
+
         assert analysis.topics == []
         assert isinstance(analysis.topics, list)
 
@@ -63,7 +63,7 @@ class TestTopicTaggingDataclass:
             acceptance_criteria=["Complete"],
             topics=[]
         )
-        
+
         assert analysis.topics == []
 
 
@@ -74,9 +74,9 @@ class TestHeuristicAnalyzerTopics:
     async def test_heuristic_returns_empty_topics(self):
         """Test heuristic analysis returns empty topics list."""
         analyzer = RequestAnalyzer(llm=None, complexity_method=ComplexityMethod.HEURISTIC)
-        
+
         result = await analyzer.analyze_request("Write a blog post about AI trends")
-        
+
         assert result.topics == []
         assert isinstance(result.topics, list)
 
@@ -84,14 +84,14 @@ class TestHeuristicAnalyzerTopics:
     async def test_heuristic_various_requests(self):
         """Test heuristic returns empty topics for various request types."""
         analyzer = RequestAnalyzer(llm=None)
-        
+
         test_cases = [
             "Debug the login API endpoint",
             "Analyze Q4 sales performance",
             "Create a meal plan for next week",
             "Help me understand Python decorators"
         ]
-        
+
         for message in test_cases:
             result = await analyzer.analyze_request(message)
             assert result.topics == [], f"Expected empty topics for: {message}"
@@ -105,7 +105,7 @@ class TestLLMAnalyzerTopics:
     async def test_llm_extracts_topics_from_response(self, mock_prompt_loader):
         """Test LLM parser extracts topics from valid JSON response."""
         mock_prompt_loader.get.return_value = "Mock prompt"
-        
+
         # Create mock LLM that returns JSON with topics
         mock_llm = create_mock_llm_with_prompt("""
         {
@@ -121,10 +121,10 @@ class TestLLMAnalyzerTopics:
             "reasoning": "This is a content creation request"
         }
         """)
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
         result = await analyzer.analyze_request("Write a blog post about AI")
-        
+
         assert result.topics == ["writing", "blog", "artificial-intelligence", "content-creation"]
         assert len(result.topics) == 4
 
@@ -133,7 +133,7 @@ class TestLLMAnalyzerTopics:
     async def test_llm_normalizes_topics(self, mock_prompt_loader):
         """Test topics are normalized to lowercase with stripped whitespace."""
         mock_prompt_loader.get.return_value = "Mock prompt"
-        
+
         mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 5.0,
@@ -145,10 +145,10 @@ class TestLLMAnalyzerTopics:
             "reasoning": "Test"
         }
         """)
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
         result = await analyzer.analyze_request("Test message")
-        
+
         # All should be lowercase and stripped
         assert result.topics == ["writing", "blog", "sales-analysis", "quarterly-reports"]
 
@@ -157,7 +157,7 @@ class TestLLMAnalyzerTopics:
     async def test_llm_limits_topics_to_five(self, mock_prompt_loader):
         """Test topics list is limited to maximum of 5 items."""
         mock_prompt_loader.get.return_value = "Mock prompt"
-        
+
         mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 5.0,
@@ -169,10 +169,10 @@ class TestLLMAnalyzerTopics:
             "reasoning": "Test"
         }
         """)
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
         result = await analyzer.analyze_request("Test message")
-        
+
         # Should be limited to 5
         assert len(result.topics) == 5
         assert result.topics == ["topic1", "topic2", "topic3", "topic4", "topic5"]
@@ -191,10 +191,10 @@ class TestLLMAnalyzerTopics:
             "reasoning": "Test"
         }
         """)
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
         result = await analyzer.analyze_request("Test message")
-        
+
         # Should default to empty list
         assert result.topics == []
 
@@ -213,10 +213,10 @@ class TestLLMAnalyzerTopics:
             "reasoning": "Test"
         }
         """)
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
         result = await analyzer.analyze_request("Test message")
-        
+
         assert result.topics == []
 
     @pytest.mark.asyncio
@@ -234,10 +234,10 @@ class TestLLMAnalyzerTopics:
             "reasoning": "Test"
         }
         """)
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
         result = await analyzer.analyze_request("Test message")
-        
+
         # Should handle gracefully and return empty list
         assert result.topics == []
 
@@ -246,7 +246,7 @@ class TestLLMAnalyzerTopics:
     async def test_llm_filters_empty_strings(self, mock_prompt_loader):
         """Test parser filters out empty strings from topics."""
         mock_prompt_loader.get.return_value = "Mock prompt"
-        
+
         mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 5.0,
@@ -258,10 +258,10 @@ class TestLLMAnalyzerTopics:
             "reasoning": "Test"
         }
         """)
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
         result = await analyzer.analyze_request("Test message")
-        
+
         # Empty strings and whitespace-only should be filtered
         assert result.topics == ["writing", "blog", "coding"]
 
@@ -274,10 +274,10 @@ class TestFallbackPathsTopics:
         """Test LLM error triggers heuristic fallback with empty topics."""
         mock_llm = AsyncMock()
         mock_llm.generate_text = AsyncMock(side_effect=Exception("LLM error"))
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
         result = await analyzer.analyze_request("Test message")
-        
+
         # Should fallback to heuristic with empty topics
         assert result.topics == []
 
@@ -286,10 +286,10 @@ class TestFallbackPathsTopics:
         """Test parsing error returns fallback analysis with empty topics."""
         mock_llm = AsyncMock()
         mock_llm.generate_text = AsyncMock(return_value="Invalid JSON response")
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
         result = await analyzer.analyze_request("Test message")
-        
+
         # Should return fallback with empty topics
         assert result.topics == []
 
@@ -298,10 +298,10 @@ class TestFallbackPathsTopics:
         """Test main analyze_request error returns fallback with empty topics."""
         mock_llm = AsyncMock()
         mock_llm.generate_text = AsyncMock(side_effect=RuntimeError("Critical error"))
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
         result = await analyzer.analyze_request("Test message")
-        
+
         # Should catch error and return safe fallback with empty topics
         assert result.topics == []
         assert result.complexity_score == 5.0  # Fallback default
@@ -315,7 +315,7 @@ class TestHybridAnalyzerTopics:
     async def test_hybrid_uses_llm_topics(self, mock_prompt_loader):
         """Test hybrid mode uses topics from LLM when available."""
         mock_prompt_loader.get.return_value = "Mock prompt"
-        
+
         mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 6.0,
@@ -327,10 +327,10 @@ class TestHybridAnalyzerTopics:
             "reasoning": "Test"
         }
         """)
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.HYBRID)
         result = await analyzer.analyze_request("Debug the API")
-        
+
         # Should use LLM topics
         assert result.topics == ["debugging", "api", "backend"]
 
@@ -339,10 +339,10 @@ class TestHybridAnalyzerTopics:
         """Test hybrid mode returns empty topics when LLM fails."""
         mock_llm = AsyncMock()
         mock_llm.generate_text = AsyncMock(side_effect=Exception("LLM failed"))
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.HYBRID)
         result = await analyzer.analyze_request("Test message")
-        
+
         # Should fallback to heuristic with empty topics
         assert result.topics == []
 
@@ -355,7 +355,7 @@ class TestTopicExamples:
     async def test_blog_writing_topics(self, mock_prompt_loader):
         """Test topics for blog writing request."""
         mock_prompt_loader.get.return_value = "Mock prompt"
-        
+
         mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 7.0,
@@ -367,10 +367,10 @@ class TestTopicExamples:
             "reasoning": "Writing task"
         }
         """)
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
         result = await analyzer.analyze_request("Write a blog post about AI trends")
-        
+
         assert "writing" in result.topics
         assert "blog" in result.topics
         assert len(result.topics) > 0
@@ -380,7 +380,7 @@ class TestTopicExamples:
     async def test_debugging_topics(self, mock_prompt_loader):
         """Test topics for debugging request."""
         mock_prompt_loader.get.return_value = "Mock prompt"
-        
+
         mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 6.0,
@@ -392,10 +392,10 @@ class TestTopicExamples:
             "reasoning": "Debug task"
         }
         """)
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
         result = await analyzer.analyze_request("Debug the login API endpoint")
-        
+
         assert "debugging" in result.topics
         assert "api" in result.topics
 
@@ -404,7 +404,7 @@ class TestTopicExamples:
     async def test_data_analysis_topics(self, mock_prompt_loader):
         """Test topics for data analysis request."""
         mock_prompt_loader.get.return_value = "Mock prompt"
-        
+
         mock_llm = create_mock_llm_with_prompt("""
         {
             "complexity_score": 8.0,
@@ -416,8 +416,8 @@ class TestTopicExamples:
             "reasoning": "Analysis task"
         }
         """)
-        
+
         analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
         result = await analyzer.analyze_request("Analyze Q4 sales performance")
-        
+
         assert "data-analysis" in result.topics or "sales" in result.topics

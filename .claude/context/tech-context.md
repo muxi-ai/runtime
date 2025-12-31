@@ -415,7 +415,7 @@ CMD ["muxi", "serve", "--formation", "/config/formation.afs"]
 
 ### For MUXI Server
 ```python
-from muxi import Formation
+from muxi.runtime import Formation
 
 # Load and start runtime
 formation = Formation()
@@ -443,7 +443,7 @@ mcp:
 ### For Monitoring
 ```python
 # Configure observability
-from muxi.observability import EventStream
+from muxi.runtime.observability import EventStream
 
 stream = EventStream(
     formatters=["datadog", "opentelemetry"],

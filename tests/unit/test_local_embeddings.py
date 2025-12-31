@@ -42,7 +42,7 @@ class TestLocalEmbeddingModule:
     @skip_if_pydantic_broken
     def test_get_local_embedding_dimension_default(self):
         """Test default dimension for local embeddings."""
-        from muxi.services.memory.local_embeddings import (
+        from muxi.runtime.services.memory.local_embeddings import (
             get_local_embedding_dimension,
             LOCAL_EMBEDDING_MODEL_NAME,
         )
@@ -58,7 +58,7 @@ class TestLocalEmbeddingModule:
     @skip_if_pydantic_broken
     def test_get_local_embedding_dimension_multilingual(self):
         """Test dimension for multilingual model."""
-        from muxi.services.memory.local_embeddings import get_local_embedding_dimension
+        from muxi.runtime.services.memory.local_embeddings import get_local_embedding_dimension
 
         # Multilingual model should also return 384
         dimension = get_local_embedding_dimension("paraphrase-multilingual-MiniLM-L12-v2")
@@ -67,7 +67,7 @@ class TestLocalEmbeddingModule:
     @skip_if_pydantic_broken
     def test_get_local_embedding_dimension_mpnet(self):
         """Test dimension for mpnet model."""
-        from muxi.services.memory.local_embeddings import get_local_embedding_dimension
+        from muxi.runtime.services.memory.local_embeddings import get_local_embedding_dimension
 
         # MPNet model should return 768
         dimension = get_local_embedding_dimension("all-mpnet-base-v2")
@@ -76,7 +76,7 @@ class TestLocalEmbeddingModule:
     @skip_if_pydantic_broken
     def test_get_local_embedding_dimension_unknown(self):
         """Test dimension for unknown model defaults to 384."""
-        from muxi.services.memory.local_embeddings import get_local_embedding_dimension
+        from muxi.runtime.services.memory.local_embeddings import get_local_embedding_dimension
 
         # Unknown model should default to 384
         dimension = get_local_embedding_dimension("unknown-model")
@@ -85,7 +85,7 @@ class TestLocalEmbeddingModule:
     @skip_if_pydantic_broken
     def test_is_local_embedding_available(self):
         """Test that sentence-transformers availability check works."""
-        from muxi.services.memory.local_embeddings import is_local_embedding_available
+        from muxi.runtime.services.memory.local_embeddings import is_local_embedding_available
 
         # sentence-transformers should be installed per requirements.txt
         assert is_local_embedding_available() is True
@@ -97,7 +97,7 @@ class TestLocalEmbeddingModule:
     )
     def test_get_local_embedding(self):
         """Test that local embedding generation works."""
-        from muxi.services.memory.local_embeddings import (
+        from muxi.runtime.services.memory.local_embeddings import (
             get_local_embedding,
             get_local_embedding_dimension,
             clear_local_embedding_cache,
@@ -122,7 +122,7 @@ class TestLocalEmbeddingModule:
     )
     def test_get_local_embedding_consistency(self):
         """Test that same text produces same embedding."""
-        from muxi.services.memory.local_embeddings import get_local_embedding
+        from muxi.runtime.services.memory.local_embeddings import get_local_embedding
 
         text = "Test sentence for consistency check"
         embedding1 = get_local_embedding(text)
@@ -138,7 +138,7 @@ class TestLocalEmbeddingModule:
     )
     def test_get_local_embedding_different_texts(self):
         """Test that different texts produce different embeddings."""
-        from muxi.services.memory.local_embeddings import get_local_embedding
+        from muxi.runtime.services.memory.local_embeddings import get_local_embedding
 
         text1 = "I love programming"
         text2 = "The weather is nice today"
@@ -157,7 +157,7 @@ class TestLocalEmbeddingModule:
     )
     async def test_get_local_embedding_async(self):
         """Test async version of local embedding generation."""
-        from muxi.services.memory.local_embeddings import (
+        from muxi.runtime.services.memory.local_embeddings import (
             get_local_embedding_async,
             get_local_embedding_dimension,
         )
@@ -177,7 +177,7 @@ class TestLocalEmbeddingModule:
     )
     def test_clear_local_embedding_cache(self):
         """Test that cache clearing works."""
-        from muxi.services.memory.local_embeddings import (
+        from muxi.runtime.services.memory.local_embeddings import (
             get_local_embedding,
             clear_local_embedding_cache,
         )
@@ -189,7 +189,7 @@ class TestLocalEmbeddingModule:
         clear_local_embedding_cache()
 
         # Import module-level variables to check they were reset
-        import muxi.services.memory.local_embeddings as le_module
+        import muxi.runtime.services.memory.local_embeddings as le_module
 
         assert le_module._model is None
         assert le_module._model_name is None
@@ -202,7 +202,7 @@ class TestLocalEmbeddingProvider:
     @skip_if_pydantic_broken
     def test_provider_initialization(self):
         """Test LocalEmbeddingProvider initialization."""
-        from muxi.services.memory.local_embeddings import (
+        from muxi.runtime.services.memory.local_embeddings import (
             LocalEmbeddingProvider,
             LOCAL_EMBEDDING_MODEL_NAME,
         )
@@ -215,7 +215,7 @@ class TestLocalEmbeddingProvider:
     @skip_if_pydantic_broken
     def test_provider_custom_model(self):
         """Test LocalEmbeddingProvider with custom model."""
-        from muxi.services.memory.local_embeddings import LocalEmbeddingProvider
+        from muxi.runtime.services.memory.local_embeddings import LocalEmbeddingProvider
 
         provider = LocalEmbeddingProvider(model_name="all-mpnet-base-v2")
 
@@ -230,7 +230,7 @@ class TestLocalEmbeddingProvider:
     )
     async def test_provider_embed_async(self):
         """Test async embedding generation via provider."""
-        from muxi.services.memory.local_embeddings import LocalEmbeddingProvider
+        from muxi.runtime.services.memory.local_embeddings import LocalEmbeddingProvider
 
         provider = LocalEmbeddingProvider()
         embedding = await provider.embed("Test sentence")
@@ -246,7 +246,7 @@ class TestLocalEmbeddingProvider:
     )
     def test_provider_embed_sync(self):
         """Test sync embedding generation via provider."""
-        from muxi.services.memory.local_embeddings import LocalEmbeddingProvider
+        from muxi.runtime.services.memory.local_embeddings import LocalEmbeddingProvider
 
         provider = LocalEmbeddingProvider()
         embedding = provider.embed_sync("Test sentence")
@@ -262,8 +262,8 @@ class TestMemoryLocalEmbeddingFallback:
     @skip_if_pydantic_broken
     def test_long_term_memory_uses_local_embeddings_when_no_model(self):
         """Test that LongTermMemory uses local embeddings when no model configured."""
-        from muxi.services.memory.long_term import LongTermMemory
-        from muxi.services.memory.local_embeddings import LocalEmbeddingProvider
+        from muxi.runtime.services.memory.long_term import LongTermMemory
+        from muxi.runtime.services.memory.local_embeddings import LocalEmbeddingProvider
 
         # Mock database manager
         mock_db_manager = MagicMock()
@@ -287,7 +287,7 @@ class TestMemoryLocalEmbeddingFallback:
     @skip_if_pydantic_broken
     def test_long_term_memory_uses_api_model_when_configured(self):
         """Test that LongTermMemory uses API model when configured."""
-        from muxi.services.memory.long_term import LongTermMemory
+        from muxi.runtime.services.memory.long_term import LongTermMemory
 
         # Mock database manager
         mock_db_manager = MagicMock()
@@ -307,8 +307,8 @@ class TestMemoryLocalEmbeddingFallback:
     @skip_if_pydantic_broken
     def test_working_memory_uses_local_embeddings_when_no_model(self):
         """Test that WorkingMemory uses local embeddings when no model configured."""
-        from muxi.services.memory.working import WorkingMemory
-        from muxi.services.memory.local_embeddings import LocalEmbeddingProvider
+        from muxi.runtime.services.memory.working import WorkingMemory
+        from muxi.runtime.services.memory.local_embeddings import LocalEmbeddingProvider
 
         # Create WorkingMemory without embedding model
         memory = WorkingMemory(
@@ -327,7 +327,7 @@ class TestMemoryLocalEmbeddingFallback:
     @skip_if_pydantic_broken
     def test_working_memory_uses_api_model_when_configured(self):
         """Test that WorkingMemory uses API model when configured."""
-        from muxi.services.memory.working import WorkingMemory
+        from muxi.runtime.services.memory.working import WorkingMemory
 
         # Create a mock LLM model
         mock_llm = MagicMock()
@@ -356,7 +356,7 @@ class TestSemanticQuality:
     )
     def test_similar_sentences_have_high_similarity(self):
         """Test that semantically similar sentences have high cosine similarity."""
-        from muxi.services.memory.local_embeddings import get_local_embedding
+        from muxi.runtime.services.memory.local_embeddings import get_local_embedding
         import math
 
         # Similar sentences

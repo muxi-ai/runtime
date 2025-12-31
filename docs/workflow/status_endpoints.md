@@ -120,7 +120,7 @@ The WorkflowExecutor has been enhanced with:
 ## Usage Example
 
 ```python
-from muxi.formation.overlord.overlord import Overlord
+from muxi.runtime.formation.overlord.overlord import Overlord
 
 # Initialize with workflow support
 overlord = Overlord(enable_workflow_by_default=True)

@@ -15,8 +15,8 @@ current_user = getpass.getuser()
 if "POSTGRES_DATABASE_URL" not in os.environ:
     os.environ["POSTGRES_DATABASE_URL"] = f"postgresql://{current_user}:@localhost:5432/muxi_framework"  # noqa: E402
 
-from muxi.formation.credentials.resolver import CredentialResolver, Credential, User  # noqa: E402
-from muxi.services.db import get_database_manager  # noqa: E402
+from muxi.runtime.formation.credentials.resolver import CredentialResolver, Credential, User  # noqa: E402
+from muxi.runtime.services.db import get_database_manager  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 
@@ -110,7 +110,7 @@ async def test_credential_isolation():
         print(f"   Total GitHub credentials for formation {formation_id}: {len(all_creds)}")
 
         # Verify each user's credential
-        from muxi.services.memory.long_term import UserIdentifier
+        from muxi.runtime.services.memory.long_term import UserIdentifier
         for user_identifier in ["alice_4d4_test", "bob_4d4_test"]:
             stmt = (
                 select(Credential)

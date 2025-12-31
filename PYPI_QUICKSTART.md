@@ -116,7 +116,7 @@ Get tokens:
    python3 -m venv test_env
    source test_env/bin/activate
    pip install dist/muxi-*.whl
-   python -c "from muxi import Formation; print('OK')"
+   python -c "from muxi.runtime import Formation; print('OK')"
    deactivate && rm -rf test_env
    ```
 

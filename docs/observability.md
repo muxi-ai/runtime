@@ -142,7 +142,7 @@ Use glob patterns to filter specific conversation events:
 ### Basic Event Emission
 
 ```python
-from muxi.services import observability
+from muxi.runtime.services import observability
 
 # Simple event
 observability.observe(

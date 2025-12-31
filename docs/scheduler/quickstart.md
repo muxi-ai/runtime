@@ -50,7 +50,7 @@ memory:
 ```python
 import asyncio
 from pathlib import Path
-from muxi.formation.formation import Formation
+from muxi.runtime.formation.formation import Formation
 
 async def schedule_daily_reminder():
     # Load formation
@@ -155,7 +155,7 @@ Here's a complete example from our test suite that you can run:
 import asyncio
 import sys
 from pathlib import Path
-from muxi.formation.formation import Formation
+from muxi.runtime.formation.formation import Formation
 
 
 async def main():

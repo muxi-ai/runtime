@@ -9,8 +9,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from dataclasses import dataclass
 
-from muxi.formation.overlord.clarification import UnifiedClarificationSystem, ClarificationResult
-from muxi.formation.credentials import MissingCredentialError
+from muxi.runtime.formation.overlord.clarification import UnifiedClarificationSystem, ClarificationResult
+from muxi.runtime.formation.credentials import MissingCredentialError
 
 
 class TestRedirectMode:

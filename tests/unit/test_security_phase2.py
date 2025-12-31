@@ -9,8 +9,8 @@ that may bypass pattern matching.
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
-from muxi.formation.overlord.agent_router import AgentRouter
-from muxi.datatypes.exceptions import SecurityViolation
+from muxi.runtime.formation.overlord.agent_router import AgentRouter
+from muxi.runtime.datatypes.exceptions import SecurityViolation
 
 
 class TestLLMSecurityDetection:

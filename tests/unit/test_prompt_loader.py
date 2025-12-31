@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from muxi.formation.prompts.loader import PromptLoader
+from muxi.runtime.formation.prompts.loader import PromptLoader
 
 
 class TestPromptLoader:

@@ -17,7 +17,7 @@ Integration:
 - User experience optimization for document workflows
 
 Usage:
-    from muxi.formation.document_experience import (
+    from muxi.runtime.formation.document_experience import (
         DocumentAcknowledgmentGenerator,
         DocumentSummarizer,
         DocumentErrorHandler

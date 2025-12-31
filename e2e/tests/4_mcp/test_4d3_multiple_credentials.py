@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def run_async_test():

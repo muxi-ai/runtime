@@ -1339,7 +1339,7 @@ class WorkflowExecutor:
                 request_id=context.get("request_id"),
             )
 
-            # Extract content from MuxiResponse
+            # Extract content from muxi.runtimeResponse
             response_content = response.content if hasattr(response, "content") else str(response)
 
             # Extract artifacts if present

@@ -3292,7 +3292,7 @@ class Agent:
                         },
                         description=f"A2A response received: execution={execution_completed}",
                     )
-                    # Extract string content from MuxiResponse if needed
+                    # Extract string content from muxi.runtimeResponse if needed
                     if hasattr(result_content, "content"):
                         result_text = result_content.content
                     elif isinstance(result_content, dict):

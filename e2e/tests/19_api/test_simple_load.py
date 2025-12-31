@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation import Formation
+from muxi.runtime.formation import Formation
 
 # Set up signal handler for timeout
 def timeout_handler(signum, frame):
@@ -22,16 +22,16 @@ async def simple_test():
     print("Loading formation...")
     formation = Formation()
     formation_path = Path(__file__).parent / "formation-api"
-    
+
     # Set 30s alarm
     signal.alarm(30)
-    
+
     await formation.load(str(formation_path))
     print("✅ Load complete!")
-    
+
     # Cancel alarm
     signal.alarm(0)
-    
+
     # Don't call stop, just return
     print("Returning...")
     return True

@@ -5,7 +5,7 @@ Tests for credential storage pipeline functionality.
 import pytest
 from unittest.mock import Mock, AsyncMock
 
-from muxi.formation.overlord.clarification import UnifiedClarificationSystem
+from muxi.runtime.formation.overlord.clarification import UnifiedClarificationSystem
 
 
 @pytest.fixture

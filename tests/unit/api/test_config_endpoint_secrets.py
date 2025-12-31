@@ -3,8 +3,8 @@ Test that /v1/config endpoint properly masks secrets.
 """
 
 import pytest
-from muxi.formation.server.routes.admin.config import get_formation_config
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation.server.routes.admin.config import get_formation_config
+from muxi.runtime.formation import Formation  # noqa: E402
 from fastapi import Request
 from unittest.mock import Mock, MagicMock
 

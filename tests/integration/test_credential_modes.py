@@ -5,7 +5,7 @@ Integration tests for credential handling modes (redirect and dynamic).
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from muxi.formation.overlord.clarification import UnifiedClarificationSystem
+from muxi.runtime.formation.overlord.clarification import UnifiedClarificationSystem
 
 
 @pytest.fixture

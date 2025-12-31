@@ -13,12 +13,12 @@ overlord:
     complexity_method: "heuristic"
     routing_strategy: "capability_based"
     error_recovery: "retry_with_backoff"
-    
+
     retry:
       max_attempts: 3
       initial_delay: 1.0
       backoff_factor: 2.0
-    
+
     timeouts:
       task_timeout: 300
       workflow_timeout: 3600
@@ -32,7 +32,7 @@ overlord:
     max_parallel_tasks: 5
     parallel_execution: true
     partial_results: true
-    
+
     # Enhanced complexity settings
     complexity_weights:
       heuristic: 0.4
@@ -112,9 +112,9 @@ result = await overlord.execute_workflow(workflow)
 ### Research & Report Generation
 ```python
 prompt = """
-Research the latest developments in quantum computing, 
-analyze the market implications, 
-create a comprehensive report, 
+Research the latest developments in quantum computing,
+analyze the market implications,
+create a comprehensive report,
 and save it as a PDF document
 """
 
@@ -191,10 +191,10 @@ async def monitor_workflow(workflow_id: str):
     while True:
         status = await overlord.get_workflow_status(workflow_id)
         print(f"Workflow {workflow_id}: {status.status} ({status.progress_percent}%)")
-        
+
         if status.status in ['completed', 'failed', 'cancelled']:
             break
-            
+
         await asyncio.sleep(2)
 ```
 
@@ -233,7 +233,7 @@ workflow = await overlord.get_workflow_status(workflow_id)
 if workflow.status == WorkflowStatus.FAILED:
     failed_tasks = [task for task in workflow.tasks if task.status == TaskStatus.FAILED]
     print(f"Failed tasks: {[task.id for task in failed_tasks]}")
-    
+
     # Retry failed tasks
     for task in failed_tasks:
         await overlord.retry_task(workflow_id, task.id)
@@ -247,11 +247,11 @@ overlord:
   workflow:
     # Increase complexity threshold to reduce workflow triggers
     complexity_threshold: 8.0
-    
+
     # Optimize parallel execution
     max_parallel_tasks: 5
     parallel_execution: true
-  
+
   caching:
     enabled: true
     ttl: 3600
@@ -275,19 +275,19 @@ print(f"Memory usage: {metrics['memory_usage_mb']}MB")
 ### Unit Testing
 ```python
 import pytest
-from muxi.formation.workflow import WorkflowExecutor, Task
+from muxi.runtime.formation.workflow import WorkflowExecutor, Task
 
 @pytest.mark.asyncio
 async def test_simple_workflow():
     executor = WorkflowExecutor()
-    
+
     task = Task(
         id="test_task",
         type="simple_test",
         description="Test task",
         agent_requirements=["test_agent"]
     )
-    
+
     result = await executor.execute_single_task(task, create_test_context())
     assert result.status == TaskStatus.COMPLETED
 ```
@@ -298,18 +298,18 @@ async def test_simple_workflow():
 async def test_workflow_integration():
     formation = await create_test_formation()
     overlord = await formation.start_overlord()
-    
+
     # Test complex request
     response = await overlord.chat(
         "Test complex workflow request",
         user_id="test_user",
         session_id="test_session"
     )
-    
+
     # Verify workflow execution
     assert hasattr(response, 'metadata')
     assert response.metadata.get('workflow_id') is not None
-    
+
     await formation.stop_overlord()
 ```
 
@@ -335,10 +335,10 @@ bypass_approval: true  # Skip workflow approval (default: true)
 ## Steps
 1. **Analyze code** [agent:code-reviewer]
    Review for style and correctness
-   
+
 2. **Security scan** [mcp:security/scan]
    Check for vulnerabilities
-   
+
 3. **Generate report** [agent:writer] [critical]
    Create review summary (cannot be optimized away)
 ```
@@ -396,7 +396,7 @@ overlord:
     complexity_threshold: 5.0  # Lower threshold for research tasks
     routing_strategy: "capability_based"
     max_parallel_tasks: 8
-    
+
     timeouts:
       task_timeout: 600
       enable_adaptive_timeout: true
@@ -407,11 +407,11 @@ overlord:
 overlord:
   workflow:
     max_parallel_tasks: 10
-    
+
     retry:
       max_attempts: 5
       initial_delay: 0.5
-      
+
     timeouts:
       task_timeout: 180
       enable_adaptive_timeout: true
@@ -423,7 +423,7 @@ overlord:
   workflow:
     complexity_threshold: 3.0  # Lower threshold for testing
     error_recovery: "fail_fast"  # Immediate failure for debugging
-    
+
     retry:
       max_attempts: 1  # No retries during development
 ```

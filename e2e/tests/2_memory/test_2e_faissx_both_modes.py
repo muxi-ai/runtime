@@ -31,7 +31,7 @@ from test_utils import (
     timeout_test, safe_overlord_chat, with_timeout,
     safe_formation_load, safe_formation_shutdown
 )
-from muxi.services.memory.working import WorkingMemory  # noqa: E402
+from muxi.runtime.services.memory.working import WorkingMemory  # noqa: E402
 
 
 # Mock LLM for testing
@@ -51,7 +51,7 @@ class TestFAISSxBothModes(BaseMemoryTest):
 
         try:
             import faissx.client as faiss
-            from muxi.services.secrets.secrets_manager import SecretsManager
+            from muxi.runtime.services.secrets.secrets_manager import SecretsManager
 
             # Load tenant ID from secrets
             secrets_manager = SecretsManager(str(self.FORMATION_DIR))
@@ -114,7 +114,7 @@ class TestFAISSxBothModes(BaseMemoryTest):
 
         try:
             import faissx.client as faiss
-            from muxi.services.secrets.secrets_manager import SecretsManager
+            from muxi.runtime.services.secrets.secrets_manager import SecretsManager
 
             # Load authentication from secrets
             secrets_manager = SecretsManager(str(self.FORMATION_DIR))
@@ -179,7 +179,7 @@ class TestFAISSxBothModes(BaseMemoryTest):
         """Test loading formations with different FAISSx configs."""
         print("\n  📄 Testing Formation Configurations")
 
-        from muxi.formation import Formation
+        from muxi.runtime.formation import Formation
 
         formations_to_test = [
             {

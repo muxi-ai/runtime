@@ -6,7 +6,7 @@ and emitted as observability events.
 """
 import pytest
 from pathlib import Path
-from muxi import Formation
+from muxi.runtime import Formation
 
 
 @pytest.fixture

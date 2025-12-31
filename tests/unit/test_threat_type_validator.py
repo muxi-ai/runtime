@@ -5,7 +5,7 @@ Unit tests for threat_type field validator in RequestAnalysis
 import pytest
 from pydantic import ValidationError
 
-from muxi.datatypes.workflow import RequestAnalysis
+from muxi.runtime.datatypes.workflow import RequestAnalysis
 
 
 class TestThreatTypeValidator:
@@ -34,7 +34,7 @@ class TestThreatTypeValidator:
             'information_extraction',
             'jailbreak'
         ]
-        
+
         for threat in valid_threats:
             analysis = RequestAnalysis(
                 complexity_score=5.0,
@@ -57,7 +57,7 @@ class TestThreatTypeValidator:
             ('Information_Extraction', 'information_extraction'),
             ('JailBreak', 'jailbreak'),
         ]
-        
+
         for input_val, expected in test_cases:
             analysis = RequestAnalysis(
                 complexity_score=5.0,
@@ -80,7 +80,7 @@ class TestThreatTypeValidator:
             '\ninformation_extraction\n',
             '  jailbreak  ',
         ]
-        
+
         for input_val in test_cases:
             analysis = RequestAnalysis(
                 complexity_score=5.0,
@@ -119,7 +119,7 @@ class TestThreatTypeValidator:
             'code_injection',
             'path_traversal',
         ]
-        
+
         for invalid in invalid_values:
             with pytest.raises(ValidationError) as exc_info:
                 RequestAnalysis(
@@ -133,7 +133,7 @@ class TestThreatTypeValidator:
                     is_security_threat=True,
                     threat_type=invalid
                 )
-            
+
             # Check error message contains the invalid value and valid options
             error_msg = str(exc_info.value)
             assert invalid in error_msg or invalid.upper() in error_msg
@@ -150,7 +150,7 @@ class TestThreatTypeValidator:
             {'type': 'prompt_injection'},
             True,
         ]
-        
+
         for invalid in invalid_values:
             with pytest.raises(ValidationError) as exc_info:
                 RequestAnalysis(
@@ -164,10 +164,10 @@ class TestThreatTypeValidator:
                     is_security_threat=True,
                     threat_type=invalid
                 )
-            
+
             error_msg = str(exc_info.value)
             # Pydantic catches type errors before our validator runs
-            assert ("must be a string or None" in error_msg or 
+            assert ("must be a string or None" in error_msg or
                     "Input should be a valid string" in error_msg)
 
     def test_empty_string_rejected(self):
@@ -184,7 +184,7 @@ class TestThreatTypeValidator:
                 is_security_threat=True,
                 threat_type='   '  # Only whitespace
             )
-        
+
         error_msg = str(exc_info.value)
         assert "Invalid threat_type" in error_msg
 

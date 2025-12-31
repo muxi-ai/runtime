@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 from .formatter import TestOutputFormatter  # noqa: E402
 from .timeout import TestTimeouts  # noqa: E402
 from .formations import FormationManager, FormationPattern, TEST_PATTERNS  # noqa: E402
@@ -124,7 +124,7 @@ class BaseE2ETest:
         if self.formation:
             try:
                 self.formatter.print_teardown("Cleaning up formation...")
-                
+
                 # Stop API server if it's running
                 if hasattr(self.formation, '_formation_server') and self.formation._formation_server:
                     if hasattr(self.formation._formation_server, 'is_running') and self.formation._formation_server.is_running:
@@ -135,11 +135,11 @@ class BaseE2ETest:
                             await asyncio.sleep(1)
                         except Exception as e:
                             self.formatter.print_warning(f"Server stop error: {e}")
-                
+
                 # Stop overlord if it's running
                 if self.overlord:
                     await self.formation.stop_overlord()
-                
+
                 self.formatter.print_teardown("Formation cleaned up")
             except Exception as e:
                 self.formatter.print_warning(f"Cleanup error: {e}")

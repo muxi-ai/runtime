@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import asyncio  # noqa: E402
 from concurrent.futures import ThreadPoolExecutor  # noqa: E402
 
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 def test_multiple_users_permissions():
@@ -22,7 +22,7 @@ def test_multiple_users_permissions():
         # Run the async test in a thread pool to avoid event loop issues
         def run_test():
             async def test_operations():
-                # Helper function to extract response text from MuxiResponse
+                # Helper function to extract response text from muxi.runtimeResponse
                 def handle_response(response):
                     if hasattr(response, 'content'):
                         return response.content

@@ -60,7 +60,7 @@ export POSTGRES_DATABASE_URL="sqlite:///./scheduler.db"
 
 ```python
 import asyncio
-from muxi.formation import Formation
+from muxi.runtime.formation import Formation
 
 async def setup_scheduler():
     # Load formation with scheduler enabled

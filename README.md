@@ -115,7 +115,7 @@ muxi dev
 The MUXI Runtime can be used directly as a Python framework:
 
 ```python
-from muxi import Formation
+from muxi.runtime import Formation
 import asyncio
 
 async def main():

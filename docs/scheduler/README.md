@@ -63,7 +63,7 @@ The MUXI Scheduler transforms MUXI from a reactive assistant into a proactive AI
 ### Basic Example
 
 ```python
-from muxi.formation import Formation
+from muxi.runtime.formation import Formation
 import asyncio
 
 async def main():

@@ -1,6 +1,6 @@
 # Docker Image Size Analysis & Optimization
 
-**Analysis Date**: October 29, 2025  
+**Analysis Date**: October 29, 2025
 **Goal**: Reduce MUXI Runtime Docker image from ~3GB
 
 ---
@@ -156,7 +156,7 @@ RUN pip install muxi --no-deps && \
 
 ### 🎭 Option 3: Use Alpine Linux (~200-300MB savings)
 
-**Current**: Debian slim (101MB base)  
+**Current**: Debian slim (101MB base)
 **Alternative**: Alpine (5MB base)
 
 **Pros:**
@@ -191,7 +191,7 @@ RUN pip install -r requirements.txt && \
     rm -rf /usr/share/locale/*
 ```
 
-**Savings:** ~100-200MB  
+**Savings:** ~100-200MB
 **Risk:** Low - only removes cache/docs
 
 ---
@@ -261,7 +261,7 @@ RUN pip install -r requirements.txt && \
 ./build-docker.sh slim
 
 # Test
-docker run --rm muxi-runtime:slim python -c "from muxi import Formation"
+docker run --rm muxi-runtime:slim python -c "from muxi.runtime import Formation"
 
 # Size
 docker images muxi-runtime:slim
@@ -317,5 +317,5 @@ docker build -f Dockerfile.minimal -t muxi-runtime:minimal .
 
 ---
 
-**Created by**: Claude (Anthropic)  
+**Created by**: Claude (Anthropic)
 **Analysis of**: `muxi-runtime:basic` and `muxi-runtime:slim`

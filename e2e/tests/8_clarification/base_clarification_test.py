@@ -13,7 +13,7 @@ import uuid
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 # Import from common module (centralized e2e/tests/common)
 from common import BaseE2ETest  # noqa: E402

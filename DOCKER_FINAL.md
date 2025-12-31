@@ -48,7 +48,7 @@ We've consolidated to **one primary Docker image** for simplicity and consistenc
 ```bash
 # Test import
 docker run --rm muxi-runtime:latest \
-  python -c "from muxi import Formation; print('✓ Works')"
+  python -c "from muxi.runtime import Formation; print('✓ Works')"
 
 # Run formation
 docker run --rm \

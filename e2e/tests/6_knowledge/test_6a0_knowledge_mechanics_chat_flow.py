@@ -13,8 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation  # noqa: E402
-from muxi.utils.user_dirs import get_knowledge_dir  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
+from muxi.runtime.utils.user_dirs import get_knowledge_dir  # noqa: E402
 
 
 def test_core_knowledge_mechanics():

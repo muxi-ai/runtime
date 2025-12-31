@@ -50,7 +50,7 @@ class CredentialHandler:
         # Create new model instance with proper configuration
         try:
             # Filter out params we're setting explicitly to avoid duplicate kwargs
-            settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
+            settings = {k: v for k, v in text_model_config.get("settings", {}).items()
                        if k not in ["temperature", "max_tokens"]}
             llm = await self.overlord.create_model(
                 model=model_name,
@@ -102,7 +102,7 @@ class CredentialHandler:
             llm = self.overlord._model_cache[cache_key]
         else:
             # Filter out params we're setting explicitly to avoid duplicate kwargs
-            settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
+            settings = {k: v for k, v in text_model_config.get("settings", {}).items()
                        if k not in ["temperature", "max_tokens"]}
             llm = await self.overlord.create_model(
                 model=model_name,
@@ -353,7 +353,7 @@ Respond in JSON format:
                 return False
 
         # For other services, fallback to MCP connection test (but with strict timeout)
-        from muxi.services.mcp.handler import MCPHandler
+        from muxi.runtime.services.mcp.handler import MCPHandler
         import asyncio
 
         handler = MCPHandler(model=None, tool_registry=self.overlord.mcp_service.tool_registry)
@@ -548,7 +548,7 @@ Respond in JSON format:
             llm = self.overlord._model_cache[cache_key]
         else:
             # Filter out params we're setting explicitly to avoid duplicate kwargs
-            settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
+            settings = {k: v for k, v in text_model_config.get("settings", {}).items()
                        if k not in ["temperature", "max_tokens"]}
             llm = await self.overlord.create_model(
                 model=model_name,
@@ -1077,7 +1077,7 @@ Return ONLY the message text, no quotes."""
 
             if cache_key not in self.overlord._model_cache:
                 # Filter out params we're setting explicitly to avoid duplicate kwargs
-                settings = {k: v for k, v in text_model_config.get("settings", {}).items() 
+                settings = {k: v for k, v in text_model_config.get("settings", {}).items()
                            if k not in ["temperature", "max_tokens"]}
                 llm = await self.overlord.create_model(
                     model=model_name,

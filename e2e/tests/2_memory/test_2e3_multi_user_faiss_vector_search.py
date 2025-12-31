@@ -27,9 +27,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from base_memory_test import BaseMemoryTest  # noqa: E402
 from test_utils import timeout_test, safe_overlord_chat, with_timeout, safe_formation_load, safe_formation_shutdown
-from muxi.services.memory.working import WorkingMemory  # noqa: E402
-from muxi.services.secrets.secrets_manager import SecretsManager  # noqa: E402
-from muxi.services.llm.llm import LLM  # noqa: E402
+from muxi.runtime.services.memory.working import WorkingMemory  # noqa: E402
+from muxi.runtime.services.secrets.secrets_manager import SecretsManager  # noqa: E402
+from muxi.runtime.services.llm.llm import LLM  # noqa: E402
 
 
 class TestMultiUserFAISSVectorSearch(BaseMemoryTest):

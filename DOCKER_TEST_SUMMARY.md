@@ -21,7 +21,7 @@
 
 ### ✅ Test 1: MUXI Import
 **Status**: PASSED
-**Test**: `from muxi import Formation`
+**Test**: `from muxi.runtime import Formation`
 **Result**: Import successful, all modules load correctly
 
 ### ✅ Test 2: Version Check
@@ -126,13 +126,13 @@ Key packages:
 ### 1. Test Import
 ```bash
 docker run --rm muxi-runtime:latest \
-  python -c "from muxi import Formation; print('✓ Works')"
+  python -c "from muxi.runtime import Formation; print('✓ Works')"
 ```
 
 ### 2. Check Version
 ```bash
 docker run --rm muxi-runtime:latest \
-  python -c "from muxi.utils.version import get_version; print(get_version())"
+  python -c "from muxi.runtime.utils.version import get_version; print(get_version())"
 ```
 
 ### 3. Run Formation (with environment)

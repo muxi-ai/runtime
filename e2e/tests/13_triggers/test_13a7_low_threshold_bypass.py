@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def main():
@@ -40,19 +40,19 @@ async def main():
 
         print(f"\n✅ Formation loaded: {formation_id}")
         print(f"📡 Server running at {base_url}")
-        
+
         # Verify threshold configuration
         overlord = formation._overlord
         approval_threshold = overlord.plan_approval_threshold
         complexity_threshold = overlord.complexity_threshold
-        
+
         print(f"\n📊 Threshold Configuration:")
         print(f"   Complexity threshold: {complexity_threshold}")
         print(f"   Approval threshold: {approval_threshold}")
-        
+
         assert approval_threshold == 2.0, \
             f"Expected approval threshold 2.0, got {approval_threshold}"
-        
+
         print(f"   ✅ Very low approval threshold confirmed (2.0)")
 
         # Test production deployment trigger (complex request that will exceed threshold)
@@ -98,16 +98,16 @@ async def main():
                 status = response_data.get("status")
                 assert status == "completed", \
                     f"Expected 'completed' status (bypass worked), got: {status}"
-                
+
                 # Should have actual content, not an approval request
                 content = response_data.get("content") or response_data.get("message", "")
                 assert content, "No response content received"
-                
+
                 # KEY VALIDATION: Response should NOT contain approval language
                 content_lower = content.lower()
                 approval_indicators = [
                     "would you like me to proceed",
-                    "should i proceed", 
+                    "should i proceed",
                     "would you like to proceed",
                     "do you want me to proceed",
                     "review the plan",
@@ -116,9 +116,9 @@ async def main():
                     "please approve",
                     "waiting for approval"
                 ]
-                
+
                 has_approval_language = any(phrase in content_lower for phrase in approval_indicators)
-                
+
                 if has_approval_language:
                     print(f"\n❌ FAILURE: Response contains approval language!")
                     print(f"   Response: {content[:300]}")
@@ -130,7 +130,7 @@ async def main():
                 print(f"✅ No approval language detected in response")
                 print(f"✅ Agent executed immediately despite low threshold")
                 print(f"✅ Response preview: {content[:150]}...")
-                
+
                 # Verify this was a complex enough request that WOULD have triggered approval
                 # if not for the bypass flag
                 print(f"\n📊 Validation:")

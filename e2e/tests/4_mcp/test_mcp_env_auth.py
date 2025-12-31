@@ -2,8 +2,8 @@
 import pytest
 from pathlib import Path
 
-from muxi import Formation
-from muxi.utils.user_dirs import get_user_dir
+from muxi.runtime import Formation
+from muxi.runtime.utils.user_dirs import get_user_dir
 
 
 @pytest.mark.asyncio
@@ -135,7 +135,7 @@ async def test_mcp_env_auth_user_credentials():
         await formation.load(str(test_dir / "formation.afs"))
 
         # Set up user credentials using the credential store
-        from muxi.services.secrets import UserCredentialStore
+        from muxi.runtime.services.secrets import UserCredentialStore
 
         # Get user directory
         user_dir = get_user_dir("users/test_user")
@@ -184,7 +184,7 @@ async def test_mcp_env_auth_user_credentials():
 @pytest.mark.asyncio
 async def test_mcp_env_auth_multiple_vars():
     """Test that multiple environment variables are passed correctly."""
-    from muxi.services.mcp.transports.command import CommandLineTransport
+    from muxi.runtime.services.mcp.transports.command import CommandLineTransport
 
     # Test the transport directly
     auth_config = {

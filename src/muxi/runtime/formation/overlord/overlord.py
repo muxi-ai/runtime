@@ -960,7 +960,7 @@ class Overlord:
 
         # Try to initialize now
         try:
-            from muxi.formation.workflow.sops import SOPSystem
+            from muxi.runtime.formation.workflow.sops import SOPSystem
 
             self.sop_system = SOPSystem(Path(self._sop_formation_path))
 
@@ -2179,7 +2179,7 @@ If this requires complex multi-step work, respond with: COMPLEX"""
     async def _check_cancelled(self, request_id: Optional[str]) -> None:
         """
         Check if request is cancelled and raise exception if so.
-        
+
         Args:
             request_id: The request ID to check
         """
@@ -2246,10 +2246,10 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                 # If there's a current request marker, only take content before it
                 if "=== CURRENT REQUEST ===" in context_section:
                     context_section = context_section.split("=== CURRENT REQUEST ===")[0]
-                
+
                 # Normalize current question for comparison (lowercase, strip punctuation)
                 normalized_question = re.sub(r'[^\w\s]', '', actual_user_message.lower().strip())
-                
+
                 # Only check non-trivial questions with actual context content
                 if normalized_question and len(normalized_question) > 10 and "User:" in context_section:
                     # Check if this exact question appears in context with an answer
@@ -2279,14 +2279,14 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                     default_persona=self._default_persona,
                     user_message=actual_user_message,
                 )
-                
+
                 # For ongoing sessions, skip greeting responses
                 if "=== CONVERSATION CONTEXT" in user_message:
                     system_prompt += (
                         "\n\nThis is an ongoing conversation - do NOT start with greetings like "
                         "'Hey there', 'Hi', 'Hello', etc. Get straight to the point."
                     )
-                
+
                 messages = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Respond to: {actual_user_message}"},
@@ -2349,7 +2349,7 @@ If this requires complex multi-step work, respond with: COMPLEX"""
 Reformat the agent's response to match your persona while preserving all technical details and information.
 Make it conversational and friendly while keeping accuracy.
 
-IMPORTANT: Match response length to the question complexity. Simple questions get brief answers. 
+IMPORTANT: Match response length to the question complexity. Simple questions get brief answers.
 Don't pad responses with unnecessary headers, bullet points, or filler. Be concise.{format_instruction}{repeated_instruction}{ongoing_session_instruction}"""
 
                 user_content = f"""User request: {actual_user_message}
@@ -2362,9 +2362,9 @@ Agent response: {raw_response}"""
                 # Force non-streaming for persona application
                 # Disable caching to ensure varied responses (persona is final stage)
                 response = await llm.chat(
-                    messages, 
-                    max_tokens=2000, 
-                    temperature=0.7, 
+                    messages,
+                    max_tokens=2000,
+                    temperature=0.7,
                     stream=False,
                     caching=False
                 )

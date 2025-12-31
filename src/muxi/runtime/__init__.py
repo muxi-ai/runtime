@@ -8,7 +8,7 @@
 # Author:       Muxi Framework Team
 #
 # This file initializes the Muxi Runtime framework package and defines what's
-# available when importing from muxi. It exports:
+# available when importing from muxi.runtime. It exports:
 #
 # Core Components
 #  - Formation for operational lifecycle management
@@ -45,14 +45,14 @@ __license__ = "Elastic License 2.0"
 __url__ = "https://github.com/muxi-ai"
 
 
-# Explicitly define what's available when using "from muxi import *"
+# Explicitly define what's available when using "from muxi.runtime import *"
 __all__ = [
     "Formation",
     "LLM",
 ]
 
 # Usage:
-# from muxi import Formation  # noqa: E402
+# from muxi.runtime import Formation  # noqa: E402
 # formation = Formation()
 # formation.load("formation.afs")
 # muxi = formation.start_overlord()  # Returns Overlord instance

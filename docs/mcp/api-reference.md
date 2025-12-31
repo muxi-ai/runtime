@@ -11,7 +11,7 @@ The main service class for MCP operations. Uses singleton pattern for thread-saf
 ### Getting Started
 
 ```python
-from muxi.services.mcp.service import MCPService
+from muxi.runtime.services.mcp.service import MCPService
 
 # Get the singleton instance
 service = MCPService.get_instance()
@@ -175,7 +175,7 @@ print(f"Hit ratio: {stats['hit_ratio']:.2%}")
 ### Exception Classes
 
 ```python
-from muxi.services.mcp.base import (
+from muxi.runtime.services.mcp.base import (
     MCPConnectionError,
     MCPTimeoutError,
     MCPRequestError,

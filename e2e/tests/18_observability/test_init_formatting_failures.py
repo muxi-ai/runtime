@@ -15,7 +15,7 @@ import shutil
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation import Formation
+from muxi.runtime.formation import Formation
 
 
 def create_bad_postgres_formation(temp_dir: Path) -> Path:

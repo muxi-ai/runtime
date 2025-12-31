@@ -118,10 +118,10 @@ source test_env/bin/activate
 pip install dist/muxi-0.YYYYMMDD.N-py3-none-any.whl
 
 # Verify installation
-python3 -c "from muxi import Formation; print('✓ Import successful')"
+python3 -c "from muxi.runtime import Formation; print('✓ Import successful')"
 
 # Test version
-python3 -c "from muxi.utils.version import get_version; print(f'Version: {get_version()}')"
+python3 -c "from muxi.runtime.utils.version import get_version; print(f'Version: {get_version()}')"
 
 # Deactivate and clean up
 deactivate
@@ -203,7 +203,7 @@ After publishing, verify:
 - [ ] **README renders** - Markdown displays correctly
 - [ ] **Links work** - All project URLs functional
 - [ ] **Installation works** - `pip install muxi` succeeds
-- [ ] **Import works** - `from muxi import Formation` succeeds
+- [ ] **Import works** - `from muxi.runtime import Formation` succeeds
 - [ ] **Dependencies install** - All required packages install correctly
 - [ ] **GitHub tagged** - Git tag exists: `git tag -l`
 - [ ] **GitHub release created** - Release notes published
@@ -285,7 +285,7 @@ pip install wheel
 
 **Problem:** `Could not find a version that satisfies the requirement muxi`
 
-**Solution:** 
+**Solution:**
 - Ensure package published successfully
 - Try `pip install --upgrade pip`
 - Check PyPI status: https://status.python.org/

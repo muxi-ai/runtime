@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def main():
@@ -80,11 +80,11 @@ async def main():
                 # (clarification request or pending status)
                 assert response_data.get("status") == "completed", \
                     f"Expected 'completed' status, got: {response_data.get('status')}"
-                
+
                 # Should have actual content, not an approval request
                 content = response_data.get("content") or response_data.get("message", "")
                 assert content, "No response content received"
-                
+
                 # KEY VALIDATION: Verify it's NOT an approval/clarification request
                 content_lower = content.lower()
                 is_approval_request = (
@@ -93,7 +93,7 @@ async def main():
                     "review the plan" in content_lower or
                     "approve this workflow" in content_lower
                 )
-                
+
                 # The response should NOT be asking for approval
                 assert not is_approval_request, \
                     f"Response appears to be an approval request: {content[:200]}"
@@ -103,7 +103,7 @@ async def main():
                 print(f"✅ Status: {response_data.get('status')}")
                 print(f"✅ Agent executed immediately (no approval requested)")
                 print(f"✅ Response preview: {content[:150]}...")
-                
+
                 # The important thing is that we got a response immediately
                 # without being asked for approval, even though the request
                 # was complex enough to trigger workflow orchestration

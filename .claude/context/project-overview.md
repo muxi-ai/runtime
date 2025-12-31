@@ -127,7 +127,7 @@ mcp:
 Load and run:
 
 ```python
-from muxi import Formation
+from muxi.runtime import Formation
 import asyncio
 
 async def main():
@@ -167,8 +167,8 @@ asyncio.run(main())
 For embedded systems or special integrations:
 
 ```python
-from muxi.formation import Formation
-from muxi.services.llm import LLMService
+from muxi.runtime.formation import Formation
+from muxi.runtime.services.llm import LLMService
 
 # Direct instantiation for embedded use
 formation = Formation()
@@ -320,7 +320,7 @@ pip install -e ".[dev]"
 ### Quick Example
 
 ```python
-from muxi import Formation
+from muxi.runtime import Formation
 import asyncio
 
 async def quickstart():

@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "muxi"
-dynamic = ["version"]  # Version is read from src/muxi/.version file
+name = "muxi-runtime"
+dynamic = ["version"]  # Version is read from src/muxi/runtime/.version file
 authors = [
   {name = "Ran Aroussi", email = "ran@aroussi.com"},
 ]

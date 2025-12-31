@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
 # Patch the initialization functions to add logging
-import muxi.formation.initialization as init_module
+import muxi.runtime.formation.initialization as init_module
 
 # Store original functions
 original_init_mcp = init_module.initialize_mcp_services
@@ -33,23 +33,23 @@ def patched_load_agents(formation):
 init_module.initialize_mcp_services = patched_init_mcp
 init_module.load_agents_from_configuration = patched_load_agents
 
-from muxi.formation import Formation
+from muxi.runtime.formation import Formation
 
 async def debug_load():
     """Load formation with detailed logging."""
     print("="*60)
     print("DETAILED DEBUG: Formation Loading")
     print("="*60)
-    
+
     try:
         print("\n[1] Creating Formation instance...")
         formation = Formation()
         print("✅ Formation instance created\n")
-        
+
         print("[2] Starting formation.load()...")
         formation_path = Path(__file__).parent / "formation-api"
         print(f"   Path: {formation_path}\n")
-        
+
         print("[3] Loading with 45s timeout...\n")
         try:
             await asyncio.wait_for(
@@ -60,7 +60,7 @@ async def debug_load():
             print("✅ SUCCESS: Formation loaded!")
             print("="*60)
             return True
-            
+
         except asyncio.TimeoutError:
             print("\n" + "="*60)
             print("❌ TIMEOUT after 45s")
@@ -68,7 +68,7 @@ async def debug_load():
             print("\nLast successful step before timeout:")
             print("Check the output above to see where it stopped")
             return False
-            
+
     except Exception as e:
         print(f"\n❌ ERROR: {type(e).__name__}: {e}")
         import traceback

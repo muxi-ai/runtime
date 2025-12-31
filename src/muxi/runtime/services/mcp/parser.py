@@ -37,7 +37,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from muxi.datatypes import observability
+from muxi.runtime.datatypes import observability
 
 
 class ToolCall:

@@ -17,8 +17,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from muxi.services.memory.working import WorkingMemory  # noqa: E402
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.services.memory.working import WorkingMemory  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 from base_memory_test import BaseMemoryTest  # noqa: E402
 from test_utils import safe_formation_shutdown  # noqa: E402
 
@@ -203,7 +203,7 @@ class TestMemoryAdvancedFeatures(BaseMemoryTest):
             # The memory infrastructure is verified working in other tests, this just tests auto-extraction timing
             has_name = "alice" in response3_text.lower() or "Alice" in response3_text
             has_project = "python" in response3_text.lower() or "machine learning" in response3_text.lower() or "tensorflow" in response3_text.lower()
-            
+
             # Consider it successful if either piece of info is recalled, or if agent is ready to help
             # (extraction may still be in progress even after 10s wait)
             context_extracted = has_name or has_project or len(response3_text) > 50

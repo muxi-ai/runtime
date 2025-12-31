@@ -16,7 +16,7 @@ Model Details:
 - Subsequent embeddings: <100ms
 
 Usage:
-    from muxi.services.memory.local_embeddings import (
+    from muxi.runtime.services.memory.local_embeddings import (
         get_local_embedding,
         get_local_embedding_dimension,
         LOCAL_EMBEDDING_MODEL_NAME,

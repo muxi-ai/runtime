@@ -9,10 +9,10 @@ and user-friendly error responses are returned.
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
-from muxi.formation.overlord.overlord import Overlord
-from muxi.datatypes.exceptions import SecurityViolation
-from muxi.datatypes.response import MuxiResponse
-from muxi.formation.background.request_tracker import RequestStatus
+from muxi.runtime.formation.overlord.overlord import Overlord
+from muxi.runtime.datatypes.exceptions import SecurityViolation
+from muxi.runtime.datatypes.response import MuxiResponse
+from muxi.runtime.formation.background.request_tracker import RequestStatus
 
 
 class TestOverlordSecurityIntegration:
@@ -69,7 +69,7 @@ class TestOverlordSecurityIntegration:
                 raise security_error
             except SecurityViolation as e:
                 # This is what overlord should do
-                from muxi.services import observability
+                from muxi.runtime.services import observability
 
                 observability.observe(
                     event_type=observability.ConversationEvents.SECURITY_VIOLATION,
@@ -114,7 +114,7 @@ class TestOverlordSecurityIntegration:
             reason = "Malicious pattern detected"
 
             # Simulate logging security event
-            from muxi.services import observability
+            from muxi.runtime.services import observability
 
             observability.observe(
                 event_type=observability.ConversationEvents.SECURITY_VIOLATION,
@@ -203,7 +203,7 @@ class TestSecurityObservability:
     async def test_security_event_logged_on_violation(self):
         """Test that security violations are logged to observability."""
         with patch('muxi.services.observability.observe') as mock_observe:
-            from muxi.services import observability
+            from muxi.runtime.services import observability
 
             # Simulate security violation
             observability.observe(
@@ -224,7 +224,7 @@ class TestSecurityObservability:
     async def test_security_event_level_is_warning(self):
         """Test that security events are logged at WARNING level."""
         with patch('muxi.services.observability.observe') as mock_observe:
-            from muxi.services import observability
+            from muxi.runtime.services import observability
 
             observability.observe(
                 event_type=observability.ConversationEvents.SECURITY_VIOLATION,
@@ -240,7 +240,7 @@ class TestSecurityObservability:
     async def test_streaming_event_on_security_block(self):
         """Test that streaming event is emitted when request is blocked."""
         with patch('muxi.services.streaming.stream') as mock_stream:
-            from muxi.services import streaming
+            from muxi.runtime.services import streaming
 
             # Simulate streaming error event
             streaming.stream(
@@ -267,7 +267,7 @@ class TestSecurityEdgeCases:
     async def test_security_violation_with_none_user_id(self):
         """Test handling security violation when user_id is None."""
         with patch('muxi.services.observability.observe') as mock_observe:
-            from muxi.services import observability
+            from muxi.runtime.services import observability
 
             # User ID might be None in some contexts
             observability.observe(
@@ -313,7 +313,7 @@ class TestSecurityEdgeCases:
     async def test_multiple_security_violations_in_session(self):
         """Test that multiple security violations in same session are all logged."""
         with patch('muxi.services.observability.observe') as mock_observe:
-            from muxi.services import observability
+            from muxi.runtime.services import observability
 
             session_id = "sess-789"
 
@@ -371,7 +371,7 @@ class TestEndToEndSecurityFlow:
             try:
                 raise security_error
             except SecurityViolation as e:
-                from muxi.services import observability, streaming
+                from muxi.runtime.services import observability, streaming
 
                 # 3. Observability event logged
                 observability.observe(
@@ -428,7 +428,7 @@ class TestEndToEndSecurityFlow:
             try:
                 raise security_error
             except SecurityViolation as e:
-                from muxi.services import observability, streaming
+                from muxi.runtime.services import observability, streaming
 
                 # 3. Log security event
                 observability.observe(

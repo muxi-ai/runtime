@@ -11,7 +11,7 @@ import psycopg2
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 from test_utils import safe_formation_shutdown  # noqa: E402
 
 
@@ -170,17 +170,17 @@ async def test_preference_detection():
 
     # Shutdown formation (this now disposes database engine internally)
     await safe_formation_shutdown(formation)
-    
+
     # Cancel all pending background tasks (except current task)
     current_task = asyncio.current_task()
     pending = [task for task in asyncio.all_tasks() if task != current_task and not task.done()]
     for task in pending:
         task.cancel()
-    
+
     # Wait for tasks to cancel
     if pending:
         await asyncio.gather(*pending, return_exceptions=True)
-    
+
     # Cleanup database records
     cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
     cur.execute("""

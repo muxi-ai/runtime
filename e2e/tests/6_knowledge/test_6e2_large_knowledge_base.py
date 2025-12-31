@@ -12,7 +12,7 @@ import time
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation
+from muxi.runtime.formation import Formation
 
 
 async def test_large_knowledge_base():

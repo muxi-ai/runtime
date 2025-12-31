@@ -51,7 +51,7 @@ jobs:
       - name: Get version
         id: version
         run: |
-          VERSION=$(cat src/muxi/.version)
+          VERSION=$(cat src/muxi/runtime/.version)
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Building Docker image for version: $VERSION"
 

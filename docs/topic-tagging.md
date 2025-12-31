@@ -187,7 +187,7 @@ class RequestAnalysis:
 #### Accessing Topics in Code
 
 ```python
-from muxi.formation.workflow.analyzer import RequestAnalyzer
+from muxi.runtime.formation.workflow.analyzer import RequestAnalyzer
 
 # Analyze request
 analyzer = RequestAnalyzer(llm=my_llm)
@@ -204,7 +204,7 @@ print(f"Topic count: {len(analysis.topics)}")
 #### Listening for Topic Events
 
 ```python
-from muxi.services import observability
+from muxi.runtime.services import observability
 
 # Register event handler
 @observability.on_event(observability.ConversationEvents.REQUEST_TOPICS_EXTRACTED)

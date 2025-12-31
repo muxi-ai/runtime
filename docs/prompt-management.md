@@ -45,7 +45,7 @@ prompts/
 ### Basic Usage
 
 ```python
-from muxi.formation.prompts.loader import PromptLoader
+from muxi.runtime.formation.prompts.loader import PromptLoader
 
 # Get a prompt without variables
 prompt = PromptLoader.get('system_persona.md')
@@ -150,7 +150,7 @@ Note: Use double braces `{{` and `}}` for literal braces in JSON examples.
 ### 2. Use in Python Code
 
 ```python
-from muxi.formation.prompts.loader import PromptLoader
+from muxi.runtime.formation.prompts.loader import PromptLoader
 
 prompt = PromptLoader.get(
     'my_new_prompt.md',

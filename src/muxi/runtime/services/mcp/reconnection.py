@@ -45,7 +45,7 @@ import time
 from datetime import datetime
 from typing import Any, Callable, Dict, TypeVar, Union
 
-from muxi.datatypes import observability
+from muxi.runtime.datatypes import observability
 
 # Type variables
 T = TypeVar("T")  # Return type for retried functions

@@ -14,8 +14,8 @@ from datetime import datetime, timedelta
 # Add the runtime path so we can import muxi
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from muxi.services.scheduler.manager import JobManager  # noqa: E402
-from muxi.services.db import get_database_manager  # noqa: E402
+from muxi.runtime.services.scheduler.manager import JobManager  # noqa: E402
+from muxi.runtime.services.db import get_database_manager  # noqa: E402
 
 
 async def test_postgres_multiuser():

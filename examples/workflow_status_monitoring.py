@@ -7,8 +7,8 @@ to monitor and manage workflows in MUXI Runtime.
 
 import asyncio
 
-from muxi.formation.overlord.overlord import Overlord
-from muxi.datatypes.workflow import WorkflowStatus
+from muxi.runtime.formation.overlord.overlord import Overlord
+from muxi.runtime.datatypes.workflow import WorkflowStatus
 
 
 async def monitor_workflow_execution(overlord: Overlord, user_id: str):

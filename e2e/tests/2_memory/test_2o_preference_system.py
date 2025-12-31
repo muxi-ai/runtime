@@ -11,7 +11,7 @@ import psycopg2
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 from test_utils import safe_formation_shutdown  # noqa: E402
 
 async def test_2o1_preference_detection_and_storage():
@@ -23,7 +23,7 @@ async def test_2o1_preference_detection_and_storage():
     cur = conn.cursor()
 
     test_user = "test_pref_user_123"
-    
+
     # Clear test data
     cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
     cur.execute("""
@@ -86,17 +86,17 @@ async def test_2o1_preference_detection_and_storage():
     finally:
         # Shutdown formation (this now disposes database engine internally)
         await safe_formation_shutdown(formation)
-        
+
         # Cancel all pending background tasks (except current task)
         current_task = asyncio.current_task()
         pending = [task for task in asyncio.all_tasks() if task != current_task and not task.done()]
         for task in pending:
             task.cancel()
-        
+
         # Wait for tasks to cancel
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
-        
+
         cur.close()
         conn.close()
 
@@ -109,7 +109,7 @@ async def test_2o2_preference_context_inclusion():
     cur = conn.cursor()
 
     test_user = "test_pref_user_456"
-    
+
     # Clear test data
     cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
     cur.execute("""
@@ -207,17 +207,17 @@ async def test_2o2_preference_context_inclusion():
     finally:
         # Shutdown formation (this now disposes database engine internally)
         await safe_formation_shutdown(formation)
-        
+
         # Cancel all pending background tasks (except current task)
         current_task = asyncio.current_task()
         pending = [task for task in asyncio.all_tasks() if task != current_task and not task.done()]
         for task in pending:
             task.cancel()
-        
+
         # Wait for tasks to cancel
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
-        
+
         cur.close()
         conn.close()
 
@@ -229,7 +229,7 @@ async def run_all_tests():
     print("=" * 60)
 
     results = []
-    
+
     # Test 2O1
     try:
         result1 = await test_2o1_preference_detection_and_storage()
@@ -254,14 +254,14 @@ async def run_all_tests():
     print("\n" + "=" * 60)
     print("Test Summary")
     print("=" * 60)
-    
+
     for test_name, passed in results:
         status = "✓ PASSED" if passed else "❌ FAILED"
         print(f"{test_name}: {status}")
-    
+
     all_passed = all(result for _, result in results)
     print(f"\nOverall: {'✓ ALL TESTS PASSED' if all_passed else '❌ SOME TESTS FAILED'}")
-    
+
     return all_passed
 
 

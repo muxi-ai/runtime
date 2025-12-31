@@ -620,7 +620,7 @@ Production scheduler setup for a development team.
 
 import asyncio
 from pathlib import Path
-from muxi.formation.formation import Formation
+from muxi.runtime.formation.formation import Formation
 
 
 async def setup_team_scheduler():

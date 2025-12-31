@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from muxi.formation.overlord.overlord import Overlord
+from muxi.runtime.formation.overlord.overlord import Overlord
 
 
 class TestPendingClarificationMigration:
@@ -30,12 +30,12 @@ class TestPendingClarificationMigration:
         """Create an Overlord instance with mocked buffer memory."""
         # Mock the observability manager
         mock_observability_manager = MagicMock()
-        
+
         # Provide configured services with observability manager
         configured_services = {
             "observability_manager": mock_observability_manager
         }
-        
+
         overlord = Overlord(
             configured_services=configured_services,
             buffer_memory=mock_buffer_memory
@@ -224,12 +224,12 @@ class TestPendingClarificationMigration:
         """Test that the old dict attribute is not present."""
         # Mock the observability manager
         mock_observability_manager = MagicMock()
-        
+
         # Provide configured services with observability manager
         configured_services = {
             "observability_manager": mock_observability_manager
         }
-        
+
         overlord = Overlord(configured_services=configured_services)
         # The _pending_clarifications dict should not exist
         assert not hasattr(overlord, '_pending_clarifications')

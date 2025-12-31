@@ -11,8 +11,8 @@ import tempfile
 import yaml
 import json
 
-from muxi.formation import Formation
-from muxi.formation.server import FormationServer
+from muxi.runtime.formation import Formation
+from muxi.runtime.formation.server import FormationServer
 
 
 @pytest.fixture

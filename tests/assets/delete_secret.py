@@ -12,7 +12,7 @@ import os
 
 # Fix the import path
 sys.path.insert(0, "/Users/ran/Projects/muxi/code/runtime/src")
-from muxi.services.secrets import SecretsManager  # noqa: E402
+from muxi.runtime.services.secrets import SecretsManager  # noqa: E402
 
 # Suppress common warnings that clutter the output
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
@@ -86,7 +86,7 @@ def main():
         sys.exit(1)
 
     parser = argparse.ArgumentParser(
-        description="Delete secrets from MUXI Formation in current directory",
+        description="Delete secrets from muxi.runtime Formation in current directory",
         epilog="""
 Examples:
   cd /path/to/formation

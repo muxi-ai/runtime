@@ -6,7 +6,7 @@ in API responses for security.
 """
 
 import pytest
-from muxi.formation.server.secrets import restore_secret_placeholders
+from muxi.runtime.formation.server.secrets import restore_secret_placeholders
 
 
 def test_hardcoded_secret_masking_in_api_response():
@@ -46,26 +46,26 @@ def test_hardcoded_secret_masking_in_api_response():
             ]
         }
     }
-    
+
     # Simulate placeholder registry (some values have placeholders)
     placeholder_registry = {
         "llm.api_keys.anthropic": "${{ secrets.ANTHROPIC_KEY }}",
         "server.api_keys.client_key": "${{ secrets.CLIENT_KEY }}"
     }
-    
+
     # Apply restoration (which includes hardcoded secret masking)
     safe_config = restore_secret_placeholders(config, placeholder_registry)
-    
+
     # Verify placeholders are restored
     assert safe_config["llm"]["api_keys"]["anthropic"] == "${{ secrets.ANTHROPIC_KEY }}"
     assert safe_config["server"]["api_keys"]["client_key"] == "${{ secrets.CLIENT_KEY }}"
-    
+
     # Verify hardcoded secrets are masked (shows first 3 and last 3 chars)
     assert safe_config["llm"]["api_keys"]["openai"] == "sk-••••••••345"
     assert safe_config["llm"]["api_keys"]["google"] == "AIz••••••••890"
     assert safe_config["server"]["api_keys"]["admin_key"] == "sk_••••••••_key"
     assert safe_config["agents"][0]["model"]["api_key"] == "sk-••••••••def"
-    
+
     # Verify MCP environment variables are handled
     assert "••••••••" in safe_config["mcp"]["servers"][0]["env"]["API_TOKEN"]
     assert safe_config["mcp"]["servers"][0]["env"]["NORMAL_VAR"] == "just-a-normal-value"
@@ -80,10 +80,10 @@ def test_masking_with_empty_placeholder_registry():
             }
         }
     }
-    
+
     # Apply restoration with empty registry
     safe_config = restore_secret_placeholders(config, {})
-    
+
     # Hardcoded secret should still be masked (shows first 3 and last 3 chars)
     assert safe_config["llm"]["api_keys"]["openai"] == "sk-••••••••345"
 
@@ -98,9 +98,9 @@ def test_already_masked_values_preserved():
             }
         }
     }
-    
+
     safe_config = restore_secret_placeholders(config, {})
-    
+
     # Already masked values should remain unchanged
     assert safe_config["llm"]["api_keys"]["openai"] == "sk-••••••••xyz"
     assert safe_config["llm"]["api_keys"]["google"] == "***REDACTED***"
@@ -121,13 +121,13 @@ def test_short_values_masked_generically():
             }
         }
     }
-    
+
     safe_config = restore_secret_placeholders(config, {})
-    
+
     # Short values should not be masked (less than 8 chars)
     assert safe_config["server"]["api_keys"]["admin_key"] == "short"
     assert safe_config["llm"]["api_keys"]["openai"] == "tiny"
-    
+
     # 8-char value at known secret path should be masked generically
     assert safe_config["server"]["api_keys"]["client_key"] == "••••••••"
 

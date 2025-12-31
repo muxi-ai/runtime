@@ -68,7 +68,7 @@ When MUXI loads the formation:
 ### 4. Secret Manager API
 
 ```python
-from muxi.services.secrets import SecretManager
+from muxi.runtime.services.secrets import SecretManager
 
 # Initialize (happens automatically during formation load)
 secret_manager = SecretManager()

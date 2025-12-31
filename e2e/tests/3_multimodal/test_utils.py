@@ -197,7 +197,7 @@ def capture_observability_events(visibility: TestVisibility):
     global _original_observe
 
     try:
-        from muxi.services import observability
+        from muxi.runtime.services import observability
 
         if _original_observe is None:
             _original_observe = observability.observe
@@ -224,7 +224,7 @@ def restore_observability():
     global _original_observe
     if _original_observe:
         try:
-            from muxi.services import observability
+            from muxi.runtime.services import observability
 
             observability.observe = _original_observe
         except Exception:

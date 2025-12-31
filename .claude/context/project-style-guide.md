@@ -155,8 +155,8 @@ except Exception:
 
 Do:
 ```python
-from muxi.services.observability.logger import EventLogger
-from muxi.datatypes.observability import SystemEvents, EventLevel
+from muxi.runtime.services.observability.logger import EventLogger
+from muxi.runtime.datatypes.observability import SystemEvents, EventLevel
 
 logger = EventLogger(level=EventLevel.INFO)
 logger.emit_event(SystemEvents.STARTUP, description="Scheduler initialized")
@@ -251,11 +251,11 @@ Imports:
 # Do
 from typing import Iterable
 import httpx
-from muxi.services.scheduler.service import SchedulerService
+from muxi.runtime.services.scheduler.service import SchedulerService
 
 # Don’t
 from typing import *
-from muxi.services.scheduler.service import *
+from muxi.runtime.services.scheduler.service import *
 ```
 
 Async HTTP:

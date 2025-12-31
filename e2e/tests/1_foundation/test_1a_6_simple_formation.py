@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import BaseE2ETest, TestOutputFormatter, TestTimeouts  # noqa: E402
-from muxi.datatypes.intent import IntentType  # noqa: E402
+from muxi.runtime.datatypes.intent import IntentType  # noqa: E402
 
 
 class TestSimpleFormation(BaseE2ETest):

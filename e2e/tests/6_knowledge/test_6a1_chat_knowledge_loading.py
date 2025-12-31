@@ -6,7 +6,7 @@ import asyncio
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 def test_relative_path_knowledge_loading():
@@ -72,7 +72,7 @@ def test_relative_path_knowledge_loading():
                 print(f"🤖 MUXI: {response2}")
                 response_text = str(response2)
 
-            assert response2 is not None, "No response from MUXI agent"
+            assert response2 is not None, "No response from muxi.runtime agent"
             assert len(response_text) > 50, "Response too short, likely no knowledge used"
 
             # The pricing doc should contain specific pricing information

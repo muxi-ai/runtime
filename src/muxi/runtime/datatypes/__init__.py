@@ -7,8 +7,8 @@ the MUXI framework.
 Submodules are not imported by default to avoid heavy dependencies.
 Import specific submodules as needed:
 
-    from muxi.datatypes.observability import EventLevel, SystemEvents
-    from muxi.datatypes.exceptions import FormationError
+    from muxi.runtime.datatypes.observability import EventLevel, SystemEvents
+    from muxi.runtime.datatypes.exceptions import FormationError
     # etc.
 
 Available submodules:

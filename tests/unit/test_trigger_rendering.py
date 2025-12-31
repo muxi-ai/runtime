@@ -162,7 +162,7 @@ Status: ${{ data.status }}
         }
 
         result = render_trigger_template(template, data)
-        assert "New GitHub issue from muxi/runtime" in result
+        assert "New GitHub issue from muxi.runtime/runtime" in result
         assert "Issue #123" in result
         assert "Bug in trigger system" in result
         assert "user123" in result  # Author value present

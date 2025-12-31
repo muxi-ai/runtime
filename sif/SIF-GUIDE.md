@@ -379,7 +379,7 @@ python -c "import muxi; print(muxi.__version__)"
 exit
 
 # Test 3: Execute Python directly
-apptainer exec muxi-runtime.sif python -c "from muxi import Formation; print('✅ MUXI Runtime loaded')"
+apptainer exec muxi-runtime.sif python -c "from muxi.runtime import Formation; print('✅ MUXI Runtime loaded')"
 
 # Test 4: Run formation (bind mount formation file)
 apptainer exec \
@@ -632,7 +632,7 @@ Use Docker BuildKit cache for faster rebuilds:
 ```bash
 # Build with BuildKit cache
 DOCKER_BUILDKIT=1 docker build \
-    --cache-from muxi-runtime:latest \
+    --cache-from muxi.runtime-runtime:latest \
     --cache-to type=local,dest=/tmp/cache \
     -t muxi-runtime:latest .
 

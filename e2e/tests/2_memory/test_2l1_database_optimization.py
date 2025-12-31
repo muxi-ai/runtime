@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 from base_memory_test import BaseMemoryTest  # noqa: E402
 
 
@@ -50,7 +50,7 @@ class TestDatabaseOptimization(BaseMemoryTest):
             """)
 
             gin_indexes = cur.fetchall()
-            
+
             if len(gin_indexes) == 0:
                 print("  ⚠️  No GIN indexes found on memories table")
                 print("  Note: GIN indexes for full-text search are not currently implemented")
@@ -84,7 +84,7 @@ class TestDatabaseOptimization(BaseMemoryTest):
                 JOIN user_identifiers ui ON u.id = ui.user_id
                 WHERE ui.identifier = %s AND ui.formation_id = 'test'
             """, (test_user,))
-            
+
             user_result = cur.fetchone()
             if user_result:
                 user_db_id = user_result[0]
@@ -97,13 +97,13 @@ class TestDatabaseOptimization(BaseMemoryTest):
                     RETURNING id
                 """, (public_id,))
                 user_db_id = cur.fetchone()[0]
-                
+
                 # Create identifier mapping
                 cur.execute("""
                     INSERT INTO user_identifiers (user_id, identifier, formation_id, created_at)
                     VALUES (%s, %s, 'test', NOW())
                 """, (user_db_id, test_user))
-            
+
             # Clean up existing memories for this user
             cur.execute("DELETE FROM memories WHERE user_id = %s", (user_db_id,))
 

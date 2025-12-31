@@ -59,7 +59,7 @@ All ID generation uses the centralized `generate_nanoid()` function from `muxi.u
 ### Basic Usage
 
 ```python
-from muxi.utils.id_generator import generate_nanoid
+from muxi.runtime.utils.id_generator import generate_nanoid
 
 # Standard ID (21 characters)
 agent_id = f"agt_{generate_nanoid()}"

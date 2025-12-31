@@ -15,7 +15,7 @@ import time
 
 sys.path.insert(0, '../../..')
 
-from muxi.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 class KnowledgeChangeDetectionTest:

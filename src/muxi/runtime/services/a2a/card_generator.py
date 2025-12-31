@@ -25,7 +25,7 @@ from .. import observability
 
 class AgentCardGenerator:
     """
-    Generates A2A agent cards from MUXI agent configurations
+    Generates A2A agent cards from muxi.runtime agent configurations
 
     This class reads existing YAML agent configurations and automatically generates
     A2A-compliant agent cards with appropriate capabilities, endpoints, and metadata.
@@ -97,7 +97,7 @@ class AgentCardGenerator:
         formation_name: Optional[str] = None,
     ) -> AgentCard:
         """
-        Generate A2A agent card from MUXI agent configuration
+        Generate A2A agent card from muxi.runtime agent configuration
 
         Args:
             config_path: Path to agent YAML configuration

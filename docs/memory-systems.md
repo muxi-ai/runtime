@@ -270,7 +270,7 @@ cat formation.afs | grep -A 20 "memory:"
 psql $POSTGRES_URI -c "SELECT 1"
 
 # Verify embeddings
-python -c "from muxi.services.llm import LLM;
+python -c "from muxi.runtime.services.llm import LLM;
 llm = LLM('openai/text-embedding-3-small');
 print(len(llm.embed('test')))"
 ```

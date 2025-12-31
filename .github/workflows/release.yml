@@ -11,7 +11,7 @@
 #
 # ON MERGE TO MAIN:
 #   1. Calculate next ScalVer version
-#   2. Update src/muxi/.version and CHANGELOG.md
+#   2. Update src/muxi/runtime/.version and CHANGELOG.md
 #   3. Build and push Docker image to GHCR
 #   4. Build and publish to PyPI
 #   5. Create GitHub Release
@@ -48,7 +48,7 @@ jobs:
         id: version
         run: |
           # Read current version
-          CURRENT_VERSION=$(cat src/muxi/.version 2>/dev/null || echo "0.20000101.0")
+          CURRENT_VERSION=$(cat src/muxi/runtime/.version 2>/dev/null || echo "0.20000101.0")
 
           # Parse: 0.20251231.1 → MAJOR=0, DATE=20251231, PATCH=1
           MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
@@ -79,7 +79,7 @@ jobs:
           TODAY=$(date +%Y-%m-%d)
 
           # Update .version file
-          echo "$VERSION" > src/muxi/.version
+          echo "$VERSION" > src/muxi/runtime/.version
 
           # Update CHANGELOG.md
           if grep -q "## \[Unreleased\]" CHANGELOG.md; then
@@ -90,7 +90,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add src/muxi/.version CHANGELOG.md
+          git add src/muxi/runtime/.version CHANGELOG.md
 
           if git diff --cached --quiet; then
             echo "No changes to commit"
@@ -170,7 +170,7 @@ jobs:
 
             **PyPI:**
             ```bash
-            pip install muxi==${{ steps.version.outputs.VERSION }}
+            pip install muxi-runtime==${{ steps.version.outputs.VERSION }}
             ```
 
             **Docker:**

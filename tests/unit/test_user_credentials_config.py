@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import yaml
 
-from muxi.formation.config.validation import FormationValidator
+from muxi.runtime.formation.config.validation import FormationValidator
 
 
 class TestUserCredentialsConfiguration:
@@ -15,7 +15,7 @@ class TestUserCredentialsConfiguration:
     def test_valid_redirect_mode_configuration(self):
         """Test that valid redirect mode configuration passes validation."""
         validator = FormationValidator()
-        
+
         config = {
             "schema": "1.0.0",
             "id": "test-formation",
@@ -25,11 +25,11 @@ class TestUserCredentialsConfiguration:
                 "redirect_message": "Please configure credentials externally"
             }
         }
-        
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             yaml.dump(config, f)
             temp_path = Path(f.name)
-        
+
         try:
             result = validator.validate(temp_path)
             assert result.is_valid, f"Validation failed: {result.errors}"
@@ -39,7 +39,7 @@ class TestUserCredentialsConfiguration:
     def test_valid_dynamic_mode_configuration(self):
         """Test that valid dynamic mode configuration passes validation."""
         validator = FormationValidator()
-        
+
         config = {
             "schema": "1.0.0",
             "id": "test-formation",
@@ -49,11 +49,11 @@ class TestUserCredentialsConfiguration:
                 "encryption_key": "test-encryption-key"
             }
         }
-        
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             yaml.dump(config, f)
             temp_path = Path(f.name)
-        
+
         try:
             result = validator.validate(temp_path)
             assert result.is_valid, f"Validation failed: {result.errors}"
@@ -63,7 +63,7 @@ class TestUserCredentialsConfiguration:
     def test_invalid_mode_value(self):
         """Test that invalid mode value is rejected."""
         validator = FormationValidator()
-        
+
         config = {
             "schema": "1.0.0",
             "id": "test-formation",
@@ -72,11 +72,11 @@ class TestUserCredentialsConfiguration:
                 "mode": "invalid_mode"
             }
         }
-        
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             yaml.dump(config, f)
             temp_path = Path(f.name)
-        
+
         try:
             result = validator.validate(temp_path)
             assert not result.is_valid
@@ -87,7 +87,7 @@ class TestUserCredentialsConfiguration:
     def test_empty_redirect_message(self):
         """Test that empty redirect message is rejected."""
         validator = FormationValidator()
-        
+
         config = {
             "schema": "1.0.0",
             "id": "test-formation",
@@ -97,11 +97,11 @@ class TestUserCredentialsConfiguration:
                 "redirect_message": ""
             }
         }
-        
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             yaml.dump(config, f)
             temp_path = Path(f.name)
-        
+
         try:
             result = validator.validate(temp_path)
             assert not result.is_valid
@@ -112,7 +112,7 @@ class TestUserCredentialsConfiguration:
     def test_invalid_encryption_key(self):
         """Test that invalid encryption key is rejected."""
         validator = FormationValidator()
-        
+
         config = {
             "schema": "1.0.0",
             "id": "test-formation",
@@ -122,11 +122,11 @@ class TestUserCredentialsConfiguration:
                 "encryption_key": ""  # Empty string should be rejected
             }
         }
-        
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             yaml.dump(config, f)
             temp_path = Path(f.name)
-        
+
         try:
             result = validator.validate(temp_path)
             assert not result.is_valid
@@ -137,17 +137,17 @@ class TestUserCredentialsConfiguration:
     def test_backward_compatibility(self):
         """Test that formations without user_credentials still validate."""
         validator = FormationValidator()
-        
+
         config = {
             "schema": "1.0.0",
             "id": "test-formation",
             "description": "Test formation without user credentials"
         }
-        
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             yaml.dump(config, f)
             temp_path = Path(f.name)
-        
+
         try:
             result = validator.validate(temp_path)
             assert result.is_valid, f"Validation failed: {result.errors}"
@@ -157,7 +157,7 @@ class TestUserCredentialsConfiguration:
     def test_null_encryption_key_accepted(self):
         """Test that null encryption key is accepted."""
         validator = FormationValidator()
-        
+
         config = {
             "schema": "1.0.0",
             "id": "test-formation",
@@ -167,11 +167,11 @@ class TestUserCredentialsConfiguration:
                 "encryption_key": None  # Null should be accepted
             }
         }
-        
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             yaml.dump(config, f)
             temp_path = Path(f.name)
-        
+
         try:
             result = validator.validate(temp_path)
             assert result.is_valid, f"Validation failed: {result.errors}"

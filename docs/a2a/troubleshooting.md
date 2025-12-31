@@ -335,7 +335,7 @@ sudo pfctl -s rules | grep 8181
 
 ```python
 # Check A2A configuration
-from muxi.formation.config.validation import FormationValidator
+from muxi.runtime.formation.config.validation import FormationValidator
 
 validator = FormationValidator()
 result = validator.validate_file("formation.afs")
@@ -446,7 +446,7 @@ async def reset_a2a():
 
 ```python
 # If automatic deregistration fails
-from muxi.services.a2a.registry_client import A2ARegistryClient
+from muxi.runtime.services.a2a.registry_client import A2ARegistryClient
 
 client = A2ARegistryClient(["https://registry.example.com"])
 await client.deregister_agent("stuck-agent")
