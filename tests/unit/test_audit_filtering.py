@@ -17,7 +17,7 @@ async def test_audit_log_since_filter_with_timezone_aware_datetime():
     """Test that since filter works correctly with timezone-aware datetimes."""
     with tempfile.TemporaryDirectory() as tmpdir:
         # Mock get_user_dir to use temp directory
-        with patch("muxi.formation.server.audit.get_user_dir", return_value=Path(tmpdir)):
+        with patch("muxi.runtime.formation.server.audit.get_user_dir", return_value=Path(tmpdir)):
             logger = AuditLogger("test_formation")
 
             # Create test entries with different timestamps
@@ -67,7 +67,7 @@ async def test_audit_log_since_filter_with_timezone_aware_datetime():
 async def test_audit_log_since_filter_with_naive_datetime():
     """Test that since filter works correctly with naive datetimes (assumes UTC)."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        with patch("muxi.formation.server.audit.get_user_dir", return_value=Path(tmpdir)):
+        with patch("muxi.runtime.formation.server.audit.get_user_dir", return_value=Path(tmpdir)):
             logger = AuditLogger("test_formation")
 
             # Create test entries
@@ -104,7 +104,7 @@ async def test_audit_log_since_filter_with_naive_datetime():
 async def test_audit_log_since_filter_with_different_timezones():
     """Test that since filter correctly converts different timezones to UTC."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        with patch("muxi.formation.server.audit.get_user_dir", return_value=Path(tmpdir)):
+        with patch("muxi.runtime.formation.server.audit.get_user_dir", return_value=Path(tmpdir)):
             logger = AuditLogger("test_formation")
 
             # Entry at 12:00 UTC
@@ -132,7 +132,7 @@ async def test_audit_log_since_filter_with_different_timezones():
 async def test_audit_log_handles_malformed_timestamps():
     """Test that malformed timestamps are excluded rather than causing errors."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        with patch("muxi.formation.server.audit.get_user_dir", return_value=Path(tmpdir)):
+        with patch("muxi.runtime.formation.server.audit.get_user_dir", return_value=Path(tmpdir)):
             logger = AuditLogger("test_formation")
 
             # Good entry

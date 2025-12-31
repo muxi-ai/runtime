@@ -11,18 +11,18 @@ class TestAVChat:
     def mock_overlord(self):
         """Create a mock Overlord instance."""
         # Mock all dependencies at import level
-        with patch('muxi.formation.overlord.overlord.ObservabilityManager') as mock_obs, \
-             patch('muxi.formation.workflow.manager.WorkflowManager'), \
-             patch('muxi.formation.persona.manager.PersonaManager'), \
-             patch('muxi.formation.workflow.request_analyzer.RequestAnalyzer'), \
-             patch('muxi.formation.workflow.task_decomposer.TaskDecomposer'), \
-             patch('muxi.formation.workflow.workflow_executor.WorkflowExecutor'), \
-             patch('muxi.formation.workflow.approval_manager.ApprovalManager'), \
-             patch('muxi.formation.workflow.progress_tracker.ProgressTracker'), \
-             patch('muxi.formation.overlord.clarification.UnifiedClarificationSystem'), \
-             patch('muxi.formation.overlord.intent_detector.IntentDetector'), \
-             patch('muxi.formation.workflow.sops.SOPCoordinator'), \
-             patch('muxi.formation.resilience.resilient_executor.ResilientWorkflowExecutor'):
+        with patch('muxi.runtime.formation.overlord.overlord.ObservabilityManager') as mock_obs, \
+             patch('muxi.runtime.formation.workflow.manager.WorkflowManager'), \
+             patch('muxi.runtime.formation.persona.manager.PersonaManager'), \
+             patch('muxi.runtime.formation.workflow.request_analyzer.RequestAnalyzer'), \
+             patch('muxi.runtime.formation.workflow.task_decomposer.TaskDecomposer'), \
+             patch('muxi.runtime.formation.workflow.workflow_executor.WorkflowExecutor'), \
+             patch('muxi.runtime.formation.workflow.approval_manager.ApprovalManager'), \
+             patch('muxi.runtime.formation.workflow.progress_tracker.ProgressTracker'), \
+             patch('muxi.runtime.formation.overlord.clarification.UnifiedClarificationSystem'), \
+             patch('muxi.runtime.formation.overlord.intent_detector.IntentDetector'), \
+             patch('muxi.runtime.formation.workflow.sops.SOPCoordinator'), \
+             patch('muxi.runtime.formation.resilience.resilient_executor.ResilientWorkflowExecutor'):
 
             from muxi.runtime.formation.overlord.overlord import Overlord
 

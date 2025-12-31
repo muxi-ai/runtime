@@ -101,7 +101,7 @@ class TestLLMAnalyzerTopics:
     """Test LLM analyzer extracts and normalizes topics."""
 
     @pytest.mark.asyncio
-    @patch('muxi.formation.prompts.loader.PromptLoader')
+    @patch('muxi.runtime.formation.prompts.loader.PromptLoader')
     async def test_llm_extracts_topics_from_response(self, mock_prompt_loader):
         """Test LLM parser extracts topics from valid JSON response."""
         mock_prompt_loader.get.return_value = "Mock prompt"
@@ -129,7 +129,7 @@ class TestLLMAnalyzerTopics:
         assert len(result.topics) == 4
 
     @pytest.mark.asyncio
-    @patch('muxi.formation.prompts.loader.PromptLoader')
+    @patch('muxi.runtime.formation.prompts.loader.PromptLoader')
     async def test_llm_normalizes_topics(self, mock_prompt_loader):
         """Test topics are normalized to lowercase with stripped whitespace."""
         mock_prompt_loader.get.return_value = "Mock prompt"
@@ -153,7 +153,7 @@ class TestLLMAnalyzerTopics:
         assert result.topics == ["writing", "blog", "sales-analysis", "quarterly-reports"]
 
     @pytest.mark.asyncio
-    @patch('muxi.formation.prompts.loader.PromptLoader')
+    @patch('muxi.runtime.formation.prompts.loader.PromptLoader')
     async def test_llm_limits_topics_to_five(self, mock_prompt_loader):
         """Test topics list is limited to maximum of 5 items."""
         mock_prompt_loader.get.return_value = "Mock prompt"
@@ -242,7 +242,7 @@ class TestLLMAnalyzerTopics:
         assert result.topics == []
 
     @pytest.mark.asyncio
-    @patch('muxi.formation.prompts.loader.PromptLoader')
+    @patch('muxi.runtime.formation.prompts.loader.PromptLoader')
     async def test_llm_filters_empty_strings(self, mock_prompt_loader):
         """Test parser filters out empty strings from topics."""
         mock_prompt_loader.get.return_value = "Mock prompt"
@@ -311,7 +311,7 @@ class TestHybridAnalyzerTopics:
     """Test hybrid analyzer uses LLM topics when available."""
 
     @pytest.mark.asyncio
-    @patch('muxi.formation.prompts.loader.PromptLoader')
+    @patch('muxi.runtime.formation.prompts.loader.PromptLoader')
     async def test_hybrid_uses_llm_topics(self, mock_prompt_loader):
         """Test hybrid mode uses topics from LLM when available."""
         mock_prompt_loader.get.return_value = "Mock prompt"
@@ -351,7 +351,7 @@ class TestTopicExamples:
     """Test realistic topic extraction examples."""
 
     @pytest.mark.asyncio
-    @patch('muxi.formation.prompts.loader.PromptLoader')
+    @patch('muxi.runtime.formation.prompts.loader.PromptLoader')
     async def test_blog_writing_topics(self, mock_prompt_loader):
         """Test topics for blog writing request."""
         mock_prompt_loader.get.return_value = "Mock prompt"
@@ -376,7 +376,7 @@ class TestTopicExamples:
         assert len(result.topics) > 0
 
     @pytest.mark.asyncio
-    @patch('muxi.formation.prompts.loader.PromptLoader')
+    @patch('muxi.runtime.formation.prompts.loader.PromptLoader')
     async def test_debugging_topics(self, mock_prompt_loader):
         """Test topics for debugging request."""
         mock_prompt_loader.get.return_value = "Mock prompt"
@@ -400,7 +400,7 @@ class TestTopicExamples:
         assert "api" in result.topics
 
     @pytest.mark.asyncio
-    @patch('muxi.formation.prompts.loader.PromptLoader')
+    @patch('muxi.runtime.formation.prompts.loader.PromptLoader')
     async def test_data_analysis_topics(self, mock_prompt_loader):
         """Test topics for data analysis request."""
         mock_prompt_loader.get.return_value = "Mock prompt"
