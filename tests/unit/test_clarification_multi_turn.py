@@ -11,8 +11,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.muxi.formation.overlord.clarification import UnifiedClarificationSystem, ClarificationResult
-from src.muxi.datatypes.response import MuxiResponse
+from muxi.runtime.formation.overlord.clarification import UnifiedClarificationSystem, ClarificationResult
+from muxi.runtime.datatypes.response import MuxiResponse
 
 
 class MockOverlord:

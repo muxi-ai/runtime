@@ -9,7 +9,7 @@ import time
 from unittest.mock import Mock, AsyncMock
 from typing import Dict, Optional
 
-from src.muxi.formation.overlord.clarification import (
+from muxi.runtime.formation.overlord.clarification import (
     UnifiedClarificationSystem
 )
 
@@ -763,8 +763,8 @@ async def test_partial_max_rounds_configuration():
 @pytest.mark.asyncio
 async def test_max_rounds_limit_validation():
     """Test that max_rounds values are limited to prevent abuse"""
-    from src.muxi.formation.initialization import initialize_clarification_config, MAX_CLARIFICATION_ROUNDS
-    from src.muxi.formation.formation import Formation
+    from muxi.runtime.formation.initialization import initialize_clarification_config, MAX_CLARIFICATION_ROUNDS
+    from muxi.runtime.formation.formation import Formation
 
     # Test valid configuration within limit
     formation = Formation()

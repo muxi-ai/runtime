@@ -3,7 +3,7 @@ Unit tests for text_cleaner utility functions.
 """
 
 import pytest
-from src.muxi.utils.text_cleaner import remove_invisible_characters, clean_response_text
+from muxi.runtime.utils.text_cleaner import remove_invisible_characters, clean_response_text
 
 
 class TestRemoveInvisibleCharacters:

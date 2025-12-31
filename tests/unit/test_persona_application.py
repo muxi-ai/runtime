@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, patch, MagicMock
 # Add the runtime directory to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.overlord.overlord import Overlord  # noqa: E402
-from src.muxi.datatypes.response import MuxiResponse  # noqa: E402
+from muxi.runtime.formation.overlord.overlord import Overlord  # noqa: E402
+from muxi.runtime.datatypes.response import MuxiResponse  # noqa: E402
 
 
 @pytest.fixture
@@ -218,7 +218,7 @@ class TestPersonaIntegration:
     @pytest.mark.asyncio
     async def test_error_response_gets_persona(self, overlord_with_persona):
         """Test that error responses get persona applied."""
-        from src.muxi.formation.credentials import MissingCredentialError
+        from muxi.runtime.formation.credentials import MissingCredentialError
 
         # Mock the error scenario
         mock_agent = AsyncMock()

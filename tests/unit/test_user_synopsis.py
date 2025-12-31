@@ -6,7 +6,7 @@ Tests the two-tier LLM-synthesized user synopsis system with configuration suppo
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from src.muxi.formation.memory.user_context import UserContextManager
+from muxi.runtime.formation.memory.user_context import UserContextManager
 
 
 class TestUserSynopsisConfiguration:

@@ -6,7 +6,7 @@ and edge cases.
 """
 
 import pytest
-from src.muxi.formation.server.utils import render_trigger_template
+from muxi.runtime.formation.server.utils import render_trigger_template
 
 
 class TestTriggerRendering:
