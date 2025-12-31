@@ -173,6 +173,10 @@ We welcome contributions! MUXI Runtime is open source and community-driven.
 
 **Quick start for contributors:**
 ```bash
+# Install from PyPI
+pip install muxi-runtime
+
+# Or for development
 git clone https://github.com/muxi-ai/runtime
 cd runtime
 pip install -e .[dev]
