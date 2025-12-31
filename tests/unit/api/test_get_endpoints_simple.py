@@ -6,7 +6,7 @@ import asyncio
 import httpx
 import pytest
 from typing import Dict, Optional
-from tests.api.utils import wait_for_server
+from tests.unit.api.utils.wait_for_server import wait_for_server
 
 # Test configuration - matches test-formations/formation-api/formation.afs
 BASE_URL = "http://0.0.0.0:8271"

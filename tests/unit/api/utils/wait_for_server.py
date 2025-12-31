@@ -33,7 +33,7 @@ async def wait_for_server(
 
     Example:
         # In your test file:
-        from tests.api.utils.wait_for_server import wait_for_server
+        from tests.unit.api.utils.wait_for_server import wait_for_server
 
         async def test_something():
             # Wait for server to be ready

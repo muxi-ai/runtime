@@ -4,7 +4,7 @@ Example test showing how to use wait_for_server utility.
 
 import asyncio
 import httpx
-from tests.api.utils import wait_for_server, wait_for_server_from_config
+from tests.unit.api.utils.wait_for_server import wait_for_server, wait_for_server_from_config
 
 
 async def test_health_endpoint():

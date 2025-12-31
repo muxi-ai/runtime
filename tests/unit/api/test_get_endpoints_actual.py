@@ -6,7 +6,7 @@ This test file documents the ACTUAL response format of each endpoint.
 import asyncio
 import httpx
 import pytest
-from tests.api.utils import wait_for_server
+from tests.unit.api.utils.wait_for_server import wait_for_server
 
 # Test configuration
 BASE_URL = "http://0.0.0.0:8271"

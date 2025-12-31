@@ -8,7 +8,7 @@ have been resolved by checking the actual API responses.
 import asyncio
 import httpx
 import pytest
-from tests.api.utils import wait_for_server
+from tests.unit.api.utils.wait_for_server import wait_for_server
 
 
 @pytest.mark.asyncio
