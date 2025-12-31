@@ -10,7 +10,7 @@ import json
 from fastapi.testclient import TestClient
 
 from muxi.runtime.formation import Formation  # noqa: E402
-from muxi.runtime.formation.server.app import create_app
+from muxi.runtime.formation.server import FormationServer
 from muxi.runtime.services.secrets.secrets_manager import SecretsManager
 
 
@@ -62,7 +62,8 @@ async def test_secrets_api_operations():
         await formation.load(config_path)
 
         # Create FastAPI app and test client
-        app = await create_app(formation)
+        server = FormationServer(formation)
+        app = server._create_app()
         client = TestClient(app)
 
         # Set up admin API key header
