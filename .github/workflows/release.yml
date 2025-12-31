@@ -33,6 +33,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      id-token: write  # Required for PyPI Trusted Publishing
     # Skip if commit is a release (prevent infinite loop)
     if: "!startsWith(github.event.head_commit.message, 'chore: release')"
 
@@ -134,7 +135,7 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
 
-      # ===== PyPI Publish =====
+      # ===== PyPI Publish (Trusted Publishing) =====
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -143,16 +144,14 @@ jobs:
       - name: Install build tools
         run: |
           python -m pip install --upgrade pip
-          pip install build twine
+          pip install build
 
       - name: Build package
         run: python -m build
 
       - name: Publish to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/*
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # No token needed - uses OIDC Trusted Publishing
 
       # ===== GitHub Release =====
       - name: Create GitHub Release
