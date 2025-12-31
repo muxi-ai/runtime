@@ -8,7 +8,7 @@ types and MUXI's unified response format, maintaining separation of concerns.
 import inspect
 import time
 import traceback
-from typing import List, Optional, Dict, Any, Union, AsyncGenerator
+from typing import List, Optional, Dict, Any, Union
 
 from onellm.types.common import ContentItem as OneLLMContentItem
 from ..datatypes.response import MuxiContentItem, MuxiUnifiedResponse, MuxiErrorDetails

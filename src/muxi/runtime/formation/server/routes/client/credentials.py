@@ -140,7 +140,7 @@ async def list_credential_services(
         services.append({
             "service": config.get("service", server_id),
             "server_id": server_id,
-            "description": f"MCP server requiring user authentication",
+            "description": "MCP server requiring user authentication",
         })
 
     response = create_success_response(

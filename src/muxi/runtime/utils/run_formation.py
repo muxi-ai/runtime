@@ -30,9 +30,9 @@ def _print_banner():
 if __name__ == "__main__" or "run_formation" in sys.argv[0]:
     _print_banner()
 
-import asyncio
-import traceback
-from pathlib import Path
+import asyncio  # noqa: E402
+import traceback  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 # Import using relative imports to avoid sys.path manipulation
 try:

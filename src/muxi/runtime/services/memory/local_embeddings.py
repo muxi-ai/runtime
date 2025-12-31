@@ -30,7 +30,7 @@ Usage:
 """
 
 import threading
-from typing import List, Optional
+from typing import List
 
 from .. import observability
 

@@ -5,7 +5,6 @@ These endpoints provide overlord configuration access,
 requiring admin API key authentication.
 """
 
-from copy import deepcopy
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse

@@ -6,7 +6,7 @@ requiring client API key authentication.
 """
 
 from datetime import timezone
-from typing import Optional, List, Any, Union
+from typing import Optional, List, Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse

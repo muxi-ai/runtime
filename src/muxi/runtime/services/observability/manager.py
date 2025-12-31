@@ -14,7 +14,6 @@ from .request_manager import RequestContextManager
 from .stream_processor import StreamProcessor
 from .health import HealthManager, HealthMonitor, HealthStatusAPI
 from ...datatypes.observability import ConversationEvents, SystemEvents, EventLevel, RequestContext
-from ...utils.user_dirs import get_observability_dir
 from ...utils.id_generator import generate_nanoid
 
 

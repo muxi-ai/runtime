@@ -100,7 +100,6 @@ if TYPE_CHECKING:
 # Formation initialization imports
 from .initialization import (
     initialize_observability,
-    enable_conversation_logging,
     initialize_llm_config,
     initialize_memory_systems,
     initialize_background_services,

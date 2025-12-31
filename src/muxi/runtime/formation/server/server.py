@@ -533,7 +533,6 @@ class FormationServer:
             logging,
             logs,
             memory,
-            scheduler,
             a2a,
             audit,
         )
