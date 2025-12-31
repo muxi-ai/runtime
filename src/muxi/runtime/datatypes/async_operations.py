@@ -5,11 +5,11 @@ Core data structures for managing async operations with timeout and cancellation
 """
 
 import asyncio
-from typing import Any, Optional, Callable, Set
-from enum import Enum
 from datetime import datetime, timezone
+from enum import Enum
+from typing import Any, Callable, Optional, Set
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .type_definitions import OperationMetadata
 

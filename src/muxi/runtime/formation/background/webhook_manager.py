@@ -8,14 +8,15 @@ retry logic and error handling.
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Optional, Any, Dict, List
+from typing import Any, Dict, List, Optional
+
 import aiohttp
 
+from ...datatypes import observability
 
 # Import unified response types
-from ...datatypes.response import MuxiUnifiedResponse, MuxiContentItem, MuxiErrorDetails
+from ...datatypes.response import MuxiContentItem, MuxiErrorDetails, MuxiUnifiedResponse
 from ...utils.response_converter import create_unified_response
-from ...datatypes import observability
 
 
 @dataclass
@@ -156,8 +157,8 @@ class WebhookManager:
                             "attempt": attempt + 1,
                             "max_retries": max_retries + 1,
                         },
-                        description=f"Webhook delivered successfully for request {request_id}" +
-                                    (f" on attempt {attempt + 1}" if attempt > 0 else ""),
+                        description=f"Webhook delivered successfully for request {request_id}"
+                        + (f" on attempt {attempt + 1}" if attempt > 0 else ""),
                     )
                     return True
                 else:
@@ -403,8 +404,8 @@ class WebhookManager:
                             "max_retries": max_retries + 1,
                             "type": "clarification",
                         },
-                        description=f"Clarification webhook delivered successfully for request {request_id}" +
-                                    (f" on attempt {attempt + 1}" if attempt > 0 else ""),
+                        description=f"Clarification webhook delivered successfully for request {request_id}"
+                        + (f" on attempt {attempt + 1}" if attempt > 0 else ""),
                     )
                     return True
                 else:

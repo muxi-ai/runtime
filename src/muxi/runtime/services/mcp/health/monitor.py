@@ -2,10 +2,11 @@
 
 import asyncio
 import datetime
-from typing import Dict, Any, Optional, Callable
-from ..transports.base import BaseTransport
-from ..protocol.message_handler import MCPMessageHandler
+from typing import Any, Callable, Dict, Optional
+
 from ....datatypes.exceptions import MCPRequestError, MCPTimeoutError
+from ..protocol.message_handler import MCPMessageHandler
+from ..transports.base import BaseTransport
 
 
 class MCPHealthMonitor:
@@ -29,7 +30,9 @@ class MCPHealthMonitor:
         self.failed_pings = 0
         self.on_connection_lost: Optional[Callable] = None
 
-    async def ping(self, transport: BaseTransport, timeout: Optional[float] = None) -> Dict[str, Any]:
+    async def ping(
+        self, transport: BaseTransport, timeout: Optional[float] = None
+    ) -> Dict[str, Any]:
         """Send ping request to MCP server.
 
         Args:
@@ -49,17 +52,10 @@ class MCPHealthMonitor:
             # Send ping request to MCP server
             if timeout:
                 response = await asyncio.wait_for(
-                    transport.send_request({
-                        "method": "ping",
-                        "params": {}
-                    }),
-                    timeout=timeout
+                    transport.send_request({"method": "ping", "params": {}}), timeout=timeout
                 )
             else:
-                response = await transport.send_request({
-                    "method": "ping",
-                    "params": {}
-                })
+                response = await transport.send_request({"method": "ping", "params": {}})
 
             # Calculate response time
             end_time = asyncio.get_event_loop().time()
@@ -75,7 +71,7 @@ class MCPHealthMonitor:
                 "success": True,
                 "response_time_ms": response_time_ms,
                 "timestamp": asyncio.get_event_loop().time(),
-                "response": ping_result
+                "response": ping_result,
             }
 
         except asyncio.TimeoutError:
@@ -83,17 +79,15 @@ class MCPHealthMonitor:
             return {
                 "success": False,
                 "error": "Ping timeout",
-                "timestamp": asyncio.get_event_loop().time()
+                "timestamp": asyncio.get_event_loop().time(),
             }
         except Exception as e:
             self._update_ping_stats(False, None)
-            return {
-                "success": False,
-                "error": str(e),
-                "timestamp": asyncio.get_event_loop().time()
-            }
+            return {"success": False, "error": str(e), "timestamp": asyncio.get_event_loop().time()}
 
-    async def start_monitoring(self, transport: BaseTransport, on_connection_lost: Optional[Callable] = None):
+    async def start_monitoring(
+        self, transport: BaseTransport, on_connection_lost: Optional[Callable] = None
+    ):
         """Start continuous health monitoring with ping.
 
         Args:
@@ -141,7 +135,9 @@ class MCPHealthMonitor:
                     # Ping failed without raising exception (e.g., timeout)
                     consecutive_failures += 1
                     error_msg = ping_result.get("error", "Unknown ping failure")
-                    print(f"Health check failed ({consecutive_failures}/{max_failures}): {error_msg}")
+                    print(
+                        f"Health check failed ({consecutive_failures}/{max_failures}): {error_msg}"
+                    )
 
                     # Check if we've failed too many times
                     if consecutive_failures >= max_failures:
@@ -188,7 +184,7 @@ class MCPHealthMonitor:
             "success_rate": 0.0,
             "last_ping_time": self.last_ping_time,
             "last_pong_time": self.last_pong_time,
-            "last_rtt_ms": None
+            "last_rtt_ms": None,
         }
 
         # Calculate success rate
@@ -214,7 +210,7 @@ class MCPHealthMonitor:
 
         summary_lines = [
             f"🏥 MCP Health Status: {status}",
-            f"📊 Success Rate: {success_rate:.1f}% ({stats['ping_count'] - stats['failed_pings']}/{stats['ping_count']})"
+            f"📊 Success Rate: {success_rate:.1f}% ({stats['ping_count'] - stats['failed_pings']}/{stats['ping_count']})",
         ]
 
         if stats["last_rtt_ms"] is not None:
@@ -224,10 +220,9 @@ class MCPHealthMonitor:
             last_ping = datetime.datetime.fromtimestamp(stats["last_ping_time"])
             summary_lines.append(f"🕐 Last ping: {last_ping.strftime('%H:%M:%S')}")
 
-        summary_lines.extend([
-            f"⏰ Ping interval: {stats['ping_interval']}s",
-            f"⏳ Timeout: {stats['timeout']}s"
-        ])
+        summary_lines.extend(
+            [f"⏰ Ping interval: {stats['ping_interval']}s", f"⏳ Timeout: {stats['timeout']}s"]
+        )
 
         return "\n".join(summary_lines)
 
@@ -243,7 +238,9 @@ class MCPHealthMonitor:
 
         if success:
             self.last_ping_time = asyncio.get_event_loop().time()
-            self.last_pong_time = self.last_ping_time + (response_time_ms / 1000) if response_time_ms else None
+            self.last_pong_time = (
+                self.last_ping_time + (response_time_ms / 1000) if response_time_ms else None
+            )
         else:
             self.failed_pings += 1
 
@@ -255,7 +252,9 @@ class MCPCapabilitiesNegotiator:
         """Initialize capabilities negotiator."""
         self.message_handler = MCPMessageHandler()
 
-    async def initialize_connection(self, transport: BaseTransport, client_info: Dict[str, Any]) -> Dict[str, Any]:
+    async def initialize_connection(
+        self, transport: BaseTransport, client_info: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Initialize MCP connection with capabilities negotiation.
 
         Args:
@@ -270,14 +269,17 @@ class MCPCapabilitiesNegotiator:
         """
         try:
             # Send initialize request
-            request = self.message_handler.create_request("initialize", {
-                "protocolVersion": client_info.get("protocolVersion", "2024-11-05"),
-                "capabilities": client_info.get("capabilities", {}),
-                "clientInfo": {
-                    "name": client_info.get("name", "MUXI MCP Client"),
-                    "version": client_info.get("version", "1.0.0")
-                }
-            })
+            request = self.message_handler.create_request(
+                "initialize",
+                {
+                    "protocolVersion": client_info.get("protocolVersion", "2024-11-05"),
+                    "capabilities": client_info.get("capabilities", {}),
+                    "clientInfo": {
+                        "name": client_info.get("name", "MUXI MCP Client"),
+                        "version": client_info.get("version", "1.0.0"),
+                    },
+                },
+            )
 
             response = await transport.send_message(request)
 
@@ -344,19 +346,10 @@ class MCPCapabilitiesNegotiator:
         return {
             "experimental": {},
             "sampling": {},
-            "tools": {
-                "listChanged": True
-            },
-            "resources": {
-                "subscribe": True,
-                "listChanged": True
-            },
-            "prompts": {
-                "listChanged": True
-            },
-            "roots": {
-                "listChanged": True
-            }
+            "tools": {"listChanged": True},
+            "resources": {"subscribe": True, "listChanged": True},
+            "prompts": {"listChanged": True},
+            "roots": {"listChanged": True},
         }
 
     def format_capabilities_summary(self, server_capabilities: Dict[str, Any]) -> str:
@@ -379,7 +372,9 @@ class MCPCapabilitiesNegotiator:
             if category in capabilities:
                 category_caps = capabilities[category]
                 if category_caps:
-                    summary_lines.append(f"  ✅ {category.title()}: {self._format_capability_details(category_caps)}")
+                    summary_lines.append(
+                        f"  ✅ {category.title()}: {self._format_capability_details(category_caps)}"
+                    )
                 else:
                     summary_lines.append(f"  ➖ {category.title()}: Basic support")
 
@@ -418,10 +413,9 @@ class MCPCapabilitiesNegotiator:
         """
         try:
             # Send logs subscription notification
-            await transport.send_request({
-                "method": "notifications/logs/setLevel",
-                "params": {"level": level}
-            })
+            await transport.send_request(
+                {"method": "notifications/logs/setLevel", "params": {"level": level}}
+            )
 
         except Exception as e:
             raise MCPRequestError(f"Failed to send logs subscription: {e}")

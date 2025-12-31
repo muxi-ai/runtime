@@ -6,20 +6,20 @@ failures by monitoring failure rates and temporarily blocking requests
 when failure thresholds are exceeded.
 """
 
-import time
 import asyncio
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Generic
+import time
+from typing import Any, Callable, Dict, Generic, List, Optional, TypeVar
 
-from ...datatypes.resilience import (
-    CircuitState,
-    CircuitBreakerConfig,
-    CircuitBreakerState,
-    CircuitBreakerException,
-    WorkflowException,
-    ErrorType,
-    ErrorSeverity,
-)
 from ...datatypes import observability
+from ...datatypes.resilience import (
+    CircuitBreakerConfig,
+    CircuitBreakerException,
+    CircuitBreakerState,
+    CircuitState,
+    ErrorSeverity,
+    ErrorType,
+    WorkflowException,
+)
 
 T = TypeVar("T")
 

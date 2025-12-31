@@ -25,10 +25,10 @@ The rewriter ensures prompts are:
 """
 
 import re
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
-from .. import observability
 from ...services.llm import LLM
+from .. import observability
 
 
 class PromptRewriter:
@@ -45,23 +45,23 @@ class PromptRewriter:
 
         # Common transformations for scheduled contexts
         self.scheduled_context_patterns = {
-            'check': 'Check and report on',
-            'remind me': 'Send reminder:',
-            'tell me': 'Provide update on',
-            'show me': 'Display information about',
-            'let me know': 'Notify about',
-            'update me': 'Provide status update on',
+            "check": "Check and report on",
+            "remind me": "Send reminder:",
+            "tell me": "Provide update on",
+            "show me": "Display information about",
+            "let me know": "Notify about",
+            "update me": "Provide status update on",
         }
 
         # Temporal reference transformations
         self.temporal_transforms = {
-            'now': 'at this scheduled time',
-            'right now': 'at this scheduled time',
-            'currently': 'at this scheduled time',
-            'today': 'for today',
-            'this morning': 'this morning',
-            'this afternoon': 'this afternoon',
-            'this evening': 'this evening',
+            "now": "at this scheduled time",
+            "right now": "at this scheduled time",
+            "currently": "at this scheduled time",
+            "today": "for today",
+            "this morning": "this morning",
+            "this afternoon": "this afternoon",
+            "this evening": "this evening",
         }
 
         pass  # REMOVED: init-phase observe() call
@@ -76,13 +76,14 @@ class PromptRewriter:
                     event_type=observability.ErrorEvents.LLM_INITIALIZATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e)},
-                    description="Failed to initialize LLM for prompt rewriting"
+                    description="Failed to initialize LLM for prompt rewriting",
                 )
                 return None
         return self.llm
 
-    async def rewrite_for_execution(self, original_prompt: str,
-                                    schedule_context: Optional[str] = None) -> str:
+    async def rewrite_for_execution(
+        self, original_prompt: str, schedule_context: Optional[str] = None
+    ) -> str:
         """
         Rewrite original prompt for scheduled execution.
 
@@ -99,9 +100,9 @@ class PromptRewriter:
             data={
                 "original_length": len(original_prompt),
                 "has_schedule_context": bool(schedule_context),
-                "component": "prompt_rewriter"
+                "component": "prompt_rewriter",
             },
-            description="Starting prompt rewriting for scheduled execution"
+            description="Starting prompt rewriting for scheduled execution",
         )
 
         # Use LLM-based rewriting directly (pattern-based removed)
@@ -114,9 +115,9 @@ class PromptRewriter:
                 "original_prompt": original_prompt,
                 "rewritten_prompt": rewritten,
                 "method": "llm_based",
-                "component": "prompt_rewriter"
+                "component": "prompt_rewriter",
             },
-            description="Prompt rewritten using LLM"
+            description="Prompt rewritten using LLM",
         )
 
         return rewritten
@@ -136,7 +137,7 @@ class PromptRewriter:
         # Apply scheduled context transformations
         for pattern, replacement in self.scheduled_context_patterns.items():
             if prompt_lower.startswith(pattern):
-                rest_of_prompt = prompt[len(pattern):].strip()
+                rest_of_prompt = prompt[len(pattern) :].strip()
                 return f"{replacement} {rest_of_prompt}".strip()
 
         # Apply temporal transformations
@@ -145,18 +146,19 @@ class PromptRewriter:
             rewritten = rewritten.replace(temporal_ref, replacement)
 
         # Add context if it looks like a command without clear action
-        simple_commands = ['email', 'status', 'report', 'weather', 'news']
+        simple_commands = ["email", "status", "report", "weather", "news"]
         if prompt_lower in simple_commands:
             return f"Check and provide update on {prompt_lower}"
 
         # If prompt is very short, expand it
-        if len(prompt.split()) <= 2 and not prompt.endswith('?'):
+        if len(prompt.split()) <= 2 and not prompt.endswith("?"):
             return f"Provide information and status update on: {prompt}"
 
         return rewritten
 
-    async def _llm_rewrite_prompt(self, original_prompt: str,
-                                  schedule_context: Optional[str] = None) -> str:
+    async def _llm_rewrite_prompt(
+        self, original_prompt: str, schedule_context: Optional[str] = None
+    ) -> str:
         """
         Rewrite prompt using LLM for complex cases.
 
@@ -174,17 +176,18 @@ class PromptRewriter:
             observability.observe(
                 event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.WARNING,
-                description="LLM unavailable for prompt rewriting, using original prompt"
+                description="LLM unavailable for prompt rewriting, using original prompt",
             )
             return original_prompt
 
         context_info = f"\nSchedule Context: {schedule_context}" if schedule_context else ""
 
         from ...formation.prompts.loader import PromptLoader
+
         prompt = PromptLoader.get(
-            'scheduler_prompt_rewriter.md',
+            "scheduler_prompt_rewriter.md",
             original_prompt=original_prompt,
-            context_info=context_info
+            context_info=context_info,
         )
 
         try:
@@ -202,11 +205,8 @@ class PromptRewriter:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
-                data={
-                    "original_prompt": original_prompt,
-                    "error": str(e)
-                },
-                description=f"LLM prompt rewriting failed: {e}"
+                data={"original_prompt": original_prompt, "error": str(e)},
+                description=f"LLM prompt rewriting failed: {e}",
             )
             # Fallback to simple enhancement
             return f"Execute scheduled task: {original_prompt}"
@@ -226,28 +226,28 @@ class PromptRewriter:
             event_type=observability.ConversationEvents.PROMPT_FORMATION_ENHANCEMENT_STARTED,
             level=observability.EventLevel.INFO,
             data={"original_length": len(prompt)},
-            description="Starting formation-specific prompt enhancement"
+            description="Starting formation-specific prompt enhancement",
         )
 
         # Get available agents and their capabilities
-        agents = formation_config.get('agents', [])
+        agents = formation_config.get("agents", [])
         available_capabilities = []
 
         for agent in agents:
             if isinstance(agent, dict):
-                agent_id = agent.get('id', '')
-                specialization = agent.get('specialization', '')
+                agent_id = agent.get("id", "")
+                specialization = agent.get("specialization", "")
                 if specialization:
                     available_capabilities.append(f"{agent_id}: {specialization}")
 
         # Get available MCP tools
-        mcp_servers = formation_config.get('mcp', {}).get('servers', [])
+        mcp_servers = formation_config.get("mcp", {}).get("servers", [])
         available_tools = []
 
         for server in mcp_servers:
             if isinstance(server, dict):
-                server_id = server.get('id', '')
-                description = server.get('description', '')
+                server_id = server.get("id", "")
+                description = server.get("description", "")
                 if description:
                     available_tools.append(f"{server_id}: {description}")
 
@@ -262,22 +262,25 @@ class PromptRewriter:
             observability.observe(
                 event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.WARNING,
-                description="LLM unavailable for formation enhancement, returning original prompt"
+                description="LLM unavailable for formation enhancement, returning original prompt",
             )
             return prompt
 
         capabilities_info = ""
         if available_capabilities:
-            capabilities_info += "\nAvailable Agents:\n" + "\n".join(f"- {cap}" for cap in available_capabilities)
+            capabilities_info += "\nAvailable Agents:\n" + "\n".join(
+                f"- {cap}" for cap in available_capabilities
+            )
 
         if available_tools:
-            capabilities_info += "\nAvailable Tools:\n" + "\n".join(f"- {tool}" for tool in available_tools)
+            capabilities_info += "\nAvailable Tools:\n" + "\n".join(
+                f"- {tool}" for tool in available_tools
+            )
 
         from ...formation.prompts.loader import PromptLoader
+
         enhancement_prompt = PromptLoader.get(
-            'scheduler_enhancement.md',
-            prompt=prompt,
-            capabilities_info=capabilities_info
+            "scheduler_enhancement.md", prompt=prompt, capabilities_info=capabilities_info
         )
 
         try:
@@ -291,9 +294,9 @@ class PromptRewriter:
                     data={
                         "original_prompt": prompt,
                         "enhanced_prompt": enhanced,
-                        "capabilities_count": len(available_capabilities) + len(available_tools)
+                        "capabilities_count": len(available_capabilities) + len(available_tools),
                     },
-                    description="Prompt enhanced for formation capabilities"
+                    description="Prompt enhanced for formation capabilities",
                 )
                 return enhanced
 
@@ -303,11 +306,8 @@ class PromptRewriter:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
-                data={
-                    "original_prompt": prompt,
-                    "error": str(e)
-                },
-                description=f"Formation prompt enhancement failed: {e}"
+                data={"original_prompt": prompt, "error": str(e)},
+                description=f"Formation prompt enhancement failed: {e}",
             )
             return prompt
 
@@ -328,13 +328,13 @@ class PromptRewriter:
         """
         context_parts = []
 
-        if schedule_info.get('frequency'):
+        if schedule_info.get("frequency"):
             context_parts.append(f"This is a scheduled task that runs {schedule_info['frequency']}")
 
-        if schedule_info.get('timezone'):
+        if schedule_info.get("timezone"):
             context_parts.append(f"in {schedule_info['timezone']} timezone")
 
-        if schedule_info.get('user_id'):
+        if schedule_info.get("user_id"):
             context_parts.append(f"for user {schedule_info['user_id']}")
 
         if context_parts:
@@ -360,25 +360,27 @@ class PromptRewriter:
         prompt_lower = prompt.lower()
 
         # Check for ambiguous references
-        ambiguous_words = ['this', 'that', 'here', 'there', 'it']
+        ambiguous_words = ["this", "that", "here", "there", "it"]
         for word in ambiguous_words:
-            if f' {word} ' in f' {prompt_lower} ':
+            if f" {word} " in f" {prompt_lower} ":
                 issues.append(f"Contains ambiguous reference: '{word}'")
                 suggestions.append(f"Replace '{word}' with specific reference")
 
         # Check for temporal issues
-        problematic_temporals = ['right now', 'currently', 'at the moment']
+        problematic_temporals = ["right now", "currently", "at the moment"]
         for temporal in problematic_temporals:
             if temporal in prompt_lower:
                 issues.append(f"Contains problematic temporal reference: '{temporal}'")
                 suggestions.append(f"Replace '{temporal}' with 'at this scheduled time' or similar")
 
         # Check for interactivity assumptions
-        interactive_words = ['show me', 'tell me', 'let me know']
+        interactive_words = ["show me", "tell me", "let me know"]
         has_interactive = any(word in prompt_lower for word in interactive_words)
 
-        if has_interactive and 'send' not in prompt_lower and 'notify' not in prompt_lower:
-            suggestions.append("Consider adding delivery mechanism (e.g., 'send summary', 'notify via webhook')")
+        if has_interactive and "send" not in prompt_lower and "notify" not in prompt_lower:
+            suggestions.append(
+                "Consider adding delivery mechanism (e.g., 'send summary', 'notify via webhook')"
+            )
 
         # Check prompt length
         if len(prompt.split()) < 3:
@@ -386,7 +388,18 @@ class PromptRewriter:
             suggestions.append("Add more context about expected action and output")
 
         # Check for action words
-        action_words = ['check', 'get', 'fetch', 'generate', 'create', 'send', 'notify', 'report', 'update', 'monitor']
+        action_words = [
+            "check",
+            "get",
+            "fetch",
+            "generate",
+            "create",
+            "send",
+            "notify",
+            "report",
+            "update",
+            "monitor",
+        ]
         has_action = any(word in prompt_lower for word in action_words)
 
         if not has_action:
@@ -394,10 +407,10 @@ class PromptRewriter:
             suggestions.append("Add action verb (check, generate, send, etc.)")
 
         validation_result = {
-            'valid': len(issues) == 0,
-            'issues': issues,
-            'suggestions': suggestions,
-            'score': max(0, 10 - len(issues) * 2)  # Simple scoring system
+            "valid": len(issues) == 0,
+            "issues": issues,
+            "suggestions": suggestions,
+            "score": max(0, 10 - len(issues) * 2),  # Simple scoring system
         }
 
         observability.observe(
@@ -405,17 +418,19 @@ class PromptRewriter:
             level=observability.EventLevel.INFO,
             data={
                 "prompt_length": len(prompt),
-                "valid": validation_result['valid'],
+                "valid": validation_result["valid"],
                 "issues_count": len(issues),
                 "suggestions_count": len(suggestions),
-                "score": validation_result['score']
+                "score": validation_result["score"],
             },
-            description="Execution prompt validation completed"
+            description="Execution prompt validation completed",
         )
 
         return validation_result
 
-    def _enhanced_pattern_rewrite(self, original_prompt: str, schedule_context: Optional[str] = None) -> str:
+    def _enhanced_pattern_rewrite(
+        self, original_prompt: str, schedule_context: Optional[str] = None
+    ) -> str:
         """
         Enhanced pattern-based rewriting without LLM.
 
@@ -436,11 +451,11 @@ class PromptRewriter:
         # Enhance with common scheduled execution patterns
         enhancements = [
             # Make it more specific for automation
-            (r'^(check|get|fetch) (.+)$', r'\1 \2 and provide a summary'),
-            (r'^(tell|show) (.+)$', r'Report on \2'),
-            (r'^(remind|alert) (.+)$', r'Send notification: \2'),
-            (r'^(update|status) (.+)$', r'Provide status update on \2'),
-            (r'^(monitor) (.+)$', r'Monitor \2 and report any changes'),
+            (r"^(check|get|fetch) (.+)$", r"\1 \2 and provide a summary"),
+            (r"^(tell|show) (.+)$", r"Report on \2"),
+            (r"^(remind|alert) (.+)$", r"Send notification: \2"),
+            (r"^(update|status) (.+)$", r"Provide status update on \2"),
+            (r"^(monitor) (.+)$", r"Monitor \2 and report any changes"),
         ]
 
         for pattern, replacement in enhancements:
@@ -449,14 +464,15 @@ class PromptRewriter:
                 break
 
         # Ensure it's actionable
-        action_words = ['check', 'get', 'send', 'report', 'provide', 'monitor', 'generate']
+        action_words = ["check", "get", "send", "report", "provide", "monitor", "generate"]
         if not any(word in rewritten.lower() for word in action_words):
             rewritten = f"Execute and report on: {rewritten}"
 
         return rewritten
 
-    async def generate_execution_summary_prompt(self, original_request: str,
-                                                schedule_pattern: str) -> str:
+    async def generate_execution_summary_prompt(
+        self, original_request: str, schedule_pattern: str
+    ) -> str:
         """
         Generate a prompt for summarizing execution results.
 

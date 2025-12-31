@@ -1,12 +1,13 @@
 # src/muxi/utils/zmq_decrypt.py
 # Reference implementation for server-side message decryption
 
-import json
 import base64
 import binascii
 import hashlib
+import json
+from typing import Any, Dict
+
 from cryptography.fernet import Fernet, InvalidToken
-from typing import Dict, Any
 
 
 def decrypt_zmq_message(encrypted_data: Dict[str, Any], token: str) -> Dict[str, Any]:
@@ -67,9 +68,11 @@ def decrypt_zmq_message(encrypted_data: Dict[str, Any], token: str) -> Dict[str,
 
 class AuthenticationError(Exception):
     """Raised when token validation fails"""
+
     pass
 
 
 class DecryptionError(Exception):
     """Raised when message decryption fails"""
+
     pass

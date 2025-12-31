@@ -5,7 +5,8 @@ This module defines data types for the unified multilingual intent detection sys
 """
 
 from enum import Enum
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 

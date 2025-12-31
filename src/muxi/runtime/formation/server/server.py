@@ -9,10 +9,10 @@ It handles both admin operations (formation management) and client operations
 import asyncio
 import re
 import signal
-import time
 import threading
+import time
 from contextlib import asynccontextmanager
-from typing import Optional, TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -186,9 +186,11 @@ class FormationServer:
         if generated_keys:
             # Log warning about auto-generated keys
             # Convert to InitEventFormatter
-            print(observability.InitEventFormatter.format_warn(
-                "API keys auto-generated (NOT for production)"
-            ))
+            print(
+                observability.InitEventFormatter.format_warn(
+                    "API keys auto-generated (NOT for production)"
+                )
+            )
 
             # Still print to console for development visibility
             print("\n" + "=" * 60)
@@ -229,7 +231,11 @@ class FormationServer:
 
             # Minimal console output for configured keys
             if self.admin_key and self.client_key:
-                print(observability.InitEventFormatter.format_info("API keys loaded from configuration"))
+                print(
+                    observability.InitEventFormatter.format_info(
+                        "API keys loaded from configuration"
+                    )
+                )
 
         yield
 
@@ -321,10 +327,10 @@ class FormationServer:
 
         # Import and add custom middleware
         from .middleware import (
-            ErrorHandlingMiddleware,
-            RequestTrackingMiddleware,
             APILoggingMiddleware,
             ConnectionTrackingMiddleware,
+            ErrorHandlingMiddleware,
+            RequestTrackingMiddleware,
         )
 
         # 2. Connection tracking (for graceful shutdown)
@@ -342,6 +348,7 @@ class FormationServer:
         # Add exception handlers to ensure proper envelope format
         from fastapi.exceptions import RequestValidationError
         from starlette.exceptions import HTTPException as StarletteHTTPException
+
         from .responses import create_error_response
 
         # Create specialized handler for validation errors
@@ -383,11 +390,9 @@ class FormationServer:
                 "missing": ("string", "missing"),  # value_error.missing
                 "json_invalid": ("string", "invalid_json"),  # value_error.json_invalid
                 "extra": ("string", "extra_field"),  # value_error.extra
-
                 # Multi-part error types (for better context)
                 "extra.forbidden": ("string", "extra_field"),  # value_error.extra.forbidden
                 "missing.required": ("string", "missing"),  # value_error.missing.required
-
                 # Type errors (from type_error.*)
                 "str": ("string", "wrong_type"),  # type_error.str
                 "string": ("string", "wrong_type"),  # alternative format
@@ -401,7 +406,6 @@ class FormationServer:
                 "object": ("object", "wrong_type"),  # alternative format
                 "float": ("number", "wrong_type"),  # type_error.float
                 "number": ("number", "wrong_type"),  # alternative format
-
                 # Validation errors
                 "too_short": ("string", "too_short"),
                 "too_long": ("string", "too_long"),
@@ -436,7 +440,7 @@ class FormationServer:
 
             # Remove array indices from location string for accurate suffix matching
             # e.g., "agents[0].settings" -> "agents.settings"
-            normalized_loc = re.sub(r'\[\d+\]', '', loc_string)
+            normalized_loc = re.sub(r"\[\d+\]", "", loc_string)
 
             # Override field type based on location string suffix
             # This is important for 'missing' errors where we need to know the expected type
@@ -506,7 +510,7 @@ class FormationServer:
 
     def _register_health_routes(self, app: FastAPI) -> None:
         """Register health and status endpoints."""
-        from .routes.health import router, root_status
+        from .routes.health import root_status, router
 
         # Register root status endpoint at / without prefix
         app.add_api_route("/", endpoint=root_status, methods=["GET"], include_in_schema=False)
@@ -519,22 +523,23 @@ class FormationServer:
 
     def _register_admin_routes(self, app: FastAPI) -> None:
         """Register admin management endpoints."""
-        from .auth import AdminKeyAuth
         from fastapi import Depends
+
+        from .auth import AdminKeyAuth
 
         # Import all admin route modules
         from .routes.admin import (
+            a2a,
             agents,
-            secrets,
+            audit,
             config,
-            overlord,
-            mcp,
             llm,
             logging,
             logs,
+            mcp,
             memory,
-            a2a,
-            audit,
+            overlord,
+            secrets,
         )
         from .routes.admin.async_routes import router as async_router
 
@@ -563,13 +568,25 @@ class FormationServer:
 
     def _register_client_routes(self, app: FastAPI) -> None:
         """Register client interaction endpoints."""
-        from .auth import ClientKeyAuth, DualKeyAuth
         from fastapi import Depends
 
-        # Import all client route modules
-        from .routes.client import chat, credentials, events, requests, memory, triggers, users, sessions, sops
+        from .auth import ClientKeyAuth, DualKeyAuth
+
         # Import scheduler from admin routes (has dual-auth endpoint GET /scheduler/jobs)
         from .routes.admin import scheduler
+
+        # Import all client route modules
+        from .routes.client import (
+            chat,
+            credentials,
+            events,
+            memory,
+            requests,
+            sessions,
+            sops,
+            triggers,
+            users,
+        )
 
         # Create auth dependencies
         client_auth = ClientKeyAuth(self.client_key)
@@ -696,13 +713,13 @@ class FormationServer:
             Exception: If server task encounters an error during startup
         """
         import socket
+
         from ...datatypes.observability import InitEventFormatter
 
         # Show server binding event
-        print(InitEventFormatter.format_info(
-            f"API Worker: binding to {self.host}:{self.port}",
-            None
-        ))
+        print(
+            InitEventFormatter.format_info(f"API Worker: binding to {self.host}:{self.port}", None)
+        )
 
         start_time = asyncio.get_event_loop().time()
         last_error = None
@@ -715,10 +732,7 @@ class FormationServer:
                     # Task completed without error but server isn't ready?
                     raise RuntimeError("Server task completed unexpectedly")
                 except Exception as e:
-                    print(InitEventFormatter.format_fail(
-                        "API Worker failed to start",
-                        str(e)
-                    ))
+                    print(InitEventFormatter.format_fail("API Worker failed to start", str(e)))
                     raise RuntimeError(f"Server startup failed: {e}") from e
 
             # Try to connect to the port
@@ -726,13 +740,17 @@ class FormationServer:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                     sock.settimeout(0.1)
                     # Try to connect
-                    result = sock.connect_ex((self.host if self.host != "0.0.0.0" else "127.0.0.1", self.port))
+                    result = sock.connect_ex(
+                        (self.host if self.host != "0.0.0.0" else "127.0.0.1", self.port)
+                    )
                     if result == 0:
                         # Connection successful - server is ready!
-                        print(InitEventFormatter.format_ok(
-                            f"API Worker: listening on {self.host}:{self.port}",
-                            f"http://{self.host if self.host != '0.0.0.0' else '127.0.0.1'}:{self.port}"
-                        ))
+                        print(
+                            InitEventFormatter.format_ok(
+                                f"API Worker: listening on {self.host}:{self.port}",
+                                f"http://{self.host if self.host != '0.0.0.0' else '127.0.0.1'}:{self.port}",
+                            )
+                        )
                         # Enable observability logging now that server is confirmed ready
                         enable_conversation_logging(self.formation)
                         return
@@ -747,10 +765,7 @@ class FormationServer:
         if last_error:
             error_msg += f": {last_error}"
 
-        print(InitEventFormatter.format_fail(
-            "API Worker startup timeout",
-            error_msg
-        ))
+        print(InitEventFormatter.format_fail("API Worker startup timeout", error_msg))
 
         # Try to cancel the server task
         if self._server_task and not self._server_task.done():

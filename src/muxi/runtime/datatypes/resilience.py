@@ -6,9 +6,9 @@ used throughout the resilience and error handling system.
 """
 
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional, Callable
 from datetime import datetime
+from enum import Enum
+from typing import Any, Callable, Dict, List, Optional
 
 
 class ErrorType(Enum):

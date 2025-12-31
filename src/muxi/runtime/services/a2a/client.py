@@ -7,21 +7,20 @@ using the official A2A SDK v0.3.0.
 
 import asyncio
 import threading
-from typing import Optional, Dict, Any, Union
-from nanoid import generate as generate_nanoid
+from typing import Any, Dict, Optional, Union
 
 from a2a.client import A2AClient
 from a2a.types import (
+    DataPart,
+    Message,
+    Role,
     SendMessageRequest,
     SendMessageResponse,
-    Message,
     TextPart,
-    DataPart,
-    Role,
 )
+from nanoid import generate as generate_nanoid
 
 from .. import observability
-
 
 # Singleton instance and lock for thread safety
 _a2a_service_instance = None
@@ -63,8 +62,9 @@ class A2AService:
             config: Optional configuration for SDK client
         """
         # Check if we need SDK (only for external A2A)
-        if config and (config.get('outbound', {}).get('enabled') or
-                       config.get('inbound', {}).get('enabled')):
+        if config and (
+            config.get("outbound", {}).get("enabled") or config.get("inbound", {}).get("enabled")
+        ):
             try:
                 # The A2A SDK requires an httpx client and either agent_card or url
                 import httpx
@@ -76,7 +76,7 @@ class A2AService:
                 )
 
                 # Get URL from config if available, safely checking for non-empty registries
-                registries = config.get('outbound', {}).get('registries', [])
+                registries = config.get("outbound", {}).get("registries", [])
                 url = registries[0] if registries else None
 
                 # Initialize SDK client with httpx client and url
@@ -138,9 +138,7 @@ class A2AService:
 
         try:
             # Convert MUXI format to SDK format
-            sdk_message = self._convert_to_sdk_message(
-                message, source_agent_id, context
-            )
+            sdk_message = self._convert_to_sdk_message(message, source_agent_id, context)
 
             # Check if internal or external routing
             if self._is_internal(target_agent_id):
@@ -428,7 +426,7 @@ class A2AService:
         This method should be called when shutting down the A2A service
         to properly close the httpx client and release resources.
         """
-        if hasattr(self, 'httpx_client') and self.httpx_client:
+        if hasattr(self, "httpx_client") and self.httpx_client:
             try:
                 await self.httpx_client.aclose()
                 self.httpx_client = None

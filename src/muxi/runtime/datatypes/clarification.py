@@ -5,17 +5,17 @@ This module defines the fundamental data structures used throughout
 the intelligent parameter collection and clarification system.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
-from enum import Enum
 import time
-from ..utils.id_generator import generate_nanoid
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
+from ..utils.id_generator import generate_nanoid
 from .type_definitions import (
-    ToolParameters,
     AvailableInformation,
     CollectedInformation,
     Context,
+    ToolParameters,
 )
 
 
@@ -212,7 +212,9 @@ class ClarificationConfig:
     """Configuration for the clarification system"""
 
     enabled: bool = True
-    max_questions: Optional[int] = None  # Kept for backward compatibility - None means not explicitly set
+    max_questions: Optional[int] = (
+        None  # Kept for backward compatibility - None means not explicitly set
+    )
     max_rounds: Optional[Dict[str, int]] = None  # New mode-specific configuration
     style: QuestionStyle = QuestionStyle.CONVERSATIONAL
     timeout_seconds: int = 300

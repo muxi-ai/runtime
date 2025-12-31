@@ -5,13 +5,15 @@ This module provides centralized health status management using a shared
 .status file with atomic operations and proper locking.
 """
 
-import json
 import asyncio
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional
+
 import aiofiles
 import aiofiles.os
-from pathlib import Path
-from typing import Dict, Any, Optional
-from datetime import datetime
+
 from ....utils.user_dirs import get_observability_dir
 
 

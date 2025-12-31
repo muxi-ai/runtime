@@ -1,9 +1,10 @@
 """MCP Templates discovery and retrieval implementation."""
 
-from typing import Dict, Any, Optional, List
-from ..transports.base import BaseTransport
-from ..protocol.message_handler import MCPMessageHandler
+from typing import Any, Dict, List, Optional
+
 from ....datatypes.exceptions import MCPRequestError
+from ..protocol.message_handler import MCPMessageHandler
+from ..transports.base import BaseTransport
 
 
 class MCPTemplateDiscovery:

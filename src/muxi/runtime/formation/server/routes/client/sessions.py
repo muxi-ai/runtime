@@ -5,24 +5,26 @@ These endpoints provide session lifecycle management and history access,
 requiring client API key authentication.
 """
 
-from typing import Optional, List
+from typing import List, Optional
 
-from fastapi import APIRouter, Request, Query, Header
+from fastapi import APIRouter, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from ...responses import (
-    APIResponse,
-    create_success_response,
-    create_error_response,
-)
 from .....datatypes.api import APIEventType, APIObjectType
 from .....services import observability
+from ...responses import (
+    APIResponse,
+    create_error_response,
+    create_success_response,
+)
 
 router = APIRouter(tags=["Sessions"])
 
 
-def _get_user_id(x_user_id: Optional[str], request_id: Optional[str]) -> tuple[Optional[str], Optional[JSONResponse]]:
+def _get_user_id(
+    x_user_id: Optional[str], request_id: Optional[str]
+) -> tuple[Optional[str], Optional[JSONResponse]]:
     """Extract and validate user_id from X-Muxi-User-ID header."""
     if not x_user_id:
         response = create_error_response(
@@ -218,7 +220,7 @@ def get_session(
             message_count = 0
             first_timestamp = None
             last_timestamp = None
-            
+
             for item in buffer.buffer:
                 if not isinstance(item, dict):
                     continue
@@ -231,7 +233,7 @@ def get_session(
                             first_timestamp = ts
                         if last_timestamp is None or ts > last_timestamp:
                             last_timestamp = ts
-            
+
             if message_count > 0:
                 session_data = {
                     "session_id": session_id,
@@ -515,6 +517,7 @@ def get_session_messages(
 
 class SessionMessage(BaseModel):
     """A message to restore into a session."""
+
     role: str = Field(..., description="Message role: user, assistant, or system")
     content: str = Field(..., description="Message content")
     timestamp: str = Field(..., description="ISO 8601 timestamp")
@@ -524,6 +527,7 @@ class SessionMessage(BaseModel):
 
 class SessionRestoreRequest(BaseModel):
     """Request body for session restore."""
+
     messages: List[SessionMessage] = Field(..., description="Messages to load into session")
 
 

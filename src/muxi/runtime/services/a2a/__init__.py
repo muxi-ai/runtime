@@ -5,17 +5,17 @@ This module provides comprehensive A2A communication capabilities for MUXI agent
 including agent cards, registry client, and the centralized formation server.
 """
 
-from typing import Optional, Dict, Any, Union
+from typing import Any, Dict, Optional, Union
 
-from .models import AgentCard, A2ACapability, A2AEndpoint, A2AAuthentication, AuthType
 from .cache_manager import A2ACacheManager
 from .card_generator import AgentCardGenerator
 from .discovery import (
-    LocalDiscoveryService,
-    DiscoveryServiceManager,
-    DiscoveryConfig,
     AgentRegistration,
+    DiscoveryConfig,
+    DiscoveryServiceManager,
+    LocalDiscoveryService,
 )
+from .models import A2AAuthentication, A2ACapability, A2AEndpoint, AgentCard, AuthType
 from .registry_client import A2ARegistryClient
 from .server import A2AServer
 
@@ -49,6 +49,7 @@ async def send_message(
     """
     # Implementation will be added in client.py
     from .client import A2AService
+
     service = A2AService()
     return await service.send_message(
         source_agent_id=source_agent_id,
@@ -87,6 +88,7 @@ async def handle_message(
     """
     # Implementation will be added in client.py
     from .client import A2AService
+
     service = A2AService()
     return await service.handle_message(
         agent=agent,

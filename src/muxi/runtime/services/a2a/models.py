@@ -5,10 +5,10 @@ This module defines the data structures for Google's Agent-to-Agent protocol,
 including agent cards, capabilities, and authentication configurations.
 """
 
-from typing import Dict, List, Optional, Any
+import json
 from dataclasses import dataclass, field
 from enum import Enum
-import json
+from typing import Any, Dict, List, Optional
 
 
 class A2AVersion(str, Enum):

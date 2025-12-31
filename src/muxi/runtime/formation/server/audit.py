@@ -221,13 +221,13 @@ class AuditLogger:
             else:
                 # Aware datetime - convert to UTC
                 since_utc = since.astimezone(timezone.utc)
-            
+
             # Filter using datetime comparison instead of string comparison
             def should_include(entry: Dict[str, Any]) -> bool:
                 timestamp_str = entry.get("timestamp", "")
                 if not timestamp_str:
                     return False
-                
+
                 try:
                     # Parse timestamp (handles multiple ISO formats)
                     # Remove trailing 'Z' and parse, then set UTC
@@ -242,12 +242,12 @@ class AuditLogger:
                     else:
                         # No timezone info - assume UTC
                         event_dt = datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
-                    
+
                     return event_dt >= since_utc
                 except (ValueError, AttributeError):
                     # Malformed timestamp - exclude entry
                     return False
-            
+
             filtered = [e for e in filtered if should_include(e)]
 
         # Return most recent first
@@ -318,10 +318,7 @@ class AuditLogger:
             task.result()  # This will raise if the task failed
         except Exception as e:
             logger.error(
-                "Audit log write failed for formation %s: %s",
-                self.formation_id,
-                e,
-                exc_info=True
+                "Audit log write failed for formation %s: %s", self.formation_id, e, exc_info=True
             )
 
     async def shutdown(self) -> None:
@@ -333,8 +330,7 @@ class AuditLogger:
         """
         if self._pending_tasks:
             logger.info(
-                "Waiting for %d pending audit log writes to complete...",
-                len(self._pending_tasks)
+                "Waiting for %d pending audit log writes to complete...", len(self._pending_tasks)
             )
             await asyncio.gather(*self._pending_tasks, return_exceptions=True)
             logger.info("All pending audit log writes completed")

@@ -158,9 +158,9 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
         processing_time = time.time() - start_time
 
         # Increment request counter (thread-safe)
-        if hasattr(request.app.state, 'formation'):
-            server = getattr(request.app.state.formation, '_server', None)
-            if server and hasattr(server, '_request_count_lock'):
+        if hasattr(request.app.state, "formation"):
+            server = getattr(request.app.state.formation, "_server", None)
+            if server and hasattr(server, "_request_count_lock"):
                 with server._request_count_lock:
                     server._request_count += 1
 
@@ -250,7 +250,7 @@ class ConnectionTrackingMiddleware(BaseHTTPMiddleware):
         connection_task = asyncio.current_task()
 
         # Add to active connections (thread-safe)
-        if hasattr(self.server_instance, '_active_connections_lock'):
+        if hasattr(self.server_instance, "_active_connections_lock"):
             with self.server_instance._active_connections_lock:
                 self.server_instance._active_connections.add(connection_task)
         else:
@@ -261,7 +261,7 @@ class ConnectionTrackingMiddleware(BaseHTTPMiddleware):
             return response
         finally:
             # Remove from active connections when request completes (thread-safe)
-            if hasattr(self.server_instance, '_active_connections_lock'):
+            if hasattr(self.server_instance, "_active_connections_lock"):
                 with self.server_instance._active_connections_lock:
                     self.server_instance._active_connections.discard(connection_task)
             else:

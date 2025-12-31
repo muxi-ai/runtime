@@ -1,8 +1,9 @@
 """High-level MCP Sampling management."""
 
-from typing import List, Dict, Any, TYPE_CHECKING
-from .client import MCPSamplingClient
+from typing import TYPE_CHECKING, Any, Dict, List
+
 from ....datatypes.exceptions import MCPRequestError
+from .client import MCPSamplingClient
 
 if TYPE_CHECKING:
     from ..service import MCPService
@@ -21,10 +22,7 @@ class MCPSamplingManager:
         self.client = MCPSamplingClient()
 
     async def create_message(
-        self,
-        server_id: str,
-        messages: List[Dict[str, Any]],
-        **kwargs
+        self, server_id: str, messages: List[Dict[str, Any]], **kwargs
     ) -> Dict[str, Any]:
         """Create a message using MCP server's sampling capability.
 
@@ -51,7 +49,7 @@ class MCPSamplingManager:
         user_message: str,
         system_prompt: str = None,
         temperature: float = None,
-        max_tokens: int = None
+        max_tokens: int = None,
     ) -> str:
         """Create a simple message from user text.
 
@@ -77,7 +75,7 @@ class MCPSamplingManager:
             messages=messages,
             system_prompt=system_prompt,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
         )
 
         # Extract text content
@@ -89,7 +87,7 @@ class MCPSamplingManager:
         conversation_history: List[str],
         new_message: str,
         system_prompt: str = None,
-        **kwargs
+        **kwargs,
     ) -> str:
         """Continue an existing conversation.
 
@@ -114,10 +112,7 @@ class MCPSamplingManager:
 
         # Create response
         result = await self.create_message(
-            server_id=server_id,
-            messages=messages,
-            system_prompt=system_prompt,
-            **kwargs
+            server_id=server_id, messages=messages, system_prompt=system_prompt, **kwargs
         )
 
         # Extract text content
@@ -131,7 +126,7 @@ class MCPSamplingManager:
         speed_priority: float = None,
         intelligence_priority: float = None,
         model_hints: List[str] = None,
-        **kwargs
+        **kwargs,
     ) -> Dict[str, Any]:
         """Create message with specific model preferences.
 
@@ -155,22 +150,16 @@ class MCPSamplingManager:
             hints=model_hints,
             cost_priority=cost_priority,
             speed_priority=speed_priority,
-            intelligence_priority=intelligence_priority
+            intelligence_priority=intelligence_priority,
         )
 
         # Create message with preferences
         return await self.create_message(
-            server_id=server_id,
-            messages=messages,
-            model_preferences=model_preferences,
-            **kwargs
+            server_id=server_id, messages=messages, model_preferences=model_preferences, **kwargs
         )
 
     async def batch_create_messages(
-        self,
-        server_id: str,
-        message_batches: List[List[Dict[str, Any]]],
-        **kwargs
+        self, server_id: str, message_batches: List[List[Dict[str, Any]]], **kwargs
     ) -> List[Dict[str, Any]]:
         """Create multiple messages in batch.
 
@@ -189,18 +178,11 @@ class MCPSamplingManager:
 
         for messages in message_batches:
             try:
-                result = await self.create_message(
-                    server_id=server_id,
-                    messages=messages,
-                    **kwargs
-                )
+                result = await self.create_message(server_id=server_id, messages=messages, **kwargs)
                 results.append(result)
             except Exception as e:
                 # Add error result to maintain batch order
-                results.append({
-                    "error": str(e),
-                    "success": False
-                })
+                results.append({"error": str(e), "success": False})
 
         return results
 
@@ -209,7 +191,7 @@ class MCPSamplingManager:
         server_id: str,
         messages: List[Dict[str, Any]],
         include_context: str = "thisServer",
-        **kwargs
+        **kwargs,
     ) -> Dict[str, Any]:
         """Create message with specific context inclusion strategy.
 
@@ -226,15 +208,11 @@ class MCPSamplingManager:
             MCPRequestError: If server not found or message creation fails
         """
         return await self.create_message(
-            server_id=server_id,
-            messages=messages,
-            include_context=include_context,
-            **kwargs
+            server_id=server_id, messages=messages, include_context=include_context, **kwargs
         )
 
     def format_conversation_for_sampling(
-        self,
-        conversation: List[Dict[str, str]]
+        self, conversation: List[Dict[str, str]]
     ) -> List[Dict[str, Any]]:
         """Format conversation for sampling API.
 
@@ -250,10 +228,7 @@ class MCPSamplingManager:
             role = turn.get("role", "user")
             content = turn.get("content", "")
 
-            message = {
-                "role": role,
-                "content": content
-            }
+            message = {"role": role, "content": content}
 
             messages.append(message)
 
@@ -274,18 +249,17 @@ class MCPSamplingManager:
             "response_length": 0,
             "model_used": None,
             "stop_reason": None,
-            "test_errors": []
+            "test_errors": [],
         }
 
         try:
             # Test simple message creation
-            test_messages = [{"role": "user", "content": "Hello, can you respond with a simple greeting?"}]
+            test_messages = [
+                {"role": "user", "content": "Hello, can you respond with a simple greeting?"}
+            ]
 
             result = await self.create_message(
-                server_id=server_id,
-                messages=test_messages,
-                max_tokens=50,
-                temperature=0.7
+                server_id=server_id, messages=test_messages, max_tokens=50, temperature=0.7
             )
 
             test_results["sampling_success"] = True
@@ -321,7 +295,7 @@ class MCPSamplingManager:
         summary_lines = [
             f"🤖 Sampling Results ({len(results)} total):",
             f"  ✅ Successful: {len(successful_results)}",
-            f"  ❌ Failed: {len(error_results)}"
+            f"  ❌ Failed: {len(error_results)}",
         ]
 
         if successful_results:

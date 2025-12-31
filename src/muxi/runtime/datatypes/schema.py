@@ -5,9 +5,10 @@ This module provides standardized configuration patterns for all MUXI services,
 ensuring consistent validation, documentation, and initialization across the framework.
 """
 
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, Dict, Any, List, Literal, Union
 from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Literal, Optional, Union
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class BaseServiceSchema(BaseModel, ABC):

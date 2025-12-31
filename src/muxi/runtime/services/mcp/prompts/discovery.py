@@ -1,9 +1,10 @@
 """MCP Prompts discovery and retrieval implementation."""
 
-from typing import List, Dict, Any, Optional
-from ..transports.base import BaseTransport
-from ..protocol.message_handler import MCPMessageHandler
+from typing import Any, Dict, List, Optional
+
 from ....datatypes.exceptions import MCPRequestError
+from ..protocol.message_handler import MCPMessageHandler
+from ..transports.base import BaseTransport
 
 
 class MCPPromptDiscovery:
@@ -59,10 +60,7 @@ class MCPPromptDiscovery:
         """
         try:
             # Send request to MCP server
-            response = await transport.send_request({
-                "method": "prompts/list",
-                "params": {}
-            })
+            response = await transport.send_request({"method": "prompts/list", "params": {}})
 
             # Extract result using helper method
             result = self._extract_result_from_response(response, "prompts/list")
@@ -75,10 +73,7 @@ class MCPPromptDiscovery:
             raise MCPRequestError(f"Failed to list prompts: {e}")
 
     async def get_prompt(
-        self,
-        transport: BaseTransport,
-        name: str,
-        arguments: Optional[Dict[str, Any]] = None
+        self, transport: BaseTransport, name: str, arguments: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Get prompt with arguments using prompts/get method.
 
@@ -100,10 +95,7 @@ class MCPPromptDiscovery:
                 params["arguments"] = arguments
 
             # Send request to MCP server
-            response = await transport.send_request({
-                "method": "prompts/get",
-                "params": params
-            })
+            response = await transport.send_request({"method": "prompts/get", "params": params})
 
             # Extract result using helper method
             result = self._extract_result_from_response(response, "prompts/get")
@@ -131,13 +123,15 @@ class MCPPromptDiscovery:
             self._validate_prompt_definition(prompt)
 
             # Add to processed list
-            processed_prompts.append({
-                "name": prompt["name"],
-                "description": prompt.get("description", ""),
-                "arguments": prompt.get("arguments", []),
-                "metadata": prompt.get("metadata", {}),
-                "protocol_compliant": True
-            })
+            processed_prompts.append(
+                {
+                    "name": prompt["name"],
+                    "description": prompt.get("description", ""),
+                    "arguments": prompt.get("arguments", []),
+                    "metadata": prompt.get("metadata", {}),
+                    "protocol_compliant": True,
+                }
+            )
 
         return processed_prompts
 
@@ -160,7 +154,7 @@ class MCPPromptDiscovery:
             "messages": result["messages"],
             "description": result.get("description", ""),
             "metadata": result.get("_meta", {}),
-            "status": "success"
+            "status": "success",
         }
 
     def _validate_prompt_definition(self, prompt: Dict[str, Any]) -> None:

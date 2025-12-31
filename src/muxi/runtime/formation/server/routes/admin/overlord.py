@@ -5,16 +5,15 @@ These endpoints provide overlord configuration access,
 requiring admin API key authentication.
 """
 
-
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from .....datatypes.api import APIEventType, APIObjectType
 from ...responses import (
     APIResponse,
     create_success_response,
 )
 from ...secrets import restore_secret_placeholders
-from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["Overlord"])
 
@@ -39,28 +38,37 @@ async def get_overlord_config(request: Request) -> JSONResponse:
         "persona": overlord_raw.get("persona", ""),
         "llm": overlord_raw.get("llm", {}),
         "caching": llm_config.get("settings", {}).get("caching", {"enabled": True, "ttl": 3600}),
-        "response": overlord_raw.get("response", {
-            "format": "markdown",
-            "widgets": False,
-            "streaming": True,
-        }),
-        "workflow": overlord_raw.get("workflow", {
-            "auto_decomposition": True,
-            "plan_approval_threshold": 7,
-            "complexity_method": "heuristic",
-            "complexity_threshold": 7.0,
-            "routing_strategy": "capability_based",
-            "enable_agent_affinity": True,
-            "error_recovery": "retry_with_backoff",
-            "parallel_execution": True,
-            "max_parallel_tasks": 5,
-            "partial_results": True,
-        }),
-        "clarification": overlord_raw.get("clarification", {
-            "max_questions": 5,
-            "style": "conversational",
-            "persist_learned_info": False,
-        }),
+        "response": overlord_raw.get(
+            "response",
+            {
+                "format": "markdown",
+                "widgets": False,
+                "streaming": True,
+            },
+        ),
+        "workflow": overlord_raw.get(
+            "workflow",
+            {
+                "auto_decomposition": True,
+                "plan_approval_threshold": 7,
+                "complexity_method": "heuristic",
+                "complexity_threshold": 7.0,
+                "routing_strategy": "capability_based",
+                "enable_agent_affinity": True,
+                "error_recovery": "retry_with_backoff",
+                "parallel_execution": True,
+                "max_parallel_tasks": 5,
+                "partial_results": True,
+            },
+        ),
+        "clarification": overlord_raw.get(
+            "clarification",
+            {
+                "max_questions": 5,
+                "style": "conversational",
+                "persist_learned_info": False,
+            },
+        ),
     }
 
     # Create a temporary config structure to apply placeholders
@@ -69,7 +77,10 @@ async def get_overlord_config(request: Request) -> JSONResponse:
     overlord_config = temp_config.get("overlord", {})
 
     response = create_success_response(
-        APIObjectType.OVERLORD_CONFIG, APIEventType.OVERLORD_CONFIG_RETRIEVED, overlord_config, request_id
+        APIObjectType.OVERLORD_CONFIG,
+        APIEventType.OVERLORD_CONFIG_RETRIEVED,
+        overlord_config,
+        request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 

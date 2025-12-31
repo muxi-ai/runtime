@@ -1,22 +1,18 @@
 """Storage system for artifacts in MUXI runtime."""
 
 import threading
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List
-from datetime import datetime, timezone, timedelta
-from ...utils.id_generator import generate_nanoid
+
 from ...datatypes.artifacts import MuxiArtifact
+from ...utils.id_generator import generate_nanoid
 
 
 class StoredArtifact:
     """Container for stored artifact with metadata."""
 
     def __init__(
-        self,
-        id: str,
-        artifact: MuxiArtifact,
-        session_id: str,
-        user_id: str,
-        timestamp: datetime
+        self, id: str, artifact: MuxiArtifact, session_id: str, user_id: str, timestamp: datetime
     ):
         self.id = id
         self.artifact = artifact
@@ -51,7 +47,7 @@ def store_artifact(session_id: str, artifact: MuxiArtifact, user_id: str = "0") 
         artifact=artifact,
         session_id=session_id,
         user_id=user_id,
-        timestamp=datetime.now(timezone.utc)
+        timestamp=datetime.now(timezone.utc),
     )
 
     # Thread-safe access to session storage
@@ -87,9 +83,7 @@ def get_recent_artifacts(session_id: str, max_age_minutes: int = 60) -> List[Mux
 
         # Filter by age and return just the MuxiArtifact objects
         recent_artifacts = [
-            stored.artifact
-            for stored in session_artifacts
-            if stored.timestamp >= cutoff_time
+            stored.artifact for stored in session_artifacts if stored.timestamp >= cutoff_time
         ]
 
     return recent_artifacts

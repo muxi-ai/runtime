@@ -6,15 +6,15 @@ for production-ready document processing.
 """
 
 import time
-from typing import Dict, List, Optional, Any, Tuple
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
+from ....datatypes.intent import IntentType
 from ....services.intent import IntentDetectionService
 from ....services.llm import LLM
-from ....datatypes.intent import IntentType
-from ....services.observability import EventLogger, ErrorEvents, EventLevel
+from ....services.observability import ErrorEvents, EventLevel, EventLogger
 
 
 class DocumentErrorType(Enum):

@@ -8,21 +8,22 @@
 # Author:       Muxi Framework Team
 # =============================================================================
 
-from typing import Any, Dict, Optional
 from datetime import datetime
+from typing import Any, Dict, Optional
+
+from mcp.client.session import ClientSession
 
 # MCP SDK imports
 from mcp.client.sse import sse_client
-from mcp.client.session import ClientSession
 
+from ... import observability
+from ..protocol.message_handler import MCPMessageHandler
+from .auth import create_httpx_auth
 from .base import (
     BaseTransport,
     MCPConnectionError,
     MCPRequestError,
 )
-from ..protocol.message_handler import MCPMessageHandler
-from .auth import create_httpx_auth
-from ... import observability
 
 
 class HTTPSSETransport(BaseTransport):
@@ -86,7 +87,7 @@ class HTTPSSETransport(BaseTransport):
                     "url": self.url,
                     "error": str(e),
                 },
-                description=f"Connection failed: {e}"
+                description=f"Connection failed: {e}",
             )
             # Clean up any partially created resources
             await self._cleanup()

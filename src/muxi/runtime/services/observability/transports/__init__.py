@@ -1,6 +1,6 @@
 from .base import BaseTransport, TransportStatus
-from .stdout import StdoutTransport
 from .file import FileTransport
+from .stdout import StdoutTransport
 from .stream import StreamTransport
 
 __all__ = [
@@ -8,5 +8,5 @@ __all__ = [
     "TransportStatus",
     "StdoutTransport",
     "FileTransport",
-    "StreamTransport"
+    "StreamTransport",
 ]

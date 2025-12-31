@@ -11,14 +11,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 
-from .processor import create_artifact_from_file
 from ...datatypes.artifacts import ArtifactMetadata, ArtifactPreview, MuxiArtifact
 from ...datatypes.clarification import ToolExecutionResult
 from ...services import observability
+from .processor import create_artifact_from_file
 
 
 async def extract_artifacts_from_tool_results(
-    tool_results: List[ToolExecutionResult]
+    tool_results: List[ToolExecutionResult],
 ) -> List[MuxiArtifact]:
     """
     Extract artifacts from tool execution results.
@@ -44,8 +44,8 @@ async def extract_artifacts_from_tool_results(
     # Process each tool result
     for result in tool_results:
         try:
-            tool_name = getattr(result, 'tool_name', 'N/A')
-            success = getattr(result, 'success', 'N/A')
+            tool_name = getattr(result, "tool_name", "N/A")
+            success = getattr(result, "success", "N/A")
             observability.observe(
                 event_type=observability.ConversationEvents.MCP_TOOL_CALL_STARTED,
                 level=observability.EventLevel.DEBUG,
@@ -55,14 +55,14 @@ async def extract_artifacts_from_tool_results(
                     "tool_name": tool_name,
                     "success": success,
                 },
-                description=f"Processing tool result: {tool_name} (success: {success})"
+                description=f"Processing tool result: {tool_name} (success: {success})",
             )
 
             # Check if this is a successful generate_file tool call
             if (
-                isinstance(result, ToolExecutionResult) and
-                result.tool_name == "generate_file" and
-                result.success is True
+                isinstance(result, ToolExecutionResult)
+                and result.tool_name == "generate_file"
+                and result.success is True
             ):
                 # Extract file info from the result
                 file_info = result.result
@@ -73,8 +73,12 @@ async def extract_artifacts_from_tool_results(
                     observability.observe(
                         event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                         level=observability.EventLevel.INFO,
-                        data={"service": "artifact", "action": "found_direct_artifact", "filename": artifact.filename},
-                        description=f"Found direct artifact: {artifact.filename}"
+                        data={
+                            "service": "artifact",
+                            "action": "found_direct_artifact",
+                            "filename": artifact.filename,
+                        },
+                        description=f"Found direct artifact: {artifact.filename}",
                     )
                     artifacts.append(artifact)
                     continue
@@ -83,8 +87,12 @@ async def extract_artifacts_from_tool_results(
                 observability.observe(
                     event_type=observability.ConversationEvents.CONTENT_EXTRACTION_STARTED,
                     level=observability.EventLevel.DEBUG,
-                    data={"service": "artifact", "action": "parse_tool_result", "result_type": str(type(file_info))},
-                    description=f"Tool result type: {type(file_info)}"
+                    data={
+                        "service": "artifact",
+                        "action": "parse_tool_result",
+                        "result_type": str(type(file_info)),
+                    },
+                    description=f"Tool result type: {type(file_info)}",
                 )
 
                 # Handle nested result structure from MCP service
@@ -114,7 +122,7 @@ async def extract_artifacts_from_tool_results(
                                                 "action": "parse_json",
                                                 "source": "text_field",
                                             },
-                                            description="Successfully parsed JSON content from text field"
+                                            description="Successfully parsed JSON content from text field",
                                         )
                                     except json.JSONDecodeError:
                                         observability.observe(
@@ -125,7 +133,7 @@ async def extract_artifacts_from_tool_results(
                                                 "action": "parse_json",
                                                 "error": "json_decode_error",
                                             },
-                                            description="Could not parse text as JSON"
+                                            description="Could not parse text as JSON",
                                         )
                                         file_info = actual_result
                                 else:
@@ -139,15 +147,23 @@ async def extract_artifacts_from_tool_results(
                                 observability.observe(
                                     event_type=observability.ConversationEvents.CONTENT_EXTRACTION_COMPLETED,
                                     level=observability.EventLevel.DEBUG,
-                                    data={"service": "artifact", "action": "parse_json", "source": "string_content"},
-                                    description="Successfully parsed JSON content from string"
+                                    data={
+                                        "service": "artifact",
+                                        "action": "parse_json",
+                                        "source": "string_content",
+                                    },
+                                    description="Successfully parsed JSON content from string",
                                 )
                             except json.JSONDecodeError:
                                 observability.observe(
                                     event_type=observability.ErrorEvents.JSON_PARSE_FAILED,
                                     level=observability.EventLevel.WARNING,
-                                    data={"service": "artifact", "action": "parse_json", "error": "json_decode_error"},
-                                    description="Could not parse content as JSON"
+                                    data={
+                                        "service": "artifact",
+                                        "action": "parse_json",
+                                        "error": "json_decode_error",
+                                    },
+                                    description="Could not parse content as JSON",
                                 )
                                 file_info = actual_result
                         else:
@@ -160,8 +176,12 @@ async def extract_artifacts_from_tool_results(
                     observability.observe(
                         event_type=observability.ErrorEvents.VALIDATION_FAILED,
                         level=observability.EventLevel.WARNING,
-                        data={"service": "artifact", "action": "validate_result", "result_type": str(type(file_info))},
-                        description=f"Tool result for generate_file is not a dict: {type(file_info)}"
+                        data={
+                            "service": "artifact",
+                            "action": "validate_result",
+                            "result_type": str(type(file_info)),
+                        },
+                        description=f"Tool result for generate_file is not a dict: {type(file_info)}",
                     )
                     continue
 
@@ -188,15 +208,13 @@ async def extract_artifacts_from_tool_results(
                             language=meta_dict.get("language"),
                             pages=meta_dict.get("pages"),
                             width=meta_dict.get("width"),
-                            height=meta_dict.get("height")
+                            height=meta_dict.get("height"),
                         )
 
                     # Create preview
                     preview = None
                     if artifact_data.get("preview") and artifact_data["preview"].get("thumbnail"):
-                        preview = ArtifactPreview(
-                            thumbnail=artifact_data["preview"]["thumbnail"]
-                        )
+                        preview = ArtifactPreview(thumbnail=artifact_data["preview"]["thumbnail"])
 
                     # Create artifact
                     artifact = MuxiArtifact(
@@ -206,15 +224,19 @@ async def extract_artifacts_from_tool_results(
                         content=artifact_data.get("content"),
                         data_url=artifact_data.get("data_url"),
                         metadata=metadata,
-                        preview=preview
+                        preview=preview,
                     )
 
                     artifacts.append(artifact)
                     observability.observe(
                         event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_COMPLETED,
                         level=observability.EventLevel.INFO,
-                        data={"service": "artifact", "action": "extract_preprocessed", "filename": artifact.filename},
-                        description=f"Successfully extracted pre-processed artifact: {artifact.filename}"
+                        data={
+                            "service": "artifact",
+                            "action": "extract_preprocessed",
+                            "filename": artifact.filename,
+                        },
+                        description=f"Successfully extracted pre-processed artifact: {artifact.filename}",
                     )
                     continue
 
@@ -224,8 +246,12 @@ async def extract_artifacts_from_tool_results(
                     observability.observe(
                         event_type=observability.ErrorEvents.ARTIFACT_FIELD_MISSING,
                         level=observability.EventLevel.WARNING,
-                        data={"service": "artifact", "action": "validate_result", "error": "missing_file_path"},
-                        description="generate_file result missing both artifact and file_path fields"
+                        data={
+                            "service": "artifact",
+                            "action": "validate_result",
+                            "error": "missing_file_path",
+                        },
+                        description="generate_file result missing both artifact and file_path fields",
                     )
                     continue
 
@@ -246,8 +272,12 @@ async def extract_artifacts_from_tool_results(
                         observability.observe(
                             event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_COMPLETED,
                             level=observability.EventLevel.INFO,
-                            data={"service": "artifact", "action": "extract_from_file", "file": str(file_path)},
-                            description=f"Successfully extracted artifact from file: {file_path}"
+                            data={
+                                "service": "artifact",
+                                "action": "extract_from_file",
+                                "file": str(file_path),
+                            },
+                            description=f"Successfully extracted artifact from file: {file_path}",
                         )
 
                         # Clean up the temporary file now that it's been processed
@@ -258,8 +288,12 @@ async def extract_artifacts_from_tool_results(
                                 observability.observe(
                                     event_type=observability.SystemEvents.CLEANUP,
                                     level=observability.EventLevel.DEBUG,
-                                    data={"service": "artifact", "action": "cleanup_temp_file", "file": str(file_path)},
-                                    description=f"Cleaned up temporary file: {file_path}"
+                                    data={
+                                        "service": "artifact",
+                                        "action": "cleanup_temp_file",
+                                        "file": str(file_path),
+                                    },
+                                    description=f"Cleaned up temporary file: {file_path}",
                                 )
                         except Exception as e:
                             observability.observe(
@@ -271,7 +305,7 @@ async def extract_artifacts_from_tool_results(
                                     "file": str(file_path),
                                     "error": str(e),
                                 },
-                                description=f"Could not clean up temporary file {file_path}: {e}"
+                                description=f"Could not clean up temporary file {file_path}: {e}",
                             )
                 except Exception as e:
                     observability.observe(
@@ -283,7 +317,7 @@ async def extract_artifacts_from_tool_results(
                             "file": str(file_path),
                             "error": str(e),
                         },
-                        description=f"Failed to create artifact from file {file_path}: {str(e)}"
+                        description=f"Failed to create artifact from file {file_path}: {str(e)}",
                     )
                     continue
 
@@ -293,7 +327,7 @@ async def extract_artifacts_from_tool_results(
                 event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={"service": "artifact", "action": "process_tool_result", "error": str(e)},
-                description=f"Error processing tool result: {str(e)}"
+                description=f"Error processing tool result: {str(e)}",
             )
             continue
 
@@ -302,8 +336,12 @@ async def extract_artifacts_from_tool_results(
         observability.observe(
             event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_COMPLETED,
             level=observability.EventLevel.INFO,
-            data={"service": "artifact", "action": "extract_from_tools", "artifacts_count": len(artifacts)},
-            description=f"Extracted {len(artifacts)} artifacts from tool results"
+            data={
+                "service": "artifact",
+                "action": "extract_from_tools",
+                "artifacts_count": len(artifacts),
+            },
+            description=f"Extracted {len(artifacts)} artifacts from tool results",
         )
 
     # Optional: Clean up the entire muxi_artifacts directory if it's empty
@@ -315,7 +353,7 @@ async def extract_artifacts_from_tool_results(
                 event_type=observability.SystemEvents.CLEANUP,
                 level=observability.EventLevel.DEBUG,
                 data={"service": "artifact", "action": "cleanup_artifacts_dir"},
-                description="Cleaned up empty muxi_artifacts directory"
+                description="Cleaned up empty muxi_artifacts directory",
             )
     except Exception:
         pass  # Ignore any cleanup errors

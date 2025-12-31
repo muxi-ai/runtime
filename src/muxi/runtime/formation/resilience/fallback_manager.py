@@ -8,11 +8,11 @@ when primary recovery strategies fail.
 import asyncio
 from typing import Any, Dict, Optional
 
+from ...datatypes import observability
 from ...datatypes.resilience import (
     ErrorType,
     FallbackFunction,
 )
-from ...datatypes import observability
 
 
 class FallbackManager:

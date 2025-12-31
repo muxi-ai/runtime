@@ -5,20 +5,20 @@ These endpoints provide LLM configuration access and management,
 requiring admin API key authentication.
 """
 
-from typing import Dict, Any
 from copy import deepcopy
+from typing import Any, Dict
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from .....datatypes.api import APIEventType, APIObjectType
 from ...responses import (
     APIResponse,
-    create_success_response,
     create_error_response,
+    create_success_response,
 )
 from ...secrets import restore_secret_placeholders
-from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["LLM"])
 
@@ -84,7 +84,7 @@ async def update_llm_settings(request: Request, settings: LLMSettingsUpdate) -> 
             f"Invalid LLM setting(s): {', '.join(sorted(invalid_keys))}. "
             f"Valid settings are: {', '.join(sorted(VALID_LLM_SETTINGS))}",
             None,
-            request_id
+            request_id,
         )
         return JSONResponse(content=response.model_dump(), status_code=400)
 
@@ -123,7 +123,7 @@ async def reset_llm_setting(request: Request, item: str) -> JSONResponse:
             "INVALID_PARAMS",
             f"Invalid LLM setting '{item}'. Valid settings are: {', '.join(sorted(VALID_LLM_SETTINGS))}",
             None,
-            request_id
+            request_id,
         )
         return JSONResponse(content=response.model_dump(), status_code=400)
 

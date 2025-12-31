@@ -4,8 +4,8 @@ Validation Data Types
 Core data structures used for validation operations across the muxi runtime system.
 """
 
-from typing import List, Optional
 from dataclasses import dataclass
+from typing import List, Optional
 
 
 @dataclass

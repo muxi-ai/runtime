@@ -11,8 +11,8 @@ Security Features:
 """
 
 import re
-from typing import Optional
 from datetime import datetime
+from typing import Optional
 
 from ...utils.datetime_utils import utc_now
 
@@ -218,8 +218,9 @@ class SchedulerInputValidator:
 
         # Use croniter for comprehensive validation
         try:
-            from croniter import croniter
             from datetime import datetime
+
+            from croniter import croniter
 
             # Test if croniter can parse the expression
             cron = croniter(cron_expr, datetime.now())

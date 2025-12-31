@@ -6,10 +6,11 @@ messages, HTTP status mappings, and categorization for consistent error
 handling across all MUXI communication modes.
 """
 
-import os
 import logging
-from typing import Dict, Optional, Literal
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+import os
+from typing import Dict, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,8 @@ class ErrorCodeInfo(BaseModel):
     def validate_code_format(cls, v):
         """Ensure error code is uppercase with underscores."""
         import re
-        if not re.match(r'^[A-Z_]+$', v):
+
+        if not re.match(r"^[A-Z_]+$", v):
             raise ValueError("Error code must contain only uppercase letters and underscores")
         return v
 

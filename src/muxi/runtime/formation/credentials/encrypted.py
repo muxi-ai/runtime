@@ -5,18 +5,19 @@ This module extends CredentialResolver to add encryption for stored credentials.
 Uses zero-configuration encryption with formation_id and per-user key derivation.
 """
 
-import json
 import base64
-from typing import Optional, Dict, Any
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
-from cryptography.fernet import Fernet
-from cachetools import LRUCache
+import json
+from typing import Any, Dict, Optional
 
-from .resolver import CredentialResolver
+from cachetools import LRUCache
+from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
 from ...services import observability
 from ...utils.user_resolution import resolve_user_identifier
+from .resolver import CredentialResolver
 
 # Default salt for key derivation (v1 format)
 DEFAULT_ENCRYPTION_SALT = "muxi-user-credentials-salt-v1"
@@ -59,7 +60,9 @@ class EncryptedCredentialResolver(CredentialResolver):
             cache_maxsize: Maximum number of users in credential cache (default: 10,000)
             fernet_cache_maxsize: Maximum Fernet instances to cache (default: 10,000)
         """
-        super().__init__(async_session_maker, formation_id, llm_model, db_manager, cache_ttl, cache_maxsize)
+        super().__init__(
+            async_session_maker, formation_id, llm_model, db_manager, cache_ttl, cache_maxsize
+        )
         self.custom_key = encryption_key
         # Use provided salt or default
         self.encryption_salt = (encryption_salt or DEFAULT_ENCRYPTION_SALT).encode("utf-8")
@@ -75,7 +78,7 @@ class EncryptedCredentialResolver(CredentialResolver):
                 data={
                     "formation_id": formation_id,
                     "encryption_key_source": "formation_id",
-                    "recommendation": "Provide explicit encryption_key for production deployments"
+                    "recommendation": "Provide explicit encryption_key for production deployments",
                 },
                 description=(
                     "Using formation_id as encryption key. This is acceptable for development "
@@ -289,6 +292,7 @@ class EncryptedCredentialResolver(CredentialResolver):
             True if duplicate exists, False otherwise
         """
         from sqlalchemy import select
+
         from .resolver import Credential
 
         service = service.lower()

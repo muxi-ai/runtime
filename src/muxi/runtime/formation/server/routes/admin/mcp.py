@@ -5,24 +5,24 @@ These endpoints provide MCP configuration, server listing, and tool discovery,
 requiring admin API key authentication.
 """
 
-from typing import Dict, Any, Optional, List
+import logging
 import uuid
 from copy import deepcopy
-import logging
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from .....datatypes.api import APIEventType, APIObjectType
+from .....services.secrets.config_utils import get_config_item_with_secrets_restored
 from ...responses import (
     APIResponse,
-    create_success_response,
     create_error_response,
+    create_success_response,
 )
-from .....datatypes.api import APIEventType, APIObjectType
 from ...secrets import restore_secret_placeholders
 from ...utils import get_header_case_insensitive
-from .....services.secrets.config_utils import get_config_item_with_secrets_restored
 
 router = APIRouter(tags=["MCP"])
 
@@ -122,13 +122,18 @@ async def get_mcp_config(request: Request) -> JSONResponse:
         "max_tool_calls": mcp_config.get("defaults", {}).get("max_tool_calls", 50),
         "max_repeated_errors": mcp_config.get("defaults", {}).get("max_repeated_errors", 3),
         "max_timeout_in_seconds": mcp_config.get("defaults", {}).get("max_timeout_in_seconds", 300),
-        "max_tool_timeout_in_seconds": mcp_config.get("defaults", {}).get("max_tool_timeout_in_seconds", 30),
+        "max_tool_timeout_in_seconds": mcp_config.get("defaults", {}).get(
+            "max_tool_timeout_in_seconds", 30
+        ),
         "enhance_user_prompts": mcp_config.get("defaults", {}).get("enhance_user_prompts", True),
         "servers": mcp_config.get("servers", []),
     }
 
     response = create_success_response(
-        APIObjectType.MCP_DEFAULTS, APIEventType.MCP_DEFAULTS_RETRIEVED, defaults_response, request_id
+        APIObjectType.MCP_DEFAULTS,
+        APIEventType.MCP_DEFAULTS_RETRIEVED,
+        defaults_response,
+        request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -159,7 +164,10 @@ async def update_mcp_defaults(request: Request, defaults: MCPDefaultsUpdate) -> 
         mcp_defaults[key] = value
 
     response = create_success_response(
-        APIObjectType.MCP_DEFAULTS, APIEventType.MCP_DEFAULTS_UPDATED, {"defaults": mcp_defaults}, request_id
+        APIObjectType.MCP_DEFAULTS,
+        APIEventType.MCP_DEFAULTS_UPDATED,
+        {"defaults": mcp_defaults},
+        request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -430,6 +438,7 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
 
         # Log successful tool execution
         from .....services import observability
+
         observability.observe(
             event_type=observability.ConversationEvents.MCP_TOOL_CALLED,
             level=observability.EventLevel.INFO,
@@ -452,6 +461,7 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
     except ValueError as e:
         # Handle expected validation errors with specific messages
         from .....services import observability
+
         observability.observe(
             event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
             level=observability.EventLevel.WARNING,
@@ -468,6 +478,7 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
     except AttributeError as e:
         # Handle missing attributes/methods (e.g., formation components not available)
         from .....services import observability
+
         observability.observe(
             event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
             level=observability.EventLevel.ERROR,
@@ -489,6 +500,7 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
     except KeyError as e:
         # Handle missing required arguments
         from .....services import observability
+
         observability.observe(
             event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
             level=observability.EventLevel.WARNING,
@@ -507,8 +519,10 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
     except Exception as e:
         # Handle unexpected errors without exposing internal details
         # Log the actual error internally but return generic message to client
-        from .....services import observability
         import traceback
+
+        from .....services import observability
+
         observability.observe(
             event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
             level=observability.EventLevel.ERROR,

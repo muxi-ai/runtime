@@ -64,6 +64,9 @@ import asyncio
 import base64
 import hashlib
 import json
+
+# Filter noisy OneLLM cache warnings that don't affect functionality
+import logging
 import mimetypes
 import random
 import re
@@ -72,8 +75,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from .. import observability
-
 # File processing imports
 # Required runtime dependencies
 import aiofiles
@@ -81,21 +82,20 @@ import magic
 
 # Import OneLLM components
 from onellm import ChatCompletion, Embedding
+from onellm import init_cache as onellm_init_cache
 from onellm.audio import AudioTranscription
 from onellm.config import set_api_key
-from onellm.errors import AuthenticationError, RateLimitError, InvalidRequestError
-from onellm import init_cache as onellm_init_cache
+from onellm.errors import AuthenticationError, InvalidRequestError, RateLimitError
+
+from .. import observability
 
 # Import multimodal components
 from ..multimodal import (
-    MultiModalFusionEngine,
-    MultiModalContent,
     ModalityType,
+    MultiModalContent,
+    MultiModalFusionEngine,
     ProcessingMode,
 )
-
-# Filter noisy OneLLM cache warnings that don't affect functionality
-import logging
 
 
 class OneLLMCacheWarningFilter(logging.Filter):
@@ -167,10 +167,12 @@ def initialize_onellm_cache(cache_config: Optional[Dict[str, Any]] = None) -> bo
     onellm_init_cache(**cache_params)
 
     # Convert to InitEventFormatter (user: say "LLM cache" not "OneLLM cache")
-    print(observability.InitEventFormatter.format_info(
-        f"LLM cache: {cache_params['max_entries']} max entries, "
-        f"{cache_params['p']} similarity, {cache_params['ttl']}s TTL"
-    ))
+    print(
+        observability.InitEventFormatter.format_info(
+            f"LLM cache: {cache_params['max_entries']} max entries, "
+            f"{cache_params['p']} similarity, {cache_params['ttl']}s TTL"
+        )
+    )
 
     _cache_initialized = True
     return True
@@ -265,7 +267,11 @@ class FileProcessor:
                 observability.observe(
                     event_type=observability.ErrorEvents.RESOURCE_EXHAUSTED,
                     level=observability.EventLevel.WARNING,
-                    data={"file_path": str(file_path), "file_size": file_size, "limit": FILE_SIZE_LIMITS["default"]},
+                    data={
+                        "file_path": str(file_path),
+                        "file_size": file_size,
+                        "limit": FILE_SIZE_LIMITS["default"],
+                    },
                     description=f"File size {file_size} exceeds limit {FILE_SIZE_LIMITS['default']}",
                 )
                 return False
@@ -278,7 +284,7 @@ class FileProcessor:
                     data={
                         "file_path": str(file_path),
                         "extension": file_path.suffix.lower(),
-                        "blocked_extensions": [".exe", ".bat", ".sh", ".scr"]
+                        "blocked_extensions": [".exe", ".bat", ".sh", ".scr"],
                     },
                     description="File blocked due to dangerous extension (security policy)",
                 )

@@ -5,12 +5,13 @@ This module provides tools for validating formation configurations,
 detecting common issues, and ensuring configurations are well-formed.
 """
 
-from typing import Dict, List, Any, Optional, Union
-from pathlib import Path
-import yaml
+import asyncio
 import json
 import re
-import asyncio
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
+import yaml
 
 # Import the MCP registry to get valid MCP names dynamically
 from ...services.mcp.built_in import BUILTIN_MCP_REGISTRY
@@ -237,7 +238,9 @@ class FormationValidator:
                 formation_file = dir_path / "formation.yml"
 
             if not formation_file.exists():
-                self.result.add_error("Missing formation config file (formation.afs/yaml/yml) in modular formation")
+                self.result.add_error(
+                    "Missing formation config file (formation.afs/yaml/yml) in modular formation"
+                )
                 return
 
             # Load main formation config
@@ -425,8 +428,6 @@ class FormationValidator:
                 self.result.add_error(
                     "user_credentials.encryption_key must be null or a non-empty string"
                 )
-
-
 
     def _validate_agents(self, agents_config: List[Dict[str, Any]], is_inline: bool = True) -> None:
         """Validate agents configuration.
@@ -1039,7 +1040,11 @@ class FormationValidator:
             return
 
         # Check for agent files (support .afs, .yaml, .yml)
-        agent_files = list(agents_dir.glob("*.afs")) + list(agents_dir.glob("*.yaml")) + list(agents_dir.glob("*.yml"))
+        agent_files = (
+            list(agents_dir.glob("*.afs"))
+            + list(agents_dir.glob("*.yaml"))
+            + list(agents_dir.glob("*.yml"))
+        )
         if not agent_files:
             self.result.add_warning("No agent configuration files found in agents/ directory")
 
@@ -1074,7 +1079,9 @@ class FormationValidator:
             return
 
         # Check for MCP files (support .afs, .yaml, .yml)
-        mcp_files = list(mcp_dir.glob("*.afs")) + list(mcp_dir.glob("*.yaml")) + list(mcp_dir.glob("*.yml"))
+        mcp_files = (
+            list(mcp_dir.glob("*.afs")) + list(mcp_dir.glob("*.yaml")) + list(mcp_dir.glob("*.yml"))
+        )
         if not mcp_files:
             self.result.add_warning("No MCP configuration files found in mcp/ directory")
 
@@ -1109,7 +1116,9 @@ class FormationValidator:
             return
 
         # Check for A2A files (support .afs, .yaml, .yml)
-        a2a_files = list(a2a_dir.glob("*.afs")) + list(a2a_dir.glob("*.yaml")) + list(a2a_dir.glob("*.yml"))
+        a2a_files = (
+            list(a2a_dir.glob("*.afs")) + list(a2a_dir.glob("*.yaml")) + list(a2a_dir.glob("*.yml"))
+        )
         if not a2a_files:
             self.result.add_warning("No A2A configuration files found in a2a/ directory")
             return
@@ -1228,7 +1237,15 @@ class FormationValidator:
                 continue
 
             # Find the capability (text, vision, audio, video, documents, embedding, streaming)
-            known_capabilities = {"text", "vision", "audio", "video", "documents", "embedding", "streaming"}
+            known_capabilities = {
+                "text",
+                "vision",
+                "audio",
+                "video",
+                "documents",
+                "embedding",
+                "streaming",
+            }
             capability_fields = set(model_config.keys()) & known_capabilities
 
             if not capability_fields:
@@ -1707,7 +1724,9 @@ class FormationValidator:
                 return
 
             if len(streams) == 0:
-                self.result.add_warning("Logging conversation streams array is empty - no conversation logging will occur")
+                self.result.add_warning(
+                    "Logging conversation streams array is empty - no conversation logging will occur"
+                )
 
             # Validate each stream
             for i, stream in enumerate(streams):
@@ -1952,7 +1971,9 @@ class FormationValidator:
         if "max_extraction_tokens" in llm_config:
             tokens = llm_config["max_extraction_tokens"]
             if not isinstance(tokens, int) or tokens <= 0:
-                self.result.add_error("overlord.llm.max_extraction_tokens must be a positive integer")
+                self.result.add_error(
+                    "overlord.llm.max_extraction_tokens must be a positive integer"
+                )
 
         # Validate settings
         if "settings" in llm_config:
@@ -1993,7 +2014,9 @@ class FormationValidator:
         if "plan_approval_threshold" in workflow_config:
             threshold = workflow_config["plan_approval_threshold"]
             if not isinstance(threshold, (int, float)) or threshold < 1 or threshold > 10:
-                self.result.add_error("workflow.plan_approval_threshold must be a number between 1 and 10")
+                self.result.add_error(
+                    "workflow.plan_approval_threshold must be a number between 1 and 10"
+                )
 
         # Validate complexity settings
         if "complexity_method" in workflow_config:
@@ -2007,7 +2030,9 @@ class FormationValidator:
         if "complexity_threshold" in workflow_config:
             threshold = workflow_config["complexity_threshold"]
             if not isinstance(threshold, (int, float)) or threshold < 1 or threshold > 10:
-                self.result.add_error("workflow.complexity_threshold must be a number between 1 and 10")
+                self.result.add_error(
+                    "workflow.complexity_threshold must be a number between 1 and 10"
+                )
 
         # Allow any additional workflow configuration fields for extensibility
 
@@ -2196,9 +2221,7 @@ class FormationValidator:
         # Validate type-specific auth requirements
         if auth_type == "api_key":
             if "key" not in auth_config:
-                self.result.add_error(
-                    f"A2A service {filename} api_key auth requires 'key' field"
-                )
+                self.result.add_error(f"A2A service {filename} api_key auth requires 'key' field")
             if "header" in auth_config and not isinstance(auth_config["header"], str):
                 self.result.add_error(f"A2A service {filename} auth header must be a string")
 
@@ -2323,17 +2346,13 @@ class FormationValidator:
             required_basic_fields = ["username", "password"]
             for field in required_basic_fields:
                 if field not in auth_config:
-                    self.result.add_error(
-                        f"A2A inbound basic auth requires '{field}' field"
-                    )
+                    self.result.add_error(f"A2A inbound basic auth requires '{field}' field")
 
         elif auth_type == "custom":
             if "headers" not in auth_config:
                 self.result.add_error("A2A inbound custom auth requires 'headers' field")
             elif not isinstance(auth_config["headers"], dict):
-                self.result.add_error(
-                    "A2A inbound custom auth headers must be a dictionary"
-                )
+                self.result.add_error("A2A inbound custom auth headers must be a dictionary")
 
     def _validate_scheduler_config(self, scheduler_config: Dict[str, Any]) -> None:
         """Validate scheduler configuration."""

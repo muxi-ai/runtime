@@ -161,9 +161,7 @@ class BufferMemoryManager:
                 score = item.get("score", 1.0)  # Default to 1.0 for recency search
                 results.append(
                     {
-                        "text": item.get(
-                            "text", ""
-                        ),  # WorkingMemory returns 'text' not 'content'
+                        "text": item.get("text", ""),  # WorkingMemory returns 'text' not 'content'
                         "metadata": item.get("metadata", {}),
                         "distance": 1.0 - score,  # Convert score to distance
                         "source": "buffer",

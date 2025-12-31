@@ -1,5 +1,3 @@
-
-
 from .discovery import MCPTemplateDiscovery
 
 __all__ = [

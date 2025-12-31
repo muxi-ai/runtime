@@ -12,8 +12,8 @@ Features:
 """
 
 import time
-from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 from ....services import observability
 
@@ -182,7 +182,7 @@ class DocumentSummarizer:
         batch_size = 5  # Process 5 chunks at a time
 
         for i in range(0, len(document_chunks), batch_size):
-            batch = document_chunks[i:i + batch_size]
+            batch = document_chunks[i : i + batch_size]
             batch_content = "\n\n".join([chunk["content"] for chunk in batch])
 
             # Generate summary for this batch

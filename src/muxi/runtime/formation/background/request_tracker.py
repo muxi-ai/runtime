@@ -57,14 +57,14 @@ class RequestState:
     def get_created_timestamp(self) -> Optional[float]:
         """
         Get the creation timestamp for this request.
-        
+
         Returns created_at if available, otherwise falls back to start_time.
         This provides a canonical accessor for timestamp resolution.
-        
+
         Returns:
             Timestamp as float, or None if neither field exists
         """
-        return getattr(self, 'created_at', None) or getattr(self, 'start_time', None)
+        return getattr(self, "created_at", None) or getattr(self, "start_time", None)
 
 
 class RequestTracker:
@@ -139,7 +139,7 @@ class RequestTracker:
     async def mark_cancelled(self, request_id: str) -> None:
         """
         Mark request as cancelled for cooperative cancellation.
-        
+
         This adds the request_id to a set that processing checkpoints
         will check. When a checkpoint detects cancellation, it will
         raise RequestCancelledException.
@@ -153,7 +153,7 @@ class RequestTracker:
     def is_cancelled(self, request_id: str) -> bool:
         """
         Check if request is marked as cancelled.
-        
+
         This is intentionally synchronous (no lock) for use in
         the cancellable decorator without blocking.
 
@@ -168,7 +168,7 @@ class RequestTracker:
     async def clear_cancelled(self, request_id: str) -> None:
         """
         Remove request from cancelled set.
-        
+
         Called when cancellation has been processed (exception raised).
 
         Args:

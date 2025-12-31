@@ -7,11 +7,11 @@ context fusion, cross-modal attention mechanisms, and unified task processing.
 
 import asyncio
 import json
+import re
 import time
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from dataclasses import dataclass, field
 from enum import Enum
-import re
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from .. import observability
 
@@ -157,7 +157,11 @@ class TextProcessor(ModalityProcessor):
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "process_text_content", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "process_text_content",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Text content processing failed in multimodal fusion",
             )
             return {"error": str(e), "processed_text": content.content}
@@ -194,7 +198,11 @@ Extract features as JSON:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "extract_features", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "extract_features",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Feature extraction failed in multimodal fusion",
             )
             return {
@@ -232,7 +240,11 @@ Analyze and provide as JSON:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "extract_concepts", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "extract_concepts",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Concept extraction failed in multimodal fusion",
             )
             return {"main_concepts": [], "domain": "general"}
@@ -261,7 +273,11 @@ Analyze and provide as JSON:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "generate_embedding", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "generate_embedding",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Embedding generation failed in multimodal fusion",
             )
             # Try local embeddings as last resort
@@ -277,8 +293,8 @@ Analyze and provide as JSON:
         Generate a semantically meaningful fallback embedding based on
         linguistic and statistical features instead of random hash bits.
         """
-        import re
         import math
+        import re
 
         # Normalize text
         text_lower = text.lower()
@@ -479,7 +495,11 @@ Analyze and provide as JSON:
             observability.observe(
                 event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "parse_json_response", "error": "json_decode_error", "error_details": str(e)},
+                data={
+                    "operation": "parse_json_response",
+                    "error": "json_decode_error",
+                    "error_details": str(e),
+                },
                 description="JSON decode error in LLM response",
             )
             return {}
@@ -491,7 +511,7 @@ Analyze and provide as JSON:
                     "operation": "parse_json_response",
                     "error": "unexpected_error",
                     "error_type": type(e).__name__,
-                    "error_details": str(e)
+                    "error_details": str(e),
                 },
                 description="Unexpected error parsing JSON in LLM response",
             )
@@ -533,7 +553,11 @@ class ImageProcessor(ModalityProcessor):
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "process_image_content", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "process_image_content",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Image content processing failed in multimodal fusion",
             )
             return {"error": str(e)}
@@ -555,7 +579,11 @@ class ImageProcessor(ModalityProcessor):
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "extract_image_features", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "extract_image_features",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Image feature extraction failed in multimodal fusion",
             )
             return {}
@@ -581,7 +609,11 @@ class ImageProcessor(ModalityProcessor):
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "extract_image_features", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "extract_image_features",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Image feature extraction failed in multimodal fusion",
             )
             return {}
@@ -606,7 +638,11 @@ class ImageProcessor(ModalityProcessor):
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "analyze_image_with_vision", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "analyze_image_with_vision",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Vision analysis failed in multimodal fusion",
             )
             return {"description": "Vision analysis unavailable"}
@@ -690,7 +726,11 @@ class AudioProcessor(ModalityProcessor):
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "process_image_content", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "process_image_content",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Image content processing failed in multimodal fusion",
             )
             return {"error": str(e)}
@@ -711,7 +751,11 @@ class AudioProcessor(ModalityProcessor):
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "extract_image_features", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "extract_image_features",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Image feature extraction failed in multimodal fusion",
             )
             return {}
@@ -731,7 +775,11 @@ class AudioProcessor(ModalityProcessor):
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "extract_image_features", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "extract_image_features",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Image feature extraction failed in multimodal fusion",
             )
             return {}
@@ -751,7 +799,11 @@ class AudioProcessor(ModalityProcessor):
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "transcribe_audio", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "transcribe_audio",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Audio transcription failed in multimodal fusion",
             )
             return {"transcription": "", "has_speech": False}
@@ -870,9 +922,7 @@ class MultiModalFusionEngine:
                     "modality_count": len(content_items),
                     "fusion_quality": fusion_quality,
                     "processing_time_ms": sum(
-                        item.processing_time_ms
-                        for item in content_items
-                        if item.processing_time_ms
+                        item.processing_time_ms for item in content_items if item.processing_time_ms
                     ),
                 },
                 description=(
@@ -891,7 +941,7 @@ class MultiModalFusionEngine:
                     "operation": "fuse_multi_modal_content",
                     "error_type": type(e).__name__,
                     "error": str(e),
-                    "modality_count": len(content_items)
+                    "modality_count": len(content_items),
                 },
                 description="Multi-modal fusion failed, using fallback",
             )
@@ -987,7 +1037,11 @@ class MultiModalFusionEngine:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "compute_cross_modal_attention", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "compute_cross_modal_attention",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Cross-modal attention computation failed",
             )
             return CrossModalAttention(
@@ -1035,7 +1089,11 @@ Provide only the numerical score:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "assess_fusion_quality", "error_type": type(e).__name__, "error": str(e)},
+                data={
+                    "operation": "assess_fusion_quality",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
                 description="Fusion quality assessment failed",
             )
             return 0.5
@@ -1134,7 +1192,7 @@ Create a comprehensive fusion analysis as JSON:
                 data={
                     "operation": "synthesize_unified_representation",
                     "error_type": type(e).__name__,
-                    "error": str(e)
+                    "error": str(e),
                 },
                 description="Unified representation synthesis failed",
             )
@@ -1261,7 +1319,11 @@ Create a comprehensive fusion analysis as JSON:
             observability.observe(
                 event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                 level=observability.EventLevel.WARNING,
-                data={"operation": "parse_json_response", "error": "json_decode_error", "error_details": str(e)},
+                data={
+                    "operation": "parse_json_response",
+                    "error": "json_decode_error",
+                    "error_details": str(e),
+                },
                 description="JSON decode error in LLM response",
             )
             return {}
@@ -1273,7 +1335,7 @@ Create a comprehensive fusion analysis as JSON:
                     "operation": "parse_json_response",
                     "error": "unexpected_error",
                     "error_type": type(e).__name__,
-                    "error_details": str(e)
+                    "error_details": str(e),
                 },
                 description="Unexpected error parsing JSON in LLM response",
             )

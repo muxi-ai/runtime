@@ -3,7 +3,8 @@ Utility functions for the Formation server.
 """
 
 import re
-from typing import Optional, List, Dict, Any, Set, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+
 from starlette.datastructures import Headers
 
 if TYPE_CHECKING:
@@ -81,7 +82,7 @@ def mask_secret_value(
     # Check for protocols (preserve these)
     protocol_match = re.match(r"^([a-zA-Z][a-zA-Z0-9+.-]*://)", secret_value)
     protocol = protocol_match.group(1) if protocol_match else ""
-    value_after_protocol = secret_value[len(protocol):]
+    value_after_protocol = secret_value[len(protocol) :]
 
     # Check for common API key prefixes
     prefix_len = 0
@@ -296,11 +297,11 @@ def render_trigger_template(template: str, data: Dict[str, Any]) -> str:
         'Label: bug'
     """
     # Pattern matches: ${{ data.key }}, ${{ data.nested.key }}, etc.
-    pattern = re.compile(r'\$\{\{\s*data\.([a-zA-Z0-9_.]+)\s*\}\}')
+    pattern = re.compile(r"\$\{\{\s*data\.([a-zA-Z0-9_.]+)\s*\}\}")
 
     def replace_data(match):
         key_path = match.group(1)
-        keys = key_path.split('.')
+        keys = key_path.split(".")
         value = data
 
         # Navigate through nested dict/list structure

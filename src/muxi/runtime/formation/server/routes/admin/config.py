@@ -7,16 +7,17 @@ requiring admin API key authentication.
 
 import time
 from copy import deepcopy
+
+import psutil
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-import psutil
 
+from .....datatypes.api import APIEventType, APIObjectType
 from ...responses import (
     APIResponse,
     create_success_response,
 )
 from ...secrets import restore_secret_placeholders
-from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["Configuration"])
 
@@ -38,47 +39,34 @@ async def get_formation_config(request: Request) -> JSONResponse:
         "version": formation.config.get("version", "1.0.0"),
         "description": formation.config.get("description", ""),
         "schema_version": formation.config.get("schema", "1.0.0"),
-        "agents": {
-            "total": len(formation.config.get("agents", [])),
-            "resource": "/v1/agents"
-        },
-        "secrets": {
-            "total": formation.get_secrets_count(),
-            "resource": "/v1/secrets"
-        },
+        "agents": {"total": len(formation.config.get("agents", [])), "resource": "/v1/agents"},
+        "secrets": {"total": formation.get_secrets_count(), "resource": "/v1/secrets"},
         "mcp": {
-            "default_retry_attempts": formation.config.get("mcp", {}).get("default_retry_attempts", 3),
-            "default_timeout_seconds": formation.config.get("mcp", {}).get("default_timeout_seconds", 30),
+            "default_retry_attempts": formation.config.get("mcp", {}).get(
+                "default_retry_attempts", 3
+            ),
+            "default_timeout_seconds": formation.config.get("mcp", {}).get(
+                "default_timeout_seconds", 30
+            ),
             "servers": {
                 "total": len(formation.config.get("mcp", {}).get("servers", [])),
-                "resource": "/v1/mcp/servers"
-            }
+                "resource": "/v1/mcp/servers",
+            },
         },
-        "overlord": {
-            "resource": "/v1/overlord"
-        },
-        "llm": {
-            "resource": "/v1/llm/settings"
-        },
-        "memory": {
-            "resource": "/v1/memory"
-        },
-        "async": {
-            "resource": "/v1/async"
-        },
-        "scheduler": {
-            "resource": "/v1/scheduler"
-        },
-        "a2a": {
-            "resource": "/v1/a2a"
-        },
-        "logging": {
-            "resource": "/v1/logging"
-        }
+        "overlord": {"resource": "/v1/overlord"},
+        "llm": {"resource": "/v1/llm/settings"},
+        "memory": {"resource": "/v1/memory"},
+        "async": {"resource": "/v1/async"},
+        "scheduler": {"resource": "/v1/scheduler"},
+        "a2a": {"resource": "/v1/a2a"},
+        "logging": {"resource": "/v1/logging"},
     }
 
     response = create_success_response(
-        APIObjectType.FORMATION_CONFIG, APIEventType.FORMATION_CONFIG_RETRIEVED, config_summary, request_id
+        APIObjectType.FORMATION_CONFIG,
+        APIEventType.FORMATION_CONFIG_RETRIEVED,
+        config_summary,
+        request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -116,16 +104,16 @@ async def get_formation_status(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     # Get server instance if available
-    server = getattr(formation, '_server', None)
+    server = getattr(formation, "_server", None)
 
     # Calculate uptime
     uptime_seconds = 0
     request_count = 0
     if server:
         # Check for required attributes before accessing them
-        if hasattr(server, '_start_time'):
+        if hasattr(server, "_start_time"):
             uptime_seconds = int(time.time() - server._start_time)
-        if hasattr(server, '_request_count'):
+        if hasattr(server, "_request_count"):
             request_count = server._request_count
 
     # Use formation id as default name if name not specified
@@ -164,22 +152,34 @@ async def get_formation_status(request: Request) -> JSONResponse:
         },
         "mcp_servers": {
             "count": len(formation.config.get("mcp", {}).get("servers", [])),
-            "active": sum(1 for s in formation.config.get("mcp", {}).get("servers", []) if s.get("active", True)),
+            "active": sum(
+                1
+                for s in formation.config.get("mcp", {}).get("servers", [])
+                if s.get("active", True)
+            ),
         },
         "stats": {
             "running": {
                 "seconds": uptime_seconds,
-                "since": int(server._start_time) if server and hasattr(server, '_start_time') else int(time.time()),
+                "since": (
+                    int(server._start_time)
+                    if server and hasattr(server, "_start_time")
+                    else int(time.time())
+                ),
             },
             "memory": {
-                "working_memory_mb": formation.config.get("memory", {}).get("working", {}).get("max_memory_mb", 512),
+                "working_memory_mb": formation.config.get("memory", {})
+                .get("working", {})
+                .get("max_memory_mb", 512),
                 "memory_usage_mb": memory_usage_mb,
             },
             "requests": {
                 "total": request_count,
-                "active": max(0, len(server._active_connections) - 1) if server and hasattr(
-                    server, '_active_connections') else 0,  # Subtract current request
-
+                "active": (
+                    max(0, len(server._active_connections) - 1)
+                    if server and hasattr(server, "_active_connections")
+                    else 0
+                ),  # Subtract current request
             },
             "buffer_size": formation.config.get("memory", {}).get("buffer", {}).get("size", 1000),
             "cpu_percent": cpu_percent,

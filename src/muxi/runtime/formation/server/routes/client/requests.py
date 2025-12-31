@@ -10,15 +10,15 @@ Supports both ClientKey and AdminKey authentication:
 import secrets
 from typing import Optional, Tuple
 
-from fastapi import APIRouter, Request, Header
+from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 
+from .....datatypes.api import APIEventType, APIObjectType
 from ...responses import (
     APIResponse,
     create_error_response,
     create_success_response,
 )
-from .....datatypes.api import APIObjectType, APIEventType
 
 router = APIRouter(tags=["Requests"])
 
@@ -52,7 +52,11 @@ def _check_auth_and_user_id(
     is_admin = False
     if provided_admin_key and admin_key and secrets.compare_digest(provided_admin_key, admin_key):
         is_admin = True
-    elif provided_client_key and client_key and secrets.compare_digest(provided_client_key, client_key):
+    elif (
+        provided_client_key
+        and client_key
+        and secrets.compare_digest(provided_client_key, client_key)
+    ):
         is_admin = False
     else:
         # Auth should have been validated by middleware, but just in case
@@ -116,8 +120,7 @@ async def list_requests(
     # Filter by user_id if provided (required for client, optional for admin)
     if user_id:
         filtered_requests = {
-            req_id: state for req_id, state in all_requests.items()
-            if state.user_id == user_id
+            req_id: state for req_id, state in all_requests.items() if state.user_id == user_id
         }
     else:
         # Admin without user filter - return all

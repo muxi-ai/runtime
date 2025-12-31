@@ -6,13 +6,13 @@ isolation for complete fault tolerance and true parallelism.
 """
 
 import asyncio
-import aiohttp
-import time
 import multiprocessing
-from typing import Dict, Any, List, Optional, Tuple
-from urllib.parse import urlparse
+import time
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
+import aiohttp
 import multitasking
 
 from .manager import HealthManager

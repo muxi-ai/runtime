@@ -11,8 +11,9 @@ as agents loaded during initialization, including:
 """
 
 import logging
-from typing import Dict, Any, Tuple, TYPE_CHECKING
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, Tuple
+
 from muxi.runtime.formation.config.loader import ConfigLoader
 
 if TYPE_CHECKING:
@@ -29,9 +30,7 @@ _config_loader = ConfigLoader()
 
 
 async def process_agent_for_runtime(
-    formation: "Formation",
-    agent_config: Dict[str, Any],
-    agent_id: str
+    formation: "Formation", agent_config: Dict[str, Any], agent_id: str
 ) -> Tuple[Dict[str, Any], Dict[str, str]]:
     """
     Process an agent configuration for runtime addition.
@@ -54,17 +53,16 @@ async def process_agent_for_runtime(
         ValueError: If required secrets are missing or config is invalid
     """
     # 1. Process secrets (same as initialization)
-    if not hasattr(formation, 'secrets_manager') or not formation.secrets_manager:
+    if not hasattr(formation, "secrets_manager") or not formation.secrets_manager:
         raise RuntimeError("SecretsManager not available for secret processing")
 
     # Process secrets using the same method as initialization
     processed_config, secrets_used, placeholders = await _config_loader.process_secrets(
-        agent_config,
-        formation.secrets_manager
+        agent_config, formation.secrets_manager
     )
 
     # 2. Track secrets in formation's used secrets
-    if hasattr(formation, 'track_used_secrets'):
+    if hasattr(formation, "track_used_secrets"):
         formation.track_used_secrets(secrets_used)
 
     # 3. Ensure agent has required fields (same as initialization)
@@ -104,9 +102,7 @@ async def process_agent_for_runtime(
             server_id = server_config.get("id")
             if server_id:
                 if server_id in server_ids:
-                    raise ValueError(
-                        f"Agent {agent_id} has duplicate MCP server id: {server_id}"
-                    )
+                    raise ValueError(f"Agent {agent_id} has duplicate MCP server id: {server_id}")
                 server_ids.add(server_id)
 
             # Validate type field
@@ -174,8 +170,7 @@ async def process_agent_for_runtime(
 
 
 async def add_agent_to_overlord_runtime(
-    formation: "Formation",
-    processed_config: Dict[str, Any]
+    formation: "Formation", processed_config: Dict[str, Any]
 ) -> str:
     """
     Add a processed agent to the running overlord.

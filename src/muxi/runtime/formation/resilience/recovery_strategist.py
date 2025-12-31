@@ -8,10 +8,10 @@ error types, context, and historical success rates.
 from typing import Dict, List, Optional
 
 from ...datatypes.resilience import (
-    ErrorType,
-    ErrorSeverity,
-    RecoveryStrategy,
     ErrorContext,
+    ErrorSeverity,
+    ErrorType,
+    RecoveryStrategy,
     ResilienceConfig,
 )
 from ...services import observability

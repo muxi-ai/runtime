@@ -20,12 +20,12 @@ import subprocess
 import sys
 import tempfile
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Set
-from datetime import datetime
 
-from .processor import create_artifact_from_file
 from ...datatypes.artifacts import MuxiArtifact
+from .processor import create_artifact_from_file
 
 # Whitelist of allowed imports for file generation
 ALLOWED_IMPORTS: Set[str] = {

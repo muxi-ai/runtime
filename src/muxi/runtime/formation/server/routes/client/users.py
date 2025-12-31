@@ -6,28 +6,35 @@ requiring client API key authentication.
 """
 
 from datetime import timezone
-from typing import Optional, List, Any
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from .....datatypes.api import APIEventType, APIObjectType
+from .....services import observability
+from .....utils.user_resolution import resolve_user_identifier
 from ...responses import (
     APIResponse,
-    create_success_response,
     create_error_response,
+    create_success_response,
 )
-from .....datatypes.api import APIEventType, APIObjectType
-from .....utils.user_resolution import resolve_user_identifier
-from .....services import observability
 
 router = APIRouter(tags=["Users"])
 
 
 class AssociateIdentifiersRequest(BaseModel):
     """Request model for associating multiple identifiers to a user."""
-    muxi_user_id: Optional[str] = Field(None, description="MUXI user ID to associate identifiers to. If not provided, creates a new user.")
-    identifiers: List[Any] = Field(..., description="List of identifiers (strings, [id, type] arrays, or {identifier, type} objects)")
+
+    muxi_user_id: Optional[str] = Field(
+        None,
+        description="MUXI user ID to associate identifiers to. If not provided, creates a new user.",
+    )
+    identifiers: List[Any] = Field(
+        ...,
+        description="List of identifiers (strings, [id, type] arrays, or {identifier, type} objects)",
+    )
 
 
 @router.get("/users/identifiers/{user_id}", response_model=APIResponse)
@@ -58,14 +65,13 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
 
     try:
         # Query database for user and their identifiers
-        from .....services.memory.long_term import User, UserIdentifier
         from sqlalchemy import select
+
+        from .....services.memory.long_term import User, UserIdentifier
 
         async with db_manager.get_session() as session:
             # Find user by public_id (muxi_user_id)
-            result = await session.execute(
-                select(User).where(User.public_id == user_id)
-            )
+            result = await session.execute(select(User).where(User.public_id == user_id))
             user = result.scalar_one_or_none()
 
             if not user:
@@ -81,7 +87,7 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
             result = await session.execute(
                 select(UserIdentifier).where(
                     UserIdentifier.user_id == user.id,
-                    UserIdentifier.formation_id == formation.formation_id
+                    UserIdentifier.formation_id == formation.formation_id,
                 )
             )
             identifiers = result.scalars().all()
@@ -94,8 +100,7 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
                     "created_at": (
                         id_obj.created_at.astimezone(timezone.utc).isoformat()
                         if id_obj.created_at and id_obj.created_at.tzinfo
-                        else id_obj.created_at.isoformat() + "Z" if id_obj.created_at
-                        else None
+                        else id_obj.created_at.isoformat() + "Z" if id_obj.created_at else None
                     ),
                 }
                 for id_obj in identifiers
@@ -137,7 +142,9 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
 
 
 @router.post("/users/identifiers", response_model=APIResponse)
-async def associate_user_identifiers(request: Request, body: AssociateIdentifiersRequest) -> JSONResponse:
+async def associate_user_identifiers(
+    request: Request, body: AssociateIdentifiersRequest
+) -> JSONResponse:
     """
     Associate multiple identifiers to a user.
 
@@ -166,9 +173,11 @@ async def associate_user_identifiers(request: Request, body: AssociateIdentifier
         return JSONResponse(content=response.model_dump(), status_code=503)
 
     try:
-        from .....services.memory.long_term import User, UserIdentifier
-        from sqlalchemy import select
         import uuid
+
+        from sqlalchemy import select
+
+        from .....services.memory.long_term import User, UserIdentifier
 
         async with db_manager.get_session() as session:
             user = None
@@ -176,9 +185,7 @@ async def associate_user_identifiers(request: Request, body: AssociateIdentifier
 
             # Find or create user
             if muxi_user_id:
-                result = await session.execute(
-                    select(User).where(User.public_id == muxi_user_id)
-                )
+                result = await session.execute(select(User).where(User.public_id == muxi_user_id))
                 user = result.scalar_one_or_none()
                 if not user:
                     response = create_error_response(
@@ -218,7 +225,7 @@ async def associate_user_identifiers(request: Request, body: AssociateIdentifier
                 result = await session.execute(
                     select(UserIdentifier).where(
                         UserIdentifier.identifier == identifier,
-                        UserIdentifier.formation_id == formation.formation_id
+                        UserIdentifier.formation_id == formation.formation_id,
                     )
                 )
                 existing = result.scalar_one_or_none()
@@ -239,10 +246,12 @@ async def associate_user_identifiers(request: Request, body: AssociateIdentifier
                     )
                     session.add(new_identifier)
 
-                associated.append({
-                    "identifier": identifier,
-                    "type": identifier_type or "unknown",
-                })
+                associated.append(
+                    {
+                        "identifier": identifier,
+                        "type": identifier_type or "unknown",
+                    }
+                )
 
                 # Invalidate cache (KV cache not yet implemented)
                 # kv_cache = None
@@ -312,15 +321,16 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
         return JSONResponse(content=response.model_dump(), status_code=503)
 
     try:
-        from .....services.memory.long_term import UserIdentifier, User
-        from sqlalchemy import select, delete
+        from sqlalchemy import delete, select
+
+        from .....services.memory.long_term import User, UserIdentifier
 
         async with db_manager.get_session() as session:
             # Find the identifier
             result = await session.execute(
                 select(UserIdentifier).where(
                     UserIdentifier.identifier == identifier,
-                    UserIdentifier.formation_id == formation.formation_id
+                    UserIdentifier.formation_id == formation.formation_id,
                 )
             )
             id_obj = result.scalar_one_or_none()
@@ -336,16 +346,12 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
 
             # Get user info before deletion
             user_id = id_obj.user_id
-            result = await session.execute(
-                select(User).where(User.id == user_id)
-            )
+            result = await session.execute(select(User).where(User.id == user_id))
             user = result.scalar_one_or_none()
             muxi_user_id = user.public_id if user else None
 
             # Delete the identifier
-            await session.execute(
-                delete(UserIdentifier).where(UserIdentifier.id == id_obj.id)
-            )
+            await session.execute(delete(UserIdentifier).where(UserIdentifier.id == id_obj.id))
             await session.commit()
 
             # Invalidate cache (KV cache not yet implemented)

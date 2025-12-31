@@ -6,9 +6,11 @@ for both internal and external agents, only differing in transport.
 """
 
 import asyncio
-from typing import Optional, Dict, Any, Union
-from a2a.types import Message, TextPart, DataPart, Role, MessageSendParams
+from typing import Any, Dict, Optional, Union
+
 from a2a.client.middleware import ClientCallContext
+from a2a.types import DataPart, Message, MessageSendParams, Role, TextPart
+
 from ...utils.id_generator import generate_nanoid
 
 
@@ -218,8 +220,9 @@ class UnifiedA2AMessaging:
                         client = A2AClient(httpx_client=http_client, url=target_agent_url)
 
                         # Create request with params
-                        from a2a.types import SendMessageRequest
                         import time
+
+                        from a2a.types import SendMessageRequest
 
                         # The A2A SDK expects params to be a dict with 'message' key
                         # Convert MessageSendParams to dict format

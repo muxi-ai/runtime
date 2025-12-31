@@ -6,10 +6,11 @@ between event storage and subscription/transport mechanisms.
 """
 
 import asyncio
-import time
-import threading
 import signal
-from typing import Dict, Optional, Any
+import threading
+import time
+from typing import Any, Dict, Optional
+
 import multitasking
 
 # Set multitasking to thread mode for shared memory access
@@ -38,10 +39,7 @@ class StreamingManager:
         """Enable streaming with ownership tracking"""
         with self._lock:
             if request_id not in self.event_streams:
-                self.event_streams[request_id] = {
-                    "owner": (user_id, session_id),
-                    "events": []
-                }
+                self.event_streams[request_id] = {"owner": (user_id, session_id), "events": []}
 
     def emit_event(self, request_id: str, event_type: str, content: str, **metadata):
         """Simple event storage - just in-memory dict/list operations"""
@@ -59,7 +57,7 @@ class StreamingManager:
                 "type": event_type,
                 "content": content,
                 "timestamp": time.time(),
-                **metadata
+                **metadata,
             }
 
             # Just append to events list (fast in-memory operation)
@@ -158,11 +156,9 @@ def get_streaming_llm_config() -> Optional[Dict[str, Any]]:
 # LLM REPHRASING
 # ===================================================================
 
+
 async def rephrase_with_llm(
-    event_type: str,
-    content: str,
-    metadata: Dict[str, Any],
-    llm_config: Dict[str, Any]
+    event_type: str, content: str, metadata: Dict[str, Any], llm_config: Dict[str, Any]
 ) -> str:
     """
     Rephrase streaming events using LLM for better user experience.
@@ -180,8 +176,8 @@ async def rephrase_with_llm(
         from ..services.llm import LLM
 
         # Extract context from metadata
-        stage = metadata.get('stage', '')
-        original_message = metadata.get('original_message', '')
+        stage = metadata.get("stage", "")
+        original_message = metadata.get("original_message", "")
 
         # Build context-aware prompt
         # For planning events (especially decomposition), we want full detail
@@ -190,7 +186,7 @@ async def rephrase_with_llm(
                 "You are an AI assistant's internal thought process. "
                 "Rephrase the following task decomposition plan as an internal monologue.\n\n"
                 "CRITICAL RULES:\n"
-                "1. Write as if thinking to yourself (first person: \"I need to...\", \"Let me...\")\n"
+                '1. Write as if thinking to yourself (first person: "I need to...", "Let me...")\n'
                 "2. Communicate the FULL plan - this is important information for the user\n"
                 "3. Match the user's language (detect from their message if available)\n"
                 "4. Sound natural and conversational, not robotic\n"
@@ -201,7 +197,7 @@ async def rephrase_with_llm(
                 "You are an AI assistant's internal thought process. "
                 "Rephrase the following progress update as a brief internal monologue.\n\n"
                 "CRITICAL RULES:\n"
-                "1. Write as if thinking to yourself (first person: \"I need to...\", \"Let me...\")\n"
+                '1. Write as if thinking to yourself (first person: "I need to...", "Let me...")\n'
                 "2. Be concise - maximum 1-2 paragraphs\n"
                 "3. Match the user's language (detect from their message if available)\n"
                 "4. Sound natural and conversational, not robotic\n"
@@ -217,15 +213,15 @@ async def rephrase_with_llm(
         )
 
         # Add relevant metadata to prompt
-        if metadata.get('task_count'):
+        if metadata.get("task_count"):
             prompt += f"- Breaking down into {metadata['task_count']} tasks\n"
-        if metadata.get('agent_name'):
+        if metadata.get("agent_name"):
             prompt += f"- Using agent: {metadata['agent_name']}\n"
-        if metadata.get('service'):
+        if metadata.get("service"):
             prompt += f"- Using service: {metadata['service']}\n"
-        if metadata.get('complexity_score'):
+        if metadata.get("complexity_score"):
             prompt += f"- Complexity: {metadata['complexity_score']}/10\n"
-        if metadata.get('selected_agent'):
+        if metadata.get("selected_agent"):
             prompt += f"- Selected: {metadata['selected_agent']}\n"
 
         # Different ending for decomposition vs other events
@@ -236,21 +232,21 @@ async def rephrase_with_llm(
 
         # Initialize LLM with streaming model config
         llm = LLM(
-            model=llm_config['model'],
-            api_key=llm_config.get('api_key'),
-            **llm_config.get('settings', {})
+            model=llm_config["model"],
+            api_key=llm_config.get("api_key"),
+            **llm_config.get("settings", {}),
         )
 
         # Adjust max_tokens based on event type
         # Planning events (especially decomposition) need more tokens for full details
-        max_tokens = 500 if (event_type == "planning" and metadata.get("stage") == "decomposition_complete") else 50
+        max_tokens = (
+            500
+            if (event_type == "planning" and metadata.get("stage") == "decomposition_complete")
+            else 50
+        )
 
         # Generate rephrased content
-        rephrased = await llm.generate_text(
-            prompt,
-            max_tokens=max_tokens,
-            temperature=0.7
-        )
+        rephrased = await llm.generate_text(prompt, max_tokens=max_tokens, temperature=0.7)
 
         # Clean up the response
         rephrased = rephrased.strip()
@@ -267,6 +263,7 @@ async def rephrase_with_llm(
 # STREAMING API
 # ===================================================================
 
+
 def stream(event_type: str, content: str, **metadata):
     """
     Emit a streaming event (non-blocking).
@@ -282,10 +279,11 @@ def stream(event_type: str, content: str, **metadata):
     try:
         # Get request context
         from .observability.context import get_current_request_context
+
         request_context = get_current_request_context()
 
         # Only emit if we have a request_id in context
-        if not (request_context and hasattr(request_context, 'id')):
+        if not (request_context and hasattr(request_context, "id")):
             return
 
         # Check if streaming is enabled for this request
@@ -297,11 +295,11 @@ def stream(event_type: str, content: str, **metadata):
         llm_config = get_streaming_llm_config()
 
         # Check if progress events are disabled (only stream final content)
-        if llm_config and not llm_config.get('progress', True):
+        if llm_config and not llm_config.get("progress", True):
             # When progress is false, only emit terminal events (final response)
             # Allow: completed, content, finalizing (events with actual response)
             # Block: progress, thinking, planning (intermediate progress events)
-            terminal_events = ('completed', 'content', 'finalizing', 'failed', 'cancelled')
+            terminal_events = ("completed", "content", "finalizing", "failed", "cancelled")
             if event_type not in terminal_events:
                 return  # Skip all progress/thinking/planning events to save on LLM costs
 
@@ -313,9 +311,14 @@ def stream(event_type: str, content: str, **metadata):
                 # Also skip rephrasing if explicitly requested via metadata
                 # Skip 'progress' and 'planning' events to avoid semantic cache returning same content
                 # Only 'thinking' events get rephrased (the first contextual event)
-                skip_rephrase = evt_metadata.get('skip_rephrase', False)
-                exclude_types = ('completed', 'content', 'finalizing', 'progress', 'planning')
-                if config and config.get('enabled', False) and evt_type not in exclude_types and not skip_rephrase:
+                skip_rephrase = evt_metadata.get("skip_rephrase", False)
+                exclude_types = ("completed", "content", "finalizing", "progress", "planning")
+                if (
+                    config
+                    and config.get("enabled", False)
+                    and evt_type not in exclude_types
+                    and not skip_rephrase
+                ):
                     # Phase 2: LLM rephrasing for progress/thinking events only
                     # Run async function in sync context
                     rephrased = evt_content  # Default to original content
@@ -366,12 +369,7 @@ def stream(event_type: str, content: str, **metadata):
 
         # Start the background task with all parameters explicit (NOW SYNCHRONOUS)
         _emit_in_background(
-            streaming_manager,
-            request_context.id,
-            event_type,
-            content,
-            metadata,
-            llm_config
+            streaming_manager, request_context.id, event_type, content, metadata, llm_config
         )
 
     except Exception:  # as e:

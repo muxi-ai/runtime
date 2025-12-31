@@ -23,6 +23,7 @@ try:
         add_agent_to_overlord_runtime,
         process_agent_for_runtime,
     )
+
     RUNTIME_IMPORTS_AVAILABLE = True
 except ImportError as e:
     # Log the import error but allow module to load
@@ -61,7 +62,7 @@ def _validate_and_sanitize_agent_id(agent_id: str, agents_dir: Path) -> Path:
         raise ValueError("Agent ID must be a non-empty string")
 
     # Define safe character pattern (alphanumeric, underscore, hyphen)
-    safe_pattern = re.compile(r'^[a-zA-Z0-9_-]+$')
+    safe_pattern = re.compile(r"^[a-zA-Z0-9_-]+$")
     if not safe_pattern.match(agent_id):
         raise ValueError(
             f"Agent ID '{agent_id}' contains unsafe characters. "
@@ -69,7 +70,7 @@ def _validate_and_sanitize_agent_id(agent_id: str, agents_dir: Path) -> Path:
         )
 
     # Check for path separators
-    if any(sep in agent_id for sep in ('/', os.sep)):
+    if any(sep in agent_id for sep in ("/", os.sep)):
         raise ValueError(f"Agent ID '{agent_id}' contains path separators which are not allowed")
 
     # Verify basename equals the original (prevents directory traversal attempts)
@@ -349,10 +350,7 @@ async def update_agent_file(
         # Create temp file in same directory to ensure same filesystem
         agent_dir = os.path.dirname(agent_file_path)
         temp_fd, temp_path = tempfile.mkstemp(
-            suffix='.tmp',
-            prefix='.agent_',
-            dir=agent_dir,
-            text=True
+            suffix=".tmp", prefix=".agent_", dir=agent_dir, text=True
         )
 
         try:

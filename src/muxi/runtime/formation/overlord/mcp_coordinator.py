@@ -5,13 +5,13 @@ This module handles all MCP server registration, tool discovery, and coordinatio
 that was previously embedded in the main Overlord class.
 """
 
-from typing import Dict, List, Optional, Any
 import re
+from typing import Any, Dict, List, Optional
 
-from ...services.mcp.service import MCPService
-from ...services.llm import LLM
-from ...datatypes.schema import MCPServiceSchema
 from ...datatypes import observability
+from ...datatypes.schema import MCPServiceSchema
+from ...services.llm import LLM
+from ...services.mcp.service import MCPService
 from ..credentials import MissingCredentialError
 
 
@@ -428,7 +428,7 @@ class MCPCoordinator:
             observability.observe(
                 event_type=observability.SystemEvents.MCP_SERVER_REGISTERED,
                 level=observability.EventLevel.INFO,
-                data={"server_id": server_id, "tool_count": len(res.get('tools', []))},
+                data={"server_id": server_id, "tool_count": len(res.get("tools", []))},
                 description=f"MCP server '{server_id}' registered successfully",
             )
             return res

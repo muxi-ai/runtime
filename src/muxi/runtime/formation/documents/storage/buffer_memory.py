@@ -12,8 +12,8 @@ Features:
 """
 
 import time
-from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 from .chunk_manager import DocumentChunkManager
 from .metadata_store import DocumentMetadata, DocumentMetadataStore

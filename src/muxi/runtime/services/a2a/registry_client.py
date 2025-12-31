@@ -7,18 +7,18 @@ monitoring across multiple external registries using the official A2A SDK.
 """
 
 import asyncio
-from typing import Dict, List, Optional, Any, Union
-from dataclasses import dataclass
 import time
-import httpx
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Union
 
+import httpx
 from a2a.client import A2AClient
+from a2a.types import AgentCard as SDKAgentCard
 from a2a.types import (
-    AgentCard as SDKAgentCard,
     Message,
-    TextPart,
     Role,
     SendMessageRequest,
+    TextPart,
 )
 
 from .. import observability
@@ -29,6 +29,7 @@ from .models_adapter import ModelsAdapter
 @dataclass
 class RegistryResponse:
     """Response from an external registry operation"""
+
     success: bool
     status_code: Optional[int] = None
     data: Optional[Dict[str, Any]] = None
@@ -39,6 +40,7 @@ class RegistryResponse:
 @dataclass
 class RegistryConfig:
     """Configuration for external registry client"""
+
     timeout_seconds: float = 30.0
     max_retries: int = 3
     retry_delay: float = 1.0
@@ -55,9 +57,7 @@ class A2ARegistryClient:
     """
 
     def __init__(
-        self,
-        registries: Optional[List[str]] = None,
-        config: Optional[RegistryConfig] = None
+        self, registries: Optional[List[str]] = None, config: Optional[RegistryConfig] = None
     ):
         """
         Initialize the SDK-based external registry client.
@@ -79,13 +79,12 @@ class A2ARegistryClient:
                 self.httpx_clients[registry_url] = httpx.AsyncClient(
                     base_url=registry_url,
                     timeout=self.config.timeout_seconds,
-                    headers={"User-Agent": self.config.user_agent}
+                    headers={"User-Agent": self.config.user_agent},
                 )
 
                 # Create SDK client with httpx client
                 self.sdk_clients[registry_url] = A2AClient(
-                    httpx_client=self.httpx_clients[registry_url],
-                    url=registry_url
+                    httpx_client=self.httpx_clients[registry_url], url=registry_url
                 )
 
             # Track registry health
@@ -109,8 +108,8 @@ class A2ARegistryClient:
                     "registries": self.registries,
                     "timeout_seconds": self.config.timeout_seconds,
                     "max_retries": self.config.max_retries,
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
         except Exception as e:
@@ -119,10 +118,7 @@ class A2ARegistryClient:
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to initialize A2A Registry Client (SDK): {str(e)}",
-                data={
-                    "registries_count": len(registries) if registries else 0,
-                    "error": str(e)
-                }
+                data={"registries_count": len(registries) if registries else 0, "error": str(e)},
             )
             raise
 
@@ -135,7 +131,7 @@ class A2ARegistryClient:
 
             # Close all SDK clients if they have close method
             for client in self.sdk_clients.values():
-                if hasattr(client, 'close'):
+                if hasattr(client, "close"):
                     await client.close()
 
             # Emit client close event
@@ -148,7 +144,7 @@ class A2ARegistryClient:
                     "total_registered_agents": sum(
                         len(agents) for agents in self.registered_agents.values()
                     ),
-                }
+                },
             )
 
         except Exception as e:
@@ -157,7 +153,7 @@ class A2ARegistryClient:
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to close A2A Registry Client (SDK): {str(e)}",
-                data={"error": str(e)}
+                data={"error": str(e)},
             )
             raise
 
@@ -173,13 +169,12 @@ class A2ARegistryClient:
                 self.httpx_clients[registry_url] = httpx.AsyncClient(
                     base_url=registry_url,
                     timeout=self.config.timeout_seconds,
-                    headers={"User-Agent": self.config.user_agent}
+                    headers={"User-Agent": self.config.user_agent},
                 )
 
                 # Create SDK client with httpx client (consistent with __init__)
                 self.sdk_clients[registry_url] = A2AClient(
-                    httpx_client=self.httpx_clients[registry_url],
-                    url=registry_url
+                    httpx_client=self.httpx_clients[registry_url], url=registry_url
                 )
 
                 # Emit registry addition event
@@ -190,8 +185,8 @@ class A2ARegistryClient:
                     data={
                         "registry_url": registry_url,
                         "total_registries": len(self.registries),
-                        "sdk_enabled": True
-                    }
+                        "sdk_enabled": True,
+                    },
                 )
             else:
                 # Emit warning for duplicate registry
@@ -199,10 +194,7 @@ class A2ARegistryClient:
                     event_type=observability.SystemEvents.A2A_REGISTRY_CONNECTED,
                     level=observability.EventLevel.WARNING,
                     description=f"Registry already exists (SDK): {registry_url}",
-                    data={
-                        "registry_url": registry_url,
-                        "total_registries": len(self.registries)
-                    }
+                    data={"registry_url": registry_url, "total_registries": len(self.registries)},
                 )
 
         except Exception as e:
@@ -211,10 +203,7 @@ class A2ARegistryClient:
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to add registry (SDK) {registry_url}: {str(e)}",
-                data={
-                    "registry_url": registry_url,
-                    "error": str(e)
-                }
+                data={"registry_url": registry_url, "error": str(e)},
             )
             raise
 
@@ -231,7 +220,7 @@ class A2ARegistryClient:
                 # Close and remove SDK client
                 if registry_url in self.sdk_clients:
                     client = self.sdk_clients.pop(registry_url)
-                    if hasattr(client, 'close'):
+                    if hasattr(client, "close"):
                         asyncio.create_task(client.close())
 
                 # Emit registry removal event
@@ -242,8 +231,8 @@ class A2ARegistryClient:
                     data={
                         "registry_url": registry_url,
                         "agents_removed": agents_count,
-                        "remaining_registries": len(self.registries)
-                    }
+                        "remaining_registries": len(self.registries),
+                    },
                 )
             else:
                 # Emit warning for non-existent registry
@@ -251,10 +240,7 @@ class A2ARegistryClient:
                     event_type=observability.SystemEvents.A2A_REGISTRY_DISCONNECTED,
                     level=observability.EventLevel.WARNING,
                     description=f"Registry not found for removal (SDK): {registry_url}",
-                    data={
-                        "registry_url": registry_url,
-                        "total_registries": len(self.registries)
-                    }
+                    data={"registry_url": registry_url, "total_registries": len(self.registries)},
                 )
 
         except Exception as e:
@@ -263,10 +249,7 @@ class A2ARegistryClient:
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to remove registry (SDK) {registry_url}: {str(e)}",
-                data={
-                    "registry_url": registry_url,
-                    "error": str(e)
-                }
+                data={"registry_url": registry_url, "error": str(e)},
             )
             raise
 
@@ -294,7 +277,7 @@ class A2ARegistryClient:
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK_STARTED,
                 level=observability.EventLevel.DEBUG,
                 description=f"Starting health check for registry (SDK): {registry_url}",
-                data={"registry_url": registry_url, "sdk_enabled": True}
+                data={"registry_url": registry_url, "sdk_enabled": True},
             )
 
             client = self.sdk_clients.get(registry_url)
@@ -307,15 +290,11 @@ class A2ARegistryClient:
                 role=Role.agent,
                 parts=[TextPart(text="health", kind="text")],
                 metadata={"type": "health_check"},
-                kind="message"
+                kind="message",
             )
 
             # Send health check via SDK
-            request = SendMessageRequest(
-                agent_id="registry",
-                message=health_message,
-                timeout=5
-            )
+            request = SendMessageRequest(agent_id="registry", message=health_message, timeout=5)
 
             # Try to send the health check message
             # If registry is healthy, it should respond or at least accept the message
@@ -335,19 +314,19 @@ class A2ARegistryClient:
             self.registry_status[registry_url] = {
                 "last_check": time.time(),
                 "healthy": is_healthy,
-                "sdk_check": True
+                "sdk_check": True,
             }
 
             # Emit health check result event
             observability.observe(
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK_COMPLETED,
-                level=observability.EventLevel.INFO if is_healthy else observability.EventLevel.WARNING,
+                level=(
+                    observability.EventLevel.INFO
+                    if is_healthy
+                    else observability.EventLevel.WARNING
+                ),
                 description=f"Registry health check {'passed' if is_healthy else 'failed'} (SDK): {registry_url}",
-                data={
-                    "registry_url": registry_url,
-                    "healthy": is_healthy,
-                    "sdk_enabled": True
-                }
+                data={"registry_url": registry_url, "healthy": is_healthy, "sdk_enabled": True},
             )
 
             return is_healthy
@@ -358,17 +337,13 @@ class A2ARegistryClient:
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Health check failed for registry (SDK): {registry_url}",
-                data={
-                    "registry_url": registry_url,
-                    "error": str(e),
-                    "sdk_enabled": True
-                }
+                data={"registry_url": registry_url, "error": str(e), "sdk_enabled": True},
             )
 
             self.registry_status[registry_url] = {
                 "last_check": time.time(),
                 "healthy": False,
-                "error": str(e)
+                "error": str(e),
             }
             return False
 
@@ -376,7 +351,7 @@ class A2ARegistryClient:
         self,
         startup_policy: str = "lenient",
         retry_timeout_seconds: int = 30,
-        registry_configs: Optional[List[Dict[str, Any]]] = None
+        registry_configs: Optional[List[Dict[str, Any]]] = None,
     ) -> tuple[bool, Dict[str, bool]]:
         """
         Check registry health according to startup policy.
@@ -409,8 +384,8 @@ class A2ARegistryClient:
                     "retry_timeout_seconds": retry_timeout_seconds,
                     "total_registries": len(self.registries),
                     "required_registries": len(required_registries),
-                    "required_urls": list(required_registries)
-                }
+                    "required_urls": list(required_registries),
+                },
             )
 
             if startup_policy == "lenient":
@@ -424,7 +399,7 @@ class A2ARegistryClient:
                             event_type=observability.SystemEvents.A2A_REGISTRY_DISCONNECTED,
                             level=observability.EventLevel.WARNING,
                             description=f"Registry {registry_url} is unreachable (lenient mode - continuing)",
-                            data={"registry_url": registry_url, "policy": "lenient"}
+                            data={"registry_url": registry_url, "policy": "lenient"},
                         )
 
                 return (True, health_status)  # Always continue in lenient mode
@@ -435,7 +410,9 @@ class A2ARegistryClient:
 
                 # In strict mode, treat ALL registries as required unless explicitly marked optional
                 # If no explicit required registries specified, all are required
-                registries_to_check = required_registries if required_registries else set(self.registries)
+                registries_to_check = (
+                    required_registries if required_registries else set(self.registries)
+                )
 
                 # Check if any required registry is down
                 for registry_url in registries_to_check:
@@ -448,8 +425,8 @@ class A2ARegistryClient:
                                 "registry_url": registry_url,
                                 "policy": "strict",
                                 "required": True,
-                                "explicit_required": registry_url in required_registries
-                            }
+                                "explicit_required": registry_url in required_registries,
+                            },
                         )
                         return (False, health_status)  # Fail fast
 
@@ -462,7 +439,9 @@ class A2ARegistryClient:
                 best_health_status = {}
 
                 # In retry mode with no explicit requirements, treat all as required
-                registries_to_check = required_registries if required_registries else set(self.registries)
+                registries_to_check = (
+                    required_registries if required_registries else set(self.registries)
+                )
 
                 while time.time() - start_time < retry_timeout_seconds:
                     health_status = await self.health_check_all()
@@ -487,8 +466,8 @@ class A2ARegistryClient:
                             data={
                                 "policy": "retry",
                                 "retry_time": time.time() - start_time,
-                                "health_status": health_status
-                            }
+                                "health_status": health_status,
+                            },
                         )
                         return (True, health_status)
 
@@ -508,8 +487,8 @@ class A2ARegistryClient:
                                 "policy": "retry",
                                 "retry_timeout": retry_timeout_seconds,
                                 "required": True,
-                                "explicit_required": registry_url in required_registries
-                            }
+                                "explicit_required": registry_url in required_registries,
+                            },
                         )
                         return (False, final_health)
 
@@ -521,7 +500,7 @@ class A2ARegistryClient:
                     event_type=observability.SystemEvents.A2A_REGISTRY_CONNECTED,
                     level=observability.EventLevel.WARNING,
                     description=f"Unknown startup policy '{startup_policy}', defaulting to lenient",
-                    data={"policy": startup_policy}
+                    data={"policy": startup_policy},
                 )
                 health_status = await self.health_check_all()
                 return (True, health_status)
@@ -531,7 +510,7 @@ class A2ARegistryClient:
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to check registries with policy: {str(e)}",
-                data={"error": str(e), "policy": startup_policy}
+                data={"error": str(e), "policy": startup_policy},
             )
             # On error, fail if strict, continue if lenient/retry
             return (startup_policy != "strict", {})
@@ -550,7 +529,7 @@ class A2ARegistryClient:
                     event_type=observability.SystemEvents.A2A_HEALTH_CHECK_STARTED,
                     level=observability.EventLevel.WARNING,
                     description="No registries configured for health check (SDK)",
-                    data={"registries_count": 0, "sdk_enabled": True}
+                    data={"registries_count": 0, "sdk_enabled": True},
                 )
                 return {}
 
@@ -562,8 +541,8 @@ class A2ARegistryClient:
                 data={
                     "registries_count": len(self.registries),
                     "registries": self.registries,
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
             tasks = [self.health_check(registry) for registry in self.registries]
@@ -586,8 +565,8 @@ class A2ARegistryClient:
                     "healthy_count": healthy_count,
                     "unhealthy_count": len(self.registries) - healthy_count,
                     "health_status": health_status,
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
             return health_status
@@ -601,15 +580,13 @@ class A2ARegistryClient:
                 data={
                     "registries_count": len(self.registries),
                     "error": str(e),
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
             raise
 
     async def register_agent(
-        self,
-        agent_card: AgentCard,
-        registry_url: Optional[str] = None
+        self, agent_card: AgentCard, registry_url: Optional[str] = None
     ) -> Union[RegistryResponse, Dict[str, RegistryResponse]]:
         """
         Register an agent with external registry(ies) using SDK.
@@ -632,8 +609,8 @@ class A2ARegistryClient:
                     "agent_url": agent_card.url,
                     "target_registry": registry_url,
                     "register_all": registry_url is None,
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
             if registry_url:
@@ -652,8 +629,8 @@ class A2ARegistryClient:
                     "agent_url": agent_card.url,
                     "target_registry": registry_url,
                     "error": str(e),
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
             raise
 
@@ -666,7 +643,7 @@ class A2ARegistryClient:
                 return RegistryResponse(
                     success=False,
                     error=f"No HTTP client for registry: {registry_url}",
-                    registry_url=registry_url
+                    registry_url=registry_url,
                 )
 
             # Send the MUXI AgentCard directly - the registry expects MUXI format, not SDK format!
@@ -676,18 +653,15 @@ class A2ARegistryClient:
                 "description": agent_card.description,
                 "version": agent_card.version,
                 "url": agent_card.url,
-                "a2aVersion": getattr(agent_card, 'a2a_version', "1.0"),
+                "a2aVersion": getattr(agent_card, "a2a_version", "1.0"),
                 "capabilities": agent_card.capabilities or {},
-                "authentication": getattr(agent_card, 'authentication', None),
-                "endpoints": getattr(agent_card, 'endpoints', {}),
-                "metadata": agent_card.metadata or {}
+                "authentication": getattr(agent_card, "authentication", None),
+                "endpoints": getattr(agent_card, "endpoints", {}),
+                "metadata": agent_card.metadata or {},
             }
 
             # Send HTTP POST to registry's /register endpoint
-            response = await http_client.post(
-                f"{registry_url}/register",
-                json=agent_data
-            )
+            response = await http_client.post(f"{registry_url}/register", json=agent_data)
 
             # Check if registration was successful
             if response.status_code == 201:  # Registry returns 201 for successful registration
@@ -707,15 +681,15 @@ class A2ARegistryClient:
                         "agent_url": agent_card.url,
                         "registry_url": registry_url,
                         "total_registered": len(self.registered_agents[registry_url]),
-                        "sdk_enabled": True
-                    }
+                        "sdk_enabled": True,
+                    },
                 )
 
                 return RegistryResponse(
                     success=True,
                     status_code=response.status_code,
                     data=response.json() if response.text else None,
-                    registry_url=registry_url
+                    registry_url=registry_url,
                 )
             else:
                 # Registration failed
@@ -731,7 +705,7 @@ class A2ARegistryClient:
                     success=False,
                     status_code=response.status_code,
                     error=error_msg,
-                    registry_url=registry_url
+                    registry_url=registry_url,
                 )
 
         except Exception as e:
@@ -747,15 +721,11 @@ class A2ARegistryClient:
                     "agent_url": agent_card.url,
                     "registry_url": registry_url,
                     "error": str(e),
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
-            return RegistryResponse(
-                success=False,
-                error=error_msg,
-                registry_url=registry_url
-            )
+            return RegistryResponse(success=False, error=error_msg, registry_url=registry_url)
 
     async def _register_all(self, agent_card: AgentCard) -> Dict[str, RegistryResponse]:
         """Register agent with all configured registries using SDK"""
@@ -770,8 +740,8 @@ class A2ARegistryClient:
                         "agent_name": agent_card.name,
                         "agent_url": agent_card.url,
                         "registries_count": 0,
-                        "sdk_enabled": True
-                    }
+                        "sdk_enabled": True,
+                    },
                 )
                 return {}
 
@@ -785,14 +755,11 @@ class A2ARegistryClient:
                     "agent_url": agent_card.url,
                     "registries_count": len(self.registries),
                     "registries": self.registries,
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
-            tasks = [
-                self._register_single(agent_card, registry)
-                for registry in self.registries
-            ]
+            tasks = [self._register_single(agent_card, registry) for registry in self.registries]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             responses = {}
@@ -806,9 +773,7 @@ class A2ARegistryClient:
                 else:
                     # Handle exceptions
                     responses[registry] = RegistryResponse(
-                        success=False,
-                        error=f"Exception: {str(result)}",
-                        registry_url=registry
+                        success=False, error=f"Exception: {str(result)}", registry_url=registry
                     )
 
             # Emit register all result event
@@ -822,8 +787,8 @@ class A2ARegistryClient:
                     "registries_count": len(self.registries),
                     "successful_registrations": successful_registrations,
                     "failed_registrations": len(self.registries) - successful_registrations,
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
             return responses
@@ -839,8 +804,8 @@ class A2ARegistryClient:
                     "agent_url": agent_card.url,
                     "registries_count": len(self.registries),
                     "error": str(e),
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
             raise
 
@@ -857,7 +822,8 @@ class A2ARegistryClient:
         try:
             # Find registries where this agent is registered
             target_registries = [
-                registry for registry, agents in self.registered_agents.items()
+                registry
+                for registry, agents in self.registered_agents.items()
                 if agent_url in agents
             ]
 
@@ -870,8 +836,8 @@ class A2ARegistryClient:
                     data={
                         "agent_url": agent_url,
                         "total_registries": len(self.registries),
-                        "sdk_enabled": True
-                    }
+                        "sdk_enabled": True,
+                    },
                 )
                 return {}
 
@@ -884,8 +850,8 @@ class A2ARegistryClient:
                     "agent_url": agent_url,
                     "target_registries": target_registries,
                     "registrations_count": len(target_registries),
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
             responses = {}
@@ -901,8 +867,7 @@ class A2ARegistryClient:
                     # Send HTTP POST to registry's /deregister endpoint with MUXI format
                     # The registry expects {"agent_url": "..."} not SDK messages
                     response = await http_client.post(
-                        f"{registry_url}/deregister",
-                        json={"agent_url": agent_url}
+                        f"{registry_url}/deregister", json={"agent_url": agent_url}
                     )
 
                     # Check if deregistration was successful
@@ -919,15 +884,15 @@ class A2ARegistryClient:
                             data={
                                 "agent_url": agent_url,
                                 "registry_url": registry_url,
-                                "sdk_enabled": True
-                            }
+                                "sdk_enabled": True,
+                            },
                         )
 
                         responses[registry_url] = RegistryResponse(
                             success=True,
                             status_code=response.status_code,
                             data=response.json() if response.text else None,
-                            registry_url=registry_url
+                            registry_url=registry_url,
                         )
                         successful_deregistrations += 1
                     else:
@@ -944,7 +909,7 @@ class A2ARegistryClient:
                             success=False,
                             status_code=response.status_code,
                             error=error_msg,
-                            registry_url=registry_url
+                            registry_url=registry_url,
                         )
 
                 except Exception as e:
@@ -959,14 +924,12 @@ class A2ARegistryClient:
                             "agent_url": agent_url,
                             "registry_url": registry_url,
                             "error": str(e),
-                            "sdk_enabled": True
-                        }
+                            "sdk_enabled": True,
+                        },
                     )
 
                     responses[registry_url] = RegistryResponse(
-                        success=False,
-                        error=error_msg,
-                        registry_url=registry_url
+                        success=False, error=error_msg, registry_url=registry_url
                     )
 
             # Emit deregistration summary event
@@ -979,8 +942,8 @@ class A2ARegistryClient:
                     "target_registries_count": len(target_registries),
                     "successful_deregistrations": successful_deregistrations,
                     "failed_deregistrations": len(target_registries) - successful_deregistrations,
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
             return responses
@@ -991,18 +954,12 @@ class A2ARegistryClient:
                 event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to deregister agent {agent_url} (SDK): {str(e)}",
-                data={
-                    "agent_url": agent_url,
-                    "error": str(e),
-                    "sdk_enabled": True
-                }
+                data={"agent_url": agent_url, "error": str(e), "sdk_enabled": True},
             )
             raise
 
     async def discover_agents(
-        self,
-        capability_filter: Optional[List[str]] = None,
-        registry_url: Optional[str] = None
+        self, capability_filter: Optional[List[str]] = None, registry_url: Optional[str] = None
     ) -> Union[List[AgentCard], Dict[str, List[AgentCard]]]:
         """
         Discover agents from external registry(ies) using SDK.
@@ -1024,8 +981,8 @@ class A2ARegistryClient:
                     "capability_filter": capability_filter,
                     "target_registry": registry_url,
                     "discover_all": registry_url is None,
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
             if registry_url:
@@ -1043,15 +1000,13 @@ class A2ARegistryClient:
                     "capability_filter": capability_filter,
                     "target_registry": registry_url,
                     "error": str(e),
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
             raise
 
     async def _discover_single(
-        self,
-        registry_url: str,
-        capability_filter: Optional[List[str]] = None
+        self, registry_url: str, capability_filter: Optional[List[str]] = None
     ) -> List[AgentCard]:
         """Discover agents from a single registry using HTTP (registries are not A2A agents)"""
         try:
@@ -1066,10 +1021,7 @@ class A2ARegistryClient:
                 params["capabilities"] = ",".join(capability_filter)
 
             # Send HTTP GET to registry's /discover endpoint
-            response = await http_client.get(
-                f"{registry_url}/discover",
-                params=params
-            )
+            response = await http_client.get(f"{registry_url}/discover", params=params)
 
             # Extract agents from response
             agent_cards = []
@@ -1086,7 +1038,7 @@ class A2ARegistryClient:
                                 version=agent_data.get("version"),
                                 url=agent_data.get("url"),
                                 capabilities=agent_data.get("capabilities", {}),
-                                metadata=agent_data.get("metadata", {})
+                                metadata=agent_data.get("metadata", {}),
                             )
                             agent_cards.append(agent_card)
                         except Exception as e:
@@ -1099,8 +1051,8 @@ class A2ARegistryClient:
                                     "registry_url": registry_url,
                                     "agent_name": agent_data.get("name", "unknown"),
                                     "error": str(e),
-                                    "agent_data": agent_data
-                                }
+                                    "agent_data": agent_data,
+                                },
                             )
 
             # Emit successful discovery event
@@ -1112,8 +1064,8 @@ class A2ARegistryClient:
                     "registry_url": registry_url,
                     "agents_discovered": len(agent_cards),
                     "capability_filter": capability_filter,
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
             return agent_cards
@@ -1128,8 +1080,8 @@ class A2ARegistryClient:
                     "registry_url": registry_url,
                     "capability_filter": capability_filter,
                     "error": str(e),
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
             return []
 
@@ -1147,8 +1099,8 @@ class A2ARegistryClient:
                     data={
                         "registries_count": 0,
                         "capability_filter": capability_filter,
-                        "sdk_enabled": True
-                    }
+                        "sdk_enabled": True,
+                    },
                 )
                 return {}
 
@@ -1161,13 +1113,12 @@ class A2ARegistryClient:
                     "registries_count": len(self.registries),
                     "registries": self.registries,
                     "capability_filter": capability_filter,
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
             tasks = [
-                self._discover_single(registry, capability_filter)
-                for registry in self.registries
+                self._discover_single(registry, capability_filter) for registry in self.registries
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -1194,8 +1145,8 @@ class A2ARegistryClient:
                     "discoveries_per_registry": {
                         registry: len(agents) for registry, agents in discoveries.items()
                     },
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
             return discoveries
@@ -1210,8 +1161,8 @@ class A2ARegistryClient:
                     "registries_count": len(self.registries),
                     "capability_filter": capability_filter,
                     "error": str(e),
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
             raise
 
@@ -1226,8 +1177,8 @@ class A2ARegistryClient:
                 data={
                     "registries_count": len(self.registry_status),
                     "registries": list(self.registry_status.keys()),
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
             return self.registry_status.copy()
@@ -1238,7 +1189,7 @@ class A2ARegistryClient:
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to get registry status (SDK): {str(e)}",
-                data={"error": str(e), "sdk_enabled": True}
+                data={"error": str(e), "sdk_enabled": True},
             )
             raise
 
@@ -1253,8 +1204,8 @@ class A2ARegistryClient:
                 data={
                     "registries_count": len(self.registered_agents),
                     "total_agents": sum(len(agents) for agents in self.registered_agents.values()),
-                    "sdk_enabled": True
-                }
+                    "sdk_enabled": True,
+                },
             )
 
             return self.registered_agents.copy()
@@ -1265,7 +1216,7 @@ class A2ARegistryClient:
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to get registered agents (SDK): {str(e)}",
-                data={"error": str(e), "sdk_enabled": True}
+                data={"error": str(e), "sdk_enabled": True},
             )
             raise
 
@@ -1273,8 +1224,7 @@ class A2ARegistryClient:
         """Get comprehensive statistics about the registry client"""
         try:
             healthy_registries = sum(
-                1 for status in self.registry_status.values()
-                if status.get("healthy", False)
+                1 for status in self.registry_status.values() if status.get("healthy", False)
             )
 
             stats = {
@@ -1282,7 +1232,8 @@ class A2ARegistryClient:
                 "healthy_registries": healthy_registries,
                 "unhealthy_registries": len(self.registries) - healthy_registries,
                 "total_registered_agents": sum(
-                    len(agents) for agents in self.registered_agents.values()),
+                    len(agents) for agents in self.registered_agents.values()
+                ),
                 "registrations_per_registry": {
                     registry: len(agents) for registry, agents in self.registered_agents.items()
                 },
@@ -1290,7 +1241,7 @@ class A2ARegistryClient:
                     registry: status.get("healthy", False)
                     for registry, status in self.registry_status.items()
                 },
-                "sdk_enabled": True
+                "sdk_enabled": True,
             }
 
             # Emit stats request event
@@ -1298,7 +1249,7 @@ class A2ARegistryClient:
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK_STARTED,
                 level=observability.EventLevel.DEBUG,
                 description="Registry client stats requested (SDK)",
-                data=stats
+                data=stats,
             )
 
             return stats
@@ -1309,6 +1260,6 @@ class A2ARegistryClient:
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to get registry client stats (SDK): {str(e)}",
-                data={"error": str(e), "sdk_enabled": True}
+                data={"error": str(e), "sdk_enabled": True},
             )
             raise

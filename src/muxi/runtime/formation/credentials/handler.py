@@ -3,9 +3,9 @@ Credential handling logic for the formation system.
 Moved from overlord.py to proper separation of concerns.
 """
 
-from typing import Dict, Optional, Any
 import logging
 import traceback
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +50,11 @@ class CredentialHandler:
         # Create new model instance with proper configuration
         try:
             # Filter out params we're setting explicitly to avoid duplicate kwargs
-            settings = {k: v for k, v in text_model_config.get("settings", {}).items()
-                       if k not in ["temperature", "max_tokens"]}
+            settings = {
+                k: v
+                for k, v in text_model_config.get("settings", {}).items()
+                if k not in ["temperature", "max_tokens"]
+            }
             llm = await self.overlord.create_model(
                 model=model_name,
                 api_key=text_model_config.get("api_key"),
@@ -102,8 +105,11 @@ class CredentialHandler:
             llm = self.overlord._model_cache[cache_key]
         else:
             # Filter out params we're setting explicitly to avoid duplicate kwargs
-            settings = {k: v for k, v in text_model_config.get("settings", {}).items()
-                       if k not in ["temperature", "max_tokens"]}
+            settings = {
+                k: v
+                for k, v in text_model_config.get("settings", {}).items()
+                if k not in ["temperature", "max_tokens"]
+            }
             llm = await self.overlord.create_model(
                 model=model_name,
                 api_key=text_model_config.get("api_key"),
@@ -170,7 +176,9 @@ Respond in JSON format:
                 {"role": "user", "content": message},
             ]
             response_obj = await llm.chat(messages)
-            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            response = (
+                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            )
 
             # Parse JSON response
             # Extract JSON from response if it contains other text
@@ -181,7 +189,7 @@ Respond in JSON format:
             json_end = response.rfind("}")
 
             if json_start >= 0 and json_end >= 0 and json_end >= json_start:
-                json_str = response[json_start:json_end + 1]
+                json_str = response[json_start : json_end + 1]
                 try:
                     detection = json.loads(json_str)
                 except (json.JSONDecodeError, ValueError) as e:
@@ -322,8 +330,9 @@ Respond in JSON format:
 
         # For GitHub, do a simple API test instead of full MCP connection
         if service == "github" and auth_type == "bearer":
-            import aiohttp
             import asyncio
+
+            import aiohttp
 
             try:
                 # Simple GitHub API call to test the token
@@ -353,8 +362,9 @@ Respond in JSON format:
                 return False
 
         # For other services, fallback to MCP connection test (but with strict timeout)
-        from muxi.runtime.services.mcp.handler import MCPHandler
         import asyncio
+
+        from muxi.runtime.services.mcp.handler import MCPHandler
 
         handler = MCPHandler(model=None, tool_registry=self.overlord.mcp_service.tool_registry)
         validation_name = f"{service_id}_validation"
@@ -548,8 +558,11 @@ Respond in JSON format:
             llm = self.overlord._model_cache[cache_key]
         else:
             # Filter out params we're setting explicitly to avoid duplicate kwargs
-            settings = {k: v for k, v in text_model_config.get("settings", {}).items()
-                       if k not in ["temperature", "max_tokens"]}
+            settings = {
+                k: v
+                for k, v in text_model_config.get("settings", {}).items()
+                if k not in ["temperature", "max_tokens"]
+            }
             llm = await self.overlord.create_model(
                 model=model_name,
                 api_key=text_model_config.get("api_key"),
@@ -580,7 +593,9 @@ Respond with only "YES" if requesting to add credentials, "NO" otherwise."""
                 {"role": "user", "content": message},
             ]
             response_obj = await llm.chat(messages)
-            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            response = (
+                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            )
 
             result = response.strip().upper()
             return result == "YES"
@@ -742,10 +757,15 @@ Generate only the message, nothing else."""
 
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Service: {service}, Credential type: {auth_description}"},
+                {
+                    "role": "user",
+                    "content": f"Service: {service}, Credential type: {auth_description}",
+                },
             ]
             response_obj = await llm.chat(messages)
-            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            response = (
+                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            )
             return response.strip()
         except Exception as e:
             print(f"Warning: Failed to generate credential prompt via LLM: {e}")
@@ -810,7 +830,9 @@ Respond with only YES or NO."""
                 {"role": "user", "content": message},
             ]
             response_obj = await llm.chat(messages)
-            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            response = (
+                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            )
             return response.strip().upper().startswith("YES")
         except Exception as e:
             logger.debug(f"Failed to check cancellation with LLM: {e}")
@@ -871,7 +893,9 @@ Respond with only YES or NO."""
                 {"role": "user", "content": message},
             ]
             response_obj = await llm.chat(messages)
-            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            response = (
+                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            )
             return response.strip().upper().startswith("YES")
         except Exception as e:
             logger.debug(f"Failed to check help request with LLM: {e}")
@@ -927,7 +951,9 @@ Be helpful and specific when you can, or provide useful generic guidance if you 
                 {"role": "user", "content": f"I need help getting credentials for: {service}"},
             ]
             response_obj = await llm.chat(messages, max_tokens=500)
-            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            response = (
+                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            )
 
             if response:
                 return response.strip()
@@ -987,7 +1013,9 @@ Return ONLY the credential itself, no quotes, no explanation."""
                 {"role": "user", "content": message},
             ]
             response_obj = await llm.chat(messages)
-            extracted = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            extracted = (
+                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            )
             # Clean up any quotes the LLM might have added
             return extracted.strip().strip('"').strip("'")
         except Exception as e:
@@ -1039,7 +1067,9 @@ Generate only the message, nothing else."""
                 {"role": "user", "content": f"The credential for {service} failed validation."},
             ]
             response_obj = await llm.chat(messages)
-            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            response = (
+                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            )
             return response.strip()
         except Exception as e:
             print(f"Warning: Failed to generate failure message via LLM: {e}")
@@ -1077,8 +1107,11 @@ Return ONLY the message text, no quotes."""
 
             if cache_key not in self.overlord._model_cache:
                 # Filter out params we're setting explicitly to avoid duplicate kwargs
-                settings = {k: v for k, v in text_model_config.get("settings", {}).items()
-                           if k not in ["temperature", "max_tokens"]}
+                settings = {
+                    k: v
+                    for k, v in text_model_config.get("settings", {}).items()
+                    if k not in ["temperature", "max_tokens"]
+                }
                 llm = await self.overlord.create_model(
                     model=model_name,
                     api_key=text_model_config.get("api_key"),
@@ -1095,7 +1128,9 @@ Return ONLY the message text, no quotes."""
                 {"role": "user", "content": f"The {service} credential is already stored."},
             ]
             response_obj = await llm.chat(messages)
-            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            response = (
+                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            )
             return response.strip()
         except Exception as e:
             print(f"Warning: Failed to generate duplicate message via LLM: {e}")
@@ -1145,10 +1180,15 @@ Generate only the message, nothing else."""
 
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Successfully connected to {service} as {account_name}."},
+                {
+                    "role": "user",
+                    "content": f"Successfully connected to {service} as {account_name}.",
+                },
             ]
             response_obj = await llm.chat(messages)
-            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            response = (
+                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            )
             return response.strip()
         except Exception as e:
             print(f"Warning: Failed to generate success message via LLM: {e}")
@@ -1199,7 +1239,9 @@ Generate only the message, nothing else."""
                 {"role": "user", "content": "User cancelled providing credentials."},
             ]
             response_obj = await llm.chat(messages)
-            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            response = (
+                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            )
             return response.strip()
         except Exception as e:
             print(f"Warning: Failed to generate cancellation message via LLM: {e}")

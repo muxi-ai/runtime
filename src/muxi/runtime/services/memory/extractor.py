@@ -33,7 +33,7 @@
 
 import json
 import time
-from typing import Set, Any
+from typing import Any, Set
 
 from .. import observability
 
@@ -153,9 +153,7 @@ class MemoryExtractor:
         else:
             # No agent response yet - just use the user message
             # This happens when extraction is called before the agent responds
-            conversation = (
-                f"User: {user_message}\n(Note: Extract from user's statement alone, agent hasn't responded yet)"
-            )
+            conversation = f"User: {user_message}\n(Note: Extract from user's statement alone, agent hasn't responded yet)"
 
         # Extract information
         extraction_results = await self._extract_user_information(conversation)
@@ -282,7 +280,7 @@ class MemoryExtractor:
                 # Find the end of the first line (json marker)
                 first_newline = clean_response.find("\n")
                 if first_newline > 0:
-                    clean_response = clean_response[first_newline + 1:]
+                    clean_response = clean_response[first_newline + 1 :]
                 # Remove the closing ```
                 if clean_response.endswith("```"):
                     clean_response = clean_response[:-3].strip()
@@ -501,7 +499,11 @@ class MemoryExtractor:
                             # Score = 1/(1+distance), so higher score = more similar
                             # Score=1.0 means identical, score>0.9 means very similar (distance<0.11)
                             first_result = existing[0] if isinstance(existing, list) else existing
-                            score = first_result.get("score", 0.0) if isinstance(first_result, dict) else 0.0
+                            score = (
+                                first_result.get("score", 0.0)
+                                if isinstance(first_result, dict)
+                                else 0.0
+                            )
 
                             # Convert distance threshold to score threshold
                             # If similarity_threshold=0.3, we skip when distance<0.3
@@ -554,7 +556,7 @@ class MemoryExtractor:
                         # Invalidate identity synopsis cache if this affects identity collections
                         if collection in ["user_identity", "relationships", "work_projects"]:
                             try:
-                                if hasattr(self.overlord, 'user_context_manager'):
+                                if hasattr(self.overlord, "user_context_manager"):
                                     await self.overlord.user_context_manager.invalidate_identity_synopsis_cache(
                                         user_id
                                     )

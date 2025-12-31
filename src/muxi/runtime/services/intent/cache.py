@@ -4,10 +4,10 @@ Intent Detection Cache
 LRU cache for intent detection results to avoid redundant LLM calls.
 """
 
-from typing import Optional, Dict, Any, Tuple
-from datetime import datetime, timedelta
-from collections import OrderedDict
 import threading
+from collections import OrderedDict
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional, Tuple
 
 from ...datatypes.intent import IntentResult
 

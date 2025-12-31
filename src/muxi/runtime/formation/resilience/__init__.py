@@ -14,22 +14,22 @@ Components:
 """
 
 from ...datatypes.resilience import (
-    ErrorType,
-    ErrorSeverity,
-    RecoveryStrategy,
-    RecoveryResult,
+    CircuitBreakerException,
     CircuitState,
+    ErrorSeverity,
+    ErrorType,
+    RecoveryException,
+    RecoveryResult,
+    RecoveryStrategy,
     ResilienceConfig,
     ResilientWorkflowResult,
     WorkflowException,
-    RecoveryException,
-    CircuitBreakerException,
 )
-
-from .error_classifier import ErrorClassifier
-from .recovery_strategist import RecoveryStrategist
 from .circuit_breaker import CircuitBreaker
+from .error_classifier import ErrorClassifier
 from .fallback_manager import FallbackManager
+from .recovery_strategist import RecoveryStrategist
+
 # COMMENTED OUT - Unused, architectural issues with workflow execution
 # from .resilient_workflow_manager import ResilientWorkflowManager
 
@@ -45,7 +45,6 @@ __all__ = [
     "WorkflowException",
     "RecoveryException",
     "CircuitBreakerException",
-
     # Components
     "ErrorClassifier",
     "RecoveryStrategist",

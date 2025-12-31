@@ -13,16 +13,16 @@ from typing import Any, Dict, List, Optional, Union
 import requests
 
 from ...datatypes.observability import (
-    ConversationEvents,
-    SystemEvents,
-    ErrorEvents,
-    ServerEvents,
     APIEvents,
+    ConversationEvents,
+    ErrorEvents,
     EventLevel,
     RequestContext,
+    ServerEvents,
+    SystemEvents,
 )
-from ...utils.user_dirs import get_observability_dir
 from ...utils.id_generator import generate_nanoid
+from ...utils.user_dirs import get_observability_dir
 from ...utils.version import get_version
 
 
@@ -85,9 +85,11 @@ class EventLogger:
 
     def _should_emit_event(
         self,
-        event_type: Union[ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents, str],
+        event_type: Union[
+            ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents, str
+        ],
         event_type_str: str,
-        level: EventLevel
+        level: EventLevel,
     ) -> bool:
         """Check if event should be emitted based on configuration.
 
@@ -113,14 +115,16 @@ class EventLogger:
             return False
 
         # Check specific event filter (wildcard '*' allows all events)
-        if self.events is not None and '*' not in self.events and event_type_str not in self.events:
+        if self.events is not None and "*" not in self.events and event_type_str not in self.events:
             return False
 
         return True
 
     def emit_event(
         self,
-        event_type: Union[ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents, str],
+        event_type: Union[
+            ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents, str
+        ],
         level: EventLevel = EventLevel.INFO,
         data: Optional[Dict[str, Any]] = None,
         request_context: Optional[RequestContext] = None,
@@ -129,7 +133,9 @@ class EventLogger:
     ) -> str:
         """Emit an observability event with structured data."""
         # Handle different event types
-        if isinstance(event_type, (ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents)):
+        if isinstance(
+            event_type, (ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents)
+        ):
             event_type_str = event_type.value
         else:
             event_type_str = event_type

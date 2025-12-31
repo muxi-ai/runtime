@@ -49,14 +49,15 @@
 # controlled and secure manner.
 # =============================================================================
 
+from ...datatypes.mcp import MCPToolCall
+from ...datatypes.response import MuxiResponse
+
 # Re-export key classes
 from .handler import MCPHandler
-from .transports import MCPConnectionError, MCPRequestError, MCPTimeoutError
+from .parser import ToolCall, ToolParser
 from .reconnect_handler import ReconnectingMCPHandler
 from .service import MCPService
-from ...datatypes.response import MuxiResponse
-from ...datatypes.mcp import MCPToolCall
-from .parser import ToolParser, ToolCall
+from .transports import MCPConnectionError, MCPRequestError, MCPTimeoutError
 
 __all__ = [
     "MCPHandler",

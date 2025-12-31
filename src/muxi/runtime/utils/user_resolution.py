@@ -18,8 +18,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from ..services.memory.long_term import User, UserIdentifier
 from ..services import observability
+from ..services.memory.long_term import User, UserIdentifier
 from ..utils.id_generator import get_default_nanoid
 
 
@@ -299,7 +299,9 @@ async def associate_user_identifiers(
         if muxi_user_id:
             # Find existing user by public_id
             result = await session.execute(
-                select(User).where(User.public_id == muxi_user_id, User.formation_id == formation_id)
+                select(User).where(
+                    User.public_id == muxi_user_id, User.formation_id == formation_id
+                )
             )
             user = result.scalar_one_or_none()
             if not user:
@@ -321,8 +323,7 @@ async def associate_user_identifiers(
         conflicts = []
         for identifier, _ in normalized_identifiers:
             result = await session.execute(
-                select(UserIdentifier.user_id)
-                .where(
+                select(UserIdentifier.user_id).where(
                     UserIdentifier.identifier == identifier,
                     UserIdentifier.formation_id == formation_id,
                 )

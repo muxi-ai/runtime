@@ -40,23 +40,22 @@
 import asyncio
 import hashlib
 import time
-from typing import Dict, List, Optional, Any, Tuple, Union
-
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # OneLLM imports - external package
 from onellm import ChatCompletion, Embedding, set_api_key
 
-# Local imports
-from .errors import (
-    OneLLMConnectionError,
-    OneLLMAuthenticationError,
-    OneLLMRateLimitError,
-    OneLLMTimeoutError,
-    OneLLMServiceError,
-)
-
 # Observability imports
 from .. import observability
+
+# Local imports
+from .errors import (
+    OneLLMAuthenticationError,
+    OneLLMConnectionError,
+    OneLLMRateLimitError,
+    OneLLMServiceError,
+    OneLLMTimeoutError,
+)
 
 
 class OneLLMService:

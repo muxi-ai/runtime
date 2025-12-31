@@ -31,67 +31,68 @@
 # =============================================================================
 
 import asyncio
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
-import yaml
-from pathlib import Path
+import atexit
+import copy
 import os
 import re
-import copy
 import shlex
-import threading
-import atexit
 import sys
+import threading
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
+import yaml
+
+from ..datatypes.async_operations import CancellationToken, OperationStatus, TimeoutConfig
+
+# Exception imports
+from ..datatypes.exceptions import (
+    ConfigurationLoadError,
+    ConfigurationNotFoundError,
+    ConfigurationValidationError,
+    DependencyValidationError,
+    OverlordImportError,
+    OverlordStartupError,
+    OverlordStateError,
+    RegistryConfigurationError,
+    add_error_context,
+)
+from ..datatypes.retry import (
+    NetworkTransientError,
+    RetryConfig,
+    RetryStrategy,
+    ServiceTransientError,
+)
+
+# Service imports
+from ..services import observability
+from ..services.mcp.transports.base import (
+    MCPCancelledError,
+    MCPConnectionError,
+    MCPRequestError,
+    MCPTimeoutError,
+)
+from ..services.secrets.secrets_manager import SecretsManager
+
+# Validation imports
+from ..utils import DependencyValidator
+
+# Async operation imports
+from ..utils.async_operation_manager import execute_with_timeout, get_operation_manager
+
+# Retry logic imports
+from ..utils.retry_manager import get_retry_manager
+from ..utils.user_dirs import set_formation_id
+from .config.formation_loader import FormationLoader
 
 # Configuration imports
 from .config.validation import (
     validate_formation,
     validate_user_credentials_requirements_async,
 )
-from .config.formation_loader import FormationLoader
-
-# Service imports
-from ..services import observability
-from ..services.secrets.secrets_manager import SecretsManager
-from ..services.mcp.transports.base import (
-    MCPConnectionError,
-    MCPRequestError,
-    MCPTimeoutError,
-    MCPCancelledError,
-)
-
-# Validation imports
-from ..utils import DependencyValidator
-
-# Async operation imports
-from ..utils.async_operation_manager import get_operation_manager, execute_with_timeout
-from ..datatypes.async_operations import TimeoutConfig, CancellationToken, OperationStatus
-
-# Retry logic imports
-from ..utils.retry_manager import get_retry_manager
-from ..datatypes.retry import (
-    RetryConfig,
-    RetryStrategy,
-    NetworkTransientError,
-    ServiceTransientError,
-)
-
-# Exception imports
-from ..datatypes.exceptions import (
-    ConfigurationNotFoundError,
-    ConfigurationValidationError,
-    ConfigurationLoadError,
-    OverlordImportError,
-    OverlordStartupError,
-    OverlordStateError,
-    DependencyValidationError,
-    RegistryConfigurationError,
-    add_error_context,
-)
 
 # Utility imports
 from .utils import generate_api_key
-from ..utils.user_dirs import set_formation_id
 
 # Type checking imports
 if TYPE_CHECKING:
@@ -99,13 +100,13 @@ if TYPE_CHECKING:
 
 # Formation initialization imports
 from .initialization import (
-    initialize_observability,
-    initialize_llm_config,
-    initialize_memory_systems,
     initialize_background_services,
-    initialize_mcp_services,
     initialize_clarification_config,
     initialize_document_processing_config,
+    initialize_llm_config,
+    initialize_mcp_services,
+    initialize_memory_systems,
+    initialize_observability,
     load_agents_from_configuration,
 )
 
@@ -471,6 +472,7 @@ class Formation:
             self.config = None
             self.secrets_manager = None
             from ..datatypes.observability import InitFailureInfo
+
             path = str(e).replace("Formation configuration not found: ", "")
             failure = InitFailureInfo(
                 component="Could not load formation configuration",
@@ -479,14 +481,14 @@ class Formation:
                 causes=[
                     "The file path is incorrect or misspelled",
                     "The formation directory doesn't exist yet",
-                    "The formation.afs file is missing from the directory"
+                    "The formation.afs file is missing from the directory",
                 ],
                 fixes=[
                     f"Double-check the path: {path}",
                     "Verify the path you passed to formation.load()",
-                    "Make sure formation.afs exists in that directory"
+                    "Make sure formation.afs exists in that directory",
                 ],
-                technical=str(e)
+                technical=str(e),
             )
             print("\n" + InitEventFormatter.format_fail(failure))
             raise e
@@ -500,7 +502,8 @@ class Formation:
             self.config = None
             self.secrets_manager = None
             from ..datatypes.observability import InitFailureInfo
-            error_msg = str(e).split('\n')[0].replace("❌ ", "")
+
+            error_msg = str(e).split("\n")[0].replace("❌ ", "")
             failure = InitFailureInfo(
                 component="Formation configuration is invalid",
                 problem=error_msg,
@@ -508,14 +511,14 @@ class Formation:
                 causes=[
                     "The YAML syntax is incorrect",
                     "Required fields are missing from your configuration",
-                    "Field values don't match expected format"
+                    "Field values don't match expected format",
                 ],
                 fixes=[
                     "Check your formation.afs for syntax errors (indentation, colons, quotes)",
                     "Compare with a working example formation",
-                    "Make sure all required fields are present (llm, agents, etc.)"
+                    "Make sure all required fields are present (llm, agents, etc.)",
                 ],
-                technical=str(e)
+                technical=str(e),
             )
             print("\n" + InitEventFormatter.format_fail(failure))
             raise e
@@ -557,7 +560,9 @@ class Formation:
         if os.path.isfile(config_path):
             if not config_path.endswith((".afs", ".yaml", ".yml")):
                 raise ConfigurationValidationError(
-                    [f"Formation file must be AFS/YAML format (.afs, .yaml, or .yml): {config_path}"],
+                    [
+                        f"Formation file must be AFS/YAML format (.afs, .yaml, or .yml): {config_path}"
+                    ],
                     {"config_path": config_path, "operation": "validate_file_extension"},
                 )
             return config_path
@@ -693,7 +698,9 @@ class Formation:
             main_config_path = formation_dir / "formation.yml"
 
         if not main_config_path.exists():
-            raise FileNotFoundError(f"Main formation config (formation.afs/yaml/yml) not found in directory: {directory_path}")
+            raise FileNotFoundError(
+                f"Main formation config (formation.afs/yaml/yml) not found in directory: {directory_path}"
+            )
 
         with open(main_config_path, "r") as f:
             config = yaml.safe_load(f)
@@ -709,7 +716,11 @@ class Formation:
                 config["agents"] = []
 
             # Load each agent file (support .afs, .yaml, .yml)
-            for agent_file in sorted(agents_dir.glob("*.afs")) + sorted(agents_dir.glob("*.yaml")) + sorted(agents_dir.glob("*.yml")):
+            for agent_file in (
+                sorted(agents_dir.glob("*.afs"))
+                + sorted(agents_dir.glob("*.yaml"))
+                + sorted(agents_dir.glob("*.yml"))
+            ):
                 try:
                     with open(agent_file, "r") as f:
                         agent_config = yaml.safe_load(f)
@@ -751,7 +762,11 @@ class Formation:
                 config["a2a"]["outbound"]["services"] = []
 
             # Load each A2A service file (support .afs, .yaml, .yml)
-            for a2a_file in sorted(a2a_dir.glob("*.afs")) + sorted(a2a_dir.glob("*.yaml")) + sorted(a2a_dir.glob("*.yml")):
+            for a2a_file in (
+                sorted(a2a_dir.glob("*.afs"))
+                + sorted(a2a_dir.glob("*.yaml"))
+                + sorted(a2a_dir.glob("*.yml"))
+            ):
                 try:
                     with open(a2a_file, "r") as f:
                         a2a_config = yaml.safe_load(f)
@@ -1034,7 +1049,7 @@ class Formation:
         self._setup_agents_config()
 
         # Create standardized configuration objects
-        from ..datatypes.schema import MCPServiceSchema, A2AServiceSchema
+        from ..datatypes.schema import A2AServiceSchema, MCPServiceSchema
 
         # Create MCP configuration object
         mcp_config_obj = None
@@ -1185,6 +1200,7 @@ class Formation:
 
         # 2. Initialize PromptLoader (fail fast if prompts missing)
         from .prompts.loader import PromptLoader
+
         try:
             PromptLoader.initialize()
             # Init event - no observability emission during init phase (replaced by InitEventFormatter)
@@ -2336,16 +2352,19 @@ class Formation:
 
                 # Print user-friendly error message
                 from ..datatypes.observability import InitEventFormatter
+
                 if is_auth_error:
-                    print(InitEventFormatter.format_warn(
-                        f"MCP server: {server_id}",
-                        "authentication failed - check credentials"
-                    ))
+                    print(
+                        InitEventFormatter.format_warn(
+                            f"MCP server: {server_id}", "authentication failed - check credentials"
+                        )
+                    )
                 else:
-                    print(InitEventFormatter.format_warn(
-                        f"MCP server: {server_id}",
-                        f"connection failed - {error_msg}"
-                    ))
+                    print(
+                        InitEventFormatter.format_warn(
+                            f"MCP server: {server_id}", f"connection failed - {error_msg}"
+                        )
+                    )
 
                 failed_servers.append(server_id)
                 continue  # Continue with other servers instead of crashing
@@ -2367,10 +2386,12 @@ class Formation:
 
                 # Print user-friendly error message
                 from ..datatypes.observability import InitEventFormatter
-                print(InitEventFormatter.format_warn(
-                    f"MCP server: {server_id}",
-                    f"invalid configuration - {str(e)}"
-                ))
+
+                print(
+                    InitEventFormatter.format_warn(
+                        f"MCP server: {server_id}", f"invalid configuration - {str(e)}"
+                    )
+                )
 
                 failed_servers.append(server_id)
                 continue  # Continue with other servers instead of crashing
@@ -2394,10 +2415,12 @@ class Formation:
 
                 # Print user-friendly error message
                 from ..datatypes.observability import InitEventFormatter
-                print(InitEventFormatter.format_warn(
-                    f"MCP server: {server_id}",
-                    f"registration failed - {error_msg}"
-                ))
+
+                print(
+                    InitEventFormatter.format_warn(
+                        f"MCP server: {server_id}", f"registration failed - {error_msg}"
+                    )
+                )
 
                 failed_servers.append(server_id)
                 continue  # Continue with other servers instead of crashing
@@ -2409,10 +2432,13 @@ class Formation:
         # Show info message if there were failures
         if failed_servers:
             from ..datatypes.observability import InitEventFormatter
-            print(InitEventFormatter.format_info(
-                "MCP initialization complete",
-                f"{len(successful_servers)} server(s) connected, {len(failed_servers)} failed"
-            ))
+
+            print(
+                InitEventFormatter.format_info(
+                    "MCP initialization complete",
+                    f"{len(successful_servers)} server(s) connected, {len(failed_servers)} failed",
+                )
+            )
 
     async def start_overlord(self):
         """
@@ -2450,14 +2476,18 @@ class Formation:
         # Return existing overlord if already running (one formation = one overlord)
         if self._is_running and self._overlord is not None:
             from ..datatypes.observability import InitEventFormatter
-            print(InitEventFormatter.format_warn(
-                "Formation is already running",
-                "returning existing instance (call stop_overlord() first to restart)"
-            ))
+
+            print(
+                InitEventFormatter.format_warn(
+                    "Formation is already running",
+                    "returning existing instance (call stop_overlord() first to restart)",
+                )
+            )
             return self._overlord
 
         # Track startup time for summary
         import time
+
         start_time = time.time()
 
         # Import for formatted output
@@ -2529,7 +2559,11 @@ class Formation:
                 )
 
             # Count warnings/errors from observability (we'll use 0 for now as a placeholder)
-            print(InitEventFormatter.format_ok("Formation initialized successfully", f"in {duration:.1f}s"))
+            print(
+                InitEventFormatter.format_ok(
+                    "Formation initialized successfully", f"in {duration:.1f}s"
+                )
+            )
 
             # Enable observability now that init is complete
             # This starts the flow of JSON observability events for runtime monitoring
@@ -2652,10 +2686,13 @@ class Formation:
                 # Shutdown message removed - observability events handle this
             except TimeoutError:
                 from ..datatypes.observability import InitEventFormatter
-                print(InitEventFormatter.format_warn(
-                    "Shutdown taking too long",
-                    f"forcing termination after {timeout_seconds} seconds"
-                ))
+
+                print(
+                    InitEventFormatter.format_warn(
+                        "Shutdown taking too long",
+                        f"forcing termination after {timeout_seconds} seconds",
+                    )
+                )
 
             # Disconnect MCP servers before cleanup
             if hasattr(self, "_mcp_service") and self._mcp_service:
@@ -2676,7 +2713,11 @@ class Formation:
                     )
 
             # Dispose database engine to prevent event loop pollution in tests
-            if self._overlord and hasattr(self._overlord, 'db_manager') and self._overlord.db_manager:
+            if (
+                self._overlord
+                and hasattr(self._overlord, "db_manager")
+                and self._overlord.db_manager
+            ):
                 try:
                     await self._overlord.db_manager.close_async()
                     observability.observe(
@@ -2870,8 +2911,8 @@ class Formation:
             # ... some error occurs ...
             formation.shutdown(1)  # Exit immediately with error code
         """
-        import sys
         import os
+        import sys
 
         # Kill overlord immediately if running
         if self._is_running:
@@ -2924,8 +2965,8 @@ class Formation:
                 # Graceful shutdown - agents finish their work
                 await formation.ashutdown()
         """
-        import sys
         import os
+        import sys
 
         # Try graceful async shutdown first
         if self._is_running:

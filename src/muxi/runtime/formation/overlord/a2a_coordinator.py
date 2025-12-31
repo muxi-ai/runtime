@@ -8,10 +8,10 @@ embedded in the main Overlord class.
 
 import asyncio
 import time
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
-from ...datatypes.schema import A2AServiceSchema
 from ...datatypes.observability import InitEventFormatter
+from ...datatypes.schema import A2AServiceSchema
 from ...services import observability
 from ...services.a2a.models import AgentCard
 from ...services.a2a.models_adapter import ModelsAdapter
@@ -66,6 +66,7 @@ class A2ACoordinator:
                 and self.overlord.request_analyzer
             ):
                 from ...services.a2a.planning_filter import PlanningAgentFilter
+
                 self.planning_filter = PlanningAgentFilter(self.overlord, filtering_config)
             else:
                 missing = []
@@ -246,8 +247,8 @@ class A2ACoordinator:
                     "port": self.server_port,
                     "formation": self.overlord.formation_id,
                     "error": str(e),
-                    "error_type": type(e).__name__
-                }
+                    "error_type": type(e).__name__,
+                },
             )
 
     def _get_agent_url(self, agent_id: str) -> str:
@@ -261,7 +262,9 @@ class A2ACoordinator:
             The full URL for the agent
         """
         # Use configured host or fallback to localhost
-        host = self.server_host if self.server_host and self.server_host != "0.0.0.0" else "localhost"
+        host = (
+            self.server_host if self.server_host and self.server_host != "0.0.0.0" else "localhost"
+        )
 
         port = (
             self.overlord.a2a_server.port
@@ -858,7 +861,7 @@ class A2ACoordinator:
 
             import httpx
             from a2a.client import A2AClient
-            from a2a.types import SendMessageRequest, MessageSendParams
+            from a2a.types import MessageSendParams, SendMessageRequest
 
             # Create httpx client and SDK client for target agent
             async with httpx.AsyncClient() as http_client:
@@ -915,7 +918,7 @@ class A2ACoordinator:
                     "source_agent_id": source_agent_id,
                     "target_agent_url": target_agent_url,
                     "error": str(e),
-                    "error_type": type(e).__name__
-                }
+                    "error_type": type(e).__name__,
+                },
             )
             return None

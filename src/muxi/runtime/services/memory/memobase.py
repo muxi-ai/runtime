@@ -33,8 +33,8 @@ import asyncio
 import time
 from typing import Any, Dict, List, Optional
 
-from .long_term import LongTermMemory
 from .. import observability
+from .long_term import LongTermMemory
 
 
 class Memobase:

@@ -57,11 +57,11 @@ from typing import Any, Dict, List, Optional
 # Import markitdown for document conversion
 from markitdown import MarkItDown
 
-# Import DocumentChunkManager for hybrid architecture integration
-from ...documents.storage.chunk_manager import DocumentChunkManager, DocumentChunk
-
 # Import observability
 from ....services import observability
+
+# Import DocumentChunkManager for hybrid architecture integration
+from ...documents.storage.chunk_manager import DocumentChunk, DocumentChunkManager
 
 
 class KnowledgeSource:
@@ -203,7 +203,7 @@ class FileKnowledge(KnowledgeSource):
                     event_type=observability.ErrorEvents.MARKITDOWN_INITIALIZATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     description="Failed to initialize MarkItDown",
-                    data={"error": str(e)}
+                    data={"error": str(e)},
                 )
                 self.enable_markitdown = False
 
@@ -264,10 +264,7 @@ class FileKnowledge(KnowledgeSource):
                 event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Error processing file {os.path.basename(file_path)}",
-                data={
-                    "file_path": file_path,
-                    "error": str(e)
-                }
+                data={"file_path": file_path, "error": str(e)},
             )
             return f"[Error loading file: {os.path.basename(file_path)}]"
 
@@ -295,8 +292,8 @@ class FileKnowledge(KnowledgeSource):
                 data={
                     "directory": self.path,
                     "recursive": self.recursive,
-                    "component": "knowledge"
-                }
+                    "component": "knowledge",
+                },
             )
 
             if self.recursive:
@@ -318,9 +315,7 @@ class FileKnowledge(KnowledgeSource):
                 event_type=observability.ErrorEvents.KNOWLEDGE_SOURCE_MISSING,
                 level=observability.EventLevel.WARNING,
                 description="Knowledge source path does not exist",
-                data={
-                    "path": self.path
-                }
+                data={"path": self.path},
             )
 
         # Remove duplicates, sort, and limit
@@ -331,10 +326,7 @@ class FileKnowledge(KnowledgeSource):
                 event_type=observability.ErrorEvents.RESOURCE_EXHAUSTED,
                 level=observability.EventLevel.WARNING,
                 description=f"Limiting knowledge files to {self.max_files} (found {len(unique_files)})",
-                data={
-                    "found": len(unique_files),
-                    "limit": self.max_files
-                }
+                data={"found": len(unique_files), "limit": self.max_files},
             )
             unique_files = unique_files[: self.max_files]
 
@@ -351,8 +343,8 @@ class FileKnowledge(KnowledgeSource):
                 "path": self.path,
                 "file_count": len(self._files),
                 "files": self._files[:3] if len(self._files) > 3 else self._files,
-                "component": "knowledge"
-            }
+                "component": "knowledge",
+            },
         )
         return self._files
 
@@ -414,8 +406,8 @@ class FileKnowledge(KnowledgeSource):
                         data={
                             "file_path": file_path,
                             "file_size": file_size,
-                            "limit": self.max_file_size
-                        }
+                            "limit": self.max_file_size,
+                        },
                     )
                     continue
 
@@ -455,8 +447,8 @@ class FileKnowledge(KnowledgeSource):
                     data={
                         "file_path": file_path,
                         "chunk_count": len(document_chunks),
-                        "processing_method": self._get_processing_method(file_path)
-                    }
+                        "processing_method": self._get_processing_method(file_path),
+                    },
                 )
 
             except Exception as e:
@@ -464,10 +456,7 @@ class FileKnowledge(KnowledgeSource):
                     event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_FAILED,
                     level=observability.EventLevel.ERROR,
                     description="Error processing knowledge file",
-                    data={
-                        "file_path": file_path,
-                        "error": str(e)
-                    }
+                    data={"file_path": file_path, "error": str(e)},
                 )
                 continue
 

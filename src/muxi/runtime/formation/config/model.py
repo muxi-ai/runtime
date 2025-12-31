@@ -13,8 +13,9 @@
 # and enables consistent model behavior across the system.
 # =============================================================================
 
-from pydantic import BaseModel, Field
 from typing import Optional
+
+from pydantic import BaseModel, Field
 
 
 class ModelConfig(BaseModel):

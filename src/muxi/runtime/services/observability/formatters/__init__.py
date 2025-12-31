@@ -1,15 +1,16 @@
-from typing import Dict, Type, Any
+from typing import Any, Dict, Type
+
 from .base import BaseFormatter
-from .jsonl import JSONLFormatter
-from .text import TextFormatter
-from .msgpack import MsgPackFormatter
-from .protobuf import ProtobufFormatter
 from .datadog import DatadogFormatter
-from .splunk import SplunkFormatter
 from .elastic import ElasticFormatter
 from .grafana import GrafanaLokiFormatter
+from .jsonl import JSONLFormatter
+from .msgpack import MsgPackFormatter
 from .newrelic import NewRelicFormatter
 from .opentelemetry import OpenTelemetryFormatter
+from .protobuf import ProtobufFormatter
+from .splunk import SplunkFormatter
+from .text import TextFormatter
 
 FORMATTER_REGISTRY: Dict[str, Type[BaseFormatter]] = {
     "jsonl": JSONLFormatter,
@@ -47,5 +48,5 @@ __all__ = [
     "NewRelicFormatter",
     "OpenTelemetryFormatter",
     "FORMATTER_REGISTRY",
-    "create_formatter"
+    "create_formatter",
 ]

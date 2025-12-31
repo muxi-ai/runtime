@@ -15,14 +15,14 @@ import hashlib
 import re
 import time
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional
-
-from ...config.document_processing import DocumentProcessingConfig
-from ....services import observability
+from typing import Any, Dict, List, Optional
 
 import nltk
-from nltk.tokenize import sent_tokenize
 import spacy
+from nltk.tokenize import sent_tokenize
+
+from ....services import observability
+from ...config.document_processing import DocumentProcessingConfig
 
 
 @dataclass

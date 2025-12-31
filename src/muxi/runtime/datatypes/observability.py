@@ -8,7 +8,7 @@ including event types, levels, and data structures.
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Optional, Set, List, Any
+from typing import Any, Dict, List, Optional, Set
 
 
 class EventLevel(Enum):
@@ -1331,12 +1331,13 @@ class TokenUsage:
         """Add comprehensive token usage data in array format."""
         # Extract values in FIELDS order
         values = [
-            usage_data.get('total_tokens', 0),
-            usage_data.get('prompt_tokens', 0),
-            usage_data.get('completion_tokens', 0),
-            usage_data.get('prompt_tokens_cached', 0) + usage_data.get('completion_tokens_cached', 0),  # total_cached
-            usage_data.get('prompt_tokens_cached', 0),
-            usage_data.get('completion_tokens_cached', 0)
+            usage_data.get("total_tokens", 0),
+            usage_data.get("prompt_tokens", 0),
+            usage_data.get("completion_tokens", 0),
+            usage_data.get("prompt_tokens_cached", 0)
+            + usage_data.get("completion_tokens_cached", 0),  # total_cached
+            usage_data.get("prompt_tokens_cached", 0),
+            usage_data.get("completion_tokens_cached", 0),
         ]
 
         # Update totals (element-wise addition)
@@ -1352,11 +1353,7 @@ class TokenUsage:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to self-documenting observability log format."""
-        return {
-            "fields": self.FIELDS,
-            "total": self.total,
-            "breakdown": self.breakdown
-        }
+        return {"fields": self.FIELDS, "total": self.total, "breakdown": self.breakdown}
 
     # Backward compatibility methods
     @property
@@ -1380,9 +1377,13 @@ class RequestContext:
     formation_id: Optional[str] = None
 
     # User identity (three aspects for multi-identity support)
-    internal_user_id: Optional[int] = None      # Database ID (for queries) - NEVER exposed externally
-    muxi_user_id: Optional[str] = None          # MUXI's canonical public_id (e.g., "usr_abc123") for observability
-    user_id: Optional[str] = None               # What developer provided (e.g., "alice@email.com") - channel context
+    internal_user_id: Optional[int] = None  # Database ID (for queries) - NEVER exposed externally
+    muxi_user_id: Optional[str] = (
+        None  # MUXI's canonical public_id (e.g., "usr_abc123") for observability
+    )
+    user_id: Optional[str] = (
+        None  # What developer provided (e.g., "alice@email.com") - channel context
+    )
 
     session_id: Optional[str] = None
     tokens: TokenUsage = field(default_factory=TokenUsage)
@@ -1465,26 +1466,26 @@ class InitEventFormatter:
         Returns:
             True if colors should be used, False otherwise
         """
-        import sys
         import os
+        import sys
 
         # Respect NO_COLOR standard (https://no-color.org/)
-        if os.environ.get('NO_COLOR'):
+        if os.environ.get("NO_COLOR"):
             return False
 
         # Allow forcing colors (useful for CI/testing)
-        if os.environ.get('FORCE_COLOR'):
+        if os.environ.get("FORCE_COLOR"):
             return True
 
         # Check if stdout is a TTY
-        if not hasattr(sys.stdout, 'isatty') or not sys.stdout.isatty():
+        if not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
             return False
 
         # Check TERM environment variable
-        term = os.environ.get('TERM', '').lower()
-        if term == 'dumb':
+        term = os.environ.get("TERM", "").lower()
+        if term == "dumb":
             return False
-        if 'color' in term or 'ansi' in term or 'xterm' in term:
+        if "color" in term or "ansi" in term or "xterm" in term:
             return True
 
         # Default to True if stdout is a TTY
@@ -1619,7 +1620,9 @@ class InitEventFormatter:
         return "\n".join(lines)
 
     @staticmethod
-    def format_summary(duration_s: float, service_count: int, warning_count: int, error_count: int) -> str:
+    def format_summary(
+        duration_s: float, service_count: int, warning_count: int, error_count: int
+    ) -> str:
         """Format startup summary line.
 
         Args:

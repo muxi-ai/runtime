@@ -9,12 +9,13 @@
 # =============================================================================
 
 import threading
-from typing import Optional, List, Dict, Any, Set
+from typing import Any, Dict, List, Optional, Set
+
+from ... import observability
 from .base import BaseTransport, MCPConnectionError
+from .command import CommandLineTransport
 from .http_sse import HTTPSSETransport
 from .streamable import StreamableHTTPTransport
-from .command import CommandLineTransport
-from ... import observability
 
 # Module-level cache for SSE servers (persists for formation lifetime)
 _sse_server_cache: Set[str] = set()
@@ -162,8 +163,13 @@ class MCPTransportFactory:
                     observability.observe(
                         event_type=observability.SystemEvents.MCP_TRANSPORT_FAILED,
                         level=observability.EventLevel.DEBUG,
-                        data={"service": "mcp", "action": "streamable_failed", "url": url, "error": str(e)},
-                        description=f"Streamable HTTP failed for {url}: {e}"
+                        data={
+                            "service": "mcp",
+                            "action": "streamable_failed",
+                            "url": url,
+                            "error": str(e),
+                        },
+                        description=f"Streamable HTTP failed for {url}: {e}",
                     )
 
             # Fall back to SSE
@@ -171,7 +177,7 @@ class MCPTransportFactory:
                 event_type=observability.SystemEvents.MCP_TRANSPORT_ATTEMPT,
                 level=observability.EventLevel.INFO,
                 data={"service": "mcp", "action": "fallback_to_sse", "url": url},
-                description=f"Falling back to SSE for {url}"
+                description=f"Falling back to SSE for {url}",
             )
             try:
                 transport = HTTPSSETransport(url, auth=auth, **kwargs)
@@ -182,7 +188,7 @@ class MCPTransportFactory:
                         event_type=observability.SystemEvents.MCP_TRANSPORT_FALLBACK_SUCCESS,
                         level=observability.EventLevel.INFO,
                         data={"service": "mcp", "action": "sse_success", "url": url},
-                        description="SSE connection successful"
+                        description="SSE connection successful",
                     )
                     # Remember this server uses SSE
                     with _sse_cache_lock:
@@ -194,15 +200,20 @@ class MCPTransportFactory:
                         event_type=observability.ErrorEvents.WARNING,
                         level=observability.EventLevel.WARNING,
                         data={"service": "mcp", "action": "sse_test_failed", "url": url},
-                        description="SSE connection test failed"
+                        description="SSE connection test failed",
                     )
                     await transport.disconnect()
             except Exception as e:
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_CONNECTION_FAILED,
                     level=observability.EventLevel.ERROR,
-                    data={"service": "mcp", "action": "sse_test_failed", "url": url, "error": str(e)},
-                    description=f"SSE test failed for {url}: {e}"
+                    data={
+                        "service": "mcp",
+                        "action": "sse_test_failed",
+                        "url": url,
+                        "error": str(e),
+                    },
+                    description=f"SSE test failed for {url}: {e}",
                 )
 
             # Both transports failed

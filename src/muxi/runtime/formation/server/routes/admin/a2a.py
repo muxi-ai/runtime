@@ -5,19 +5,19 @@ These endpoints provide A2A configuration access and management,
 requiring admin API key authentication.
 """
 
-from typing import Dict, Any
 from copy import deepcopy
+from typing import Any, Dict
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from .....datatypes.api import APIEventType, APIObjectType
 from ...responses import (
     APIResponse,
     create_success_response,
 )
 from ...secrets import restore_secret_placeholders
-from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["A2A"])
 
@@ -74,6 +74,7 @@ async def update_a2a_outbound(request: Request, settings: A2AOutboundUpdate) -> 
     if formation._async_config_lock is None:
         # Fallback: initialize lock if not already created (should not happen in normal operation)
         import asyncio
+
         formation._async_config_lock = asyncio.Lock()
 
     async with formation._async_config_lock:
@@ -87,10 +88,7 @@ async def update_a2a_outbound(request: Request, settings: A2AOutboundUpdate) -> 
             outbound_config[key] = value
 
     response = create_success_response(
-        APIObjectType.A2A,
-        APIEventType.A2A_UPDATED,
-        {"outbound": outbound_config},
-        request_id
+        APIObjectType.A2A, APIEventType.A2A_UPDATED, {"outbound": outbound_config}, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -114,6 +112,7 @@ async def reset_a2a_outbound_setting(request: Request, item: str) -> JSONRespons
     # Acquire async lock to prevent race conditions
     if formation._async_config_lock is None:
         import asyncio
+
         formation._async_config_lock = asyncio.Lock()
 
     async with formation._async_config_lock:

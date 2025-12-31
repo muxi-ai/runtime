@@ -1,7 +1,8 @@
 """Artifact data models for MUXI runtime."""
 
 from datetime import datetime
-from typing import Optional, Literal
+from typing import Literal, Optional
+
 from pydantic import BaseModel
 
 

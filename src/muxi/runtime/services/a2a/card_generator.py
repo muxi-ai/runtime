@@ -5,22 +5,22 @@ This module provides functionality to automatically generate A2A-compliant agent
 from existing MUXI agent YAML configurations, with intelligent caching support.
 """
 
-import yaml
-from typing import Dict, Any, Optional
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Optional
 
+import yaml
 
+from .. import observability
+from .cache_manager import A2ACacheManager
 from .models import (
-    AgentCard,
-    A2ACapability,
     A2AAuthentication,
+    A2ACapability,
     A2AEndpoint,
+    AgentCard,
     AuthType,
     CapabilityType,
 )
-from .cache_manager import A2ACacheManager
-from .. import observability
 
 
 class AgentCardGenerator:
@@ -539,7 +539,11 @@ class AgentCardGenerator:
         cards = {}
 
         # Find all config files (support .afs, .yaml, .yml)
-        config_files = list(config_dir.glob("*.afs")) + list(config_dir.glob("*.yaml")) + list(config_dir.glob("*.yml"))
+        config_files = (
+            list(config_dir.glob("*.afs"))
+            + list(config_dir.glob("*.yaml"))
+            + list(config_dir.glob("*.yml"))
+        )
 
         pass  # REMOVED: init-phase observe() call
 

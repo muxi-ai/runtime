@@ -2,9 +2,10 @@
 Real MCP tool discovery using tools/list protocol.
 """
 
-import re
 import logging
-from typing import List, Dict, Any, Optional
+import re
+from typing import Any, Dict, List, Optional
+
 from ..transports.base import BaseTransport, MCPRequestError
 
 logger = logging.getLogger(__name__)

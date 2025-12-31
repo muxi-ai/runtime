@@ -38,52 +38,52 @@ def redact_sensitive_content(text: Optional[str]) -> str:
     # Matches strings like: sk-..., api_key=..., apikey:..., etc.
     api_key_patterns = [
         # OpenAI style keys
-        (r'\bsk-[A-Za-z0-9-]{20,}\b', 'sk-****'),
+        (r"\bsk-[A-Za-z0-9-]{20,}\b", "sk-****"),
         # Generic API keys with common prefixes
         (
-            r'\b(api[-_]?key|apikey|api[-_]?token|access[-_]?token|'
+            r"\b(api[-_]?key|apikey|api[-_]?token|access[-_]?token|"
             r'auth[-_]?token|bearer)\s*[:=]\s*["\']?([A-Za-z0-9+/=_-]{20,})["\']?',
-            r'\1=****'
+            r"\1=****",
         ),
         # AWS Access Keys
-        (r'\bAKIA[A-Z0-9]{16}\b', 'AKIA****'),
+        (r"\bAKIA[A-Z0-9]{16}\b", "AKIA****"),
         # AWS Secret Keys
-        (r'\b[A-Za-z0-9+/]{40}\b(?=.*aws|.*secret)', '****'),
+        (r"\b[A-Za-z0-9+/]{40}\b(?=.*aws|.*secret)", "****"),
         # GitHub tokens
-        (r'\bghp_[A-Za-z0-9]{36}\b', 'ghp_****'),
-        (r'\bgho_[A-Za-z0-9]{36}\b', 'gho_****'),
-        (r'\bghu_[A-Za-z0-9]{36}\b', 'ghu_****'),
+        (r"\bghp_[A-Za-z0-9]{36}\b", "ghp_****"),
+        (r"\bgho_[A-Za-z0-9]{36}\b", "gho_****"),
+        (r"\bghu_[A-Za-z0-9]{36}\b", "ghu_****"),
         # Google API keys
-        (r'\bAIza[A-Za-z0-9_-]{35}\b', 'AIza****'),
+        (r"\bAIza[A-Za-z0-9_-]{35}\b", "AIza****"),
         # Slack tokens
-        (r'\bxox[baprs]-[A-Za-z0-9-]{10,}\b', 'xox*-****'),
+        (r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b", "xox*-****"),
     ]
 
     # Password patterns
     password_patterns = [
         # With explicit delimiter
-        (r'(password|passwd|pwd|pass)\s*[:=]\s*["\']?([^\s"\']{8,})["\']?', r'\1=****'),
+        (r'(password|passwd|pwd|pass)\s*[:=]\s*["\']?([^\s"\']{8,})["\']?', r"\1=****"),
         # With "is" or space
-        (r'(password|passwd|pwd|pass)\s+(is\s+)?([^\s"\']{8,})', r'\1 ****'),
-        (r'(secret|client_secret)\s*[:=]\s*["\']?([^\s"\']{8,})["\']?', r'\1=****'),
+        (r'(password|passwd|pwd|pass)\s+(is\s+)?([^\s"\']{8,})', r"\1 ****"),
+        (r'(secret|client_secret)\s*[:=]\s*["\']?([^\s"\']{8,})["\']?', r"\1=****"),
     ]
 
     # Credit card patterns (basic - matches 13-19 digit numbers with optional formatting)
-    credit_card_pattern = r'\b(?:\d{4}[-\s]?){3}\d{1,7}\b'
+    credit_card_pattern = r"\b(?:\d{4}[-\s]?){3}\d{1,7}\b"
 
     # SSN pattern (US format: XXX-XX-XXXX or XXXXXXXXX)
-    ssn_pattern = r'\b\d{3}-?\d{2}-?\d{4}\b'
+    ssn_pattern = r"\b\d{3}-?\d{2}-?\d{4}\b"
 
     # Email pattern (partial redaction)
-    email_pattern = r'\b([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b'
+    email_pattern = r"\b([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b"
 
     # Phone number pattern (US format)
-    phone_pattern = r'\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'
+    phone_pattern = r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"
 
     # Database connection strings
     db_patterns = [
-        (r'(mongodb|postgres|postgresql|mysql|redis|sqlite)://[^\s]+', r'\1://****'),
-        (r'(host|server)\s*[:=]\s*["\']?([^\s"\']+)["\']?', r'\1=****'),
+        (r"(mongodb|postgres|postgresql|mysql|redis|sqlite)://[^\s]+", r"\1://****"),
+        (r'(host|server)\s*[:=]\s*["\']?([^\s"\']+)["\']?', r"\1=****"),
     ]
 
     # Apply all redactions
@@ -97,22 +97,24 @@ def redact_sensitive_content(text: Optional[str]) -> str:
         redacted = re.sub(pattern, replacement, redacted, flags=re.IGNORECASE)
 
     # Credit cards
-    redacted = re.sub(credit_card_pattern, '****-****-****-****', redacted)
+    redacted = re.sub(credit_card_pattern, "****-****-****-****", redacted)
 
     # SSNs
-    redacted = re.sub(ssn_pattern, '***-**-****', redacted)
+    redacted = re.sub(ssn_pattern, "***-**-****", redacted)
 
     # Emails (show first char and domain)
-    redacted = re.sub(email_pattern, lambda m: m.group(1)[0] + '****@' + m.group(2), redacted)
+    redacted = re.sub(email_pattern, lambda m: m.group(1)[0] + "****@" + m.group(2), redacted)
 
     # Phone numbers
-    redacted = re.sub(phone_pattern, '***-***-****', redacted)
+    redacted = re.sub(phone_pattern, "***-***-****", redacted)
 
     # JWT tokens (they start with ey and are base64)
-    redacted = re.sub(r'\bey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b', 'ey****.****.****.', redacted)
+    redacted = re.sub(
+        r"\bey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "ey****.****.****.", redacted
+    )
 
     # Generic long hex strings that might be tokens (40+ chars)
-    redacted = re.sub(r'\b[a-fA-F0-9]{40,}\b', '****', redacted)
+    redacted = re.sub(r"\b[a-fA-F0-9]{40,}\b", "****", redacted)
 
     return redacted
 
@@ -149,23 +151,23 @@ def sanitize_message_preview(message: Optional[str], max_length: int = 200) -> s
     # Additional aggressive sanitization for streaming context
     # Remove any remaining potential sensitive keywords
     sensitive_words = [
-        r'\b(private|confidential|internal|secret|credential|token|key|password|auth)\b',
+        r"\b(private|confidential|internal|secret|credential|token|key|password|auth)\b",
     ]
     for pattern in sensitive_words:
-        sanitized = re.sub(pattern, '[REDACTED]', sanitized, flags=re.IGNORECASE)
+        sanitized = re.sub(pattern, "[REDACTED]", sanitized, flags=re.IGNORECASE)
 
     # Remove any URLs that might contain sensitive parameters
-    sanitized = re.sub(r'https?://[^\s]+', '[URL]', sanitized)
+    sanitized = re.sub(r"https?://[^\s]+", "[URL]", sanitized)
 
     # Remove file paths that might reveal system structure
-    sanitized = re.sub(r'[/\\](?:Users|home|var|etc|opt)[/\\][^\s]+', '[PATH]', sanitized)
+    sanitized = re.sub(r"[/\\](?:Users|home|var|etc|opt)[/\\][^\s]+", "[PATH]", sanitized)
 
     # Truncate to max length
     if len(sanitized) > max_length:
-        sanitized = sanitized[:max_length-3] + "..."
+        sanitized = sanitized[: max_length - 3] + "..."
 
     # Clean up any consecutive spaces or newlines
-    sanitized = re.sub(r'\s+', ' ', sanitized).strip()
+    sanitized = re.sub(r"\s+", " ", sanitized).strip()
 
     # Ensure we never return empty
     if not sanitized:

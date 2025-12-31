@@ -8,13 +8,14 @@ types and MUXI's unified response format, maintaining separation of concerns.
 import inspect
 import time
 import traceback
-from typing import List, Optional, Dict, Any, Union
+from typing import Any, Dict, List, Optional, Union
 
 from onellm.types.common import ContentItem as OneLLMContentItem
-from ..datatypes.response import MuxiContentItem, MuxiUnifiedResponse, MuxiErrorDetails
+
 from ..datatypes.errors import get_error_info
-from ..utils.error_classifier import classify_error_code
+from ..datatypes.response import MuxiContentItem, MuxiErrorDetails, MuxiUnifiedResponse
 from ..services import observability
+from ..utils.error_classifier import classify_error_code
 
 
 def convert_onellm_to_muxi_content(
@@ -379,14 +380,14 @@ async def extract_response_content(response: Any) -> str:
         async for chunk in response:
             if isinstance(chunk, str):
                 chunks.append(chunk)
-            elif hasattr(chunk, 'content'):
+            elif hasattr(chunk, "content"):
                 content = chunk.content
                 if content:
                     chunks.append(str(content) if not isinstance(content, str) else content)
         return "".join(chunks)
 
     # Handle MuxiResponse or similar objects with .content attribute
-    if hasattr(response, 'content'):
+    if hasattr(response, "content"):
         content = response.content
         if isinstance(content, str):
             return content
@@ -394,10 +395,10 @@ async def extract_response_content(response: Any) -> str:
             # Extract text from content items (multi-modal responses)
             text_parts = []
             for item in content:
-                if hasattr(item, 'text') and item.text:
+                if hasattr(item, "text") and item.text:
                     text_parts.append(item.text)
-                elif isinstance(item, dict) and item.get('text'):
-                    text_parts.append(item['text'])
+                elif isinstance(item, dict) and item.get("text"):
+                    text_parts.append(item["text"])
             return " ".join(text_parts)
         else:
             return str(content) if content else ""

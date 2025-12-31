@@ -145,9 +145,7 @@ class UserContextManager:
                 try:
                     # Get ALL recent memories from collection (no semantic search/embeddings needed)
                     results = self.overlord.long_term_memory.get_recent_memories(
-                        limit=10,
-                        collection=collection,
-                        external_user_id=external_user_id
+                        limit=10, collection=collection, external_user_id=external_user_id
                     )
                     if results:
                         identity_memories.extend(results)
@@ -247,9 +245,7 @@ class UserContextManager:
                 try:
                     # Get ALL recent memories from collection (no semantic search/embeddings needed)
                     results = self.overlord.long_term_memory.get_recent_memories(
-                        limit=10,
-                        collection=collection,
-                        external_user_id=external_user_id
+                        limit=10, collection=collection, external_user_id=external_user_id
                     )
                     if results:
                         context_memories.extend(results)

@@ -8,10 +8,10 @@ This module provides:
 - Credential exceptions for error handling
 """
 
-from .resolver import CredentialResolver
 from .encrypted import EncryptedCredentialResolver
-from .exceptions import MissingCredentialError, AmbiguousCredentialError
+from .exceptions import AmbiguousCredentialError, MissingCredentialError
 from .handler import CredentialHandler
+from .resolver import CredentialResolver
 
 __all__ = [
     "CredentialResolver",

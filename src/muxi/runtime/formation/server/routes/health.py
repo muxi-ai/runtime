@@ -111,9 +111,9 @@ async def health_check(request: Request) -> JSONResponse:
     is_healthy = _check_formation_health(formation)
 
     # Get uptime
-    server = getattr(formation, '_server', None)
+    server = getattr(formation, "_server", None)
     uptime_seconds = 0
-    if server and hasattr(server, '_start_time'):
+    if server and hasattr(server, "_start_time"):
         uptime_seconds = int(time.time() - server._start_time)
 
     # Build simple health response per spec

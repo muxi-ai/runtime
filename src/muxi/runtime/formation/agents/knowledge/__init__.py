@@ -49,7 +49,7 @@
 # =============================================================================
 
 
-from .base import KnowledgeSource, FileKnowledge, KnowledgeHandler
+from .base import FileKnowledge, KnowledgeHandler, KnowledgeSource
 
 __all__ = [
     "KnowledgeSource",

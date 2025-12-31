@@ -8,7 +8,7 @@ Enhanced with request-scoped exclusion for resilience fallback strategies.
 """
 
 import asyncio
-from typing import Set, List, Callable, Optional, Awaitable, Dict
+from typing import Awaitable, Callable, Dict, List, Optional, Set
 
 
 class ActiveAgentsTracker:

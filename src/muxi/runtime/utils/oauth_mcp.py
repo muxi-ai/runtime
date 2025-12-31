@@ -9,18 +9,18 @@ Usage:
     python src/muxi/utils/oauth_mcp.py https://mcp.server.com/sse
 """
 
-import sys
+import argparse
 import json
-import time
 import socket
+import sys
 import threading
+import time
+import urllib.error
+import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import urlparse, parse_qs, urlencode, urljoin
-from typing import Optional, Dict, Any, cast
-import argparse
-import urllib.request
-import urllib.error
+from typing import Any, Dict, Optional, cast
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 
 # MUXI logo for OAuth providers that support it
 MUXI_LOGO_URL = "https://raw.githubusercontent.com/muxi-ai/.github/refs/heads/main/profile/logo.png"
@@ -522,9 +522,9 @@ def build_authorization_url(oauth_config, client_info, callback_port):
         "code_challenge_methods_supported", []
     ):
         # Generate PKCE challenge
-        import secrets
-        import hashlib
         import base64
+        import hashlib
+        import secrets
 
         code_verifier = (
             base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")

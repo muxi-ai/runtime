@@ -5,13 +5,14 @@ This module provides a lightweight version of SecretsManager that can be importe
 quickly without triggering the heavy import chain (formation, ML libraries, etc).
 """
 
-import json
-import re
-import os
 import asyncio
+import json
+import os
+import re
 import threading
-from typing import Dict, Any, Optional, Union, List
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
 from cryptography.fernet import Fernet
 
 
@@ -178,10 +179,12 @@ class SecretsManager:
                 usages = self.check_secret_usage(normalized_name)
                 if usages:
                     # Build detailed error message
-                    usage_details = "\n".join([
-                        f"  - {file_path.relative_to(self.formation_dir)}:{line_num} -> {line_content}"
-                        for file_path, line_num, line_content in usages
-                    ])
+                    usage_details = "\n".join(
+                        [
+                            f"  - {file_path.relative_to(self.formation_dir)}:{line_num} -> {line_content}"
+                            for file_path, line_num, line_content in usages
+                        ]
+                    )
                     raise ValueError(
                         f"Cannot delete secret '{normalized_name}' - it is currently in use:\n{usage_details}\n"
                         f"Remove these references first, or use force=True to delete anyway."
@@ -223,7 +226,7 @@ class SecretsManager:
 
         # Write all keys in ENV format (KEY=)
         lines = [f"{key}=" for key in all_keys]
-        self.secrets_example_path.write_text('\n'.join(lines) + '\n')
+        self.secrets_example_path.write_text("\n".join(lines) + "\n")
 
     def _remove_from_secrets_example(self, secret_name: str) -> None:
         """Update secrets file with ALL remaining keys from secrets.enc."""
@@ -238,7 +241,7 @@ class SecretsManager:
 
         # Write all keys in ENV format (KEY=)
         lines = [f"{key}=" for key in all_keys]
-        self.secrets_example_path.write_text('\n'.join(lines) + '\n')
+        self.secrets_example_path.write_text("\n".join(lines) + "\n")
 
     def check_secret_usage(self, secret_name: str) -> List[tuple]:
         """
@@ -254,12 +257,12 @@ class SecretsManager:
         usages = []
 
         # Search in all config files (.afs, .yaml, .yml) in formation directory and subdirectories
-        yaml_patterns = ['*.afs', '*.yaml', '*.yml']
+        yaml_patterns = ["*.afs", "*.yaml", "*.yml"]
         for pattern in yaml_patterns:
             for yaml_file in self.formation_dir.rglob(pattern):
                 try:
                     content = yaml_file.read_text()
-                    for line_num, line in enumerate(content.split('\n'), start=1):
+                    for line_num, line in enumerate(content.split("\n"), start=1):
                         matches = self._secrets_pattern.findall(line)
                         for match in matches:
                             if self._normalize_secret_name(match) == normalized_name:

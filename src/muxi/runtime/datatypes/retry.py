@@ -5,9 +5,9 @@ Core data structures for implementing retry logic for transient failures.
 """
 
 import random
-from typing import Any, Dict, Optional, Callable, List, Type
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional, Type
 
 
 class RetryStrategy(Enum):

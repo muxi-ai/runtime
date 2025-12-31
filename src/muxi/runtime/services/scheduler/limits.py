@@ -12,9 +12,9 @@ Security Features:
 """
 
 import time
-from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
 from ...utils.datetime_utils import utc_now
 
@@ -47,11 +47,7 @@ class RateLimiter:
         self._cleanup_interval = 3600  # Cleanup every hour
         self._last_cleanup = time.time()
 
-    def check_rate_limit(
-        self,
-        user_id: str,
-        limits: ResourceLimits
-    ) -> None:
+    def check_rate_limit(self, user_id: str, limits: ResourceLimits) -> None:
         """
         Check if user has exceeded rate limits.
 
@@ -73,10 +69,7 @@ class RateLimiter:
             self._hourly_counts[user_id] = []
 
         # Remove old entries
-        self._hourly_counts[user_id] = [
-            ts for ts in self._hourly_counts[user_id]
-            if ts > hour_ago
-        ]
+        self._hourly_counts[user_id] = [ts for ts in self._hourly_counts[user_id] if ts > hour_ago]
 
         if len(self._hourly_counts[user_id]) >= limits.max_job_creations_per_hour:
             raise ValueError(
@@ -89,10 +82,7 @@ class RateLimiter:
             self._daily_counts[user_id] = []
 
         # Remove old entries
-        self._daily_counts[user_id] = [
-            ts for ts in self._daily_counts[user_id]
-            if ts > day_ago
-        ]
+        self._daily_counts[user_id] = [ts for ts in self._daily_counts[user_id] if ts > day_ago]
 
         if len(self._daily_counts[user_id]) >= limits.max_job_creations_per_day:
             raise ValueError(
@@ -117,18 +107,14 @@ class RateLimiter:
         # Clean up hourly counts
         for user_id in list(self._hourly_counts.keys()):
             self._hourly_counts[user_id] = [
-                ts for ts in self._hourly_counts[user_id]
-                if ts > hour_ago
+                ts for ts in self._hourly_counts[user_id] if ts > hour_ago
             ]
             if not self._hourly_counts[user_id]:
                 del self._hourly_counts[user_id]
 
         # Clean up daily counts
         for user_id in list(self._daily_counts.keys()):
-            self._daily_counts[user_id] = [
-                ts for ts in self._daily_counts[user_id]
-                if ts > day_ago
-            ]
+            self._daily_counts[user_id] = [ts for ts in self._daily_counts[user_id] if ts > day_ago]
             if not self._daily_counts[user_id]:
                 del self._daily_counts[user_id]
 
@@ -148,11 +134,7 @@ class SchedulerLimitsEnforcer:
         self.limits = limits or ResourceLimits()
         self.rate_limiter = RateLimiter()
 
-    async def check_job_creation_limits(
-        self,
-        job_manager,
-        user_id: str
-    ) -> None:
+    async def check_job_creation_limits(self, job_manager, user_id: str) -> None:
         """
         Check if user can create a new job without exceeding limits.
 
@@ -168,7 +150,7 @@ class SchedulerLimitsEnforcer:
 
         # Check job count limits (requires database query)
         user_jobs = await job_manager.get_user_jobs(user_id)
-        active_jobs = [job for job in user_jobs if job['status'] == 'ACTIVE']
+        active_jobs = [job for job in user_jobs if job["status"] == "ACTIVE"]
 
         if len(active_jobs) >= self.limits.max_jobs_per_user:
             raise ValueError(
@@ -177,10 +159,7 @@ class SchedulerLimitsEnforcer:
             )
 
         # Check concurrent execution limits
-        running_jobs = [
-            job for job in active_jobs
-            if job.get('last_execution_status') == 'RUNNING'
-        ]
+        running_jobs = [job for job in active_jobs if job.get("last_execution_status") == "RUNNING"]
 
         if len(running_jobs) >= self.limits.max_concurrent_jobs_per_user:
             raise ValueError(
@@ -216,7 +195,7 @@ class SchedulerLimitsEnforcer:
         Returns:
             True if job should be paused
         """
-        consecutive_failures = job.get('consecutive_failures', 0)
+        consecutive_failures = job.get("consecutive_failures", 0)
         return consecutive_failures >= self.limits.max_failed_executions_before_pause
 
     def get_execution_timeout(self) -> int:

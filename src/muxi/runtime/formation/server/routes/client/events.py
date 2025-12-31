@@ -12,8 +12,8 @@ import json
 import secrets
 from typing import Optional, Tuple
 
-from fastapi import APIRouter, HTTPException, Request, Header
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from ...responses import create_error_response
 
@@ -43,7 +43,11 @@ def _check_auth_and_user_id(
     is_admin = False
     if provided_admin_key and admin_key and secrets.compare_digest(provided_admin_key, admin_key):
         is_admin = True
-    elif provided_client_key and client_key and secrets.compare_digest(provided_client_key, client_key):
+    elif (
+        provided_client_key
+        and client_key
+        and secrets.compare_digest(provided_client_key, client_key)
+    ):
         is_admin = False
     else:
         response = create_error_response(
@@ -90,23 +94,24 @@ async def user_events(
 
     # Normalize user_id to "0" for single-user mode (only if user_id provided)
     if user_id_filter:
-        user_id = "0" if overlord and not getattr(overlord, "is_multi_user", False) else user_id_filter
+        user_id = (
+            "0" if overlord and not getattr(overlord, "is_multi_user", False) else user_id_filter
+        )
     else:
         user_id = None  # Admin without filter - all events
 
     if not overlord:
-        raise HTTPException(
-            status_code=503,
-            detail="Overlord service not available"
-        )
+        raise HTTPException(status_code=503, detail="Overlord service not available")
 
     # Get observability manager
-    observability_manager = overlord.observability_manager if hasattr(overlord, 'observability_manager') else None
+    observability_manager = (
+        overlord.observability_manager if hasattr(overlord, "observability_manager") else None
+    )
 
-    if not observability_manager or not hasattr(observability_manager, 'subscribe'):
+    if not observability_manager or not hasattr(observability_manager, "subscribe"):
         raise HTTPException(
             status_code=503,
-            detail="Live event streaming not available - observability manager not configured"
+            detail="Live event streaming not available - observability manager not configured",
         )
 
     async def event_generator():
@@ -154,7 +159,7 @@ async def user_events(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
-        }
+        },
     )
 
 
@@ -183,7 +188,9 @@ async def session_events(
 
     # Normalize user_id to "0" for single-user mode (only if user_id provided)
     if user_id_filter:
-        user_id = "0" if overlord and not getattr(overlord, "is_multi_user", False) else user_id_filter
+        user_id = (
+            "0" if overlord and not getattr(overlord, "is_multi_user", False) else user_id_filter
+        )
     else:
         user_id = None  # Admin without filter
 
@@ -191,12 +198,14 @@ async def session_events(
         raise HTTPException(status_code=503, detail="Overlord service not available")
 
     # Get observability manager
-    observability_manager = overlord.observability_manager if hasattr(overlord, 'observability_manager') else None
+    observability_manager = (
+        overlord.observability_manager if hasattr(overlord, "observability_manager") else None
+    )
 
-    if not observability_manager or not hasattr(observability_manager, 'subscribe'):
+    if not observability_manager or not hasattr(observability_manager, "subscribe"):
         raise HTTPException(
             status_code=503,
-            detail="Live event streaming not available - observability manager not configured"
+            detail="Live event streaming not available - observability manager not configured",
         )
 
     async def event_generator():
@@ -234,7 +243,7 @@ async def session_events(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
-        }
+        },
     )
 
 
@@ -267,7 +276,9 @@ async def request_events(
 
     # Normalize user_id to "0" for single-user mode (only if user_id provided)
     if user_id_filter:
-        user_id = "0" if overlord and not getattr(overlord, "is_multi_user", False) else user_id_filter
+        user_id = (
+            "0" if overlord and not getattr(overlord, "is_multi_user", False) else user_id_filter
+        )
     else:
         user_id = None  # Admin - can access any request
 
@@ -298,7 +309,7 @@ async def request_events(
         except Exception as e:
             error_msg = str(e).strip() if e else "Stream error"
             if error_msg:
-                error_msg = error_msg.replace('\n', ' ').replace('\r', '')[:200]
+                error_msg = error_msg.replace("\n", " ").replace("\r", "")[:200]
             yield f"data: {json.dumps({'error': error_msg})}\n\n"
 
     return StreamingResponse(
@@ -307,8 +318,8 @@ async def request_events(
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
-            "Connection": "keep-alive"
-        }
+            "Connection": "keep-alive",
+        },
     )
 
 

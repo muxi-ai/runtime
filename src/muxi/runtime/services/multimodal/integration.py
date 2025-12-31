@@ -7,17 +7,17 @@ rich multi-modal content.
 """
 
 import mimetypes
-from typing import Any, Dict, List, Optional
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-import time
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from ...datatypes.workflow import SubTask, TaskInput, TaskOutput, Workflow
 from .fusion_engine import (
-    MultiModalFusionEngine,
-    MultiModalContent,
     ModalityType,
+    MultiModalContent,
+    MultiModalFusionEngine,
     MultiModalProcessingResult,
 )
 

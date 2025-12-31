@@ -1,5 +1,6 @@
-from typing import Dict, Any, List
 import json
+from typing import Any, Dict, List
+
 from .base import BaseFormatter
 
 try:

@@ -12,19 +12,19 @@ Now integrated with A2A SDK security schemes for protocol compliance.
 """
 
 import base64
-from enum import Enum
-from typing import Dict, Optional, Tuple, Any
 from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, Optional, Tuple
 
 # A2A SDK imports
 from a2a.types import (
-    SecurityScheme,
     APIKeySecurityScheme,
     HTTPAuthSecurityScheme,
+    SecurityScheme,
 )
 
-from ...secrets import SecretsManager
 from ... import observability
+from ...secrets import SecretsManager
 
 
 class AuthType(str, Enum):
@@ -606,7 +606,9 @@ class A2AAuthManager:
                         password = creds.credentials.get("password")
                         if username and password:
                             credentials_str = f"{username}:{password}"
-                            encoded_credentials = base64.b64encode(credentials_str.encode()).decode()
+                            encoded_credentials = base64.b64encode(
+                                credentials_str.encode()
+                            ).decode()
                             updated_headers["Authorization"] = f"Basic {encoded_credentials}"
 
             observability.observe(

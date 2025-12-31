@@ -6,19 +6,18 @@ fusion engines, content analysis, and workflow integration.
 """
 
 from .fusion_engine import (
-    MultiModalFusionEngine,
-    MultiModalContent,
     ModalityType,
-    ProcessingMode,
+    MultiModalContent,
+    MultiModalFusionEngine,
     MultiModalProcessingResult,
+    ProcessingMode,
 )
-
 from .integration import (
     MultiModalTaskInput,
     MultiModalTaskOutput,
-    WorkflowMultiModalProcessor,
     TaskInputProcessor,
     TaskOutputProcessor,
+    WorkflowMultiModalProcessor,
 )
 
 __all__ = [

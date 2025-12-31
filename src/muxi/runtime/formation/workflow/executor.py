@@ -1,33 +1,31 @@
 import asyncio
-from collections import defaultdict
-from typing import Optional, Dict, Any, List, Callable
-from datetime import datetime, timedelta
 import json
 import re
+from collections import defaultdict
+from datetime import datetime, timedelta
+from typing import Any, Callable, Dict, List, Optional
 
+from ...datatypes.exceptions import WorkflowTimeoutError
 from ...datatypes.workflow import (
-    Workflow,
     SubTask,
-    TaskStatus,
-    WorkflowStatus,
     TaskResult,
+    TaskStatus,
+    Workflow,
+    WorkflowStatus,
     build_execution_phases,
 )
 from ...datatypes.workflow_models import (
-    TaskSpecification,
     TaskExecutionState,
+    TaskSpecification,
     create_execution_result,
 )
 from ...services import observability, streaming
-from ...datatypes.exceptions import WorkflowTimeoutError
-
 from ..agents.agent import Agent
-
 from .config import (
+    AgentRoutingRule,
+    TaskRoutingStrategy,
     WorkflowConfig,
     WorkflowErrorHandler,
-    TaskRoutingStrategy,
-    AgentRoutingRule,
 )
 
 
@@ -187,15 +185,18 @@ class WorkflowExecutor:
         if max_timeout:
             try:
                 return await asyncio.wait_for(
-                    self._execute_workflow_internal(workflow, context),
-                    timeout=max_timeout
+                    self._execute_workflow_internal(workflow, context), timeout=max_timeout
                 )
             except asyncio.TimeoutError:
                 # Workflow exceeded maximum allowed time
                 workflow.status = WorkflowStatus.FAILED
                 workflow.completed_at = datetime.now()
 
-                elapsed = (workflow.completed_at - workflow.started_at).total_seconds() if workflow.started_at else 0
+                elapsed = (
+                    (workflow.completed_at - workflow.started_at).total_seconds()
+                    if workflow.started_at
+                    else 0
+                )
 
                 observability.observe(
                     event_type=observability.ConversationEvents.WORKFLOW_EXECUTION_FAILED,
@@ -206,7 +207,9 @@ class WorkflowExecutor:
                         "max_timeout_seconds": max_timeout,
                         "elapsed_seconds": elapsed,
                         "total_tasks": len(workflow.tasks),
-                        "completed_tasks": sum(1 for t in workflow.tasks.values() if t.status == TaskStatus.COMPLETED),
+                        "completed_tasks": sum(
+                            1 for t in workflow.tasks.values() if t.status == TaskStatus.COMPLETED
+                        ),
                     },
                     description=(
                         f"Workflow {workflow.id} exceeded maximum timeout of {max_timeout}s "
@@ -312,7 +315,8 @@ class WorkflowExecutor:
                     "workflow_id": workflow.id,
                     "status": workflow.status.value,
                     "total_tasks": len(workflow.tasks),
-                    "execution_time_ms": (datetime.now() - workflow.created_at).total_seconds() * 1000,
+                    "execution_time_ms": (datetime.now() - workflow.created_at).total_seconds()
+                    * 1000,
                 },
                 description=f"Workflow {workflow.id} completed with status {workflow.status.value}",
             )
@@ -513,7 +517,7 @@ class WorkflowExecutor:
             if max_parallel and max_parallel < len(task_coroutines):
                 # Execute in batches respecting max_parallel_tasks
                 for i in range(0, len(task_coroutines), max_parallel):
-                    batch = task_coroutines[i:i + max_parallel]
+                    batch = task_coroutines[i : i + max_parallel]
                     await asyncio.gather(*batch, return_exceptions=True)
                     # Check if we should continue after each batch
                     if not self._should_continue_execution(workflow):
@@ -608,7 +612,7 @@ class WorkflowExecutor:
                 f"Completed task: {task.description}",
                 stage="task_complete",
                 task_id=task.id,
-                task_type=task.task_type if hasattr(task, 'task_type') else None
+                task_type=task.task_type if hasattr(task, "task_type") else None,
             )
 
             # Notify task completed
@@ -724,7 +728,7 @@ class WorkflowExecutor:
             if max_parallel and max_parallel < len(task_coroutines):
                 # Execute in batches respecting max_parallel_tasks
                 for i in range(0, len(task_coroutines), max_parallel):
-                    batch = task_coroutines[i:i + max_parallel]
+                    batch = task_coroutines[i : i + max_parallel]
                     await asyncio.gather(*batch, return_exceptions=True)
                     # Check if we should continue after each batch
                     if not self._should_continue_execution(workflow):
@@ -819,9 +823,13 @@ class WorkflowExecutor:
                     "task_id": task.id,
                     "task_name": task.name,
                     "agent_id": agent.agent_id,
-                    "task_complexity": task.estimated_complexity if hasattr(task, 'estimated_complexity') else None,
+                    "task_complexity": (
+                        task.estimated_complexity if hasattr(task, "estimated_complexity") else None
+                    ),
                     "estimated_duration_s": task_timeout,
-                    "dependencies_completed": len(task.dependencies) if hasattr(task, 'dependencies') else 0,
+                    "dependencies_completed": (
+                        len(task.dependencies) if hasattr(task, "dependencies") else 0
+                    ),
                     "workflow_id": workflow.id if workflow else None,
                 },
                 description=(
@@ -877,7 +885,9 @@ class WorkflowExecutor:
                     "agent_id": task.assigned_agent_id,
                     "status": result.status.value if result else "unknown",
                     "duration_ms": execution_time * 1000 if execution_time else None,
-                    "task_complexity": task.estimated_complexity if hasattr(task, 'estimated_complexity') else None,
+                    "task_complexity": (
+                        task.estimated_complexity if hasattr(task, "estimated_complexity") else None
+                    ),
                     "success": result.status.value == "completed" if result else False,
                     "workflow_id": workflow.id if workflow else None,
                 },
@@ -934,7 +944,7 @@ class WorkflowExecutor:
                     "assigned_agent_id": task.assigned_agent_id,
                     "error_type": type(e).__name__,
                     "error": str(e),
-                    "workflow_id": getattr(task, 'workflow_id', None),
+                    "workflow_id": getattr(task, "workflow_id", None),
                 },
                 description=f"Task '{task.name}' execution failed",
             )
@@ -1355,7 +1365,7 @@ class WorkflowExecutor:
                 outputs["artifacts"] = {
                     "result": artifacts,
                     "status": "success",
-                    "metrics": {"artifact_count": len(artifacts)}
+                    "metrics": {"artifact_count": len(artifacts)},
                 }
 
             return TaskResult(
@@ -1862,7 +1872,7 @@ class ProgressTracker:
                 "workflow_id": workflow_id,
                 "completed_tasks": completed_tasks,
                 "total_tasks": total_tasks,
-                "progress_percentage": progress_info['progress_percentage'],
+                "progress_percentage": progress_info["progress_percentage"],
             },
             description=(
                 f"Workflow {workflow_id} progress: {completed_tasks}/{total_tasks} tasks "

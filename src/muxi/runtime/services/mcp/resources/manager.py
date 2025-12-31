@@ -1,8 +1,9 @@
 """High-level MCP Resource management."""
 
-from typing import List, Dict, Any, TYPE_CHECKING
-from .discovery import MCPResourceDiscovery
+from typing import TYPE_CHECKING, Any, Dict, List
+
 from ....datatypes.exceptions import MCPRequestError
+from .discovery import MCPResourceDiscovery
 
 if TYPE_CHECKING:
     from ..service import MCPService
@@ -78,9 +79,7 @@ class MCPResourceManager:
         return await self.discovery.read_resource(transport, uri)
 
     async def list_resources_by_type(
-        self,
-        server_id: str,
-        mime_type_filter: str = None
+        self, server_id: str, mime_type_filter: str = None
     ) -> List[Dict[str, Any]]:
         """List resources filtered by MIME type.
 
@@ -98,7 +97,8 @@ class MCPResourceManager:
 
         if mime_type_filter:
             filtered_resources = [
-                resource for resource in resources
+                resource
+                for resource in resources
                 if resource.get("mimeType", "").startswith(mime_type_filter)
             ]
             return filtered_resources
@@ -106,9 +106,7 @@ class MCPResourceManager:
         return resources
 
     async def find_resources_by_name(
-        self,
-        server_id: str,
-        name_pattern: str
+        self, server_id: str, name_pattern: str
     ) -> List[Dict[str, Any]]:
         """Find resources by name pattern.
 
@@ -126,8 +124,7 @@ class MCPResourceManager:
         pattern_lower = name_pattern.lower()
 
         matching_resources = [
-            resource for resource in resources
-            if pattern_lower in resource.get("name", "").lower()
+            resource for resource in resources if pattern_lower in resource.get("name", "").lower()
         ]
 
         return matching_resources
@@ -162,8 +159,9 @@ class MCPResourceManager:
                     try:
                         # Assuming blob is base64 encoded
                         import base64
+
                         decoded_bytes = base64.b64decode(blob_data)
-                        return decoded_bytes.decode('utf-8')
+                        return decoded_bytes.decode("utf-8")
                     except Exception:
                         return f"[Binary content: {mime_type}]"
                 else:
@@ -221,7 +219,7 @@ class MCPResourceManager:
             "list_resources_success": False,
             "read_resource_success": False,
             "resource_count": 0,
-            "test_errors": []
+            "test_errors": [],
         }
 
         try:

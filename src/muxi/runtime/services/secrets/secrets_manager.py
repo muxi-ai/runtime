@@ -4,15 +4,17 @@ Formation-level secrets manager for MUXI Runtime.
 Provides secure, encrypted secrets storage with GitHub Actions-style interpolation.
 """
 
-import json
-import re
-import os
 import asyncio
-import threading
+import json
 import logging
-from typing import Dict, Any, Optional, Union, List, Set
+import os
+import re
+import threading
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Union
+
 from cryptography.fernet import Fernet
+
 from .. import observability
 
 # Get logger for this module
@@ -63,7 +65,7 @@ class SecretsManager:
         Returns:
             bool: True if encryption has been initialized, False otherwise
         """
-        return getattr(self, '_encryption_initialized', False)
+        return getattr(self, "_encryption_initialized", False)
 
     async def initialize_encryption(self) -> None:
         """Initialize encryption for formation (creates master key if needed)."""
@@ -191,7 +193,7 @@ class SecretsManager:
 
                 # Track that this secret was used (sync version)
                 # Already protected by _sync_lock acquired above
-                if secret_value is not None and hasattr(self, '_used_secrets'):
+                if secret_value is not None and hasattr(self, "_used_secrets"):
                     self._used_secrets.add(normalized_name)
 
                 return secret_value
@@ -227,7 +229,9 @@ class SecretsManager:
                 )
 
             # If somehow initialized but cache is None, attempt to load
-            self._secrets_cache = await self._load_secrets_from_file() if self.secrets_file_path.exists() else {}
+            self._secrets_cache = (
+                await self._load_secrets_from_file() if self.secrets_file_path.exists() else {}
+            )
         return self._secrets_cache
 
     def get_used_secrets(self) -> Set[str]:
@@ -381,10 +385,12 @@ class SecretsManager:
                     usages = self.check_secret_usage(normalized_name)
                     if usages:
                         # Build detailed error message
-                        usage_details = "\n".join([
-                            f"  - {file_path.relative_to(self.formation_dir)}:{line_num} -> {line_content}"
-                            for file_path, line_num, line_content in usages
-                        ])
+                        usage_details = "\n".join(
+                            [
+                                f"  - {file_path.relative_to(self.formation_dir)}:{line_num} -> {line_content}"
+                                for file_path, line_num, line_content in usages
+                            ]
+                        )
                         raise ValueError(
                             f"Cannot delete secret '{normalized_name}' - it is currently in use:\n{usage_details}\n"
                             f"Remove these references first, or use force=True to delete anyway."
@@ -577,7 +583,11 @@ class SecretsManager:
             # Observability: Secret import completed
             observability.observe(
                 event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                level=observability.EventLevel.INFO if failed_count == 0 else observability.EventLevel.WARNING,
+                level=(
+                    observability.EventLevel.INFO
+                    if failed_count == 0
+                    else observability.EventLevel.WARNING
+                ),
                 description=f"Secret import completed: {imported_count} imported, {failed_count} failed",
                 data={
                     "operation_type": "import",
@@ -655,7 +665,7 @@ class SecretsManager:
 
         # Write all keys in ENV format (KEY=)
         lines = [f"{key}=" for key in all_keys]
-        self.secrets_example_path.write_text('\n'.join(lines) + '\n')
+        self.secrets_example_path.write_text("\n".join(lines) + "\n")
 
     def _remove_from_secrets_example(self, secret_name: str) -> None:
         """
@@ -676,7 +686,7 @@ class SecretsManager:
 
         # Write all keys in ENV format (KEY=)
         lines = [f"{key}=" for key in all_keys]
-        self.secrets_example_path.write_text('\n'.join(lines) + '\n')
+        self.secrets_example_path.write_text("\n".join(lines) + "\n")
 
     def check_secret_usage(self, secret_name: str) -> List[tuple]:
         """
@@ -692,12 +702,12 @@ class SecretsManager:
         usages = []
 
         # Search in all config files (.afs, .yaml, .yml) in formation directory and subdirectories
-        yaml_patterns = ['*.afs', '*.yaml', '*.yml']
+        yaml_patterns = ["*.afs", "*.yaml", "*.yml"]
         for pattern in yaml_patterns:
             for yaml_file in self.formation_dir.rglob(pattern):
                 try:
                     content = yaml_file.read_text()
-                    for line_num, line in enumerate(content.split('\n'), start=1):
+                    for line_num, line in enumerate(content.split("\n"), start=1):
                         matches = self._secrets_pattern.findall(line)
                         for match in matches:
                             if self._normalize_secret_name(match) == normalized_name:

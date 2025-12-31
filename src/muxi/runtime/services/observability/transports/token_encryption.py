@@ -5,11 +5,12 @@ This module provides symmetric encryption derived from authentication tokens,
 ensuring both authentication and data protection for observability data.
 """
 
-import json
-import time
 import base64
 import hashlib
-from typing import Dict, Any
+import json
+import time
+from typing import Any, Dict
+
 from cryptography.fernet import Fernet
 
 

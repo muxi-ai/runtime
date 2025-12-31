@@ -8,19 +8,19 @@ streaming support, and workflow coordination.
 import asyncio
 import time
 import traceback
-from typing import Optional, Any, Union, Dict, AsyncGenerator, List
-from ..background.request_tracker import RequestStatus, RequestState
-from ..background.cancellation import RequestCancelledException
-from ...utils.id_generator import generate_nanoid
-from ...services import observability
+from typing import Any, AsyncGenerator, Dict, List, Optional, Union
+
 from ...datatypes.response import MuxiResponse
-from ...services import streaming
+from ...services import observability, streaming
 from ...services.observability.context import (
     get_current_event_logger,
     get_current_request_context,
     set_event_logger,
     set_request_context,
 )
+from ...utils.id_generator import generate_nanoid
+from ..background.cancellation import RequestCancelledException
+from ..background.request_tracker import RequestState, RequestStatus
 
 
 class ChatOrchestrator:
@@ -61,17 +61,19 @@ class ChatOrchestrator:
         """
         # Capture the current context to propagate to background task
         import contextvars
+
         current_context = contextvars.copy_context()
 
         # Fire-and-forget the processing with a delay to ensure subscription is ready
         async def delayed_process():
             # Set the request context for this background task
-            from ...services.observability.context import set_request_context, RequestContext
+            from ...services.observability.context import RequestContext, set_request_context
+
             request_context = RequestContext(
                 id=request_id,
                 user_id=user_id,
                 session_id=session_id,
-                formation_id=getattr(self.overlord, 'formation_id', 'unknown'),
+                formation_id=getattr(self.overlord, "formation_id", "unknown"),
                 internal_user_id=internal_user_id,
                 muxi_user_id=muxi_user_id,
             )
@@ -81,6 +83,7 @@ class ChatOrchestrator:
 
             # Emit initial acknowledgment event (respects progress config)
             import random
+
             from ...services import streaming
 
             # Randomize the initial acknowledgment message
@@ -94,15 +97,12 @@ class ChatOrchestrator:
                 "Let me check that for you...",
                 "Looking into this...",
                 "Let me see...",
-                "One second..."
+                "One second...",
             ]
 
             # Use streaming.stream() to respect progress filtering
             streaming.stream(
-                "progress",
-                random.choice(initial_messages),
-                stage="init",
-                skip_rephrase=True
+                "progress", random.choice(initial_messages), stage="init", skip_rephrase=True
             )
 
             # Process the request - overlord._process_sync_chat will handle all streaming events
@@ -254,7 +254,8 @@ class ChatOrchestrator:
             # Use long_term_memory's db_manager if overlord's is not available
             db_mgr = self.overlord.db_manager or (
                 self.overlord.long_term_memory.db_manager
-                if self.overlord.long_term_memory else None
+                if self.overlord.long_term_memory
+                else None
             )
 
             # Only resolve if db_manager is available
@@ -336,7 +337,10 @@ class ChatOrchestrator:
                 observability.observe(
                     event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_STARTED,
                     level=observability.EventLevel.INFO,
-                    data={"file_count": len(files), "filenames": [f.get("filename", "unknown") for f in files]},
+                    data={
+                        "file_count": len(files),
+                        "filenames": [f.get("filename", "unknown") for f in files],
+                    },
                     description=f"Starting file processing for {len(files)} file(s)",
                 )
 
@@ -382,7 +386,7 @@ class ChatOrchestrator:
                     session_id=session_id,
                     request_id=request_id,
                 ),
-                name=f"store_user_message_{request_id}"
+                name=f"store_user_message_{request_id}",
             )
 
             # Enhance message with conversation context (memories + buffer)
@@ -395,11 +399,7 @@ class ChatOrchestrator:
 
             # Extract user information from enhanced message (fire-and-forget)
             # Only if persistent memory is configured
-            if (
-                self.overlord.long_term_memory
-                and user_id
-                and self.overlord.auto_extract_user_info
-            ):
+            if self.overlord.long_term_memory and user_id and self.overlord.auto_extract_user_info:
                 # Log user info extraction task creation
                 observability.observe(
                     event_type=observability.ConversationEvents.USER_INFO_EXTRACTION_STARTED,
@@ -420,7 +420,7 @@ class ChatOrchestrator:
                         agent_id=agent_name or "overlord",
                         enhanced_message=enhanced_message,  # Enhanced message for context
                     ),
-                    name=f"extract_user_info_{request_id}"
+                    name=f"extract_user_info_{request_id}",
                 )
 
             # Use provided values or formation defaults
@@ -720,7 +720,7 @@ class ChatOrchestrator:
                     session_id=session_id,
                     request_id=request_id,
                 ),
-                name=f"store_assistant_response_{request_id}"
+                name=f"store_assistant_response_{request_id}",
             )
 
         # ALWAYS return MuxiResponse objects with session_id in metadata
@@ -743,21 +743,17 @@ class ChatOrchestrator:
             return MuxiResponse(
                 role="assistant",
                 content=result.content if isinstance(result.content, str) else str(result.content),
-                artifacts=result.artifacts if hasattr(result, 'artifacts') and result.artifacts else None,
-                metadata=response_metadata
+                artifacts=(
+                    result.artifacts if hasattr(result, "artifacts") and result.artifacts else None
+                ),
+                metadata=response_metadata,
             )
         elif isinstance(result, str):
-            return MuxiResponse(
-                role="assistant",
-                content=result,
-                metadata=response_metadata
-            )
+            return MuxiResponse(role="assistant", content=result, metadata=response_metadata)
         else:
             # Fallback for unexpected types
             return MuxiResponse(
-                role="assistant",
-                content=str(result) if result else "",
-                metadata=response_metadata
+                role="assistant", content=str(result) if result else "", metadata=response_metadata
             )
 
     async def _store_user_message_async(
@@ -920,6 +916,7 @@ class ChatOrchestrator:
             except Exception as e:
                 # Log error but continue without long-term memories
                 from ...services import observability
+
                 observability.observe(
                     event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
                     level=observability.EventLevel.ERROR,  # Changed to ERROR to see it
@@ -927,7 +924,7 @@ class ChatOrchestrator:
                         "operation": "long_term_memory_search",
                         "error": str(e),
                         "error_type": type(e).__name__,
-                        "traceback": str(e.__traceback__) if hasattr(e, '__traceback__') else None,
+                        "traceback": str(e.__traceback__) if hasattr(e, "__traceback__") else None,
                     },
                     description=f"Long-term memory search failed: {str(e)}",
                 )
@@ -973,23 +970,30 @@ class ChatOrchestrator:
 
                         # CRITICAL FIX: Skip messages that already contain context markers
                         # This prevents the matryoshka doll effect of nested contexts
-                        if any(marker in content for marker in [
-                            "=== CONVERSATION CONTEXT",
-                            "=== CURRENT REQUEST ===",
-                            "=== USER PROFILE ===",
-                            "=== FILE PROCESSING RESULTS ===",
-                            "=== RELEVANT MEMORIES ==="
-                        ]):
+                        if any(
+                            marker in content
+                            for marker in [
+                                "=== CONVERSATION CONTEXT",
+                                "=== CURRENT REQUEST ===",
+                                "=== USER PROFILE ===",
+                                "=== FILE PROCESSING RESULTS ===",
+                                "=== RELEVANT MEMORIES ===",
+                            ]
+                        ):
                             # This is an enhanced message, extract just the actual content
                             # Look for the actual user/assistant message
                             if "=== CURRENT REQUEST ===" in content and "User:" in content:
                                 # Extract just the user's actual message
                                 lines = content.split("\n")
                                 for i, line in enumerate(lines):
-                                    if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                                    if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(
+                                        lines
+                                    ):
                                         next_line = lines[i + 1].strip()
                                         if next_line.startswith("User:"):
-                                            content = next_line[5:].strip()  # Remove "User: " prefix
+                                            content = next_line[
+                                                5:
+                                            ].strip()  # Remove "User: " prefix
                                             break
                             else:
                                 # Skip this message entirely if we can't extract clean content
@@ -1032,6 +1036,7 @@ class ChatOrchestrator:
         # with previous requests that had similar text but no files
         if file_results:
             import uuid
+
             cache_bust_id = str(uuid.uuid4())[:8]  # Short unique ID
             enhanced_parts.append(f"=== FILE PROCESSING RESULTS [req:{cache_bust_id}] ===")
             enhanced_parts.append(file_results)
@@ -1041,8 +1046,9 @@ class ChatOrchestrator:
         if long_term_memories:
             # Load memory usage protocol from prompts
             from ..prompts.loader import PromptLoader
+
             try:
-                memory_protocol = PromptLoader.get('memory_usage_protocol.md')
+                memory_protocol = PromptLoader.get("memory_usage_protocol.md")
                 enhanced_parts.append(memory_protocol)
                 enhanced_parts.append("")
             except KeyError:
@@ -1061,8 +1067,9 @@ class ChatOrchestrator:
         if context_text:
             # Load conversation awareness protocol from prompts
             from ..prompts.loader import PromptLoader
+
             try:
-                conv_protocol = PromptLoader.get('conversation_awareness_protocol.md')
+                conv_protocol = PromptLoader.get("conversation_awareness_protocol.md")
                 enhanced_parts.append(conv_protocol)
                 enhanced_parts.append("")
             except Exception:
@@ -1139,5 +1146,6 @@ class ChatOrchestrator:
     async def _stream_request(self, request_id: str, user_id: str, session_id: str):
         """Internal streaming subscription (private method)"""
         from ...services.streaming import streaming_manager
+
         async for event in streaming_manager.subscribe(request_id, user_id, session_id):
             yield event

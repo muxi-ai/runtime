@@ -5,8 +5,8 @@ This module provides metrics tracking for workflow execution,
 including success rates, execution times, and user-specific metrics.
 """
 
-from typing import Dict, Any
 import threading
+from typing import Any, Dict
 
 
 class WorkflowMetrics:
@@ -142,7 +142,7 @@ class WorkflowMetrics:
             self.total_execution_time = 0.0
             self.workflow_count_by_user.clear()
 
-    def merge(self, other: 'WorkflowMetrics') -> None:
+    def merge(self, other: "WorkflowMetrics") -> None:
         """
         Merge metrics from another WorkflowMetrics instance.
 

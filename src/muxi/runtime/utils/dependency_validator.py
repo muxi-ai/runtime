@@ -5,9 +5,9 @@ Validates service dependencies before Formation startup to ensure all required
 dependencies are available and properly configured.
 """
 
-from typing import Dict, Any, List
 import importlib
 import os
+from typing import Any, Dict, List
 
 from ..datatypes.validation import ServiceDependency, ValidationResult
 

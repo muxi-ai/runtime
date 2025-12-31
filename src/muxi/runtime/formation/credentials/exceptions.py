@@ -2,7 +2,8 @@
 Credential-related exceptions for the formation system.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
+
 from ...datatypes.exceptions import FormationError
 
 
@@ -18,7 +19,7 @@ class MissingCredentialError(FormationError):
                 "service": service,
                 "user_id": user_id,
                 "error_type": "missing_credential",
-            }
+            },
         )
 
 

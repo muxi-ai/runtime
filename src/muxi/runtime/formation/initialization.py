@@ -104,8 +104,9 @@ def enable_conversation_logging(formation) -> None:
     """
     # First, mark server as ready so system events start flowing
     from ..services.observability.context import get_current_event_logger
+
     current_logger = get_current_event_logger()
-    if current_logger and hasattr(current_logger, 'set_server_ready'):
+    if current_logger and hasattr(current_logger, "set_server_ready"):
         current_logger.set_server_ready(True)
 
     conversation_config = getattr(formation, "_conversation_logging_config", {})
@@ -147,9 +148,11 @@ def enable_conversation_logging(formation) -> None:
             # CRITICAL: Set the logger in context so observe() uses it
             set_event_logger(event_logger)
 
-            print(observability.InitEventFormatter.format_info(
-                f"Conversation logging enabled: {event_logger.output_config.get('path')}"
-            ))
+            print(
+                observability.InitEventFormatter.format_info(
+                    f"Conversation logging enabled: {event_logger.output_config.get('path')}"
+                )
+            )
             break
 
 
@@ -307,9 +310,7 @@ def _initialize_working_memory(formation, working_config: Dict[str, Any]) -> Non
         formation._working_memory_config = config
 
         # Convert to InitEventFormatter
-        print(observability.InitEventFormatter.format_ok(
-            f"Working memory ({config.mode} mode)"
-        ))
+        print(observability.InitEventFormatter.format_ok(f"Working memory ({config.mode} mode)"))
 
     except Exception as e:
         observability.observe(
@@ -445,8 +446,8 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
         # Determine the type of persistent memory based on connection string
         if connection_string.startswith("postgresql://"):
             # PostgreSQL memory
-            from ..services.memory.long_term import LongTermMemory
             from ..services.db import get_database_manager
+            from ..services.memory.long_term import LongTermMemory
 
             # Create database manager with configured timeout
             db_manager = get_database_manager(connection_string, statement_timeout)
@@ -462,8 +463,8 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
         elif connection_string.endswith(".db") or "sqlite" in connection_string:
             # SQLite memory with database manager for credentials
-            from ..services.memory.sqlite import SQLiteMemory
             from ..services.db import get_database_manager
+            from ..services.memory.sqlite import SQLiteMemory
 
             # Create database manager for SQLite (needed for credentials table)
             # Check if connection string already has sqlite:// prefix
@@ -485,8 +486,8 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
         else:
             # Default to Memobase
-            from ..services.memory.memobase import Memobase
             from ..services.db import get_database_manager
+            from ..services.memory.memobase import Memobase
 
             # Create database manager with configured timeout
             db_manager = get_database_manager(connection_string, statement_timeout)
@@ -504,7 +505,11 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
         # Print clean formatted line
         mode = "multi-user" if getattr(formation, "_is_multi_user", False) else "single-user"
-        print(InitEventFormatter.format_ok("Initializing persistent memory", f"{memory_type} / {mode} mode"))
+        print(
+            InitEventFormatter.format_ok(
+                "Initializing persistent memory", f"{memory_type} / {mode} mode"
+            )
+        )
 
     except Exception as e:
         observability.observe(
@@ -529,16 +534,15 @@ def _create_all_database_tables(db_manager) -> None:
     try:
         # Import all models to ensure they are registered with Base.metadata
         # Memory models (users, memories)
-        from ..services.memory.long_term import User, Memory  # noqa: F401
-
         # Credential models (credentials table) - Note: User is already imported above
         from ..formation.credentials.resolver import Credential  # noqa: F401
 
-        # Scheduler models (scheduled_jobs, scheduled_job_audit)
-        from ..services.scheduler.models import ScheduledJob, ScheduledJobAudit  # noqa: F401
-
         # Get Base from db module
         from ..services.db import Base
+        from ..services.memory.long_term import Memory, User  # noqa: F401
+
+        # Scheduler models (scheduled_jobs, scheduled_job_audit)
+        from ..services.scheduler.models import ScheduledJob, ScheduledJobAudit  # noqa: F401
 
         # Create all tables using the database manager
         db_manager.create_tables(Base.metadata)
@@ -554,7 +558,11 @@ def _create_all_database_tables(db_manager) -> None:
         pass  # REMOVED: init-phase observe() call
 
         # Print clean formatted line
-        print(InitEventFormatter.format_ok("Database schema ready", f"{len(table_names)} tables initialized"))
+        print(
+            InitEventFormatter.format_ok(
+                "Database schema ready", f"{len(table_names)} tables initialized"
+            )
+        )
 
     except Exception as e:
         observability.observe(
@@ -655,14 +663,14 @@ async def initialize_mcp_services(formation) -> None:
             causes=[
                 "MCP service wrapper encountered an unexpected error",
                 "This is different from individual server failures",
-                "Could indicate a system-level issue"
+                "Could indicate a system-level issue",
             ],
             fixes=[
                 "Check the full error trace below",
                 "Verify MCP configuration in formation.afs",
-                "Check system dependencies are installed"
+                "Check system dependencies are installed",
             ],
-            technical=str(e)
+            technical=str(e),
         )
         print("\n" + observability.InitEventFormatter.format_fail(failure_info))
         raise  # Fail fast - re-raise exception
@@ -871,7 +879,9 @@ def load_agents_from_configuration(formation) -> None:
 
         except (KeyError, ValueError, TypeError, AttributeError) as e:
             # Configuration errors that we can tolerate - log and continue to next agent
-            agent_id = agent_config.get("id", "unknown") if isinstance(agent_config, dict) else "unknown"
+            agent_id = (
+                agent_config.get("id", "unknown") if isinstance(agent_config, dict) else "unknown"
+            )
             observability.observe(
                 event_type=observability.ErrorEvents.CONFIG_AGENT_VALIDATION_FAILED,
                 level=observability.EventLevel.WARNING,
@@ -900,7 +910,11 @@ def load_agents_from_configuration(formation) -> None:
             if agent_config.get("id"):
                 agent_name = agent_config.get("name", agent_config.get("id"))
                 agent_role = agent_config.get("role", "general")
-                print(InitEventFormatter.format_ok(f"Loaded agent '{agent_name}'", f"role: {agent_role}"))
+                print(
+                    InitEventFormatter.format_ok(
+                        f"Loaded agent '{agent_name}'", f"role: {agent_role}"
+                    )
+                )
 
 
 async def initialize_buffer_memory(formation, overlord, buffer_config: Dict[str, Any]) -> None:
@@ -1063,9 +1077,9 @@ async def initialize_persistent_memory(
             "postgres://"
         ):
             # REMOVE - line 1077 (redundant with InitEventFormatter)
-            from ..services.memory.memobase import Memobase
-            from ..services.memory.long_term import LongTermMemory
             from ..services.db import get_database_manager
+            from ..services.memory.long_term import LongTermMemory
+            from ..services.memory.memobase import Memobase
 
             # Create ONE DatabaseManager for the Formation
             db_manager = get_database_manager(connection_string, statement_timeout)
@@ -1094,8 +1108,8 @@ async def initialize_persistent_memory(
 
         elif connection_string.startswith("sqlite://") or connection_string.endswith(".db"):
             # REMOVE - line 1120 (redundant with InitEventFormatter)
-            from ..services.memory.sqlite import SQLiteMemory
             from ..services.db import get_database_manager
+            from ..services.memory.sqlite import SQLiteMemory
 
             # Remove sqlite:// prefix if present
             db_path = connection_string.replace("sqlite://", "")

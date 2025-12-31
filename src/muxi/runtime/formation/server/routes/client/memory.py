@@ -9,19 +9,19 @@ Buffer endpoints support both ClientKey and AdminKey:
 
 import secrets
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
-from fastapi import APIRouter, Request, Query, Header
+from fastapi import APIRouter, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from .....datatypes.api import APIEventType, APIObjectType
 from ...responses import (
     APIResponse,
-    memory_list_response,
     create_error_response,
     create_success_response,
+    memory_list_response,
 )
-from .....datatypes.api import APIObjectType, APIEventType
 
 router = APIRouter(tags=["Memory"])
 
@@ -33,7 +33,9 @@ class MemoryCreate(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
-def _get_user_id(x_user_id: Optional[str], request_id: Optional[str]) -> tuple[Optional[str], Optional[JSONResponse]]:
+def _get_user_id(
+    x_user_id: Optional[str], request_id: Optional[str]
+) -> tuple[Optional[str], Optional[JSONResponse]]:
     """Extract and validate user_id from X-Muxi-User-ID header."""
     if not x_user_id:
         response = create_error_response(
@@ -70,7 +72,11 @@ def _check_auth_and_user_id(
     is_admin = False
     if provided_admin_key and admin_key and secrets.compare_digest(provided_admin_key, admin_key):
         is_admin = True
-    elif provided_client_key and client_key and secrets.compare_digest(provided_client_key, client_key):
+    elif (
+        provided_client_key
+        and client_key
+        and secrets.compare_digest(provided_client_key, client_key)
+    ):
         is_admin = False
     else:
         response = create_error_response(
@@ -141,12 +147,14 @@ async def get_user_memories(
         # Convert to API format
         memory_list = []
         for mem in memories:
-            memory_list.append({
-                "id": mem.get("id"),
-                "content": mem.get("content") or mem.get("text"),
-                "created_at": mem.get("created_at"),
-                "metadata": mem.get("metadata", {})
-            })
+            memory_list.append(
+                {
+                    "id": mem.get("id"),
+                    "content": mem.get("content") or mem.get("text"),
+                    "created_at": mem.get("created_at"),
+                    "metadata": mem.get("metadata", {}),
+                }
+            )
 
         response = memory_list_response(memory_list, request_id)
         return JSONResponse(content=response.model_dump(), status_code=200)
@@ -209,7 +217,7 @@ async def create_user_memory(
             "id": memory_id,
             "content": memory.content,
             "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "metadata": memory.metadata or {}
+            "metadata": memory.metadata or {},
         }
 
         response = create_success_response(
@@ -271,10 +279,7 @@ async def delete_user_memory(
         )
 
         if success:
-            result = {
-                "deleted": memory_id,
-                "user_id": user_id
-            }
+            result = {"deleted": memory_id, "user_id": user_id}
             response = create_success_response(
                 APIObjectType.MEMORY, APIEventType.MEMORY_DELETED, result, request_id
             )

@@ -11,12 +11,12 @@ Features:
 - Connection discovery between documents
 """
 
-import time
 import hashlib
 import json
-from typing import Dict, List, Any, Optional, Set
+import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
 
 from ....datatypes import observability
 
@@ -107,7 +107,7 @@ class DocumentCrossReferenceManager:
             data={
                 "operation": "cross_reference_manager_init",
                 "storage_path": str(self.storage_path),
-            }
+            },
         )
 
     def _default_citation_styles(self) -> Dict[str, CitationStyle]:
@@ -202,7 +202,7 @@ class DocumentCrossReferenceManager:
                 "source_document_id": source_document_id,
                 "target_document_id": target_document_id,
                 "reference_type": reference_type,
-            }
+            },
         )
         return reference_id
 
@@ -294,7 +294,7 @@ class DocumentCrossReferenceManager:
                     data={
                         "operation": "load_references",
                         "references_count": len(self._references),
-                    }
+                    },
                 )
 
             # Rebuild document graph

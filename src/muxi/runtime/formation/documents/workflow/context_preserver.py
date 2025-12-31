@@ -11,12 +11,12 @@ Features:
 - Context relevance scoring
 """
 
-import time
 import json
-from typing import Dict, List, Any, Optional
+import time
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from collections import defaultdict
+from typing import Any, Dict, List, Optional
 
 from ....datatypes import observability
 

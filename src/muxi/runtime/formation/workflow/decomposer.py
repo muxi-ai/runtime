@@ -1,20 +1,20 @@
-from typing import Optional, Dict, Any, Tuple
 import re
+from typing import Any, Dict, Optional, Tuple
 
 from ...datatypes.workflow import (
-    Workflow,
-    SubTask,
-    TaskStatus,
-    WorkflowStatus,
     ApprovalStatus,
     RequestAnalysis,
-    generate_workflow_id,
-    generate_task_id,
-    validate_workflow_dag,
+    SubTask,
+    TaskStatus,
+    Workflow,
+    WorkflowStatus,
     build_execution_phases,
+    generate_task_id,
+    generate_workflow_id,
+    validate_workflow_dag,
 )
-from ...services.llm import LLM
 from ...services import observability
+from ...services.llm import LLM
 
 
 class TaskDecomposer:
@@ -231,7 +231,6 @@ class TaskDecomposer:
             #     complexity_score=analysis.complexity_score if analysis else None,
             #     request_type=analysis.request_type if analysis and hasattr(analysis, 'request_type') else None
             # )
-
             # Safety check: Limit prompt size to prevent recursion issues
             # Very large prompts (>100k chars) can cause recursion in LLM processing
             total_size = len(system_prompt) + len(user_content)
@@ -245,13 +244,16 @@ class TaskDecomposer:
                 {"role": "user", "content": user_content},
             ]
             response_obj = await self.llm.chat(messages, max_tokens=2000)
-            
+
             # Check cancellation after LLM call
             from ..background.cancellation import check_cancellation_from_context
+
             if context and context.get("request_tracker"):
                 await check_cancellation_from_context(context["request_tracker"])
-            
-            response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+
+            response = (
+                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            )
 
             # # DEBUG: Print LLM response for debugging
             # print("\n" + "🤖 LLM DECOMPOSITION RESPONSE:")
@@ -314,6 +316,7 @@ class TaskDecomposer:
 
             # Keep stderr output for immediate visibility
             import sys
+
             sys.stderr.write(f"\n⚠️  LLM decomposition failed: {type(e).__name__}\n")
             sys.stderr.write("   Falling back to heuristic decomposition\n")
             sys.stderr.flush()
@@ -395,7 +398,7 @@ class TaskDecomposer:
                         "error_type": type(e).__name__,
                         "context_type": type(context).__name__ if context else None,
                     },
-                    description=f"Failed to serialize context for decomposition: {str(e)}"
+                    description=f"Failed to serialize context for decomposition: {str(e)}",
                 )
                 context_info = "\nContext: <unavailable>"
 
@@ -881,7 +884,9 @@ Analysis Results:
                 {"role": "user", "content": user_content},
             ]
             response_obj = await self.llm.chat(messages, max_tokens=800)
-            plan_preview = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            plan_preview = (
+                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+            )
             return plan_preview
 
         except Exception as e:

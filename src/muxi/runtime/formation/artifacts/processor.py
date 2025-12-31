@@ -1,16 +1,16 @@
 """File processing utilities for MUXI artifacts."""
 
-from pathlib import Path
 import base64
-import mimetypes
 import io
-from typing import Optional, Dict, Any, Tuple
+import mimetypes
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
 
-from PIL import Image
 from pdf2image import convert_from_path
+from PIL import Image
 
-from ...datatypes.artifacts import MuxiArtifact, ArtifactMetadata, ArtifactPreview
+from ...datatypes.artifacts import ArtifactMetadata, ArtifactPreview, MuxiArtifact
 from ...services import observability
 
 # Define file type extensions
@@ -125,7 +125,7 @@ def generate_pdf_thumbnail(
             event_type=observability.ErrorEvents.THUMBNAIL_GENERATION_FAILED,
             level=observability.EventLevel.ERROR,
             data={"service": "artifact", "file": str(file_path), "error": str(e)},
-            description=f"PDF thumbnail generation failed: {e}. This likely means Poppler is not installed."
+            description=f"PDF thumbnail generation failed: {e}. This likely means Poppler is not installed.",
         )
         # Return None for any error
         return None
@@ -177,7 +177,7 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
             event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_STARTED,
             level=observability.EventLevel.INFO,
             data={"service": "artifact", "action": "create_from_file", "file": str(file_path)},
-            description=f"Creating artifact from file: {file_path}"
+            description=f"Creating artifact from file: {file_path}",
         )
 
         if not path.exists():
@@ -185,7 +185,7 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
                 event_type=observability.ErrorEvents.RESOURCE_NOT_FOUND,
                 level=observability.EventLevel.WARNING,
                 data={"service": "artifact", "file": str(file_path), "error": "file_not_found"},
-                description=f"File does not exist: {file_path}"
+                description=f"File does not exist: {file_path}",
             )
             return None
 
@@ -278,8 +278,12 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
         observability.observe(
             event_type=observability.ConversationEvents.CONTENT_PROCESSED,
             level=observability.EventLevel.INFO,
-            data={"service": "artifact", "action": "create_from_file", "filename": artifact.filename},
-            description=f"Successfully created artifact: {artifact.filename}"
+            data={
+                "service": "artifact",
+                "action": "create_from_file",
+                "filename": artifact.filename,
+            },
+            description=f"Successfully created artifact: {artifact.filename}",
         )
         return artifact
 
@@ -288,7 +292,12 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
         observability.observe(
             event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
             level=observability.EventLevel.ERROR,
-            data={"service": "artifact", "action": "create_from_file", "file": str(file_path), "error": str(e)},
-            description=f"Error creating artifact from {file_path}: {str(e)}"
+            data={
+                "service": "artifact",
+                "action": "create_from_file",
+                "file": str(file_path),
+                "error": str(e),
+            },
+            description=f"Error creating artifact from {file_path}: {str(e)}",
         )
         return None

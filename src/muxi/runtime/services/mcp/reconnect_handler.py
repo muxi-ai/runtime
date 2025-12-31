@@ -34,7 +34,7 @@ import asyncio
 from typing import Any, Dict, List, Optional
 
 from ...datatypes import observability
-from .handler import MCPHandler, MCPConnectionError
+from .handler import MCPConnectionError, MCPHandler
 from .reconnection import RetryConfiguration, with_retries
 
 

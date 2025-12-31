@@ -1,6 +1,7 @@
 """MCP Logging client implementation."""
 
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 from ..transports.base import BaseTransport
 from .message_handler import MCPMessageHandler
 
@@ -13,11 +14,7 @@ class MCPLoggingClient:
         self.message_handler = MCPMessageHandler()
         self.log_history: List[Dict[str, Any]] = []
 
-    async def set_logging_level(
-        self,
-        transport: BaseTransport,
-        level: str
-    ) -> Dict[str, Any]:
+    async def set_logging_level(self, transport: BaseTransport, level: str) -> Dict[str, Any]:
         """Set logging level for MCP server.
 
         Args:
@@ -33,17 +30,25 @@ class MCPLoggingClient:
         try:
             # Validate level
             valid_levels = [
-                "debug", "info", "notice", "warning",
-                "error", "critical", "alert", "emergency"
+                "debug",
+                "info",
+                "notice",
+                "warning",
+                "error",
+                "critical",
+                "alert",
+                "emergency",
             ]
 
             if level.lower() not in valid_levels:
-                raise ValueError(f"Invalid logging level: {level}. Must be one of: {', '.join(valid_levels)}")
+                raise ValueError(
+                    f"Invalid logging level: {level}. Must be one of: {', '.join(valid_levels)}"
+                )
 
             # Create logging/setLevel request
-            request = self.message_handler.create_request("logging/setLevel", {
-                "level": level.lower()
-            })
+            request = self.message_handler.create_request(
+                "logging/setLevel", {"level": level.lower()}
+            )
 
             # Send request and get response
             response = await transport.send_message(request)
@@ -54,23 +59,12 @@ class MCPLoggingClient:
             # Extract result
             result = response.get("result", {})
 
-            return {
-                "success": True,
-                "level": level.lower(),
-                "result": result
-            }
+            return {"success": True, "level": level.lower(), "result": result}
 
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "level": level.lower()
-            }
+            return {"success": False, "error": str(e), "level": level.lower()}
 
-    def collect_logs(
-        self,
-        logs: List[Dict[str, Any]]
-    ) -> None:
+    def collect_logs(self, logs: List[Dict[str, Any]]) -> None:
         """Collect logs from MCP server notifications.
 
         Args:
@@ -102,8 +96,14 @@ class MCPLoggingClient:
 
         # Ensure level is valid
         valid_levels = [
-            "debug", "info", "notice", "warning",
-            "error", "critical", "alert", "emergency"
+            "debug",
+            "info",
+            "notice",
+            "warning",
+            "error",
+            "critical",
+            "alert",
+            "emergency",
         ]
 
         if log_entry["level"] not in valid_levels:
@@ -112,13 +112,11 @@ class MCPLoggingClient:
         # Add timestamp if missing
         if "timestamp" not in log_entry:
             import time
+
             log_entry["timestamp"] = time.time()
 
     def get_logs(
-        self,
-        level_filter: str = None,
-        limit: int = 100,
-        since_timestamp: float = None
+        self, level_filter: str = None, limit: int = 100, since_timestamp: float = None
     ) -> List[Dict[str, Any]]:
         """Get collected logs with optional filtering.
 
@@ -157,7 +155,7 @@ class MCPLoggingClient:
                 "total_logs": 0,
                 "by_level": {},
                 "latest_timestamp": None,
-                "oldest_timestamp": None
+                "oldest_timestamp": None,
             }
 
         # Count by level
@@ -176,7 +174,7 @@ class MCPLoggingClient:
             "total_logs": len(self.log_history),
             "by_level": level_counts,
             "latest_timestamp": max(timestamps) if timestamps else None,
-            "oldest_timestamp": min(timestamps) if timestamps else None
+            "oldest_timestamp": min(timestamps) if timestamps else None,
         }
 
     def format_log_entry(self, log_entry: Dict[str, Any]) -> str:
@@ -195,6 +193,7 @@ class MCPLoggingClient:
         # Format timestamp
         if timestamp:
             import time
+
             time_str = time.strftime("%H:%M:%S", time.localtime(timestamp))
         else:
             time_str = "??:??:??"
@@ -208,16 +207,12 @@ class MCPLoggingClient:
             "ERROR": "❌",
             "CRITICAL": "🚨",
             "ALERT": "🔥",
-            "EMERGENCY": "💥"
+            "EMERGENCY": "💥",
         }.get(level, "📝")
 
         return f"{time_str} {level_emoji} [{level}] {data}"
 
-    def format_logs(
-        self,
-        logs: List[Dict[str, Any]],
-        max_entries: int = 50
-    ) -> str:
+    def format_logs(self, logs: List[Dict[str, Any]], max_entries: int = 50) -> str:
         """Format multiple log entries for display.
 
         Args:
@@ -245,10 +240,7 @@ class MCPLoggingClient:
         return "\n".join(lines)
 
     def export_logs(
-        self,
-        format_type: str = "json",
-        level_filter: str = None,
-        since_timestamp: float = None
+        self, format_type: str = "json", level_filter: str = None, since_timestamp: float = None
     ) -> str:
         """Export logs in specified format.
 
@@ -263,11 +255,12 @@ class MCPLoggingClient:
         logs = self.get_logs(
             level_filter=level_filter,
             since_timestamp=since_timestamp,
-            limit=None  # Get all matching logs
+            limit=None,  # Get all matching logs
         )
 
         if format_type == "json":
             import json
+
             return json.dumps(logs, indent=2)
 
         elif format_type == "csv":
@@ -306,8 +299,7 @@ class MCPLoggingClient:
             # Clear logs before timestamp
             original_count = len(self.log_history)
             self.log_history = [
-                log for log in self.log_history
-                if log.get("timestamp", 0) >= before_timestamp
+                log for log in self.log_history if log.get("timestamp", 0) >= before_timestamp
             ]
             return original_count - len(self.log_history)
 
@@ -341,5 +333,5 @@ class MCPLoggingClient:
             "current_log_count": summary["total_logs"],
             "log_levels_seen": list(summary["by_level"].keys()),
             "oldest_log": summary["oldest_timestamp"],
-            "newest_log": summary["latest_timestamp"]
+            "newest_log": summary["latest_timestamp"],
         }

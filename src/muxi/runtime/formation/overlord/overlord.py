@@ -80,47 +80,107 @@
 import asyncio
 import base64
 import json
+import os
 import signal
 import sys
-from contextlib import contextmanager, suppress
 import threading
 import time
-from pathlib import Path
+from contextlib import contextmanager, suppress
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Union, AsyncGenerator
-import os
+from pathlib import Path
+from typing import Any, AsyncGenerator, Dict, List, Optional, Set, Union
 
-from ..agents import Agent
-from ..background.request_tracker import RequestStatus
-from ..background.cancellation import RequestCancelledException
-from .clarification import UnifiedClarificationSystem
+# Import MarkItDown - required dependency
+from markitdown import MarkItDown
+
+# Unified Response Components
+from ...datatypes.clarification import (
+    ClarificationConfig,
+    ClarificationRequest,
+    ClarificationResponse,
+    ClarificationResultStatus,
+    QuestionStyle,
+)
+from ...datatypes.exceptions import (
+    AgentHasDependentsError,
+    AgentNotFoundError,
+    OverlordShuttingDownError,
+    RegistryConfigurationError,
+    SecurityViolation,
+)
+from ...datatypes.response import MuxiResponse
+from ...datatypes.task_status import TaskStatus
+from ...datatypes.workflow import ApprovalStatus, RequestAnalysis, Workflow, WorkflowStatus
 
 # ClarificationHandler removed - using UnifiedClarificationSystem
 from ...services import observability, streaming
-from ...datatypes.response import MuxiResponse
-from ...datatypes.clarification import ClarificationRequest, ClarificationResponse
-from ...services.mcp.service import MCPService
-from ...services.memory.working import WorkingMemory
-from ...services.memory.long_term import LongTermMemory
-from ...services.memory.memobase import Memobase
-from ...services.llm import LLM
 from ...services.a2a.registry_client import A2ARegistryClient
 from ...services.a2a.server import A2AServer
-from ..credentials import CredentialResolver, CredentialHandler
-from .agent_router import AgentRouter
-from .chat_orchestrator import ChatOrchestrator
-from .mcp_coordinator import MCPCoordinator
-from .a2a_coordinator import A2ACoordinator
-from .input_validation import InputValidator, InputLimits, InputValidationError
-from ...services.scheduler.service import SchedulerService
-from ..initialization import initialize_artifact_service
-from ...datatypes.exceptions import RegistryConfigurationError
-
-# A2A models imported when needed
-from ...services.secrets.secrets_manager import SecretsManager
+from ...services.llm import LLM
 
 # Built-in MCP imports
 from ...services.mcp.built_in import list_builtin_mcps
+from ...services.mcp.service import MCPService
+from ...services.memory.long_term import LongTermMemory
+from ...services.memory.memobase import Memobase
+from ...services.memory.working import WorkingMemory
+
+# Import multimodal integration
+# Import multimodal and synthesis components
+from ...services.multimodal import (
+    MultiModalFusionEngine,
+    TaskInputProcessor,
+    TaskOutputProcessor,
+    WorkflowMultiModalProcessor,
+)
+from ...services.scheduler.service import SchedulerService
+
+# A2A models imported when needed
+from ...services.secrets.secrets_manager import SecretsManager
+from ...services.streaming import streaming_manager
+from ...utils.security import redact_message_preview, sanitize_message_preview
+from ...utils.text_cleaner import clean_response_text
+from ...utils.user_dirs import set_formation_id
+from ..agents import Agent
+
+# Async Orchestration Components
+from ..background import (
+    RequestTracker,
+    TimeEstimator,
+    WebhookManager,
+)
+from ..background.cancellation import RequestCancelledException
+from ..background.request_tracker import RequestStatus
+from ..credentials import CredentialHandler, CredentialResolver
+from ..documents.experience import (
+    DocumentAcknowledgmentGenerator,
+    DocumentErrorHandler,
+    DocumentSummarizer,
+)
+
+# Document Processing Components
+from ..documents.storage import (
+    DocumentChunkManager,
+    DocumentMetadataStore,
+    DocumentReferenceSystem,
+)
+from ..documents.workflow import (
+    DocumentContextPreserver,
+    DocumentCrossReferenceManager,
+    DocumentWorkflowIntegrator,
+)
+from ..initialization import initialize_artifact_service
+
+# Memory Management
+from ..memory import (
+    BufferMemoryManager,
+    ExtractionCoordinator,
+    PersistentMemoryManager,
+    UserContextManager,
+)
+
+# Utility functions
+from ..utils import generate_api_key
 
 # Enhanced workflow capabilities
 from ..workflow import (
@@ -130,8 +190,6 @@ from ..workflow import (
     TaskDecomposer,
     WorkflowManager,
 )
-from ..workflow.resilient_executor import ResilientWorkflowExecutor
-
 from ..workflow.config import (
     ComplexityConfig,
     ErrorRecoveryStrategy,
@@ -145,44 +203,20 @@ from ..workflow.config import (
     WorkflowConfig,
     WorkflowConfigManager,
 )
-
-from ...datatypes.workflow import ApprovalStatus, Workflow, WorkflowStatus, RequestAnalysis
-from ...datatypes.task_status import TaskStatus
-
-# Utility functions
-from ..utils import generate_api_key
-from ...utils.security import redact_message_preview, sanitize_message_preview
-from ...utils.text_cleaner import clean_response_text
-
-# Configuration Management
-from .secrets_manager import SecretsInterpolator
-
-# Memory Management
-from ..memory import (
-    BufferMemoryManager,
-    ExtractionCoordinator,
-    PersistentMemoryManager,
-    UserContextManager,
-)
+from ..workflow.resilient_executor import ResilientWorkflowExecutor
+from ..workflow.synthesis import AdvancedResponseSynthesizer, ResponseQualityAssessor
+from .a2a_coordinator import A2ACoordinator
 
 # Dynamic Agent Management
 from .active_agents_tracker import ActiveAgentsTracker
-from ...datatypes.exceptions import (
-    AgentHasDependentsError,
-    AgentNotFoundError,
-    OverlordShuttingDownError,
-    SecurityViolation,
-)
+from .agent_router import AgentRouter
+from .chat_orchestrator import ChatOrchestrator
+from .clarification import UnifiedClarificationSystem
+from .input_validation import InputLimits, InputValidationError, InputValidator
+from .mcp_coordinator import MCPCoordinator
 
-# Import multimodal and synthesis components
-from ...services.multimodal import MultiModalFusionEngine, WorkflowMultiModalProcessor
-from ..workflow.synthesis import AdvancedResponseSynthesizer, ResponseQualityAssessor
-
-# Import multimodal integration
-from ...services.multimodal import (
-    TaskInputProcessor,
-    TaskOutputProcessor,
-)
+# Configuration Management
+from .secrets_manager import SecretsInterpolator
 
 # Resilience components
 # COMMENTED OUT - ResilientWorkflowManager unused, architectural issues
@@ -191,38 +225,6 @@ from ...services.multimodal import (
 #     ResilienceConfig,
 # )
 
-# Document Processing Components
-from ..documents.storage import (
-    DocumentChunkManager,
-    DocumentMetadataStore,
-    DocumentReferenceSystem,
-)
-from ..documents.experience import (
-    DocumentAcknowledgmentGenerator,
-    DocumentSummarizer,
-    DocumentErrorHandler,
-)
-from ..documents.workflow import (
-    DocumentWorkflowIntegrator,
-    DocumentCrossReferenceManager,
-    DocumentContextPreserver,
-)
-
-# Async Orchestration Components
-from ..background import (
-    RequestTracker,
-    WebhookManager,
-    TimeEstimator,
-)
-
-# Unified Response Components
-from ...datatypes.clarification import ClarificationConfig, QuestionStyle, ClarificationResultStatus
-from ...utils.user_dirs import set_formation_id
-
-from ...services.streaming import streaming_manager
-
-# Import MarkItDown - required dependency
-from markitdown import MarkItDown
 
 _MARKITDOWN_INSTANCE = None
 _MARKITDOWN_LOCK = threading.Lock()
@@ -1536,7 +1538,11 @@ class Overlord:
 
             except Exception as e:
                 # Agent loading failed - log error details and continue with next agent
-                agent_id = agent_config.get("id", "unknown") if isinstance(agent_config, dict) else "unknown"
+                agent_id = (
+                    agent_config.get("id", "unknown")
+                    if isinstance(agent_config, dict)
+                    else "unknown"
+                )
                 observability.observe(
                     event_type=observability.ErrorEvents.AGENT_INITIALIZATION_FAILED,
                     level=observability.EventLevel.ERROR,
@@ -1545,7 +1551,11 @@ class Overlord:
                         "error_type": type(e).__name__,
                         "error": str(e),
                         "agent_config": (
-                            {k: v for k, v in (agent_config or {}).items() if k not in ["system_message", "tools"]}
+                            {
+                                k: v
+                                for k, v in (agent_config or {}).items()
+                                if k not in ["system_message", "tools"]
+                            }
                             if isinstance(agent_config, dict)
                             else None
                         ),
@@ -1576,6 +1586,7 @@ class Overlord:
         with the same ID, the MUXI default is skipped.
         """
         from pathlib import Path
+
         import yaml
 
         # Find MUXI's default agents directory
@@ -1585,7 +1596,11 @@ class Overlord:
             return
 
         # Load all config files from the directory (support .afs, .yaml, .yml)
-        for agent_file in list(muxi_agents_dir.glob("*.afs")) + list(muxi_agents_dir.glob("*.yaml")) + list(muxi_agents_dir.glob("*.yml")):
+        for agent_file in (
+            list(muxi_agents_dir.glob("*.afs"))
+            + list(muxi_agents_dir.glob("*.yaml"))
+            + list(muxi_agents_dir.glob("*.yml"))
+        ):
             try:
                 with open(agent_file, "r") as f:
                     agent_config = yaml.safe_load(f)
@@ -1984,7 +1999,7 @@ class Overlord:
         import re
 
         # Extract actual user message from context format if present
-        match = re.search(r'User:\s*([^\n]+)', message)
+        match = re.search(r"User:\s*([^\n]+)", message)
         actual_message = match.group(1).strip() if match else message
 
         # First try fast heuristics for common cases
@@ -2034,7 +2049,10 @@ Reply with only: ACTIONABLE or NON_ACTIONABLE"""
 
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": actual_message},  # Use extracted message, not full context
+                    {
+                        "role": "user",
+                        "content": actual_message,
+                    },  # Use extracted message, not full context
                 ]
                 response = await llm.chat(messages)
                 if response and "NON_ACTIONABLE" in response.upper():
@@ -2166,7 +2184,9 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                     {"role": "user", "content": message_lower},
                 ]
                 response_obj = await llm.chat(messages)
-                response = response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                response = (
+                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+                )
                 if response and "SIMPLE" in response.upper():
                     return True
             except Exception:
@@ -2232,7 +2252,8 @@ If this requires complex multi-step work, respond with: COMPLEX"""
 
         # Extract actual user message from context format if present
         import re
-        match = re.search(r'User:\s*([^\n]+)', user_message)
+
+        match = re.search(r"User:\s*([^\n]+)", user_message)
         actual_user_message = match.group(1).strip() if match else user_message
 
         # Detect if this is a repeated question from conversation context
@@ -2248,20 +2269,26 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                     context_section = context_section.split("=== CURRENT REQUEST ===")[0]
 
                 # Normalize current question for comparison (lowercase, strip punctuation)
-                normalized_question = re.sub(r'[^\w\s]', '', actual_user_message.lower().strip())
+                normalized_question = re.sub(r"[^\w\s]", "", actual_user_message.lower().strip())
 
                 # Only check non-trivial questions with actual context content
-                if normalized_question and len(normalized_question) > 10 and "User:" in context_section:
+                if (
+                    normalized_question
+                    and len(normalized_question) > 10
+                    and "User:" in context_section
+                ):
                     # Check if this exact question appears in context with an answer
                     # Note: Context is in reverse chronological order (Most Recent First)
                     # So Assistant responses appear BEFORE User questions in the list
-                    context_lines = context_section.split('\n')
+                    context_lines = context_section.split("\n")
                     for i, line in enumerate(context_lines):
-                        if 'User:' in line and normalized_question in re.sub(r'[^\w\s]', '', line.lower()):
+                        if "User:" in line and normalized_question in re.sub(
+                            r"[^\w\s]", "", line.lower()
+                        ):
                             # Found the question - check if there's an Assistant response BEFORE it
                             # (since context is reverse chronological)
                             for j in range(max(0, i - 5), i):
-                                if 'Assistant:' in context_lines[j]:
+                                if "Assistant:" in context_lines[j]:
                                     is_repeated_question = True
                                     break
                             if is_repeated_question:
@@ -2292,7 +2319,9 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                     {"role": "user", "content": f"Respond to: {actual_user_message}"},
                 ]
                 # Force non-streaming for persona application, disable caching for varied responses
-                response = await llm.chat(messages, max_tokens=300, temperature=0.7, stream=False, caching=False)
+                response = await llm.chat(
+                    messages, max_tokens=300, temperature=0.7, stream=False, caching=False
+                )
 
                 if hasattr(response, "content"):
                     return clean_response_text(response.content)
@@ -2362,15 +2391,12 @@ Agent response: {raw_response}"""
                 # Force non-streaming for persona application
                 # Disable caching to ensure varied responses (persona is final stage)
                 response = await llm.chat(
-                    messages,
-                    max_tokens=2000,
-                    temperature=0.7,
-                    stream=False,
-                    caching=False
+                    messages, max_tokens=2000, temperature=0.7, stream=False, caching=False
                 )
 
                 # Check cancellation after LLM call returns
                 from ..background.cancellation import check_cancellation_from_context
+
                 await check_cancellation_from_context(self.request_tracker)
 
                 if hasattr(response, "content"):
@@ -2883,7 +2909,8 @@ Agent response: {raw_response}"""
     def _initialize_a2a_client_factory(self):
         """Initialize the A2A ClientFactory with AgentTransport registered."""
         try:
-            from a2a.client import ClientFactory, ClientConfig
+            from a2a.client import ClientConfig, ClientFactory
+
             from ...services.a2a.agent_transport import AgentTransport
 
             # Create client factory with default configuration
@@ -4958,7 +4985,7 @@ Agent response: {raw_response}"""
             return MuxiResponse(
                 role="assistant",
                 content=str(e),
-                metadata={"error_code": "INPUT_VALIDATION_ERROR", "error_type": "validation"}
+                metadata={"error_code": "INPUT_VALIDATION_ERROR", "error_type": "validation"},
             )
         except Exception as e:
             # Log unexpected validation errors but re-raise to avoid hiding bugs
@@ -4968,7 +4995,7 @@ Agent response: {raw_response}"""
                 data={
                     "error": str(e),
                     "error_type": type(e).__name__,
-                    "phase": "chat_message_validation"
+                    "phase": "chat_message_validation",
                 },
                 description=f"Unexpected error during message validation: {type(e).__name__}",
             )
@@ -4987,7 +5014,7 @@ Agent response: {raw_response}"""
                 return MuxiResponse(
                     role="assistant",
                     content=str(e),
-                    metadata={"error_code": "FILE_VALIDATION_ERROR", "error_type": "validation"}
+                    metadata={"error_code": "FILE_VALIDATION_ERROR", "error_type": "validation"},
                 )
             except Exception as e:
                 # Log unexpected validation errors but re-raise to avoid hiding bugs
@@ -4997,7 +5024,7 @@ Agent response: {raw_response}"""
                     data={
                         "error": str(e),
                         "error_type": type(e).__name__,
-                        "phase": "file_upload_validation"
+                        "phase": "file_upload_validation",
                     },
                     description=f"Unexpected error during file validation: {type(e).__name__}",
                 )
@@ -5034,6 +5061,7 @@ Agent response: {raw_response}"""
         # Generate session_id if not provided (ensures conversation continuity)
         if not session_id:
             from ...utils.id_generator import generate_nanoid
+
             session_id = f"sess_{generate_nanoid()}"
 
         return await self.chat_orchestrator.chat(
@@ -5107,6 +5135,7 @@ Agent response: {raw_response}"""
 
         # Emit progress event for audio transcription
         from ...services import streaming
+
         streaming.stream(
             "progress",
             "Transcribing audio...",
@@ -7084,8 +7113,8 @@ Agent response: {raw_response}"""
 
             # Check if this is a credential error that needs clarification
             from ..credentials import (
-                MissingCredentialError,
                 AmbiguousCredentialError,
+                MissingCredentialError,
             )
 
             # Extract the actual user message from formatted context if needed (for credential errors)
@@ -8734,7 +8763,7 @@ Agent response: {raw_response}"""
                         # Stream in chunks for better UX
                         chunk_size = 100
                         for i in range(0, len(content), chunk_size):
-                            yield content[i:i + chunk_size]
+                            yield content[i : i + chunk_size]
                             await asyncio.sleep(0.01)  # Small delay for smooth streaming
                     else:
                         yield str(content)
@@ -10143,7 +10172,7 @@ Agent response: {raw_response}"""
         )
 
         # Apply pagination
-        return workflows[offset:offset + limit]
+        return workflows[offset : offset + limit]
 
     async def cancel_workflow(self, workflow_id: str) -> bool:
         """

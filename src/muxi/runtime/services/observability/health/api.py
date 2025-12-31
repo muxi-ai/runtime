@@ -5,8 +5,9 @@ This module provides HTTP API endpoints for monitoring and debugging
 the health status of observability stream destinations.
 """
 
-from typing import Dict, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, Optional
+
 from .manager import HealthManager
 
 

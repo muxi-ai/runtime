@@ -5,14 +5,14 @@ This module provides intelligent error classification to determine
 the appropriate recovery strategy based on error type and context.
 """
 
-import re
 import asyncio
+import re
 from typing import Dict, List, Optional, Pattern
 
 from ...datatypes.resilience import (
-    ErrorType,
-    ErrorSeverity,
     ErrorContext,
+    ErrorSeverity,
+    ErrorType,
     WorkflowException,
 )
 from ...services import observability

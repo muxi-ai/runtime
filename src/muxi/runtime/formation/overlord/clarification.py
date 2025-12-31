@@ -1,8 +1,8 @@
-import time
 import json
 import re
-from typing import Dict, Optional
+import time
 from dataclasses import dataclass
+from typing import Dict, Optional
 
 from ...services import observability
 
@@ -587,21 +587,24 @@ class UnifiedClarificationSystem:
         # Bypass cache if file processing results are present in the conversation
         # This prevents cached clarification responses from being returned when files are attached
         # Check for both the marker and the content prefix
-        has_file_results = "FILE PROCESSING RESULTS" in conversation or "[File Processing Result]" in conversation
+        has_file_results = (
+            "FILE PROCESSING RESULTS" in conversation or "[File Processing Result]" in conversation
+        )
         response = await self.llm.chat(
             messages, temperature=0, max_tokens=250, caching=not has_file_results
         )
-        
+
         # Check cancellation after LLM call
         from ..background.cancellation import check_cancellation_from_context
+
         if hasattr(self.overlord, "request_tracker"):
             await check_cancellation_from_context(self.overlord.request_tracker)
-        
+
         content = response.content if hasattr(response, "content") else str(response)
 
         # Parse JSON
         try:
-            json_str = content[content.index("{"):content.rindex("}") + 1]
+            json_str = content[content.index("{") : content.rindex("}") + 1]
             result = json.loads(json_str)
 
             # If an MCP service was detected and needs clarification, check for available credentials
@@ -689,16 +692,17 @@ class UnifiedClarificationSystem:
             {"role": "user", "content": f"Collected info: {state['collected_info']}"},
         ]
         response = await self.llm.chat(messages, temperature=0, max_tokens=150)
-        
+
         # Check cancellation after LLM call
         from ..background.cancellation import check_cancellation_from_context
+
         if hasattr(self.overlord, "request_tracker"):
             await check_cancellation_from_context(self.overlord.request_tracker)
-        
+
         content = response.content if hasattr(response, "content") else str(response)
 
         try:
-            json_str = content[content.index("{"):content.rindex("}") + 1]
+            json_str = content[content.index("{") : content.rindex("}") + 1]
             return json.loads(json_str)
         except Exception:
             return {"needs_more": False, "question": None}
@@ -1320,12 +1324,13 @@ Answer with just: YES or NO"""
                         temperature=0,
                         max_tokens=10,
                     )
-                    
+
                     # Check cancellation after LLM call
                     from ..background.cancellation import check_cancellation_from_context
+
                     if hasattr(self.overlord, "request_tracker"):
                         await check_cancellation_from_context(self.overlord.request_tracker)
-                    
+
                     content = response.content if hasattr(response, "content") else str(response)
 
                     if "YES" not in content.upper():

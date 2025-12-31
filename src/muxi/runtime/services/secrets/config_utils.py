@@ -5,8 +5,8 @@ This module provides reusable functions for retrieving configuration items
 with secrets properly restored from placeholders.
 """
 
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from copy import deepcopy
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
     from ...formation.formation import Formation  # noqa: E402

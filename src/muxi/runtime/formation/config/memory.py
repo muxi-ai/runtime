@@ -50,21 +50,22 @@ class MemoryConfig:
 
     def get_working_config(self) -> Dict[str, Any]:
         """Get working memory configuration."""
-        return self.memory_config.get("working", {
-            "max_memory_mb": "auto",
-            "fifo_interval_min": 5,
-            "vector_dimension": 1536,
-            "mode": "local",
-            "remote": {}
-        })
+        return self.memory_config.get(
+            "working",
+            {
+                "max_memory_mb": "auto",
+                "fifo_interval_min": 5,
+                "vector_dimension": 1536,
+                "mode": "local",
+                "remote": {},
+            },
+        )
 
     def get_buffer_config(self) -> Dict[str, Any]:
         """Get buffer memory configuration."""
-        return self.memory_config.get("buffer", {
-            "size": 10,
-            "multiplier": 10,
-            "vector_search": True
-        })
+        return self.memory_config.get(
+            "buffer", {"size": 10, "multiplier": 10, "vector_search": True}
+        )
 
     def get_persistent_config(self) -> Optional[Dict[str, Any]]:
         """Get persistent memory configuration."""
@@ -74,6 +75,5 @@ class MemoryConfig:
         """Check if persistent memory is enabled."""
         persistent_config = self.get_persistent_config()
         return (
-            persistent_config is not None
-            and persistent_config.get("connection_string") is not None
+            persistent_config is not None and persistent_config.get("connection_string") is not None
         )

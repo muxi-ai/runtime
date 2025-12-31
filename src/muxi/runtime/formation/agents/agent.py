@@ -41,23 +41,23 @@
 # =============================================================================
 
 import datetime
-import traceback
 import json
 import re
 import time
+import traceback
 from typing import Any, Dict, List, Optional, Union
 
+from ...datatypes.intent import IntentDetectionContext, IntentType
+from ...datatypes.response import MuxiResponse
+from ...services import observability, streaming
+from ...services.intent import IntentDetectionService
+from ...services.llm import LLM
+from ...services.mcp.service import MCPService
+from ...utils.id_generator import generate_nanoid
+from ...utils.security import sanitize_message_preview
 from ..artifacts.extractor import extract_artifacts_from_tool_results
 from ..background.cancellation import RequestCancelledException
 from ..credentials import MissingCredentialError
-from ...utils.id_generator import generate_nanoid
-from ...datatypes.response import MuxiResponse
-from ...datatypes.intent import IntentType, IntentDetectionContext
-from ...services.mcp.service import MCPService
-from ...services.llm import LLM
-from ...services.intent import IntentDetectionService
-from ...services import observability, streaming
-from ...utils.security import sanitize_message_preview
 
 
 class Agent:
@@ -805,7 +805,7 @@ class Agent:
         self._a2a_attempt_count = 0
 
         # Emit agent message processing event with enhanced metadata
-        tool_count = len(self.tools) if hasattr(self, 'tools') and self.tools else 0
+        tool_count = len(self.tools) if hasattr(self, "tools") and self.tools else 0
         observability.observe(
             event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
             level=observability.EventLevel.INFO,
@@ -815,7 +815,7 @@ class Agent:
                 "message_length": len(content),
                 "has_tools": tool_count > 0,
                 "tool_count": tool_count,
-                "model_used": self.model if hasattr(self, 'model') and self.model else None,
+                "model_used": self.model if hasattr(self, "model") and self.model else None,
             },
             description=f"Agent {self.agent_id} ({self.name}) starting message processing",
         )
@@ -1224,14 +1224,20 @@ class Agent:
                                     )
                         except Exception as e:
                             # Re-raise credential errors to trigger clarification flow
-                            from ..credentials import AmbiguousCredentialError, MissingCredentialError
                             from ...services.mcp.service import CredentialSelectionNeededError
-
-                            if isinstance(e, (
+                            from ..credentials import (
                                 AmbiguousCredentialError,
                                 MissingCredentialError,
-                                CredentialSelectionNeededError,
-                            )):
+                            )
+
+                            if isinstance(
+                                e,
+                                (
+                                    AmbiguousCredentialError,
+                                    MissingCredentialError,
+                                    CredentialSelectionNeededError,
+                                ),
+                            ):
                                 # These need to bubble up to overlord for clarification
                                 raise
 
@@ -1309,23 +1315,34 @@ class Agent:
                                 )
 
                 # Check if this is a simple direct response (no steps needed)
-                if execution_plan and not execution_plan.get("my_steps") and not execution_plan.get("delegate_steps"):
+                if (
+                    execution_plan
+                    and not execution_plan.get("my_steps")
+                    and not execution_plan.get("delegate_steps")
+                ):
                     # Empty plan - handle simple requests directly
                     data_flow = execution_plan.get("data_flow", "")
-                    if "direct response" in data_flow.lower() or "no tools needed" in data_flow.lower():
+                    if (
+                        "direct response" in data_flow.lower()
+                        or "no tools needed" in data_flow.lower()
+                    ):
                         # Generate a direct response for simple conversational requests
                         simple_messages = [
-                            {"role": "system", "content": "You are a helpful assistant. Provide direct, natural responses without using any tools or files."},  # noqa: E501
-                            {"role": "user", "content": message}
+                            {
+                                "role": "system",
+                                "content": "You are a helpful assistant. Provide direct, natural responses without using any tools or files.",
+                            },  # noqa: E501
+                            {"role": "user", "content": message},
                         ]
 
                         response_obj = await self.model.chat(simple_messages)
-                        response_text = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
-
-                        response = MuxiResponse(
-                            role="assistant",
-                            content=response_text.strip()
+                        response_text = (
+                            response_obj.content
+                            if hasattr(response_obj, "content")
+                            else str(response_obj)
                         )
+
+                        response = MuxiResponse(role="assistant", content=response_text.strip())
 
                         observability.observe(
                             event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
@@ -1421,7 +1438,9 @@ class Agent:
                         # Extract artifacts if we have any tool results with artifacts
                         if tool_execution_results:
                             try:
-                                artifacts = await extract_artifacts_from_tool_results(tool_execution_results)
+                                artifacts = await extract_artifacts_from_tool_results(
+                                    tool_execution_results
+                                )
                                 if artifacts:
                                     response.artifacts = artifacts
                                     observability.observe(
@@ -1472,10 +1491,17 @@ class Agent:
 
             except Exception as e:
                 # Re-raise credential errors to trigger clarification flow
-                from ..credentials import AmbiguousCredentialError, MissingCredentialError
                 from ...services.mcp.service import CredentialSelectionNeededError
+                from ..credentials import AmbiguousCredentialError, MissingCredentialError
 
-                if isinstance(e, (AmbiguousCredentialError, MissingCredentialError, CredentialSelectionNeededError)):
+                if isinstance(
+                    e,
+                    (
+                        AmbiguousCredentialError,
+                        MissingCredentialError,
+                        CredentialSelectionNeededError,
+                    ),
+                ):
                     # These need to bubble up to overlord for clarification
                     raise
 
@@ -1824,7 +1850,11 @@ class Agent:
                         actual_tool_name = tool_name
 
                     # Emit streaming event for tool call
-                    display_name = server_id.replace("-", " ").replace("_", " ").title() if server_id else actual_tool_name
+                    display_name = (
+                        server_id.replace("-", " ").replace("_", " ").title()
+                        if server_id
+                        else actual_tool_name
+                    )
                     streaming.stream(
                         "progress",
                         f"Using the {display_name} tool...",
@@ -2923,6 +2953,7 @@ class Agent:
                 )
                 # Check cancellation after MCP call returns
                 from ..background.cancellation import check_cancellation_from_context
+
                 if self.overlord and hasattr(self.overlord, "request_tracker"):
                     await check_cancellation_from_context(self.overlord.request_tracker)
             else:
@@ -2949,6 +2980,7 @@ class Agent:
 
                 # Check cancellation after MCP call returns
                 from ..background.cancellation import check_cancellation_from_context
+
                 if self.overlord and hasattr(self.overlord, "request_tracker"):
                     await check_cancellation_from_context(self.overlord.request_tracker)
 
@@ -2968,8 +3000,8 @@ class Agent:
 
         except Exception as e:
             # Check if this is a credential error
-            from ..credentials import AmbiguousCredentialError
             from ...services.mcp.service import CredentialSelectionNeededError
+            from ..credentials import AmbiguousCredentialError
 
             if isinstance(e, CredentialSelectionNeededError):
                 # Convert to AmbiguousCredentialError and raise to overlord
@@ -3244,6 +3276,7 @@ class Agent:
 
             # Check cancellation after A2A call returns
             from ..background.cancellation import check_cancellation_from_context
+
             if self.overlord and hasattr(self.overlord, "request_tracker"):
                 await check_cancellation_from_context(self.overlord.request_tracker)
 
@@ -3373,7 +3406,7 @@ class Agent:
             agent_id=getattr(self, "agent_id", None),
             message_preview=sanitize_message_preview(user_message),
             has_tools=bool(available_tools),
-            tool_count=len(available_tools) if available_tools else 0
+            tool_count=len(available_tools) if available_tools else 0,
         )
 
         # Log available tools for debugging
@@ -3472,8 +3505,9 @@ class Agent:
             planning_prompt += "Even if you lack specific tools or capabilities, provide your best effort response.\n\n"
 
         from ..prompts.loader import PromptLoader
+
         try:
-            planning_prompt += PromptLoader.get('agent_planning.md')
+            planning_prompt += PromptLoader.get("agent_planning.md")
         except KeyError as e:
             observability.observe(
                 event_type=observability.ErrorEvents.PLANNING_TEMPLATE_MISSING,
@@ -3515,6 +3549,7 @@ class Agent:
 
             # Check cancellation after LLM call returns
             from ..background.cancellation import check_cancellation_from_context
+
             if self.overlord and hasattr(self.overlord, "request_tracker"):
                 await check_cancellation_from_context(self.overlord.request_tracker)
 

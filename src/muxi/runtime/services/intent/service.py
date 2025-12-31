@@ -5,19 +5,19 @@ Unified multilingual intent detection using LLM for all intent classification ne
 Replaces keyword-based detection with language-agnostic LLM-based approach.
 """
 
-import json
 import hashlib
 import inspect
+import json
 from typing import Optional
 
 from ...datatypes.intent import (
-    IntentType,
-    IntentResult,
     IntentDetectionContext,
+    IntentResult,
+    IntentType,
     QueryType,
 )
-from ..llm import LLM
 from .. import observability
+from ..llm import LLM
 from .cache import IntentCache
 
 

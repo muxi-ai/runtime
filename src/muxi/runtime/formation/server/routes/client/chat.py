@@ -5,12 +5,12 @@ These endpoints provide chat functionality for users,
 requiring client API key authentication.
 """
 
-from typing import Optional, List, Dict, Any, Union
 import asyncio
 import json
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .....services import observability
@@ -35,7 +35,7 @@ class ChatRequest(BaseModel):
 
 class AudioChatRequest(BaseModel):
     """Model for audio chat requests (voice notes).
-    
+
     The audio is transcribed first, then the transcription is used as the user's message.
     Only audio/* MIME types are accepted.
     """
@@ -49,7 +49,9 @@ class AudioChatRequest(BaseModel):
 
 
 @router.post("/chat", response_model=None)
-async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingResponse, JSONResponse]:
+async def chat(
+    request: Request, chat_request: ChatRequest
+) -> Union[StreamingResponse, JSONResponse]:
     """
     Send a message to the formation and receive a response.
 
@@ -103,8 +105,8 @@ async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingRe
         # Async mode is supported via request tracking system
         # Implementation requires webhook configuration or SSE subscription for results
         raise HTTPException(
-            status_code=501, 
-            detail="Async mode requires webhook configuration. Use stream=true for real-time responses or mode=sync for immediate responses."
+            status_code=501,
+            detail="Async mode requires webhook configuration. Use stream=true for real-time responses or mode=sync for immediate responses.",
         )
 
     # Handle non-streaming mode
@@ -122,13 +124,13 @@ async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingRe
             )
 
             # Return complete response as JSON
+            from .....datatypes.api import APIEventType, APIObjectType
             from ...responses import create_success_response
-            from .....datatypes.api import APIObjectType, APIEventType
 
             # Extract session_id from response metadata if available (overlord may have generated one)
             response_session_id = chat_request.session_id
-            if hasattr(response, 'metadata') and response.metadata:
-                response_session_id = response.metadata.get('session_id', chat_request.session_id)
+            if hasattr(response, "metadata") and response.metadata:
+                response_session_id = response.metadata.get("session_id", chat_request.session_id)
 
             data = {
                 "message": response,
@@ -150,7 +152,7 @@ async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingRe
             # Re-raise HTTPException unchanged to preserve status code and details
             if isinstance(e, HTTPException):
                 raise
-            
+
             # Log non-HTTP exceptions
             observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_FAILED,
@@ -220,7 +222,7 @@ async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingRe
             error_msg = str(e).strip() if e else "Request failed"
             if error_msg:
                 # Remove newlines and limit length for SSE safety
-                error_msg = error_msg.replace('\n', ' ').replace('\r', '')[:200]
+                error_msg = error_msg.replace("\n", " ").replace("\r", "")[:200]
 
             error_data = json.dumps({"error": error_msg, "type": type(e).__name__})
             yield f"event: error\ndata: {error_data}\n\n"
@@ -237,7 +239,9 @@ async def chat(request: Request, chat_request: ChatRequest) -> Union[StreamingRe
 
 
 @router.post("/audiochat", response_model=None)
-async def audiochat(request: Request, audiochat_request: AudioChatRequest) -> Union[StreamingResponse, JSONResponse]:
+async def audiochat(
+    request: Request, audiochat_request: AudioChatRequest
+) -> Union[StreamingResponse, JSONResponse]:
     """
     Send audio files (voice notes) for transcription and conversational response.
 
@@ -267,6 +271,7 @@ async def audiochat(request: Request, audiochat_request: AudioChatRequest) -> Un
     # Validate files are provided
     if not audiochat_request.files:
         from ...responses import create_error_response
+
         response = create_error_response(
             "VALIDATION_ERROR",
             "files parameter is required for audiochat()",
@@ -280,6 +285,7 @@ async def audiochat(request: Request, audiochat_request: AudioChatRequest) -> Un
         content_type = file_data.get("content_type", file_data.get("mime_type", ""))
         if not content_type.startswith("audio/"):
             from ...responses import create_error_response
+
             response = create_error_response(
                 "VALIDATION_ERROR",
                 "Only audio files (audio/*) are accepted. For video or other files, use /chat with the files parameter.",
@@ -323,8 +329,8 @@ async def audiochat(request: Request, audiochat_request: AudioChatRequest) -> Un
                 stream=False,
             )
 
+            from .....datatypes.api import APIEventType, APIObjectType
             from ...responses import create_success_response
-            from .....datatypes.api import APIObjectType, APIEventType
 
             data = {
                 "message": response,
@@ -398,7 +404,7 @@ async def audiochat(request: Request, audiochat_request: AudioChatRequest) -> Un
 
             error_msg = str(e).strip() if e else "Request failed"
             if error_msg:
-                error_msg = error_msg.replace('\n', ' ').replace('\r', '')[:200]
+                error_msg = error_msg.replace("\n", " ").replace("\r", "")[:200]
 
             error_data = json.dumps({"error": error_msg, "type": type(e).__name__})
             yield f"event: error\ndata: {error_data}\n\n"

@@ -1,6 +1,6 @@
-import json
 import hashlib
-from typing import Dict, Any, List, Optional
+import json
+from typing import Any, Dict, List, Optional
 
 
 class AgentCardHasher:
@@ -12,7 +12,7 @@ class AgentCardHasher:
         relevant_fields = {
             "id": agent_card.get("id", ""),
             "capabilities": sorted(agent_card.get("capabilities", [])),
-            "tools": sorted([t.get("name", "") for t in agent_card.get("tools", [])])
+            "tools": sorted([t.get("name", "") for t in agent_card.get("tools", [])]),
         }
         normalized = json.dumps(relevant_fields, sort_keys=True)
         return hashlib.sha256(normalized.encode()).hexdigest()[:16]
@@ -28,9 +28,6 @@ class AgentCardHasher:
     @staticmethod
     def hash_task(task: str, context: Optional[Dict[str, Any]] = None) -> str:
         """Hash task for consistent cache keys."""
-        task_data = {
-            "task": task.strip().lower(),
-            "context": context or {}
-        }
+        task_data = {"task": task.strip().lower(), "context": context or {}}
         normalized = json.dumps(task_data, sort_keys=True)
         return hashlib.sha256(normalized.encode()).hexdigest()[:16]

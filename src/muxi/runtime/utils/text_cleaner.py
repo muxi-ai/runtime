@@ -33,29 +33,29 @@ def remove_invisible_characters(text: str) -> str:
     # Define invisible characters to remove
     # Based on https://invisible-characters.com/
     invisible_chars = [
-        '\u200b',  # Zero-width space
-        '\u200c',  # Zero-width non-joiner
-        '\u200d',  # Zero-width joiner
-        '\u2060',  # Word joiner
-        '\ufeff',  # Zero-width no-break space
-        '\u180e',  # Mongolian vowel separator
-        '\u2000',  # En quad
-        '\u2001',  # Em quad
-        '\u2002',  # En space
-        '\u2003',  # Em space
-        '\u2004',  # Three-per-em space
-        '\u2005',  # Four-per-em space
-        '\u2006',  # Six-per-em space
-        '\u2007',  # Figure space
-        '\u2008',  # Punctuation space
-        '\u2009',  # Thin space
-        '\u200a',  # Hair space
-        '\u205f',  # Medium mathematical space
-        '\u3000',  # Ideographic space
-        '\u00a0',  # Non-breaking space
-        '\u2028',  # Line separator
-        '\u2029',  # Paragraph separator
-        '\u202f',  # Narrow no-break space
+        "\u200b",  # Zero-width space
+        "\u200c",  # Zero-width non-joiner
+        "\u200d",  # Zero-width joiner
+        "\u2060",  # Word joiner
+        "\ufeff",  # Zero-width no-break space
+        "\u180e",  # Mongolian vowel separator
+        "\u2000",  # En quad
+        "\u2001",  # Em quad
+        "\u2002",  # En space
+        "\u2003",  # Em space
+        "\u2004",  # Three-per-em space
+        "\u2005",  # Four-per-em space
+        "\u2006",  # Six-per-em space
+        "\u2007",  # Figure space
+        "\u2008",  # Punctuation space
+        "\u2009",  # Thin space
+        "\u200a",  # Hair space
+        "\u205f",  # Medium mathematical space
+        "\u3000",  # Ideographic space
+        "\u00a0",  # Non-breaking space
+        "\u2028",  # Line separator
+        "\u2029",  # Paragraph separator
+        "\u202f",  # Narrow no-break space
     ]
 
     # Create a translation table
@@ -70,15 +70,15 @@ def remove_invisible_characters(text: str) -> str:
     for char in cleaned:
         category = unicodedata.category(char)
         # Cc = Control characters, Cf = Format characters, Co = Private use, Cn = Unassigned
-        if category in ('Cc', 'Cf', 'Co', 'Cn'):
+        if category in ("Cc", "Cf", "Co", "Cn"):
             # Keep common whitespace characters
-            if char in ('\t', '\n', '\r'):
+            if char in ("\t", "\n", "\r"):
                 result.append(char)
             # Skip other control/format characters
         else:
             result.append(char)
 
-    return ''.join(result)
+    return "".join(result)
 
 
 def clean_response_text(text: str) -> str:
@@ -100,10 +100,11 @@ def clean_response_text(text: str) -> str:
     # Remove decorative separator lines (box drawing characters)
     # These sometimes appear when LLM adds visual separators
     import re
-    text = re.sub(r'^[─━═┄┅┈┉\-_]{3,}\s*$', '', text, flags=re.MULTILINE)
-    
+
+    text = re.sub(r"^[─━═┄┅┈┉\-_]{3,}\s*$", "", text, flags=re.MULTILINE)
+
     # Strip leading/trailing whitespace and normalize multiple newlines
     text = text.strip()
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     return text

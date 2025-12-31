@@ -11,11 +11,13 @@ For auto-reload with nodemon:
 
 import sys
 
+
 # Print banner immediately before heavy imports
 def _print_banner():
     from ..utils.version import get_version
+
     version = get_version()
-    print("\n" + "="*68)
+    print("\n" + "=" * 68)
     print(" __  __ _    ___   _______   ____             _   _")
     print("|  \\/  | |  | \\ \\ / /_   _| |    \\_   _ _ __ | | (_)_ __ ___   ___")
     print("| \\  / | |  | |\\ V /  | |   | [ ] || | | '_ \\| __| | '_ ` _ \\ / _ \\")
@@ -23,8 +25,9 @@ def _print_banner():
     print("|_|  |_|\\____//_/ \\_\\_____| |_| \\_\\__/_| |_|\\__|_|_| |_| |_|\\___|")
     print(" ")
     print(f"Starting MUXI Runtime v{version}...")
-    print("="*68 + "\n")
+    print("=" * 68 + "\n")
     sys.stdout.flush()
+
 
 # Only print banner when running as main script
 if __name__ == "__main__" or "run_formation" in sys.argv[0]:
@@ -36,18 +39,18 @@ from pathlib import Path  # noqa: E402
 
 # Import using relative imports to avoid sys.path manipulation
 try:
-    from ...formation import Formation  # noqa: E402
-    from ...services import observability
     from ...datatypes.exceptions import (
         ConfigurationLoadError,
         ConfigurationNotFoundError,
         ConfigurationValidationError,
         DependencyValidationError,
-        ServiceStartupError,
+        MCPConnectionError,
         OverlordError,
         OverlordStartupError,
-        MCPConnectionError,
+        ServiceStartupError,
     )
+    from ...formation import Formation  # noqa: E402
+    from ...services import observability
 except ImportError:
     # Fallback for development environments where package isn't installed
     # Find project root by looking for pyproject.toml or setup.py
@@ -61,18 +64,18 @@ except ImportError:
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
-    from src.muxi.formation import Formation  # noqa: E402
-    from src.muxi.services import observability
     from src.muxi.datatypes.exceptions import (
         ConfigurationLoadError,
         ConfigurationNotFoundError,
         ConfigurationValidationError,
         DependencyValidationError,
-        ServiceStartupError,
+        MCPConnectionError,
         OverlordError,
         OverlordStartupError,
-        MCPConnectionError,
+        ServiceStartupError,
     )
+    from src.muxi.formation import Formation  # noqa: E402
+    from src.muxi.services import observability
 
 
 async def run_formation(formation_path: str, port: int = None, host: str = None):
@@ -286,21 +289,13 @@ Examples:
 
   # Auto-reload with nodemon
   nodemon --exec "python -m muxi.utils.run_formation formation.afs" --ext py,yaml
-        """
+        """,
     )
 
+    parser.add_argument("formation_path", help="Path to formation.afs file")
+    parser.add_argument("--port", type=int, help="Port to bind server (overrides formation.afs)")
     parser.add_argument(
-        "formation_path",
-        help="Path to formation.afs file"
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        help="Port to bind server (overrides formation.afs)"
-    )
-    parser.add_argument(
-        "--host",
-        help="Host to bind server (overrides formation.afs, default: 127.0.0.1)"
+        "--host", help="Host to bind server (overrides formation.afs, default: 127.0.0.1)"
     )
 
     args = parser.parse_args()

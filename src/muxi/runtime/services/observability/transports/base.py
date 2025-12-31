@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List
 from enum import Enum
+from typing import Any, Dict, List
 
 
 class TransportStatus(Enum):

@@ -9,31 +9,29 @@ import threading
 from typing import TYPE_CHECKING
 
 # Import all workflow types first
-from ...datatypes.workflow import (
-    # Core workflow data structures
-    Workflow,
-    SubTask,
-    TaskStatus,
-    WorkflowStatus,
+from ...datatypes.workflow import (  # Core workflow data structures; Utility functions
     ApprovalStatus,
     RequestAnalysis,
-    TaskResult,
+    SubTask,
     TaskInput,
     TaskOutput,
-
-    # Utility functions
-    generate_workflow_id,
+    TaskResult,
+    TaskStatus,
+    Workflow,
+    WorkflowStatus,
+    build_execution_phases,
     generate_task_id,
+    generate_workflow_id,
     validate_workflow_dag,
-    build_execution_phases
 )
 
 # Import workflow components
 from .analyzer import RequestAnalyzer
-from .decomposer import TaskDecomposer, ApprovalManager
-from .executor import WorkflowExecutor, ProgressTracker
+from .decomposer import ApprovalManager, TaskDecomposer
+from .executor import ProgressTracker, WorkflowExecutor
 from .workflow_manager import WorkflowManager
 from .workflow_metrics import WorkflowMetrics
+
 # SOPSystem is lazy-loaded via __getattr__ to avoid disk I/O on import
 
 __all__ = [
@@ -47,13 +45,11 @@ __all__ = [
     "TaskStatus",
     "Workflow",
     "WorkflowStatus",
-
     # Utility functions
     "build_execution_phases",
     "generate_task_id",
     "generate_workflow_id",
     "validate_workflow_dag",
-
     # Core classes
     "ApprovalManager",
     "ProgressTracker",
@@ -62,7 +58,7 @@ __all__ = [
     "WorkflowExecutor",
     "WorkflowManager",
     "WorkflowMetrics",
-    "SOPSystem"
+    "SOPSystem",
 ]
 
 
@@ -71,9 +67,7 @@ if TYPE_CHECKING:
     from .sops import SOPSystem
 
 # Lazy loading implementation for SOPSystem with thread safety
-_lazy_imports = {
-    'SOPSystem': None
-}
+_lazy_imports = {"SOPSystem": None}
 _import_lock = threading.Lock()
 
 
@@ -85,15 +79,16 @@ def __getattr__(name):
     which can impact startup time. This lazy loading ensures it's only
     imported when actually accessed.
     """
-    if name == 'SOPSystem':
+    if name == "SOPSystem":
         # Check if already imported (double-checked locking pattern)
-        if _lazy_imports['SOPSystem'] is None:
+        if _lazy_imports["SOPSystem"] is None:
             with _import_lock:
                 # Check again inside lock to prevent race conditions
-                if _lazy_imports['SOPSystem'] is None:
+                if _lazy_imports["SOPSystem"] is None:
                     from .sops import SOPSystem
-                    _lazy_imports['SOPSystem'] = SOPSystem
-        return _lazy_imports['SOPSystem']
+
+                    _lazy_imports["SOPSystem"] = SOPSystem
+        return _lazy_imports["SOPSystem"]
 
     # If not a lazy import, raise AttributeError
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
@@ -106,4 +101,4 @@ def __dir__():
     This makes SOPSystem visible in IDE autocompletion, help(), and dir()
     even though it's lazily loaded.
     """
-    return list(globals().keys()) + ['SOPSystem']
+    return list(globals().keys()) + ["SOPSystem"]

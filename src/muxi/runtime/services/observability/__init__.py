@@ -76,10 +76,11 @@ __all__ = [
 # CLEAN MODULE INTERFACE WITH EXPLICIT HELPER FUNCTION
 # ===================================================================
 
-from typing import Any, Dict, Optional, Union
-import multitasking
 import signal
 import threading
+from typing import Any, Dict, Optional, Union
+
+import multitasking
 
 from ...utils.security import redact_sensitive_content
 
@@ -199,7 +200,10 @@ def observe(
         elif isinstance(event_type, str):
             # Check for user-related keywords in string event types
             event_type_lower = event_type.lower()
-            if any(keyword in event_type_lower for keyword in ["user", "conversation", "message", "error", "api"]):
+            if any(
+                keyword in event_type_lower
+                for keyword in ["user", "conversation", "message", "error", "api"]
+            ):
                 should_redact = True
 
         if should_redact:
@@ -211,6 +215,7 @@ def observe(
 
         # Get request context
         from .context import get_current_request_context
+
         request_context = get_current_request_context()
 
         @multitasking.task
@@ -230,7 +235,12 @@ def observe(
 
         # Start the background task with all parameters explicit (using redacted data)
         _emit_in_background(
-            configured_logger, request_context, event_type, level, redacted_data, redacted_description
+            configured_logger,
+            request_context,
+            event_type,
+            level,
+            redacted_data,
+            redacted_description,
         )
 
     except Exception:

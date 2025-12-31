@@ -12,12 +12,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, model_validator
 
+from .....datatypes.api import APIEventType, APIObjectType
 from ...responses import (
     APIResponse,
-    create_success_response,
     create_error_response,
+    create_success_response,
 )
-from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["Logging"])
 
@@ -25,14 +25,24 @@ router = APIRouter(tags=["Logging"])
 class LoggingDestinationCreate(BaseModel):
     """Model for creating a logging destination."""
 
-    id: Optional[str] = Field(default=None, description="Optional ID (auto-generated if not provided)")
-    transport: Literal["stdout", "file", "stream"] = Field(..., description="Transport type: stdout, file, stream")
-    destination: Optional[str] = Field(default=None, description="Destination path/URL (required for file and stream)")
-    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(default="INFO", description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL")  # noqa: E501
-    format: Literal["text", "jsonl"] = Field(default="jsonl", description="Log format: text or jsonl")
+    id: Optional[str] = Field(
+        default=None, description="Optional ID (auto-generated if not provided)"
+    )
+    transport: Literal["stdout", "file", "stream"] = Field(
+        ..., description="Transport type: stdout, file, stream"
+    )
+    destination: Optional[str] = Field(
+        default=None, description="Destination path/URL (required for file and stream)"
+    )
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        default="INFO", description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL"
+    )  # noqa: E501
+    format: Literal["text", "jsonl"] = Field(
+        default="jsonl", description="Log format: text or jsonl"
+    )
     enabled: bool = Field(default=True, description="Whether destination is enabled")
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def validate_destination_requirement(self):
         """Validate that destination is provided when transport is file or stream."""
         if self.transport in ("file", "stream") and not self.destination:
@@ -111,7 +121,7 @@ async def list_logging_destinations(request: Request) -> JSONResponse:
                 "Value: %r. Skipping this entry.",
                 idx,
                 type(stream).__name__,
-                stream
+                stream,
             )
             continue
 
@@ -182,8 +192,8 @@ async def create_logging_destination(
             "required_implementation": [
                 "Formation config update mechanism",
                 "Logging subsystem reload/reconfiguration",
-                "Persistent storage of logging configuration"
-            ]
+                "Persistent storage of logging configuration",
+            ],
         },
     )
     return JSONResponse(content=response.model_dump(), status_code=501)
@@ -223,8 +233,8 @@ async def update_logging_destination(
             "required_implementation": [
                 "Formation config update mechanism",
                 "Logging subsystem reload/reconfiguration",
-                "Persistent storage of logging configuration"
-            ]
+                "Persistent storage of logging configuration",
+            ],
         },
     )
     return JSONResponse(content=response.model_dump(), status_code=501)
@@ -261,8 +271,8 @@ async def delete_logging_destination(request: Request, destination_id: str) -> J
             "required_implementation": [
                 "Formation config update mechanism",
                 "Logging subsystem reload/reconfiguration",
-                "Persistent storage of logging configuration"
-            ]
+                "Persistent storage of logging configuration",
+            ],
         },
     )
     return JSONResponse(content=response.model_dump(), status_code=501)

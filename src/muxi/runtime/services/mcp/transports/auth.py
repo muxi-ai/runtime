@@ -8,8 +8,9 @@
 # Author:       Muxi Framework Team
 # =============================================================================
 
+from typing import Any, Dict, Optional
+
 import httpx
-from typing import Optional, Dict, Any
 
 
 class BearerAuth(httpx.Auth):

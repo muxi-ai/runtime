@@ -1,9 +1,10 @@
 """MCP Resources discovery and retrieval implementation."""
 
-from typing import Dict, Any, Optional
-from ..transports.base import BaseTransport
-from ..protocol.message_handler import MCPMessageHandler
+from typing import Any, Dict, Optional
+
 from ....datatypes.exceptions import MCPRequestError
+from ..protocol.message_handler import MCPMessageHandler
+from ..transports.base import BaseTransport
 
 
 class MCPResourceDiscovery:
@@ -13,7 +14,9 @@ class MCPResourceDiscovery:
         """Initialize resource discovery."""
         self.message_handler = MCPMessageHandler()
 
-    async def list_resources(self, transport: BaseTransport, cursor: Optional[str] = None) -> Dict[str, Any]:
+    async def list_resources(
+        self, transport: BaseTransport, cursor: Optional[str] = None
+    ) -> Dict[str, Any]:
         """List available resources using resources/list method.
 
         Args:
@@ -33,10 +36,7 @@ class MCPResourceDiscovery:
                 params["cursor"] = cursor
 
             # Send request to MCP server
-            response = await transport.send_request({
-                "method": "resources/list",
-                "params": params
-            })
+            response = await transport.send_request({"method": "resources/list", "params": params})
 
             # Extract resources from result
             result = response.get("result", {})
@@ -48,10 +48,7 @@ class MCPResourceDiscovery:
                 self._validate_resource_definition(resource)
                 validated_resources.append(resource)
 
-            return {
-                "resources": validated_resources,
-                "nextCursor": result.get("nextCursor")
-            }
+            return {"resources": validated_resources, "nextCursor": result.get("nextCursor")}
 
         except Exception as e:
             if isinstance(e, MCPRequestError):
@@ -73,10 +70,9 @@ class MCPResourceDiscovery:
         """
         try:
             # Send request to MCP server
-            response = await transport.send_request({
-                "method": "resources/read",
-                "params": {"uri": uri}
-            })
+            response = await transport.send_request(
+                {"method": "resources/read", "params": {"uri": uri}}
+            )
 
             # Extract resource content from result
             result = response.get("result", {})

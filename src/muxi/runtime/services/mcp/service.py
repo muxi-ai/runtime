@@ -32,23 +32,23 @@
 
 import asyncio
 import re
-from typing import Any, Dict, Optional, List
-from ...utils.datetime_utils import utc_now_iso
+from typing import Any, Dict, List, Optional
 
-from ..llm import LLM
-from .handler import MCPHandler, MCPConnectionError
-from .transports import TransportDetector, ModernProtocolFeatures
-from .resources.discovery import MCPResourceDiscovery
-from .prompts.discovery import MCPPromptDiscovery
-from .sampling.creator import MCPSamplingCreator
-from .templates.discovery import MCPTemplateDiscovery
-from .health.monitor import MCPHealthMonitor, MCPCapabilitiesNegotiator
-from .. import observability, streaming
 from ...datatypes.observability import InitEventFormatter
 from ...formation.credentials import (
-    MissingCredentialError,
     AmbiguousCredentialError,
+    MissingCredentialError,
 )
+from ...utils.datetime_utils import utc_now_iso
+from .. import observability, streaming
+from ..llm import LLM
+from .handler import MCPConnectionError, MCPHandler
+from .health.monitor import MCPCapabilitiesNegotiator, MCPHealthMonitor
+from .prompts.discovery import MCPPromptDiscovery
+from .resources.discovery import MCPResourceDiscovery
+from .sampling.creator import MCPSamplingCreator
+from .templates.discovery import MCPTemplateDiscovery
+from .transports import ModernProtocolFeatures, TransportDetector
 
 
 class CredentialSelectionNeededError(Exception):
@@ -67,13 +67,12 @@ class CredentialSelectionNeededError(Exception):
         self.ordered_credentials = ordered_credentials or []
         # Handle both list of dicts and list of strings
         if available_credentials and isinstance(available_credentials[0], dict):
-            names = [c['name'] for c in available_credentials]
+            names = [c["name"] for c in available_credentials]
         else:
             names = available_credentials
 
         super().__init__(
-            f"Multiple credentials found for {service}, selection needed. "
-            f"Available: {names}"
+            f"Multiple credentials found for {service}, selection needed. " f"Available: {names}"
         )
 
 
@@ -102,7 +101,7 @@ def extract_service_name(server_id: str) -> str:
         return "unknown"
 
     # First try to extract leading alphanumeric token
-    match = re.match(r'^([A-Za-z0-9]+)', server_id)
+    match = re.match(r"^([A-Za-z0-9]+)", server_id)
     if match:
         return match.group(1).lower()
 
@@ -589,9 +588,9 @@ class MCPService:
                 "tool_name": tool_name,
                 "has_user_credentials": resolved_auth is not None,
                 "auth_type": (
-                    "none" if resolved_auth is None
-                    else resolved_auth.get("type") if isinstance(resolved_auth, dict)
-                    else "string"
+                    "none"
+                    if resolved_auth is None
+                    else resolved_auth.get("type") if isinstance(resolved_auth, dict) else "string"
                 ),
             },
             description=f"Executing MCP tool '{tool_name}' on server '{server_id}' with user credentials",
@@ -608,7 +607,7 @@ class MCPService:
                 stage="tool_execution",
                 service=service_name,
                 tool_name=tool_name,
-                has_params=bool(parameters)
+                has_params=bool(parameters),
             )
 
             # Execute tool using ephemeral connection
@@ -755,7 +754,9 @@ class MCPService:
                     error_details = "\n".join([f"  - {t}: {errors[t]}" for t in transports_to_try])
 
                     # Check if this is an authentication error
-                    is_auth_error = any("401" in str(e) or "unauthorized" in str(e).lower() for e in errors.values())
+                    is_auth_error = any(
+                        "401" in str(e) or "unauthorized" in str(e).lower() for e in errors.values()
+                    )
 
                     error_msg = (
                         f"Failed to register MCP server '{server_id}': Unable to connect to {url}\n"
@@ -1671,7 +1672,7 @@ class MCPService:
             prompt_parts.extend(
                 [
                     f"\nThey have the following {service_name} credentials available:",
-                    '\n'.join(f"{i+1}. {name}" for i, name in enumerate(credential_names)),
+                    "\n".join(f"{i+1}. {name}" for i, name in enumerate(credential_names)),
                     "\nWhich credential should be used?",
                     "\nPRIORITY ORDER (most important first):",
                     "1. Use the MOST RECENTLY mentioned account in the conversation context",
@@ -1713,7 +1714,7 @@ class MCPService:
                     service=service_name,
                     user_id=user_id or "unknown",
                     available_credentials=credential_names,
-                    ordered_credentials=list(range(1, len(credential_names) + 1))
+                    ordered_credentials=list(range(1, len(credential_names) + 1)),
                 )
 
             # Parse the JSON response

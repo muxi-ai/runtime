@@ -9,15 +9,14 @@ NOTE: WE DO NOT NEED TO USE OBSERVABILITY HERE!
 This is a development-only tool and does not interfere with production runtime.
 """
 
-import sys
 import argparse
 import asyncio
+import os
+import sys
 import warnings
 from pathlib import Path
-import os
 
 from ..services.secrets import SecretsManager
-
 
 # Suppress common warnings that clutter the output
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")

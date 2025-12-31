@@ -5,20 +5,25 @@ These endpoints allow external systems to trigger formation actions
 with template-based message generation from event data.
 """
 
-from typing import Dict, Any, Optional, List
-from pathlib import Path
 import re
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from .....datatypes.api import APIEventType, APIObjectType
 from .....services import observability
-from .....datatypes.api import APIObjectType, APIEventType
 from .....utils.id_generator import generate_request_id
 from .....utils.response_converter import extract_response_content
-from ...responses import create_api_response, create_success_response, create_error_response, APIResponse
-from ...utils import render_trigger_template, get_header_case_insensitive
+from ...responses import (
+    APIResponse,
+    create_api_response,
+    create_error_response,
+    create_success_response,
+)
+from ...utils import get_header_case_insensitive, render_trigger_template
 
 router = APIRouter(tags=["Triggers"])
 
@@ -27,8 +32,12 @@ class TriggerRequest(BaseModel):
     """Model for trigger requests."""
 
     data: Dict[str, Any] = Field(..., description="Event data to pass to trigger template")
-    session_id: Optional[str] = Field(default=None, description="Session ID for conversation grouping")
-    use_async: Optional[bool] = Field(default=True, description="Process trigger asynchronously (default: true)")
+    session_id: Optional[str] = Field(
+        default=None, description="Session ID for conversation grouping"
+    )
+    use_async: Optional[bool] = Field(
+        default=True, description="Process trigger asynchronously (default: true)"
+    )
 
 
 @router.get("/triggers")
@@ -87,7 +96,7 @@ def _extract_data_placeholders(content: str) -> List[str]:
         List of unique data field paths (e.g., ["user.name", "event.type"])
     """
     # Match ${{ data.xxx }} patterns
-    pattern = r'\$\{\{\s*data\.([a-zA-Z0-9_.]+)\s*\}\}'
+    pattern = r"\$\{\{\s*data\.([a-zA-Z0-9_.]+)\s*\}\}"
     matches = re.findall(pattern, content)
     # Return unique, sorted list
     return sorted(set(matches))
@@ -114,7 +123,7 @@ async def get_trigger(request: Request, trigger_name: str) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     # Validate trigger_name to prevent path traversal attacks
-    if not re.match(r'^[a-zA-Z0-9_-]+$', trigger_name):
+    if not re.match(r"^[a-zA-Z0-9_-]+$", trigger_name):
         return JSONResponse(
             status_code=400,
             content=create_error_response(
@@ -377,10 +386,7 @@ async def execute_trigger(
             return create_api_response(
                 object_type=APIObjectType.REQUEST,
                 event_type=APIEventType.REQUEST_COMPLETED,
-                data={
-                    "status": "completed",
-                    "content": response_content  # LLM response text
-                },
+                data={"status": "completed", "content": response_content},  # LLM response text
                 request_id=request_id,
             )
 

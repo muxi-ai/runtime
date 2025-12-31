@@ -6,23 +6,23 @@ Utility for implementing retry logic for transient failures in Formation operati
 
 import asyncio
 import time
-from typing import Any, Callable, Awaitable, TypeVar, Optional, Dict
+from typing import Any, Awaitable, Callable, Dict, Optional, TypeVar
 
-from ..services import observability
 from ..datatypes.retry import (
+    NetworkTransientError,
+    RateLimitTransientError,
+    RetryAttempt,
     RetryConfig,
     RetryResult,
-    RetryAttempt,
     RetryStrategy,
-    TransientError,
-    NetworkTransientError,
     ServiceTransientError,
-    RateLimitTransientError,
+    TransientError,
     calculate_delay,
     is_retryable_error,
 )
+from ..services import observability
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class RetryManager:
@@ -46,7 +46,9 @@ class RetryManager:
         """Check if an error should be retried based on configuration."""
         return is_retryable_error(error, retry_config)
 
-    def _calculate_retry_delay(self, attempt_num: int, retry_config: RetryConfig, error: Exception) -> float:
+    def _calculate_retry_delay(
+        self, attempt_num: int, retry_config: RetryConfig, error: Exception
+    ) -> float:
         """Calculate delay for next retry attempt."""
         if attempt_num >= retry_config.max_attempts:
             return 0.0
@@ -59,18 +61,26 @@ class RetryManager:
 
         return delay
 
-    def _create_retry_attempt(self, attempt_num: int, error: Exception, delay: float,
-                              attempt_start: float, attempt_elapsed: float) -> RetryAttempt:
+    def _create_retry_attempt(
+        self,
+        attempt_num: int,
+        error: Exception,
+        delay: float,
+        attempt_start: float,
+        attempt_elapsed: float,
+    ) -> RetryAttempt:
         """Create a RetryAttempt record."""
         return RetryAttempt(
             attempt_number=attempt_num,
             error=error,
             delay_before_retry=delay,
             timestamp=attempt_start,
-            elapsed_time=attempt_elapsed
+            elapsed_time=attempt_elapsed,
         )
 
-    def _create_success_result(self, result: T, attempts: list, attempt_num: int, start_time: float) -> RetryResult:
+    def _create_success_result(
+        self, result: T, attempts: list, attempt_num: int, start_time: float
+    ) -> RetryResult:
         """Create a successful RetryResult."""
         elapsed_time = time.time() - start_time
         return RetryResult(
@@ -78,11 +88,12 @@ class RetryManager:
             result=result,
             attempts=attempts,
             total_attempts=attempt_num,
-            total_elapsed_time=elapsed_time
+            total_elapsed_time=elapsed_time,
         )
 
-    def _create_failure_result(self, error: Exception, attempts: list, attempt_num: int,
-                               start_time: float) -> RetryResult:
+    def _create_failure_result(
+        self, error: Exception, attempts: list, attempt_num: int, start_time: float
+    ) -> RetryResult:
         """Create a failed RetryResult."""
         elapsed_time = time.time() - start_time
         return RetryResult(
@@ -90,7 +101,7 @@ class RetryManager:
             error=error,
             attempts=attempts,
             total_attempts=attempt_num,
-            total_elapsed_time=elapsed_time
+            total_elapsed_time=elapsed_time,
         )
 
     async def execute_with_retry(
@@ -98,7 +109,7 @@ class RetryManager:
         operation: Callable[[], Awaitable[T]],
         config: Optional[RetryConfig] = None,
         operation_name: str = "operation",
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> RetryResult:
         """
         Execute an async operation with retry logic.
@@ -137,7 +148,9 @@ class RetryManager:
                 delay = self._calculate_retry_delay(attempt_num, retry_config, error)
 
                 # Record this attempt
-                attempt = self._create_retry_attempt(attempt_num, error, delay, attempt_start, attempt_elapsed)
+                attempt = self._create_retry_attempt(
+                    attempt_num, error, delay, attempt_start, attempt_elapsed
+                )
                 attempts.append(attempt)
 
                 # Call retry callback if configured
@@ -159,7 +172,7 @@ class RetryManager:
             RuntimeError(f"Retry logic error for {operation_name}"),
             attempts,
             retry_config.max_attempts,
-            start_time
+            start_time,
         )
 
     def execute_sync_with_retry(
@@ -167,7 +180,7 @@ class RetryManager:
         operation: Callable[[], T],
         config: Optional[RetryConfig] = None,
         operation_name: str = "operation",
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> RetryResult:
         """
         Execute a synchronous operation with retry logic.
@@ -206,7 +219,9 @@ class RetryManager:
                 delay = self._calculate_retry_delay(attempt_num, retry_config, error)
 
                 # Record this attempt
-                attempt = self._create_retry_attempt(attempt_num, error, delay, attempt_start, attempt_elapsed)
+                attempt = self._create_retry_attempt(
+                    attempt_num, error, delay, attempt_start, attempt_elapsed
+                )
                 attempts.append(attempt)
 
                 # Call retry callback if configured
@@ -228,7 +243,7 @@ class RetryManager:
             RuntimeError(f"Retry logic error for {operation_name}"),
             attempts,
             retry_config.max_attempts,
-            start_time
+            start_time,
         )
 
 
@@ -258,7 +273,7 @@ async def retry_network_operation(
     operation: Callable[[], Awaitable[T]],
     max_attempts: int = 3,
     base_delay: float = 1.0,
-    operation_name: str = "network_operation"
+    operation_name: str = "network_operation",
 ) -> RetryResult:
     """
     Retry a network operation with network-specific error handling.
@@ -293,10 +308,10 @@ async def retry_network_operation(
                 "error_type": type(error).__name__,
                 "error_message": str(error),
                 "retry_delay": delay,
-                "total_attempts": max_attempts
+                "total_attempts": max_attempts,
             },
-            description=f"🔄 {operation_name} attempt {attempt} failed: {error}. Retrying in {delay:.1f}s..."
-        )
+            description=f"🔄 {operation_name} attempt {attempt} failed: {error}. Retrying in {delay:.1f}s...",
+        ),
     )
 
     manager = get_retry_manager()
@@ -307,7 +322,7 @@ async def retry_api_call(
     operation: Callable[[], Awaitable[T]],
     max_attempts: int = 5,
     base_delay: float = 2.0,
-    operation_name: str = "api_call"
+    operation_name: str = "api_call",
 ) -> RetryResult:
     """
     Retry an API call with API-specific error handling.
@@ -345,10 +360,10 @@ async def retry_api_call(
                 "error_type": type(error).__name__,
                 "error_message": str(error),
                 "retry_delay": delay,
-                "total_attempts": max_attempts
+                "total_attempts": max_attempts,
             },
-            description=f"🔄 {operation_name} attempt {attempt} failed: {error}. Retrying in {delay:.1f}s..."
-        )
+            description=f"🔄 {operation_name} attempt {attempt} failed: {error}. Retrying in {delay:.1f}s...",
+        ),
     )
 
     manager = get_retry_manager()
@@ -368,21 +383,18 @@ def classify_error_as_transient(error: Exception) -> Optional[TransientError]:
     # Network timeouts - use isinstance checks instead of string matching
     if isinstance(error, TimeoutError):
         return NetworkTransientError(
-            f"Network timeout: {error}",
-            details={"original_error": str(error)}
+            f"Network timeout: {error}", details={"original_error": str(error)}
         )
 
     # Connection issues - use isinstance checks
     if isinstance(error, ConnectionError):
         if isinstance(error, ConnectionRefusedError):
             return NetworkTransientError(
-                f"Connection refused: {error}",
-                details={"original_error": str(error)}
+                f"Connection refused: {error}", details={"original_error": str(error)}
             )
         else:
             return NetworkTransientError(
-                f"Connection error: {error}",
-                details={"original_error": str(error)}
+                f"Connection error: {error}", details={"original_error": str(error)}
             )
 
     # OS network errors
@@ -391,27 +403,27 @@ def classify_error_as_transient(error: Exception) -> Optional[TransientError]:
         if error.errno in (10054, 10060, 10061, 104, 110, 111):  # Common network error codes
             return NetworkTransientError(
                 f"Network OS error: {error}",
-                details={"original_error": str(error), "errno": error.errno}
+                details={"original_error": str(error), "errno": error.errno},
             )
 
     # HTTP-specific errors (for when using requests or httpx)
-    if hasattr(error, 'response') and hasattr(error.response, 'status_code'):
+    if hasattr(error, "response") and hasattr(error.response, "status_code"):
         status_code = error.response.status_code
         if status_code in [408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524]:
             if status_code == 429:
                 return RateLimitTransientError(
                     f"Rate limited (HTTP {status_code}): {error}",
-                    details={"original_error": str(error), "status_code": status_code}
+                    details={"original_error": str(error), "status_code": status_code},
                 )
             elif status_code in [500, 502, 503, 504]:
                 return ServiceTransientError(
                     f"Service unavailable (HTTP {status_code}): {error}",
-                    details={"original_error": str(error), "status_code": status_code}
+                    details={"original_error": str(error), "status_code": status_code},
                 )
             else:
                 return NetworkTransientError(
                     f"Network error (HTTP {status_code}): {error}",
-                    details={"original_error": str(error), "status_code": status_code}
+                    details={"original_error": str(error), "status_code": status_code},
                 )
 
     # Import errors for missing optional dependencies
@@ -423,21 +435,22 @@ def classify_error_as_transient(error: Exception) -> Optional[TransientError]:
 
     # DNS resolution failures (when not caught by OSError)
     dns_error_terms = [
-        'name or service not known',
-        'nodename nor servname',
-        'no address associated'
+        "name or service not known",
+        "nodename nor servname",
+        "no address associated",
     ]
     if any(term in error_str for term in dns_error_terms):
         return NetworkTransientError(
-            f"DNS resolution failed: {error}",
-            details={"original_error": str(error)}
+            f"DNS resolution failed: {error}", details={"original_error": str(error)}
         )
 
     # Service unavailable messages (when not caught by HTTP status)
-    if any(term in error_str for term in ['service unavailable', 'temporarily unavailable', 'try again later']):
+    if any(
+        term in error_str
+        for term in ["service unavailable", "temporarily unavailable", "try again later"]
+    ):
         return ServiceTransientError(
-            f"Service unavailable: {error}",
-            details={"original_error": str(error)}
+            f"Service unavailable: {error}", details={"original_error": str(error)}
         )
 
     return None

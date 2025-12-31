@@ -6,6 +6,7 @@ PostgreSQL (JSONB) and SQLite (TEXT with JSON serialization).
 """
 
 import json
+
 from sqlalchemy import JSON
 from sqlalchemy.types import TEXT, TypeDecorator
 

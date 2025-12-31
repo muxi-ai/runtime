@@ -11,7 +11,7 @@ manages pending approvals, and collects workflow metrics.
 
 import threading
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Any, List
+from typing import Any, Dict, List, Optional
 
 from ...datatypes.workflow import Workflow, WorkflowStatus
 from ...services import observability
@@ -64,7 +64,7 @@ class WorkflowManager:
             event_type=observability.SystemEvents.SERVICE_STARTED,
             level=observability.EventLevel.INFO,
             data={"event": "track_workflow_entry", "workflow_id": workflow.id},
-            description="WorkflowManager.track_workflow - Entry"
+            description="WorkflowManager.track_workflow - Entry",
         )
 
         with self._lock:
@@ -74,7 +74,7 @@ class WorkflowManager:
                 event_type=observability.SystemEvents.SERVICE_STARTED,
                 level=observability.EventLevel.INFO,
                 data={"event": "track_workflow_lock", "workflow_id": workflow_id},
-                description="WorkflowManager.track_workflow - Inside lock"
+                description="WorkflowManager.track_workflow - Inside lock",
             )
 
             self.active_workflows[workflow_id] = workflow
@@ -83,7 +83,7 @@ class WorkflowManager:
                 event_type=observability.SystemEvents.SERVICE_STARTED,
                 level=observability.EventLevel.INFO,
                 data={"event": "track_workflow_stored", "workflow_id": workflow_id},
-                description="WorkflowManager.track_workflow - Workflow stored in active_workflows"
+                description="WorkflowManager.track_workflow - Workflow stored in active_workflows",
             )
 
             # Update metrics
@@ -98,9 +98,13 @@ class WorkflowManager:
                     "event": "workflow_tracked",
                     "workflow_id": workflow_id,
                     "user_id": user_id,
-                    "status": workflow.status.value if hasattr(workflow.status, 'value') else str(workflow.status)
+                    "status": (
+                        workflow.status.value
+                        if hasattr(workflow.status, "value")
+                        else str(workflow.status)
+                    ),
                 },
-                description="Workflow tracked"
+                description="Workflow tracked",
             )
 
     def get_active_workflow(self, workflow_id: str) -> Optional[Workflow]:
@@ -133,11 +137,8 @@ class WorkflowManager:
                 observability.observe(
                     event_type=observability.SystemEvents.SERVICE_STARTED,
                     level=observability.EventLevel.WARNING,
-                    data={
-                        "event": "workflow_complete_not_active",
-                        "workflow_id": workflow_id
-                    },
-                    description="Workflow complete called on non-active workflow"
+                    data={"event": "workflow_complete_not_active", "workflow_id": workflow_id},
+                    description="Workflow complete called on non-active workflow",
                 )
                 return
 
@@ -166,9 +167,9 @@ class WorkflowManager:
                     "event": "workflow_completed",
                     "workflow_id": workflow_id,
                     "status": workflow.status,
-                    "execution_time": execution_time
+                    "execution_time": execution_time,
                 },
-                description="Workflow completed"
+                description="Workflow completed",
             )
 
     def get_workflow_history(self, workflow_id: str) -> Optional[Workflow]:
@@ -210,9 +211,9 @@ class WorkflowManager:
                 data={
                     "event": "workflow_metrics_updated",
                     "workflow_id": workflow_id,
-                    "metrics": metrics
+                    "metrics": metrics,
                 },
-                description="Workflow metrics updated"
+                description="Workflow metrics updated",
             )
 
     def add_pending_approval(self, workflow: Workflow) -> None:
@@ -229,11 +230,8 @@ class WorkflowManager:
             observability.observe(
                 event_type=observability.SystemEvents.SERVICE_STARTED,
                 level=observability.EventLevel.INFO,
-                data={
-                    "event": "workflow_pending_approval",
-                    "workflow_id": workflow_id
-                },
-                description="Workflow pending approval"
+                data={"event": "workflow_pending_approval", "workflow_id": workflow_id},
+                description="Workflow pending approval",
             )
 
     def get_pending_approval(self, workflow_id: str) -> Optional[Workflow]:
@@ -263,11 +261,8 @@ class WorkflowManager:
                 observability.observe(
                     event_type=observability.SystemEvents.SERVICE_STARTED,
                     level=observability.EventLevel.INFO,
-                    data={
-                        "event": "workflow_approval_removed",
-                        "workflow_id": workflow_id
-                    },
-                    description="Workflow approval removed"
+                    data={"event": "workflow_approval_removed", "workflow_id": workflow_id},
+                    description="Workflow approval removed",
                 )
 
     def get_workflow(self, workflow_id: str) -> Optional[Workflow]:
@@ -302,7 +297,7 @@ class WorkflowManager:
         include_pending: bool = True,
         user_id: Optional[str] = None,
         status: Optional[WorkflowStatus] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[Workflow]:
         """
         Get workflows matching specified criteria.
@@ -386,11 +381,8 @@ class WorkflowManager:
             observability.observe(
                 event_type=observability.SystemEvents.SERVICE_STARTED,
                 level=observability.EventLevel.WARNING,
-                data={
-                    "event": "workflow_cancelled",
-                    "workflow_id": workflow_id
-                },
-                description="Workflow cancelled"
+                data={"event": "workflow_cancelled", "workflow_id": workflow_id},
+                description="Workflow cancelled",
             )
 
             return True
@@ -406,10 +398,12 @@ class WorkflowManager:
             metrics = self.workflow_metrics.get_summary()
 
             # Add current counts
-            metrics.update({
-                "in_progress_workflows": len(self.active_workflows),
-                "pending_approval_workflows": len(self.pending_approvals),
-            })
+            metrics.update(
+                {
+                    "in_progress_workflows": len(self.active_workflows),
+                    "pending_approval_workflows": len(self.pending_approvals),
+                }
+            )
 
             return metrics
 
@@ -455,9 +449,9 @@ class WorkflowManager:
                     data={
                         "event": "workflow_history_cleared",
                         "cleared_count": cleared_count,
-                        "older_than_days": older_than_days
+                        "older_than_days": older_than_days,
                     },
-                    description="Workflow history cleared"
+                    description="Workflow history cleared",
                 )
 
             return cleared_count
@@ -483,7 +477,7 @@ class WorkflowManager:
                         "event": "workflow_status_updated",
                         "workflow_id": workflow_id,
                         "status": workflow.status,
-                        "progress": workflow.progress_percent
+                        "progress": workflow.progress_percent,
                     },
-                    description="Workflow status updated"
+                    description="Workflow status updated",
                 )

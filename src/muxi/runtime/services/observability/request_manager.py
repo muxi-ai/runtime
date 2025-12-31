@@ -6,14 +6,14 @@ request lifecycles and automatic cleanup.
 """
 
 import asyncio
-import time
 import threading
+import time
 from contextlib import asynccontextmanager
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional
 
+from ...datatypes.observability import RequestContext
 from ...utils.id_generator import generate_nanoid as generate_id
 from .context import _current_request_context
-from ...datatypes.observability import RequestContext
 
 
 class RequestContextManager:

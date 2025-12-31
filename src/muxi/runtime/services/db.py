@@ -15,16 +15,16 @@ Key Features:
 """
 
 import os
-from typing import Optional, Any, Dict
+from contextlib import asynccontextmanager
+from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
-from contextlib import asynccontextmanager
-from sqlalchemy import create_engine, MetaData, text
-from sqlalchemy.orm import sessionmaker, Session, declarative_base
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
-from . import observability
 from ..utils.user_dirs import get_memory_dir
+from . import observability
 
 # Create a shared base for all MUXI models
 Base = declarative_base()
@@ -53,6 +53,7 @@ class AsyncModelMixin:
             The model instance if found, or None if no match exists.
         """
         from sqlalchemy import select
+
         stmt = select(cls).filter_by(**kwargs)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
@@ -70,6 +71,7 @@ class AsyncModelMixin:
             List: All model instances matching the specified criteria.
         """
         from sqlalchemy import select
+
         stmt = select(cls).filter_by(**kwargs)
         result = await session.execute(stmt)
         return result.scalars().all()
@@ -178,7 +180,10 @@ class DatabaseManager:
         self.max_overflow = max_overflow
 
         # Validate idle_transaction_timeout_seconds
-        if not isinstance(idle_transaction_timeout_seconds, int) or idle_transaction_timeout_seconds < 0:
+        if (
+            not isinstance(idle_transaction_timeout_seconds, int)
+            or idle_transaction_timeout_seconds < 0
+        ):
             raise ValueError(
                 "idle_transaction_timeout_seconds must be a non-negative integer, "
                 f"got {idle_transaction_timeout_seconds}"
@@ -336,7 +341,9 @@ class DatabaseManager:
                         # Statement timeout prevents hung queries (milliseconds)
                         "statement_timeout": str(self.statement_timeout_seconds * 1000),
                         # Idle transaction timeout for cleanup (milliseconds)
-                        "idle_in_transaction_session_timeout": str(self.idle_transaction_timeout_seconds * 1000),
+                        "idle_in_transaction_session_timeout": str(
+                            self.idle_transaction_timeout_seconds * 1000
+                        ),
                     }
                 },
             )
@@ -527,6 +534,7 @@ class DatabaseManager:
             # Note: This is synchronous disposal of async engine
             # In production, prefer using close_async() when possible
             import asyncio
+
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
@@ -594,12 +602,13 @@ def get_database_manager(
 
         if params_differ:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(
                 "get_database_manager called with different parameters than existing instance. "
                 "Using existing instance and IGNORING new parameters. "
                 "Differences: %s",
-                ", ".join(differences)
+                ", ".join(differences),
             )
 
     return _db_manager

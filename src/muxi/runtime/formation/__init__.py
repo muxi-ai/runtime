@@ -1,8 +1,8 @@
 """Formation package for MUXI runtime."""
 
-from .formation import Formation  # noqa: E402
-from ..utils import DependencyValidator
 from ..datatypes.validation import ValidationResult
+from ..utils import DependencyValidator
+from .formation import Formation  # noqa: E402
 
 __all__ = [
     "Formation",

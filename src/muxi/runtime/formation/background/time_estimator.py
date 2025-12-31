@@ -5,7 +5,7 @@ This module estimates processing time using request analysis to help
 determine if requests should be processed asynchronously.
 """
 
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 from ...services import observability
 
@@ -81,8 +81,8 @@ class TimeEstimator:
                     "estimated_seconds": round(estimated_seconds, 1),
                     "complexity_score": analysis.complexity_score,
                     "capabilities_count": len(required_capabilities),
-                    "requires_decomposition": getattr(analysis, 'requires_decomposition', False),
-                    "requires_multi_agent": getattr(analysis, 'requires_multi_agent', False),
+                    "requires_decomposition": getattr(analysis, "requires_decomposition", False),
+                    "requires_multi_agent": getattr(analysis, "requires_multi_agent", False),
                 },
                 description=(
                     f"Time estimation completed: {estimated_seconds:.1f}s "

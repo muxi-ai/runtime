@@ -1,9 +1,10 @@
 """MCP Health monitoring implementation."""
 
-import time
 import asyncio
 import logging
-from typing import Dict, Any, List
+import time
+from typing import Any, Dict, List
+
 from ..transports.base import BaseTransport
 from .message_handler import MCPMessageHandler
 
@@ -18,11 +19,7 @@ class MCPHealthMonitor:
         self.message_handler = MCPMessageHandler()
         self.health_history: Dict[str, List[Dict[str, Any]]] = {}
 
-    async def ping(
-        self,
-        transport: BaseTransport,
-        timeout: float = 10.0
-    ) -> Dict[str, Any]:
+    async def ping(self, transport: BaseTransport, timeout: float = 10.0) -> Dict[str, Any]:
         """Ping MCP server to check responsiveness.
 
         Args:
@@ -42,10 +39,7 @@ class MCPHealthMonitor:
             request = self.message_handler.create_request("ping", {})
 
             # Send ping with timeout
-            response = await asyncio.wait_for(
-                transport.send_message(request),
-                timeout=timeout
-            )
+            response = await asyncio.wait_for(transport.send_message(request), timeout=timeout)
 
             # Calculate timing
             end_time = time.time()
@@ -61,7 +55,7 @@ class MCPHealthMonitor:
                 "success": True,
                 "response_time_ms": response_time,
                 "timestamp": end_time,
-                "result": result
+                "result": result,
             }
 
         except asyncio.TimeoutError:
@@ -73,7 +67,7 @@ class MCPHealthMonitor:
                 "error": "Ping timeout",
                 "response_time_ms": response_time,
                 "timestamp": end_time,
-                "timeout": timeout
+                "timeout": timeout,
             }
 
         except Exception as e:
@@ -84,13 +78,11 @@ class MCPHealthMonitor:
                 "success": False,
                 "error": str(e),
                 "response_time_ms": response_time,
-                "timestamp": end_time
+                "timestamp": end_time,
             }
 
     async def check_server_health(
-        self,
-        transport: BaseTransport,
-        server_id: str = None
+        self, transport: BaseTransport, server_id: str = None
     ) -> Dict[str, Any]:
         """Comprehensive health check for MCP server.
 
@@ -108,7 +100,7 @@ class MCPHealthMonitor:
             "ping_result": None,
             "connection_status": "unknown",
             "capabilities": [],
-            "errors": []
+            "errors": [],
         }
 
         try:
@@ -133,7 +125,9 @@ class MCPHealthMonitor:
             else:
                 health_status["connection_status"] = "disconnected"
                 health_status["overall_status"] = "unhealthy"
-                health_status["errors"].append(f"Ping failed: {ping_result.get('error', 'Unknown error')}")
+                health_status["errors"].append(
+                    f"Ping failed: {ping_result.get('error', 'Unknown error')}"
+                )
 
         except Exception as e:
             health_status["connection_status"] = "error"
@@ -147,9 +141,7 @@ class MCPHealthMonitor:
         return health_status
 
     async def _check_capabilities(
-        self,
-        transport: BaseTransport,
-        health_status: Dict[str, Any]
+        self, transport: BaseTransport, health_status: Dict[str, Any]
     ) -> None:
         """Check server capabilities by testing common MCP methods.
 
@@ -190,9 +182,9 @@ class MCPHealthMonitor:
         try:
             # This is a more complex check, so we just test if the method exists
             # by sending a minimal request that should fail gracefully
-            sampling_request = self.message_handler.create_request("sampling/createMessage", {
-                "messages": [{"role": "user", "content": "test"}]
-            })
+            sampling_request = self.message_handler.create_request(
+                "sampling/createMessage", {"messages": [{"role": "user", "content": "test"}]}
+            )
             await asyncio.wait_for(transport.send_message(sampling_request), timeout=5.0)
             # If we get a response (even an error), the capability exists
             capabilities.append("sampling")
@@ -202,11 +194,7 @@ class MCPHealthMonitor:
 
         health_status["capabilities"] = capabilities
 
-    def _store_health_history(
-        self,
-        server_id: str,
-        health_status: Dict[str, Any]
-    ) -> None:
+    def _store_health_history(self, server_id: str, health_status: Dict[str, Any]) -> None:
         """Store health status in history.
 
         Args:
@@ -223,11 +211,7 @@ class MCPHealthMonitor:
         if len(self.health_history[server_id]) > 50:
             self.health_history[server_id] = self.health_history[server_id][-50:]
 
-    def get_health_history(
-        self,
-        server_id: str,
-        limit: int = 10
-    ) -> List[Dict[str, Any]]:
+    def get_health_history(self, server_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Get health history for a server.
 
         Args:
@@ -242,10 +226,7 @@ class MCPHealthMonitor:
 
         return self.health_history[server_id][-limit:]
 
-    def get_health_summary(
-        self,
-        server_id: str
-    ) -> Dict[str, Any]:
+    def get_health_summary(self, server_id: str) -> Dict[str, Any]:
         """Get health summary for a server.
 
         Args:
@@ -257,15 +238,13 @@ class MCPHealthMonitor:
         history = self.health_history.get(server_id, [])
 
         if not history:
-            return {
-                "server_id": server_id,
-                "status": "no_data",
-                "checks_count": 0
-            }
+            return {"server_id": server_id, "status": "no_data", "checks_count": 0}
 
         # Calculate statistics
         recent_checks = history[-10:]  # Last 10 checks
-        successful_pings = len([h for h in recent_checks if h.get("ping_result", {}).get("success", False)])
+        successful_pings = len(
+            [h for h in recent_checks if h.get("ping_result", {}).get("success", False)]
+        )
         healthy_checks = len([h for h in recent_checks if h.get("overall_status") == "healthy"])
 
         # Calculate average response time
@@ -290,9 +269,8 @@ class MCPHealthMonitor:
             "avg_response_time_ms": avg_response_time,
             "capabilities": latest.get("capabilities", []),
             "recent_errors": [
-                error for h in recent_checks[-3:]  # Last 3 checks
-                for error in h.get("errors", [])
-            ]
+                error for h in recent_checks[-3:] for error in h.get("errors", [])  # Last 3 checks
+            ],
         }
 
     async def monitor_server_health(
@@ -300,7 +278,7 @@ class MCPHealthMonitor:
         transport: BaseTransport,
         server_id: str,
         interval: float = 60.0,
-        max_checks: int = None
+        max_checks: int = None,
     ) -> None:
         """Continuously monitor server health.
 
@@ -351,17 +329,14 @@ class MCPHealthMonitor:
         timestamp = health_status.get("timestamp", 0)
 
         # Status emoji
-        status_emoji = {
-            "healthy": "✅",
-            "degraded": "⚠️",
-            "unhealthy": "❌",
-            "unknown": "❓"
-        }.get(overall_status, "❓")
+        status_emoji = {"healthy": "✅", "degraded": "⚠️", "unhealthy": "❌", "unknown": "❓"}.get(
+            overall_status, "❓"
+        )
 
         lines = [
             f"{status_emoji} Server: {server_id}",
             f"Status: {overall_status.upper()}",
-            f"Checked: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))}"
+            f"Checked: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))}",
         ]
 
         # Ping information

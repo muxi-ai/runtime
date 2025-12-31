@@ -41,13 +41,11 @@
 
 from .app import AppConfig
 from .database import DatabaseConfig
-from .loader import ConfigLoader
 from .formation_loader import FormationLoader
-
+from .loader import ConfigLoader
 from .memory import MemoryConfig
 from .model import ModelConfig
 from .routing import RoutingConfig
-
 
 __all__ = [
     "AppConfig",

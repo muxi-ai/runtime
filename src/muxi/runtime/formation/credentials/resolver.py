@@ -5,15 +5,16 @@ This service handles runtime resolution of user credentials for MCP servers
 and other components that need to access services on behalf of users.
 """
 
-from typing import Optional, Dict, Any, List, Union
-from sqlalchemy import Column, Integer, String, DateTime, select, Text
+from typing import Any, Dict, List, Optional, Union
+
 import nanoid
 from cachetools import TTLCache
+from sqlalchemy import Column, DateTime, Integer, String, Text, select
 
 from ...datatypes.exceptions import FormationError
-from ...utils.datetime_utils import utc_now_naive
 from ...services import observability
 from ...services.db import Base
+from ...utils.datetime_utils import utc_now_naive
 from ...utils.user_resolution import resolve_user_identifier
 
 
@@ -116,12 +117,9 @@ class CredentialResolver:
 
         # Query database using internal_user_id
         async with self.async_session_maker() as session:
-            stmt = (
-                select(Credential)
-                .where(
-                    Credential.user_id == internal_user_id,
-                    Credential.service == service,
-                )
+            stmt = select(Credential).where(
+                Credential.user_id == internal_user_id,
+                Credential.service == service,
             )
 
             result = await session.execute(stmt)
@@ -149,7 +147,7 @@ class CredentialResolver:
                                     "error": str(e),
                                     "error_type": type(e).__name__,
                                 },
-                                description=f"Failed to parse credential JSON for {credentials[0].name}: {str(e)}"
+                                description=f"Failed to parse credential JSON for {credentials[0].name}: {str(e)}",
                             )
                             raise FormationError(
                                 f"Malformed credential JSON for service '{service}' "
@@ -179,7 +177,7 @@ class CredentialResolver:
                                         "error": str(e),
                                         "error_type": type(e).__name__,
                                     },
-                                    description=f"Failed to parse credential JSON for {cred.name}: {str(e)}"
+                                    description=f"Failed to parse credential JSON for {cred.name}: {str(e)}",
                                 )
                                 # Skip this malformed credential, don't include it in the list
                                 continue
@@ -224,7 +222,10 @@ class CredentialResolver:
                 # Note: Duplicate checking is handled by EncryptedCredentialResolver
                 # Serialize credentials to JSON string if it's a dict
                 import json
-                credentials_str = json.dumps(credentials) if isinstance(credentials, dict) else credentials
+
+                credentials_str = (
+                    json.dumps(credentials) if isinstance(credentials, dict) else credentials
+                )
 
                 new_cred = Credential(
                     user_id=internal_user_id,  # Use the resolved internal user ID
@@ -302,12 +303,9 @@ class CredentialResolver:
 
             # Update in database
             async with self.async_session_maker() as session:
-                stmt = (
-                    select(Credential)
-                    .where(
-                        Credential.user_id == internal_user_id,
-                        Credential.service == service,
-                    )
+                stmt = select(Credential).where(
+                    Credential.user_id == internal_user_id,
+                    Credential.service == service,
                 )
                 result = await session.execute(stmt)
                 credential = result.scalar_one_or_none()
@@ -354,12 +352,9 @@ class CredentialResolver:
         internal_user_id = await self._resolve_user_id(user_id)
 
         async with self.async_session_maker() as session:
-            stmt = (
-                select(Credential)
-                .where(
-                    Credential.user_id == internal_user_id,
-                    Credential.service == service,
-                )
+            stmt = select(Credential).where(
+                Credential.user_id == internal_user_id,
+                Credential.service == service,
             )
             result = await session.execute(stmt)
             credential = result.scalar_one_or_none()
@@ -390,11 +385,8 @@ class CredentialResolver:
         internal_user_id = await self._resolve_user_id(user_id)
 
         async with self.async_session_maker() as session:
-            stmt = (
-                select(Credential)
-                .where(
-                    Credential.user_id == internal_user_id,
-                )
+            stmt = select(Credential).where(
+                Credential.user_id == internal_user_id,
             )
             result = await session.execute(stmt)
             credentials = result.scalars().all()
@@ -492,7 +484,10 @@ class CredentialResolver:
                 response = await discovery_llm.chat(
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Available tools from {server_id}:\n{tools_text}"},
+                        {
+                            "role": "user",
+                            "content": f"Available tools from {server_id}:\n{tools_text}",
+                        },
                     ],
                     max_tokens=20,
                     temperature=0,

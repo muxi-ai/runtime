@@ -7,13 +7,15 @@ maintaining full A2A protocol compliance for message format.
 """
 
 from typing import Optional, Union
-from a2a.client.transports.base import ClientTransport
+
 from a2a.client.middleware import ClientCallContext
-from a2a.types import MessageSendParams, Task, Message
+from a2a.client.transports.base import ClientTransport
+from a2a.types import Message, MessageSendParams, Task
 
 
 class AgentNotFoundError(Exception):
     """Raised when target agent is not found in formation"""
+
     pass
 
 
@@ -35,10 +37,7 @@ class AgentTransport(ClientTransport):
         self.overlord = overlord
 
     async def send_message(
-        self,
-        request: MessageSendParams,
-        *,
-        context: Optional[ClientCallContext] = None
+        self, request: MessageSendParams, *, context: Optional[ClientCallContext] = None
     ) -> Union[Task, Message]:
         """
         Send A2A message directly to an agent in the formation.
@@ -59,10 +58,10 @@ class AgentTransport(ClientTransport):
 
         # Try to get URL from context state or attributes
         url = None
-        if hasattr(context, 'url'):
+        if hasattr(context, "url"):
             url = context.url
-        elif hasattr(context, 'state') and isinstance(context.state, dict):
-            url = context.state.get('url')
+        elif hasattr(context, "state") and isinstance(context.state, dict):
+            url = context.state.get("url")
 
         if not url:
             raise ValueError("Context with URL is required for agent transport")
@@ -79,31 +78,32 @@ class AgentTransport(ClientTransport):
             raise AttributeError(f"Agent {target_agent_id} does not support A2A messaging")
 
         # Extract source agent ID from metadata
-        source_agent_id = request.metadata.get("source_agent_id", "unknown") if request.metadata else "unknown"
+        source_agent_id = (
+            request.metadata.get("source_agent_id", "unknown") if request.metadata else "unknown"
+        )
 
         # Message is already in A2A protocol format
         # Call the agent directly (in-memory)
         response = await target_agent.handle_a2a_message(
-            source_agent_id=source_agent_id,
-            message=request.message,
-            message_type="request"
+            source_agent_id=source_agent_id, message=request.message, message_type="request"
         )
 
         # Convert response to Message if it's a dict
         if isinstance(response, dict):
             # Extract message_id suffix for better readability
-            message_suffix = 'unknown'
-            if context and hasattr(context, 'state'):
-                message_suffix = context.state.get('message_id', 'unknown')
+            message_suffix = "unknown"
+            if context and hasattr(context, "state"):
+                message_suffix = context.state.get("message_id", "unknown")
 
             # Create a Message from the response
-            from a2a.types import TextPart, Role
+            from a2a.types import Role, TextPart
+
             return Message(
                 message_id=f"resp_{target_agent_id}_{message_suffix}",
                 role=Role.agent,
                 parts=[TextPart(text=str(response), kind="text")],
                 metadata=response if isinstance(response, dict) else {},
-                kind="message"
+                kind="message",
             )
 
         # Return as-is if already a Message or Task

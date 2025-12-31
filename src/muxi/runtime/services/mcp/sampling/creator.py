@@ -1,9 +1,10 @@
 """MCP Sampling implementation for createMessage functionality."""
 
-from typing import Dict, Any, List, Optional
-from ..transports.base import BaseTransport
-from ..protocol.message_handler import MCPMessageHandler
+from typing import Any, Dict, List, Optional
+
 from ....datatypes.exceptions import MCPRequestError
+from ..protocol.message_handler import MCPMessageHandler
+from ..transports.base import BaseTransport
 
 
 class MCPSamplingCreator:
@@ -20,7 +21,7 @@ class MCPSamplingCreator:
         model_preferences: Optional[Dict[str, Any]] = None,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
-        stop_sequences: Optional[List[str]] = None
+        stop_sequences: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Request LLM message creation via sampling/createMessage method.
 
@@ -58,13 +59,12 @@ class MCPSamplingCreator:
                 params["stopSequences"] = stop_sequences
 
             # Send request to MCP server
-            response = await transport.send_request({
-                "method": "sampling/createMessage",
-                "params": params
-            })
+            response = await transport.send_request(
+                {"method": "sampling/createMessage", "params": params}
+            )
 
             # Extract result - handle both dict and direct response
-            if hasattr(response, 'get'):
+            if hasattr(response, "get"):
                 result = response.get("result", {})
             else:
                 result = response if isinstance(response, dict) else {}
@@ -80,7 +80,7 @@ class MCPSamplingCreator:
         self,
         user_message: str,
         conversation_history: Optional[List[Dict[str, Any]]] = None,
-        system_message: Optional[str] = None
+        system_message: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Prepare messages in the format expected by createMessage.
 
@@ -96,10 +96,7 @@ class MCPSamplingCreator:
 
         # Add system message if provided
         if system_message:
-            messages.append({
-                "role": "system",
-                "content": system_message
-            })
+            messages.append({"role": "system", "content": system_message})
 
         # Add conversation history if provided
         if conversation_history:
@@ -108,10 +105,7 @@ class MCPSamplingCreator:
                 messages.append(msg)
 
         # Add user message
-        messages.append({
-            "role": "user",
-            "content": user_message
-        })
+        messages.append({"role": "user", "content": user_message})
 
         return messages
 
@@ -120,7 +114,7 @@ class MCPSamplingCreator:
         hints: Optional[List[Dict[str, Any]]] = None,
         cost_priority: Optional[float] = None,
         speed_priority: Optional[float] = None,
-        intelligence_priority: Optional[float] = None
+        intelligence_priority: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Create model preferences object for sampling requests.
 
@@ -274,7 +268,9 @@ class MCPSamplingCreator:
         # Validate role
         role = result["role"]
         if role != "assistant":
-            raise MCPRequestError(f"Create message result should have role 'assistant', got '{role}'")
+            raise MCPRequestError(
+                f"Create message result should have role 'assistant', got '{role}'"
+            )
 
         # Validate content
         content = result["content"]
@@ -324,7 +320,7 @@ class MCPSamplingCreator:
             f"🤖 Message from {role}:",
             f"📝 Content: {content[:200]}{'...' if len(content) > 200 else ''}",
             f"🔧 Model: {model}",
-            f"⏹️  Stop reason: {stop_reason}"
+            f"⏹️  Stop reason: {stop_reason}",
         ]
 
         return "\n".join(summary_lines)

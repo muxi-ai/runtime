@@ -50,7 +50,6 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-
 from .loader import ConfigLoader
 
 
@@ -80,7 +79,9 @@ class FormationLoader:
             bool: True if config is a dictionary, False otherwise
         """
         if not isinstance(config, dict):
-            print(f"⚠️  Warning: {config_type} file '{file_name}' contains {type(config).__name__} instead of dict - skipping")  # noqa: E501
+            print(
+                f"⚠️  Warning: {config_type} file '{file_name}' contains {type(config).__name__} instead of dict - skipping"
+            )  # noqa: E501
             return False
         return True
 
@@ -210,7 +211,9 @@ class FormationLoader:
         if not main_config_path.exists():
             main_config_path = formation_dir / "formation.yml"
         if not main_config_path.exists():
-            raise FileNotFoundError(f"Main formation config (formation.afs/yaml/yml) not found in directory: {directory_path}")
+            raise FileNotFoundError(
+                f"Main formation config (formation.afs/yaml/yml) not found in directory: {directory_path}"
+            )
 
         # Load the main configuration
         main_config = self.config_loader.load(str(main_config_path))
@@ -640,29 +643,25 @@ class FormationLoader:
         # Reject absolute paths
         if os.path.isabs(path):
             from ...datatypes.observability import InitEventFormatter
+
             error_msg = (
                 f"Absolute paths not allowed for knowledge sources: {path}\n"
                 f"Use paths relative to formation directory root.\n"
                 f"Example: 'knowledge/faq/' instead of '{path}'"
             )
-            print(InitEventFormatter.format_fail(
-                "Invalid knowledge path",
-                error_msg
-            ))
+            print(InitEventFormatter.format_fail("Invalid knowledge path", error_msg))
             raise ValueError(error_msg)
 
         # Reject parent directory traversal
-        if '..' in path.split(os.sep):
+        if ".." in path.split(os.sep):
             from ...datatypes.observability import InitEventFormatter
+
             error_msg = (
                 f"Parent directory traversal not allowed: {path}\n"
                 f"Keep knowledge within formation directory.\n"
                 f"Recommended: Place files in knowledge/ subdirectory"
             )
-            print(InitEventFormatter.format_fail(
-                "Invalid knowledge path",
-                error_msg
-            ))
+            print(InitEventFormatter.format_fail("Invalid knowledge path", error_msg))
             raise ValueError(error_msg)
 
         # Resolve relative to formation root (not formation_dir/knowledge/)
@@ -674,20 +673,21 @@ class FormationLoader:
         try:
             # Check if resolved path is within formation directory
             os.path.commonpath([resolved_path, formation_dir_abs])
-            if not resolved_path.startswith(formation_dir_abs + os.sep) and resolved_path != formation_dir_abs:
+            if (
+                not resolved_path.startswith(formation_dir_abs + os.sep)
+                and resolved_path != formation_dir_abs
+            ):
                 raise ValueError("Path escapes formation directory")
         except ValueError:
             from ...datatypes.observability import InitEventFormatter
+
             error_msg = (
                 f"Knowledge path escapes formation directory: {path}\n"
                 f"Resolved to: {resolved_path}\n"
                 f"Must be within: {formation_dir_abs}\n"
                 f"Keep all knowledge files within the formation directory."
             )
-            print(InitEventFormatter.format_fail(
-                "Invalid knowledge path",
-                error_msg
-            ))
+            print(InitEventFormatter.format_fail("Invalid knowledge path", error_msg))
             raise ValueError(error_msg)
 
         return resolved_path

@@ -9,19 +9,18 @@ import json
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from ...utils.datetime_utils import utc_now
-from ...utils.id_generator import generate_nanoid
-
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 
+from ...utils.datetime_utils import utc_now
+from ...utils.id_generator import generate_nanoid
 from .. import observability
 from ..db import DatabaseManager
 from ..llm import LLM
+from ..memory.long_term import User  # Import User model for formation isolation
+from .limits import get_limits_enforcer
 from .models import ScheduledJob, ScheduledJobAudit
 from .validation import SchedulerInputValidator
-from .limits import get_limits_enforcer
-from ..memory.long_term import User  # Import User model for formation isolation
 
 
 class JobManager:
@@ -66,8 +65,9 @@ class JobManager:
                 return user_id
 
             # User doesn't exist - create new user + identifier
-            from ...utils.id_generator import get_default_nanoid
             from sqlalchemy.exc import IntegrityError
+
+            from ...utils.id_generator import get_default_nanoid
 
             new_user = User(
                 public_id=get_default_nanoid()(),

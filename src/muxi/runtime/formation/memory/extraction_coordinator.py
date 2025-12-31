@@ -7,8 +7,8 @@ from conversations, including triggering extraction and managing the process.
 
 from typing import Any
 
-from ...services.memory.extractor import MemoryExtractor
 from ...datatypes import observability
+from ...services.memory.extractor import MemoryExtractor
 
 
 class ExtractionCoordinator:

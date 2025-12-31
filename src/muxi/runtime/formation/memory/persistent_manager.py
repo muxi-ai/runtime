@@ -294,7 +294,9 @@ class PersistentMemoryManager:
                         {
                             "text": item.get("text", ""),
                             "metadata": item.get("metadata", {}),
-                            "distance": item.get("score", 0.0),  # score is actually distance/similarity
+                            "distance": item.get(
+                                "score", 0.0
+                            ),  # score is actually distance/similarity
                             "source": "long_term",
                         }
                     )

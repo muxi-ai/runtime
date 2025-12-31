@@ -6,11 +6,10 @@ error codes for consistent error handling across the system.
 """
 
 import asyncio
-from typing import Type, Dict
+from typing import Dict, Type
 
 from ..datatypes.errors import ERROR_CODE_REGISTRY
 from ..services import observability
-
 
 # Exception type to error code mapping
 EXCEPTION_TO_ERROR_CODE: Dict[Type[Exception], str] = {

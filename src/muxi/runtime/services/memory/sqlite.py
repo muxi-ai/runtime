@@ -38,9 +38,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from .base import BaseMemory
 from ...extensions import SQLiteVecExtension
 from .. import observability
+from .base import BaseMemory
 
 
 class SQLiteMemory(BaseMemory):
@@ -314,15 +314,16 @@ class SQLiteMemory(BaseMemory):
         """Lazy load embedding provider on first access (like LongTermMemory)."""
         if self._embedding_provider is None and self._embedding_model_name:
             from ..llm import LLM
+
             self._embedding_provider = LLM(model=self._embedding_model_name)
         return self._embedding_provider
 
     def _extract_embedding_from_response(self, embedding_response):
         """Extract the actual embedding vector from LLM response (copied from LongTermMemory)."""
-        if hasattr(embedding_response, 'data') and isinstance(embedding_response.data, list):
+        if hasattr(embedding_response, "data") and isinstance(embedding_response.data, list):
             if len(embedding_response.data) > 0:
                 first_embedding = embedding_response.data[0]
-                if hasattr(first_embedding, 'embedding'):
+                if hasattr(first_embedding, "embedding"):
                     return first_embedding.embedding
                 elif isinstance(first_embedding, (list, np.ndarray)):
                     return first_embedding

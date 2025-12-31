@@ -5,10 +5,10 @@ This module provides a circuit breaker to prevent cascading failures
 when LLM services are experiencing issues.
 """
 
-import time
 import asyncio
-from typing import Callable, Optional, TypeVar
+import time
 from enum import Enum
+from typing import Callable, Optional, TypeVar
 
 from ...services import observability
 

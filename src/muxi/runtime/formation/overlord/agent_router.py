@@ -337,7 +337,7 @@ Your response: [agent-id] or SECURITY_BLOCK"""
             raise SecurityViolation(
                 reason="LLM detected security threat in message",
                 threat_type="llm_detected",
-                message_preview=""  # Don't log potentially malicious content
+                message_preview="",  # Don't log potentially malicious content
             )
 
         # Try to extract agent ID - handle various formats

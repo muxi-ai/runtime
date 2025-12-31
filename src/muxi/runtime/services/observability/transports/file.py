@@ -1,11 +1,13 @@
+import asyncio
 import json
 import os
-import asyncio
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 import aiofiles
-from .base import BaseTransport, TransportStatus
+
 from ....utils.user_dirs import get_observability_dir
+from .base import BaseTransport, TransportStatus
 
 
 class FileTransport(BaseTransport):

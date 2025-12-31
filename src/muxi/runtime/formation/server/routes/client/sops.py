@@ -6,17 +6,17 @@ requiring client API key authentication.
 """
 
 import re
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from .....datatypes.api import APIEventType, APIObjectType
 from ...responses import (
     APIResponse,
-    create_success_response,
     create_error_response,
+    create_success_response,
 )
-from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["SOPs"])
 
@@ -47,11 +47,11 @@ def _extract_agents_from_sop(metadata: Dict[str, Any], content: str) -> List[str
         # Only detect "agent:" at line start (after optional whitespace) to avoid prose
         for line in content.split("\n"):
             # Match lines that start with optional whitespace followed by "agent:" as a key
-            match = re.match(r'^\s*agent:\s*(.+?)\s*$', line, re.IGNORECASE)
+            match = re.match(r"^\s*agent:\s*(.+?)\s*$", line, re.IGNORECASE)
             if match:
                 agent_name = match.group(1).strip()
                 # Validate: non-empty, alphanumeric/underscore/dash only
-                if agent_name and re.match(r'^[a-zA-Z0-9_-]+$', agent_name):
+                if agent_name and re.match(r"^[a-zA-Z0-9_-]+$", agent_name):
                     if agent_name not in agents_used:
                         agents_used.append(agent_name)
 
@@ -101,7 +101,7 @@ async def list_sops(request: Request) -> JSONResponse:
         def is_numbered_line(line: str) -> bool:
             stripped = line.strip()
             return len(stripped) > 0 and stripped[0].isdigit()
-        
+
         steps = sum(1 for line in content.split("\n") if is_numbered_line(line))
 
         # Extract agents used (from content or metadata)
@@ -151,7 +151,7 @@ async def get_sop_details(request: Request, sop_name: str) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     # Validate sop_name to prevent path traversal attacks
-    if not re.match(r'^[a-zA-Z0-9_-]+$', sop_name):
+    if not re.match(r"^[a-zA-Z0-9_-]+$", sop_name):
         return JSONResponse(
             status_code=400,
             content=create_error_response(
@@ -196,7 +196,7 @@ async def get_sop_details(request: Request, sop_name: str) -> JSONResponse:
     def is_numbered_line(line: str) -> bool:
         stripped = line.strip()
         return len(stripped) > 0 and stripped[0].isdigit()
-    
+
     steps = sum(1 for line in content.split("\n") if is_numbered_line(line))
 
     # Extract agents used

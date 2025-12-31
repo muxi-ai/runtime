@@ -20,9 +20,8 @@ Integration:
 """
 
 from .buffer_memory import DocumentAwareBufferMemory
-from .chunk_manager import DocumentChunkManager, DocumentChunk
+from .chunk_manager import DocumentChunk, DocumentChunkManager
 from .metadata_store import DocumentMetadataStore
-
 from .reference_system import DocumentReferenceSystem
 
 __all__ = [
@@ -30,6 +29,5 @@ __all__ = [
     "DocumentChunkManager",
     "DocumentChunk",
     "DocumentMetadataStore",
-
     "DocumentReferenceSystem",
 ]

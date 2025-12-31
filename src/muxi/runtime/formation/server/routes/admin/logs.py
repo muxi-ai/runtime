@@ -11,7 +11,7 @@ import re
 from functools import lru_cache
 from typing import Optional, Pattern
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from .....services import observability
@@ -23,13 +23,13 @@ router = APIRouter(tags=["Logs"])
 def _compile_event_type_pattern(filter_value: str) -> Pattern:
     """
     Compile and cache a regex pattern for event_type wildcard matching.
-    
+
     Escapes regex metacharacters and converts * wildcards to .* pattern.
     Cached to avoid recompiling the same pattern on every event.
-    
+
     Args:
         filter_value: Event type filter value (may contain * wildcards)
-    
+
     Returns:
         Compiled regex pattern for matching
     """
@@ -108,7 +108,7 @@ async def stream_logs(
         """
         formation = request.app.state.formation
         overlord = getattr(formation, "_overlord", None)
-        
+
         if not overlord:
             error_msg = {
                 "error": True,
@@ -118,11 +118,13 @@ async def stream_logs(
             yield "event: error\n"
             yield f"data: {json.dumps(error_msg)}\n\n"
             return
-        
+
         # Get observability manager
-        observability_manager = overlord.observability_manager if hasattr(overlord, 'observability_manager') else None
-        
-        if not observability_manager or not hasattr(observability_manager, 'subscribe'):
+        observability_manager = (
+            overlord.observability_manager if hasattr(overlord, "observability_manager") else None
+        )
+
+        if not observability_manager or not hasattr(observability_manager, "subscribe"):
             # Fallback if observability manager doesn't have subscription support
             error_msg = {
                 "error": True,
@@ -132,14 +134,14 @@ async def stream_logs(
             yield "event: error\n"
             yield f"data: {json.dumps(error_msg)}\n\n"
             return
-        
+
         try:
             # Subscribe to observability event stream with filters
             async for event in observability_manager.subscribe(active_filters):
                 # Check if client disconnected
                 if await request.is_disconnected():
                     break
-                
+
                 # Format event for SSE
                 event_data = {
                     "timestamp": event.get("timestamp"),
@@ -152,7 +154,7 @@ async def stream_logs(
                     "message": event.get("description"),
                     "data": event.get("data"),
                 }
-                
+
                 yield "event: log\n"
                 yield f"data: {json.dumps(event_data)}\n\n"
 

@@ -35,8 +35,10 @@
 #   pool_size = database_config.pool_size
 # =============================================================================
 
-from pydantic import BaseModel, Field
 from typing import Optional
+
+from pydantic import BaseModel, Field
+
 from ...utils.user_dirs import get_memory_dir
 
 

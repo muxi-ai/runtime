@@ -12,9 +12,7 @@ from typing import Any, Dict, List, Optional
 class InputValidationError(ValueError):
     """Raised when input validation fails."""
 
-    def __init__(
-        self, message: str, limit: Optional[int] = None, actual: Optional[int] = None
-    ):
+    def __init__(self, message: str, limit: Optional[int] = None, actual: Optional[int] = None):
         """
         Initialize InputValidationError with structured context.
 
@@ -55,9 +53,7 @@ class InputLimits:
         limits_config = config["input_limits"]
         return cls(
             max_message_length=limits_config.get("max_message_length", cls.max_message_length),
-            max_file_size_bytes=limits_config.get(
-                "max_file_size_bytes", cls.max_file_size_bytes
-            ),
+            max_file_size_bytes=limits_config.get("max_file_size_bytes", cls.max_file_size_bytes),
             max_memory_entry_size=limits_config.get(
                 "max_memory_entry_size", cls.max_memory_entry_size
             ),
@@ -180,7 +176,7 @@ class InputValidator:
         # Heuristic: if object is a collection (not string), estimate potential size
         # Skip strings as they're already in final form
         # Assume each element could be ~100 bytes when stringified
-        if not isinstance(output, str) and hasattr(output, '__len__'):
+        if not isinstance(output, str) and hasattr(output, "__len__"):
             try:
                 element_count = len(output)
                 # Conservative estimate: 100 bytes per element

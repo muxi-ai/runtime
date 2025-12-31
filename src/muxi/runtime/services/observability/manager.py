@@ -6,15 +6,16 @@ the central coordination for the observability system.
 """
 
 import socket
-from contextlib import contextmanager
-from typing import Any, Dict, Optional, List
 import time
+from contextlib import contextmanager
+from typing import Any, Dict, List, Optional
+
+from ...datatypes.observability import ConversationEvents, EventLevel, RequestContext, SystemEvents
+from ...utils.id_generator import generate_nanoid
+from .health import HealthManager, HealthMonitor, HealthStatusAPI
 from .logger import EventLogger
 from .request_manager import RequestContextManager
 from .stream_processor import StreamProcessor
-from .health import HealthManager, HealthMonitor, HealthStatusAPI
-from ...datatypes.observability import ConversationEvents, SystemEvents, EventLevel, RequestContext
-from ...utils.id_generator import generate_nanoid
 
 
 class ObservabilityManager:
@@ -30,8 +31,8 @@ class ObservabilityManager:
             self.event_logger = self._create_event_logger()
 
         # Set the configured event logger in context for global access
-        from .context import set_event_logger
         from . import set_runtime_event_logger
+        from .context import set_event_logger
 
         set_event_logger(self.event_logger)
         # Also set as runtime logger for cross-context access
@@ -68,6 +69,7 @@ class ObservabilityManager:
         """Lazily initialize subscriber lock on the correct event loop."""
         if self._subscriber_lock is None:
             import asyncio
+
             self._subscriber_lock = asyncio.Lock()
         return self._subscriber_lock
 
@@ -222,6 +224,7 @@ class ObservabilityManager:
                 # Use cached compiled patterns for performance
                 if value not in self._compiled_patterns:
                     import re
+
                     pattern_str = value.replace("*", ".*")
                     self._compiled_patterns[value] = re.compile(pattern_str)
                 pattern = self._compiled_patterns[value]
@@ -277,9 +280,11 @@ class ObservabilityManager:
                             level=EventLevel.WARNING,
                             data={
                                 "dropped_events": self._dropped_events_count,
-                                "subscriber_queue_size": queue.qsize() if hasattr(queue, 'qsize') else 'unknown'
+                                "subscriber_queue_size": (
+                                    queue.qsize() if hasattr(queue, "qsize") else "unknown"
+                                ),
                             },
-                            description=f"Dropped {self._dropped_events_count} events due to slow subscribers"
+                            description=f"Dropped {self._dropped_events_count} events due to slow subscribers",
                         )
 
     def get_dropped_events_count(self) -> int:

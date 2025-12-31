@@ -6,12 +6,14 @@ enabling consistent execution of complex multi-step operations.
 
 import asyncio
 import hashlib
-import yaml
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import yaml
+
 from ...services import observability
 from ...utils.user_dirs import get_cache_dir
+
 # Lazy import DocumentChunkManager to avoid initialization issues
 # from ..documents.storage.chunk_manager import DocumentChunkManager
 
@@ -83,20 +85,24 @@ class SOPSystem:
 
                     # Init event - visible during startup (Linux init-style)
                     from ...datatypes.observability import InitEventFormatter
+
                     sop_names = ", ".join(list(self.sops.keys())[:3])
                     if len(self.sops) > 3:
                         sop_names += f" +{len(self.sops) - 3} more"
-                    print(InitEventFormatter.format_ok(
-                        f"SOPs: {len(self.sops)} procedure(s) loaded",
-                        sop_names
-                    ))
+                    print(
+                        InitEventFormatter.format_ok(
+                            f"SOPs: {len(self.sops)} procedure(s) loaded", sop_names
+                        )
+                    )
             except Exception as e:
                 # Fail fast with clear error (Linux init-style)
                 from ...datatypes.observability import InitEventFormatter
-                print(InitEventFormatter.format_fail(
-                    f"Failed to load SOPs from {self.sop_dir}",
-                    str(e)
-                ))
+
+                print(
+                    InitEventFormatter.format_fail(
+                        f"Failed to load SOPs from {self.sop_dir}", str(e)
+                    )
+                )
                 raise RuntimeError(f"SOP initialization failed: {e}") from e
 
     @property
@@ -121,7 +127,7 @@ class SOPSystem:
         # First, find all SOPs (markdown files with type: sop)
         for md_file in self.sop_dir.rglob("*.md"):
             # Check hash for change detection
-            with open(md_file, 'rb') as f:
+            with open(md_file, "rb") as f:
                 file_hash = hashlib.md5(f.read()).hexdigest()
 
             sop_id = md_file.stem
@@ -130,9 +136,9 @@ class SOPSystem:
                 metadata = {}
 
                 # Parse YAML front matter if present
-                if content.startswith('---'):
+                if content.startswith("---"):
                     try:
-                        parts = content.split('---', 2)
+                        parts = content.split("---", 2)
                         if len(parts) >= 3:
                             metadata = yaml.safe_load(parts[1]) or {}
                             content = parts[2].strip()
@@ -147,7 +153,7 @@ class SOPSystem:
                                     "file": str(md_file),
                                     "error_type": "yaml_parsing",
                                 },
-                                description=f"Failed to parse YAML front matter in {md_file.name}"
+                                description=f"Failed to parse YAML front matter in {md_file.name}",
                             )
                         except Exception:
                             pass
@@ -164,25 +170,29 @@ class SOPSystem:
                                     "error_type": "general_parsing",
                                     "exception_type": type(e).__name__,
                                 },
-                                description=f"Unexpected error parsing {md_file.name}"
+                                description=f"Unexpected error parsing {md_file.name}",
                             )
                         except Exception:
                             pass
                         continue
 
                 # Only process if type: sop
-                if metadata.get('type') == 'sop':
+                if metadata.get("type") == "sop":
                     self.sops[sop_id] = {
-                        'id': sop_id,
-                        'path': md_file,
-                        'name': metadata.get('name', sop_id),
-                        'description': metadata.get('description', ''),
-                        'mode': metadata.get('mode', 'template'),  # Default to template
-                        'tags': self._parse_tags(metadata.get('tags', '')),
-                        'bypass_approval': metadata.get('bypass_approval', True),  # Default to bypass
-                        'content': content,  # Full markdown content for decomposer
-                        'raw_content': md_file.read_text(),  # Original content with frontmatter
-                        'steps': metadata.get('steps', [])  # Always include steps, default to empty list
+                        "id": sop_id,
+                        "path": md_file,
+                        "name": metadata.get("name", sop_id),
+                        "description": metadata.get("description", ""),
+                        "mode": metadata.get("mode", "template"),  # Default to template
+                        "tags": self._parse_tags(metadata.get("tags", "")),
+                        "bypass_approval": metadata.get(
+                            "bypass_approval", True
+                        ),  # Default to bypass
+                        "content": content,  # Full markdown content for decomposer
+                        "raw_content": md_file.read_text(),  # Original content with frontmatter
+                        "steps": metadata.get(
+                            "steps", []
+                        ),  # Always include steps, default to empty list
                     }
                     self.file_hashes[sop_id] = file_hash
 
@@ -209,7 +219,7 @@ class SOPSystem:
         if isinstance(tags, list):
             return tags
         elif isinstance(tags, str):
-            return [t.strip() for t in tags.split(',')]
+            return [t.strip() for t in tags.split(",")]
         return []
 
     # Step extraction removed - decomposer handles this now
@@ -245,21 +255,23 @@ class SOPSystem:
 
         if embeddings_file.exists():
             import json
+
             import numpy as np
+
             try:
-                with open(embeddings_file, 'r') as f:
+                with open(embeddings_file, "r") as f:
                     cached_data = json.load(f)
                     cached_sop_ids = set(cached_data.keys())
 
                     # Load embeddings for existing SOPs with matching hashes
                     for sop_id, data in cached_data.items():
                         if sop_id in self.file_hashes:
-                            if data['hash'] == self.file_hashes[sop_id]:
+                            if data["hash"] == self.file_hashes[sop_id]:
                                 # Convert list back to numpy array if needed
-                                if isinstance(data['embedding'], list):
-                                    embedding = np.array(data['embedding'])
+                                if isinstance(data["embedding"], list):
+                                    embedding = np.array(data["embedding"])
                                 else:
-                                    embedding = data['embedding']
+                                    embedding = data["embedding"]
                                 self.embeddings_cache[sop_id] = embedding
                                 # Try to hydrate WorkingMemory immediately
                                 self._hydrate_working_memory(sop_id, embedding)
@@ -272,13 +284,14 @@ class SOPSystem:
                         "error": str(e),
                         "cache_file": str(embeddings_file),
                     },
-                    description="Failed to load SOP embeddings cache - will regenerate"
+                    description="Failed to load SOP embeddings cache - will regenerate",
                 )
         elif old_pickle_file.exists():
             # Migrate from old pickle format to JSON
             import pickle
+
             try:
-                with open(old_pickle_file, 'rb') as f:
+                with open(old_pickle_file, "rb") as f:
                     cached_data = pickle.load(f)
                     # Save in new JSON format
                     self.embeddings_cache = cached_data
@@ -293,15 +306,15 @@ class SOPSystem:
                             "new_format": "json",
                             "sop_count": len(cached_data),
                         },
-                        description="Migrated SOP embeddings cache from pickle to JSON format"
+                        description="Migrated SOP embeddings cache from pickle to JSON format",
                     )
                     # Now process the migrated data
                     cached_sop_ids = set(cached_data.keys())
                     for sop_id, data in cached_data.items():
                         if sop_id in self.file_hashes:
-                            if data['hash'] == self.file_hashes[sop_id]:
-                                self.embeddings_cache[sop_id] = data['embedding']
-                                self._hydrate_working_memory(sop_id, data['embedding'])
+                            if data["hash"] == self.file_hashes[sop_id]:
+                                self.embeddings_cache[sop_id] = data["embedding"]
+                                self._hydrate_working_memory(sop_id, data["embedding"])
             except Exception as e:
                 # Log migration error but continue
                 observability.observe(
@@ -311,7 +324,7 @@ class SOPSystem:
                         "error": str(e),
                         "cache_file": str(old_pickle_file),
                     },
-                    description="Failed to migrate old pickle cache - will regenerate"
+                    description="Failed to migrate old pickle cache - will regenerate",
                 )
 
         # Clean up stale cache entries (SOPs that were removed)
@@ -328,6 +341,7 @@ class SOPSystem:
         if working_memory:
             # Add to FAISS synchronously during startup
             import asyncio
+
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
@@ -350,10 +364,10 @@ class SOPSystem:
                 id=sop_id,
                 embedding=embedding,
                 metadata={
-                    'name': sop['name'],
-                    'tags': sop['tags'],
-                    'mode': sop.get('mode', 'template')
-                }
+                    "name": sop["name"],
+                    "tags": sop["tags"],
+                    "mode": sop.get("mode", "template"),
+                },
             )
 
     def _save_cached_embeddings(self):
@@ -362,6 +376,7 @@ class SOPSystem:
         embeddings_file = self.cache_dir / "embeddings.json"
 
         import json
+
         import numpy as np
 
         cache_data = {}
@@ -369,19 +384,19 @@ class SOPSystem:
             # Convert numpy arrays to lists for JSON serialization
             if isinstance(embedding, np.ndarray):
                 embedding_list = embedding.tolist()
-            elif hasattr(embedding, 'tolist'):
+            elif hasattr(embedding, "tolist"):
                 embedding_list = embedding.tolist()
             else:
                 embedding_list = list(embedding) if not isinstance(embedding, list) else embedding
 
             cache_data[sop_id] = {
-                'hash': self.file_hashes.get(sop_id),
-                'embedding': embedding_list,
-                'version': '1.0'  # Add version for future compatibility
+                "hash": self.file_hashes.get(sop_id),
+                "embedding": embedding_list,
+                "version": "1.0",  # Add version for future compatibility
             }
 
         try:
-            with open(embeddings_file, 'w') as f:
+            with open(embeddings_file, "w") as f:
                 json.dump(cache_data, f, indent=2)
         except Exception as e:
             # Log save error but continue operation
@@ -392,7 +407,7 @@ class SOPSystem:
                     "error": str(e),
                     "cache_file": str(embeddings_file),
                 },
-                description="Failed to save SOP embeddings cache"
+                description="Failed to save SOP embeddings cache",
             )
 
     # ========================================================================
@@ -413,7 +428,7 @@ class SOPSystem:
         import os
 
         # Try environment variable first
-        formation_dir = os.environ.get('MUXI_FORMATION_DIR')
+        formation_dir = os.environ.get("MUXI_FORMATION_DIR")
         if formation_dir:
             return Path(formation_dir)
 
@@ -435,17 +450,19 @@ class SOPSystem:
             try:
                 # Try WorkingMemory first
                 from ...memory import WorkingMemory
+
                 working_memory = WorkingMemory.get_instance()
-                if working_memory and hasattr(working_memory, 'faiss_service'):
+                if working_memory and hasattr(working_memory, "faiss_service"):
                     self._faiss_service = working_memory.faiss_service
                     return self._faiss_service
 
                 # Try BufferMemory as fallback
                 from ...formation import Formation  # noqa: E402
+
                 formation = Formation.get_instance()
-                if formation and hasattr(formation, '_configured_services'):
-                    buffer_memory = formation._configured_services.get('buffer_memory')
-                    if buffer_memory and hasattr(buffer_memory, 'faiss_service'):
+                if formation and hasattr(formation, "_configured_services"):
+                    buffer_memory = formation._configured_services.get("buffer_memory")
+                    if buffer_memory and hasattr(buffer_memory, "faiss_service"):
                         self._faiss_service = buffer_memory.faiss_service
             except Exception:
                 pass
@@ -456,10 +473,13 @@ class SOPSystem:
         if self._embedding_model is None:
             try:
                 from ...memory import WorkingMemory
+
                 working_memory = WorkingMemory.get_instance()
-                if working_memory and hasattr(working_memory, 'embedding_model'):
+                if working_memory and hasattr(working_memory, "embedding_model"):
                     # Wrap the model in our adapter for consistent interface
-                    self._embedding_model = self._create_embedding_adapter(working_memory.embedding_model)
+                    self._embedding_model = self._create_embedding_adapter(
+                        working_memory.embedding_model
+                    )
             except Exception:
                 pass
         return self._embedding_model
@@ -477,6 +497,7 @@ class SOPSystem:
         Returns:
             An adapter object with consistent embed() and generate_embeddings() methods
         """
+
         class EmbeddingAdapter:
             """Adapter to provide consistent embedding interface."""
 
@@ -502,7 +523,9 @@ class SOPSystem:
                       embed_async() or generate_embeddings() directly.
                 """
                 # Check if model has sync embed method
-                if hasattr(self.model, 'embed') and not asyncio.iscoroutinefunction(self.model.embed):
+                if hasattr(self.model, "embed") and not asyncio.iscoroutinefunction(
+                    self.model.embed
+                ):
                     return self.model.embed(text)
                 else:
                     # If only async is available, handle it properly
@@ -533,14 +556,14 @@ class SOPSystem:
             async def embed_async(self, text: str):
                 """Asynchronous single text embedding with fallback to batch method."""
                 # Try direct embed method first
-                if hasattr(self.model, 'embed'):
+                if hasattr(self.model, "embed"):
                     if asyncio.iscoroutinefunction(self.model.embed):
                         return await self.model.embed(text)
                     else:
                         return self.model.embed(text)
 
                 # Fall back to generate_embeddings for single text
-                elif hasattr(self.model, 'generate_embeddings'):
+                elif hasattr(self.model, "generate_embeddings"):
                     embeddings = await self.generate_embeddings([text])
                     return embeddings[0] if embeddings else None
 
@@ -549,7 +572,7 @@ class SOPSystem:
             async def generate_embeddings(self, texts: List[str]) -> List[Any]:
                 """Asynchronous batch embedding with proper sync/async handling."""
                 # Prefer batch method if available
-                if hasattr(self.model, 'generate_embeddings'):
+                if hasattr(self.model, "generate_embeddings"):
                     # Check if it's async or sync
                     if asyncio.iscoroutinefunction(self.model.generate_embeddings):
                         return await self.model.generate_embeddings(texts)
@@ -574,9 +597,10 @@ class SOPSystem:
             try:
                 # Use both MarkItDown for extraction and DocumentChunkManager for chunking
                 from markitdown import MarkItDown
+
                 self._document_processor = {
-                    'markitdown': MarkItDown(),
-                    'chunk_manager': self._get_chunk_manager()
+                    "markitdown": MarkItDown(),
+                    "chunk_manager": self._get_chunk_manager(),
                 }
             except Exception:
                 pass
@@ -586,40 +610,44 @@ class SOPSystem:
         """Get DocumentChunkManager from formation or create one using formation's config."""
         try:
             # Lazy import DocumentChunkManager to avoid initialization issues
-            from ..documents.storage.chunk_manager import DocumentChunkManager
-
             # Try to get from formation's configured services
             from ...formation import Formation  # noqa: E402
+            from ..documents.storage.chunk_manager import DocumentChunkManager
+
             formation = Formation.get_instance()
 
             # First try to get existing chunk manager
-            if formation and hasattr(formation, '_configured_services'):
-                chunk_manager = formation._configured_services.get('document_chunk_manager')
+            if formation and hasattr(formation, "_configured_services"):
+                chunk_manager = formation._configured_services.get("document_chunk_manager")
                 if chunk_manager:
                     return chunk_manager
 
             # If not available, try to get the document processing config from formation
             if formation:
                 # Try to get document processing config from formation
-                if hasattr(formation, '_document_processing_config'):
+                if hasattr(formation, "_document_processing_config"):
                     # Use the formation's document processing configuration
-                    return DocumentChunkManager(document_config=formation._document_processing_config)
+                    return DocumentChunkManager(
+                        document_config=formation._document_processing_config
+                    )
 
                 # Try to get from _configured_services as well
-                if hasattr(formation, '_configured_services'):
-                    doc_config = formation._configured_services.get('document_processing_config')
+                if hasattr(formation, "_configured_services"):
+                    doc_config = formation._configured_services.get("document_processing_config")
                     if doc_config:
                         return DocumentChunkManager(document_config=doc_config)
 
             # Last resort: Create using the formation's LLM config if available
-            if formation and hasattr(formation, '_llm_config'):
+            if formation and hasattr(formation, "_llm_config"):
                 from ...formation.config.document_processing import DocumentProcessingConfig
+
                 # This will extract document settings from llm.models.documents
                 config = DocumentProcessingConfig(formation._llm_config)
                 return DocumentChunkManager(document_config=config)
 
             # Final fallback: Create with defaults (will use formation defaults internally)
             from ...formation.config.document_processing import DocumentProcessingConfig
+
             config = DocumentProcessingConfig({})
             return DocumentChunkManager(document_config=config)
         except Exception:
@@ -669,11 +697,11 @@ class SOPSystem:
             if sop_id not in self.embeddings_cache:
                 # Create searchable text from SOP
                 searchable_text = f"{sop['name']} {sop['description']} "
-                searchable_text += " ".join(str(tag) for tag in sop['tags'])
+                searchable_text += " ".join(str(tag) for tag in sop["tags"])
                 # Include step text for better matching (check if steps exist)
-                steps = sop.get('steps', [])
+                steps = sop.get("steps", [])
                 for step in steps:
-                    searchable_text += " " + step.get('text', '')
+                    searchable_text += " " + step.get("text", "")
 
                 # Generate embedding using adapter's async interface since we're in async context
                 try:
@@ -691,9 +719,9 @@ class SOPSystem:
                         data={
                             "error": str(e),
                             "sop_id": sop_id,
-                            "sop_name": sop.get('name', sop_id),
+                            "sop_name": sop.get("name", sop_id),
                         },
-                        description=f"Failed to generate embedding for SOP: {sop_id}"
+                        description=f"Failed to generate embedding for SOP: {sop_id}",
                     )
                     continue
 
@@ -735,18 +763,16 @@ class SOPSystem:
 
             # Search using WorkingMemory
             results = await working_memory.search(
-                namespace="sops",
-                query_embedding=query_embedding,
-                top_k=top_k
+                namespace="sops", query_embedding=query_embedding, top_k=top_k
             )
 
             # Return SOPs with relevance scores
             relevant_sops = []
             for result in results:
-                sop_id = result['id']
+                sop_id = result["id"]
                 if sop_id in self.sops:
                     sop = self.sops[sop_id].copy()
-                    sop['relevance_score'] = result['score']
+                    sop["relevance_score"] = result["score"]
                     relevant_sops.append(sop)
 
             return relevant_sops
@@ -762,20 +788,20 @@ class SOPSystem:
         for sop_id, sop in self.sops.items():
             score = 0
             # Check tags
-            for tag in sop['tags']:
+            for tag in sop["tags"]:
                 if tag.lower() in task_lower:
                     score += 1
             # Check name
-            if sop['name'].lower() in task_lower:
+            if sop["name"].lower() in task_lower:
                 score += 2
 
             if score > 0:
                 sop_copy = sop.copy()
-                sop_copy['relevance_score'] = score
+                sop_copy["relevance_score"] = score
                 scored_sops.append(sop_copy)
 
         # Sort by score and return top k
-        scored_sops.sort(key=lambda x: x['relevance_score'], reverse=True)
+        scored_sops.sort(key=lambda x: x["relevance_score"], reverse=True)
         return scored_sops[:top_k]
 
     # ========================================================================
@@ -796,8 +822,7 @@ class SOPSystem:
         return self.resource_map.get(reference)
 
     async def get_resource_content(
-        self, reference: str,
-        max_file_size_mb: int = 10
+        self, reference: str, max_file_size_mb: int = 10
     ) -> Optional[str]:
         """
         Get complete content of referenced file with size limits.
@@ -843,12 +868,12 @@ class SOPSystem:
                     "file": str(file_path),
                     "error": str(e),
                 },
-                description=f"Failed to check file size for {file_path.name}"
+                description=f"Failed to check file size for {file_path.name}",
             )
             # Continue processing if we can't check size
 
         # For text files, just read the complete content
-        if file_path.suffix.lower() in ['.md', '.txt', '.yaml', '.yml', '.json', '.csv', '.tsv']:
+        if file_path.suffix.lower() in [".md", ".txt", ".yaml", ".yml", ".json", ".csv", ".tsv"]:
             try:
                 return file_path.read_text()
             except Exception as e:
@@ -859,28 +884,35 @@ class SOPSystem:
                         "file": str(file_path),
                         "error": str(e),
                     },
-                    description=f"Failed to read text file {file_path.name}"
+                    description=f"Failed to read text file {file_path.name}",
                 )
                 return f"[Unable to read: {file_path.name}]"
 
         # Handle image files separately - just return a reference
-        if file_path.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp']:
+        if file_path.suffix.lower() in [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg", ".webp"]:
             # For images, return a descriptive reference
             # In the future, we could use vision models to describe the image
             return f"[Image file: {file_path.name}]"
 
         # Use MarkItDown for document files (PDFs, Word docs, spreadsheets, presentations)
         document_processor = self._get_document_processor()
-        if (document_processor and
-                file_path.suffix.lower() in ['.pdf', '.docx', '.doc', '.pptx', '.ppt', '.xlsx', '.xls']):
+        if document_processor and file_path.suffix.lower() in [
+            ".pdf",
+            ".docx",
+            ".doc",
+            ".pptx",
+            ".ppt",
+            ".xlsx",
+            ".xls",
+        ]:
             try:
-                markitdown = document_processor.get('markitdown')
+                markitdown = document_processor.get("markitdown")
                 if markitdown:
                     # Extract complete content with MarkItDown
                     result = markitdown.convert(str(file_path))
-                    content = (result.text_content
-                               if hasattr(result, 'text_content')
-                               else str(result))
+                    content = (
+                        result.text_content if hasattr(result, "text_content") else str(result)
+                    )
                     return content
             except Exception as e:
                 # Log extraction failure but continue
@@ -892,7 +924,7 @@ class SOPSystem:
                         "error": str(e),
                         "file_type": file_path.suffix,
                     },
-                    description=f"Failed to extract content from {file_path.name}"
+                    description=f"Failed to extract content from {file_path.name}",
                 )
                 # Return reference placeholder
                 return f"[Unable to extract: {file_path.name}]"

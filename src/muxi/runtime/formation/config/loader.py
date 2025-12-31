@@ -38,10 +38,11 @@
 #   config = loader.load_and_process("path/to/config.afs", secrets_manager)
 # =============================================================================
 
-import re
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
+
 import yaml
 
 
@@ -153,14 +154,18 @@ class ConfigLoader:
                         try:
                             secret_value = await secrets_manager.get_secret(secret_name)
                             if secret_value is None:
-                                raise ValueError(f"Secret '{secret_name}' not found in SecretsManager")
+                                raise ValueError(
+                                    f"Secret '{secret_name}' not found in SecretsManager"
+                                )
 
                             # Replace the pattern with the secret value
                             pattern = rf"\$\{{\{{\s*secrets\.{secret_name}\s*\}}\}}"
                             result = re.sub(pattern, secret_value, result)
 
                         except Exception as e:
-                            raise ValueError(f"Failed to retrieve secret '{secret_name}': {str(e)}") from e
+                            raise ValueError(
+                                f"Failed to retrieve secret '{secret_name}': {str(e)}"
+                            ) from e
 
                 return result
             elif isinstance(obj, dict):
@@ -273,6 +278,8 @@ class ConfigLoader:
             FileNotFoundError: If the file does not exist
         """
         config = self.load(path)
-        config, secrets_in_use, placeholder_registry = await self.process_secrets(config, secrets_manager)
+        config, secrets_in_use, placeholder_registry = await self.process_secrets(
+            config, secrets_manager
+        )
         self.validate_config(config)
         return config, secrets_in_use, placeholder_registry

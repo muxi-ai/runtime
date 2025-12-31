@@ -41,20 +41,20 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     desc,
     func,
     select,
-    UniqueConstraint,
 )
+
 from ...datatypes.json_type import JSONType
+from ...utils.datetime_utils import utc_now_naive
 
 # Note: No longer importing global config - values passed as parameters
 from ...utils.id_generator import get_default_nanoid
-from ...utils.datetime_utils import utc_now_naive
-from ..llm import LLM
 from .. import observability
-from ..db import DatabaseManager, Base, AsyncModelMixin
-
+from ..db import AsyncModelMixin, Base, DatabaseManager
+from ..llm import LLM
 
 # Memory collection definitions for organizing long-term storage
 MEMORY_COLLECTIONS = {
@@ -100,7 +100,9 @@ class UserIdentifier(Base, AsyncModelMixin):
     __tablename__ = "user_identifiers"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     identifier = Column(String(255), nullable=False)
     identifier_type = Column(String(50))  # Optional: 'email', 'slack', 'telegram', etc.
     formation_id = Column(String(255), nullable=False, index=True)
@@ -277,9 +279,7 @@ class LongTermMemory:
 
             # First check if extension already exists
             with self.engine.connect() as conn:
-                result = conn.execute(
-                    text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
-                )
+                result = conn.execute(text("SELECT 1 FROM pg_extension WHERE extname = 'vector'"))
                 extension_exists = result.fetchone() is not None
 
             if extension_exists:
@@ -296,7 +296,7 @@ class LongTermMemory:
         except Exception as e:
             # Check if the error is because extension already exists (shouldn't happen, but be safe)
             error_str = str(e).lower()
-            if "already exists" in error_str or "extension \"vector\" already exists" in error_str:
+            if "already exists" in error_str or 'extension "vector" already exists' in error_str:
                 # Extension exists, no need to log as error
                 return
 
@@ -319,6 +319,7 @@ class LongTermMemory:
             int: Internal user ID for database operations
         """
         from ..observability.context import get_current_request_context
+
         ctx = get_current_request_context()
 
         if ctx and ctx.internal_user_id is not None:
@@ -329,6 +330,7 @@ class LongTermMemory:
             if not self.is_multi_user:
                 # Single-user mode: Always use identifier "0"
                 from ...utils.user_resolution import resolve_user_identifier
+
                 internal_user_id, _ = await resolve_user_identifier(
                     identifier="0",
                     formation_id=self.formation_id,
@@ -339,6 +341,7 @@ class LongTermMemory:
             elif external_user_id:
                 # Multi-user mode: Resolve provided external_user_id
                 from ...utils.user_resolution import resolve_user_identifier
+
                 internal_user_id, _ = await resolve_user_identifier(
                     identifier=external_user_id,
                     formation_id=self.formation_id,
@@ -360,6 +363,7 @@ class LongTermMemory:
         This is provided for backward compatibility only.
         """
         from ..observability.context import get_current_request_context
+
         ctx = get_current_request_context()
 
         if ctx and ctx.internal_user_id is not None:
@@ -376,12 +380,13 @@ class LongTermMemory:
             # Find or create user synchronously
             with self.Session() as session:
                 result = session.execute(
-                    select(User.id).where(
-                        User.formation_id == self.formation_id
-                    ).limit(1) if not self.is_multi_user else
-                    select(User.id).join(UserIdentifier).where(
+                    select(User.id).where(User.formation_id == self.formation_id).limit(1)
+                    if not self.is_multi_user
+                    else select(User.id)
+                    .join(UserIdentifier)
+                    .where(
                         UserIdentifier.identifier == external_user_id,
-                        UserIdentifier.formation_id == self.formation_id
+                        UserIdentifier.formation_id == self.formation_id,
                     )
                 )
                 user_id = result.scalar_one_or_none()
@@ -827,8 +832,8 @@ class LongTermMemory:
         with self.Session() as session:
             # For PostgreSQL with pgvector, we need to cast the query embedding
             if self.db_manager.database_type == "postgresql":
-                from sqlalchemy import cast
                 from pgvector.sqlalchemy import Vector
+                from sqlalchemy import cast
 
                 query_embedding_vector = cast(query_embedding, Vector(self.dimension))
             else:
@@ -1259,8 +1264,8 @@ class LongTermMemory:
         async with self.db_manager.get_async_session() as session:
             # For PostgreSQL with pgvector, we need to cast the query embedding
             if self.db_manager.database_type == "postgresql":
-                from sqlalchemy import cast
                 from pgvector.sqlalchemy import Vector
+                from sqlalchemy import cast
 
                 query_embedding_vector = cast(query_embedding, Vector(self.dimension))
             else:

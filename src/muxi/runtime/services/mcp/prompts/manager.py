@@ -1,8 +1,9 @@
 """High-level MCP Prompt management."""
 
-from typing import List, Dict, Any, TYPE_CHECKING
-from .discovery import MCPPromptDiscovery
+from typing import TYPE_CHECKING, Any, Dict, List
+
 from ....datatypes.exceptions import MCPRequestError
+from .discovery import MCPPromptDiscovery
 
 if TYPE_CHECKING:
     from ..service import MCPService
@@ -39,10 +40,7 @@ class MCPPromptManager:
         return await self.discovery.list_prompts(transport)
 
     async def get_prompt(
-        self,
-        server_id: str,
-        name: str,
-        arguments: Dict[str, Any] = None
+        self, server_id: str, name: str, arguments: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Get a specific prompt with optional argument substitution.
 
@@ -64,10 +62,7 @@ class MCPPromptManager:
         return await self.discovery.get_prompt(transport, name, arguments)
 
     async def get_prompt_text(
-        self,
-        server_id: str,
-        name: str,
-        arguments: Dict[str, Any] = None
+        self, server_id: str, name: str, arguments: Dict[str, Any] = None
     ) -> str:
         """Get prompt content as formatted text.
 
@@ -85,11 +80,7 @@ class MCPPromptManager:
         prompt_content = await self.get_prompt(server_id, name, arguments)
         return self.discovery.extract_prompt_text(prompt_content)
 
-    async def find_prompts_by_name(
-        self,
-        server_id: str,
-        name_pattern: str
-    ) -> List[Dict[str, Any]]:
+    async def find_prompts_by_name(self, server_id: str, name_pattern: str) -> List[Dict[str, Any]]:
         """Find prompts by name pattern.
 
         Args:
@@ -106,8 +97,7 @@ class MCPPromptManager:
         pattern_lower = name_pattern.lower()
 
         matching_prompts = [
-            prompt for prompt in prompts
-            if pattern_lower in prompt.get("name", "").lower()
+            prompt for prompt in prompts if pattern_lower in prompt.get("name", "").lower()
         ]
 
         return matching_prompts
@@ -126,10 +116,7 @@ class MCPPromptManager:
         """
         prompts = await self.get_prompts(server_id)
 
-        parametric_prompts = [
-            prompt for prompt in prompts
-            if prompt.get("arguments")
-        ]
+        parametric_prompts = [prompt for prompt in prompts if prompt.get("arguments")]
 
         return parametric_prompts
 
@@ -147,17 +134,12 @@ class MCPPromptManager:
         """
         prompts = await self.get_prompts(server_id)
 
-        simple_prompts = [
-            prompt for prompt in prompts
-            if not prompt.get("arguments")
-        ]
+        simple_prompts = [prompt for prompt in prompts if not prompt.get("arguments")]
 
         return simple_prompts
 
     def validate_prompt_arguments(
-        self,
-        prompt: Dict[str, Any],
-        provided_args: Dict[str, Any]
+        self, prompt: Dict[str, Any], provided_args: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Validate and prepare arguments for a prompt.
 
@@ -180,7 +162,9 @@ class MCPPromptManager:
             is_required = arg_spec.get("required", False)
 
             if is_required and arg_name not in provided_args:
-                raise MCPRequestError(f"Required argument '{arg_name}' missing for prompt '{prompt.get('name')}'")
+                raise MCPRequestError(
+                    f"Required argument '{arg_name}' missing for prompt '{prompt.get('name')}'"
+                )
 
             if arg_name in provided_args:
                 validated_args[arg_name] = provided_args[arg_name]
@@ -191,15 +175,14 @@ class MCPPromptManager:
         expected_arg_names = {arg.get("name") for arg in prompt_args}
         for provided_arg in provided_args:
             if provided_arg not in expected_arg_names:
-                raise MCPRequestError(f"Unexpected argument '{provided_arg}' for prompt '{prompt.get('name')}'")
+                raise MCPRequestError(
+                    f"Unexpected argument '{provided_arg}' for prompt '{prompt.get('name')}'"
+                )
 
         return validated_args
 
     async def execute_prompt_with_validation(
-        self,
-        server_id: str,
-        name: str,
-        arguments: Dict[str, Any] = None
+        self, server_id: str, name: str, arguments: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Execute a prompt with argument validation.
 
@@ -257,10 +240,7 @@ class MCPPromptManager:
         name = prompt.get("name", "Unnamed")
         description = prompt.get("description", "No description")
 
-        details_lines = [
-            f"📝 Prompt: {name}",
-            f"Description: {description}"
-        ]
+        details_lines = [f"📝 Prompt: {name}", f"Description: {description}"]
 
         # Add argument information
         arguments = prompt.get("arguments", [])
@@ -270,11 +250,11 @@ class MCPPromptManager:
             arg_info = self.discovery.get_prompt_arguments_info(prompt)
             for arg in arg_info:
                 arg_line = f"  • {arg['name']}: {arg['type']}"
-                if arg['required']:
+                if arg["required"]:
                     arg_line += " (required)"
-                if 'default' in arg:
+                if "default" in arg:
                     arg_line += f" (default: {arg['default']})"
-                if arg['description']:
+                if arg["description"]:
                     arg_line += f" - {arg['description']}"
                 details_lines.append(arg_line)
         else:
@@ -298,7 +278,7 @@ class MCPPromptManager:
             "prompt_count": 0,
             "simple_prompt_count": 0,
             "parametric_prompt_count": 0,
-            "test_errors": []
+            "test_errors": [],
         }
 
         try:

@@ -1,7 +1,8 @@
 import json
 import time
-from typing import Dict, Any, List
 from datetime import datetime
+from typing import Any, Dict, List
+
 from .base import BaseFormatter
 
 

@@ -5,11 +5,12 @@ This module provides intelligent caching for expensive operations like
 LLM calls, cron expression parsing, and job type detection.
 """
 
-from typing import Dict, Any, Optional
+import hashlib
+import time
 from datetime import datetime
 from functools import lru_cache
-import time
-import hashlib
+from typing import Any, Dict, Optional
+
 from croniter import croniter
 
 from ...services import observability
@@ -211,12 +212,8 @@ class SchedulerCache:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.DEBUG,
-                data={
-                    "expression": expr,
-                    "error_type": type(e).__name__,
-                    "error_message": str(e)
-                },
-                description=f"Failed to parse cron expression: {expr}"
+                data={"expression": expr, "error_type": type(e).__name__, "error_message": str(e)},
+                description=f"Failed to parse cron expression: {expr}",
             )
             return None
 

@@ -5,11 +5,12 @@ This module defines the standardized response format for all MUXI communication
 modes (sync, async, webhooks) with multi-modal support and OpenAI compatibility.
 """
 
-from typing import Optional, List, Literal, TypedDict, Union, Dict, Any
+from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
+
 from pydantic import BaseModel, Field
 
-from .mcp import FunctionCallModel
 from .artifacts import MuxiArtifact
+from .mcp import FunctionCallModel
 
 
 class MuxiFileContent(TypedDict):

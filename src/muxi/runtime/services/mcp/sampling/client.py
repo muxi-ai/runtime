@@ -1,9 +1,10 @@
 """MCP Sampling client implementation."""
 
-from typing import List, Dict, Any, Optional
-from ..transports.base import BaseTransport
-from ..protocol.message_handler import MCPMessageHandler
+from typing import Any, Dict, List, Optional
+
 from ....datatypes.exceptions import MCPRequestError
+from ..protocol.message_handler import MCPMessageHandler
+from ..transports.base import BaseTransport
 
 
 class MCPSamplingClient:
@@ -19,7 +20,7 @@ class MCPSamplingClient:
         messages: List[Dict[str, Any]],
         model_preferences: Optional[Dict[str, Any]] = None,
         max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None
+        temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Create a message using MCP sampling/createMessage method.
 
@@ -51,10 +52,9 @@ class MCPSamplingClient:
                 params["temperature"] = temperature
 
             # Send request to MCP server
-            response = await transport.send_request({
-                "method": "sampling/createMessage",
-                "params": params
-            })
+            response = await transport.send_request(
+                {"method": "sampling/createMessage", "params": params}
+            )
 
             # Extract result
             result = response.get("result", {})
@@ -115,10 +115,14 @@ class MCPSamplingClient:
                     content_type = content_item["type"]
                     if content_type == "text":
                         if "text" not in content_item:
-                            raise MCPRequestError(f"Message {i} content item {j} missing 'text' field")
+                            raise MCPRequestError(
+                                f"Message {i} content item {j} missing 'text' field"
+                            )
                     elif content_type == "image":
                         if "data" not in content_item:
-                            raise MCPRequestError(f"Message {i} content item {j} missing 'data' field")
+                            raise MCPRequestError(
+                                f"Message {i} content item {j} missing 'data' field"
+                            )
 
     def _validate_message_result(self, result: Dict[str, Any]) -> None:
         """Validate message creation result.
@@ -184,9 +188,7 @@ class MCPSamplingClient:
             return str(content)
 
     def prepare_conversation_messages(
-        self,
-        conversation_history: List[str],
-        roles: List[str] = None
+        self, conversation_history: List[str], roles: List[str] = None
     ) -> List[Dict[str, Any]]:
         """Prepare conversation messages from simple text list.
 
@@ -210,10 +212,7 @@ class MCPSamplingClient:
                 # Default to alternating user/assistant starting with user
                 role = "user" if i % 2 == 0 else "assistant"
 
-            message = {
-                "role": role,
-                "content": message_text
-            }
+            message = {"role": role, "content": message_text}
 
             messages.append(message)
 
@@ -224,7 +223,7 @@ class MCPSamplingClient:
         hints: List[str] = None,
         cost_priority: float = None,
         speed_priority: float = None,
-        intelligence_priority: float = None
+        intelligence_priority: float = None,
     ) -> Dict[str, Any]:
         """Create model preferences object.
 
@@ -269,7 +268,7 @@ class MCPSamplingClient:
         summary_lines = [
             f"🤖 Generated Message (model: {model})",
             f"Stop reason: {stop_reason}",
-            f"Content: {content_text[:200]}{'...' if len(content_text) > 200 else ''}"
+            f"Content: {content_text[:200]}{'...' if len(content_text) > 200 else ''}",
         ]
 
         # Add usage information if available

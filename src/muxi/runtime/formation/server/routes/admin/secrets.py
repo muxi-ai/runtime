@@ -9,14 +9,14 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from ...responses import (
-    APIResponse,
-    create_success_response,
-    create_error_response,
-)
-from ...utils import mask_secret_value
 from .....datatypes.api import APIEventType, APIObjectType
 from .....services import observability
+from ...responses import (
+    APIResponse,
+    create_error_response,
+    create_success_response,
+)
+from ...utils import mask_secret_value
 
 router = APIRouter(tags=["Secrets"])
 
@@ -46,10 +46,7 @@ async def list_secrets(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     if not hasattr(formation, "secrets_manager") or not formation.secrets_manager:
-        secret_list = {
-            "secrets": {},
-            "count": 0
-        }
+        secret_list = {"secrets": {}, "count": 0}
     else:
         try:
             # Get all secret names (async call)
@@ -69,10 +66,7 @@ async def list_secrets(request: Request) -> JSONResponse:
                 secrets_dict[name] = masked_value
 
             # Return in spec-compliant format
-            secret_list = {
-                "secrets": secrets_dict,
-                "count": len(secret_names)
-            }
+            secret_list = {"secrets": secrets_dict, "count": len(secret_names)}
         except Exception as e:
             # Handle secrets manager errors gracefully
             response = create_error_response(
@@ -176,7 +170,7 @@ async def update_secret(request: Request, key: str, secret: SecretUpdate) -> JSO
         APIObjectType.SECRET,
         APIEventType.SECRET_UPDATED,
         {"message": f"Secret '{key}' updated successfully"},
-        request_id
+        request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -233,6 +227,6 @@ async def delete_secret(request: Request, key: str) -> JSONResponse:
         APIObjectType.SECRET,
         APIEventType.SECRET_DELETED,
         {"message": f"Secret '{key}' deleted successfully"},
-        request_id
+        request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)

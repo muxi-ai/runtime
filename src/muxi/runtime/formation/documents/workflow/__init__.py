@@ -16,10 +16,11 @@ and WorkingMemory from the formation module instead.
 
 import warnings
 
+from .context_preserver import DocumentContextPreserver
+from .cross_reference_manager import DocumentCrossReferenceManager
+
 # Import the actual classes
 from .workflow_integrator import DocumentWorkflowIntegrator
-from .cross_reference_manager import DocumentCrossReferenceManager
-from .context_preserver import DocumentContextPreserver
 
 
 def _deprecated_warning(component_name: str) -> None:
@@ -28,7 +29,7 @@ def _deprecated_warning(component_name: str) -> None:
         f"{component_name} is deprecated for agent knowledge use cases. "
         f"Use DocumentChunkManager and WorkingMemory from the formation module instead.",
         DeprecationWarning,
-        stacklevel=3
+        stacklevel=3,
     )
 
 
@@ -36,7 +37,7 @@ def _deprecated_warning(component_name: str) -> None:
 __all__ = [
     "DocumentWorkflowIntegrator",
     "DocumentCrossReferenceManager",
-    "DocumentContextPreserver"
+    "DocumentContextPreserver",
 ]
 
 

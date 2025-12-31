@@ -16,19 +16,17 @@ Key features:
 import asyncio
 import socket
 from contextlib import closing
-from typing import Dict, Any, Optional, List
-from ...utils.id_generator import generate_nanoid
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Path, Request, Body, HTTPException
 import uvicorn
-from pydantic import BaseModel
 
 # A2A SDK imports
-from a2a.types import (
-    Message as SDKMessage,
-    Role as SDKRole,
-)
+from a2a.types import Message as SDKMessage
+from a2a.types import Role as SDKRole
+from fastapi import Body, FastAPI, HTTPException, Path, Request
+from pydantic import BaseModel
 
+from ...utils.id_generator import generate_nanoid
 from .. import observability
 from .models_adapter import ModelsAdapter
 
@@ -244,8 +242,8 @@ class A2AServer:
                             "agent_id": agent_id,
                             "error": str(e),
                             "error_type": type(e).__name__,
-                            "body_keys": list(body.keys()) if isinstance(body, dict) else None
-                        }
+                            "body_keys": list(body.keys()) if isinstance(body, dict) else None,
+                        },
                     )
                     # If legacy parsing fails, try SDK format as fallback
                     return await self._handle_sdk_message(agent_id, body, http_request)
@@ -303,15 +301,12 @@ class A2AServer:
                     # Check if it's a type mismatch (403) vs missing/invalid credentials (401)
                     if auth_error and "requires" in auth_error.lower():
                         # Auth type mismatch - return 403 Forbidden
-                        raise HTTPException(
-                            status_code=403,
-                            detail=auth_error
-                        )
+                        raise HTTPException(status_code=403, detail=auth_error)
                     else:
                         # Missing or invalid credentials - return 401 Unauthorized
                         raise HTTPException(
                             status_code=401,
-                            detail=f"Authentication failed: {auth_error or 'Invalid credentials'}"
+                            detail=f"Authentication failed: {auth_error or 'Invalid credentials'}",
                         )
 
             # Validate trusted endpoints if configured
@@ -331,12 +326,13 @@ class A2AServer:
                         description="Untrusted client attempted A2A communication",
                     )
 
-                    from a2a.types import JSONRPCErrorResponse, JSONRPCError
+                    from a2a.types import JSONRPCError, JSONRPCErrorResponse
+
                     error_response = JSONRPCErrorResponse(
                         id=request_data.get("id", message_id),
                         error=JSONRPCError(
                             code=-32600,  # Invalid Request
-                            message=f"Untrusted client: {client_host}"
+                            message=f"Untrusted client: {client_host}",
                         ),
                     )
                     return error_response.model_dump(mode="json")
@@ -506,7 +502,7 @@ class A2AServer:
                 },
                 description=f"SDK A2A message handling failed: {str(e)}",
             )
-            from a2a.types import JSONRPCErrorResponse, JSONRPCError
+            from a2a.types import JSONRPCError, JSONRPCErrorResponse
 
             error_response = JSONRPCErrorResponse(
                 id=request_data.get("id", message_id),
@@ -569,16 +565,17 @@ class A2AServer:
                     # Check if it's a type mismatch (403) vs missing/invalid credentials (401)
                     if auth_error and "requires" in auth_error.lower():
                         # Auth type mismatch - return 403 Forbidden
-                        raise HTTPException(
-                            status_code=403,
-                            detail=auth_error
-                        )
+                        raise HTTPException(status_code=403, detail=auth_error)
                     else:
                         # Missing or invalid credentials - return 401 Unauthorized
                         raise HTTPException(
                             status_code=401,
                             detail=f"Authentication failed: {auth_error}",
-                            headers={"WWW-Authenticate": f"{self.auth_mode.title()}"} if self.auth_mode != "none" else {}  # noqa: E501
+                            headers=(
+                                {"WWW-Authenticate": f"{self.auth_mode.title()}"}
+                                if self.auth_mode != "none"
+                                else {}
+                            ),  # noqa: E501
                         )
 
             # Check if agent exists

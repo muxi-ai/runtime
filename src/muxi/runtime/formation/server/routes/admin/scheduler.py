@@ -8,21 +8,20 @@ GET /scheduler/jobs supports both ClientKey and AdminKey:
 """
 
 import secrets
-from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
 import croniter
-
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from .....datatypes.api import APIEventType, APIObjectType
 from ...responses import (
     APIResponse,
-    create_success_response,
     create_error_response,
+    create_success_response,
 )
-from .....datatypes.api import APIEventType, APIObjectType
 
 
 def _require_admin_key(
@@ -77,7 +76,11 @@ def _check_auth_and_user_id(
     is_admin = False
     if provided_admin_key and admin_key and secrets.compare_digest(provided_admin_key, admin_key):
         is_admin = True
-    elif provided_client_key and client_key and secrets.compare_digest(provided_client_key, client_key):
+    elif (
+        provided_client_key
+        and client_key
+        and secrets.compare_digest(provided_client_key, client_key)
+    ):
         is_admin = False
     else:
         response = create_error_response(
@@ -99,6 +102,7 @@ def _check_auth_and_user_id(
 
     return x_user_id, is_admin, None
 
+
 router = APIRouter(tags=["Scheduler"])
 
 
@@ -114,7 +118,9 @@ class ScheduledJobCreate(BaseModel):
     """Model for creating a scheduled job."""
 
     type: str = Field(..., description="Job type: 'one_time' or 'recurring'")
-    schedule: str = Field(..., description="Cron expression (recurring) or ISO 8601 datetime (one_time)")
+    schedule: str = Field(
+        ..., description="Cron expression (recurring) or ISO 8601 datetime (one_time)"
+    )
     message: str = Field(..., description="Prompt to send to the AI when job executes")
 
 
@@ -175,7 +181,7 @@ def update_scheduler(request: Request, config: SchedulerUpdate) -> JSONResponse:
 
     # Update in-memory configuration (ephemeral - lost on restart)
     scheduler_config = formation.config.setdefault("scheduler", {})
-    
+
     # Update only fields that were explicitly provided by the client
     # Using exclude_unset=True to avoid overwriting with default values
     for key, value in config.dict(exclude_unset=True).items():
@@ -226,22 +232,25 @@ async def list_scheduled_jobs(request: Request) -> JSONResponse:
             # Fallback: access jobs dict directly
             jobs_dict = scheduler.jobs if hasattr(scheduler, "jobs") else {}
             for job_id, job_data in jobs_dict.items():
-                jobs.append({
-                    "id": job_id,
-                    "type": job_data.get("type", "one_time"),
-                    "schedule": job_data.get("schedule"),
-                    "run_at": job_data.get("run_at"),
-                    "message": job_data.get("message", ""),
-                    "user_id": job_data.get("user_id", "0"),
-                    "session_id": job_data.get("session_id"),
-                    "enabled": job_data.get("enabled", True),
-                    "next_run": job_data.get("next_run"),
-                    "last_run": job_data.get("last_run"),
-                    "failure_count": job_data.get("failure_count", 0),
-                })
+                jobs.append(
+                    {
+                        "id": job_id,
+                        "type": job_data.get("type", "one_time"),
+                        "schedule": job_data.get("schedule"),
+                        "run_at": job_data.get("run_at"),
+                        "message": job_data.get("message", ""),
+                        "user_id": job_data.get("user_id", "0"),
+                        "session_id": job_data.get("session_id"),
+                        "enabled": job_data.get("enabled", True),
+                        "next_run": job_data.get("next_run"),
+                        "last_run": job_data.get("last_run"),
+                        "failure_count": job_data.get("failure_count", 0),
+                    }
+                )
     except Exception as e:
         # Log error but return empty list
         from .....services import observability
+
         observability.observe(
             event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.WARNING,
@@ -312,7 +321,12 @@ def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONRespo
             cron = croniter.croniter(job.schedule, base_time)
             next_run_dt = cron.get_next(datetime)
             next_run = next_run_dt.astimezone(timezone.utc).isoformat()
-        except (ValueError, KeyError, croniter.CroniterBadCronError, croniter.CroniterBadDateError) as e:
+        except (
+            ValueError,
+            KeyError,
+            croniter.CroniterBadCronError,
+            croniter.CroniterBadDateError,
+        ) as e:
             response = create_error_response(
                 error_code="VALIDATION_ERROR",
                 message="Invalid cron expression for recurring job",
@@ -332,6 +346,7 @@ def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONRespo
         # Validate ISO 8601 datetime for one_time jobs
         try:
             from dateutil.parser import isoparse
+
             run_at_dt = isoparse(job.schedule)
             # Ensure timezone aware
             if run_at_dt.tzinfo is None:
@@ -399,6 +414,7 @@ def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONRespo
 
     # Generate job ID
     from .....utils.id_generator import generate_request_id
+
     job_id = f"job_{generate_request_id()[4:]}"  # Remove 'req_' prefix
 
     # Create job data
@@ -478,6 +494,7 @@ def get_scheduled_job(request: Request, job_id: str) -> JSONResponse:
             job_data = scheduler.jobs.get(job_id)
     except Exception as e:
         from .....services import observability
+
         observability.observe(
             event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.WARNING,

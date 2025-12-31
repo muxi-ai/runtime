@@ -25,11 +25,7 @@ Usage:
 """
 
 from .acknowledgment_generator import DocumentAcknowledgmentGenerator
-from .summarizer import DocumentSummarizer
 from .error_handler import DocumentErrorHandler
+from .summarizer import DocumentSummarizer
 
-__all__ = [
-    "DocumentAcknowledgmentGenerator",
-    "DocumentSummarizer",
-    "DocumentErrorHandler"
-]
+__all__ = ["DocumentAcknowledgmentGenerator", "DocumentSummarizer", "DocumentErrorHandler"]

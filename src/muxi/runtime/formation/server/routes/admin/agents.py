@@ -5,25 +5,25 @@ These endpoints provide agent CRUD operations,
 requiring admin API key authentication.
 """
 
-from typing import Optional, List, Dict, Any
-from copy import deepcopy
 import logging
+from copy import deepcopy
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from .....datatypes.api import APIEventType, APIObjectType
+from .....services import observability
+from .....services.secrets.config_utils import get_agent_with_secrets_restored
 from ...responses import (
     APIResponse,
     agent_list_response,
-    create_success_response,
     create_error_response,
+    create_success_response,
 )
 from ...secrets import restore_secret_placeholders
 from ...utils import validate_secret_references
-from .....datatypes.api import APIEventType, APIObjectType
-from .....services.secrets.config_utils import get_agent_with_secrets_restored
-from .....services import observability
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
@@ -210,7 +210,7 @@ def _delete_agent_file_safe(formation: Any, agent_id: str) -> None:
                     "agent_id": agent_id,
                     "error": str(e),
                     "error_type": type(e).__name__,
-                }
+                },
             )
 
 

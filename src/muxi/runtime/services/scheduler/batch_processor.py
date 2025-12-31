@@ -5,9 +5,9 @@ This module provides efficient batch processing capabilities for the scheduler,
 allowing it to handle thousands of jobs without loading them all into memory.
 """
 
-from typing import List, Dict, Any, Optional, AsyncIterator
-from datetime import datetime
 import asyncio
+from datetime import datetime
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from ...datatypes.schema import SchedulerServiceSchema
 from .. import observability
@@ -36,9 +36,9 @@ class JobBatchProcessor:
         # Batch size should be tuned based on available memory and job complexity
         # Handle both dict and object config
         if isinstance(self.config, dict):
-            max_concurrent = self.config.get('max_concurrent_jobs', 10)
+            max_concurrent = self.config.get("max_concurrent_jobs", 10)
         else:
-            max_concurrent = getattr(self.config, 'max_concurrent_jobs', 10)
+            max_concurrent = getattr(self.config, "max_concurrent_jobs", 10)
         self.batch_size = min(100, max_concurrent * 10)
 
     async def get_active_jobs_count(self) -> int:
@@ -101,17 +101,17 @@ class JobBatchProcessor:
 
             # Respect concurrent job limits
             if isinstance(self.config, dict):
-                max_concurrent = self.config.get('max_concurrent_jobs', 10)
+                max_concurrent = self.config.get("max_concurrent_jobs", 10)
             else:
-                max_concurrent = getattr(self.config, 'max_concurrent_jobs', 10)
+                max_concurrent = getattr(self.config, "max_concurrent_jobs", 10)
 
             if len(due_jobs) >= max_concurrent:
                 break
 
         if isinstance(self.config, dict):
-            max_concurrent = self.config.get('max_concurrent_jobs', 10)
+            max_concurrent = self.config.get("max_concurrent_jobs", 10)
         else:
-            max_concurrent = getattr(self.config, 'max_concurrent_jobs', 10)
+            max_concurrent = getattr(self.config, "max_concurrent_jobs", 10)
         return due_jobs[:max_concurrent]
 
     async def _process_batch(
@@ -143,7 +143,7 @@ class JobBatchProcessor:
                         return job
             except Exception as e:
                 # Log error but don't fail entire batch
-                job_id = job.get('id', 'unknown')
+                job_id = job.get("id", "unknown")
                 observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,

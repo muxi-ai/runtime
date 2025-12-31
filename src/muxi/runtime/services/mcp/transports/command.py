@@ -9,23 +9,24 @@
 # =============================================================================
 
 import asyncio
-import warnings
 import logging
-from typing import Any, Dict, Optional
+import warnings
 from datetime import datetime
+from typing import Any, Dict, Optional
 
-# Real MCP SDK imports
-from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp.client.session import ClientSession
 
+# Real MCP SDK imports
+from mcp.client.stdio import StdioServerParameters, stdio_client
+
+from ..protocol.message_handler import MCPMessageHandler
 from .base import (
     BaseTransport,
+    CancellationToken,
     MCPConnectionError,
     MCPRequestError,
     MCPTimeoutError,
-    CancellationToken,
 )
-from ..protocol.message_handler import MCPMessageHandler
 
 
 class CommandLineTransport(BaseTransport):

@@ -1,7 +1,7 @@
 # src/muxi/formation/prompts/loader.py
+import logging
 from pathlib import Path
 from typing import Dict
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class PromptLoader:
         for prompt_path in prompt_files:
             try:
                 # Use Path.read_text() for cleaner code
-                cls._prompts[prompt_path.name] = prompt_path.read_text(encoding='utf-8')
+                cls._prompts[prompt_path.name] = prompt_path.read_text(encoding="utf-8")
                 logger.debug(f"Loaded prompt: {prompt_path.name}")
             except Exception as e:
                 logger.error(f"Failed to load {prompt_path.name}: {e}")

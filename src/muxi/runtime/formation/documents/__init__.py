@@ -12,13 +12,12 @@ For agent knowledge systems, use:
 
 from .experience import __all__ as experience_all
 from .storage import __all__ as storage_all
+
 # Import deprecated workflow components (with warnings when used)
 from .workflow import __all__ as workflow_all
 
 # Recommended exports for agent knowledge systems
-__agent_knowledge_exports__ = [
-    "DocumentChunkManager"
-]
+__agent_knowledge_exports__ = ["DocumentChunkManager"]
 
 # All exports (including deprecated workflow components)
 __all__ = __agent_knowledge_exports__ + experience_all + storage_all + workflow_all

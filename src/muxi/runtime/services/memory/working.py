@@ -70,9 +70,9 @@ import signal
 import time
 from typing import Any, Dict, List, Optional
 
-from faissx import client as faiss
-import numpy as np
 import multitasking
+import numpy as np
+from faissx import client as faiss
 
 from .. import observability
 from ..llm import LLM
@@ -531,7 +531,7 @@ class WorkingMemory:
             recent_items = list(self.buffer)
         else:
             # Use only the most recent items (up to max_size) - the context window
-            recent_items = list(self.buffer)[-self.max_size:]
+            recent_items = list(self.buffer)[-self.max_size :]
 
         # Apply filtering if specified
         if filter_metadata or namespace or session_id:
@@ -721,9 +721,7 @@ class WorkingMemory:
                         "query_length": len(query),
                         "buffer_size": len(self.buffer),
                     },
-                    description=(
-                        "Working memory search completed " "(embedding failure fallback)"
-                    ),
+                    description=("Working memory search completed " "(embedding failure fallback)"),
                 )
 
                 return embedding_fallback_results
@@ -1149,7 +1147,11 @@ class WorkingMemory:
 
         # Calculate how many we can load
         available_space = self.buffer_size - len(self.buffer)
-        messages_to_load = sorted_messages[-available_space:] if len(sorted_messages) > available_space else sorted_messages
+        messages_to_load = (
+            sorted_messages[-available_space:]
+            if len(sorted_messages) > available_space
+            else sorted_messages
+        )
         messages_dropped = len(sorted_messages) - len(messages_to_load)
 
         # Add messages to buffer

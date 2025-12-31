@@ -9,13 +9,13 @@ Models:
 """
 
 import json
-from ...utils.datetime_utils import utc_now_naive
 from typing import Any, Dict
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text
 
-from ..db import Base, AsyncModelMixin
 from ...datatypes.json_type import JSONType
+from ...utils.datetime_utils import utc_now_naive
+from ..db import AsyncModelMixin, Base
 
 
 class ScheduledJobAudit(Base, AsyncModelMixin):

@@ -1,7 +1,8 @@
 import asyncio
-from typing import Dict, Any, List, Optional
-from .transports.base import BaseTransport, TransportStatus
+from typing import Any, Dict, List, Optional
+
 from .health import HealthManager
+from .transports.base import BaseTransport, TransportStatus
 
 
 class StreamProcessor:
@@ -185,8 +186,8 @@ class StreamProcessor:
         Args:
             streams_config: List of processed stream configurations from formation
         """
-        from .transports.stdout import StdoutTransport
         from .transports.file import FileTransport
+        from .transports.stdout import StdoutTransport
         from .transports.stream import StreamTransport
 
         for stream_config in streams_config:

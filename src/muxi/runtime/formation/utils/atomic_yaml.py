@@ -38,7 +38,7 @@ def _sync_fsync(file_path: str) -> None:
     """
     # Open in read+write mode to get file descriptor for fsync
     # The file was already written and closed by aiofiles
-    with open(file_path, 'r+b') as f:
+    with open(file_path, "r+b") as f:
         f.flush()
         os.fsync(f.fileno())
 
@@ -160,9 +160,7 @@ async def atomic_write_yaml(
             # aiofiles handles don't have fileno(), so we open synchronously in thread
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
-                None,  # Use default ThreadPoolExecutor
-                _sync_fsync,
-                temp_path
+                None, _sync_fsync, temp_path  # Use default ThreadPoolExecutor
             )
 
             # Preserve original file permissions if requested
@@ -247,7 +245,9 @@ async def update_yaml(
             existing_data = yaml.safe_load(content)
 
         if not isinstance(existing_data, dict):
-            raise TypeError(f"YAML file must contain a dictionary, got {type(existing_data).__name__}")
+            raise TypeError(
+                f"YAML file must contain a dictionary, got {type(existing_data).__name__}"
+            )
 
         # Merge updates
         if deep_merge:
@@ -311,12 +311,13 @@ async def atomic_update_yaml(
     the update operation (read-modify-write) is NOT atomic without external locking.
     """
     import warnings
+
     warnings.warn(
         "atomic_update_yaml is deprecated and will be removed in a future version. "
         "Use update_yaml instead. Note: This function is NOT safe for concurrent "
         "updates without external locking.",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
     return await update_yaml(file_path, updates, preserve_permissions, deep_merge)
 

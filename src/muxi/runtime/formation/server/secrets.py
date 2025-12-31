@@ -5,11 +5,11 @@ This module provides utilities for restoring original secret placeholders
 in configuration data before sending API responses.
 """
 
-import os
 import json
+import os
 import re
 from copy import deepcopy
-from typing import Any, Dict, List, Union, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Union
 
 
 def restore_secret_placeholders(
@@ -128,7 +128,7 @@ def _parse_path(path: str) -> List[PathSegment]:
 
         if char == ".":
             # Check for consecutive dots
-            if i > 0 and path[i-1] == ".":
+            if i > 0 and path[i - 1] == ".":
                 consecutive_dots += 1
                 if consecutive_dots > 1:
                     raise ValueError(f"Invalid path: consecutive dots at position {i}")
@@ -139,7 +139,7 @@ def _parse_path(path: str) -> List[PathSegment]:
             if current_key:
                 segments.append(PathSegment("key", current_key))
                 current_key = ""
-            elif i > 0 and path[i-1] != "]":
+            elif i > 0 and path[i - 1] != "]":
                 # Empty segment (consecutive dots not after bracket)
                 raise ValueError(f"Invalid path: empty segment at position {i}")
             i += 1
@@ -160,7 +160,7 @@ def _parse_path(path: str) -> List[PathSegment]:
                 raise ValueError(f"Invalid path: unclosed bracket at position {i}")
 
             # Extract and validate the index
-            index_str = path[i+1:j].strip()
+            index_str = path[i + 1 : j].strip()
             if not index_str:
                 raise ValueError(f"Invalid path: empty array index at position {i}")
 
@@ -172,7 +172,9 @@ def _parse_path(path: str) -> List[PathSegment]:
             except ValueError as e:
                 if "negative array index" in str(e):
                     raise
-                raise ValueError(f"Invalid path: non-integer array index '{index_str}' at position {i}") from e
+                raise ValueError(
+                    f"Invalid path: non-integer array index '{index_str}' at position {i}"
+                ) from e
 
             i = j + 1
             consecutive_dots = 0
@@ -199,31 +201,25 @@ KNOWN_SECRET_PATHS = {
     # Server API keys
     "server.api_keys.admin_key",
     "server.api_keys.client_key",
-
     # LLM API keys
     "llm.api_keys.openai",
     "llm.api_keys.anthropic",
     "llm.api_keys.google",
     "llm.api_keys.cohere",
     "llm.api_keys.huggingface",
-
     # Agent model API keys
     "agents[*].model.api_key",
-
     # MCP server environment variables that commonly contain secrets
     "mcp.servers[*].env.API_KEY",
     "mcp.servers[*].env.API_TOKEN",
     "mcp.servers[*].env.SECRET_KEY",
     "mcp.servers[*].env.ACCESS_TOKEN",
     "mcp.servers[*].env.AUTH_TOKEN",
-
     # Overlord API key
     "overlord.api_key",
-
     # Database connection strings
     "database.connection_string",
     "memory.database.url",
-
     # Webhook secrets
     "async.webhook_secret",
     "webhooks.secret",
@@ -234,68 +230,68 @@ KNOWN_SECRET_PATHS = {
 API_KEY_PATTERNS = [
     {
         "name": "openai_standard",
-        "pattern": re.compile(r'^sk-[a-zA-Z0-9]{20,}$'),
+        "pattern": re.compile(r"^sk-[a-zA-Z0-9]{20,}$"),
         "confidence": 0.9,  # High confidence - very specific format
         "provider": "OpenAI",
         "last_verified": "2024-01-15",
-        "description": "Standard OpenAI API key format"
+        "description": "Standard OpenAI API key format",
     },
     {
         "name": "openai_project",
-        "pattern": re.compile(r'^sk-proj-[a-zA-Z0-9]{20,}$'),
+        "pattern": re.compile(r"^sk-proj-[a-zA-Z0-9]{20,}$"),
         "confidence": 0.95,  # Very high confidence - project-specific prefix
         "provider": "OpenAI",
         "last_verified": "2024-01-15",
-        "description": "OpenAI project-scoped API key"
+        "description": "OpenAI project-scoped API key",
     },
     {
         "name": "anthropic",
-        "pattern": re.compile(r'^sk-ant-[a-zA-Z0-9-]{40,}$'),
+        "pattern": re.compile(r"^sk-ant-[a-zA-Z0-9-]{40,}$"),
         "confidence": 0.95,  # Very high confidence - unique prefix
         "provider": "Anthropic",
         "last_verified": "2024-01-15",
-        "description": "Anthropic API key format"
+        "description": "Anthropic API key format",
     },
     {
         "name": "google_api",
-        "pattern": re.compile(r'^AIza[a-zA-Z0-9-_]{35}$'),
+        "pattern": re.compile(r"^AIza[a-zA-Z0-9-_]{35}$"),
         "confidence": 0.85,  # Good confidence - specific prefix and length
         "provider": "Google",
         "last_verified": "2024-01-15",
-        "description": "Google Cloud API key format"
+        "description": "Google Cloud API key format",
     },
     {
         "name": "stripe_like",
-        "pattern": re.compile(r'^sk_[a-zA-Z0-9_]{20,}$'),
+        "pattern": re.compile(r"^sk_[a-zA-Z0-9_]{20,}$"),
         "confidence": 0.7,  # Medium confidence - common pattern
         "provider": "Generic",
         "last_verified": "2024-01-15",
-        "description": "Stripe-style secret key format"
+        "description": "Stripe-style secret key format",
     },
     {
         "name": "hex_hash",
-        "pattern": re.compile(r'^[a-f0-9]{32,64}$'),
+        "pattern": re.compile(r"^[a-f0-9]{32,64}$"),
         "confidence": 0.5,  # Low confidence - could be any hex string
         "provider": "Generic",
         "last_verified": "2024-01-15",
-        "description": "Hexadecimal hash-like keys (MD5/SHA)"
+        "description": "Hexadecimal hash-like keys (MD5/SHA)",
     },
     {
         "name": "uppercase_key",
-        "pattern": re.compile(r'^[A-Z0-9]{20,40}$'),
+        "pattern": re.compile(r"^[A-Z0-9]{20,40}$"),
         "confidence": 0.4,  # Low confidence - very generic
         "provider": "Generic",
         "last_verified": "2024-01-15",
-        "description": "All uppercase alphanumeric keys"
+        "description": "All uppercase alphanumeric keys",
     },
     {
         "name": "muxi_specific",
-        "pattern": re.compile(r'^sk_muxi_[a-zA-Z0-9_]+$'),
+        "pattern": re.compile(r"^sk_muxi_[a-zA-Z0-9_]+$"),
         "confidence": 0.95,  # Very high confidence - our own format
         "provider": "Muxi",
         "last_verified": "2024-01-15",
-        "description": "Muxi-specific API key format"
-    }
+        "description": "Muxi-specific API key format",
+    },
 ]
 
 # Confidence threshold for flagging as API key
@@ -310,7 +306,7 @@ def load_custom_patterns():
     """Load custom API key patterns from configuration file if specified."""
     if CUSTOM_PATTERNS_FILE and os.path.exists(CUSTOM_PATTERNS_FILE):
         try:
-            with open(CUSTOM_PATTERNS_FILE, 'r') as f:
+            with open(CUSTOM_PATTERNS_FILE, "r") as f:
                 custom_patterns = json.load(f)
 
                 # Handle the case where custom_patterns might be a dict with a "patterns" key
@@ -322,7 +318,9 @@ def load_custom_patterns():
                     try:
                         # Validate required fields
                         if "pattern" not in pattern:
-                            print(f"Warning: Pattern at index {i} missing 'pattern' field, skipping")
+                            print(
+                                f"Warning: Pattern at index {i} missing 'pattern' field, skipping"
+                            )
                             continue
 
                         # Compile the regex pattern
@@ -543,7 +541,9 @@ def _looks_like_api_key(value: str) -> bool:
     # Additional heuristics can add confidence
     if max_confidence < API_KEY_CONFIDENCE_THRESHOLD:
         # Check for key-like prefixes as a secondary indicator
-        if len(value) > 20 and any(prefix in value.lower() for prefix in ['sk_', 'pk_', 'api_', 'key_', 'token_']):
+        if len(value) > 20 and any(
+            prefix in value.lower() for prefix in ["sk_", "pk_", "api_", "key_", "token_"]
+        ):
             # Add a small confidence boost for prefix matches
             max_confidence = min(max_confidence + 0.2, 0.6)
 

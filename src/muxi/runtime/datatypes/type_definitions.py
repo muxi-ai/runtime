@@ -6,9 +6,9 @@ generic Dict[str, Any] usage throughout the codebase, improving type
 safety, IDE support, and code documentation.
 """
 
-from typing import Optional, Dict, List, Any, Literal, Union
-from typing_extensions import TypedDict
+from typing import Any, Dict, List, Literal, Optional, Union
 
+from typing_extensions import TypedDict
 
 # ===== Common Metadata Types =====
 

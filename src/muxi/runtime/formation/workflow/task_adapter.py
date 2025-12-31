@@ -14,11 +14,11 @@ Important:
     mismatches in task dependencies and data flow.
 """
 
-from typing import Tuple, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Tuple
 
-from ...datatypes.workflow import SubTask, TaskInput, TaskOutput
-from ...datatypes.workflow_models import TaskSpecification, TaskExecutionState, TaskExecutionResult
 from ...datatypes.task_status import TaskStatus
+from ...datatypes.workflow import SubTask, TaskInput, TaskOutput
+from ...datatypes.workflow_models import TaskExecutionResult, TaskExecutionState, TaskSpecification
 
 if TYPE_CHECKING:
     from ...datatypes.workflow import Workflow
@@ -38,8 +38,7 @@ class TaskAdapter:
 
     @staticmethod
     def from_subtask(
-        subtask: SubTask,
-        workflow: Optional['Workflow'] = None
+        subtask: SubTask, workflow: Optional["Workflow"] = None
     ) -> Tuple[TaskSpecification, TaskExecutionState]:
         """
         Convert a SubTask into separated TaskSpecification and TaskExecutionState.
@@ -205,7 +204,12 @@ class TaskAdapter:
 
                 # If dependency task exists and isn't completed, add to blocked_by
                 # Check both string and enum values for COMPLETED and DONE
-                if dep_task and dep_task.status not in ['COMPLETED', 'DONE', TaskStatus.COMPLETED, TaskStatus.DONE]:
+                if dep_task and dep_task.status not in [
+                    "COMPLETED",
+                    "DONE",
+                    TaskStatus.COMPLETED,
+                    TaskStatus.DONE,
+                ]:
                     blocked_by.add(dep_id)
 
             # Update the state with calculated blocked_by
@@ -443,8 +447,7 @@ class TaskAdapter:
 
 
 def subtask_to_models(
-    subtask: SubTask,
-    workflow: Optional['Workflow'] = None
+    subtask: SubTask, workflow: Optional["Workflow"] = None
 ) -> Tuple[TaskSpecification, TaskExecutionState]:
     """
     Convenience function to convert SubTask to separated models.

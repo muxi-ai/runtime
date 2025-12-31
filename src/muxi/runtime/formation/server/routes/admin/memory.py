@@ -11,12 +11,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from .....datatypes.api import APIEventType, APIObjectType
 from ...responses import (
     APIResponse,
-    create_success_response,
     create_error_response,
+    create_success_response,
 )
-from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["Memory"])
 
@@ -108,6 +108,7 @@ async def get_buffer_stats(request: Request) -> JSONResponse:
 
     if hasattr(buffer, "buffer"):
         import sys
+
         for msg in buffer.buffer:
             if isinstance(msg, dict):
                 metadata = msg.get("metadata", {})
@@ -232,6 +233,7 @@ async def clear_memory_buffers(request: Request) -> JSONResponse:
     entries_cleared = 0
     if hasattr(buffer, "buffer"):
         from collections import deque
+
         entries_cleared = len(buffer.buffer)
         existing_maxlen = getattr(buffer.buffer, "maxlen", None)
         buffer.buffer = deque(maxlen=existing_maxlen) if existing_maxlen is not None else deque()
@@ -327,7 +329,7 @@ async def reset_memory_setting(request: Request, item: str) -> JSONResponse:
     # Reset specific memory setting by removing it from in-memory config
     # This restores the formation YAML default value
     memory_config = formation.config.get("memory", {})
-    
+
     # Define valid memory settings that can be reset
     valid_paths = {
         "buffer_size": ["buffer", "size"],
@@ -336,7 +338,7 @@ async def reset_memory_setting(request: Request, item: str) -> JSONResponse:
         "working_max_memory_mb": ["working", "max_memory_mb"],
         "working_fifo_interval_min": ["working", "fifo_interval_min"],
     }
-    
+
     if item in valid_paths:
         path = valid_paths[item]
         if len(path) == 2 and path[0] in memory_config:
