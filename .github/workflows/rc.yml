@@ -84,7 +84,7 @@ jobs:
 
       - name: Test Docker image
         run: |
-          docker run --rm muxi-runtime:test python -c "from muxi.runtime import __version__; print(f'MUXI Runtime v{__version__}')"
+          docker run --rm --entrypoint python muxi-runtime:test -c "from muxi.runtime import __version__; print(f'MUXI Runtime v{__version__}')"
 
   build-pip:
     runs-on: ubuntu-latest
