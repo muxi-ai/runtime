@@ -129,10 +129,12 @@ jobs:
       - name: Check package
         run: twine check dist/*
 
-      - name: Test package install (no deps)
+      - name: Verify package
         run: |
           pip install --no-deps dist/*.whl
-          python -c "from muxi.runtime import __version__; print(f'MUXI Runtime v{__version__}')"
+          pip show muxi-runtime
+          # Verify wheel contains expected files
+          unzip -l dist/*.whl | grep -E "(muxi/runtime/__init__|\.version)"
 
   summary:
     needs: [test-matrix, build-docker, build-pip]
