@@ -55,12 +55,15 @@ jobs:
 
     steps:
       - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          docker system prune -af
-          df -h
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -97,11 +100,15 @@ jobs:
 
     steps:
       - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          df -h
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -122,10 +129,10 @@ jobs:
       - name: Check package
         run: twine check dist/*
 
-      - name: Test package install
+      - name: Test package install (no deps)
         run: |
-          pip install dist/*.whl
-          python -c "import muxi; print(f'MUXI Runtime v{muxi.__version__}')"
+          pip install --no-deps dist/*.whl
+          python -c "from muxi.runtime import __version__; print(f'MUXI Runtime v{__version__}')"
 
   summary:
     needs: [test-matrix, build-docker, build-pip]
