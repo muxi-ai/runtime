@@ -54,6 +54,14 @@ jobs:
     needs: test-matrix
 
     steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          docker system prune -af
+          df -h
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -88,6 +96,13 @@ jobs:
     needs: test-matrix
 
     steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          df -h
+
       - name: Checkout
         uses: actions/checkout@v4
 
