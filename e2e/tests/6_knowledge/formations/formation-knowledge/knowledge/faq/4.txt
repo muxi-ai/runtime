@@ -1,0 +1,3 @@
+How fast will tasks be completed?
+It depends on the task and its complexity, but on average, most requests will be completed in 2-3 days.
+

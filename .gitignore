@@ -1,4 +1,5 @@
 brainstorm/
+src/muxi.egg-info/*
 
 # Dependencies
 node_modules/
@@ -9,7 +10,6 @@ yarn.lock
 yarn-error.log
 .pnp/
 .pnp.js
-
 # Python
 __pycache__/
 *.py[cod]
@@ -30,7 +30,6 @@ ENV/
 .venv/
 .env/
 .python-version
-
 # Jekyll / Documentation
 docs/_site/
 docs/.sass-cache/
@@ -38,7 +37,6 @@ docs/.jekyll-cache/
 docs/.jekyll-metadata
 docs/Gemfile.lock
 .jekyll-cache/
-
 # Logs
 logs/
 *.log
@@ -48,7 +46,6 @@ yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
 api_server.log
-
 # Cache files
 .npm
 .eslintcache
@@ -70,7 +67,6 @@ api_server.log
 .rts2_cache_cjs/
 .rts2_cache_es/
 .rts2_cache_umd/
-
 # OS generated files
 .DS_Store
 .DS_Store?
@@ -91,7 +87,6 @@ Thumbs.db
 *.launch
 *.tmproj
 .history/
-
 # Build outputs
 dist/
 build/
@@ -100,58 +95,66 @@ docs/_site
 .output/
 coverage/
 *.tsbuildinfo
-
 # dotenv environment variable files
 .env
 .env.development.local
 .env.test.local
 .env.production.local
 .env.local
-
 # Runtime data
 pids
 *.pid
 *.seed
 *.pid.lock
-
 # Local database files
 *.sqlite
 *.sqlite3
 *.db
-
 # Virtual Environment
-venv/
-env/
-ENV/
-
 # Environment variables
-.env
-
 # IDE specific files
-.idea/
-.vscode/
-*.swp
-*.swo
-
 # OS specific files
-.DS_Store
-Thumbs.db
-
 # Testing
-htmlcov/
-
-# Logs
-logs/
-*.log
-
 # Database
-*.db
-*.sqlite3
-
 # FAISS indexes
 *.index
-
 # Playwright
 .playwright-cache/
 .specstory/
-.specstory/
+.a2a_registry/
+.registry_data/
+src/muxi/observability/health/.status
+.key
+
+.claude/epics
+.claude/.mcp.json
+webhook_log.json
+
+.pytest_cache
+.ruff_cache
+.venv/
+.cursor
+.taskmaster
+tests/outputs/*
+.a2a_registry_data/agents.json
+tests/assets/formations.backup/*
+
+# Large test files
+tests/assets/files/*.mp4
+tests/assets/files/*.mov
+tests/assets/files/*.wav
+tests/assets/files/*.m4a
+tests/assets/files/*.pptx
+tests/assets/files/large.pdf
+tests/assets/files/report.pdf
+tests/assets/files/presentation.mp4
+tests/assets/files/document.docx
+tests/assets/files/slide.png
+# E2E test results
+e2e/results/*
+
+# Singularity/Apptainer images (can be very large)
+*.sif
+*.simg
+*.img
+*.egg-info/

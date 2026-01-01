@@ -1,0 +1,37 @@
+---
+schema: "1.0.0"
+id: "test-cache-custom"
+description: "Test formation with custom cache parameters"
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 100
+    caching:
+      enabled: true
+      max_entries: 100          # Lower for testing
+      p: 0.90                   # Looser similarity
+      hash_only: false
+      stream_chunk_strategy: "words"
+      stream_chunk_length: 5
+      ttl: 60                   # 1 minute for testing
+
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+
+  models:
+    - text: "openai/gpt-4o-mini"
+      settings:
+        temperature: 0.7
+
+agents:
+  - schema: "1.0.0"
+    id: "test-agent"
+    name: "Test Agent"
+    description: "Simple test agent for caching tests"
+    system_message: "You are a test assistant. Keep responses brief."
+
+memory:
+  buffer:
+    size: 5
+    vector_search: false

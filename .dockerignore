@@ -1,0 +1,88 @@
+# Add more aggressive exclusions
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info
+dist
+build
+.eggs
+*.whl
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.hypothesis
+tests/
+e2e/*
+!e2e/assets
+e2e/assets/*
+!e2e/assets/faissx-auth.json
+
+# Documentation
+docs/
+*.md
+!README.md
+context/
+examples/
+
+# Docker
+Dockerfile*
+docker-compose*.yaml
+.dockerignore
+
+# Container files
+sif/
+*.sif
+
+# Development
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+webhook_log.json
+
+# Data
+*.db
+*.sqlite
+sqlite:
+
+# Build artifacts
+coverage.json
+pyrightconfig.json
+pytest.ini
+setup.cfg
+
+# Scripts (not needed in container)
+scripts/
+utils/
+
+# Claude/AI
+.claude/
+CLAUDE.md
+AGENTS.md
+*_SUMMARY.md
+*_REPORT.md
+*_STATUS.md
+
+# Git workflow
+GIT-*.md
+
+# Migrations (if not needed)
+migrations/

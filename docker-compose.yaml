@@ -1,0 +1,174 @@
+services:
+  # ============================================================================
+  # MUXI Runtime - Main Service (2.4GB optimized image)
+  # ============================================================================
+  # Usage: docker-compose up muxi
+  # Access: http://localhost:8000
+  #
+  # This service runs MUXI formations with all dependencies included.
+  # Mount your formations directory and set API keys in .env file.
+  # ============================================================================
+
+  muxi:
+    image: muxi-runtime:latest
+    container_name: muxi-runtime
+    restart: unless-stopped
+
+    # Override default CMD to run a formation
+    # Change this to point to your formation:
+    command: >
+      python -m muxi.utils.run_formation
+      /formations/example-formation/formation.afs
+
+    ports:
+      - "${MUXI_PORT:-8000}:8000"
+
+    volumes:
+      # Mount your formations directory (read-write for secrets management)
+      # Note: MUXI needs write access to create .key files
+      - ${FORMATIONS_DIR:-./formations}:/formations
+
+      # Persistent data directory
+      - ${DATA_DIR:-./data}:/data
+
+      # Logs directory (optional)
+      - ${LOGS_DIR:-./logs}:/logs
+
+      # Optional: Mount secrets.env file if formations need it
+      # - ./formations/my-formation/secrets.env:/app/secrets.env:ro
+
+    environment:
+      # MUXI Configuration
+      # Note: API keys come from secrets.enc in formation directories
+      # Do NOT set them as environment variables
+      - MUXI_FORMATIONS_DIR=/formations
+      - MUXI_DATA_DIR=/data
+      - MUXI_LOGS_DIR=/logs
+      - PYTHONUNBUFFERED=1
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    networks:
+      - muxi-network
+
+    # Optional: Resource limits (uncomment to use)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '4.0'
+    #       memory: 8G
+    #     reservations:
+    #       cpus: '2.0'
+    #       memory: 4G
+
+  # ============================================================================
+  # MUXI Production - Full Stack with PostgreSQL (Optional)
+  # ============================================================================
+  # Usage: docker-compose up muxi-production postgres
+  # Access: http://localhost:8001
+  #
+  # Includes PostgreSQL with pgvector for production deployments.
+  # Use this when you need persistent memory and vector search.
+  # ============================================================================
+
+  muxi-production:
+    image: muxi-runtime:production
+    container_name: muxi-production
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    ports:
+      - "${MUXI_PROD_PORT:-8001}:8000"
+
+    volumes:
+      - ${FORMATIONS_DIR:-./formations}:/formations:ro
+      - ${DATA_DIR:-./data}:/data
+      - ${LOGS_DIR:-./logs}:/logs
+
+    environment:
+      # Note: LLM API keys come from secrets.enc in formation directories
+      # Do NOT set them as environment variables
+
+      # Database Configuration
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-muxi}
+      - POSTGRES_USER=${POSTGRES_USER:-muxi}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-muxi_password}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-muxi}:${POSTGRES_PASSWORD:-muxi_password}@postgres:5432/${POSTGRES_DB:-muxi}
+
+      # MUXI Configuration
+      - MUXI_FORMATIONS_DIR=/formations
+      - MUXI_DATA_DIR=/data
+      - MUXI_LOGS_DIR=/logs
+      - PYTHONUNBUFFERED=1
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    networks:
+      - muxi-network
+
+  # ============================================================================
+  # PostgreSQL with pgvector (For Production Setup)
+  # ============================================================================
+  # Only needed when using muxi-production service
+  # Provides persistent storage and vector similarity search
+  # ============================================================================
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: muxi-postgres
+    restart: unless-stopped
+
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-muxi}
+      - POSTGRES_USER=${POSTGRES_USER:-muxi}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-muxi_password}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-muxi}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - muxi-network
+
+    # Optional: Performance tuning (uncomment for production)
+    # command: >
+    #   postgres
+    #   -c shared_buffers=256MB
+    #   -c max_connections=100
+    #   -c work_mem=16MB
+    #   -c maintenance_work_mem=64MB
+
+networks:
+  muxi-network:
+    driver: bridge
+    name: muxi-network
+
+volumes:
+  postgres-data:
+    driver: local
+    name: muxi-postgres-data

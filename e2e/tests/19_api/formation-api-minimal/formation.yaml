@@ -1,0 +1,18 @@
+schema: "1.0.0"
+id: api-test-minimal
+description: "Minimal formation for testing - no LLM"
+
+runtime:
+  built_in_mcps: false
+
+memory:
+  buffer:
+    size: 10
+    vector_search: false
+
+server:
+  enabled: true
+  port: 8271
+  api_keys:
+    admin_key: test-admin-key-123
+    client_key: test-client-key-456

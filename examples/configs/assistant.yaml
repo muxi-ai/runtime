@@ -1,0 +1,79 @@
+---
+schema: "1.0.0"
+id: assistant
+version: "1.0.0"
+description: "General-purpose AI assistant that can answer questions, assist with tasks, and provide information on a wide range of topics."
+
+# Multi-modal LLM configuration
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 1000
+    timeout_seconds: 30
+    
+    # LLM Response Caching (enabled by default)
+    # Provides 70%+ cost savings through semantic similarity matching
+    # See docs/features/llm-caching.md for details
+    caching:
+      enabled: true                       # Enable/disable (default: true)
+      max_entries: 10000                  # LRU eviction limit (default: 10000)
+      p: 0.95                             # Similarity threshold (default: 0.95)
+      hash_only: false                    # Disable semantic matching (default: false)
+      stream_chunk_strategy: "sentences"  # Chunking strategy (default: sentences)
+      stream_chunk_length: 1              # Chunk size (default: 1)
+      ttl: 86400                          # Time-to-live in seconds (default: 86400 = 1 day)
+
+  api_keys:
+    openai: "${OPENAI_API_KEY}"
+
+  models:
+    - text: "openai/gpt-4o"
+      settings:
+        temperature: 0.7
+        max_tokens: 1000
+        timeout_seconds: 30
+
+# Agents configuration
+agents:
+  - schema: "1.0.0"
+    id: "general_assistant"
+    name: "General Assistant Agent"
+    description: "General-purpose AI assistant"
+    system_message: "You are a helpful AI assistant. You can provide information, answer questions, and assist with various tasks."
+    llm_models:
+      - text: "openai/gpt-4o"
+        settings:
+          temperature: 0.7
+
+# MCP servers configuration
+mcp:
+  servers:
+    - schema: "1.0.0"
+      id: calculator
+      description: "Calculator service for mathematical computations"
+      type: "http"
+      endpoint: http://localhost:5001
+      auth:
+        type: "api_key"
+        key: "${CALC_API_KEY}"
+    - schema: "1.0.0"
+      id: web_search
+      description: "Web search service for general information lookup"
+      type: "http"
+      endpoint: http://localhost:5002
+      auth:
+        type: "api_key"
+        key: "${SEARCH_API_KEY}"
+
+# Memory configuration
+memory:
+  buffer:
+    size: 10
+    multiplier: 10
+    vector_search: true
+    vector_dimension: 1536
+    mode: "local"
+
+  long_term:
+    connection_string: "sqlite:///assistant_memory.db"
+    embedding_model: "text-embedding-ada-002"

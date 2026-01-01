@@ -1,0 +1,34 @@
+schema: "1.0.0"
+id: formation-triggers-test
+name: Trigger System Test Formation
+description: Test formation for trigger endpoints and template rendering
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+
+workflow:
+  auto_decomposition: true
+  complexity_threshold: 5.0  # Low threshold to trigger workflow
+  plan_approval_threshold: 6.0  # Low threshold to require approval
+
+agents:
+  - id: test-agent
+    name: Test Agent
+    description: Simple agent for trigger testing
+    system_message: |
+      You are a test agent. When you receive trigger messages, respond concisely with:
+      - A confirmation you received the message
+      - The key information from the message
+      Keep responses under 50 words.
+    default: true
+
+server:
+  host: 0.0.0.0
+  port: 18271
+  access_log: false
+  api_keys:
+    admin_key: "testing-api-key"
+    client_key: "testing-api-key"

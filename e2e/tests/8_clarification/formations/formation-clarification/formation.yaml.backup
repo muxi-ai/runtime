@@ -1,0 +1,43 @@
+schema: "1.0.0"
+id: "test_formation"
+description: "Single agent formation with minimal memory for clarification testing"
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 2000
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+
+memory:
+  buffer:
+    size: 10
+    multiplier: 5
+    vector_search: false
+  persistent:
+    connection_string: "${{ secrets.POSTGRES_URI }}"
+    embedding_model: "openai/text-embedding-3-small"
+
+logging:
+  streams:
+    - transport: "stdout"
+      level: "info"
+      format: "jsonl"
+
+overlord:
+  clarification:
+    style: "conversational"  # Options: conversational, formal, brief
+  # workflow:
+  #   auto_decomposition: true
+  #   complexity_threshold: 1.0  # Set to 1 to trigger workflow for everything
+  #   plan_approval_threshold: 10  # Keep approval high to avoid approval prompts
+
+user_credentials:
+  mode: "dynamic"  # Redirect mode for testing
+  redirect_message: "Please configure your API credentials in the external credential manager."
+
+mcp:
+  default_timeout_seconds: 10         # Timeout per individual tool call
+

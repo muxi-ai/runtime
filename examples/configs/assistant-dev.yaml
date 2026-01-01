@@ -1,0 +1,73 @@
+---
+schema: "1.0.0"
+id: assistant-dev
+version: "1.0.0"
+description: "Development configuration for general-purpose AI assistant with caching disabled"
+
+# Multi-modal LLM configuration
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 1000
+    timeout_seconds: 30
+    
+    # IMPORTANT: Disable caching for development
+    # This ensures you see the effects of prompt changes immediately
+    # See docs/features/llm-caching.md for details
+    caching:
+      enabled: false  # Disabled for development
+
+  api_keys:
+    openai: "${OPENAI_API_KEY}"
+
+  models:
+    - text: "openai/gpt-4o"
+      settings:
+        temperature: 0.7
+        max_tokens: 1000
+        timeout_seconds: 30
+
+# Agents configuration
+agents:
+  - schema: "1.0.0"
+    id: "general_assistant"
+    name: "General Assistant Agent"
+    description: "General-purpose AI assistant"
+    system_message: "You are a helpful AI assistant. You can provide information, answer questions, and assist with various tasks."
+    llm_models:
+      - text: "openai/gpt-4o"
+        settings:
+          temperature: 0.7
+
+# MCP servers configuration
+mcp:
+  servers:
+    - schema: "1.0.0"
+      id: calculator
+      description: "Calculator service for mathematical computations"
+      type: "http"
+      endpoint: http://localhost:5001
+      auth:
+        type: "api_key"
+        key: "${CALC_API_KEY}"
+    - schema: "1.0.0"
+      id: web_search
+      description: "Web search service for general information lookup"
+      type: "http"
+      endpoint: http://localhost:5002
+      auth:
+        type: "api_key"
+        key: "${SEARCH_API_KEY}"
+
+# Memory configuration
+memory:
+  buffer:
+    size: 10
+    multiplier: 10
+    vector_search: true
+    vector_dimension: 1536
+    mode: "local"
+
+  long_term:
+    connection_string: "sqlite:///assistant_memory.db"
+    embedding_model: "text-embedding-ada-002"

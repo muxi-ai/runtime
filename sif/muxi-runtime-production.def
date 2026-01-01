@@ -1,0 +1,100 @@
+Bootstrap: docker
+From: muxi-runtime:production
+
+# This definition file converts the production Docker image to SIF format
+# First build the Docker image: ./build-docker.sh production
+# Then build the SIF: apptainer build muxi-runtime-production.sif muxi-runtime-production.def
+
+%post
+    echo "Converting Docker image to SIF..."
+    echo "No additional setup needed - everything is in the Docker image"
+
+%environment
+    export PYTHONPATH=/app/src:/app:$PYTHONPATH
+    export PYTHONDONTWRITEBYTECODE=1
+    export PYTHONUNBUFFERED=1
+    export PATH=/usr/lib/postgresql/17/bin:$PATH
+    export PGDATA=/var/lib/postgresql/17/main
+    export POSTGRES_URI=postgresql://muxi:muxi_password@localhost:5432/muxi
+    export FAISSX_NO_AUTH_URL=http://localhost:45678
+    export FAISSX_WITH_AUTH_URL=http://localhost:65432
+
+%startscript
+    # Start all services with supervisor
+    /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+
+%runscript
+    # Run formation server
+    cd /app
+    exec python -m muxi.server "$@"
+
+%test
+    # Verify installations
+    echo "Testing Python..."
+    python --version || exit 1
+    
+    echo "Testing MUXI runtime..."
+    python -c "import muxi; print(f'✅ MUXI Runtime {muxi.__version__}')" || exit 1
+    
+    echo "Testing dependencies..."
+    python -c "import fastapi, onellm, faissx; print('✅ Dependencies loaded')" || exit 1
+    
+    echo "Testing PostgreSQL..."
+    /usr/lib/postgresql/17/bin/postgres --version || exit 1
+    
+    echo "Testing system tools..."
+    which ffmpeg > /dev/null && echo "✅ FFmpeg" || exit 1
+    which tesseract > /dev/null && echo "✅ Tesseract" || exit 1
+    
+    echo "All tests passed! ✅"
+
+%labels
+    Author Ran Aroussi
+    Version 1.0.0-production
+    Description MUXI Runtime - Production Container with Services
+    License Elastic-2.0
+    URL https://muxi.org
+    Features PostgreSQL, FAISSx, Vector Search, Full Services
+
+%help
+    ===========================================================
+    MUXI Runtime - Production Container
+    ===========================================================
+    
+    This production container includes:
+      • MUXI Runtime
+      • PostgreSQL 17 with pgvector
+      • FAISSx vector store
+      • All system dependencies
+    
+    Usage:
+    
+    1. Start all services (instance mode)
+       $ singularity instance start \
+           --bind ./data:/data \
+           --bind ./logs:/logs \
+           muxi-runtime-production.sif muxi-prod
+    
+    2. Run formation with services
+       $ singularity run \
+           --bind ./formations:/formations \
+           --bind ./data:/data \
+           --bind ./logs:/logs \
+           muxi-runtime-production.sif
+    
+    3. Stop instance
+       $ singularity instance stop muxi-prod
+    
+    Service Endpoints:
+      PostgreSQL:       localhost:5432
+      FAISSx (no auth): localhost:45678
+      FAISSx (auth):    localhost:65432
+    
+    Environment Variables:
+      POSTGRES_URI        - PostgreSQL connection string
+      FAISSX_NO_AUTH_URL  - FAISSx no-auth endpoint
+      FAISSX_WITH_AUTH_URL - FAISSx auth endpoint
+    
+    Documentation: https://muxi.org/docs
+    
+    ===========================================================

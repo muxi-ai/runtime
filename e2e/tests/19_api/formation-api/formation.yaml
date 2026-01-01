@@ -1,0 +1,31 @@
+schema: "1.0.0"
+id: api-test-formation
+description: "Formation for testing API endpoints (audit, SOP, scheduler)"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+
+runtime:
+  built_in_mcps: false
+
+memory:
+  buffer:
+    size: 100
+    vector_search: false
+
+agents:
+  - id: assistant
+    name: "API Test Assistant"
+    description: "A helpful assistant for testing API endpoints"
+    system_message: "You are a helpful assistant. Be concise and direct."
+
+server:
+  enabled: true
+  # host: 127.0.0.1  # Default - localhost only
+  port: 8271
+  api_keys:
+    admin_key: test-admin-key-123
+    client_key: test-client-key-456

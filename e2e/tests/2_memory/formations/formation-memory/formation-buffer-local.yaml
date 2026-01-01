@@ -1,0 +1,43 @@
+schema: "1.0.0"
+id: "buffer-memory-local-test"
+name: "buffer-memory-local-test"
+description: "Test formation for local buffer memory mode"
+
+runtime:
+  built_in_mcps: false
+
+overlord:
+  clarification:
+    style: "brief"
+    max_rounds:
+      direct: 1
+      brainstorm: 1
+      planning: 1
+      execution: 1
+      other: 1
+
+agents:
+  - id: "memory-assistant"
+    name: "Memory Test Assistant"
+    description: "Assistant for testing local buffer memory"
+    role: "assistant"
+    system_message: "You are a helpful assistant that remembers conversation context. Always acknowledge what you remember about the user."
+
+memory:
+  working:
+    mode: "local"
+    max_memory_mb: 1
+    fifo_interval_min: 5
+    vector_dimension: 1536
+
+  buffer:
+    size: 10
+    multiplier: 5
+    vector_search: true
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o"
+    - embedding: "openai/text-embedding-3-small"

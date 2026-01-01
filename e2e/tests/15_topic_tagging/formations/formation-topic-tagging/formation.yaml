@@ -1,0 +1,55 @@
+schema: "1.0.0"
+id: "topic_tagging_test"
+description: "Formation for testing topic tagging feature"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+# Overlord configuration
+overlord:
+  persona: |
+    You are a helpful AI assistant for testing topic extraction.
+
+  # Workflow configuration - REQUIRED for topic tagging
+  workflow:
+    auto_decomposition: true  # Must be enabled for request analysis
+    complexity_threshold: 7.0  # Topics extracted during analysis
+    plan_approval_threshold: 10  # High to avoid approval prompts
+
+  # Response configuration
+  response:
+    format: "markdown"
+    streaming: false
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "info"  # Capture topic extraction events
+        format: "jsonl"
+
+# Simple memory configuration
+memory:
+  buffer:
+    size: 10
+    vector_search: false
+
+# Agent configuration
+agents:
+  - id: general-agent
+    name: General Assistant
+    description: Handles general requests
+    default: true
+    capabilities:
+      - "general"
+      - "writing"
+      - "analysis"
+      - "debugging"

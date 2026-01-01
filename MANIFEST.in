@@ -1,0 +1,73 @@
+# MANIFEST.in - Controls what files are included in the PyPI distribution
+# This ensures all necessary runtime files are packaged with the wheel
+
+# Include essential documentation
+include README.md
+include LICENSE
+include CHANGELOG.md
+include CONTRIBUTING.md
+include CODE_OF_CONDUCT.md
+
+# Include version file (critical for runtime version detection)
+include src/muxi/.version
+
+# Include all schema files (formation validation)
+recursive-include schemas *.yaml *.yml *.json
+
+# Include all prompt templates (used by Overlord and agents)
+recursive-include src/muxi/formation/prompts *.md *.txt
+
+# Include all MCP built-in server definitions
+recursive-include src/muxi/services/mcp/built_in *.yaml *.yml
+
+# Include all document processing assets
+recursive-include src/muxi/formation/documents *.md *.txt
+
+# Include SQLite extensions (if present)
+recursive-include src/muxi/extensions/loadable *.so *.dylib *.dll
+
+# Include migration scripts
+recursive-include migrations *.sql *.py
+
+# Exclude test files and development artifacts
+recursive-exclude tests *
+recursive-exclude e2e *
+recursive-exclude .pytest_cache *
+recursive-exclude .mypy_cache *
+recursive-exclude __pycache__ *
+recursive-exclude *.egg-info *
+exclude .gitignore
+exclude .dockerignore
+exclude pyrightconfig.json
+exclude pytest.ini
+exclude setup.cfg
+exclude coverage.json
+exclude webhook_log.json
+
+# Exclude Docker and container files
+exclude Dockerfile*
+exclude docker-compose.yaml
+exclude build-docker.sh
+recursive-exclude sif *
+
+# Exclude development scripts
+recursive-exclude scripts *
+recursive-exclude utils *
+recursive-exclude .claude *
+
+# Exclude documentation (available online)
+recursive-exclude docs *
+recursive-exclude context *
+
+# Exclude example formations (available in separate repo)
+recursive-exclude examples *
+
+# Global patterns to exclude
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude .DS_Store
+global-exclude *.swp
+global-exclude *.swo
+global-exclude *~
+global-exclude .git*

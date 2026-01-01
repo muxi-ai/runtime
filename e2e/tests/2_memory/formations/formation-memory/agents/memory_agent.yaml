@@ -1,0 +1,11 @@
+schema: "1.0.0"
+id: "memory_agent"
+name: "Memory Test Agent"
+description: "Generic AI assistant for testing memory system capabilities"
+
+system_message: |
+  You are a helpful AI assistant.
+
+role: "general"
+specialties:
+  - "general_assistance"

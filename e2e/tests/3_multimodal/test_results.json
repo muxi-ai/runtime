@@ -1,0 +1,271 @@
+{
+  "summary": {
+    "total": 37,
+    "passed": 1,
+    "failed": 0,
+    "timeout": 36,
+    "error": 0,
+    "duration": 4344.33
+  },
+  "tests": [
+    {
+      "test": "test_3a1",
+      "status": "TIMEOUT",
+      "duration": 120.03,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3a2",
+      "status": "TIMEOUT",
+      "duration": 120.03,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3a3",
+      "status": "TIMEOUT",
+      "duration": 120.05,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3b1",
+      "status": "TIMEOUT",
+      "duration": 120.05,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3b2",
+      "status": "TIMEOUT",
+      "duration": 120.04,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3b3",
+      "status": "TIMEOUT",
+      "duration": 120.04,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3b4",
+      "status": "TIMEOUT",
+      "duration": 120.03,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3c1",
+      "status": "TIMEOUT",
+      "duration": 120.09,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3c2",
+      "status": "TIMEOUT",
+      "duration": 120.04,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3c3",
+      "status": "TIMEOUT",
+      "duration": 120.04,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3c4",
+      "status": "TIMEOUT",
+      "duration": 120.03,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3d1",
+      "status": "TIMEOUT",
+      "duration": 120.05,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3d2",
+      "status": "TIMEOUT",
+      "duration": 120.01,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3d3",
+      "status": "TIMEOUT",
+      "duration": 120.09,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3e1",
+      "status": "TIMEOUT",
+      "duration": 120.04,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3e2",
+      "status": "TIMEOUT",
+      "duration": 120.03,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3f1",
+      "status": "TIMEOUT",
+      "duration": 120.04,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3f2",
+      "status": "TIMEOUT",
+      "duration": 120.03,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3f3",
+      "status": "TIMEOUT",
+      "duration": 120.04,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3f4",
+      "status": "TIMEOUT",
+      "duration": 120.03,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3f5",
+      "status": "TIMEOUT",
+      "duration": 120.05,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3g1",
+      "status": "TIMEOUT",
+      "duration": 120.02,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3g2",
+      "status": "TIMEOUT",
+      "duration": 120.01,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3g3",
+      "status": "TIMEOUT",
+      "duration": 120.03,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3g4",
+      "status": "TIMEOUT",
+      "duration": 120.03,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3h1",
+      "status": "TIMEOUT",
+      "duration": 120.03,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3h2",
+      "status": "TIMEOUT",
+      "duration": 120.04,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3h3",
+      "status": "TIMEOUT",
+      "duration": 120.04,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3i1",
+      "status": "TIMEOUT",
+      "duration": 120.04,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3i2",
+      "status": "TIMEOUT",
+      "duration": 120.06,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3i3",
+      "status": "TIMEOUT",
+      "duration": 120.05,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3i4",
+      "status": "TIMEOUT",
+      "duration": 120.04,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3j1",
+      "status": "TIMEOUT",
+      "duration": 120.05,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3j2",
+      "status": "TIMEOUT",
+      "duration": 120.02,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3j3",
+      "status": "TIMEOUT",
+      "duration": 120.02,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3j4",
+      "status": "TIMEOUT",
+      "duration": 120.05,
+      "returncode": -1,
+      "output_snippet": "Test timed out after 120s"
+    },
+    {
+      "test": "test_3k1_avchat",
+      "status": "PASSED",
+      "duration": 22.91,
+      "returncode": 0,
+      "output_snippet": "\"description\":\"Created async task in existing event loop\"}}\n{\"id\":\"evt_RpgXXULJ33zZqgF6wa9WX\",\"timestamp\":1759357507696,\"level\":\"debug\",\"muxi_version\":\"0.2025.0\",\"server\":\"m1pro.lan\",\"event\":\"service.started\",\"data\":{\"task\":\"<Task pending name='Task-61' coro=<Formation._deregister_agents_with_timeout() running at /Users/ran/Projects/muxi/code/runtime/src/muxi/formation/formation.py:2670>>\",\"timeout\":2.0,\"operation\":\"async_task_created\",\"description\":\"Created async task in existing event loop\"}}\n"
+    }
+  ]
+}

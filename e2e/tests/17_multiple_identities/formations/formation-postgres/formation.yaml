@@ -1,0 +1,37 @@
+---
+schema: "1.0.0"
+id: "test-multi-identity-postgres"
+description: "Test formation for multi-identity with PostgreSQL backend"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+
+  models:
+    - text: "openai/gpt-4o-mini"
+      settings:
+        temperature: 0.7
+        max_tokens: 150
+
+agents:
+  - schema: "1.0.0"
+    id: "assistant"
+    name: "Test Assistant"
+    role: "helpful_assistant"
+    description: "A helpful assistant for testing multi-identity"
+    instructions: |
+      You are a helpful assistant. Remember what users tell you about themselves.
+      When asked about user preferences or information, recall from memory what they've shared.
+      Be concise in your responses.
+
+memory:
+  long_term:
+    enabled: true
+    auto_extract: true
+  buffer:
+    size: 10
+    vector_search: false
+
+database:
+  type: "postgresql"
+  url: "${{ secrets.POSTGRES_URI }}"

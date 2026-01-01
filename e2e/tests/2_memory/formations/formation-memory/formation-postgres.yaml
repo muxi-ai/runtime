@@ -1,0 +1,53 @@
+schema: "1.0.0"
+id: "memory-test-formation"
+description: "Formation for testing buffer and persistent memory systems"
+auto_extract_user_info: true
+
+runtime:
+  built_in_mcps: false
+
+overlord:
+  clarification:
+    enabled: false
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 2000
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o"
+    - embedding: "openai/text-embedding-3-small"
+
+memory:
+  working:
+    max_memory_mb: 1
+    fifo_interval_min: 5
+    vector_dimension: 1536
+    mode: "local"
+    auto_extract:
+      enabled: true
+      extract_user_info: true
+
+  buffer:
+    size: 50
+    multiplier: 10
+    vector_search: true
+
+  persistent:
+    connection_string: "${{ secrets.POSTGRES_URI }}"
+    embedding_model: "openai/text-embedding-3-small"
+
+logging:
+  system:
+    level: "debug"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "debug"
+        format: "jsonl"
+
+# Agent will be auto-discovered from agents/ directory

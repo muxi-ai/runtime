@@ -1,0 +1,209 @@
+# MUXI Runtime - Production Image with Services
+# Includes PostgreSQL, FAISSx, and full service stack
+FROM python:3.10-slim
+
+LABEL maintainer="Ran Aroussi <ran@aroussi.com>"
+LABEL description="MUXI Runtime - Production container with PostgreSQL and FAISSx"
+LABEL version="1.0.0-production"
+
+# Add PostgreSQL APT repository for version 17
+RUN apt-get update && apt-get install -y gnupg wget lsb-release \
+    && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    # PostgreSQL 17 and pgvector extension
+    postgresql-17 \
+    postgresql-client-17 \
+    postgresql-17-pgvector \
+    # Build dependencies
+    build-essential \
+    gcc \
+    g++ \
+    make \
+    # System utilities
+    curl \
+    wget \
+    git \
+    supervisor \
+    netcat-openbsd \
+    # Image processing
+    poppler-utils \
+    tesseract-ocr \
+    # Audio/Video processing
+    ffmpeg \
+    # Magic file detection
+    libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set PostgreSQL environment
+ENV PGDATA=/var/lib/postgresql/17/main
+ENV PATH="/usr/lib/postgresql/17/bin:${PATH}"
+
+# Create necessary directories
+RUN mkdir -p /app /data /logs /var/run/postgresql /var/lib/postgresql/17 \
+    && chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql /logs
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and source
+COPY requirements.txt pyproject.toml setup.py ./
+COPY src ./src
+COPY e2e/assets/faissx-auth.json ./faissx-auth.json
+
+# Note: schemas and context are symlinks outside build context
+# They're not needed at runtime - only for development reference
+
+# Install uv for faster package management
+RUN pip install --no-cache-dir uv
+
+# Install all Python packages
+RUN uv pip install --system \
+    faissx \
+    fastapi \
+    uvicorn \
+    httpx \
+    aiofiles \
+    && uv pip install --system -r requirements.txt \
+    && uv pip install --system -e .
+
+# Download spaCy model
+RUN python -m spacy download en_core_web_sm || true
+
+# Initialize PostgreSQL database
+USER postgres
+RUN rm -rf /var/lib/postgresql/17/main/* 2>/dev/null || true \
+    && /usr/lib/postgresql/17/bin/initdb -D /var/lib/postgresql/17/main \
+    && echo "listen_addresses = '*'" >> /var/lib/postgresql/17/main/postgresql.conf \
+    && echo "max_connections = 200" >> /var/lib/postgresql/17/main/postgresql.conf \
+    && echo "shared_buffers = 256MB" >> /var/lib/postgresql/17/main/postgresql.conf \
+    && echo "host    all             all             0.0.0.0/0               trust" >> /var/lib/postgresql/17/main/pg_hba.conf \
+    && echo "local   all             all                                     trust" >> /var/lib/postgresql/17/main/pg_hba.conf \
+    && /usr/lib/postgresql/17/bin/pg_ctl -D /var/lib/postgresql/17/main -l /tmp/postgres.log start \
+    && sleep 5 \
+    && createdb muxi \
+    && createuser muxi \
+    && psql -c "GRANT ALL PRIVILEGES ON DATABASE muxi TO muxi;" \
+    && psql -d muxi -c "GRANT CREATE ON SCHEMA public TO muxi;" \
+    && psql -d muxi -c "GRANT ALL ON SCHEMA public TO muxi;" \
+    && psql -d muxi -c "CREATE EXTENSION IF NOT EXISTS vector;" \
+    && /usr/lib/postgresql/17/bin/pg_ctl -D /var/lib/postgresql/17/main stop
+
+USER root
+
+# Create supervisor configuration
+RUN cat > /etc/supervisor/conf.d/supervisord.conf <<'EOF'
+[supervisord]
+nodaemon=true
+logfile=/logs/supervisord.log
+pidfile=/var/run/supervisord.pid
+
+[program:postgresql]
+command=/usr/lib/postgresql/17/bin/postgres -D /var/lib/postgresql/17/main
+user=postgres
+autostart=true
+autorestart=true
+stdout_logfile=/logs/postgresql.log
+stderr_logfile=/logs/postgresql.err
+priority=1
+
+[program:faissx-no-auth]
+command=faissx.server run --port 45678
+directory=/app
+autostart=true
+autorestart=true
+stdout_logfile=/logs/faissx-no-auth.log
+stderr_logfile=/logs/faissx-no-auth.err
+priority=10
+
+[program:faissx-with-auth]
+command=faissx.server run --port 65432 --enable-auth --auth-file /app/faissx-auth.json
+directory=/app
+autostart=true
+autorestart=true
+stdout_logfile=/logs/faissx-with-auth.log
+stderr_logfile=/logs/faissx-with-auth.err
+priority=10
+EOF
+
+# Create health check script
+RUN cat > /app/healthcheck.sh <<'EOF'
+#!/bin/bash
+# Check PostgreSQL
+psql -U muxi -d muxi -c 'SELECT 1' > /dev/null 2>&1 || exit 1
+# Check FAISSx ports are open
+nc -z localhost 45678 || exit 1
+nc -z localhost 65432 || exit 1
+# Check if formation server is running (if started)
+if pgrep -f "muxi.server" > /dev/null; then
+    curl -f http://localhost:8000/health || exit 1
+fi
+exit 0
+EOF
+
+RUN chmod +x /app/healthcheck.sh
+
+# Create entrypoint script
+RUN cat > /app/entrypoint.sh <<'EOF'
+#!/bin/bash
+set -e
+
+echo "Starting MUXI Runtime (Production)..."
+
+# Start supervisor in background
+/usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf &
+SUPERVISOR_PID=$!
+
+# Wait for PostgreSQL
+echo "Waiting for PostgreSQL..."
+for i in {1..30}; do
+    if psql -U muxi -h localhost -d muxi -c 'SELECT 1' > /dev/null 2>&1; then
+        echo "✅ PostgreSQL is ready"
+        break
+    fi
+    sleep 2
+done
+
+# Wait for FAISSx
+echo "Waiting for FAISSx..."
+for i in {1..30}; do
+    if nc -z localhost 45678 && nc -z localhost 65432; then
+        echo "✅ FAISSx is ready"
+        break
+    fi
+    sleep 2
+done
+
+echo "✅ All services ready!"
+
+# If command provided, run it; otherwise start formation server
+if [ $# -gt 0 ]; then
+    exec "$@"
+else
+    echo "Starting MUXI formation server..."
+    exec python -m muxi.server
+fi
+EOF
+
+RUN chmod +x /app/entrypoint.sh
+
+# Environment variables
+ENV POSTGRES_URI=postgresql://muxi:muxi_password@localhost:5432/muxi
+ENV FAISSX_NO_AUTH_URL=http://localhost:45678
+ENV FAISSX_WITH_AUTH_URL=http://localhost:65432
+ENV PYTHONPATH=/app/src:/app:$PYTHONPATH
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Expose ports
+EXPOSE 5432 45678 65432 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD /app/healthcheck.sh
+
+# Entrypoint
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["python", "-m", "muxi.server"]

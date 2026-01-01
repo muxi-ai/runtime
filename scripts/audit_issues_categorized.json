@@ -1,0 +1,2717 @@
+{
+  "REVIEW_DEBUG": [
+    {
+      "type": "ConversationEvents.A2A_DISCOVERY_COMPLETED",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "901",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.A2A_MESSAGE_SENT",
+      "file": "src/muxi/services/a2a/client.py",
+      "line": "153",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.A2A_MESSAGE_SENT",
+      "file": "src/muxi/services/a2a/client.py",
+      "line": "169",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.AGENT_PLANNING",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "1086",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.AGENT_PLANNING",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "1097",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.AGENT_PLANNING",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "1154",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.AGENT_PLANNING",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "4397",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.AGENT_RESPONSE_GENERATED",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "1850",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.CONTENT_EXTRACTION_COMPLETED",
+      "file": "src/muxi/formation/artifacts/extractor.py",
+      "line": "114",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.CONTENT_EXTRACTION_COMPLETED",
+      "file": "src/muxi/formation/artifacts/extractor.py",
+      "line": "144",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.CONTENT_EXTRACTION_STARTED",
+      "file": "src/muxi/formation/artifacts/extractor.py",
+      "line": "88",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.CONTENT_PROCESSED",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "297",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.DOCUMENT_PROCESSING_COMPLETED",
+      "file": "src/muxi/utils/document.py",
+      "line": "53",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.DOCUMENT_PROCESSING_COMPLETED",
+      "file": "src/muxi/utils/document.py",
+      "line": "109",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.DOCUMENT_PROCESSING_COMPLETED",
+      "file": "src/muxi/utils/document.py",
+      "line": "149",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.DOCUMENT_PROCESSING_FAILED",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "826",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.DOCUMENT_PROCESSING_STARTED",
+      "file": "src/muxi/utils/document.py",
+      "line": "24",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.DOCUMENT_PROCESSING_STARTED",
+      "file": "src/muxi/utils/document.py",
+      "line": "94",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.MCP_TOOL_CALL_STARTED",
+      "file": "src/muxi/formation/artifacts/extractor.py",
+      "line": "54",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.MCP_TOOL_CALL_STARTED",
+      "file": "src/muxi/services/mcp/service.py",
+      "line": "595",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.MEMORY_LONG_TERM_ENHANCED",
+      "file": "src/muxi/formation/memory/persistent_manager.py",
+      "line": "81",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.MEMORY_LONG_TERM_ENHANCED",
+      "file": "src/muxi/formation/memory/persistent_manager.py",
+      "line": "115",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.MEMORY_LONG_TERM_ENHANCED",
+      "file": "src/muxi/services/memory/extractor.py",
+      "line": "579",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.MEMORY_LONG_TERM_LOOKUP",
+      "file": "src/muxi/formation/memory/persistent_manager.py",
+      "line": "173",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.MEMORY_LONG_TERM_LOOKUP",
+      "file": "src/muxi/services/memory/extractor.py",
+      "line": "553",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.MEMORY_WORKING_LOOKUP",
+      "file": "src/muxi/formation/memory/buffer_manager.py",
+      "line": "128",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.MEMORY_WORKING_RETRIEVED",
+      "file": "src/muxi/services/memory/sqlite.py",
+      "line": "730",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.MEMORY_WORKING_UPDATED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "5094",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.REQUEST_PROCESSING",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "6399",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.REQUEST_PROCESSING",
+      "file": "src/muxi/services/memory/memobase.py",
+      "line": "124",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.REQUEST_PROCESSING",
+      "file": "src/muxi/services/memory/memobase.py",
+      "line": "236",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.REQUEST_PROCESSING",
+      "file": "src/muxi/services/memory/memobase.py",
+      "line": "380",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.REQUEST_PROCESSING",
+      "file": "src/muxi/services/memory/memobase.py",
+      "line": "539",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.REQUEST_VALIDATED",
+      "file": "src/muxi/formation/overlord/chat_orchestrator.py",
+      "line": "220",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.RESPONSE_CONVERSION_COMPLETED",
+      "file": "src/muxi/utils/response_converter.py",
+      "line": "58",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.RESPONSE_CONVERSION_COMPLETED",
+      "file": "src/muxi/utils/response_converter.py",
+      "line": "124",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.RESPONSE_CONVERSION_COMPLETED",
+      "file": "src/muxi/utils/response_converter.py",
+      "line": "165",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.RESPONSE_CONVERSION_COMPLETED",
+      "file": "src/muxi/utils/response_converter.py",
+      "line": "256",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.RESPONSE_CONVERSION_COMPLETED",
+      "file": "src/muxi/utils/response_converter.py",
+      "line": "329",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.RESPONSE_CONVERSION_STARTED",
+      "file": "src/muxi/utils/response_converter.py",
+      "line": "33",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.RESPONSE_CONVERSION_STARTED",
+      "file": "src/muxi/utils/response_converter.py",
+      "line": "104",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.RESPONSE_CONVERSION_STARTED",
+      "file": "src/muxi/utils/response_converter.py",
+      "line": "224",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.RESPONSE_CONVERSION_STARTED",
+      "file": "src/muxi/utils/response_converter.py",
+      "line": "301",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.RESPONSE_SYNTHESIZED",
+      "file": "src/muxi/formation/workflow/synthesis.py",
+      "line": "643",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.SESSION_CREATED",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "650",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.SESSION_CREATED",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "658",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.SESSION_CREATED",
+      "file": "src/muxi/services/llm/service.py",
+      "line": "176",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.WEBHOOK_FAILED",
+      "file": "src/muxi/formation/background/webhook_manager.py",
+      "line": "216",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    },
+    {
+      "type": "ConversationEvents.WEBHOOK_FAILED",
+      "file": "src/muxi/formation/background/webhook_manager.py",
+      "line": "466",
+      "rec": "REVIEW - DEBUG ConversationEvent, may be too granular for production"
+    }
+  ],
+  "MISSING_DESCRIPTION": [
+    {
+      "type": "ConversationEvents.A2A_MESSAGE_FAILED",
+      "file": "src/muxi/services/a2a/client.py",
+      "line": "236",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ConversationEvents.A2A_MESSAGE_SENT",
+      "file": "src/muxi/services/a2a/client.py",
+      "line": "202",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ConversationEvents.AGENT_A2A",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "1600",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ConversationEvents.AGENT_MESSAGE_PROCESSING",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "883",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ConversationEvents.AGENT_PLANNING",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "1167",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ConversationEvents.ASYNC_THRESHOLD_DETECTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7623",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ConversationEvents.DOCUMENT_PROCESSING_COMPLETED",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "933",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ConversationEvents.MCP_TOOL_CALL_COMPLETED",
+      "file": "src/muxi/services/mcp/service.py",
+      "line": "675",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ConversationEvents.MCP_TOOL_CALL_FAILED",
+      "file": "src/muxi/services/mcp/service.py",
+      "line": "649",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ConversationEvents.MCP_TOOL_CALL_FAILED",
+      "file": "src/muxi/services/mcp/service.py",
+      "line": "700",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ConversationEvents.MEMORY_LONG_TERM_RETRIEVED",
+      "file": "src/muxi/formation/memory/persistent_manager.py",
+      "line": "257",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ConversationEvents.MEMORY_WORKING_RETRIEVED",
+      "file": "src/muxi/formation/memory/buffer_manager.py",
+      "line": "146",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ConversationEvents.MEMORY_WORKING_RETRIEVED",
+      "file": "src/muxi/services/memory/working.py",
+      "line": "678",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ConversationEvents.SESSION_CREATED",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "184",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ErrorEvents.CONFIGURATION_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "1178",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ErrorEvents.CONNECTION_TIMEOUT",
+      "file": "src/muxi/formation/workflow/executor.py",
+      "line": "99",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ErrorEvents.CONNECTION_TIMEOUT",
+      "file": "src/muxi/formation/workflow/executor.py",
+      "line": "1541",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ErrorEvents.VALIDATION_FAILED",
+      "file": "src/muxi/utils/user_resolution.py",
+      "line": "94",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "ErrorEvents.VALIDATION_FAILED",
+      "file": "src/muxi/utils/user_resolution.py",
+      "line": "304",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "SystemEvents.A2A_AUTH_VALIDATION_FAILED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "586",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "SystemEvents.A2A_REGISTRY_CONNECTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "1116",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "SystemEvents.EXTENSION_LISTED",
+      "file": "src/muxi/extensions/base.py",
+      "line": "209",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "SystemEvents.EXTENSION_LOADED",
+      "file": "src/muxi/extensions/base.py",
+      "line": "103",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "SystemEvents.EXTENSION_LOADED",
+      "file": "src/muxi/extensions/base.py",
+      "line": "140",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "SystemEvents.EXTENSION_LOADED",
+      "file": "src/muxi/extensions/base.py",
+      "line": "256",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "SystemEvents.EXTENSION_LOADED",
+      "file": "src/muxi/extensions/base.py",
+      "line": "276",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "SystemEvents.MCP_OVERLORD_REQUEST_CANCELLED",
+      "file": "src/muxi/services/mcp/handler.py",
+      "line": "547",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "SystemEvents.MCP_SERVER_DISCONNECTED",
+      "file": "src/muxi/services/mcp/service.py",
+      "line": "1090",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "SystemEvents.MCP_SERVER_MAPPING_FAILED",
+      "file": "src/muxi/services/mcp/handler.py",
+      "line": "922",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "SystemEvents.MCP_SERVER_OPERATIONS_CANCELLED",
+      "file": "src/muxi/services/mcp/handler.py",
+      "line": "1038",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED",
+      "file": "src/muxi/services/mcp/service.py",
+      "line": "890",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    },
+    {
+      "type": "SystemEvents.SERVICE_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "860",
+      "rec": "MISSING DESCRIPTION - Add meaningful description"
+    }
+  ],
+  "REVIEW_GRANULAR": [
+    {
+      "type": "ConversationEvents.AGENT_TOOL_CHAIN_COMPLETED",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "2134",
+      "rec": "REVIEW - Consider DEBUG level for granular processing steps"
+    },
+    {
+      "type": "ConversationEvents.AGENT_TOOL_CHAIN_ITERATION_COMPLETED",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "2080",
+      "rec": "REVIEW - Consider DEBUG level for granular processing steps"
+    },
+    {
+      "type": "ConversationEvents.AGENT_TOOL_CHAIN_ITERATION_STARTED",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "1778",
+      "rec": "REVIEW - Consider DEBUG level for granular processing steps"
+    },
+    {
+      "type": "ConversationEvents.RESPONSE_SYNTHESIZED",
+      "file": "src/muxi/formation/workflow/synthesis.py",
+      "line": "482",
+      "rec": "REVIEW - Consider DEBUG level for granular processing steps"
+    },
+    {
+      "type": "SystemEvents.SCHEDULER_PARSER_INITIALIZED",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "145",
+      "rec": "REVIEW - Consider DEBUG level for granular processing steps"
+    }
+  ],
+  "OTHER": [
+    {
+      "type": "ErrorEvents.GENERIC_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "4161",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "ErrorEvents.VALIDATION_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "1191",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "ErrorEvents.VALIDATION_ERROR",
+      "file": "src/muxi/formation/workflow/decomposer.py",
+      "line": "1171",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/server/server.py",
+      "line": "166",
+      "rec": "REVIEW - Check if legitimate server start or debug trace"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "636",
+      "rec": "CONVERT to ErrorEvents.MCP_INITIALIZATION_FAILED (ERROR using INITIALIZING)"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/services/a2a/client.py",
+      "line": "456",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/services/memory/extractor.py",
+      "line": "513",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/services/memory/extractor.py",
+      "line": "529",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/utils/user_resolution.py",
+      "line": "81",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/utils/user_resolution.py",
+      "line": "106",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/formation/documents/workflow/cross_reference_manager.py",
+      "line": "103",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/formation/documents/workflow/cross_reference_manager.py",
+      "line": "195",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/formation/documents/workflow/cross_reference_manager.py",
+      "line": "290",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "1344",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/services/a2a/client.py",
+      "line": "93",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/services/a2a/client.py",
+      "line": "439",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/services/mcp/reconnection.py",
+      "line": "416",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/utils/user_resolution.py",
+      "line": "132",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/utils/user_resolution.py",
+      "line": "163",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    },
+    {
+      "type": "SystemEvents.OPERATION_COMPLETED",
+      "file": "src/muxi/utils/user_resolution.py",
+      "line": "353",
+      "rec": "REVIEW - Generic event type, consider more specific event"
+    }
+  ],
+  "REPLACE_INTERNAL_ERROR": [
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "316",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "709",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "425",
+      "rec": "REPLACE with ErrorEvents.KNOWLEDGE_SEARCH_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "3416",
+      "rec": "REPLACE with ErrorEvents.PLANNING_TEMPLATE_MISSING"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "3664",
+      "rec": "REPLACE with ErrorEvents.A2A_MESSAGE_HANDLING_FAILED (already exists)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "4306",
+      "rec": "REPLACE with ErrorEvents.PARAMETER_VALIDATION_FAILED (already exists)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/knowledge/base.py",
+      "line": "263",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "379",
+      "rec": "REPLACE with ErrorEvents.EMBEDDINGS_GENERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "606",
+      "rec": "REPLACE with ErrorEvents.KNOWLEDGE_SEARCH_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "854",
+      "rec": "REPLACE with ErrorEvents.EMBEDDINGS_GENERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/documents/storage/metadata_store.py",
+      "line": "477",
+      "rec": "REPLACE with ErrorEvents.METADATA_PERSISTENCE_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/documents/storage/reference_system.py",
+      "line": "518",
+      "rec": "REPLACE with ErrorEvents.REFERENCE_PERSISTENCE_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/formation.py",
+      "line": "1212",
+      "rec": "REPLACE with ErrorEvents.FORMATION_INITIALIZATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/formation.py",
+      "line": "1220",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "290",
+      "rec": "REPLACE with ErrorEvents.MEMORY_INITIALIZATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "358",
+      "rec": "REPLACE with ErrorEvents.MEMORY_INITIALIZATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "472",
+      "rec": "REPLACE with ErrorEvents.MEMORY_INITIALIZATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "527",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "675",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "966",
+      "rec": "REPLACE with ErrorEvents.MEMORY_INITIALIZATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "1157",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/memory/extraction_coordinator.py",
+      "line": "121",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/chat_orchestrator.py",
+      "line": "697",
+      "rec": "REPLACE with ErrorEvents.MEMORY_OPERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/chat_orchestrator.py",
+      "line": "736",
+      "rec": "REPLACE with ErrorEvents.MEMORY_OPERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/chat_orchestrator.py",
+      "line": "1027",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "1665",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "2547",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "3723",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "5225",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "5622",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "5780",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "6120",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "6860",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7764",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "9704",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "9812",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/resilience/error_classifier.py",
+      "line": "238",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/resilience/fallback_manager.py",
+      "line": "269",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/resilience/recovery_strategist.py",
+      "line": "219",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/server/middleware.py",
+      "line": "89",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/workflow/executor.py",
+      "line": "118",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/a2a/client.py",
+      "line": "101",
+      "rec": "REPLACE with ErrorEvents.A2A_MESSAGE_HANDLING_FAILED (already exists)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/a2a/client.py",
+      "line": "446",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/a2a/registry_client.py",
+      "line": "530",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/intent/service.py",
+      "line": "130",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "297",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "648",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "1268",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/memory/working.py",
+      "line": "1161",
+      "rec": "REPLACE with ErrorEvents.MEMORY_OPERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "859",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/manager.py",
+      "line": "1339",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "561",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "873",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "882",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "957",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "1075",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "1143",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/rewriter.py",
+      "line": "206",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/rewriter.py",
+      "line": "307",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/utils/run_formation.py",
+      "line": "186",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/utils/run_formation.py",
+      "line": "215",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/utils/run_formation.py",
+      "line": "244",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "803",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "1836",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "1848",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "1909",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "220",
+      "rec": "REPLACE with ErrorEvents.A2A_MESSAGE_HANDLING_FAILED (already exists)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "270",
+      "rec": "REPLACE with ErrorEvents.EMBEDDINGS_GENERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "488",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "980",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "1270",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "1459",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "1503",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "1582",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "2122",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "2547",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "3011",
+      "rec": "REPLACE with ErrorEvents.A2A_MESSAGE_HANDLING_FAILED (already exists)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "3287",
+      "rec": "REPLACE with ErrorEvents.A2A_MESSAGE_HANDLING_FAILED (already exists)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "3349",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/agent.py",
+      "line": "3539",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "339",
+      "rec": "REPLACE with ErrorEvents.MEMORY_OPERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "395",
+      "rec": "REPLACE with ErrorEvents.EMBEDDINGS_GENERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "432",
+      "rec": "REPLACE with ErrorEvents.MEMORY_OPERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "867",
+      "rec": "REPLACE with ErrorEvents.EMBEDDINGS_GENERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "1074",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "566",
+      "rec": "REPLACE with ErrorEvents.DOCUMENT_PROCESSING_FAILED (already exists)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "716",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "784",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "830",
+      "rec": "REPLACE with ErrorEvents.DOCUMENT_PROCESSING_FAILED (already exists)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "942",
+      "rec": "REPLACE with ErrorEvents.MEMORY_INITIALIZATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "995",
+      "rec": "REPLACE with ErrorEvents.EMBEDDINGS_GENERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "1009",
+      "rec": "REPLACE with ErrorEvents.EMBEDDINGS_GENERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "1020",
+      "rec": "REPLACE with ErrorEvents.EMBEDDINGS_GENERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "1049",
+      "rec": "REPLACE with ErrorEvents.MEMORY_OPERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "1019",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "1089",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "1231",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "1334",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "1936",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "2225",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "2253",
+      "rec": "REPLACE with ErrorEvents.FORMATION_INITIALIZATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "2274",
+      "rec": "REPLACE with ErrorEvents.FORMATION_INITIALIZATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "2764",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "2798",
+      "rec": "REPLACE with ErrorEvents.A2A_MESSAGE_HANDLING_FAILED (already exists)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "3276",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "3316",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "3395",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "3482",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "5343",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "5859",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "6379",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "6385",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "6770",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7209",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "9568",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "10147",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/a2a/registry_client.py",
+      "line": "1094",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "277",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "287",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "674",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "1360",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/memory/working.py",
+      "line": "657",
+      "rec": "REPLACE with ErrorEvents.MEMORY_OPERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/memory/working.py",
+      "line": "811",
+      "rec": "REPLACE with ErrorEvents.MEMORY_OPERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "157",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "194",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "232",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "251",
+      "rec": "REPLACE with ErrorEvents.EMBEDDINGS_GENERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "442",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "455",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "463",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "471",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "512",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "534",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "560",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "585",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "669",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "690",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "710",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "730",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "954",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "1002",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "1098",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "1203",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "1216",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "1224",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/multimodal/fusion_engine.py",
+      "line": "1232",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/batch_processor.py",
+      "line": "140",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/manager.py",
+      "line": "575",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "120",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "265",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "362",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "433",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "468",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "791",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "802",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "993",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "1256",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    },
+    {
+      "type": "ErrorEvents.INTERNAL_ERROR",
+      "file": "src/muxi/services/scheduler/parser.py",
+      "line": "1316",
+      "rec": "REPLACE with specific ErrorEvent type (INTERNAL_ERROR too generic)"
+    }
+  ],
+  "MISNOMER_RETRY": [
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "483",
+      "rec": "MISNOMER - REPLACE with ErrorEvents.KNOWLEDGE_SOURCE_ADD_FAILED"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "613",
+      "rec": "MISNOMER - REPLACE with ErrorEvents.KNOWLEDGE_SEARCH_FAILED"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "748",
+      "rec": "MISNOMER - REPLACE with ErrorEvents.KNOWLEDGE_HANDLER_CREATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "1461",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/formation/agents/knowledge/handler.py",
+      "line": "1740",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "82",
+      "rec": "MISNOMER - REPLACE with ErrorEvents.A2A_AUTHENTICATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "131",
+      "rec": "MISNOMER - REPLACE with ErrorEvents.A2A_CREDENTIAL_LOAD_FAILED"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "353",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "376",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "400",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "432",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "509",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "612",
+      "rec": "MISNOMER - REPLACE with ErrorEvents.A2A_AUTHENTICATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "650",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "693",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "745",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "784",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "825",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/inbound.py",
+      "line": "882",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/outbound.py",
+      "line": "343",
+      "rec": "MISNOMER - REPLACE with ErrorEvents.A2A_CREDENTIAL_LOAD_FAILED"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/cache_manager.py",
+      "line": "70",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/cache_manager.py",
+      "line": "207",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/cache_manager.py",
+      "line": "264",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/cache_manager.py",
+      "line": "324",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/card_generator.py",
+      "line": "97",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/card_generator.py",
+      "line": "600",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/card_generator.py",
+      "line": "666",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "146",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "195",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "239",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "283",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "336",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "418",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "483",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "546",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "686",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "746",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "838",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "909",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/registry_client.py",
+      "line": "118",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/registry_client.py",
+      "line": "156",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/registry_client.py",
+      "line": "210",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/registry_client.py",
+      "line": "262",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/registry_client.py",
+      "line": "597",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/registry_client.py",
+      "line": "833",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/registry_client.py",
+      "line": "990",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/registry_client.py",
+      "line": "1205",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/registry_client.py",
+      "line": "1237",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/registry_client.py",
+      "line": "1264",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/registry_client.py",
+      "line": "1308",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/server.py",
+      "line": "289",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/server.py",
+      "line": "752",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/llm/service.py",
+      "line": "435",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/llm/service.py",
+      "line": "574",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/memory/memobase.py",
+      "line": "172",
+      "rec": "MISNOMER - REPLACE with ErrorEvents.MEMORY_OPERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/memory/memobase.py",
+      "line": "297",
+      "rec": "MISNOMER - REPLACE with ErrorEvents.MEMORY_OPERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/memory/memobase.py",
+      "line": "408",
+      "rec": "MISNOMER - REPLACE with ErrorEvents.MEMORY_OPERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/memory/memobase.py",
+      "line": "480",
+      "rec": "MISNOMER - REPLACE with ErrorEvents.MEMORY_OPERATION_FAILED"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/memory/memobase.py",
+      "line": "583",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/scheduler/service.py",
+      "line": "281",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/scheduler/service.py",
+      "line": "304",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/scheduler/service.py",
+      "line": "514",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/scheduler/service.py",
+      "line": "571",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/utils/document.py",
+      "line": "37",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/utils/document.py",
+      "line": "68",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/utils/document.py",
+      "line": "170",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/utils/response_converter.py",
+      "line": "72",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/utils/response_converter.py",
+      "line": "181",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/utils/response_converter.py",
+      "line": "274",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/utils/response_converter.py",
+      "line": "345",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/mcp/reconnection.py",
+      "line": "318",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/outbound.py",
+      "line": "330",
+      "rec": "MISNOMER - REPLACE with ErrorEvents.A2A_CREDENTIAL_LOAD_FAILED"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/outbound.py",
+      "line": "373",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/auth/outbound.py",
+      "line": "485",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/cache_manager.py",
+      "line": "165",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/a2a/cache_manager.py",
+      "line": "365",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "1227",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/services/mcp/reconnection.py",
+      "line": "386",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/utils/error_classifier.py",
+      "line": "44",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/utils/retry_manager.py",
+      "line": "287",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    },
+    {
+      "type": "ErrorEvents.RETRY_ATTEMPTED",
+      "file": "src/muxi/utils/retry_manager.py",
+      "line": "339",
+      "rec": "MISNOMER - No retry happening! Replace with specific error type"
+    }
+  ],
+  "ANTI_PATTERN_WARNING": [
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/artifacts/extractor.py",
+      "line": "270",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/agents/knowledge/base.py",
+      "line": "202",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.MARKITDOWN_INIT_FAILED (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/agents/knowledge/base.py",
+      "line": "317",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.KNOWLEDGE_SOURCE_MISSING (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/agents/knowledge/base.py",
+      "line": "330",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/agents/knowledge/base.py",
+      "line": "410",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/artifacts/extractor.py",
+      "line": "125",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.JSON_PARSE_FAILED (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/artifacts/extractor.py",
+      "line": "151",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.JSON_PARSE_FAILED (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/artifacts/extractor.py",
+      "line": "165",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/artifacts/extractor.py",
+      "line": "229",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.ARTIFACT_FIELD_MISSING (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/artifacts/processor.py",
+      "line": "124",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.THUMBNAIL_GENERATION_FAILED (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/documents/storage/metadata_store.py",
+      "line": "440",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/documents/storage/reference_system.py",
+      "line": "467",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/memory/buffer_manager.py",
+      "line": "176",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.MEMORY_RETRIEVAL_FAILED (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/memory/buffer_manager.py",
+      "line": "212",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.MEMORY_CLEAR_FAILED (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/memory/persistent_manager.py",
+      "line": "297",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.MEMORY_RETRIEVAL_FAILED (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/memory/persistent_manager.py",
+      "line": "344",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.MEMORY_CLEAR_FAILED (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "957",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.SOP_INITIALIZATION_FAILED (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "1917",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.PERSONA_FILE_MISSING (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "2356",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.SECRET_INTERPOLATION_FAILED (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "2891",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "3198",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/workflow/sops.py",
+      "line": "140",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/workflow/sops.py",
+      "line": "156",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/workflow/sops.py",
+      "line": "266",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.SOP_INITIALIZATION_FAILED (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/workflow/sops.py",
+      "line": "305",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/workflow/sops.py",
+      "line": "386",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.SOP_INITIALIZATION_FAILED (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/workflow/sops.py",
+      "line": "682",
+      "rec": "ANTI-PATTERN - REPLACE with ErrorEvents.SOP_INITIALIZATION_FAILED (level=WARNING)"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/workflow/sops.py",
+      "line": "818",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/workflow/sops.py",
+      "line": "833",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/workflow/sops.py",
+      "line": "849",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/formation/workflow/sops.py",
+      "line": "881",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/services/a2a/discovery.py",
+      "line": "811",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    },
+    {
+      "type": "ErrorEvents.WARNING",
+      "file": "src/muxi/services/mcp/transports/factory.py",
+      "line": "203",
+      "rec": "ANTI-PATTERN - Don't use level (WARNING) as event type! Create specific ErrorEvent"
+    }
+  ],
+  "REMOVE_SERVER_STARTED": [
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "6460",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "6477",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "2579",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "2622",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "5462",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "5919",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "5939",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "5964",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "5981",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "5998",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "6017",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "6683",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "6727",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "6744",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "6842",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7581",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7599",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7644",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7654",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7668",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7685",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7695",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7712",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7731",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7801",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7813",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7824",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7832",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7842",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7873",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7896",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "7990",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "8050",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "8090",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "8127",
+      "rec": "REMOVE - Misused as debug trace in overlord.py (not server start)"
+    }
+  ],
+  "KEEP_INTENTIONAL": [
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/formation/server/server.py",
+      "line": "154",
+      "rec": "KEEP - Legitimate server start event"
+    },
+    {
+      "type": "ServerEvents.SERVER_STARTED",
+      "file": "src/muxi/utils/run_formation.py",
+      "line": "77",
+      "rec": "KEEP - Legitimate server start event"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "277",
+      "rec": "KEEP - Working memory config (distinct from buffer/persistent)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "765",
+      "rec": "KEEP - Clarification config not in InitEventFormatter"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/formation.py",
+      "line": "3146",
+      "rec": "KEEP - Runtime event (not startup)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/formation.py",
+      "line": "3177",
+      "rec": "KEEP - Runtime event (not startup)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/formation.py",
+      "line": "3192",
+      "rec": "KEEP - Runtime event (not startup)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "97",
+      "rec": "KEEP - Observability bootstrap (chicken-egg)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "234",
+      "rec": "KEEP - LLM config not in InitEventFormatter"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "553",
+      "rec": "KEEP - Document processing not in InitEventFormatter"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "651",
+      "rec": "KEEP - Artifact service not in InitEventFormatter"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "813",
+      "rec": "KEEP - Document config not in InitEventFormatter"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "482",
+      "rec": "KEEP - Credential resolver not in InitEventFormatter"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "2786",
+      "rec": "KEEP - A2A ClientFactory distinct from A2A server"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/server/server.py",
+      "line": "130",
+      "rec": "KEEP - Runtime event (not startup)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/server/server.py",
+      "line": "226",
+      "rec": "KEEP - API keys config not in InitEventFormatter"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/workflow/workflow_manager.py",
+      "line": "51",
+      "rec": "KEEP - Workflow manager not in InitEventFormatter"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "151",
+      "rec": "KEEP - LLM cache config (new Oct 2025 feature)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/services/llm/llm.py",
+      "line": "173",
+      "rec": "KEEP - LLM cache config (new Oct 2025 feature)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/server/server.py",
+      "line": "185",
+      "rec": "KEEP - Security warning (auto-generated keys)"
+    }
+  ],
+  "REMOVE_INITIALIZING": [
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/artifacts/extractor.py",
+      "line": "41",
+      "rec": "REMOVE - DEBUG runtime trace (not initialization)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "2738",
+      "rec": "REMOVE - DEBUG runtime trace (collection registration)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "2751",
+      "rec": "REMOVE - DEBUG runtime trace (collection registration)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "4188",
+      "rec": "REMOVE - DEBUG runtime trace (file processing)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/services/memory/long_term.py",
+      "line": "207",
+      "rec": "REMOVE - DEBUG runtime trace (lazy loading)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/formation.py",
+      "line": "1268",
+      "rec": "REMOVE - Redundant (InitEventFormatter section 10: Formation ready)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "339",
+      "rec": "REMOVE - Redundant (InitEventFormatter section 2: Buffer memory)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "456",
+      "rec": "REMOVE - Redundant (InitEventFormatter section 4: Persistent memory)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "604",
+      "rec": "REMOVE - Redundant (InitEventFormatter section 5: MCP per-server lines)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "708",
+      "rec": "REMOVE - Redundant (InitEventFormatter section 8: Scheduler service)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "1077",
+      "rec": "REMOVE - Redundant (InitEventFormatter section 4: Persistent memory)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/initialization.py",
+      "line": "1120",
+      "rec": "REMOVE - Redundant (InitEventFormatter section 4: Persistent memory)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/formation/overlord/overlord.py",
+      "line": "4148",
+      "rec": "REMOVE - DEBUG runtime trace (file processing)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/services/memory/long_term.py",
+      "line": "258",
+      "rec": "REMOVE - DEBUG runtime trace (internal detail)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/utils/run_formation.py",
+      "line": "64",
+      "rec": "REMOVE - Redundant (InitEventFormatter section 1: Formation banner)"
+    },
+    {
+      "type": "SystemEvents.INITIALIZING",
+      "file": "src/muxi/utils/run_formation.py",
+      "line": "271",
+      "rec": "REMOVE - Redundant (InitEventFormatter section 1: Formation banner)"
+    }
+  ],
+  "NEEDS_REVIEW_DEBUG": []
+}
