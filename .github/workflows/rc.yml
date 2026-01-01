@@ -15,6 +15,13 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          df -h
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -22,6 +29,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
@@ -34,7 +42,11 @@ jobs:
 
       - name: Run integration tests
         run: |
-          pytest tests/integration -v --tb=short
+          if [ -n "$(find tests/integration -name 'test_*.py' 2>/dev/null)" ]; then
+            pytest tests/integration -v --tb=short
+          else
+            echo "No integration tests found, skipping"
+          fi
         continue-on-error: true
 
   build-docker:
