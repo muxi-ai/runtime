@@ -5,17 +5,14 @@
 #
 # VERSION FORMAT (ScalVer):
 #   MAJOR.YYYYMMDD.PATCH
-#   - MAJOR: Manual change only (breaking changes)
-#   - YYYYMMDD: Auto-set to today's date
-#   - PATCH: Auto-incremented (resets to 0 on new day)
 #
-# ON MERGE TO MAIN:
-#   1. Calculate next ScalVer version
-#   2. Update src/muxi/runtime/.version and CHANGELOG.md
-#   3. Build and push Docker image to GHCR
-#   4. Build and publish to PyPI
-#   5. Create GitHub Release
-#   6. Merge main back to develop
+# JOBS (parallelized where possible):
+#   1. version: Calculate version, update files, create tag
+#   2. docker-amd64 + docker-arm64: Build images in parallel (native runners)
+#   3. docker-manifest: Create multi-arch manifest
+#   4. pypi: Build and publish to PyPI
+#   5. github-release: Create GitHub release
+#   6. merge-back: Merge main to develop
 #
 name: Release
 
@@ -28,14 +25,76 @@ env:
   IMAGE_NAME: muxi-ai/runtime
 
 jobs:
-  release:
+  # ===== Version Calculation & Tagging =====
+  version:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
-      id-token: write  # Required for PyPI Trusted Publishing
-    # Skip if commit is a release (prevent infinite loop)
     if: "!startsWith(github.event.head_commit.message, 'chore: release')"
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.MUXI_RELEASE_TOKEN }}
+
+      - name: Calculate next version (ScalVer)
+        id: version
+        run: |
+          CURRENT_VERSION=$(cat src/muxi/runtime/.version 2>/dev/null || echo "0.20000101.0")
+          MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+          CURRENT_DATE=$(echo $CURRENT_VERSION | cut -d. -f2)
+          CURRENT_PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
+          TODAY=$(date +%Y%m%d)
+
+          if [ "$CURRENT_DATE" = "$TODAY" ]; then
+            NEXT_PATCH=$((CURRENT_PATCH + 1))
+            NEXT_VERSION="${MAJOR}.${TODAY}.${NEXT_PATCH}"
+          else
+            NEXT_VERSION="${MAJOR}.${TODAY}.0"
+          fi
+
+          echo "VERSION=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current: $CURRENT_VERSION → Next: v$NEXT_VERSION"
+
+      - name: Update version and CHANGELOG
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          TODAY=$(date +%Y-%m-%d)
+
+          echo "$VERSION" > src/muxi/runtime/.version
+
+          if grep -q "## \[Unreleased\]" CHANGELOG.md; then
+            sed -i.bak "s/## \[Unreleased\]/## [$VERSION] - $TODAY/" CHANGELOG.md
+            rm -f CHANGELOG.md.bak
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/muxi/runtime/.version CHANGELOG.md
+
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: release v$VERSION"
+            git push
+          fi
+
+      - name: Create git tag
+        run: |
+          TAG="v${{ steps.version.outputs.VERSION }}"
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+  # ===== Docker Build (AMD64) =====
+  docker-amd64:
+    runs-on: ubuntu-latest
+    needs: version
+    permissions:
+      packages: write
 
     steps:
       - name: Free disk space
@@ -52,77 +111,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          token: ${{ secrets.MUXI_RELEASE_TOKEN }}
+          ref: v${{ needs.version.outputs.version }}
 
-      - name: Calculate next version (ScalVer)
-        id: version
-        run: |
-          # Read current version
-          CURRENT_VERSION=$(cat src/muxi/runtime/.version 2>/dev/null || echo "0.20000101.0")
-
-          # Parse: 0.20251231.1 → MAJOR=0, DATE=20251231, PATCH=1
-          MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
-          CURRENT_DATE=$(echo $CURRENT_VERSION | cut -d. -f2)
-          CURRENT_PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
-
-          # Today's date
-          TODAY=$(date +%Y%m%d)
-
-          # Calculate next version
-          if [ "$CURRENT_DATE" = "$TODAY" ]; then
-            # Same day - increment patch
-            NEXT_PATCH=$((CURRENT_PATCH + 1))
-            NEXT_VERSION="${MAJOR}.${TODAY}.${NEXT_PATCH}"
-          else
-            # New day - reset to MAJOR.TODAY.0
-            NEXT_VERSION="${MAJOR}.${TODAY}.0"
-          fi
-
-          echo "VERSION=$NEXT_VERSION" >> $GITHUB_OUTPUT
-          echo "CURRENT=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "📦 Current version: $CURRENT_VERSION"
-          echo "📦 Next version: v$NEXT_VERSION"
-
-      - name: Update version and CHANGELOG
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          TODAY=$(date +%Y-%m-%d)
-
-          # Update .version file
-          echo "$VERSION" > src/muxi/runtime/.version
-
-          # Update CHANGELOG.md
-          if grep -q "## \[Unreleased\]" CHANGELOG.md; then
-            sed -i.bak "s/## \[Unreleased\]/## [$VERSION] - $TODAY/" CHANGELOG.md
-            rm -f CHANGELOG.md.bak
-            echo "✓ Updated CHANGELOG.md with version $VERSION"
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add src/muxi/runtime/.version CHANGELOG.md
-
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "chore: release v$VERSION"
-            git push
-          fi
-
-      - name: Create git tag
-        run: |
-          TAG="v${{ steps.version.outputs.VERSION }}"
-
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists"
-          else
-            git tag "$TAG"
-            git push origin "$TAG"
-            echo "Created and pushed tag $TAG"
-          fi
-
-      # ===== Docker Build & Push =====
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -133,60 +123,149 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build and push (amd64)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ steps.version.outputs.VERSION }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ needs.version.outputs.version }}-amd64
+          platforms: linux/amd64
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,mode=max,scope=amd64
 
-      # ===== PyPI Publish (Trusted Publishing) =====
+  # ===== Docker Build (ARM64) =====
+  docker-arm64:
+    runs-on: ubuntu-24.04-arm
+    needs: version
+    permissions:
+      packages: write
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          df -h
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.version.outputs.version }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push (arm64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ needs.version.outputs.version }}-arm64
+          platforms: linux/arm64
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,mode=max,scope=arm64
+
+  # ===== Create Multi-Arch Manifest =====
+  docker-manifest:
+    runs-on: ubuntu-latest
+    needs: [version, docker-amd64, docker-arm64]
+    permissions:
+      packages: write
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push manifest
+        run: |
+          VERSION="v${{ needs.version.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+
+          # Create manifest for versioned tag
+          docker manifest create ${IMAGE}:${VERSION} \
+            ${IMAGE}:${VERSION}-amd64 \
+            ${IMAGE}:${VERSION}-arm64
+
+          docker manifest push ${IMAGE}:${VERSION}
+
+          # Create manifest for latest tag
+          docker manifest create ${IMAGE}:latest \
+            ${IMAGE}:${VERSION}-amd64 \
+            ${IMAGE}:${VERSION}-arm64
+
+          docker manifest push ${IMAGE}:latest
+
+          echo "Created multi-arch manifest for ${IMAGE}:${VERSION} and ${IMAGE}:latest"
+
+  # ===== PyPI Publish =====
+  pypi:
+    runs-on: ubuntu-latest
+    needs: version
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.version.outputs.version }}
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install build tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install build
-
       - name: Build package
-        run: python -m build
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        # No token needed - uses OIDC Trusted Publishing
 
-      # ===== GitHub Release =====
+  # ===== GitHub Release =====
+  github-release:
+    runs-on: ubuntu-latest
+    needs: [version, docker-manifest, pypi]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.version.outputs.VERSION }}
-          name: v${{ steps.version.outputs.VERSION }}
+          tag_name: v${{ needs.version.outputs.version }}
+          name: v${{ needs.version.outputs.version }}
           draft: false
           prerelease: false
           body: |
-            ## MUXI Runtime v${{ steps.version.outputs.VERSION }}
-
-            **Git Commit:** ${{ github.sha }}
+            ## MUXI Runtime v${{ needs.version.outputs.version }}
 
             ### Installation
 
             **PyPI:**
             ```bash
-            pip install muxi-runtime==${{ steps.version.outputs.VERSION }}
+            pip install muxi-runtime==${{ needs.version.outputs.version }}
             ```
 
             **Docker:**
             ```bash
-            docker pull ghcr.io/muxi-ai/runtime:v${{ steps.version.outputs.VERSION }}
+            docker pull ghcr.io/muxi-ai/runtime:v${{ needs.version.outputs.version }}
             ```
 
             ### Changes
@@ -195,29 +274,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ===== Merge Back to Develop =====
+  # ===== Merge Back to Develop =====
+  merge-back:
+    runs-on: ubuntu-latest
+    needs: [version, github-release]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.MUXI_RELEASE_TOKEN }}
+
       - name: Merge main back to develop
         run: |
-          echo "🔄 Merging main back to develop..."
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git fetch origin develop
           git checkout develop
-          git merge --no-ff main -m "chore: merge main back to develop (v${{ steps.version.outputs.VERSION }})"
+          git merge --no-ff main -m "chore: merge main back to develop (v${{ needs.version.outputs.version }})"
           git push origin develop
-
-          echo "✓ Merged main → develop"
-        env:
-          GITHUB_TOKEN: ${{ secrets.MUXI_RELEASE_TOKEN }}
-
-      - name: Summary
-        run: |
-          echo "🎉 Release complete!"
-          echo ""
-          echo "Version:  v${{ steps.version.outputs.VERSION }}"
-          echo "Commit:   $(git rev-parse --short HEAD)"
-          echo "Released: $(date -u)"
-          echo ""
-          echo "✓ Docker image pushed to GHCR"
-          echo "✓ Package published to PyPI"
-          echo "✓ GitHub release created"
-          echo "✓ main merged back to develop"
