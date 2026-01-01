@@ -6,14 +6,6 @@
 # VERSION FORMAT (ScalVer):
 #   MAJOR.YYYYMMDD.PATCH
 #
-# JOBS (parallelized where possible):
-#   1. version: Calculate version, update files, create tag
-#   2. docker-amd64 + docker-arm64: Build images in parallel (native runners)
-#   3. docker-manifest: Create multi-arch manifest
-#   4. pypi: Build and publish to PyPI
-#   5. github-release: Create GitHub release
-#   6. merge-back: Merge main to develop
-#
 name: Release
 
 on:
@@ -58,7 +50,7 @@ jobs:
           fi
 
           echo "VERSION=$NEXT_VERSION" >> $GITHUB_OUTPUT
-          echo "Current: $CURRENT_VERSION → Next: v$NEXT_VERSION"
+          echo "Current: $CURRENT_VERSION -> Next: v$NEXT_VERSION"
 
       - name: Update version and CHANGELOG
         run: |
@@ -89,7 +81,7 @@ jobs:
             git push origin "$TAG"
           fi
 
-  # ===== Docker Build (AMD64) =====
+  # ===== Docker Build (AMD64) - Native =====
   docker-amd64:
     runs-on: ubuntu-latest
     needs: version
@@ -134,7 +126,7 @@ jobs:
           cache-from: type=gha,scope=amd64
           cache-to: type=gha,mode=max,scope=amd64
 
-  # ===== Docker Build (ARM64) =====
+  # ===== Docker Build (ARM64) - Native =====
   docker-arm64:
     runs-on: ubuntu-24.04-arm
     needs: version
@@ -188,26 +180,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Create and push manifest
         run: |
           VERSION="v${{ needs.version.outputs.version }}"
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
 
-          # Create manifest for versioned tag
-          docker manifest create ${IMAGE}:${VERSION} \
+          # Create multi-arch manifest using buildx imagetools
+          docker buildx imagetools create -t ${IMAGE}:${VERSION} \
             ${IMAGE}:${VERSION}-amd64 \
             ${IMAGE}:${VERSION}-arm64
 
-          docker manifest push ${IMAGE}:${VERSION}
-
-          # Create manifest for latest tag
-          docker manifest create ${IMAGE}:latest \
+          docker buildx imagetools create -t ${IMAGE}:latest \
             ${IMAGE}:${VERSION}-amd64 \
             ${IMAGE}:${VERSION}-arm64
 
-          docker manifest push ${IMAGE}:latest
-
-          echo "Created multi-arch manifest for ${IMAGE}:${VERSION} and ${IMAGE}:latest"
+          echo "Created multi-arch manifests for ${VERSION} and latest"
 
   # ===== PyPI Publish =====
   pypi:
@@ -243,34 +233,17 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ needs.version.outputs.version }}
           name: v${{ needs.version.outputs.version }}
-          draft: false
-          prerelease: false
           body: |
             ## MUXI Runtime v${{ needs.version.outputs.version }}
 
-            ### Installation
+            **PyPI:** `pip install muxi-runtime==${{ needs.version.outputs.version }}`
 
-            **PyPI:**
-            ```bash
-            pip install muxi-runtime==${{ needs.version.outputs.version }}
-            ```
-
-            **Docker:**
-            ```bash
-            docker pull ghcr.io/muxi-ai/runtime:v${{ needs.version.outputs.version }}
-            ```
-
-            ### Changes
-
-            See [CHANGELOG.md](https://github.com/muxi-ai/runtime/blob/main/CHANGELOG.md) for details.
+            **Docker:** `docker pull ghcr.io/muxi-ai/runtime:v${{ needs.version.outputs.version }}`
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -292,7 +265,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git fetch origin develop
           git checkout develop
           git merge --no-ff main -m "chore: merge main back to develop (v${{ needs.version.outputs.version }})"
