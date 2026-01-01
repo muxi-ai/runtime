@@ -72,5 +72,9 @@ jobs:
 
       - name: Run integration tests
         run: |
-          pytest tests/integration -v --tb=short -x
+          if [ -n "$(find tests/integration -name 'test_*.py' 2>/dev/null)" ]; then
+            pytest tests/integration -v --tb=short -x
+          else
+            echo "No integration tests found, skipping"
+          fi
         continue-on-error: true  # Integration tests may need external services
