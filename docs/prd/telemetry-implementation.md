@@ -1,0 +1,516 @@
+# Runtime Telemetry Implementation Plan
+
+**Date:** 2026-01-01
+**Status:** Draft for Review
+**Author:** Droid
+
+---
+
+## Overview
+
+Implement privacy-respecting telemetry for the MUXI Runtime to understand usage patterns, feature adoption, and system health. Data helps prioritize development and identify issues.
+
+## Design Principles
+
+1. **Privacy First** - No PII, no content, no identifiable formation data
+2. **Always Collect, Conditionally Send** - Local storage even when disabled
+3. **Metrics Answer Questions** - Every metric serves a product decision
+4. **Non-Blocking** - Fire-and-forget, never impact runtime performance
+
+---
+
+## Metrics Design
+
+### Product Questions → Metrics
+
+| Question | Metric | Why It Matters |
+|----------|--------|----------------|
+| Is the runtime being used? | `requests_total`, `uptime_hours` | Basic adoption |
+| Is it working reliably? | `success_rate`, `errors_by_type` | Quality signal |
+| How complex are formations? | `agents_count`, `tools_count`, `features_enabled` | Complexity trends |
+| Which features are adopted? | `feature_usage.*` | Prioritize development |
+| What LLM ecosystem? | `llm_providers[]` | Provider partnerships |
+| Are we getting repeat users? | `sessions_count`, `uptime_hours` | Stickiness |
+| How is response time? | `latency_p50`, `latency_p95` | Performance baseline |
+| Is caching working? | `cache_hit_rate` | Caching ROI |
+
+### Proposed Payload
+
+```json
+{
+  "module": "runtime",
+  "schema_version": 1,
+  "machine_id": "7f83b165-7ff1-fc53-b92d-c18148a1d65d",
+  "ts": "2026-01-02T10:00:00Z",
+  "country": "US",
+  "payload": {
+    "version": "0.20260101.5",
+    "uptime_hours": 24,
+    
+    "formation": {
+      "agents_count": 3,
+      "tools_count": 12,
+      "mcp_servers_count": 2,
+      "memory_backend": "sqlite",
+      "features_enabled": ["scheduler", "a2a", "clarification", "workflows"]
+    },
+    
+    "requests": {
+      "total": 3420,
+      "success": 3350,
+      "failed": 70,
+      "success_rate": 0.98,
+      "by_sdk": {
+        "python": 2800,
+        "typescript": 600,
+        "direct": 20
+      }
+    },
+    
+    "latency_ms": {
+      "p50": 450,
+      "p95": 1200,
+      "p99": 2500
+    },
+    
+    "errors": {
+      "timeout": 30,
+      "rate_limit": 25,
+      "auth": 5,
+      "internal": 10
+    },
+    
+    "llm": {
+      "providers": ["openai", "anthropic"],
+      "requests_total": 5200,
+      "cache_hits": 1200,
+      "cache_hit_rate": 0.23
+    },
+    
+    "features": {
+      "clarifications_triggered": 45,
+      "workflows_executed": 12,
+      "sops_matched": 8,
+      "a2a_calls": 0,
+      "scheduled_tasks_run": 156,
+      "knowledge_queries": 230
+    }
+  }
+}
+```
+
+---
+
+## What We DO NOT Collect
+
+| Category | Examples | Reason |
+|----------|----------|--------|
+| Content | Prompts, responses, formation names | Privacy |
+| Identifiers | User IDs, session IDs, API keys | Privacy |
+| Model specifics | "gpt-4o-mini", "claude-3.5" | Provider relationships |
+| IP addresses | User IPs | Privacy |
+| File paths | Formation paths, knowledge paths | Security |
+| Timing details | Per-request timestamps | Too granular |
+
+---
+
+## Architecture
+
+### Module Structure
+
+```
+src/muxi/runtime/services/telemetry/
+├── __init__.py
+├── machine_id.py      # Deterministic machine ID generation
+├── config.py          # ~/.muxi/config.yaml management
+├── collector.py       # Metrics collection and aggregation
+├── sender.py          # HTTP send with retry logic
+└── service.py         # Main service, hourly flush, lifecycle
+```
+
+### Data Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Runtime                               │
+│                                                              │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐              │
+│  │ Overlord │    │  Agents  │    │ Services │              │
+│  └────┬─────┘    └────┬─────┘    └────┬─────┘              │
+│       │               │               │                      │
+│       └───────────────┼───────────────┘                      │
+│                       ▼                                      │
+│              ┌────────────────┐                              │
+│              │   Collector    │  ← Increment counters        │
+│              └────────┬───────┘                              │
+│                       │                                      │
+│                       ▼                                      │
+│    ┌──────────────────────────────────────┐                 │
+│    │  ~/.muxi/runtime/telemetry.json      │  ← Persist      │
+│    └──────────────────────────────────────┘                 │
+│                       │                                      │
+│                       ▼ (hourly)                             │
+│              ┌────────────────┐                              │
+│              │    Sender      │  ← If telemetry enabled      │
+│              └────────┬───────┘                              │
+│                       │                                      │
+└───────────────────────┼──────────────────────────────────────┘
+                        │
+                        ▼
+           https://capture.muxi.org/v1/telemetry
+```
+
+---
+
+## Implementation Details
+
+### 1. Machine ID (`machine_id.py`)
+
+```python
+def generate_machine_id() -> str:
+    """
+    Deterministic machine ID from OS hardware UUID.
+    Algorithm: format_as_uuid(sha256(os_machine_id + "muxi"))
+    """
+    os_id = _get_os_machine_id()  # Platform-specific
+    hash_hex = hashlib.sha256(f"{os_id}muxi".encode()).hexdigest()
+    return f"{hash_hex[0:8]}-{hash_hex[8:12]}-{hash_hex[12:16]}-{hash_hex[16:20]}-{hash_hex[20:32]}"
+```
+
+Platform sources:
+- **macOS**: `ioreg -rd1 -c IOPlatformExpertDevice | grep IOPlatformUUID`
+- **Linux**: `/etc/machine-id` or `/var/lib/dbus/machine-id`
+- **Windows**: `wmic csproduct get uuid`
+
+### 2. Config Management (`config.py`)
+
+Location: `~/.muxi/config.yaml`
+
+```yaml
+machine_id: 7f83b165-7ff1-fc53-b92d-c18148a1d65d
+country: US
+telemetry: true  # User can set to false
+```
+
+Functions:
+- `get_or_create_machine_id()` - Generate once, cache forever
+- `get_or_fetch_country()` - Fetch from ipapi.co once, cache forever
+- `is_telemetry_enabled()` - Check env `MUXI_TELEMETRY=0` then config file
+
+### 3. Collector (`collector.py`)
+
+Thread-safe counter aggregation:
+
+```python
+class TelemetryCollector:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._counters = defaultdict(int)
+        self._latencies = []  # For percentile calculation
+        self._features_enabled = set()
+        self._llm_providers = set()
+        self._errors_by_type = defaultdict(int)
+        self._sdk_requests = defaultdict(int)
+    
+    def record_request(self, success: bool, latency_ms: float, sdk: str = "direct"):
+        with self._lock:
+            self._counters["requests_total"] += 1
+            self._counters["requests_success" if success else "requests_failed"] += 1
+            self._latencies.append(latency_ms)
+            self._sdk_requests[sdk] += 1
+    
+    def record_error(self, error_type: str):
+        with self._lock:
+            self._errors_by_type[error_type] += 1
+    
+    def record_llm_request(self, provider: str, cache_hit: bool):
+        with self._lock:
+            self._llm_providers.add(provider)
+            self._counters["llm_requests_total"] += 1
+            if cache_hit:
+                self._counters["llm_cache_hits"] += 1
+    
+    def record_feature_use(self, feature: str):
+        with self._lock:
+            self._counters[f"feature_{feature}"] += 1
+    
+    def set_formation_info(self, agents: int, tools: int, mcp_servers: int, 
+                          memory_backend: str, features: list[str]):
+        with self._lock:
+            self._counters["agents_count"] = agents
+            self._counters["tools_count"] = tools
+            self._counters["mcp_servers_count"] = mcp_servers
+            self._memory_backend = memory_backend
+            self._features_enabled = set(features)
+    
+    def snapshot_and_reset(self) -> dict:
+        """Get current metrics and reset counters."""
+        with self._lock:
+            snapshot = self._build_payload()
+            self._reset()
+            return snapshot
+```
+
+### 4. Sender (`sender.py`)
+
+```python
+ENDPOINT = os.environ.get("TELEMETRY_URL", "https://capture.muxi.org/v1/telemetry")
+TIMEOUT = 2.0
+MAX_RETRIES = 1
+
+async def send_telemetry(payload: dict) -> bool:
+    """Fire-and-forget send with single retry."""
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+                resp = await client.post(ENDPOINT, json=payload)
+                return resp.status_code == 200
+        except Exception:
+            if attempt == MAX_RETRIES:
+                return False
+    return False
+```
+
+### 5. Service (`service.py`)
+
+```python
+class TelemetryService:
+    FLUSH_INTERVAL = timedelta(hours=1)
+    STATE_PATH = Path.home() / ".muxi" / "runtime" / "telemetry.json"
+    
+    def __init__(self):
+        self.collector = TelemetryCollector()
+        self.start_time = datetime.now()
+        self._last_flush = datetime.now()
+        self._load_state()
+    
+    async def start(self):
+        """Start background flush task."""
+        asyncio.create_task(self._flush_loop())
+    
+    async def _flush_loop(self):
+        while True:
+            await asyncio.sleep(60)  # Check every minute
+            if datetime.now() - self._last_flush >= self.FLUSH_INTERVAL:
+                await self._flush()
+    
+    async def _flush(self):
+        payload = self._build_full_payload()
+        self._save_state(payload)  # Always save locally
+        
+        if is_telemetry_enabled():
+            await send_telemetry(payload)
+        
+        self.collector.snapshot_and_reset()
+        self._last_flush = datetime.now()
+    
+    async def shutdown(self):
+        """Final flush on shutdown."""
+        await self._flush()
+```
+
+---
+
+## Integration Points
+
+### 1. Formation Startup
+
+```python
+# In formation.py
+async def _initialize_telemetry(self):
+    self.telemetry = TelemetryService()
+    self.telemetry.collector.set_formation_info(
+        agents=len(self.agents),
+        tools=self._count_tools(),
+        mcp_servers=len(self.mcp_servers),
+        memory_backend=self.memory_config.get("backend", "none"),
+        features=self._enabled_features()
+    )
+    await self.telemetry.start()
+```
+
+### 2. Request Middleware
+
+```python
+# In server/middleware.py
+@app.middleware("http")
+async def telemetry_middleware(request: Request, call_next):
+    start = time.time()
+    sdk = "direct"
+    
+    # Check for SDK header from server proxy
+    if request.headers.get("X-Muxi-Server") == "1":
+        sdk_header = request.headers.get("X-Muxi-SDK", "")
+        sdk = sdk_header.split("/")[0] if sdk_header else "unknown"
+    
+    try:
+        response = await call_next(request)
+        latency_ms = (time.time() - start) * 1000
+        telemetry.collector.record_request(
+            success=response.status_code < 400,
+            latency_ms=latency_ms,
+            sdk=sdk
+        )
+        return response
+    except Exception as e:
+        telemetry.collector.record_request(success=False, latency_ms=0, sdk=sdk)
+        telemetry.collector.record_error(_classify_error(e))
+        raise
+```
+
+### 3. LLM Service
+
+```python
+# In services/llm/llm.py
+async def complete(self, messages, **kwargs):
+    provider = self._get_provider_name()  # "openai", "anthropic", etc.
+    cache_hit = self._check_cache(messages)
+    
+    telemetry.collector.record_llm_request(provider, cache_hit)
+    # ... rest of completion logic
+```
+
+### 4. Feature Usage
+
+```python
+# In overlord/clarification.py
+async def request_clarification(self, ...):
+    telemetry.collector.record_feature_use("clarification")
+    # ...
+
+# In workflow/executor.py
+async def execute_workflow(self, ...):
+    telemetry.collector.record_feature_use("workflow")
+    # ...
+
+# In scheduler/service.py
+async def run_scheduled_task(self, ...):
+    telemetry.collector.record_feature_use("scheduled_task")
+    # ...
+```
+
+---
+
+## Error Classification
+
+```python
+def classify_error(error: Exception) -> str:
+    error_str = str(error).lower()
+    
+    if "timeout" in error_str or isinstance(error, asyncio.TimeoutError):
+        return "timeout"
+    if "rate" in error_str and "limit" in error_str:
+        return "rate_limit"
+    if "401" in error_str or "403" in error_str or "auth" in error_str:
+        return "auth"
+    if "connection" in error_str or "network" in error_str:
+        return "network"
+    
+    return "internal"
+```
+
+---
+
+## Local State File
+
+Path: `~/.muxi/runtime/telemetry.json`
+
+```json
+{
+  "last_flush": "2026-01-02T09:00:00Z",
+  "pending_payload": {
+    "requests": {"total": 150, "success": 148},
+    "...": "..."
+  }
+}
+```
+
+This file:
+- Persists across runtime restarts
+- Accumulates data if telemetry is disabled
+- Gets cleared after successful flush
+
+---
+
+## Testing
+
+### Environment Override
+
+```bash
+export TELEMETRY_URL=http://localhost:8080/v1/telemetry
+export MUXI_TELEMETRY=0  # Disable sending (still collects)
+```
+
+### Unit Tests
+
+```python
+def test_machine_id_deterministic():
+    """Same machine should generate same ID."""
+    id1 = generate_machine_id()
+    id2 = generate_machine_id()
+    assert id1 == id2
+
+def test_collector_thread_safe():
+    """Concurrent increments should be accurate."""
+    collector = TelemetryCollector()
+    # ... concurrent test
+
+def test_flush_respects_opt_out():
+    """Data collected but not sent when disabled."""
+    # ...
+```
+
+---
+
+## Rollout Plan
+
+### Phase 1: Infrastructure (Day 1)
+- [ ] Create telemetry module structure
+- [ ] Implement machine_id.py
+- [ ] Implement config.py
+- [ ] Unit tests for core functions
+
+### Phase 2: Collection (Day 1-2)
+- [ ] Implement collector.py
+- [ ] Implement sender.py
+- [ ] Implement service.py
+- [ ] Add formation startup integration
+
+### Phase 3: Integration (Day 2)
+- [ ] Add request middleware
+- [ ] Add LLM tracking
+- [ ] Add feature usage tracking
+- [ ] Integration tests
+
+### Phase 4: Validation (Day 2)
+- [ ] Test with local receiver
+- [ ] Verify payload format
+- [ ] Test opt-out behavior
+- [ ] Test restart persistence
+
+---
+
+## Open Questions
+
+1. **Percentile calculation** - Keep last N latencies in memory or use streaming algorithm (t-digest)?
+
+2. **Formation changes** - If user hot-reloads formation, do we track as new session or continue?
+
+3. **Multi-formation** - If someone runs multiple formations on same machine, separate or combined telemetry?
+
+4. **Startup telemetry** - Send on startup or wait for first hourly flush?
+
+---
+
+## Appendix: Privacy Review Checklist
+
+Before shipping, verify:
+
+- [ ] No formation names, paths, or content in payload
+- [ ] No user prompts or agent responses
+- [ ] No API keys, tokens, or secrets
+- [ ] No IP addresses (country code only)
+- [ ] No specific model names (provider only)
+- [ ] No timestamps that could identify users
+- [ ] Machine ID is hashed, not raw hardware ID
+- [ ] Opt-out is respected at env and config level
