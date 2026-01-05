@@ -62,7 +62,6 @@ Implement privacy-respecting telemetry for the MUXI Runtime to understand usage 
       "total": 3420,
       "success": 3350,
       "failed": 70,
-      "success_rate": 0.98,
       "sources": {
         "framework": 0,
         "api": {
@@ -72,6 +71,17 @@ Implement privacy-respecting telemetry for the MUXI Runtime to understand usage 
         "sdk": {
           "python": 2800,
           "typescript": 600
+        }
+      },
+      "failures": {
+        "framework": 0,
+        "api": {
+          "direct": 2,
+          "server": 68
+        },
+        "sdk": {
+          "python": 50,
+          "typescript": 18
         }
       }
     },
