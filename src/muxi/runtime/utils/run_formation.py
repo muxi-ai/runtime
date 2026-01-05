@@ -14,18 +14,54 @@ import sys
 
 # Print banner immediately before heavy imports
 def _print_banner():
+    import os
+    import platform
+
     from ..utils.version import get_version
 
     version = get_version()
-    print("\n" + "=" * 68)
-    print(" __  __ _    ___   _______   ____             _   _")
-    print("|  \\/  | |  | \\ \\ / /_   _| |    \\_   _ _ __ | | (_)_ __ ___   ___")
-    print("| \\  / | |  | |\\ V /  | |   | [ ] || | | '_ \\| __| | '_ ` _ \\ / _ \\")
-    print("| |\\/| | |__| |/ . \\ _| |_  |  _ / |_| | | | | |_| | | | | | |  __/")
-    print("|_|  |_|\\____//_/ \\_\\_____| |_| \\_\\__/_| |_|\\__|_|_| |_| |_|\\___|")
-    print(" ")
-    print(f"Starting MUXI Runtime v{version}...")
-    print("=" * 68 + "\n")
+    arch = platform.machine()  # e.g., x86_64, arm64
+
+    # Check if terminal supports colors
+    def supports_color():
+        if os.environ.get("NO_COLOR"):
+            return False
+        if os.environ.get("FORCE_COLOR"):
+            return True
+        if not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
+            return False
+        return True
+
+    # 24-bit ANSI color helper
+    def rgb(hex_color):
+        if not supports_color():
+            return ""
+        r = int(hex_color[1:3], 16)
+        g = int(hex_color[3:5], 16)
+        b = int(hex_color[5:7], 16)
+        return f"\033[38;2;{r};{g};{b}m"
+
+    reset = "\033[0m" if supports_color() else ""
+
+    # Gradient colors for each line
+    c1 = rgb("#d9aa54")
+    c2 = rgb("#d9aa54")
+    c3 = rgb("#da9e4b")
+    c4 = rgb("#db9647")
+    c5 = rgb("#dc8f42")
+
+    print()
+    print(f"{c1} __  __ _    ___   _______   ____             _   _{reset}")
+    print(f"{c2}|  \\/  | |  | \\ \\ / /_   _| |    \\_   _ _ __ | | (_)_ __ ___   ___{reset}")
+    print(f"{c3}| \\  / | |  | |\\ V /  | |   | [] | | | | '_ \\| __| | '_ ` _ \\ / _ \\{reset}")
+    print(f"{c4}| |\\/| | |__| |/ . \\ _| |_  |  _ / |_| | | | | |_| | | | | | |  __/{reset}")
+    print(f"{c5}|_|  |_|\\____//_/ \\_\\_____| |_| \\_\\___/|_| |_|\\___|_|_| |_| |_|\\___|{reset}")
+    print()
+    print(f"MUXI Runtime {version} (ELv2 {arch})")
+    print()
+    print(" * Documentation:  https://muxi.org/docs")
+    print(" * Support:        https://muxi.org/support")
+    print()
     sys.stdout.flush()
 
 
