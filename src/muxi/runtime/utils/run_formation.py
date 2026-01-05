@@ -55,9 +55,10 @@ def _print_banner():
     print(f"{c2}|  \\/  | |  | \\ \\ / /_   _| |    \\_   _ _ __ | | (_)_ __ ___   ___{reset}")
     print(f"{c3}| \\  / | |  | |\\ V /  | |   | [] | | | | '_ \\| __| | '_ ` _ \\ / _ \\{reset}")
     print(f"{c4}| |\\/| | |__| |/ . \\ _| |_  |  _ / |_| | | | | |_| | | | | | |  __/{reset}")
-    print(f"{c5}|_|  |_|\\____//_/ \\_\\_____| |_| \\_\\___/|_| |_|\\___|_|_| |_| |_|\\___|{reset}")
+    print(f"{c5}|_|  |_|\\____//_/ \\_\\_____| |_| \\_\\___/|_| |_|\\__|_|_| |_| |_|\\___|{reset}")
     print()
-    print(f"MUXI Runtime {version} (ELv2 {arch})")
+    bold = "\033[1m" if supports_color() else ""
+    print(f"{bold}MUXI Runtime {version} (ELv2 {arch}){reset}")
     print()
     print(" * Documentation:  https://muxi.org/docs")
     print(" * Support:        https://muxi.org/support")
