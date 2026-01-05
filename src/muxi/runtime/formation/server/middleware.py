@@ -131,7 +131,9 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                     formation.telemetry.record_error(telemetry_error)
 
                     # Also record the failed request with route and SDK info
-                    has_server_header = has_header_case_insensitive(request.headers, "X-Muxi-Server")
+                    has_server_header = has_header_case_insensitive(
+                        request.headers, "X-Muxi-Server"
+                    )
                     route = "server" if has_server_header else "direct"
                     sdk_header = get_header_case_insensitive(request.headers, "X-Muxi-SDK") or ""
                     sdk = sdk_header.split("/")[0] if sdk_header else None

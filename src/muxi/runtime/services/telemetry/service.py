@@ -83,7 +83,11 @@ class Counters:
     errors: dict = field(default_factory=lambda: defaultdict(int))
 
     # LLM tracking (provider -> model -> {requests, cache_hits})
-    llm_stats: dict = field(default_factory=lambda: defaultdict(lambda: defaultdict(lambda: {"requests": 0, "cache_hits": 0})))
+    llm_stats: dict = field(
+        default_factory=lambda: defaultdict(
+            lambda: defaultdict(lambda: {"requests": 0, "cache_hits": 0})
+        )
+    )
 
     # Feature tracking
     features: dict = field(default_factory=lambda: defaultdict(int))
@@ -125,7 +129,7 @@ class Counters:
             # Track latency
             self.latencies.append(latency_ms)
             if len(self.latencies) > self.max_latencies:
-                self.latencies = self.latencies[-self.max_latencies:]
+                self.latencies = self.latencies[-self.max_latencies :]
 
     def increment_llm(self, provider: str, model: str, cache_hit: bool) -> None:
         """Record an LLM request."""
@@ -201,7 +205,9 @@ class Counters:
                 "llm": {
                     "requests_total": llm_requests_total,
                     "cache_hits": llm_cache_hits_total,
-                    "cache_hit_rate": (llm_cache_hits_total / llm_requests_total) if llm_requests_total > 0 else 0,
+                    "cache_hit_rate": (
+                        (llm_cache_hits_total / llm_requests_total) if llm_requests_total > 0 else 0
+                    ),
                     **llm_by_provider,
                 },
                 "features": dict(self.features),
@@ -220,7 +226,9 @@ class Counters:
             self.sdk_requests = defaultdict(int)
             self.latencies = []
             self.errors = defaultdict(int)
-            self.llm_stats = defaultdict(lambda: defaultdict(lambda: {"requests": 0, "cache_hits": 0}))
+            self.llm_stats = defaultdict(
+                lambda: defaultdict(lambda: {"requests": 0, "cache_hits": 0})
+            )
             self.features = defaultdict(int)
 
             return snapshot

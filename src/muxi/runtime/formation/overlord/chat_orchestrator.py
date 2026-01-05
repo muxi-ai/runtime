@@ -210,6 +210,7 @@ class ChatOrchestrator:
         # HTTP requests are tracked by middleware with route="direct" or "server"
         from ..server.middleware import is_http_request
         from ...services.telemetry import get_telemetry
+
         _framework_start_time = time.time()
         _is_framework_mode = not is_http_request()
 

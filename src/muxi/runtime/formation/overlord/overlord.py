@@ -6525,6 +6525,7 @@ Agent response: {raw_response}"""
                 if clarification_result.action == "clarify":
                     # Record clarification feature usage in telemetry
                     from ...services.telemetry import get_telemetry
+
                     telemetry = get_telemetry()
                     if telemetry:
                         telemetry.record_feature("clarification")
@@ -7567,6 +7568,7 @@ Agent response: {raw_response}"""
 
             # Record workflow feature usage in telemetry
             from ...services.telemetry import get_telemetry
+
             telemetry = get_telemetry()
             if telemetry:
                 telemetry.record_feature("workflow")

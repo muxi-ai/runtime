@@ -672,6 +672,7 @@ class SchedulerService:
 
             # Record scheduled task feature usage in telemetry
             from ..telemetry import get_telemetry
+
             telemetry = get_telemetry()
             if telemetry:
                 telemetry.record_feature("scheduled_task")

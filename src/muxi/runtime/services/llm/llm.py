@@ -1517,6 +1517,7 @@ Provide a helpful, conversational response that directly addresses what the user
                 if cached_response is not None:
                     # Record telemetry for cache hit
                     from ...services.telemetry import get_telemetry
+
                     telemetry = get_telemetry()
                     if telemetry:
                         telemetry.record_llm_request(self._provider, self._model, cache_hit=True)
@@ -1527,6 +1528,7 @@ Provide a helpful, conversational response that directly addresses what the user
 
             # Record telemetry for LLM request
             from ...services.telemetry import get_telemetry
+
             telemetry = get_telemetry()
             if telemetry:
                 telemetry.record_llm_request(self._provider, self._model, cache_hit=False)
@@ -1597,6 +1599,7 @@ Provide a helpful, conversational response that directly addresses what the user
 
             # Record telemetry for LLM request
             from ...services.telemetry import get_telemetry
+
             telemetry = get_telemetry()
             if telemetry:
                 telemetry.record_llm_request(self._provider, self._model, cache_hit=False)

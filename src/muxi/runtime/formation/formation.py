@@ -1033,11 +1033,11 @@ class Formation:
 
         # Set formation info for telemetry
         agents_count = len(self._agents_config) if self._agents_config else 0
-        tools_count = sum(
-            len(agent.get("tools", [])) for agent in (self._agents_config or [])
-        )
+        tools_count = sum(len(agent.get("tools", [])) for agent in (self._agents_config or []))
         mcp_count = len(self._mcp_config.get("servers", [])) if self._mcp_config else 0
-        memory_backend = self._memory_config.get("backend", "none") if self._memory_config else "none"
+        memory_backend = (
+            self._memory_config.get("backend", "none") if self._memory_config else "none"
+        )
 
         # Collect enabled features
         features = []
@@ -1047,7 +1047,9 @@ class Formation:
             features.append("workflow")
         if self._scheduler_config and self._scheduler_config.get("enabled", False):
             features.append("scheduler")
-        if self._a2a_config and (self._a2a_config.get("inbound") or self._a2a_config.get("outbound")):
+        if self._a2a_config and (
+            self._a2a_config.get("inbound") or self._a2a_config.get("outbound")
+        ):
             features.append("a2a")
 
         self._telemetry.set_formation_info(
