@@ -100,7 +100,6 @@ Implement privacy-respecting telemetry for the MUXI Runtime to understand usage 
     },
     
     "llm": {
-      "providers": ["openai", "anthropic"],
       "requests_total": 5200,
       "cache_hits": 1200,
       "cache_hit_rate": 0.23,
