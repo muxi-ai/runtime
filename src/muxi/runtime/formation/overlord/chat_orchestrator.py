@@ -208,8 +208,8 @@ class ChatOrchestrator:
 
         # Track framework mode requests (direct Python API calls, not via HTTP)
         # HTTP requests are tracked by middleware with route="direct" or "server"
-        from ..server.middleware import is_http_request
         from ...services.telemetry import get_telemetry
+        from ..server.middleware import is_http_request
 
         _framework_start_time = time.time()
         _is_framework_mode = not is_http_request()
