@@ -63,10 +63,16 @@ Implement privacy-respecting telemetry for the MUXI Runtime to understand usage 
       "success": 3350,
       "failed": 70,
       "success_rate": 0.98,
-      "by_sdk": {
-        "python": 2800,
-        "typescript": 600,
-        "direct": 20
+      "sources": {
+        "framework": 0,
+        "api": {
+          "direct": 10,
+          "server": 3410
+        },
+        "sdk": {
+          "python": 2800,
+          "typescript": 600
+        }
       }
     },
     
@@ -134,30 +140,30 @@ src/muxi/runtime/services/telemetry/
 ### Data Flow
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Runtime                               │
-│                                                              │
+┌────────────────────────────────────────────────────────────┐
+│                        Runtime                             │
+│                                                            │
 │  ┌──────────┐    ┌──────────┐    ┌──────────┐              │
 │  │ Overlord │    │  Agents  │    │ Services │              │
 │  └────┬─────┘    └────┬─────┘    └────┬─────┘              │
-│       │               │               │                      │
-│       └───────────────┼───────────────┘                      │
-│                       ▼                                      │
-│              ┌────────────────┐                              │
-│              │   Collector    │  ← Increment counters        │
-│              └────────┬───────┘                              │
-│                       │                                      │
-│                       ▼                                      │
-│    ┌──────────────────────────────────────┐                 │
-│    │  ~/.muxi/runtime/telemetry.json      │  ← Persist      │
-│    └──────────────────────────────────────┘                 │
-│                       │                                      │
-│                       ▼ (hourly)                             │
-│              ┌────────────────┐                              │
-│              │    Sender      │  ← If telemetry enabled      │
-│              └────────┬───────┘                              │
-│                       │                                      │
-└───────────────────────┼──────────────────────────────────────┘
+│       │               │               │                    │
+│       └───────────────┼───────────────┘                    │
+│                       ▼                                    │
+│              ┌────────────────┐                            │
+│              │   Collector    │  ← Increment counters      │
+│              └────────┬───────┘                            │
+│                       │                                    │
+│                       ▼                                    │
+│    ┌──────────────────────────────────────┐                │
+│    │  ~/.muxi/runtime/telemetry.json      │  ← Persist     │
+│    └──────────────────────────────────────┘                │
+│                       │                                    │
+│                       ▼ (hourly)                           │
+│              ┌────────────────┐                            │
+│              │    Sender      │  ← If telemetry enabled    │
+│              └────────┬───────┘                            │
+│                       │                                    │
+└───────────────────────┼────────────────────────────────────┘
                         │
                         ▼
            https://capture.muxi.org/v1/telemetry
@@ -362,19 +368,45 @@ async def _initialize_telemetry(self):
 > - `X-Muxi-Server` - Server version (e.g., "1.0.0") - indicates request came through server
 > - `X-Muxi-SDK` - SDK identifier (e.g., "python/1.2.3", "cli/0.12.0") - identifies calling SDK
 
+#### Request Source Tracking
+
+Two independent dimensions are tracked:
+
+**Route** (how the request arrived - mutually exclusive):
+| Source | Condition | Example |
+|--------|-----------|---------|
+| `framework` | Direct Python API call (no HTTP) | `formation.chat("hello")` |
+| `api.direct` | HTTP without `X-Muxi-Server` header | curl directly to runtime |
+| `api.server` | HTTP with `X-Muxi-Server` header | Request proxied through MUXI Server |
+
+**SDK** (which SDK made the request - independent dimension):
+
+Extracted from `X-Muxi-SDK` header (format: `sdk/version`):
+| Header Value | Extracted SDK |
+|--------------|---------------|
+| `python/1.2.3` | `python` |
+| `typescript/0.5.0` | `typescript` |
+| `cli/1.0.0` | `cli` |
+| `java/2.0.0` | `java` |
+| (no header) | not counted |
+
+**Math:**
+- `total = framework + api.direct + api.server`
+- `sum(sdk.*) = requests with X-Muxi-SDK header` (currently subset of api.server, may change)
+
 ```python
 # In server/middleware.py
 @app.middleware("http")
 async def telemetry_middleware(request: Request, call_next):
     start = time.time()
-    sdk = "direct"
     
-    # Check for SDK header passed through from server proxy
-    server_version = request.headers.get("X-Muxi-Server")
-    if server_version:
-        # Request came through MUXI Server - extract SDK info
-        sdk_header = request.headers.get("X-Muxi-SDK", "")
-        sdk = sdk_header.split("/")[0] if sdk_header else "server"  # "python", "cli", etc.
+    # Determine route (how request arrived)
+    has_server_header = request.headers.get("X-Muxi-Server") is not None
+    route = "server" if has_server_header else "direct"
+    
+    # Determine SDK (independent dimension)
+    sdk_header = request.headers.get("X-Muxi-SDK", "")
+    sdk = sdk_header.split("/")[0] if sdk_header else None  # "python", "typescript", "cli", or None
     
     try:
         response = await call_next(request)
@@ -382,12 +414,34 @@ async def telemetry_middleware(request: Request, call_next):
         telemetry.collector.record_request(
             success=response.status_code < 400,
             latency_ms=latency_ms,
+            route=route,
             sdk=sdk
         )
         return response
     except Exception as e:
-        telemetry.collector.record_request(success=False, latency_ms=0, sdk=sdk)
+        telemetry.collector.record_request(success=False, latency_ms=0, route=route, sdk=sdk)
         telemetry.collector.record_error(_classify_error(e))
+        raise
+```
+
+For framework mode (direct Python API), track at the Formation level:
+
+```python
+# In formation.py
+async def chat(self, message: str, ...):
+    start = time.time()
+    try:
+        result = await self._process_chat(message, ...)
+        latency_ms = (time.time() - start) * 1000
+        self.telemetry.collector.record_request(
+            success=True,
+            latency_ms=latency_ms,
+            route="framework",
+            sdk=None
+        )
+        return result
+    except Exception as e:
+        self.telemetry.collector.record_request(success=False, latency_ms=0, route="framework", sdk=None)
         raise
 ```
 
