@@ -387,10 +387,9 @@ class TelemetryService:
             return
         try:
             with open(BACKUP_PATH) as f:
-                backup = json.load(f)
-            # Merge backup counters into current counters
-            # For simplicity, we just re-send the backup on next flush
-            # A more sophisticated approach would merge the counters
+                _ = json.load(f)  # Validate backup exists and is valid JSON
+            # TODO: Merge backup counters into current counters
+            # For now, we just validate the backup exists
             logger.debug("Loaded telemetry backup")
         except Exception as e:
             logger.debug(f"Failed to load telemetry backup: {e}")

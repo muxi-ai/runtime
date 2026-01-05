@@ -1512,11 +1512,9 @@ Provide a helpful, conversational response that directly addresses what the user
             cache_key = _get_cache_key("chat", **cache_params)
 
             # Only use cache if no files are attached AND caching is enabled
-            cache_hit = False
             if not files and use_caching:
                 cached_response = _get_cached_response(cache_key)
                 if cached_response is not None:
-                    cache_hit = True
                     # Record telemetry for cache hit
                     from ...services.telemetry import get_telemetry
                     telemetry = get_telemetry()
