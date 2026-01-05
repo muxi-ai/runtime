@@ -103,7 +103,23 @@ Implement privacy-respecting telemetry for the MUXI Runtime to understand usage 
       "providers": ["openai", "anthropic"],
       "requests_total": 5200,
       "cache_hits": 1200,
-      "cache_hit_rate": 0.23
+      "cache_hit_rate": 0.23,
+      "openai": {
+        "gpt-4o": {
+          "requests": 3000,
+          "cache_hits": 800
+        },
+        "gpt-4o-mini": {
+          "requests": 2000,
+          "cache_hits": 350
+        }
+      },
+      "anthropic": {
+        "claude-sonnet-4-5": {
+          "requests": 200,
+          "cache_hits": 50
+        }
+      }
     },
     
     "features": {
@@ -126,7 +142,6 @@ Implement privacy-respecting telemetry for the MUXI Runtime to understand usage 
 |----------|----------|--------|
 | Content | Prompts, responses, formation names | Privacy |
 | Identifiers | User IDs, session IDs, API keys | Privacy |
-| Model specifics | "gpt-4o-mini", "claude-3.5" | Provider relationships |
 | IP addresses | User IPs | Privacy |
 | File paths | Formation paths, knowledge paths | Security |
 | Timing details | Per-request timestamps | Too granular |
@@ -614,7 +629,6 @@ Before shipping, verify:
 - [ ] No user prompts or agent responses
 - [ ] No API keys, tokens, or secrets
 - [ ] No IP addresses (country code only)
-- [ ] No specific model names (provider only)
 - [ ] No timestamps that could identify users
 - [ ] Machine ID is hashed, not raw hardware ID
 - [ ] Opt-out is respected at env and config level
