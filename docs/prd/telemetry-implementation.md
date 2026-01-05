@@ -1,6 +1,7 @@
 # Runtime Telemetry Implementation Plan
 
 **Date:** 2026-01-01
+**Updated:** 2026-01-05 (with Server implementation insights)
 **Status:** Draft for Review
 **Author:** Droid
 
@@ -13,9 +14,11 @@ Implement privacy-respecting telemetry for the MUXI Runtime to understand usage 
 ## Design Principles
 
 1. **Privacy First** - No PII, no content, no identifiable formation data
-2. **Always Collect, Conditionally Send** - Local storage even when disabled
+2. **Opt-In by Default** - Enabled unless explicitly disabled via env var or config
 3. **Metrics Answer Questions** - Every metric serves a product decision
 4. **Non-Blocking** - Fire-and-forget, never impact runtime performance
+
+> **Note:** Server telemetry has been implemented. Key decisions from that implementation are incorporated below.
 
 ---
 
@@ -184,18 +187,32 @@ Platform sources:
 
 ### 2. Config Management (`config.py`)
 
+> **Global Config:** Shared by CLI, Server, and Runtime at `~/.muxi/config.yaml`
+
 Location: `~/.muxi/config.yaml`
 
 ```yaml
 machine_id: 7f83b165-7ff1-fc53-b92d-c18148a1d65d
 country: US
-telemetry: true  # User can set to false
+telemetry: true  # Set to false to opt-out (applies to all MUXI modules)
 ```
 
 Functions:
-- `get_or_create_machine_id()` - Generate once, cache forever
-- `get_or_fetch_country()` - Fetch from ipapi.co once, cache forever
-- `is_telemetry_enabled()` - Check env `MUXI_TELEMETRY=0` then config file
+- `get_or_create_machine_id()` - Generate once, cache in config file
+- `get_or_fetch_country()` - Fetch from ipapi.co once, cache in config file
+- `is_telemetry_enabled()` - Check env `MUXI_TELEMETRY=0` first, then config file
+
+```python
+def is_telemetry_enabled() -> bool:
+    """Check if telemetry is enabled. Opt-in by default."""
+    # Environment variable takes precedence
+    if os.environ.get("MUXI_TELEMETRY") == "0":
+        return False
+    
+    # Check global config file
+    config = load_global_config()  # ~/.muxi/config.yaml
+    return config.get("telemetry", True)  # Default: enabled
+```
 
 ### 3. Collector (`collector.py`)
 
@@ -253,22 +270,32 @@ class TelemetryCollector:
 
 ### 4. Sender (`sender.py`)
 
+> **Server Decision:** On failure, wait 5 seconds and retry once. If still fails, wait until next hourly flush. No rate limiting.
+
 ```python
 ENDPOINT = os.environ.get("TELEMETRY_URL", "https://capture.muxi.org/v1/telemetry")
 TIMEOUT = 2.0
-MAX_RETRIES = 1
+RETRY_BACKOFF = 5.0  # seconds
 
 async def send_telemetry(payload: dict) -> bool:
-    """Fire-and-forget send with single retry."""
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-                resp = await client.post(ENDPOINT, json=payload)
-                return resp.status_code == 200
-        except Exception:
-            if attempt == MAX_RETRIES:
-                return False
-    return False
+    """Send with single retry after 5 second backoff."""
+    # First attempt
+    if await _do_send(payload):
+        return True
+    
+    # Wait 5 seconds and retry once
+    await asyncio.sleep(RETRY_BACKOFF)
+    
+    # Second attempt - if this fails, we wait until next hour
+    return await _do_send(payload)
+
+async def _do_send(payload: dict) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            resp = await client.post(ENDPOINT, json=payload)
+            return 200 <= resp.status_code < 300
+    except Exception:
+        return False
 ```
 
 ### 5. Service (`service.py`)
@@ -331,6 +358,10 @@ async def _initialize_telemetry(self):
 
 ### 2. Request Middleware
 
+> **Server Integration:** The MUXI Server proxy passes through `X-Muxi-*` headers from clients. The runtime can read:
+> - `X-Muxi-Server` - Server version (e.g., "1.0.0") - indicates request came through server
+> - `X-Muxi-SDK` - SDK identifier (e.g., "python/1.2.3", "cli/0.12.0") - identifies calling SDK
+
 ```python
 # In server/middleware.py
 @app.middleware("http")
@@ -338,10 +369,12 @@ async def telemetry_middleware(request: Request, call_next):
     start = time.time()
     sdk = "direct"
     
-    # Check for SDK header from server proxy
-    if request.headers.get("X-Muxi-Server") == "1":
+    # Check for SDK header passed through from server proxy
+    server_version = request.headers.get("X-Muxi-Server")
+    if server_version:
+        # Request came through MUXI Server - extract SDK info
         sdk_header = request.headers.get("X-Muxi-SDK", "")
-        sdk = sdk_header.split("/")[0] if sdk_header else "unknown"
+        sdk = sdk_header.split("/")[0] if sdk_header else "server"  # "python", "cli", etc.
     
     try:
         response = await call_next(request)
@@ -413,6 +446,8 @@ def classify_error(error: Exception) -> str:
 
 ## Local State File
 
+> **Server Decision:** Simple accumulate-until-sent approach. No historical data kept.
+
 Path: `~/.muxi/runtime/telemetry.json`
 
 ```json
@@ -425,10 +460,11 @@ Path: `~/.muxi/runtime/telemetry.json`
 }
 ```
 
-This file:
-- Persists across runtime restarts
-- Accumulates data if telemetry is disabled
-- Gets cleared after successful flush
+Behavior:
+- **Successful send** → Clear file, reset counters, start fresh
+- **Failed send** → Keep accumulating until next successful send
+- **Runtime restart** → Load pending payload, continue accumulating
+- **Telemetry disabled** → Still collect locally (in case user re-enables)
 
 ---
 
@@ -493,12 +529,16 @@ def test_flush_respects_opt_out():
 ## Open Questions
 
 1. **Percentile calculation** - Keep last N latencies in memory or use streaming algorithm (t-digest)?
+   > *Suggestion:* Keep last 1000 latencies in memory, calculate percentiles on snapshot. Simple and sufficient.
 
-2. **Formation changes** - If user hot-reloads formation, do we track as new session or continue?
+2. ~~**Formation changes** - If user hot-reloads formation, do we track as new session or continue?~~
+   > **RESOLVED:** Continue same session. Formation info is updated on reload but counters persist.
 
-3. **Multi-formation** - If someone runs multiple formations on same machine, separate or combined telemetry?
+3. ~~**Multi-formation** - If someone runs multiple formations on same machine, separate or combined telemetry?~~
+   > **RESOLVED:** Separate. Each runtime instance has its own telemetry service and sends independently.
 
-4. **Startup telemetry** - Send on startup or wait for first hourly flush?
+4. ~~**Startup telemetry** - Send on startup or wait for first hourly flush?~~
+   > **RESOLVED:** Wait for first hourly flush. Consistent with server behavior.
 
 ---
 
