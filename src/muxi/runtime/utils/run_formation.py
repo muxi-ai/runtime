@@ -63,6 +63,7 @@ def _print_banner():
     print(" * Documentation:  https://muxi.org/docs")
     print(" * Support:        https://muxi.org/support")
     print()
+    print()
     sys.stdout.flush()
 
 
@@ -101,7 +102,7 @@ except ImportError:
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
-    from src.muxi.datatypes.exceptions import (
+    from src.muxi.runtime.datatypes.exceptions import (
         ConfigurationLoadError,
         ConfigurationNotFoundError,
         ConfigurationValidationError,
@@ -111,8 +112,8 @@ except ImportError:
         OverlordStartupError,
         ServiceStartupError,
     )
-    from src.muxi.formation import Formation  # noqa: E402
-    from src.muxi.services import observability
+    from src.muxi.runtime.formation import Formation  # noqa: E402
+    from src.muxi.runtime.services import observability
 
 
 async def run_formation(formation_path: str, port: int = None, host: str = None):
