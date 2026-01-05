@@ -6,6 +6,7 @@ including error handling, logging, and request tracking.
 """
 
 import asyncio
+import contextvars
 import time
 import traceback
 from typing import Callable
@@ -18,6 +19,16 @@ from ...services import observability
 from ...utils.id_generator import generate_request_id
 from .responses import create_error_response
 from .utils import get_header_case_insensitive, has_header_case_insensitive
+
+# Context variable to track if request came via HTTP (for telemetry deduplication)
+_http_request_context: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "http_request_context", default=False
+)
+
+
+def is_http_request() -> bool:
+    """Check if current execution is within an HTTP request context."""
+    return _http_request_context.get()
 
 
 class ErrorHandlingMiddleware(BaseHTTPMiddleware):
@@ -101,7 +112,7 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                 description=f"API request failed: {message}",
             )
 
-            # Record error in telemetry
+            # Record error in telemetry (including failed request)
             if hasattr(request.app.state, "formation"):
                 formation = request.app.state.formation
                 if hasattr(formation, "telemetry") and formation.telemetry:
@@ -118,6 +129,18 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                     else:
                         telemetry_error = "internal"
                     formation.telemetry.record_error(telemetry_error)
+
+                    # Also record the failed request with route and SDK info
+                    has_server_header = has_header_case_insensitive(request.headers, "X-Muxi-Server")
+                    route = "server" if has_server_header else "direct"
+                    sdk_header = get_header_case_insensitive(request.headers, "X-Muxi-SDK") or ""
+                    sdk = sdk_header.split("/")[0] if sdk_header else None
+                    formation.telemetry.record_request(
+                        success=False,
+                        latency_ms=0,  # Unknown since we caught exception
+                        route=route,
+                        sdk=sdk,
+                    )
 
             return JSONResponse(
                 status_code=status_code,
@@ -142,6 +165,9 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
             Response with request ID header
         """
         start_time = time.time()
+
+        # Set HTTP request context for telemetry deduplication
+        token = _http_request_context.set(True)
 
         # Generate request ID for non-chat endpoints
         # Chat endpoints will use the request_id from the body
@@ -179,46 +205,50 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
             )
 
         # Process request
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
 
-        # Calculate processing time
-        processing_time = time.time() - start_time
-        latency_ms = processing_time * 1000
+            # Calculate processing time
+            processing_time = time.time() - start_time
+            latency_ms = processing_time * 1000
 
-        # Increment request counter (thread-safe)
-        if hasattr(request.app.state, "formation"):
-            server = getattr(request.app.state.formation, "_server", None)
-            if server and hasattr(server, "_request_count_lock"):
-                with server._request_count_lock:
-                    server._request_count += 1
+            # Increment request counter (thread-safe)
+            if hasattr(request.app.state, "formation"):
+                server = getattr(request.app.state.formation, "_server", None)
+                if server and hasattr(server, "_request_count_lock"):
+                    with server._request_count_lock:
+                        server._request_count += 1
 
-            # Record in telemetry
-            formation = request.app.state.formation
-            if hasattr(formation, "telemetry") and formation.telemetry:
-                formation.telemetry.record_request(
-                    success=response.status_code < 400,
-                    latency_ms=latency_ms,
-                    route=telemetry_route,
-                    sdk=telemetry_sdk,
+                # Record in telemetry
+                formation = request.app.state.formation
+                if hasattr(formation, "telemetry") and formation.telemetry:
+                    formation.telemetry.record_request(
+                        success=response.status_code < 400,
+                        latency_ms=latency_ms,
+                        route=telemetry_route,
+                        sdk=telemetry_sdk,
+                    )
+
+            # Log response
+            if request_id:
+                observability.observe(
+                    event_type=observability.ServerEvents.REQUEST_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "formation_api_server",
+                        "request_id": request_id,
+                        "method": request.method,
+                        "path": request.url.path,
+                        "status_code": response.status_code,
+                        "processing_time": processing_time,
+                    },
+                    description=f"API request completed: {response.status_code}",
                 )
 
-        # Log response
-        if request_id:
-            observability.observe(
-                event_type=observability.ServerEvents.REQUEST_COMPLETED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "formation_api_server",
-                    "request_id": request_id,
-                    "method": request.method,
-                    "path": request.url.path,
-                    "status_code": response.status_code,
-                    "processing_time": processing_time,
-                },
-                description=f"API request completed: {response.status_code}",
-            )
-
-        return response
+            return response
+        finally:
+            # Reset HTTP request context
+            _http_request_context.reset(token)
 
 
 class APILoggingMiddleware(BaseHTTPMiddleware):

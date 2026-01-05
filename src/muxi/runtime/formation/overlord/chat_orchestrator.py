@@ -206,6 +206,13 @@ class ChatOrchestrator:
 
         user_id = str(user_id).lower().strip() if user_id is not None else None
 
+        # Track framework mode requests (direct Python API calls, not via HTTP)
+        # HTTP requests are tracked by middleware with route="direct" or "server"
+        from ..server.middleware import is_http_request
+        from ...services.telemetry import get_telemetry
+        _framework_start_time = time.time()
+        _is_framework_mode = not is_http_request()
+
         # Check if there's a pending clarification for this session
         # If so, reuse its request_id for multi-turn clarification continuity
         pending_clarification = None
@@ -454,7 +461,7 @@ class ChatOrchestrator:
                 self.overlord.observability_manager.mark_request_async(request_id)
 
                 # Execute async request
-                return await self._execute_async_request(
+                result = await self._execute_async_request(
                     message=enhanced_message,
                     agent_name=agent_name,
                     user_id=user_id,
@@ -463,6 +470,15 @@ class ChatOrchestrator:
                     webhook_url=webhook_url,
                     timestamp=timestamp,
                 )
+
+                # Record framework mode telemetry (async requests are always "successful" at queue time)
+                if _is_framework_mode:
+                    telemetry = get_telemetry()
+                    if telemetry:
+                        latency_ms = (time.time() - _framework_start_time) * 1000
+                        telemetry.record_request(True, latency_ms, "framework")
+
+                return result
 
             # Determine streaming behavior
             use_streaming = (
@@ -475,6 +491,13 @@ class ChatOrchestrator:
 
             # Execute sync request
             if use_streaming:
+                # For streaming, record telemetry at start (can't easily track end)
+                if _is_framework_mode:
+                    telemetry = get_telemetry()
+                    if telemetry:
+                        latency_ms = (time.time() - _framework_start_time) * 1000
+                        telemetry.record_request(True, latency_ms, "framework")
+
                 # Return the streaming generator (delegates to separate function with yield)
                 return self._create_stream_generator(
                     enhanced_message=enhanced_message,
@@ -490,18 +513,32 @@ class ChatOrchestrator:
                     bypass_workflow_approval=bypass_workflow_approval,
                 )
 
-            # else...
-            return await self._process_sync_chat(
-                message=enhanced_message,
-                agent_name=agent_name,
-                user_id=user_id,
-                session_id=session_id,
-                request_id=request_id,
-                original_message=message,  # Pass original for extraction
-                use_async=use_async,
-                webhook_url=webhook_url,
-                bypass_workflow_approval=bypass_workflow_approval,
-            )
+            # Sync processing
+            try:
+                result = await self._process_sync_chat(
+                    message=enhanced_message,
+                    agent_name=agent_name,
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                    original_message=message,  # Pass original for extraction
+                    use_async=use_async,
+                    webhook_url=webhook_url,
+                    bypass_workflow_approval=bypass_workflow_approval,
+                )
+                success = True
+            except Exception:
+                success = False
+                raise
+            finally:
+                # Record framework mode telemetry for sync requests
+                if _is_framework_mode:
+                    telemetry = get_telemetry()
+                    if telemetry:
+                        latency_ms = (time.time() - _framework_start_time) * 1000
+                        telemetry.record_request(success, latency_ms, "framework")
+
+            return result
 
     async def _determine_async_mode(
         self,
