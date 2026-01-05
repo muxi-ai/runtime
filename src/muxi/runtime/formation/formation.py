@@ -73,6 +73,7 @@ from ..services.mcp.transports.base import (
     MCPTimeoutError,
 )
 from ..services.secrets.secrets_manager import SecretsManager
+from ..services.telemetry import TelemetryService, set_telemetry
 
 # Validation imports
 from ..utils import DependencyValidator
@@ -152,6 +153,7 @@ class Formation:
 
         # Service management
         self.secrets_manager: Optional[SecretsManager] = None
+        self._telemetry: Optional[TelemetryService] = None
         self._formation_path: Optional[str] = None
 
         # Async operation management
@@ -1022,6 +1024,51 @@ class Formation:
                             "suggestion": "Check configuration file format and accessibility",
                         },
                     ) from error
+
+    async def _start_telemetry(self) -> None:
+        """Initialize and start the telemetry service."""
+        from .. import __version__
+
+        self._telemetry = TelemetryService(version=__version__)
+
+        # Set formation info for telemetry
+        agents_count = len(self._agents_config) if self._agents_config else 0
+        tools_count = sum(
+            len(agent.get("tools", [])) for agent in (self._agents_config or [])
+        )
+        mcp_count = len(self._mcp_config.get("servers", [])) if self._mcp_config else 0
+        memory_backend = self._memory_config.get("backend", "none") if self._memory_config else "none"
+
+        # Collect enabled features
+        features = []
+        if self._clarification_config and self._clarification_config.get("enabled", True):
+            features.append("clarification")
+        if self.config and self.config.get("enable_workflow_by_default", False):
+            features.append("workflow")
+        if self._scheduler_config and self._scheduler_config.get("enabled", False):
+            features.append("scheduler")
+        if self._a2a_config and (self._a2a_config.get("inbound") or self._a2a_config.get("outbound")):
+            features.append("a2a")
+
+        self._telemetry.set_formation_info(
+            agents=agents_count,
+            tools=tools_count,
+            mcp_servers=mcp_count,
+            memory_backend=memory_backend,
+            features=features,
+        )
+
+        await self._telemetry.start()
+
+        # Set global reference for access from LLM and other services
+        set_telemetry(self._telemetry)
+
+    async def _stop_telemetry(self) -> None:
+        """Stop the telemetry service (final flush)."""
+        if self._telemetry:
+            await self._telemetry.shutdown()
+            set_telemetry(None)
+            self._telemetry = None
 
     def _prepare_services(self) -> None:
         """
@@ -2558,6 +2605,9 @@ class Formation:
                     ]
                 )
 
+            # Initialize and start telemetry service
+            await self._start_telemetry()
+
             # Count warnings/errors from observability (we'll use 0 for now as a placeholder)
             print(
                 InitEventFormatter.format_ok(
@@ -2734,6 +2784,9 @@ class Formation:
                         description=f"Failed to dispose database engine: {db_error}",
                     )
 
+            # Stop telemetry service (sends final flush)
+            await self._stop_telemetry()
+
             # Clean up references
             self._overlord = None
             self._is_running = False
@@ -2742,6 +2795,7 @@ class Formation:
             print(f"❌ Error during graceful overlord shutdown: {e}")
             print("💡 Suggestion: Use kill_overlord() for immediate termination if needed")
             # Force cleanup even if graceful shutdown fails
+            await self._stop_telemetry()
             self._overlord = None
             self._is_running = False
 
@@ -3386,6 +3440,11 @@ class Formation:
     def mcp_servers(self) -> List[Dict[str, Any]]:
         """Get the list of MCP server configurations."""
         return getattr(self, "_mcp_servers", [])
+
+    @property
+    def telemetry(self) -> Optional[TelemetryService]:
+        """Get the telemetry service instance for recording metrics."""
+        return self._telemetry
 
     def get_overlord(self) -> Optional[Any]:
         """

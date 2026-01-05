@@ -22,6 +22,21 @@ from .machine_id import get_machine_id
 
 logger = logging.getLogger(__name__)
 
+# Global telemetry instance for access from anywhere in the runtime
+_global_telemetry: "TelemetryService | None" = None
+
+
+def get_telemetry() -> "TelemetryService | None":
+    """Get the global telemetry service instance."""
+    return _global_telemetry
+
+
+def set_telemetry(service: "TelemetryService | None") -> None:
+    """Set the global telemetry service instance."""
+    global _global_telemetry
+    _global_telemetry = service
+
+
 TELEMETRY_ENDPOINT = "https://capture.muxi.org/v1/telemetry"
 FLUSH_INTERVAL_SECONDS = 3600  # 1 hour
 BACKUP_PATH = Path.home() / ".muxi" / "runtime" / "telemetry_backup.json"

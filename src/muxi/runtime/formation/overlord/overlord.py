@@ -6523,6 +6523,12 @@ Agent response: {raw_response}"""
                     )
 
                 if clarification_result.action == "clarify":
+                    # Record clarification feature usage in telemetry
+                    from ...services.telemetry import get_telemetry
+                    telemetry = get_telemetry()
+                    if telemetry:
+                        telemetry.record_feature("clarification")
+
                     streaming.stream(
                         "thinking",
                         "I need to clarify something with the user...",
@@ -7558,6 +7564,12 @@ Agent response: {raw_response}"""
                 },
                 description=f"Starting workflow orchestration (complexity: {analysis.complexity_score})",
             )
+
+            # Record workflow feature usage in telemetry
+            from ...services.telemetry import get_telemetry
+            telemetry = get_telemetry()
+            if telemetry:
+                telemetry.record_feature("workflow")
 
             # Determine if approval is needed - ALWAYS if explicitly requested
             # UNLESS bypass_workflow_approval is True (e.g., from triggers)

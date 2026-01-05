@@ -101,6 +101,24 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                 description=f"API request failed: {message}",
             )
 
+            # Record error in telemetry
+            if hasattr(request.app.state, "formation"):
+                formation = request.app.state.formation
+                if hasattr(formation, "telemetry") and formation.telemetry:
+                    # Classify error type for telemetry
+                    error_str = str(e).lower()
+                    if "timeout" in error_str:
+                        telemetry_error = "timeout"
+                    elif "rate" in error_str and "limit" in error_str:
+                        telemetry_error = "rate_limit"
+                    elif status_code in (401, 403) or "auth" in error_str:
+                        telemetry_error = "auth"
+                    elif "connection" in error_str or "network" in error_str:
+                        telemetry_error = "network"
+                    else:
+                        telemetry_error = "internal"
+                    formation.telemetry.record_error(telemetry_error)
+
             return JSONResponse(
                 status_code=status_code,
                 content=error_response.model_dump(),
@@ -136,6 +154,15 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
         # Store request ID in state for access by endpoints
         request.state.request_id = request_id
 
+        # Determine telemetry route and SDK for tracking
+        # Route: "server" if request came through MUXI Server proxy, else "direct"
+        has_server_header = has_header_case_insensitive(request.headers, "X-Muxi-Server")
+        telemetry_route = "server" if has_server_header else "direct"
+
+        # SDK: extract from X-Muxi-SDK header (format: "sdk/version")
+        sdk_header = get_header_case_insensitive(request.headers, "X-Muxi-SDK") or ""
+        telemetry_sdk = sdk_header.split("/")[0] if sdk_header else None
+
         # Log request
         if request_id:
             observability.observe(
@@ -156,6 +183,7 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
 
         # Calculate processing time
         processing_time = time.time() - start_time
+        latency_ms = processing_time * 1000
 
         # Increment request counter (thread-safe)
         if hasattr(request.app.state, "formation"):
@@ -163,6 +191,16 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
             if server and hasattr(server, "_request_count_lock"):
                 with server._request_count_lock:
                     server._request_count += 1
+
+            # Record in telemetry
+            formation = request.app.state.formation
+            if hasattr(formation, "telemetry") and formation.telemetry:
+                formation.telemetry.record_request(
+                    success=response.status_code < 400,
+                    latency_ms=latency_ms,
+                    route=telemetry_route,
+                    sdk=telemetry_sdk,
+                )
 
         # Log response
         if request_id:

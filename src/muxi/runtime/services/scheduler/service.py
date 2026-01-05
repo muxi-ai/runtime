@@ -670,6 +670,12 @@ class SchedulerService:
                 description=f"Starting execution of scheduled job: {job['title']}",
             )
 
+            # Record scheduled task feature usage in telemetry
+            from ..telemetry import get_telemetry
+            telemetry = get_telemetry()
+            if telemetry:
+                telemetry.record_feature("scheduled_task")
+
             # Execute through overlord
             if self.overlord:
                 # Get webhook URL from formation configuration
