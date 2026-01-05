@@ -71,7 +71,6 @@ paths:
                     type: "config.retrieved"
                     request:
                       id: "req_config123"
-                      idempotency_key: null
                     success: true
                     error: null
                     data:
@@ -132,7 +131,6 @@ paths:
                     type: "formation.status.retrieved"
                     request:
                       id: "req_status123"
-                      idempotency_key: null
                     success: true
                     error: null
                     data:
@@ -1132,9 +1130,6 @@ components:
       properties:
         id:
           type: string
-        idempotency_key:
-          type: string
-          nullable: true
     
     APIError:
       type: object
