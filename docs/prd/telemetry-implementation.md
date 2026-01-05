@@ -154,43 +154,35 @@ Implement privacy-respecting telemetry for the MUXI Runtime to understand usage 
 ```
 src/muxi/runtime/services/telemetry/
 ├── __init__.py
-├── machine_id.py      # Deterministic machine ID generation
-├── config.py          # ~/.muxi/config.yaml management
-├── collector.py       # Metrics collection and aggregation
-├── sender.py          # HTTP send with retry logic
-└── service.py         # Main service, hourly flush, lifecycle
+├── machine_id.py   # Deterministic machine ID (shared with other modules)
+└── service.py      # Everything else: config, counters, sending, lifecycle
 ```
 
-### Data Flow
+### State Management
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│                        Runtime                             │
-│                                                            │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐              │
-│  │ Overlord │    │  Agents  │    │ Services │              │
-│  └────┬─────┘    └────┬─────┘    └────┬─────┘              │
-│       │               │               │                    │
-│       └───────────────┼───────────────┘                    │
-│                       ▼                                    │
-│              ┌────────────────┐                            │
-│              │   Collector    │  ← Increment counters      │
-│              └────────┬───────┘                            │
-│                       │                                    │
-│                       ▼                                    │
-│    ┌──────────────────────────────────────┐                │
-│    │  ~/.muxi/runtime/telemetry.json      │  ← Persist     │
-│    └──────────────────────────────────────┘                │
-│                       │                                    │
-│                       ▼ (hourly)                           │
-│              ┌────────────────┐                            │
-│              │    Sender      │  ← If telemetry enabled    │
-│              └────────┬───────┘                            │
-│                       │                                    │
-└───────────────────────┼────────────────────────────────────┘
-                        │
-                        ▼
-           https://capture.muxi.org/v1/telemetry
+┌─────────────────────────────────────────┐
+│  In-memory counters (always collecting) │
+└─────────────────────────────────────────┘
+                    │
+                    ▼ (every hour or shutdown)
+              ┌───────────┐
+              │ Try send  │──────────────────┐
+              └───────────┘                  │
+                    │                        │
+         ┌──────────┴──────────┐             │
+         ▼                     ▼             │
+    [Success]              [Failure]         │
+    Reset counters         Keep counters     │
+    Delete backup file     Save to backup    │
+                           file (for restart)│
+                                             │
+                    ┌────────────────────────┘
+                    ▼
+              [On Startup]
+              Load backup file if exists
+              Add to in-memory counters
+              Delete backup file
 ```
 
 ---
@@ -200,170 +192,373 @@ src/muxi/runtime/services/telemetry/
 ### 1. Machine ID (`machine_id.py`)
 
 ```python
-def generate_machine_id() -> str:
-    """
-    Deterministic machine ID from OS hardware UUID.
-    Algorithm: format_as_uuid(sha256(os_machine_id + "muxi"))
-    """
-    os_id = _get_os_machine_id()  # Platform-specific
+import hashlib
+import platform
+import subprocess
+from pathlib import Path
+
+import yaml
+
+CONFIG_PATH = Path.home() / ".muxi" / "config.yaml"
+
+
+def _get_os_machine_id() -> str:
+    """Get platform-specific machine identifier."""
+    system = platform.system()
+    
+    if system == "Darwin":
+        result = subprocess.run(
+            ["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
+            capture_output=True, text=True
+        )
+        for line in result.stdout.split("\n"):
+            if "IOPlatformUUID" in line:
+                return line.split('"')[3]
+    
+    elif system == "Linux":
+        for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"]:
+            try:
+                return Path(path).read_text().strip()
+            except FileNotFoundError:
+                continue
+    
+    elif system == "Windows":
+        result = subprocess.run(
+            ["wmic", "csproduct", "get", "uuid"],
+            capture_output=True, text=True
+        )
+        lines = result.stdout.strip().split("\n")
+        if len(lines) > 1:
+            return lines[1].strip()
+    
+    return ""
+
+
+def get_machine_id() -> str:
+    """Get or create machine ID. Cached in ~/.muxi/config.yaml."""
+    # Check cache
+    if CONFIG_PATH.exists():
+        config = yaml.safe_load(CONFIG_PATH.read_text()) or {}
+        if "machine_id" in config:
+            return config["machine_id"]
+    
+    # Generate new
+    os_id = _get_os_machine_id()
+    if not os_id:
+        os_id = str(uuid.uuid4())  # Fallback for containers
+    
     hash_hex = hashlib.sha256(f"{os_id}muxi".encode()).hexdigest()
-    return f"{hash_hex[0:8]}-{hash_hex[8:12]}-{hash_hex[12:16]}-{hash_hex[16:20]}-{hash_hex[20:32]}"
+    machine_id = f"{hash_hex[0:8]}-{hash_hex[8:12]}-{hash_hex[12:16]}-{hash_hex[16:20]}-{hash_hex[20:32]}"
+    
+    # Cache it
+    config = yaml.safe_load(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
+    config["machine_id"] = machine_id
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(yaml.dump(config))
+    
+    return machine_id
 ```
 
-Platform sources:
-- **macOS**: `ioreg -rd1 -c IOPlatformExpertDevice | grep IOPlatformUUID`
-- **Linux**: `/etc/machine-id` or `/var/lib/dbus/machine-id`
-- **Windows**: `wmic csproduct get uuid`
+### 2. Telemetry Service (`service.py`)
 
-### 2. Config Management (`config.py`)
-
-> **Global Config:** Shared by CLI, Server, and Runtime at `~/.muxi/config.yaml`
-
-Location: `~/.muxi/config.yaml`
-
-```yaml
-machine_id: 7f83b165-7ff1-fc53-b92d-c18148a1d65d
-country: US
-telemetry: true  # Set to false to opt-out (applies to all MUXI modules)
-```
-
-Functions:
-- `get_or_create_machine_id()` - Generate once, cache in config file
-- `get_or_fetch_country()` - Fetch from ipapi.co once, cache in config file
-- `is_telemetry_enabled()` - Check env `MUXI_TELEMETRY=0` first, then config file
+Single file with everything:
 
 ```python
+import asyncio
+import json
+import os
+import threading
+import time
+from collections import defaultdict
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Optional
+
+import httpx
+import yaml
+
+from .machine_id import get_machine_id
+
+# Constants
+CONFIG_PATH = Path.home() / ".muxi" / "config.yaml"
+BACKUP_PATH = Path.home() / ".muxi" / "runtime" / "telemetry.json"
+ENDPOINT = os.environ.get("TELEMETRY_URL", "https://capture.muxi.org/v1/telemetry")
+FLUSH_INTERVAL = timedelta(hours=1)
+SEND_TIMEOUT = 2.0
+MAX_LATENCIES = 1000  # Cap for percentile calculation
+
+
 def is_telemetry_enabled() -> bool:
-    """Check if telemetry is enabled. Opt-in by default."""
-    # Environment variable takes precedence
+    """Check opt-out: env var first, then config file."""
     if os.environ.get("MUXI_TELEMETRY") == "0":
         return False
+    if CONFIG_PATH.exists():
+        config = yaml.safe_load(CONFIG_PATH.read_text()) or {}
+        if config.get("telemetry") is False:
+            return False
+    return True
+
+
+def get_country() -> str:
+    """Get country code. Fetched once from ipapi.co, then cached."""
+    if CONFIG_PATH.exists():
+        config = yaml.safe_load(CONFIG_PATH.read_text()) or {}
+        if "country" in config:
+            return config["country"]
     
-    # Check global config file
-    config = load_global_config()  # ~/.muxi/config.yaml
-    return config.get("telemetry", True)  # Default: enabled
-```
+    # Fetch once
+    try:
+        resp = httpx.get("https://ipapi.co/json/", timeout=2)
+        country = resp.json().get("country_code", "XX")
+    except Exception:
+        country = "XX"
+    
+    # Cache it
+    config = yaml.safe_load(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
+    config["country"] = country
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(yaml.dump(config))
+    
+    return country
 
-### 3. Collector (`collector.py`)
 
-Thread-safe counter aggregation:
-
-```python
-class TelemetryCollector:
-    def __init__(self):
+class TelemetryService:
+    """Collects and sends runtime telemetry."""
+    
+    def __init__(self, version: str):
         self._lock = threading.Lock()
-        self._counters = defaultdict(int)
-        self._latencies = []  # For percentile calculation
-        self._features_enabled = set()
-        self._llm_providers = set()
-        self._errors_by_type = defaultdict(int)
-        self._sdk_requests = defaultdict(int)
+        self._version = version
+        self._start_time = datetime.now()
+        self._last_flush = datetime.now()
+        
+        # Counters - match payload structure exactly
+        self._requests_total = 0
+        self._requests_success = 0
+        self._requests_failed = 0
+        self._sources = {"framework": 0, "api": {"direct": 0, "server": 0}, "sdk": {}}
+        self._failures = {"framework": 0, "api": {"direct": 0, "server": 0}, "sdk": {}}
+        self._latencies: list[float] = []
+        self._errors: dict[str, int] = defaultdict(int)
+        self._llm: dict = {"requests_total": 0, "cache_hits": 0}  # provider/model added dynamically
+        self._features: dict[str, int] = defaultdict(int)
+        
+        # Formation info (set once on startup)
+        self._formation: dict = {}
+        
+        # Load any pending data from previous run
+        self._load_backup()
     
-    def record_request(self, success: bool, latency_ms: float, sdk: str = "direct"):
+    def _load_backup(self):
+        """Load counters from backup file if exists."""
+        if BACKUP_PATH.exists():
+            try:
+                data = json.loads(BACKUP_PATH.read_text())
+                # Merge with current counters
+                self._requests_total += data.get("requests_total", 0)
+                self._requests_success += data.get("requests_success", 0)
+                self._requests_failed += data.get("requests_failed", 0)
+                # ... merge other fields as needed
+                BACKUP_PATH.unlink()  # Delete after loading
+            except Exception:
+                pass
+    
+    def _save_backup(self):
+        """Save current counters to backup file."""
+        BACKUP_PATH.parent.mkdir(parents=True, exist_ok=True)
+        BACKUP_PATH.write_text(json.dumps(self._build_payload()["payload"]))
+    
+    def set_formation_info(self, agents: int, tools: int, mcp_servers: int,
+                          memory_backend: str, features: list[str]):
+        """Set formation metadata (called once on startup)."""
+        self._formation = {
+            "agents_count": agents,
+            "tools_count": tools,
+            "mcp_servers_count": mcp_servers,
+            "memory_backend": memory_backend,
+            "features_enabled": features
+        }
+    
+    def record_request(self, success: bool, latency_ms: float, 
+                       route: str, sdk: Optional[str] = None):
+        """
+        Record a request.
+        
+        Args:
+            success: Whether request succeeded
+            latency_ms: Response time in milliseconds
+            route: "framework" | "direct" | "server"
+            sdk: SDK name if present (e.g., "python", "typescript")
+        """
         with self._lock:
-            self._counters["requests_total"] += 1
-            self._counters["requests_success" if success else "requests_failed"] += 1
-            self._latencies.append(latency_ms)
-            self._sdk_requests[sdk] += 1
+            self._requests_total += 1
+            if success:
+                self._requests_success += 1
+            else:
+                self._requests_failed += 1
+            
+            # Track by route
+            if route == "framework":
+                self._sources["framework"] += 1
+                if not success:
+                    self._failures["framework"] += 1
+            elif route == "direct":
+                self._sources["api"]["direct"] += 1
+                if not success:
+                    self._failures["api"]["direct"] += 1
+            elif route == "server":
+                self._sources["api"]["server"] += 1
+                if not success:
+                    self._failures["api"]["server"] += 1
+            
+            # Track by SDK
+            if sdk:
+                self._sources["sdk"][sdk] = self._sources["sdk"].get(sdk, 0) + 1
+                if not success:
+                    self._failures["sdk"][sdk] = self._failures["sdk"].get(sdk, 0) + 1
+            
+            # Track latency (capped)
+            if len(self._latencies) < MAX_LATENCIES:
+                self._latencies.append(latency_ms)
     
     def record_error(self, error_type: str):
+        """Record error by type: timeout, rate_limit, auth, network, internal."""
         with self._lock:
-            self._errors_by_type[error_type] += 1
+            self._errors[error_type] += 1
     
-    def record_llm_request(self, provider: str, cache_hit: bool):
+    def record_llm_request(self, provider: str, model: str, cache_hit: bool):
+        """Record LLM request with provider and model."""
         with self._lock:
-            self._llm_providers.add(provider)
-            self._counters["llm_requests_total"] += 1
+            self._llm["requests_total"] += 1
             if cache_hit:
-                self._counters["llm_cache_hits"] += 1
+                self._llm["cache_hits"] += 1
+            
+            # Track per provider/model
+            if provider not in self._llm:
+                self._llm[provider] = {}
+            if model not in self._llm[provider]:
+                self._llm[provider][model] = {"requests": 0, "cache_hits": 0}
+            
+            self._llm[provider][model]["requests"] += 1
+            if cache_hit:
+                self._llm[provider][model]["cache_hits"] += 1
     
-    def record_feature_use(self, feature: str):
+    def record_feature(self, feature: str):
+        """Record feature usage."""
         with self._lock:
-            self._counters[f"feature_{feature}"] += 1
+            self._features[feature] += 1
     
-    def set_formation_info(self, agents: int, tools: int, mcp_servers: int, 
-                          memory_backend: str, features: list[str]):
-        with self._lock:
-            self._counters["agents_count"] = agents
-            self._counters["tools_count"] = tools
-            self._counters["mcp_servers_count"] = mcp_servers
-            self._memory_backend = memory_backend
-            self._features_enabled = set(features)
+    def _calculate_percentiles(self) -> dict:
+        """Calculate latency percentiles."""
+        if not self._latencies:
+            return {"p50": 0, "p95": 0, "p99": 0}
+        
+        sorted_lat = sorted(self._latencies)
+        n = len(sorted_lat)
+        return {
+            "p50": sorted_lat[int(n * 0.50)],
+            "p95": sorted_lat[int(n * 0.95)] if n >= 20 else sorted_lat[-1],
+            "p99": sorted_lat[int(n * 0.99)] if n >= 100 else sorted_lat[-1]
+        }
     
-    def snapshot_and_reset(self) -> dict:
-        """Get current metrics and reset counters."""
-        with self._lock:
-            snapshot = self._build_payload()
-            self._reset()
-            return snapshot
-```
-
-### 4. Sender (`sender.py`)
-
-> **Server Decision:** On failure, wait 5 seconds and retry once. If still fails, wait until next hourly flush. No rate limiting.
-
-```python
-ENDPOINT = os.environ.get("TELEMETRY_URL", "https://capture.muxi.org/v1/telemetry")
-TIMEOUT = 2.0
-RETRY_BACKOFF = 5.0  # seconds
-
-async def send_telemetry(payload: dict) -> bool:
-    """Send with single retry after 5 second backoff."""
-    # First attempt
-    if await _do_send(payload):
-        return True
+    def _build_payload(self) -> dict:
+        """Build the full telemetry payload."""
+        uptime = (datetime.now() - self._start_time).total_seconds() / 3600
+        
+        # Calculate cache hit rate
+        llm_total = self._llm.get("requests_total", 0)
+        llm_hits = self._llm.get("cache_hits", 0)
+        cache_hit_rate = round(llm_hits / llm_total, 2) if llm_total > 0 else 0
+        
+        return {
+            "module": "runtime",
+            "schema_version": 1,
+            "machine_id": get_machine_id(),
+            "ts": datetime.utcnow().isoformat() + "Z",
+            "country": get_country(),
+            "payload": {
+                "version": self._version,
+                "uptime_hours": round(uptime, 1),
+                "formation": self._formation,
+                "requests": {
+                    "total": self._requests_total,
+                    "success": self._requests_success,
+                    "failed": self._requests_failed,
+                    "sources": self._sources,
+                    "failures": self._failures
+                },
+                "latency_ms": self._calculate_percentiles(),
+                "errors": dict(self._errors),
+                "llm": {**self._llm, "cache_hit_rate": cache_hit_rate},
+                "features": dict(self._features)
+            }
+        }
     
-    # Wait 5 seconds and retry once
-    await asyncio.sleep(RETRY_BACKOFF)
+    def _reset_counters(self):
+        """Reset all counters after successful send."""
+        self._requests_total = 0
+        self._requests_success = 0
+        self._requests_failed = 0
+        self._sources = {"framework": 0, "api": {"direct": 0, "server": 0}, "sdk": {}}
+        self._failures = {"framework": 0, "api": {"direct": 0, "server": 0}, "sdk": {}}
+        self._latencies = []
+        self._errors = defaultdict(int)
+        self._llm = {"requests_total": 0, "cache_hits": 0}
+        self._features = defaultdict(int)
+        # Note: _formation is NOT reset (static info)
     
-    # Second attempt - if this fails, we wait until next hour
-    return await _do_send(payload)
-
-async def _do_send(payload: dict) -> bool:
-    try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            resp = await client.post(ENDPOINT, json=payload)
-            return 200 <= resp.status_code < 300
-    except Exception:
+    async def _send(self, payload: dict) -> bool:
+        """Send payload with single retry."""
+        for attempt in range(2):
+            try:
+                async with httpx.AsyncClient(timeout=SEND_TIMEOUT) as client:
+                    resp = await client.post(ENDPOINT, json=payload)
+                    if 200 <= resp.status_code < 300:
+                        return True
+            except Exception:
+                pass
+            
+            if attempt == 0:
+                await asyncio.sleep(5)  # Wait 5s before retry
+        
         return False
-```
-
-### 5. Service (`service.py`)
-
-```python
-class TelemetryService:
-    FLUSH_INTERVAL = timedelta(hours=1)
-    STATE_PATH = Path.home() / ".muxi" / "runtime" / "telemetry.json"
     
-    def __init__(self):
-        self.collector = TelemetryCollector()
-        self.start_time = datetime.now()
+    async def flush(self):
+        """Flush telemetry: send if enabled, handle success/failure."""
+        with self._lock:
+            if self._requests_total == 0:
+                return  # Nothing to send
+            
+            payload = self._build_payload()
+        
+        if not is_telemetry_enabled():
+            return  # Silently skip if disabled
+        
+        success = await self._send(payload)
+        
+        with self._lock:
+            if success:
+                self._reset_counters()
+                if BACKUP_PATH.exists():
+                    BACKUP_PATH.unlink()
+            else:
+                self._save_backup()
+        
         self._last_flush = datetime.now()
-        self._load_state()
     
     async def start(self):
-        """Start background flush task."""
+        """Start the hourly flush loop."""
         asyncio.create_task(self._flush_loop())
     
     async def _flush_loop(self):
+        """Background task: flush every hour."""
         while True:
             await asyncio.sleep(60)  # Check every minute
-            if datetime.now() - self._last_flush >= self.FLUSH_INTERVAL:
-                await self._flush()
-    
-    async def _flush(self):
-        payload = self._build_full_payload()
-        self._save_state(payload)  # Always save locally
-        
-        if is_telemetry_enabled():
-            await send_telemetry(payload)
-        
-        self.collector.snapshot_and_reset()
-        self._last_flush = datetime.now()
+            if datetime.now() - self._last_flush >= FLUSH_INTERVAL:
+                await self.flush()
     
     async def shutdown(self):
-        """Final flush on shutdown."""
-        await self._flush()
+        """Flush on shutdown."""
+        await self.flush()
 ```
 
 ---
@@ -374,260 +569,142 @@ class TelemetryService:
 
 ```python
 # In formation.py
-async def _initialize_telemetry(self):
-    self.telemetry = TelemetryService()
-    self.telemetry.collector.set_formation_info(
-        agents=len(self.agents),
-        tools=self._count_tools(),
-        mcp_servers=len(self.mcp_servers),
-        memory_backend=self.memory_config.get("backend", "none"),
-        features=self._enabled_features()
-    )
-    await self.telemetry.start()
+from muxi.runtime.services.telemetry import TelemetryService
+
+class Formation:
+    async def initialize(self):
+        # ... other init ...
+        
+        self.telemetry = TelemetryService(version=__version__)
+        self.telemetry.set_formation_info(
+            agents=len(self.agents),
+            tools=self._count_tools(),
+            mcp_servers=len(self.mcp_servers),
+            memory_backend=self.memory_config.get("backend", "none"),
+            features=self._enabled_features()
+        )
+        await self.telemetry.start()
+    
+    async def shutdown(self):
+        await self.telemetry.shutdown()
 ```
 
-### 2. Request Middleware
+### 2. Request Tracking
 
-> **Server Integration:** The MUXI Server proxy passes through `X-Muxi-*` headers from clients. The runtime can read:
-> - `X-Muxi-Server` - Server version (e.g., "1.0.0") - indicates request came through server
-> - `X-Muxi-SDK` - SDK identifier (e.g., "python/1.2.3", "cli/0.12.0") - identifies calling SDK
+**Route detection** (mutually exclusive):
+| Route | Condition |
+|-------|-----------|
+| `framework` | Direct Python API call |
+| `direct` | HTTP without `X-Muxi-Server` header |
+| `server` | HTTP with `X-Muxi-Server` header |
 
-#### Request Source Tracking
-
-Two independent dimensions are tracked:
-
-**Route** (how the request arrived - mutually exclusive):
-| Source | Condition | Example |
-|--------|-----------|---------|
-| `framework` | Direct Python API call (no HTTP) | `formation.chat("hello")` |
-| `api.direct` | HTTP without `X-Muxi-Server` header | curl directly to runtime |
-| `api.server` | HTTP with `X-Muxi-Server` header | Request proxied through MUXI Server |
-
-**SDK** (which SDK made the request - independent dimension):
-
-Extracted from `X-Muxi-SDK` header (format: `sdk/version`):
-| Header Value | Extracted SDK |
-|--------------|---------------|
-| `python/1.2.3` | `python` |
-| `typescript/0.5.0` | `typescript` |
-| `cli/1.0.0` | `cli` |
-| `java/2.0.0` | `java` |
-| (no header) | not counted |
-
-**Math:**
-- `total = framework + api.direct + api.server`
-- `sum(sdk.*) = requests with X-Muxi-SDK header` (currently subset of api.server, may change)
+**SDK detection** (from `X-Muxi-SDK` header, format `sdk/version`):
 
 ```python
-# In server/middleware.py
+# HTTP middleware
 @app.middleware("http")
 async def telemetry_middleware(request: Request, call_next):
     start = time.time()
-    
-    # Determine route (how request arrived)
-    has_server_header = request.headers.get("X-Muxi-Server") is not None
-    route = "server" if has_server_header else "direct"
-    
-    # Determine SDK (independent dimension)
+    route = "server" if request.headers.get("X-Muxi-Server") else "direct"
     sdk_header = request.headers.get("X-Muxi-SDK", "")
-    sdk = sdk_header.split("/")[0] if sdk_header else None  # "python", "typescript", "cli", or None
+    sdk = sdk_header.split("/")[0] if sdk_header else None
     
     try:
         response = await call_next(request)
-        latency_ms = (time.time() - start) * 1000
-        telemetry.collector.record_request(
+        telemetry.record_request(
             success=response.status_code < 400,
-            latency_ms=latency_ms,
+            latency_ms=(time.time() - start) * 1000,
             route=route,
             sdk=sdk
         )
         return response
     except Exception as e:
-        telemetry.collector.record_request(success=False, latency_ms=0, route=route, sdk=sdk)
-        telemetry.collector.record_error(_classify_error(e))
+        telemetry.record_request(False, 0, route, sdk)
+        telemetry.record_error(classify_error(e))
         raise
-```
 
-For framework mode (direct Python API), track at the Formation level:
-
-```python
-# In formation.py
+# Framework mode (in formation.py)
 async def chat(self, message: str, ...):
     start = time.time()
     try:
         result = await self._process_chat(message, ...)
-        latency_ms = (time.time() - start) * 1000
-        self.telemetry.collector.record_request(
-            success=True,
-            latency_ms=latency_ms,
-            route="framework",
-            sdk=None
-        )
+        self.telemetry.record_request(True, (time.time() - start) * 1000, "framework")
         return result
     except Exception as e:
-        self.telemetry.collector.record_request(success=False, latency_ms=0, route="framework", sdk=None)
+        self.telemetry.record_request(False, 0, "framework")
         raise
 ```
 
-### 3. LLM Service
+### 3. LLM Tracking
 
 ```python
 # In services/llm/llm.py
-async def complete(self, messages, **kwargs):
-    provider = self._get_provider_name()  # "openai", "anthropic", etc.
-    cache_hit = self._check_cache(messages)
-    
-    telemetry.collector.record_llm_request(provider, cache_hit)
-    # ... rest of completion logic
+telemetry.record_llm_request(provider="openai", model="gpt-4o", cache_hit=False)
 ```
 
-### 4. Feature Usage
+### 4. Feature Tracking
 
 ```python
-# In overlord/clarification.py
-async def request_clarification(self, ...):
-    telemetry.collector.record_feature_use("clarification")
-    # ...
-
-# In workflow/executor.py
-async def execute_workflow(self, ...):
-    telemetry.collector.record_feature_use("workflow")
-    # ...
-
-# In scheduler/service.py
-async def run_scheduled_task(self, ...):
-    telemetry.collector.record_feature_use("scheduled_task")
-    # ...
+telemetry.record_feature("clarification")
+telemetry.record_feature("workflow")
+telemetry.record_feature("scheduled_task")
 ```
 
----
-
-## Error Classification
+### 5. Error Classification
 
 ```python
 def classify_error(error: Exception) -> str:
-    error_str = str(error).lower()
-    
-    if "timeout" in error_str or isinstance(error, asyncio.TimeoutError):
-        return "timeout"
-    if "rate" in error_str and "limit" in error_str:
-        return "rate_limit"
-    if "401" in error_str or "403" in error_str or "auth" in error_str:
-        return "auth"
-    if "connection" in error_str or "network" in error_str:
-        return "network"
-    
+    s = str(error).lower()
+    if "timeout" in s: return "timeout"
+    if "rate" in s and "limit" in s: return "rate_limit"
+    if "401" in s or "403" in s or "auth" in s: return "auth"
+    if "connection" in s or "network" in s: return "network"
     return "internal"
 ```
 
 ---
 
-## Local State File
-
-> **Server Decision:** Simple accumulate-until-sent approach. No historical data kept.
-
-Path: `~/.muxi/runtime/telemetry.json`
-
-```json
-{
-  "last_flush": "2026-01-02T09:00:00Z",
-  "pending_payload": {
-    "requests": {"total": 150, "success": 148},
-    "...": "..."
-  }
-}
-```
-
-Behavior:
-- **Successful send** → Clear file, reset counters, start fresh
-- **Failed send** → Keep accumulating until next successful send
-- **Runtime restart** → Load pending payload, continue accumulating
-- **Telemetry disabled** → Still collect locally (in case user re-enables)
-
----
-
 ## Testing
 
-### Environment Override
-
 ```bash
+# Override endpoint for testing
 export TELEMETRY_URL=http://localhost:8080/v1/telemetry
 export MUXI_TELEMETRY=0  # Disable sending (still collects)
 ```
 
-### Unit Tests
-
-```python
-def test_machine_id_deterministic():
-    """Same machine should generate same ID."""
-    id1 = generate_machine_id()
-    id2 = generate_machine_id()
-    assert id1 == id2
-
-def test_collector_thread_safe():
-    """Concurrent increments should be accurate."""
-    collector = TelemetryCollector()
-    # ... concurrent test
-
-def test_flush_respects_opt_out():
-    """Data collected but not sent when disabled."""
-    # ...
-```
+Key test cases:
+- Machine ID is deterministic (same machine = same ID)
+- Counters are thread-safe under concurrent access
+- Opt-out prevents sending but continues collection
+- Backup file created on send failure, loaded on restart
 
 ---
 
-## Rollout Plan
+## Implementation Checklist
 
-### Phase 1: Infrastructure (Day 1)
-- [ ] Create telemetry module structure
-- [ ] Implement machine_id.py
-- [ ] Implement config.py
-- [ ] Unit tests for core functions
+**Phase 1: Core**
+- [ ] `machine_id.py` - deterministic UUID generation
+- [ ] `service.py` - config, counters, sending, lifecycle
 
-### Phase 2: Collection (Day 1-2)
-- [ ] Implement collector.py
-- [ ] Implement sender.py
-- [ ] Implement service.py
-- [ ] Add formation startup integration
+**Phase 2: Integration**
+- [ ] Formation startup/shutdown hooks
+- [ ] Request middleware (route + SDK tracking)
+- [ ] LLM service tracking (provider + model)
+- [ ] Feature tracking hooks
 
-### Phase 3: Integration (Day 2)
-- [ ] Add request middleware
-- [ ] Add LLM tracking
-- [ ] Add feature usage tracking
-- [ ] Integration tests
-
-### Phase 4: Validation (Day 2)
+**Phase 3: Validation**
 - [ ] Test with local receiver
-- [ ] Verify payload format
+- [ ] Verify payload format matches spec
 - [ ] Test opt-out behavior
-- [ ] Test restart persistence
+- [ ] Test backup/restore on failure
 
 ---
 
-## Open Questions
+## Privacy Checklist
 
-1. **Percentile calculation** - Keep last N latencies in memory or use streaming algorithm (t-digest)?
-   > *Suggestion:* Keep last 1000 latencies in memory, calculate percentiles on snapshot. Simple and sufficient.
-
-2. ~~**Formation changes** - If user hot-reloads formation, do we track as new session or continue?~~
-   > **RESOLVED:** Continue same session. Formation info is updated on reload but counters persist.
-
-3. ~~**Multi-formation** - If someone runs multiple formations on same machine, separate or combined telemetry?~~
-   > **RESOLVED:** Separate. Each runtime instance has its own telemetry service and sends independently.
-
-4. ~~**Startup telemetry** - Send on startup or wait for first hourly flush?~~
-   > **RESOLVED:** Wait for first hourly flush. Consistent with server behavior.
-
----
-
-## Appendix: Privacy Review Checklist
-
-Before shipping, verify:
-
-- [ ] No formation names, paths, or content in payload
-- [ ] No user prompts or agent responses
-- [ ] No API keys, tokens, or secrets
-- [ ] No IP addresses (country code only)
-- [ ] No timestamps that could identify users
-- [ ] Machine ID is hashed, not raw hardware ID
-- [ ] Opt-out is respected at env and config level
+Before shipping, verify NO payload contains:
+- [ ] Formation names, paths, or content
+- [ ] User prompts or agent responses
+- [ ] API keys, tokens, or secrets
+- [ ] IP addresses (country code only)
+- [ ] Raw hardware identifiers (hashed only)
