@@ -52,41 +52,6 @@ MUXI Runtime uses a **fixed YYYYMMDD format** for maximum clarity:
 3. **MAJOR for Breaking**: Increment MAJOR for breaking changes or API incompatibilities
 4. **SemVer Compatibility**: Every version is syntactically valid SemVer 2.0
 
-## MUXI Runtime Version Strategy
-
-### Development Phases
-
-**Alpha/Experimental Phase (MAJOR = 0)**
-```bash
-0.20250115.0 # Initial formation engine (January 15, 2025)
-0.20250115.1 # Same-day hotfix for critical bug
-0.20250130.0 # Memory system improvements (January 30, 2025)
-0.20250215.0 # MCP integration (February 15, 2025)
-```
-
-**Stable Release Phase (MAJOR = 1)**
-```bash
-1.20250301.0 # First stable release with workflow orchestration (March 1, 2025)
-1.20250301.1 # Performance optimizations patch
-1.20250315.0 # A2A protocol enhancements (March 15, 2025)
-1.20250401.0 # April feature release
-```
-
-**Regular Feature Releases**
-```bash
-1.20250515.0 # May feature release (May 15, 2025)
-1.20250515.1 # Security patch applied later
-1.20250601.0 # June feature release (June 1, 2025)
-1.20250615.0 # Mid-month feature release (June 15, 2025)
-```
-
-**Breaking Changes (MAJOR = 2)**
-```bash
-2.20250701.0 # Breaking API changes (July 1, 2025)
-2.20250701.1 # Same-day hotfix
-2.20250715.0 # Next feature release with new API
-```
-
 ### Release Cadence Guidelines
 
 **Fixed YYYYMMDD Format Benefits:**
@@ -95,24 +60,6 @@ MUXI Runtime uses a **fixed YYYYMMDD format** for maximum clarity:
 - **No Format Confusion**: Developers always know what the 8-digit number means
 - **Better Support**: "I need the version from March 15th" → `1.20250315.x`
 - **Simplified Rules**: No complex format evolution to understand
-
-**Release Patterns:**
-```bash
-# Weekly releases
-1.20250107.0 # January 7, 2025
-1.20250114.0 # January 14, 2025
-1.20250121.0 # January 21, 2025
-
-# Bi-weekly releases
-1.20250201.0 # February 1, 2025
-1.20250215.0 # February 15, 2025
-1.20250301.0 # March 1, 2025
-
-# Monthly releases
-1.20250401.0 # April 1, 2025
-1.20250501.0 # May 1, 2025
-1.20250601.0 # June 1, 2025
-```
 
 ## Pre-release and Metadata
 
@@ -159,25 +106,6 @@ muxi-runtime = "1.20251015"  # Tilde ranges work normally
 require github.com/muxi-ai/runtime v1.20251015.0
 ```
 
-## Migration from SemVer
-
-If migrating from traditional SemVer, follow this playbook:
-
-### Quick Migration (Most Projects)
-
-1. **Keep current MAJOR** unless you're also making breaking changes
-2. **Reset PATCH to 0**
-3. **Use current date in YYYYMMDD format**
-4. **Update documentation and tooling**
-
-Example:
-```bash
-# Before (SemVer)
-1.15.3
-
-# After (ScalVer) - if migrating on October 15, 2025
-1.20251015.0  # Clear date-based versioning
-```
 
 ### Guard Against Legacy Minor Overflows
 
@@ -222,15 +150,6 @@ ScalVer maintains proper ordering with standard SemVer comparison tools:
 3. **Read Dates**: The 8-digit date tells you exactly when features were released
 4. **Check Breaking Changes**: MAJOR bumps indicate breaking changes
 
-## Implementation Checklist
-
-- [ ] Adopt fixed YYYYMMDD format for all releases
-- [ ] Update version in `pyproject.toml` or equivalent
-- [ ] Update CI/CD scripts to use 8-digit date format
-- [ ] Document version strategy in README
-- [ ] Test package manager compatibility with 8-digit versions
-- [ ] Update release automation scripts
-- [ ] Communicate change to users with clear examples
 
 ## Resources
 
@@ -259,4 +178,4 @@ A: ScalVer continues to work correctly, though the reference grammar uses 4-digi
 
 ---
 
-*This document reflects MUXI Runtime's adoption of ScalVer with fixed YYYYMMDD format for maximum clarity, providing exact release dating while maintaining full SemVer ecosystem compatibility.*
+*This document reflects MUXI's adoption of ScalVer with fixed YYYYMMDD format for maximum clarity, providing exact release dating while maintaining full SemVer ecosystem compatibility.*
