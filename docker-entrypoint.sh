@@ -57,6 +57,24 @@ if [ -z "$1" ]; then
 fi
 
 FORMATION_PATH="$1"
+shift  # Remove formation path from args
+
+# Parse remaining arguments (--port, --host)
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --port)
+            CLI_PORT="$2"
+            shift 2
+            ;;
+        --host)
+            CLI_HOST="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
 
 # Check if formation file exists
 if [ ! -f "$FORMATION_PATH" ]; then
@@ -73,9 +91,9 @@ if [ ! -f "$FORMATION_PATH" ]; then
     exit 1
 fi
 
-# Get port and host from environment or use defaults
-PORT="${PORT:-${FORMATION_PORT:-8000}}"
-HOST="${HOST:-${FORMATION_HOST:-127.0.0.1}}"
+# Priority: CLI args > environment vars > defaults
+PORT="${CLI_PORT:-${PORT:-${FORMATION_PORT:-8000}}}"
+HOST="${CLI_HOST:-${HOST:-${FORMATION_HOST:-127.0.0.1}}}"
 
 # Display configuration
 echo "📋 Configuration:"
@@ -95,12 +113,12 @@ fi
 mkdir -p ~/.muxi
 if [ -n "$OPENAI_API_KEY" ]; then
     echo "🔐 Setting up OPENAI_API_KEY secret..."
-    python -m muxi.utils.add_secret OPENAI_API_KEY "$OPENAI_API_KEY" 2>/dev/null || true
+    python -m muxi.runtime.utils.add_secret OPENAI_API_KEY "$OPENAI_API_KEY" 2>/dev/null || true
 fi
 
 if [ -n "$ANTHROPIC_API_KEY" ]; then
     echo "🔐 Setting up ANTHROPIC_API_KEY secret..."
-    python -m muxi.utils.add_secret ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY" 2>/dev/null || true
+    python -m muxi.runtime.utils.add_secret ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY" 2>/dev/null || true
 fi
 
 echo ""
@@ -111,4 +129,4 @@ echo ""
 
 # Run the formation server with port and host overrides
 # The formation will load secrets from ~/.muxi/secrets.enc
-exec python -m muxi.utils.run_formation "$FORMATION_PATH" --port "$PORT" --host "$HOST"
+exec python -m muxi.runtime.utils.run_formation "$FORMATION_PATH" --port "$PORT" --host "$HOST"

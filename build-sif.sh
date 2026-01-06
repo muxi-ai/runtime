@@ -31,10 +31,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Read version from .version file
-if [ -f "src/muxi/.version" ]; then
+if [ -f "src/muxi/runtime/.version" ]; then
+    VERSION=$(cat src/muxi/runtime/.version | tr -d '[:space:]')
+elif [ -f "src/muxi/.version" ]; then
     VERSION=$(cat src/muxi/.version | tr -d '[:space:]')
 else
-    echo "❌ Error: src/muxi/.version not found"
+    echo "❌ Error: .version file not found"
     exit 1
 fi
 
