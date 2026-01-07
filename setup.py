@@ -39,34 +39,17 @@ def download_spacy_model():
         print("  Please run manually: python -m spacy download en_core_web_sm")
 
 
-def install_muxi_cli():
-    """Install the MUXI CLI (Go binary)."""
-    # TODO: When the Go CLI is ready, implement installation here
-    # This should:
-    # 1. Detect the platform (Linux/macOS/Windows, AMD64/ARM64)
-    # 2. Download the appropriate binary from GitHub releases
-    # 3. Install it to a location in PATH (e.g., /usr/local/bin/muxi)
-    # 4. Make it executable (chmod +x on Unix systems)
-    #
-    # Example implementation:
-    # platform = detect_platform()
-    # binary_url = f"https://github.com/muxi-ai/cli/releases/latest/download/muxi_{platform}"
-    # install_location = get_install_location()  # /usr/local/bin/muxi or ~/.local/bin/muxi
-    # download_binary(binary_url, install_location)
-    # make_executable(install_location)
-    pass
-
-
 class PostInstallCommand(install):
     """Post-installation for development install."""
+
     def run(self):
         install.run(self)
         download_spacy_model()
-        install_muxi_cli()  # TODO: Enable when Go CLI is ready
 
 
 class PostDevelopCommand(develop):
     """Post-installation for editable install."""
+
     def run(self):
         develop.run(self)
         download_spacy_model()
@@ -75,6 +58,7 @@ class PostDevelopCommand(develop):
 
 class PostEggInfoCommand(egg_info):
     """Post-installation for egg info."""
+
     def run(self):
         egg_info.run(self)
         # Don't download on egg_info as it's called frequently
@@ -117,8 +101,8 @@ except FileNotFoundError:
 # Optional fields with defaults
 description = project_config.get("description", "")
 authors = project_config.get("authors", [])
-author = authors[0]["name"] if authors else ""
-author_email = authors[0]["email"] if authors else ""
+author = authors[0]["name"] if authors else "MUXI Team"
+author_email = authors[0]["email"] if authors else "dev@muxi.org"
 install_requires = project_config.get("dependencies", [])
 extras_require = project_config.get("optional-dependencies", {})
 python_requires = project_config.get("requires-python", ">=3.10")
@@ -165,9 +149,9 @@ setup(
     extras_require=extras_require,
     # CLI will be installed as Go binary in post-install
     cmdclass={
-        'install': PostInstallCommand,
-        'develop': PostDevelopCommand,
-        'egg_info': PostEggInfoCommand,
+        "install": PostInstallCommand,
+        "develop": PostDevelopCommand,
+        "egg_info": PostEggInfoCommand,
     },
     zip_safe=False,
 )
