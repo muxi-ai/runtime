@@ -1,4 +1,4 @@
-# MUXI Agent Protocol (MAP) Specification
+# Computer Use Protocol (CUP) Specification
 
 **Version:** 0.1.0 (Draft)  
 **Status:** Proposal  
@@ -9,7 +9,7 @@
 
 ## Abstract
 
-The MUXI Agent Protocol (MAP) defines a standardized communication protocol between MUXI formations (server-side) and autonomous agents running on end-user machines (client-side). Similar to how MCP standardized tool integration, MAP standardizes remote agent coordination.
+The Computer Use Protocol (CUP) defines a standardized communication protocol between MUXI formations (server-side) and autonomous agents running on end-user machines (client-side). Similar to how MCP standardized tool integration, CUP standardizes remote agent coordination.
 
 The protocol enables server-side AI systems to dispatch tasks to client-side agents that have their own intelligence (LLM) and can execute complex, multi-step operations on the user's machine autonomously.
 
@@ -39,7 +39,7 @@ Issue resolved (maybe)
 Total time: 2-5 days
 ```
 
-**With MAP-Enabled Agents:**
+**With CUP-Enabled Agents:**
 
 ```
 Employee (via Slack): "My Outlook won't sync"
@@ -74,7 +74,7 @@ Total time: 2 minutes
 - **Interoperability** - Any compliant agent works with any MUXI formation
 - **Vendor neutrality** - Not locked to one computer-use implementation
 - **Security standardization** - Common auth, audit, and permission patterns
-- **Ecosystem growth** - Third parties can build MAP-compliant agents
+- **Ecosystem growth** - Third parties can build CUP-compliant agents
 
 ---
 
@@ -85,7 +85,7 @@ Total time: 2 minutes
 │                         End User's Machine                           │
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                    MAP-Compliant Agent                          │ │
+│  │                    CUP-Compliant Agent                          │ │
 │  │                    (e.g., OpenWork-based)                       │ │
 │  │                                                                 │ │
 │  │   ┌───────────┐    ┌───────────┐    ┌───────────────────────┐  │ │
@@ -101,7 +101,7 @@ Total time: 2 minutes
 │  └─────────────────────────────────────────────────────────────────┘ │ ║ ║
 └──────────────────────────────────────────────────────────────────────╬─╬─╬─┘
                                                                        ║ ║ ║
-                         ══════ MAP Protocol ══════                    ║ ║ ║
+                         ══════ CUP Protocol ══════                    ║ ║ ║
                                                                        ║ ║ ║
 ┌──────────────────────────────────────────────────────────────────────╬─╬─╬─┐
 │                           MUXI Formation                             ║ ║ ║ │
@@ -114,7 +114,7 @@ Total time: 2 minutes
 │                               │             │  api_key: ...    │    ║ ║ ║ │
 │                               ▼             │  capabilities:[] │    ║ ║ ║ │
 │                    ┌───────────────────┐    └────────┬─────────┘    ║ ║ ║ │
-│                    │   MAP Gateway     │◀────────────┘              ║ ║ ║ │
+│                    │   CUP Gateway     │◀────────────┘              ║ ║ ║ │
 │                    │                   │                            ║ ║ ║ │
 │                    │  • Dispatch tasks │══════════ send task ══════▶╝ ║ ║ │
 │                    │  • Handle callbacks│◀═════════ progress ═════════╝ ║ │
@@ -147,7 +147,7 @@ Total time: 2 minutes
 
 **Formation → Agent:**
 ```
-Authorization: Bearer map_sk_<agent_api_key>
+Authorization: Bearer cup_sk_<agent_api_key>
 ```
 
 **Agent → Formation (callbacks):**
@@ -163,16 +163,16 @@ Callback tokens are task-specific and short-lived.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/map/v1/tasks` | Create a new task |
-| DELETE | `/map/v1/tasks/{task_id}` | Cancel a running task |
-| GET | `/map/v1/health` | Health check |
-| GET | `/map/v1/capabilities` | List agent capabilities |
+| POST | `/cup/v1/tasks` | Create a new task |
+| DELETE | `/cup/v1/tasks/{task_id}` | Cancel a running task |
+| GET | `/cup/v1/health` | Health check |
+| GET | `/cup/v1/capabilities` | List agent capabilities |
 
 #### Formation Endpoints (callback receiver)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/map/v1/callback` | Receive task updates |
+| POST | `/cup/v1/callback` | Receive task updates |
 
 ---
 
@@ -180,13 +180,13 @@ Callback tokens are task-specific and short-lived.
 
 ### Task Create
 
-**Request:** `POST /map/v1/tasks`
+**Request:** `POST /cup/v1/tasks`
 
 ```json
 {
-  "jsonmap": "1.0",
+  "jsoncup": "1.0",
   "id": "task_abc123def456",
-  "callback_url": "https://formation.example.com/map/v1/callback",
+  "callback_url": "https://formation.example.com/cup/v1/callback",
   "callback_token": "cb_xyz789...",
   
   "intent": "Fix Outlook sync issue",
@@ -231,7 +231,7 @@ Callback tokens are task-specific and short-lived.
 
 ```json
 {
-  "jsonmap": "1.0",
+  "jsoncup": "1.0",
   "task_id": "task_abc123def456",
   "type": "task.progress",
   "timestamp": "2026-03-15T10:30:45Z",
@@ -257,7 +257,7 @@ When the agent needs human confirmation:
 
 ```json
 {
-  "jsonmap": "1.0",
+  "jsoncup": "1.0",
   "task_id": "task_abc123def456",
   "type": "task.approval_required",
   "timestamp": "2026-03-15T10:31:20Z",
@@ -283,7 +283,7 @@ The formation routes this to the user via their communication channel (Slack/Wha
 
 ### Approval Response
 
-**Request:** `POST /map/v1/tasks/{task_id}/approval`
+**Request:** `POST /cup/v1/tasks/{task_id}/approval`
 
 ```json
 {
@@ -298,7 +298,7 @@ The formation routes this to the user via their communication channel (Slack/Wha
 
 ```json
 {
-  "jsonmap": "1.0",
+  "jsoncup": "1.0",
   "task_id": "task_abc123def456",
   "type": "task.completed",
   "timestamp": "2026-03-15T10:33:15Z",
@@ -342,7 +342,7 @@ The formation routes this to the user via their communication channel (Slack/Wha
 
 ```json
 {
-  "jsonmap": "1.0",
+  "jsoncup": "1.0",
   "task_id": "task_abc123def456",
   "type": "task.failed",
   "timestamp": "2026-03-15T10:35:00Z",
@@ -379,7 +379,7 @@ The formation routes this to the user via their communication channel (Slack/Wha
 
 ### Task Cancelled
 
-**Request:** `DELETE /map/v1/tasks/{task_id}`
+**Request:** `DELETE /cup/v1/tasks/{task_id}`
 
 **Response:** `200 OK`
 
@@ -403,7 +403,7 @@ Agents must be registered with the formation before receiving tasks. This is typ
 {
   "user_id": "employee_12345",
   "agent_version": "1.0.0",
-  "endpoint": "https://workstation-abc.corp.example.com:8443/map/v1",
+  "endpoint": "https://workstation-abc.corp.example.com:8443/cup/v1",
   "capabilities": [
     "browser_control",
     "application_control", 
@@ -431,7 +431,7 @@ Agents must be registered with the formation before receiving tasks. This is typ
 ```json
 {
   "agent_id": "agent_xyz789",
-  "api_key": "map_sk_live_...",
+  "api_key": "cup_sk_live_...",
   "registered_at": "2026-03-01T09:00:00Z",
   "permissions": {
     "granted": ["browser_control", "application_control", "file_system_read", "screenshot_capture"],
@@ -453,7 +453,7 @@ For agents behind NAT/firewalls, several options exist:
 {
   "endpoint_type": "tunnel",
   "tunnel_provider": "cloudflare",
-  "endpoint": "https://agent-abc123.cfargotunnel.com/map/v1"
+  "endpoint": "https://agent-abc123.cfargotunnel.com/cup/v1"
 }
 ```
 
@@ -635,7 +635,7 @@ For laptops that go offline:
 ## Appendix B: JSON Schema
 
 Full JSON schemas for all message types are available at:
-`https://schemas.muxi.org/map/v1/`
+`https://schemas.muxi.org/cup/v1/`
 
 ---
 
