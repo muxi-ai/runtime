@@ -2,13 +2,17 @@
 Webhook management for async request completion notifications.
 
 This module handles webhook delivery for async completions with
-retry logic and error handling.
+retry logic and error handling. Includes HMAC-SHA256 signing for
+webhook payload verification.
 """
 
 import asyncio
+import hashlib
+import hmac
+import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
 
@@ -17,6 +21,35 @@ from ...datatypes import observability
 # Import unified response types
 from ...datatypes.response import MuxiContentItem, MuxiErrorDetails, MuxiUnifiedResponse
 from ...utils.response_converter import create_unified_response
+
+
+def sign_webhook(payload: Dict[str, Any], secret: str) -> Tuple[str, int]:
+    """
+    Sign a webhook payload using HMAC-SHA256.
+
+    Args:
+        payload: The webhook payload dict
+        secret: Signing secret (typically admin_key)
+
+    Returns:
+        Tuple of (signature_header_value, timestamp)
+    """
+    timestamp = int(time.time())
+
+    # Canonical JSON: compact, sorted keys for deterministic output
+    payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    payload_bytes = payload_json.encode("utf-8")
+
+    # Message format: "{timestamp}.{payload}"
+    message = f"{timestamp}.".encode("utf-8") + payload_bytes
+
+    # HMAC-SHA256
+    signature = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
+
+    # Header value
+    header_value = f"t={timestamp},v1={signature}"
+
+    return header_value, timestamp
 
 
 @dataclass
@@ -46,16 +79,23 @@ class ClarificationWebhookPayload:
 class WebhookManager:
     """Handles webhook delivery for async completions with retry logic."""
 
-    def __init__(self, default_retries: int = 3, default_timeout: int = 10):
+    def __init__(
+        self,
+        default_retries: int = 3,
+        default_timeout: int = 10,
+        signing_secret: str = "",
+    ):
         """
         Initialize webhook manager.
 
         Args:
             default_retries: Default number of retry attempts
             default_timeout: Default timeout in seconds for webhook requests
+            signing_secret: Secret for HMAC-SHA256 signing (typically admin_key)
         """
         self.default_retries = default_retries
         self.default_timeout = default_timeout
+        self._signing_secret = signing_secret
         self._session: Optional[aiohttp.ClientSession] = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -326,8 +366,18 @@ class WebhookManager:
             # Convert unified response to dict for JSON serialization, excluding null fields
             payload_dict = self._clean_payload_for_serialization(payload)
 
+            # Build headers with signature if signing secret is configured
+            headers: Dict[str, str] = {"Content-Type": "application/json"}
+            if self._signing_secret:
+                sig_header, sig_ts = sign_webhook(payload_dict, self._signing_secret)
+                headers["X-Muxi-Signature"] = sig_header
+                headers["X-Muxi-Timestamp"] = str(sig_ts)
+
             async with session.post(
-                webhook_url, json=payload_dict, timeout=aiohttp.ClientTimeout(total=timeout)
+                webhook_url,
+                json=payload_dict,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=timeout),
             ) as response:
                 # Consider 2xx status codes as successful
                 if 200 <= response.status < 300:
@@ -499,9 +549,20 @@ class WebhookManager:
         """
         try:
             session = await self._get_session()
+            payload_dict = payload.to_dict()
+
+            # Build headers with signature if signing secret is configured
+            headers: Dict[str, str] = {"Content-Type": "application/json"}
+            if self._signing_secret:
+                sig_header, sig_ts = sign_webhook(payload_dict, self._signing_secret)
+                headers["X-Muxi-Signature"] = sig_header
+                headers["X-Muxi-Timestamp"] = str(sig_ts)
 
             async with session.post(
-                webhook_url, json=payload.to_dict(), timeout=aiohttp.ClientTimeout(total=timeout)
+                webhook_url,
+                json=payload_dict,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=timeout),
             ) as response:
                 # Consider 2xx status codes as successful
                 if 200 <= response.status < 300:

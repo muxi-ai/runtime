@@ -726,9 +726,11 @@ def initialize_background_services(formation) -> None:
         from .background import WebhookManager
 
         webhook_config = formation.config.get("async", {})
+        signing_secret = formation._api_keys.get("admin", "") if hasattr(formation, "_api_keys") else ""
         formation._webhook_manager = WebhookManager(
             default_retries=webhook_config.get("webhook_retries", 3),
             default_timeout=webhook_config.get("webhook_timeout", 30),
+            signing_secret=signing_secret,
         )
 
         # REMOVE - line 708 (redundant with InitEventFormatter Scheduler)

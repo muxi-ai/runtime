@@ -729,6 +729,7 @@ class Overlord:
             self.webhook_manager = WebhookManager(
                 default_retries=async_config.get("webhook_retries", 3),
                 default_timeout=async_config.get("webhook_timeout", 10),
+                signing_secret=self.admin_api_key or "",
             )
 
         # Time estimator is intelligence-specific, keep local initialization
