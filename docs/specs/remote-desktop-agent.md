@@ -1,500 +1,589 @@
-# Remote Desktop Agent Integration
+# MUXI Desktop Agent (MDA)
 
-**Version:** 0.1.0 (Draft)  
-**Status:** Proposal  
-**Target:** Q2 2026  
+**Product Requirements Document**
+Architecture • UX • Implementation
 
----
+------
 
 ## Executive Summary
 
-This document outlines how MUXI formations can interact with computer use agents running on end-user machines. The approach maintains MUXI's open-source integrity while enabling a separate commercial service for the desktop agent and tunnel infrastructure.
+MDA (MUXI Desktop Agent) is a general-purpose execution layer that enables natural language control of work computers. Users interact with their MUXI formation through existing channels (Slack, Teams, WhatsApp), and MDA executes tasks locally — browser automation, native app control, file operations, and system interactions.
 
-**Key Principle:** MUXI Runtime remains 100% open source. The desktop agent and tunnel service are separate products that happen to be compatible with MUXI (and any other MCP client).
+MDA connects user machines to MUXI formations via Cloudflare Tunnel, creating a secure, NAT-traversing channel that requires zero network configuration. The architecture is simple: MDA receives instructions via SSE, executes locally using bundled MCP tools, and reports status back through the tunnel.
 
----
+Two infrastructure models serve different market segments: a free-tier SaaS model for individuals using Cloudflare's free tunnels with application-layer auth, and an enterprise model with dedicated Cloudflare accounts, Access policies, and WorkOS integration.
 
-## Business Model
+------
 
-### Separation of Concerns
+## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        OPEN SOURCE (MUXI)                            │
-│                                                                      │
-│   - MUXI Runtime (Apache 2.0 / ELv2)                                │
-│   - MCP client implementation                                        │
-│   - DB schema for machine registry                                   │
-│   - API endpoints for machine management                             │
-│   - SDK/CLI for developers                                           │
-│                                                                      │
-│   Anyone can connect ANY MCP-compatible computer use agent.          │
-│   No vendor lock-in.                                                 │
-└─────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────┐
-│                   COMMERCIAL SERVICE (Separate Brand?)               │
-│                                                                      │
-│   - Desktop application (computer use + MCP server + tunnel)         │
-│   - Managed tunnel infrastructure                                    │
-│   - Enterprise features (SSO, permissions, audit)                    │
-│   - Support & SLA                                                    │
-│                                                                      │
-│   Optional. Users can self-host or use alternatives.                 │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Why Separate Branding?
-
-| Approach | Pros | Cons |
-|----------|------|------|
-| **"MUXI Desktop"** | Brand recognition | OSS community may feel commercialization creep |
-| **Separate brand** | Clean separation, OSS stays pure | Need to build new brand awareness |
-
-**Recommendation:** Consider a separate brand (e.g., "Relay", "Bridge", "Conduit") for the commercial desktop service. This keeps MUXI's OSS reputation untainted while allowing aggressive monetization of the desktop product.
-
-### Monetization
-
-| Tier | Price | Features |
-|------|-------|----------|
-| **Free** | $0 | 1 machine, community support, rate limited |
-| **Pro** | $10/user/mo | 5 machines, priority tunnel, basic support |
-| **Enterprise** | Custom | Unlimited machines, SSO, audit logs, SLA, dedicated tunnel |
-
----
-
-## Technical Architecture
-
-### Overview
+### High-Level Overview
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                              CLOUD                                      │
-│                                                                         │
-│   ┌──────────────────────┐            ┌────────────────────────────┐   │
-│   │    MUXI Formation    │            │     Tunnel Server          │   │
-│   │                      │            │     (Commercial Service)   │   │
-│   │   ┌──────────────┐   │            │                            │   │
-│   │   │ MCP Client   │───────────────▶│  agent-abc.tunnel.svc:443  │   │
-│   │   └──────────────┘   │   HTTPS    │                            │   │
-│   │                      │            └─────────────┬──────────────┘   │
-│   │   ┌──────────────┐   │                          │                  │
-│   │   │ Machine      │   │                          │                  │
-│   │   │ Registry DB  │   │                       tunnel                │
-│   │   └──────────────┘   │                          │                  │
-│   └──────────────────────┘                          │                  │
-└─────────────────────────────────────────────────────┼──────────────────┘
-                                                      │
-                                                      │
-┌─────────────────────────────────────────────────────┼──────────────────┐
-│                        USER'S MACHINE               │                   │
-│                                                     │                   │
-│   ┌─────────────────────────────────────────────────▼───────────────┐  │
-│   │                    Desktop Agent                                 │  │
-│   │                                                                  │  │
-│   │   ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │  │
-│   │   │   Tunnel     │  │  MCP Server  │  │   Computer Use       │  │  │
-│   │   │   Client     │──│  (HTTP)      │──│   (OpenWork/other)   │  │  │
-│   │   │              │  │  Port 8080   │  │                      │  │  │
-│   │   └──────────────┘  └──────────────┘  └──────────────────────┘  │  │
-│   └──────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  MDA (Desktop Agent)                                            │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  Agent Daemon                                             │  │
+│  │                                                           │  │
+│  │  ┌─────────────────────────────────────────────────────┐  │  │
+│  │  │  Bundled MCP Tools                                  │  │  │
+│  │  │  ├── Playwright (browser automation)                │  │  │
+│  │  │  ├── macos-ui-automation / Windows-MCP (native GUI) │  │  │
+│  │  │  ├── File system operations                         │  │  │
+│  │  │  ├── AppleScript/JXA (macOS) / AutoIt (Windows)     │  │  │
+│  │  │  └── [Extensible - additional MCPs]                 │  │  │
+│  │  └─────────────────────────────────────────────────────┘  │  │
+│  │                                                           │  │
+│  │  ┌─────────────────────────────────────────────────────┐  │  │
+│  │  │  Credential Store                                   │  │  │
+│  │  │  ├── System password (for auth prompts)             │  │  │
+│  │  │  ├── API keys                                       │  │  │
+│  │  │  └── Stored in OS keychain (encrypted)              │  │  │
+│  │  └─────────────────────────────────────────────────────┘  │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  MUXI Integration Layer                                   │  │
+│  │  ├── HTTP MCP Server (exposes tools to formation)         │  │
+│  │  ├── SSE Client (receives instructions)                   │  │
+│  │  ├── cloudflared (tunnel subprocess)                      │  │
+│  │  └── HMAC auth validation                                 │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  UI Layer                                                 │  │
+│  │  ├── Menu bar icon (status, quick actions)                │  │
+│  │  ├── Execution mask (full-screen overlay while working)   │  │
+│  │  └── Thinking pane (logs, progress, user input)           │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              │ Cloudflare Tunnel
+                              ▼
+                      ┌───────────────┐
+                      │ MUXI Formation│
+                      └───────────────┘
+                              ▲
+                              │
+                      ┌───────────────┐
+                      │ Slack/Teams/  │
+                      │ WhatsApp/etc  │
+                      └───────────────┘
+                              ▲
+                              │
+                          [ User ]
 ```
 
-### The Desktop Agent is Just an MCP Server
+### Component Breakdown
 
-The desktop agent exposes a standard MCP server over HTTP. Nothing proprietary. Any MCP client can connect to it.
+#### Agent Daemon
 
-**This means:**
-- MUXI can connect (via our SDK)
-- Claude Desktop can connect
-- Any MCP-compatible tool can connect
-- Self-hosted tunnel users can connect
-- Direct LAN connections work too
+The core execution engine. Similar in concept to OpenCode, Claude Code, or CodeShip — an LLM-powered agent that can invoke tools to accomplish tasks.
 
----
+**Responsibilities:**
 
-## MCP Tool Schema for Computer Use Agents
+- Receive instructions from MUXI formation via SSE
+- Plan and execute multi-step tasks
+- Invoke MCP tools for browser/GUI/file operations
+- Report progress and results back to formation
+- Handle errors and attempt alternative approaches
 
-A computer use MCP server SHOULD expose these tools:
+**Starting point:** Fork from [OpenWork](https://github.com/accomplish-ai/openwork) which already provides Electron shell + OpenCode CLI integration.
 
-### Core Tools
+#### Bundled MCP Tools
 
-```yaml
-tools:
-  # Primary tool - natural language task execution
-  - name: execute_task
-    description: |
-      Execute an autonomous task on this computer. The agent will 
-      interpret the intent and perform necessary actions.
-    inputSchema:
-      type: object
-      required: [intent]
-      properties:
-        intent:
-          type: string
-          description: Natural language description of what to do
-          example: "Open Chrome and search for 'weather in NYC'"
-        context:
-          type: object
-          description: Additional context to help the agent
-          properties:
-            background:
-              type: string
-              description: Relevant background information
-            preferences:
-              type: object
-              description: User preferences for task execution
-        constraints:
-          type: object
-          properties:
-            timeout_seconds:
-              type: integer
-              default: 300
-              description: Maximum time for task execution
-            allowed_applications:
-              type: array
-              items:
-                type: string
-              description: Whitelist of applications the agent can use
-            require_approval:
-              type: boolean
-              default: false
-              description: Pause and request approval before destructive actions
+Pre-configured MCP servers that ship with MDA:
 
-  # Cancel a running task
-  - name: cancel_task
-    description: Cancel a currently running task
-    inputSchema:
-      type: object
-      required: [task_id]
-      properties:
-        task_id:
-          type: string
+| Tool                    | Platform       | Purpose                                   |
+| ----------------------- | -------------- | ----------------------------------------- |
+| Playwright MCP          | Cross-platform | Browser automation via accessibility tree |
+| macos-ui-automation-mcp | macOS          | Native app control via Accessibility APIs |
+| Windows-MCP             | Windows        | Native app control via UI Automation APIs |
+| macos-automator-mcp     | macOS          | AppleScript/JXA execution (200+ recipes)  |
+| File system MCP         | Cross-platform | File/folder operations                    |
 
-  # Respond to approval request
-  - name: respond_to_approval
-    description: Respond to a pending approval request from the agent
-    inputSchema:
-      type: object
-      required: [approval_id, decision]
-      properties:
-        approval_id:
-          type: string
-        decision:
-          type: string
-          enum: [approve, deny, abort]
+**Native GUI automation details:**
 
-  # File operations
-  - name: get_file
-    description: Retrieve a file from this computer
-    inputSchema:
-      type: object
-      required: [path]
-      properties:
-        path:
-          type: string
-          description: File path (absolute or relative to user home)
-        
-  - name: list_files
-    description: List files in a directory
-    inputSchema:
-      type: object
-      properties:
-        path:
-          type: string
-          default: "~"
-        pattern:
-          type: string
-          description: Glob pattern to filter files
+macOS uses the Accessibility API (same framework as VoiceOver). Requires user to grant Accessibility permission to MDA in System Settings → Privacy & Security → Accessibility.
+
+Windows uses UI Automation API (successor to Microsoft Active Accessibility). May require similar permissions depending on target applications.
+
+#### Credential Store
+
+Secure storage for sensitive data needed during automation:
+
+| Credential      | Purpose                      | Storage                 |
+| --------------- | ---------------------------- | ----------------------- |
+| System password | Auto-fill sudo/admin prompts | OS Keychain (encrypted) |
+| API keys        | Service authentication       | OS Keychain (encrypted) |
+| OAuth tokens    | Service authentication       | OS Keychain (encrypted) |
+
+**System password handling:**
+
+- Collected during MDA setup (one-time)
+- Used automatically when agent encounters system auth prompts
+- Never transmitted to MUXI formation — stays local
+- Reduces need for user input during execution to 2FA only
+
+#### MUXI Integration Layer
+
+The net-new code that differentiates MDA from a standalone agent:
+
+**HTTP MCP Server:**
+
+- Exposes bundled MCP tools to the remote MUXI formation
+- Formation can invoke tools as if they were local
+- HMAC validation on every request
+
+**SSE Client:**
+
+- Persistent connection to formation
+- Receives instructions in real-time
+- Handles reconnection on network issues
+
+**cloudflared:**
+
+- Bundled Cloudflare tunnel client (~25MB)
+- Managed as subprocess
+- Provides NAT-traversing inbound connectivity
+
+#### UI Layer
+
+Minimal UI focused on status and execution visibility:
+
+**Menu bar icon:**
+
+- Connection status (connected/disconnected)
+- Recent activity
+- Quick actions (pause, settings)
+
+**Execution mask:**
+
+- Full-screen transparent overlay during agent work
+- Glowing border (Siri-style) indicates agent is active
+- Thinking pane shows agent progress and logs
+
+------
+
+## Infrastructure Models
+
+### Comparison
+
+| Aspect             | SaaS (Individuals)             | Enterprise                       |
+| ------------------ | ------------------------------ | -------------------------------- |
+| Cloudflare account | Shared MUXI account            | Dedicated per-org account        |
+| Tunnel URL         | `<tunnel-id>.cfargotunnel.com` | `<device-id>.<org>.mda.muxi.org` |
+| Access policies    | None (free tier)               | IP allowlist + service tokens    |
+| Authentication     | HMAC at app layer              | Cloudflare Access + HMAC         |
+| Identity provider  | MUXI account                   | WorkOS → Customer SSO            |
+| Cost to MUXI       | $0/user                        | ~$3/user/month                   |
+| Price to customer  | Free / future premium          | $10/machine/month                |
+
+### SaaS Model (Individuals)
+
+**Tunnel provisioning:**
+
+1. On first run, MDA calls Cloudflare API to create tunnel
+2. Returns static tunnel ID (UUID) and credentials
+3. Credentials stored locally in `~/.mda/tunnel-credentials.json`
+4. Tunnel URL is permanent: `<tunnel-id>.cfargotunnel.com`
+
+**Security model:**
+
+- Tunnel URL obscurity (UUIDs are unguessable)
+- HMAC request signing on every request
+- Non-standard port for local MCP server
+
+**Reinstall behavior:**
+
+- Lost credentials = new tunnel provisioned
+- Treated as new device (no credential backup complexity)
+
+### Enterprise Model
+
+**Per-organization isolation:**
+
+- Dedicated Cloudflare account (`cloudflare+{org}@muxi.org`)
+- Custom domain: `*.<org>.mda.muxi.org`
+- Cloudflare Access policies restrict to MUXI formation IPs
+- WorkOS OIDC integration for SSO
+
+**Tunnel provisioning:**
+
+1. MDA provisions tunnel in org's Cloudflare account
+2. MUXI creates CNAME: `<device-id>.<org>.mda.muxi.org` → `<tunnel-id>.cfargotunnel.com`
+3. Cloudflare Access rule applied to wildcard domain
+4. Device registered in MUXI backend with org/user binding
+
+**Security model (defense in depth):**
+
+- Cloudflare Access (network layer): IP allowlist + service tokens
+- HMAC signing (application layer): Every request signed
+- WorkOS device authorization: IT admin can approve/revoke devices
+
+### Pricing
+
+**Enterprise:**
+
+| Tier               | Price             |
+| ------------------ | ----------------- |
+| 1-200 machines     | $10/machine/month |
+| 201-1,000 machines | $8/machine/month  |
+| 1,000+ machines    | Contact sales     |
+
+**SaaS:** Free tier at launch. Future premium features via Stripe.
+
+**Margin:** ~70% enterprise (after Cloudflare Access), 100% SaaS free tier.
+
+------
+
+## User Experience
+
+### Activation Model
+
+**v1: Remote activation only**
+
+No local chat interface at launch. Users invoke MDA through existing channels:
+
+- Slack
+- Microsoft Teams
+- WhatsApp
+- Any channel connected to MUXI formation
+
+This simplifies v1:
+
+- No new UI for users to learn
+- Enterprise already has Slack/Teams deployed
+- MUXI formation is the "brain," MDA is just the "hands"
+- Fewer features to build and secure
+
+Local chat window can be added in v2 as a convenience feature.
+
+### Activation Flow
+
+```
+User (via Slack): "Check my email for messages from Sarah"
+              ↓
+MUXI Formation: [processes request, determines MDA needed]
+              ↓
+MDA receives instruction via SSE
+              ↓
+Is user at computer?
+    ├── Yes (recent activity) → Show approval notification
+    │         ↓
+    │   Approval dialog with countdown (default 30s)
+    │         ↓
+    │   User approves OR countdown expires (auto-approve)
+    │         ↓
+    │   Agent executes
+    │
+    └── No (screen locked/idle) → Queue task
+              ↓
+        User returns → "You have 1 pending task. Run now?"
 ```
 
-### MCP Resources
+### Execution Mask
 
-```yaml
-resources:
-  # Agent capabilities
-  - uri: agent://capabilities
-    name: Agent Capabilities
-    description: What this agent can do
-    mimeType: application/json
-    
-  # Current status
-  - uri: agent://status
-    name: Agent Status  
-    description: Current agent status (idle, busy, error)
-    mimeType: application/json
-
-  # Running task info
-  - uri: agent://tasks/current
-    name: Current Task
-    description: Information about currently running task
-    mimeType: application/json
-```
-
-### Streaming Progress (via MCP SSE)
-
-When `execute_task` is called, progress is streamed via MCP's SSE transport:
+When agent is working, the entire screen is covered with a transparent overlay:
 
 ```
-event: progress
-data: {"task_id": "t_123", "step": 1, "total": 5, "action": "Opening browser"}
-
-event: progress  
-data: {"task_id": "t_123", "step": 2, "total": 5, "action": "Navigating to google.com"}
-
-event: approval_required
-data: {"approval_id": "a_456", "action": "Download file", "reason": "Task requires downloading a file"}
-
-event: complete
-data: {"task_id": "t_123", "success": true, "summary": "Search completed", "result": {...}}
+┌─────────────────────────────────────────────────────────────────┐
+│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
+│▓┌─────────────────────────────────────────────────────────────┐▓│
+│▓│                                                             │▓│
+│▓│      [Transparent view of desktop - agent working]          │▓│
+│▓│                                                             │▓│
+│▓│      User can see what agent is doing in real-time          │▓│
+│▓│                                                             │▓│
+│▓└─────────────────────────────────────────────────────────────┘▓│
+│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
+│                                                                 │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  THINKING PANE                                             │ │
+│  │                                                            │ │
+│  │  ✓ Opening Mail app...                                     │ │
+│  │  ✓ Searching for messages from Sarah...                    │ │
+│  │  ✓ Found 3 messages                                        │ │
+│  │  ✓ Reading most recent...                                  │ │
+│  │                                                            │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│  ████████████████░░░░░░░░░░░░░░░░░░░░░░  Progress: 3/5 steps    │
+│                                                                 │
+│  [████ STOP ████]                          Press Cmd+Shift+Esc  │
+│                                                                 │
+│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
+└─────────────────────────────────────────────────────────────────┘
+  ↑ Glowing border (Siri-style animation)
 ```
 
----
+**Visual elements:**
 
-## MUXI Runtime Integration
+- Transparent center showing actual desktop
+- Glowing animated border indicating "agent is active"
+- Thinking pane with real-time agent logs and progress
+- Progress bar showing task completion
+- Stop button and keyboard shortcut always visible
 
-### Database Schema
+### Input Lockout
 
-```sql
--- Machine registry (user can have multiple machines)
-CREATE TABLE user_machines (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id VARCHAR(255) NOT NULL,
-    
-    -- Machine identification
-    machine_name VARCHAR(255) NOT NULL,
-    machine_id VARCHAR(255) UNIQUE,  -- Hardware-derived ID for auto-registration
-    
-    -- Connection details
-    endpoint_url VARCHAR(500) NOT NULL,  -- e.g., https://agent-abc.tunnel.svc
-    api_key_hash VARCHAR(255) NOT NULL,  -- Hashed API key for MCP auth
-    
-    -- Metadata
-    capabilities JSONB DEFAULT '[]',  -- What the agent can do
-    os_info JSONB DEFAULT '{}',       -- OS, version, etc.
-    last_seen_at TIMESTAMP,
-    is_online BOOLEAN DEFAULT false,
-    
-    -- Timestamps
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-    
-    -- Constraints
-    CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(id)
-);
+During agent execution, user input is locked to prevent interference:
 
-CREATE INDEX idx_user_machines_user ON user_machines(user_id);
-CREATE INDEX idx_user_machines_online ON user_machines(is_online);
+| Input                          | State During Execution     |
+| ------------------------------ | -------------------------- |
+| Mouse                          | Locked                     |
+| Keyboard                       | Locked                     |
+| Escape combo (`Cmd+Shift+Esc`) | Always works — stops agent |
+
+**Rationale:** Agent is controlling mouse and keyboard. User input would cause conflicts and unpredictable behavior.
+
+### 2FA / User Input Handling
+
+When agent encounters 2FA or needs user input:
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  THINKING PANE                                                 │
+│                                                                │
+│  ✓ Logging into Chase...                                       │
+│  ✓ Entered credentials                                         │
+│  ✓ 2FA required                                                │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                                                          │  │
+│  │  I need your 2FA code:                                   │  │
+│  │                                                          │  │
+│  │  [________________________]              0:47 remaining  │  │
+│  │                                                          │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
 ```
 
-### API Endpoints
+**Input unlock rules during 2FA:**
 
-```yaml
-# Machine Management
-POST   /v1/machines                    # Register a new machine
-GET    /v1/machines                    # List user's machines
-GET    /v1/machines/{id}               # Get machine details
-PATCH  /v1/machines/{id}               # Update machine (name, etc.)
-DELETE /v1/machines/{id}               # Remove machine
+| Input                     | State                            |
+| ------------------------- | -------------------------------- |
+| Mouse                     | Locked                           |
+| Keyboard (general)        | Locked                           |
+| Keyboard (input box only) | Unlocked                         |
+| Tab key                   | Disabled (prevents focus escape) |
+| Escape combo              | Always works                     |
 
-# Task Execution
-POST   /v1/machines/{id}/tasks         # Send task to machine
-GET    /v1/machines/{id}/tasks/{tid}   # Get task status
-DELETE /v1/machines/{id}/tasks/{tid}   # Cancel task
+**Flow:**
 
-# Approvals
-POST   /v1/machines/{id}/approvals/{aid}  # Respond to approval request
+1. Agent pauses execution
+2. Input box appears in thinking pane with 60-second countdown
+3. Keyboard unlocks for input box only
+4. User types code, hits Enter
+5. Keyboard locks again
+6. Agent continues
 
-# File Operations
-GET    /v1/machines/{id}/files         # List files
-GET    /v1/machines/{id}/files/*path   # Download file
+**Timeout behavior:**
+
+- If countdown reaches 0 with no input
+- Agent attempts alternative approach or aborts gracefully
+- User notified via original channel (Slack/Teams)
+
+**Why 2FA is the only user input needed:**
+
+- System password stored during setup (handles sudo/admin prompts)
+- API keys and OAuth tokens stored in credential store
+- 2FA codes are inherently real-time and can't be pre-stored
+
+### Task Completion
+
+When agent finishes:
+
+1. Mask dismisses with fade animation
+2. Toast notification: "Task complete: [summary]"
+3. Full results sent back to user via original channel (Slack/Teams)
+
+### State Summary
+
+| State                | UI                                | User Input                       |
+| -------------------- | --------------------------------- | -------------------------------- |
+| Idle                 | Menu bar icon only                | Normal                           |
+| Instruction received | Approval notification + countdown | Normal                           |
+| Executing            | Full-screen mask + thinking pane  | Locked (except escape)           |
+| 2FA needed           | Input box in thinking pane        | Keyboard unlocked for input only |
+| Complete             | Toast notification                | Normal                           |
+| User away + pending  | Badge on menu bar                 | Prompt on return                 |
+
+------
+
+## Technical Implementation
+
+### MDA Client Components
+
+| Component          | Technology                 | Notes                                       |
+| ------------------ | -------------------------- | ------------------------------------------- |
+| Shell              | Electron or Tauri          | Tauri preferred for smaller footprint       |
+| Agent engine       | Fork of OpenCode or custom | Spawned as subprocess                       |
+| MCP runtime        | Node.js                    | Hosts bundled MCP servers                   |
+| Tunnel             | cloudflared                | Bundled binary, ~25MB                       |
+| Credential storage | OS Keychain                | macOS Keychain / Windows Credential Manager |
+| UI overlay         | Native window APIs         | Full-screen transparent window              |
+
+### MUXI Backend Components
+
+| Component               | Purpose                                              |
+| ----------------------- | ---------------------------------------------------- |
+| Tunnel Provisioning API | Creates tunnels via Cloudflare API, manages CNAMEs   |
+| Device Registry         | Maps device ID → tunnel URL → user → org             |
+| Org Manager             | Manages per-org Cloudflare accounts, Access policies |
+| WorkOS Integration      | OIDC config per org, SCIM webhook handler            |
+
+### Platform-Specific MCP Tools
+
+**macOS:**
+
+- `macos-ui-automation-mcp` — Native GUI via Accessibility APIs
+- `macos-automator-mcp` — AppleScript/JXA with 200+ pre-built recipes
+- Requires: Accessibility permission in System Settings
+
+**Windows:**
+
+- `Windows-MCP` — Native GUI via UI Automation APIs
+- `windows-desktop-automation` — AutoIt-based automation
+- May require: UI Automation permissions for certain apps
+
+**Cross-platform:**
+
+- `Playwright MCP` — Browser automation
+- File system operations
+
+### Local Storage
+
+```
+~/.mda/
+├── tunnel-credentials.json    # Cloudflare tunnel ID + secret
+├── config.yml                 # Server URL, device ID, settings
+└── logs/                      # Execution logs (rotated)
+
+# Credentials in OS Keychain (not filesystem):
+# - System password
+# - API keys
+# - OAuth tokens
 ```
 
-### SDK Integration
+### Installation Flow
 
-```python
-from muxi import Formation
+**SaaS (Individuals):**
 
-formation = Formation.load("./my-formation")
+1. Download MDA for platform
+2. Run installer, grant Accessibility permission
+3. Login via MUXI account (browser OAuth)
+4. Enter system password (stored in keychain)
+5. MDA provisions Cloudflare tunnel
+6. Registers tunnel URL with MUXI backend
+7. Ready — user can invoke via Slack/etc
 
-# List user's machines
-machines = await formation.machines.list(user_id="user_123")
-# [Machine(id="m_abc", name="Work Laptop", is_online=True), ...]
+**Enterprise:**
 
-# Execute task on a machine
-result = await formation.machines.execute(
-    machine_id="m_abc",
-    intent="Find the Q4 report PDF and send it to me",
-    constraints={"timeout_seconds": 120}
-)
+1. Employee downloads MDA (or pushed via MDM)
+2. Login via WorkOS → customer SSO
+3. If device not pre-approved, IT admin receives approval request
+4. Grant Accessibility permission
+5. Enter system password (stored in keychain)
+6. MDA provisions tunnel in org's Cloudflare account
+7. CNAME created, Access policy applied
+8. Ready
 
-# Stream progress
-async for event in formation.machines.execute_stream(
-    machine_id="m_abc",
-    intent="Fix Outlook sync issue"
-):
-    if event.type == "progress":
-        print(f"Step {event.step}: {event.action}")
-    elif event.type == "approval_required":
-        # Route to user via Slack/WhatsApp
-        decision = await get_user_approval(event)
-        await formation.machines.respond_to_approval(
-            machine_id="m_abc",
-            approval_id=event.approval_id,
-            decision=decision
-        )
-    elif event.type == "complete":
-        print(f"Done: {event.summary}")
-```
+### Reinstall Handling
 
-### CLI Integration
+Same for both models:
 
-```bash
-# List machines
-muxi machines list --user user_123
+- Reinstall with lost credentials = new device
+- New tunnel provisioned, new device ID
+- Enterprise: May require IT re-approval
+- Old device shows as "disconnected" in admin dashboard
 
-# Execute task
-muxi machines exec m_abc "Open Chrome and go to gmail.com"
+------
 
-# Get file from remote machine
-muxi machines get-file m_abc "~/Documents/report.pdf" --output ./report.pdf
+## Infrastructure Requirements
 
-# Check machine status
-muxi machines status m_abc
-```
+### Cloudflare Resources
 
----
+| Resource  | SaaS                    | Enterprise       |
+| --------- | ----------------------- | ---------------- |
+| Tunnels   | Free (unlimited)        | Free (unlimited) |
+| Access    | N/A                     | ~$3/user/month   |
+| Bandwidth | ~50-200 MB/client/month | Same             |
 
-## Use Cases
+### MUXI Backend
 
-### 1. Enterprise IT Support
+Minimal infrastructure:
 
-**User (Slack):** "My Outlook won't sync"
+- Tunnel provisioning API (Cloudflare API wrapper)
+- Device registry database
+- Org manager for enterprise accounts
+- WorkOS integration endpoints
 
-**Formation:**
-1. Identifies user, looks up their registered machines
-2. Dispatches diagnostic task to user's work laptop
-3. Agent checks settings, clears cache, repairs
-4. Reports resolution back through Slack
-
-**Result:** 2-minute automated resolution instead of 2-day ticket queue.
-
-### 2. Remote File Access
-
-**User (WhatsApp, 10 PM):** "Send me the Johnson proposal from my work computer"
-
-**Formation:**
-1. Looks up user's work machine
-2. Sends `get_file` request with search intent
-3. Agent finds file, returns it
-4. Formation sends file to user via WhatsApp
-
-**Result:** No more "I left it at the office."
-
-### 3. Software Deployment
-
-**IT Admin:** "Deploy VPN update to all sales team laptops"
-
-**Formation:**
-1. Queries machines registered to sales team users
-2. Dispatches installation task to each (with approval required)
-3. Users get Slack notification, approve
-4. Agents install silently, report status
-5. IT dashboard shows deployment progress
-
-### 4. Compliance Verification
-
-**Scheduled task:** "Weekly antivirus check"
-
-**Formation:**
-1. Iterates through all registered machines
-2. Dispatches verification task to each online machine
-3. Agents check AV status, version, last scan
-4. Formation generates compliance report
-5. Flags non-compliant machines for IT follow-up
-
----
-
-## Roadmap
-
-### V1 - Foundation (Q2 2026)
-
-- [ ] Desktop agent app (OpenWork-based)
-- [ ] MCP server implementation with core tools
-- [ ] Tunnel infrastructure (frp/bore-based)
-- [ ] MUXI Runtime: DB schema + API endpoints
-- [ ] SDK: `formation.machines.*` methods
-- [ ] CLI: `muxi machines` commands
-- [ ] Manual machine registration flow
-
-### V2 - Enterprise (Q3 2026)
-
-- [ ] Auto-registration (user auth → machine registered)
-- [ ] Enterprise SSO integration
-- [ ] Permission policies (who can access whose machines)
-- [ ] Audit logging
-- [ ] Admin dashboard
-- [ ] Machine groups / tags
-
-### V3 - Scale (Q4 2026)
-
-- [ ] Multi-region tunnel infrastructure
-- [ ] Machine health monitoring
-- [ ] Scheduled tasks per machine
-- [ ] Cross-machine operations
-- [ ] API for third-party integrations
-
----
+------
 
 ## Security Considerations
 
-### Authentication
+### Credential Security
 
-- Machine ↔ Tunnel: mTLS or API key
-- Formation ↔ Tunnel: API key per machine
-- User ↔ Formation: Existing auth (via Slack/WhatsApp identity)
+- System password never leaves device
+- Stored in OS Keychain with encryption
+- Used only for local auth prompts
+- MUXI formation never sees it
 
-### Authorization
+### Network Security
 
-- Machines are scoped to users
-- Enterprise policies control cross-user access
-- Sensitive operations require real-time user approval
+- All traffic through Cloudflare tunnel (encrypted)
+- HMAC signing on every request
+- Enterprise: Additional Cloudflare Access layer
+- Non-standard local port reduces attack surface
 
-### Audit
+### Permission Model
 
-- All tasks logged with timestamps
-- Screenshots captured at key steps (optional)
-- Approval decisions recorded with user identity
+- User explicitly grants Accessibility permission
+- User explicitly provides system password
+- User approves each remote task (or auto-approve with countdown)
+- Escape hatch always available to stop agent
 
-### Data Privacy
+### Enterprise Controls
 
-- Files transit through tunnel encrypted (TLS)
-- Optional: E2E encryption (formation ↔ agent)
-- Enterprise: Data residency options
+- IT admin approves devices before activation
+- Cloudflare Access logs all connection attempts
+- Can revoke device access instantly
+- Audit trail of all agent activity
 
----
+------
 
-## Open Questions
+## Timeline
 
-1. **Separate brand name?** What to call the commercial desktop service?
-2. **Tunnel technology?** frp vs bore vs custom?
-3. **Pricing model?** Per-user vs per-machine vs usage-based?
-4. **Self-hosted option?** Allow enterprises to run their own tunnel server?
+| Phase               | Scope                                             | Target  |
+| ------------------- | ------------------------------------------------- | ------- |
+| Phase 1: Foundation | Agent daemon + MCP tools + manual tunnel          | Q1 2026 |
+| Phase 2: SaaS       | Auto tunnel provisioning, MUXI auth, self-service | Q2 2026 |
+| Phase 3: Enterprise | Per-org Cloudflare, WorkOS, Access policies       | Q3 2026 |
+| Phase 4: Polish     | Auto-updates, analytics, MDM integration          | Q4 2026 |
 
----
+------
 
-## References
+## Success Metrics
 
-- [MCP Protocol](https://modelcontextprotocol.io/)
-- [OpenWork](https://github.com/accomplish-ai/openwork) - MIT licensed computer use framework
-- [frp](https://github.com/fatedier/frp) - Fast reverse proxy
-- [bore](https://github.com/ekzhang/bore) - Simple tunnel
+| Metric                | Description                                    |
+| --------------------- | ---------------------------------------------- |
+| Adoption              | Active MDA installations, daily active devices |
+| Reliability           | Tunnel uptime, reconnection success rate       |
+| Task completion       | % of tasks completed successfully              |
+| User input rate       | How often 2FA/input needed (lower is better)   |
+| Enterprise conversion | Trial → paid, expansion within accounts        |
+| Revenue               | MRR from enterprise subscriptions              |
 
----
+------
 
-## Changelog
+## Future Considerations (v2+)
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 0.1.0 | 2026-01 | Initial draft |
+- **Local chat window** — Convenience for power users
+- **Voice input** — "Hey MDA, the code is 482910"
+- **Mobile companion app** — Chat with MDA from phone while it works
+- **Linux support** — AT-SPI2 based GUI automation
+- **Screen region mode** — Agent works in partial screen, user keeps rest
+- **Scheduled tasks** — "Every morning, check my calendar and summarize"
