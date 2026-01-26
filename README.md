@@ -1,5 +1,9 @@
 # MUXI Runtime
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/muxi-ai/runtime/badge)](https://scorecard.dev/viewer/?uri=github.com/muxi-ai/runtime)
+[![License](https://img.shields.io/badge/License-Elastic%202.0-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+
 The execution engine for AI agent formations.
 
 > **For most users:** Install [MUXI CLI](https://github.com/muxi-ai/cli) for the complete experience.
