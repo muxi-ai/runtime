@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 - Initial Public Release
+## 0.XXXXXXXX.X - Initial Public Release
 
 ### Core Features
 
