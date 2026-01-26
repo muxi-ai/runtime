@@ -1,5 +1,8 @@
 # Security Architecture
 
+> **Note for contributors:** This document describes the runtime's internal security architecture.
+> For reporting security vulnerabilities, see [SECURITY.md](https://github.com/muxi-ai/muxi/blob/main/SECURITY.md).
+
 **MUXI Runtime Security System**
 Last Updated: January 2025
 
