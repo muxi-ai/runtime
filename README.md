@@ -112,7 +112,7 @@ pytest tests/integration -v
 pytest e2e/tests -v
 ```
 
-See [docs/README.md](docs/README.md) for contributor documentation.
+See [contributing/README.md](contributing/README.md) for contributor documentation.
 
 ## Related Repositories
 
@@ -127,7 +127,7 @@ See [docs/README.md](docs/README.md) for contributor documentation.
 ## Documentation
 
 - **User docs:** [docs.muxi.ai](https://docs.muxi.ai)
-- **Contributor docs:** [docs/README.md](docs/README.md)
+- **Contributor docs:** [contributing/README.md](contributing/README.md)
 - **Formation spec:** [agentformation.org](https://agentformation.org)
 
 ## License

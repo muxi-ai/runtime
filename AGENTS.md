@@ -52,7 +52,7 @@ runtime/
 │   └── datatypes/         # Type definitions
 ├── tests/                 # Unit + integration tests
 ├── e2e/                   # End-to-end tests (200+ across 12 areas)
-├── docs/                  # Contributor documentation
+├── contributing/          # Contributor documentation
 ├── formations/            # Example formations
 └── migrations/            # Database migrations
 ```
@@ -146,7 +146,7 @@ runtime/
   - Present tense for progress: `_PROCESSING`, `_STARTED`, `_PLANNING`
   - Component prefix: `OVERLORD_*`, `AGENT_*`, `WORKFLOW_*`, `MEMORY_*`, `MCP_*`
 - **Adding events**: prefer reusing existing events with enhanced metadata over creating new types; add new events only when semantically distinct.
-- **Metadata enhancement**: enrich events with performance metrics, quality scores, and diagnostic fields (see Phase 2 audit in `docs/audits/phase-2-observability/` for patterns).
+- **Metadata enhancement**: enrich events with performance metrics, quality scores, and diagnostic fields.
 - **Event lifecycle**: emit `_STARTED` for initiation, `_COMPLETED` for success, `_FAILED` for errors—ensures complete traceability.
 
 ## Testing Philosophy

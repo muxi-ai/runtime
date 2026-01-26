@@ -122,8 +122,9 @@ runtime/
 
 | Document | Description |
 |----------|-------------|
-| [pypi-distribution.md](pypi-distribution.md) | Building and publishing to PyPI |
-| [docker-compose-guide.md](docker-compose-guide.md) | Docker Compose development setup |
+| [building.md](building.md) | Building Docker, SIF, and PyPI packages |
+| [pypi-distribution.md](pypi-distribution.md) | PyPI distribution details |
+| [docker-compose-guide.md](docker-compose-guide.md) | Running with Docker Compose |
 | [docker-secrets-guide.md](docker-secrets-guide.md) | Secrets management in Docker |
 | [docker-testing.md](docker-testing.md) | Testing Docker builds |
 
