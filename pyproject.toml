@@ -248,8 +248,12 @@ ignore = [
     "E501",   # line too long (handled by formatter)
     "B008",   # function call in default argument (common in FastAPI)
     "B904",   # raise without from (too noisy)
+    "SIM102", # nested if statements (readability preference)
+    "SIM105", # contextlib.suppress (explicit try/except is clearer)
     "SIM108", # ternary operator (readability preference)
+    "UP006",  # Use builtin type for annotations (keep typing.Set etc)
     "UP007",  # Use X | Y for Union (keep Optional[X] for readability)
+    "UP035",  # Import from collections.abc (keep typing imports)
     "UP045",  # Use X | None (keep Optional[X] for readability)
 ]
 
