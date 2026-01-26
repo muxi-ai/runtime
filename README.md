@@ -9,6 +9,13 @@ The execution engine for AI agent formations.
 > **For most users:** Install [MUXI CLI](https://github.com/muxi-ai/cli) for the complete experience.
 > This repo is for contributors and developers embedding the runtime directly.
 
+> [!IMPORTANT]
+> ## MUXI Ecosystem
+>
+> This repository is part of the larger MUXI ecosystem.
+>
+> **📋 Complete architectural overview:** See [muxi/ARCHITECTURE.md](https://github.com/muxi-ai/muxi/blob/main/ARCHITECTURE.md) - explains how core repositories fit together, dependencies, status, and roadmap.
+
 ## What is MUXI Runtime?
 
 MUXI Runtime transforms declarative YAML configurations into running AI systems. It's the core engine that powers the [MUXI Server](https://github.com/muxi-ai/server).
@@ -29,14 +36,14 @@ MUXI Runtime transforms declarative YAML configurations into running AI systems.
                          │
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│  MUXI Runtime (Python) ◄── THIS REPO               │
-│  ┌───────────────────────────────────────────────┐ │
-│  │  Formation Engine (YAML loader & validator)   │ │
-│  ├───────────────────────────────────────────────┤ │
-│  │  Overlord │ Agents │ Workflow │ Background    │ │
-│  ├───────────────────────────────────────────────┤ │
-│  │  Memory │ MCP │ A2A │ LLM │ Observability     │ │
-│  └───────────────────────────────────────────────┘ │
+│  MUXI Runtime (Python) ◄── THIS REPO                │
+│  ┌───────────────────────────────────────────────┐  │
+│  │  Formation Engine (YAML loader & validator)   │  │
+│  ├───────────────────────────────────────────────┤  │
+│  │  Overlord │ Agents │ Workflow │ Background    │  │
+│  ├───────────────────────────────────────────────┤  │
+│  │  Memory │ MCP │ A2A │ LLM │ Observability     │  │
+│  └───────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────┘
                          │
                          ▼
@@ -93,7 +100,7 @@ async def main():
     formation = Formation()
     await formation.load("formation.afs")
     overlord = await formation.start_overlord()
-    
+
     response = await overlord.chat(
         "Hello!",
         user_id="user123"
