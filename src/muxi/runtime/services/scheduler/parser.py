@@ -445,9 +445,7 @@ Respond with ONLY: "one_time" or "recurring"
 Request: {request_text}
 (Input has been sanitized for security)"""
 
-        prompt = (
-            prompt_template.format(request_text=safe_text)
-            + f"""
+        prompt = prompt_template.format(request_text=safe_text) + f"""
 
 Current date/time: {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}
 Target timezone: {timezone}
@@ -471,7 +469,6 @@ Examples:
 
 Return only valid JSON, no explanation.
 """
-        )
 
         response = None
         try:
@@ -778,9 +775,7 @@ Return only valid JSON, no explanation.
 SCHEDULE: {schedule_text}
 (Input has been sanitized for security)"""
 
-        prompt = (
-            prompt_template.format(schedule_text=safe_text)
-            + f"""
+        prompt = prompt_template.format(schedule_text=safe_text) + f"""
 TIMEZONE: {timezone}
 
 CRON FORMAT: minute hour day-of-month month day-of-week
@@ -808,7 +803,6 @@ EXAMPLES:
 
 IMPORTANT: Return ONLY the cron expression, no explanation or additional text.
 """
-        )
 
         try:
             response = await llm.generate_text(prompt)
@@ -973,9 +967,7 @@ Convert the following exclusion description into a rule that represents when to 
 Exclusion: {description}
 (Input has been sanitized for security)"""
 
-        prompt = (
-            prompt_template.format(description=safe_description)
-            + """
+        prompt = prompt_template.format(description=safe_description) + """
 
 Return a JSON object with:
 - "type": "cron" or "complex_date"
@@ -1009,7 +1001,6 @@ Complex date patterns should use these structured formats:
 
 Return only valid JSON, no explanation.
 """
-        )
 
         response = None
         try:

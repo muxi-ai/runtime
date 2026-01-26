@@ -104,9 +104,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             </div>
         </body>
         </html>
-        """.format(
-            logo=MUXI_LOGO_URL
-        )
+        """.format(logo=MUXI_LOGO_URL)
 
         self.wfile.write(html.encode())
 
@@ -140,9 +138,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             </div>
         </body>
         </html>
-        """.format(
-            logo=MUXI_LOGO_URL, error=error_message
-        )
+        """.format(logo=MUXI_LOGO_URL, error=error_message)
 
         self.wfile.write(html.encode())
 
@@ -188,9 +184,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             </script>
         </body>
         </html>
-        """.format(
-            logo=MUXI_LOGO_URL
-        )
+        """.format(logo=MUXI_LOGO_URL)
 
         self.wfile.write(html.encode())
 

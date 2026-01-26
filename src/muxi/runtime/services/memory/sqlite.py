@@ -163,8 +163,7 @@ class SQLiteMemory(BaseMemory):
             )
 
         # Create tables
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 public_id TEXT NOT NULL UNIQUE,
@@ -173,12 +172,10 @@ class SQLiteMemory(BaseMemory):
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(public_id, formation_id)
             )
-        """
-        )
+        """)
 
         # Create user_identifiers table
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS user_identifiers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -189,8 +186,7 @@ class SQLiteMemory(BaseMemory):
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                 UNIQUE(identifier, formation_id)
             )
-        """
-        )
+        """)
 
         # Create indexes for user_identifiers
         conn.execute(
@@ -202,8 +198,7 @@ class SQLiteMemory(BaseMemory):
             "ON user_identifiers(user_id)"
         )
 
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS collections (
                 id TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
@@ -214,11 +209,9 @@ class SQLiteMemory(BaseMemory):
                 FOREIGN KEY (user_id) REFERENCES users(id),
                 UNIQUE(name, user_id)
             )
-        """
-        )
+        """)
 
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS memories (
                 id TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
@@ -230,8 +223,7 @@ class SQLiteMemory(BaseMemory):
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
-        """
-        )
+        """)
 
         # Create default user and collection if they don't exist
         self._ensure_default_user(conn)

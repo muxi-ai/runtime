@@ -1340,8 +1340,7 @@ class LongTermMemory:
                 from sqlalchemy import text as sql_text
 
                 # Using parameterized query for safety
-                sql = sql_text(
-                    """
+                sql = sql_text("""
                     SELECT
                         m.id,
                         m.text,
@@ -1356,8 +1355,7 @@ class LongTermMemory:
                         AND to_tsvector('simple', m.text) @@ plainto_tsquery('simple', :query)
                     ORDER BY rank DESC
                     LIMIT :limit
-                """
-                )
+                """)
 
                 result = await session.execute(
                     sql,
