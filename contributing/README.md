@@ -18,6 +18,7 @@ Please review these documents in the main MUXI repository:
 | [VERSIONING.md](https://github.com/muxi-ai/muxi/blob/main/VERSIONING.md) | ScalVer versioning scheme |
 | [REPOSITORIES.md](https://github.com/muxi-ai/muxi/blob/main/REPOSITORIES.md) | All MUXI repositories |
 | [SECURITY.md](https://github.com/muxi-ai/muxi/blob/main/SECURITY.md) | Security policy & vulnerability reporting |
+| [AI-POLICY.md](https://github.com/muxi-ai/muxi/blob/main/AI-POLICY.md) | AI-assisted development policy |
 
 ## What is MUXI Runtime?
 
