@@ -2,6 +2,23 @@
 
 Documentation for contributors working on the MUXI Runtime.
 
+> **Start here:** Read the [MUXI Architecture](https://github.com/muxi-ai/muxi/blob/main/ARCHITECTURE.md) to understand how all MUXI components fit together.
+
+## Before Contributing
+
+Please review these documents in the main MUXI repository:
+
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE.md](https://github.com/muxi-ai/muxi/blob/main/ARCHITECTURE.md) | How all MUXI components fit together |
+| [CONTRIBUTING.md](https://github.com/muxi-ai/muxi/blob/main/CONTRIBUTING.md) | Contribution guidelines |
+| [CODE_OF_CONDUCT.md](https://github.com/muxi-ai/muxi/blob/main/CODE_OF_CONDUCT.md) | Community standards |
+| [CONTRIBUTOR_LICENSE_AGREEMENT.md](https://github.com/muxi-ai/muxi/blob/main/CONTRIBUTOR_LICENSE_AGREEMENT.md) | CLA for contributions |
+| [GIT-WORKFLOW.md](https://github.com/muxi-ai/muxi/blob/main/GIT-WORKFLOW.md) | Branch strategy (develop → rc → main) |
+| [VERSIONING.md](https://github.com/muxi-ai/muxi/blob/main/VERSIONING.md) | ScalVer versioning scheme |
+| [REPOSITORIES.md](https://github.com/muxi-ai/muxi/blob/main/REPOSITORIES.md) | All MUXI repositories |
+| [SECURITY.md](https://github.com/muxi-ai/muxi/blob/main/SECURITY.md) | Security policy & vulnerability reporting |
+
 ## What is MUXI Runtime?
 
 MUXI Runtime is the **execution engine** for AI agent formations. It's the core component that:
@@ -98,16 +115,6 @@ runtime/
 |----------|-------------|
 | [AGENTS.md](../AGENTS.md) | Development playbook and conventions |
 | [CLAUDE.md](../CLAUDE.md) | AI-assisted development context |
-
-### MUXI-Wide Guides (apply to all repos)
-
-| Topic | Link |
-|-------|------|
-| Git Workflow | [github.com/muxi-ai/muxi/GIT-WORKFLOW.md](https://github.com/muxi-ai/muxi/blob/main/GIT-WORKFLOW.md) |
-| Versioning | [github.com/muxi-ai/muxi/VERSIONING.md](https://github.com/muxi-ai/muxi/blob/main/VERSIONING.md) |
-| Contributing | [github.com/muxi-ai/muxi/CONTRIBUTING.md](https://github.com/muxi-ai/muxi/blob/main/CONTRIBUTING.md) |
-| Security Policy | [github.com/muxi-ai/muxi/SECURITY.md](https://github.com/muxi-ai/muxi/blob/main/SECURITY.md) |
-| Licensing | [github.com/muxi-ai/muxi/LICENSE.md](https://github.com/muxi-ai/muxi/blob/main/LICENSE.md) |
 
 ## Runtime-Specific Docs
 
