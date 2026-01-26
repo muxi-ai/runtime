@@ -31,11 +31,9 @@ e2e/assets/*
 !e2e/assets/faissx-auth.json
 
 # Documentation
-docs/
+contributing/
 *.md
 !README.md
-context/
-examples/
 
 # Docker
 Dockerfile*
@@ -43,7 +41,6 @@ docker-compose*.yaml
 .dockerignore
 
 # Container files
-sif/
 *.sif
 
 # Development
@@ -73,9 +70,9 @@ setup.cfg
 scripts/
 utils/
 
-# Claude/AI
+# AI/Agent config
 .claude/
-CLAUDE.md
+.factory/
 AGENTS.md
 *_SUMMARY.md
 *_REPORT.md

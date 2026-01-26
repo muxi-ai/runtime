@@ -5,11 +5,9 @@
 include README.md
 include LICENSE
 include CHANGELOG.md
-include CONTRIBUTING.md
-include CODE_OF_CONDUCT.md
 
 # Include version file (critical for runtime version detection)
-include src/muxi/.version
+include src/muxi/runtime/.version
 
 # Include all prompt templates (used by Overlord and agents)
 recursive-include src/muxi/formation/prompts *.md *.txt
@@ -44,20 +42,17 @@ exclude webhook_log.json
 # Exclude Docker and container files
 exclude Dockerfile*
 exclude docker-compose.yaml
-exclude build-docker.sh
-recursive-exclude sif *
 
 # Exclude development scripts
 recursive-exclude scripts *
 recursive-exclude utils *
+
+# Exclude AI/agent config
 recursive-exclude .claude *
+recursive-exclude .factory *
 
-# Exclude documentation (available online)
-recursive-exclude docs *
-recursive-exclude context *
-
-# Exclude example formations (available in separate repo)
-recursive-exclude examples *
+# Exclude contributor documentation (available online)
+recursive-exclude contributing *
 
 # Global patterns to exclude
 global-exclude *.pyc
