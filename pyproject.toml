@@ -249,6 +249,8 @@ ignore = [
     "B008",   # function call in default argument (common in FastAPI)
     "B904",   # raise without from (too noisy)
     "SIM108", # ternary operator (readability preference)
+    "UP007",  # Use X | Y for Union (keep Optional[X] for readability)
+    "UP045",  # Use X | None (keep Optional[X] for readability)
 ]
 
 [tool.ruff.lint.isort]
