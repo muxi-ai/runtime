@@ -53,7 +53,6 @@ runtime/
 ├── tests/                 # Unit + integration tests
 ├── e2e/                   # End-to-end tests (200+ across 12 areas)
 ├── contributing/          # Contributor documentation
-├── formations/            # Example formations
 └── migrations/            # Database migrations
 ```
 

@@ -18,7 +18,7 @@ services:
     # Change this to point to your formation:
     command: >
       python -m muxi.utils.run_formation
-      /formations/example-formation/formation.afs
+      /formations/your-formation/formation.afs
 
     ports:
       - "${MUXI_PORT:-8000}:8000"
