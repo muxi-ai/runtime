@@ -680,10 +680,10 @@ class DocumentErrorHandler:
 
         def simple_pdf_extract(filename):
             try:
-                import PyPDF2
+                import pypdf
 
                 with open(filename, "rb") as file:
-                    reader = PyPDF2.PdfReader(file)
+                    reader = pypdf.PdfReader(file)
                     text = ""
                     for page_num in range(min(5, len(reader.pages))):  # Limit to 5 pages
                         text += reader.pages[page_num].extract_text()
