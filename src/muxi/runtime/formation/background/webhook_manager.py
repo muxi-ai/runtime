@@ -327,7 +327,7 @@ class WebhookManager:
 
         # HTTP status errors
         if hasattr(exception, "status"):
-            status = getattr(exception, "status")
+            status = exception.status
             if status >= 500:
                 return f"Server error (HTTP {status})"
             elif status >= 400:

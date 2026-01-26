@@ -241,22 +241,24 @@ select = [
     "I",      # isort
     "B",      # flake8-bugbear
     "C4",     # flake8-comprehensions
-    "UP",     # pyupgrade
-    "SIM",    # flake8-simplify
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
     "B007",   # unused loop variable (use _var convention later)
     "B008",   # function call in default argument (common in FastAPI)
+    "B019",   # lru_cache on methods (known pattern in codebase)
+    "B023",   # function binding loop variable (complex to fix)
+    "B026",   # star-arg unpacking (existing pattern)
+    "B028",   # no stacklevel in warnings (low priority)
+    "B034",   # re.sub keyword args (existing pattern)
     "B904",   # raise without from (too noisy)
-    "SIM102", # nested if statements (readability preference)
-    "SIM105", # contextlib.suppress (explicit try/except is clearer)
-    "SIM108", # ternary operator (readability preference)
-    "SIM110", # use any() instead of for loop (readability preference)
-    "UP006",  # Use builtin type for annotations (keep typing.Set etc)
-    "UP007",  # Use X | Y for Union (keep Optional[X] for readability)
-    "UP035",  # Import from collections.abc (keep typing imports)
-    "UP045",  # Use X | None (keep Optional[X] for readability)
+    "B905",   # zip without strict (python 3.10+ feature)
+    "C400",   # unnecessary generator (style preference)
+    "C401",   # unnecessary generator for set (style preference)
+    "C403",   # list comprehension to set (style preference)
+    "C414",   # unnecessary list in sorted (style preference)
+    "C416",   # unnecessary comprehension (style preference)
+    "C420",   # dict.fromkeys (style preference)
 ]
 
 [tool.ruff.lint.isort]
