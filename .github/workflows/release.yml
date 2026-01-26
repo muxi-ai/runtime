@@ -59,8 +59,12 @@ jobs:
 
           echo "$VERSION" > src/muxi/runtime/.version
 
+          # Update CHANGELOG - handle both [Unreleased] and X.XXXXXXXX.X placeholders
           if grep -q "## \[Unreleased\]" CHANGELOG.md; then
             sed -i.bak "s/## \[Unreleased\]/## [$VERSION] - $TODAY/" CHANGELOG.md
+            rm -f CHANGELOG.md.bak
+          elif grep -q "## X\.XXXXXXXX\.X" CHANGELOG.md; then
+            sed -i.bak "s/## X\.XXXXXXXX\.X/## $VERSION/" CHANGELOG.md
             rm -f CHANGELOG.md.bak
           fi
 
