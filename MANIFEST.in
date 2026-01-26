@@ -11,9 +11,6 @@ include CODE_OF_CONDUCT.md
 # Include version file (critical for runtime version detection)
 include src/muxi/.version
 
-# Include all schema files (formation validation)
-recursive-include schemas *.yaml *.yml *.json
-
 # Include all prompt templates (used by Overlord and agents)
 recursive-include src/muxi/formation/prompts *.md *.txt
 
