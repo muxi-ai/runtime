@@ -107,6 +107,7 @@ runtime/
 | Versioning | [github.com/muxi-ai/muxi/VERSIONING.md](https://github.com/muxi-ai/muxi/blob/main/VERSIONING.md) |
 | Contributing | [github.com/muxi-ai/muxi/CONTRIBUTING.md](https://github.com/muxi-ai/muxi/blob/main/CONTRIBUTING.md) |
 | Security Policy | [github.com/muxi-ai/muxi/SECURITY.md](https://github.com/muxi-ai/muxi/blob/main/SECURITY.md) |
+| Licensing | [github.com/muxi-ai/muxi/LICENSE.md](https://github.com/muxi-ai/muxi/blob/main/LICENSE.md) |
 
 ## Runtime-Specific Docs
 
@@ -125,11 +126,9 @@ runtime/
 |----------|-------------|
 | [security-architecture.md](security-architecture.md) | LLM-based security layers |
 | [server-integration.md](server-integration.md) | How Server integrates with Runtime |
-| [runtime-versioning.md](runtime-versioning.md) | Runtime version management for Server |
 | [prompt-management.md](prompt-management.md) | Centralized prompt loader system |
 | [id-conventions.md](id-conventions.md) | ID format conventions (prefixes, nanoid) |
 | [type-safety-guide.md](type-safety-guide.md) | TypedDict conventions |
-| [licensing.md](licensing.md) | ELv2 license explanation |
 
 ## Key Concepts for Contributors
 
