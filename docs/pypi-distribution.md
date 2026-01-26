@@ -16,7 +16,6 @@ The distribution includes:
 
 - **Core Python package** (`src/muxi/`) - All runtime code
 - **Version file** (`src/muxi/.version`) - Version tracking for runtime
-- **Schema files** (`schemas/`) - Formation YAML validation schemas
 - **Prompt templates** (`src/muxi/formation/prompts/`) - LLM prompt templates
 - **Built-in MCP servers** (`src/muxi/services/mcp/built_in/`) - File generation and other built-ins
 - **SQLite extensions** (`src/muxi/extensions/loadable/`) - Native extensions (if present)

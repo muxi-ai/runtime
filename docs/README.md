@@ -15,30 +15,30 @@ MUXI Runtime is the **execution engine** for AI agent formations. It's the core 
 ### Role in the MUXI Stack
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  User Applications (Chat UIs, APIs, Automations)           │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│  User Applications (Chat UIs, APIs, Automations)       │
+└────────────────────────────────────────────────────────┘
                               │
                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│  MUXI Server (Go)                                           │
-│  - Formation lifecycle management                           │
-│  - Multi-tenant orchestration                               │
-│  - Runtime version management                               │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│  MUXI Server (Go)                                      │
+│  - Formation lifecycle management                      │
+│  - Multi-tenant orchestration                          │
+│  - Runtime version management                          │
+└────────────────────────────────────────────────────────┘
                               │
                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│  MUXI Runtime (Python) ◄── YOU ARE HERE                    │
-│  - Formation execution engine                               │
-│  - Overlord orchestration                                   │
-│  - Agent, memory, MCP, A2A services                         │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│  MUXI Runtime (Python) ◄── YOU ARE HERE                │
+│  - Formation execution engine                          │
+│  - Overlord orchestration                              │
+│  - Agent, memory, MCP, A2A services                    │
+└────────────────────────────────────────────────────────┘
                               │
                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│  External Services (LLM APIs, MCP Servers, Databases)       │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│  External Services (LLM APIs, MCP Servers, Databases)  │
+└────────────────────────────────────────────────────────┘
 ```
 
 ## Getting Started
@@ -114,28 +114,22 @@ runtime/
 
 | Document | Description |
 |----------|-------------|
-| [PYPI_DISTRIBUTION.md](PYPI_DISTRIBUTION.md) | Building and publishing to PyPI |
-| [DOCKER_COMPOSE_GUIDE.md](DOCKER_COMPOSE_GUIDE.md) | Docker Compose development setup |
-| [DOCKER_SECRETS_GUIDE.md](DOCKER_SECRETS_GUIDE.md) | Secrets management in Docker |
-| [DOCKER_TESTING.md](DOCKER_TESTING.md) | Testing Docker builds |
+| [pypi-distribution.md](pypi-distribution.md) | Building and publishing to PyPI |
+| [docker-compose-guide.md](docker-compose-guide.md) | Docker Compose development setup |
+| [docker-secrets-guide.md](docker-secrets-guide.md) | Secrets management in Docker |
+| [docker-testing.md](docker-testing.md) | Testing Docker builds |
 
 ### Architecture & Internals
 
 | Document | Description |
 |----------|-------------|
 | [security-architecture.md](security-architecture.md) | LLM-based security layers |
-| [SERVER_INTEGRATION.md](SERVER_INTEGRATION.md) | How Server integrates with Runtime |
-| [RUNTIME_VERSIONING.md](RUNTIME_VERSIONING.md) | Runtime version management for Server |
+| [server-integration.md](server-integration.md) | How Server integrates with Runtime |
+| [runtime-versioning.md](runtime-versioning.md) | Runtime version management for Server |
 | [prompt-management.md](prompt-management.md) | Centralized prompt loader system |
-| [ID_CONVENTIONS.md](ID_CONVENTIONS.md) | ID format conventions (prefixes, nanoid) |
+| [id-conventions.md](id-conventions.md) | ID format conventions (prefixes, nanoid) |
 | [type-safety-guide.md](type-safety-guide.md) | TypedDict conventions |
 | [licensing.md](licensing.md) | ELv2 license explanation |
-
-### Specs
-
-| Document | Description |
-|----------|-------------|
-| [specs/remote-desktop-agent.md](specs/remote-desktop-agent.md) | MDA (MUXI Desktop Agent) PRD |
 
 ## Key Concepts for Contributors
 
