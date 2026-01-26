@@ -75,15 +75,6 @@ SIF files are created in `sif-builds/` with naming convention:
 muxi-runtime-{version}-linux-{arch}.sif
 ```
 
-### Alternative: Build from Definition Files
-
-The `sif/` directory contains Singularity definition files for direct builds (requires Linux with Singularity installed):
-
-```bash
-cd sif
-sudo singularity build muxi-runtime.sif muxi-runtime.def
-```
-
 ## PyPI Package
 
 ### Build Package
