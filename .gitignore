@@ -158,3 +158,6 @@ e2e/results/*
 *.simg
 *.img
 *.egg-info/
+
+# Factory AI
+.factory/

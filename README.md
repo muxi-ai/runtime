@@ -1,134 +1,97 @@
 # MUXI Runtime
 
-![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)
-![Python](https://img.shields.io/badge/Python-3.10+-green.svg)
-![License](https://img.shields.io/badge/License-Elastic-purple.svg)
-![Tests](https://img.shields.io/badge/Tests-passing-brightgreen.svg)
-![Coverage](https://img.shields.io/badge/Coverage-85%25-green.svg)
+The execution engine for AI agent formations.
 
+> **For most users:** Install [MUXI CLI](https://github.com/muxi-ai/cli) for the complete experience.
+> This repo is for contributors and developers embedding the runtime directly.
 
-### The container runtime for AI agents
+## What is MUXI Runtime?
 
-**Core execution engine that powers the MUXI AI Server**
-> _“Like containers for Docker, but for intelligent multi-agent systems”_
+MUXI Runtime transforms declarative YAML configurations into running AI systems. It's the core engine that powers the [MUXI Server](https://github.com/muxi-ai/server).
 
----
+**Core responsibilities:**
+- Formation execution - Loads and runs agent configurations from YAML
+- Overlord orchestration - Routes requests, manages clarifications, coordinates workflows
+- Memory systems - Three-tier memory (buffer, persistent, vector)
+- Tool integration - MCP protocol support for external tools
+- Multi-tenant isolation - User and session management
 
-## 📖 What is MUXI Runtime?
-
-MUXI Runtime is the low-level execution engine that powers AI agent formations inside the [MUXI AI Server](https://github.com/muxi-ai/server). It's the foundational layer that transforms declarative YAML configurations into living, breathing AI systems.
-
-> [!NOTE]
-> This repository is for contributors and the for developers who want to embed MUXI Runtime in their own applications. **For 90% of users, we recommend installing [MUXI AI Server](https://github.com/muxi-ai/server) for the complete platform experience.**
-
-### Core Responsibilities
-
-- **Formation Execution** - Loads and runs AI agent configurations from YAML
-- **Agent Lifecycle** - Manages agent creation, orchestration, and teardown
-- **Memory Management** - Three-tier memory system (buffer, persistent, vector)
-- **Tool Integration** - MCP protocol support for 1,000+ external tools
-- **Resource Isolation** - Multi-tenant support with credential management
-
-## 🌟 Features
-
-- **Formation Execution**: Direct execution of formation YAML configurations as live AI systems
-- **Hot Agent Deployment**: Add/remove agents during runtime with zero downtime
-- **Formation-Overlord Architecture**: Clean separation between operations (Formation) and intelligence (Overlord)
-- **Overlord Orchestration**: Central orchestration system for managing multiple agents
-- **Agent Framework**: Flexible agent implementation with specialized capabilities
-- **Unified Services Architecture**: Consolidated multimodal, memory, MCP, A2A, and observability services
-- **Memory Systems**: Sophisticated memory management with buffer and long-term storage, including FIFO cleanup and automatic memory management with async database operations for 3x performance improvement
-- **User Synopsis**: Two-tier LLM-synthesized caching system that automatically generates and caches user profile summaries (identity + context) for enhanced message injection, reducing LLM costs by ~85% while maintaining fresh, relevant context
-- **LLM Response Caching**: Intelligent semantic caching powered by OneLLM that automatically caches and reuses LLM responses for similar requests, providing 70%+ cost savings and faster response times - enabled by default with production-optimized settings
-- **MCP Protocol**: Model Context Protocol implementation for tool integration
-- **Built-in MCP Servers**: File Generation MCP for secure creation of charts, documents, spreadsheets, images, and presentations through sandboxed Python execution
-- **Artifacts System**: Comprehensive file generation, tracking, and management with secure sandboxed execution, intelligent metadata extraction, session-based storage, and nanoid-based unique identifiers
-- **Knowledge Integration**: Enhanced knowledge base with directory/multi-path support and YAML configuration
-- **Standard Operating Procedures (SOPs)**: Overlord-level procedural guidance with template/guide modes, supporting [agent:], [mcp:], and [file:] directives for consistent task execution
-- **Security Layer**: Role-based access control and permission management
-- **A2A Communication**: Agent-to-Agent protocol for complex agent collaboration
-- **Multi-Modal Support**: Handle text, image, audio, video, and document content through unified services
-- **OneLLM Integration**: Provider-agnostic LLM interface with multiple model support
-- **Async Orchestration**: Production-ready async request-response patterns for long-running agentic tasks with intelligent routing, webhook notifications, background processing, and session tracking
-- **Streaming Responses**: Real-time streaming chat responses with AsyncGenerator support for ChatGPT-like streaming behavior
-- **Intelligent Clarification**: Advanced parameter collection system that automatically detects incomplete requests and asks natural clarifying questions with multilingual support
-- **Unified Response Format**: Standardized response structure across all communication modes (sync, async, webhooks) with consistent error handling, metadata, and session management
-- **Workflow Orchestration**: Intelligent task decomposition for complex requests with configurable complexity analysis, multi-agent coordination, parallel task execution, and approval workflows for high-stakes operations
-- **Dynamic Async Decision Making**: Approval-aware async pattern that intelligently defers async execution when user approval is needed, maintaining synchronous flow for interactive workflows while automatically switching to async after approval for optimal performance
-- **Intelligent Agent Filtering**: LLM-based agent selection for formations with 10+ agents, featuring aggressive caching (97% cache hit rate), configurable relevance thresholds, and smart routing that ensures the most capable agent handles each task
-- **Resilience Layer**: Production-ready error recovery with automatic retry (exponential backoff), user-friendly error messages, graceful degradation strategies, and circuit breakers to prevent cascading failures
-- **Observability & Monitoring**: Production-ready event streaming system with 157 typed events, 4 transport types (stdout, file, stream, trail), 10 event formatters (jsonl, text, msgpack, protobuf, datadog, splunk, elastic, grafana, newrelic, opentelemetry), enhanced metadata for analytics (32+ fields across request validation, security, agents, workflows, and memory), 100% event validation, complete lifecycle tracking, and distributed tracing
-- **MCP Code Quality Enhancement**: Comprehensive code quality improvements including elimination of 150+ lines of duplicated code, enhanced error handling with logging, performance optimizations with caching, type safety improvements, JSON-RPC compliance, and proper subprocess safety patterns
-- **Task Scheduling System**: Natural language task scheduling for both recurring jobs ("check email every hour") and one-time tasks ("remind me tomorrow at 2pm") with intelligent detection, unified database architecture, proactive AI capabilities, security hardening, and enterprise features including audit trails and Formation API exposure
-- **Webhook Triggers**: Event-driven execution system that allows external systems to trigger formation actions through HTTP endpoints with template-based message generation from event data, supporting async/sync modes and complete request tracing
-
-## 🏗️ Architecture Overview
+## Architecture
 
 ```
-┌────────────────────────────────────┐
-│           MUXI AI Server           │  ← User-facing API server
-├────────────────────────────────────┤
-│             MUXI Runtime           │  ← This repository
-│  ┌──────────────────────────────┐  │
-│  │      Formation Engine        │  │  ← YAML loader & validator
-│  ├──────────────────────────────┤  │
-│  │    Overlord   │  Agent Pool  │  │  ← Orchestration layer
-│  ├──────────────────────────────┤  │
-│  │   Memory │ Services │ Tools  │  │  ← Core subsystems
-│  ├──────────────────────────────┤  │
-│  │  SOPs │ Knowledge │ Security │  │  ← Guidance systems
-│  └──────────────────────────────┘  │
-├────────────────────────────────────┤
-│       LLM Providers (OneLLM)       │  ← External integrations
-└────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│  MUXI Server (Go) - Formation lifecycle management  │
+└─────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────┐
+│  MUXI Runtime (Python) ◄── THIS REPO               │
+│  ┌───────────────────────────────────────────────┐ │
+│  │  Formation Engine (YAML loader & validator)   │ │
+│  ├───────────────────────────────────────────────┤ │
+│  │  Overlord │ Agents │ Workflow │ Background    │ │
+│  ├───────────────────────────────────────────────┤ │
+│  │  Memory │ MCP │ A2A │ LLM │ Observability     │ │
+│  └───────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────┐
+│  External Services (LLM APIs, MCP Servers, DBs)     │
+└─────────────────────────────────────────────────────┘
 ```
 
-📚 **Full Documentation**: [muxi.org/docs](https://muxi.org/docs)
+## Package Structure
 
----
+The runtime uses `src/muxi/runtime/` to share the `muxi` namespace with the [Python SDK](https://github.com/muxi-ai/sdks):
 
-## 🚀 Quick Start
+```
+src/muxi/runtime/
+├── formation/          # Formation engine
+│   ├── overlord/       # Central orchestration
+│   ├── agents/         # Agent implementations
+│   ├── workflow/       # Task decomposition, SOPs
+│   ├── server/         # Formation API (FastAPI)
+│   └── background/     # Webhooks, scheduling, async
+├── services/           # Runtime services
+│   ├── memory/         # Memory systems
+│   ├── mcp/            # MCP client
+│   ├── a2a/            # Agent-to-agent
+│   └── llm/            # LLM abstraction
+└── datatypes/          # Type definitions
+```
 
-The easiest way to get started is to install the MUXI Server + CLI and create a new project:
+## Quick Start
+
+### Using with MUXI Server (recommended)
 
 ```bash
-# Install MUXI Server + CLI
-curl -fsSL https://muxi.org/install | sh
+# Install MUXI CLI
+curl -fsSL https://muxi.ai/install | sh
 
-# Create a new AI project
-muxi new my-ai-assistant
-cd my-ai-assistant
-
-# Start developing
+# Create and run a formation
+muxi new my-assistant
+cd my-assistant
 muxi dev
 ```
 
-### 📚 Documentation
-- [Quick Start Guide](https://muxi.org/docs/quickstart) - Get started with MUXI
-- [Formation Guide](https://muxi.org/docs/formations) - Creating AI systems
-- [API Reference](https://muxi.org/docs/api) - Server API documentation
+### Embedding directly
 
----
-
-## 🔧 Embedding MUXI Runtime
-
-The MUXI Runtime can be used directly as a Python framework:
+```bash
+pip install muxi-runtime
+```
 
 ```python
 from muxi.runtime import Formation
 import asyncio
 
 async def main():
-    # Load a formation
     formation = Formation()
     await formation.load("formation.afs")
-
-    # Start the runtime
     overlord = await formation.start_overlord()
-
-    # Interact with your AI system
+    
     response = await overlord.chat(
-        "Hello! What can you help me with?",
+        "Hello!",
         user_id="user123"
     )
     print(response)
@@ -136,106 +99,37 @@ async def main():
 asyncio.run(main())
 ```
 
-**Example formation.afs:**
-```yaml
-schema: "1.0.0"
-id: "my-assistant"
-description: "A helpful AI assistant"
+## Development
 
-llm:
-  models:
-    - text: "openai/gpt-4o-mini"
-  api_keys:
-    openai: "${{ secrets.OPENAI_API_KEY }}"
-
-agents:
-  - id: "assistant"
-    name: "General Assistant"
-    system_message: "You are a helpful AI assistant."
-
-memory:
-  buffer:
-    size: 20
-    vector_search: true
-```
-
-### 📚 Documentation
-
-- [Python SDK](https://muxi.org/docs/sdk/python) - Using MUXI as a library
-- [Formation Schema](https://muxi.org/docs/schema) - Complete YAML reference
-- [Advanced Patterns](https://muxi.org/docs/patterns) - Complex use cases
-
----
-
-## 👨🏼‍💻 Contributing
-
-We welcome contributions! MUXI Runtime is open source and community-driven.
-
-**Quick start for contributors:**
 ```bash
-# Install from PyPI
-pip install muxi-runtime
-
-# Or for development
 git clone https://github.com/muxi-ai/runtime
 cd runtime
-pip install -e .[dev]
-pytest
+pip install -e ".[dev]"
+
+# Run tests
+pytest tests/unit -v
+pytest tests/integration -v
+pytest e2e/tests -v
 ```
 
-📚 **See our [Contributing Guide](CONTRIBUTING.md)** for:
-- Development setup and prerequisites
-- Testing philosophy (real services, no mocks)
-- Code style and architecture principles
-- Pull request process
-- Community guidelines
+See [docs/README.md](docs/README.md) for contributor documentation.
 
-## 🤝 Community & Support
+## Related Repositories
 
-- **Issues**: [GitHub Issues](https://github.com/muxi-ai/runtime/issues)
-- **Discussions**: [GitHub Discussions](https://muxi.org/community)
-- **Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md)
+| Repo | Description |
+|------|-------------|
+| [muxi-ai/muxi](https://github.com/muxi-ai/muxi) | Main repo with architecture docs |
+| [muxi-ai/server](https://github.com/muxi-ai/server) | Go server that hosts this runtime |
+| [muxi-ai/cli](https://github.com/muxi-ai/cli) | Command-line tool |
+| [muxi-ai/sdks](https://github.com/muxi-ai/sdks) | Python, TypeScript, Go SDKs |
+| [muxi-ai/schemas](https://github.com/muxi-ai/schemas) | API schemas |
 
-## 📦 Related Projects
+## Documentation
 
-- [muxi-ai/server](https://github.com/muxi-ai/server) - API server that hosts this runtime
-- [muxi-ai/cli](https://github.com/muxi-ai/cli) - Command-line management tool
-- [muxi-ai/sdks](https://github.com/muxi-ai/sdks) - SDKs in multiple languages for MUXI
-- [muxi-ai/onellm](https://github.com/muxi-ai/onellm) - Unified LLM interface
-- [muxi-ai/faissx](https://github.com/muxi-ai/faissx) - Distributed vector store
+- **User docs:** [docs.muxi.ai](https://docs.muxi.ai)
+- **Contributor docs:** [docs/README.md](docs/README.md)
+- **Formation spec:** [agentformation.org](https://agentformation.org)
 
-## 📄 Citation
+## License
 
-If you use MUXI Runtime in your research or commercial product, please cite:
-
-```
-@software{MUXI_2025,
-  author = {Ran Aroussi},
-  title = {MUXI Runtime: The container runtime for AI agents},
-  year = {2025},
-  url = {https://github.com/muxi-ai/runtime},
-  note = {Available at https://muxi.org/},
-  version = {latest}
-}
-```
-
-## ⚖️ License
-
-MUXI Runtime (and MUXI Server) are licensed under the **Elastic License 2.0** (ELv2).
-
-This means that you're allowed to freely use, modify, and redistribute the software – **including in commercial products** – as long as you do not provide it as a hosted or managed service to third parties.
-
-In other words:
-
-- ✅ Use MUXI for internal projects, personal use, research, or embedded inside your own applications.
-- ✅ Sell products that include MUXI, as long as you’re not offering MUXI itself as a service.
-- ❌ You may not offer a “hosted” or “managed” MUXI to others (e.g., MUXI-as-a-service, cloud API).
-
-
-See the [LICENSE](LICENSE) file for the complete license text and [licensing details](docs/licensing.md) for more information.
-
----
-
-**Building the future of AI infrastructure, one runtime at a time**<br>
-[Report Bug](https://github.com/muxi-ai/runtime/issues) • [Submit PR](https://github.com/muxi-ai/runtime/pulls) • [Join Discussions](https://muxi.org/community)
-
+[Elastic License 2.0](LICENSE) - Free to use, modify, and embed in products. Cannot be offered as a hosted service.

@@ -8,11 +8,9 @@ Your fast-reference for building, debugging, and extending the MUXI Runtime with
 
 This repository is part of the larger MUXI ecosystem.
 
-**Complete architectural overview:** See [MUXI-ARCHITECTURE.md](../MUXI-ARCHITECTURE.md) - explains how all 9 repositories fit together, dependencies, status, and roadmap.
+**Complete architectural overview:** See [ARCHITECTURE.md](https://github.com/muxi-ai/muxi/blob/main/ARCHITECTURE.md) in the main MUXI repo.
 
-**Strategic moat analysis:** See [MUXI_TECHNICAL_MOAT_ANALYSIS.md](./MUXI_TECHNICAL_MOAT_ANALYSIS.md) - covers the 5-layer strategic moat (standards capture, network effects, auto-extend, ecosystem compatibility, enterprise permissions).
-
-**This repo (runtime):** The formation execution environment - FastAPI-based Python runtime packaged as SIF container. API is finalized; target public launch January 2026.
+**This repo (runtime):** The formation execution environment - FastAPI-based Python runtime packaged as SIF container.
 
 ---
 
@@ -48,18 +46,16 @@ This repository is part of the larger MUXI ecosystem.
 ## Project Layout
 ```
 runtime/
-├── src/muxi/              # Core runtime package
+├── src/muxi/runtime/      # Core runtime package (shares muxi namespace with SDK)
 │   ├── formation/         # Formation engine, overlord, agents, workflows
 │   ├── services/          # Memory, MCP, observability, scheduler
 │   └── datatypes/         # Type definitions
 ├── tests/                 # Unit + integration tests
-├── e2e/                   # End-to-end tests (215+ across 12 areas)
-├── docs/                  # Documentation
-├── schemas/               # YAML schema definitions (linked from ../schemas)
-├── examples/              # Usage examples
+├── e2e/                   # End-to-end tests (200+ across 12 areas)
+├── docs/                  # Contributor documentation
+├── formations/            # Example formations
 └── migrations/            # Database migrations
 ```
-Extended structure details live in `context/project-structure.md`.
 
 ## Development Standards
 - **Language & style**: target Python 3.10+, adopt async I/O where throughput improves, format with Black (line length 100) and isort (`profile=black`), lint with Ruff & Flake8 (line length 120), keep naming snake_case/PascalCase as appropriate.
@@ -196,41 +192,29 @@ Extended structure details live in `context/project-structure.md`.
   - Prefer simplicity: standalone script > complex base class if test is timing-sensitive.
 
 ## File Index
-- `src/muxi/formation/formation.py` — formation lifecycle management.
-- `src/muxi/formation/overlord/overlord.py` — central orchestration logic.
-- `src/muxi/formation/workflow/` — SOP execution pipeline.
-- `src/muxi/formation/resilience/` — error recovery and user messaging.
-- `src/muxi/services/` — runtime services catalog.
-- `src/muxi/datatypes/observability.py` — 349 event type definitions across 5 categories.
-- `scripts/validate_events.py` — event validation utility (100% coverage required).
-- `docs/audits/phase-2-observability/` — comprehensive observability audit documentation.
-- `schemas/formation/formation.afs` — formation schema definition. Supported extensions: `.afs` (preferred), `.yaml`, `.yml`.
-- `e2e/tests/` — 12 test areas (215+ tests) covering all runtime functionality.
-- `e2e/results/` — migration reports and test execution documentation.
+- `src/muxi/runtime/formation/formation.py` — formation lifecycle management.
+- `src/muxi/runtime/formation/overlord/overlord.py` — central orchestration logic.
+- `src/muxi/runtime/formation/workflow/` — SOP execution pipeline.
+- `src/muxi/runtime/formation/resilience/` — error recovery and user messaging.
+- `src/muxi/runtime/services/` — runtime services catalog.
+- `src/muxi/runtime/datatypes/observability.py` — event type definitions.
+- `scripts/validate_events.py` — event validation utility.
+- `e2e/tests/` — 12 test areas covering all runtime functionality.
+- Formation schema: see [agentformation.org](https://agentformation.org).
 
-## Upcoming Features (Q1 2026)
+## Upcoming Features
 
 ### Agent Skills (SKILL.md)
 Implementation of the open [Agent Skills specification](https://agentskills.io/specification):
 - Skills directory: `formation/skills/{skill-name}/SKILL.md`
 - Progressive disclosure: metadata at startup, full content on activation
 - Executor container for script execution (ZeroMQ-based)
-- See `docs/prd/skills-implementation-plan.md` for details
 
 ### Enterprise Permissions
 Group-based permission filtering via `muxi-enterprise` package:
 - YAML-based group definitions with inheritance
 - Agent/MCP filtering by group membership
-- Auto-discovery from `groups/` directory
 - Runtime patching (zero changes to OSS code)
-- See `context/enterprise/prd.md` for details
-
-### Auto-Extend (Future)
-Self-evolving formations that detect capability gaps and extend themselves:
-- Capability gap detection via LLM analysis
-- Permission-aware marketplace search
-- Auto-approval rules for trusted sources
-- See `context/enterprise/auto-extend-vision.md` for details
 
 ## Technical Debt Targets
 1. Validate declared model capabilities vs assigned responsibilities.
