@@ -15,9 +15,8 @@ from a2a.types import Role as SDKRole
 from a2a.types import TextPart as SDKTextPart
 
 # MUXI models (to be gradually replaced)
-from .models import A2AAuthentication, A2ACapability
+from .models import A2AAuthentication, A2ACapability, AuthType
 from .models import AgentCard as MUXIAgentCard
-from .models import AuthType
 
 
 class ModelsAdapter:
