@@ -1,7 +1,0 @@
-{
-  "venvPath": ".",
-  "venv": "venv",
-  "extraPaths": [
-    "/Users/ran/.local/lib/python3.x/site-packages/"
-  ]
-}
