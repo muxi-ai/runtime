@@ -277,5 +277,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin develop
           git checkout develop
-          git merge --no-ff main -m "chore: merge main back to develop (v${{ needs.version.outputs.version }})"
+          git merge --no-ff main -m "chore: merge main back to develop (v${{ needs.version.outputs.version }}) [skip ci]"
           git push origin develop
