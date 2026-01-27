@@ -3,6 +3,17 @@
 # RELEASE FLOW:
 #   develop → rc (PR) → main (merge) → auto-release
 #
+# STEP ORDER:
+#   1. version job: calculate version, commit .version + CHANGELOG
+#   2. docker-amd64, docker-arm64, pypi jobs: build + publish (parallel)
+#   3. docker-manifest job: create multi-arch manifest
+#   4. github-release job: create GitHub Release
+#   5. merge-back job: merge main → develop
+#   6. tag job: push git tag (final step, after everything succeeds)
+#
+# Tag is pushed LAST so a failed Docker/PyPI build won't leave a
+# dangling tag pointing at an incomplete release.
+#
 # VERSION FORMAT (ScalVer):
 #   MAJOR.YYYYMMDD.PATCH
 #
@@ -28,6 +39,7 @@ jobs:
     if: "!startsWith(github.event.head_commit.message, 'chore: release')"
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
+      sha: ${{ steps.sha.outputs.SHA }}
 
     steps:
       - name: Checkout
@@ -80,13 +92,9 @@ jobs:
             git push
           fi
 
-      - name: Create git tag
-        run: |
-          TAG="v${{ steps.version.outputs.VERSION }}"
-          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
-            git tag "$TAG"
-            git push origin "$TAG"
-          fi
+      - name: Output release commit SHA
+        id: sha
+        run: echo "SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
   # ===== Docker Build (AMD64) - Native =====
   docker-amd64:
@@ -111,7 +119,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: v${{ needs.version.outputs.version }}
+          ref: ${{ needs.version.outputs.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -151,7 +159,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: v${{ needs.version.outputs.version }}
+          ref: ${{ needs.version.outputs.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -220,7 +228,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: v${{ needs.version.outputs.version }}
+          ref: ${{ needs.version.outputs.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -279,3 +287,27 @@ jobs:
           git checkout develop
           git merge --no-ff main -m "chore: merge main back to develop (v${{ needs.version.outputs.version }}) [skip ci]"
           git push origin develop
+
+  # ===== Create Git Tag (final step) =====
+  tag:
+    runs-on: ubuntu-latest
+    needs: [version, merge-back]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          token: ${{ secrets.MUXI_RELEASE_TOKEN }}
+
+      - name: Create and push git tag
+        run: |
+          TAG="v${{ needs.version.outputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists"
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
