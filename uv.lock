@@ -1268,7 +1268,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -3269,7 +3269,7 @@ requires-dist = [
     { name = "nanoid", specifier = ">=2.0.0" },
     { name = "nltk", specifier = ">=3.8.0" },
     { name = "numpy", specifier = ">=1.24.0" },
-    { name = "onellm", specifier = ">=0.20251222.0" },
+    { name = "onellm", specifier = ">=0.20260127.0" },
     { name = "openai", specifier = ">=1.3.0" },
     { name = "openpyxl", specifier = ">=3.1.0" },
     { name = "pandas", specifier = ">=2.0.0" },
@@ -3753,22 +3753,23 @@ wheels = [
 
 [[package]]
 name = "onellm"
-version = "0.20251229.0"
+version = "0.20260127.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
-    { name = "faiss-cpu" },
+    { name = "filelock" },
     { name = "huggingface-hub" },
     { name = "openai" },
+    { name = "pyasn1" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "requests" },
-    { name = "sentence-transformers" },
     { name = "tiktoken" },
+    { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/82/40/4b1a22a83dc4fdad15186a0c3bb239f8338ac8af76be44a233b9a18e2751/onellm-0.20251229.0.tar.gz", hash = "sha256:fe5fdd8cfb16fd0fcc706b6c16d8db4a705215023c7a797bf8355817334d08ee", size = 165371, upload-time = "2025-12-29T20:19:38.247Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/21/a8e442b9e36691e1bdcc4aa1f42af03c0543bacdce01048c1827a14928f6/onellm-0.20260127.0.tar.gz", hash = "sha256:3cbb2618f12a498fc0abd92e14d4d1a69695e0346017df71003f7185836a914e", size = 153720, upload-time = "2026-01-27T22:35:34.043Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/48/77/add31c23631c007fa0cd2fa0e5d0b34b84c9e222be0e8cae61a551166ef9/onellm-0.20251229.0-py3-none-any.whl", hash = "sha256:a306b546b2fa23bd2074ba066cf3c8acd849783ef3b123eee394208c53a1d2ef", size = 191970, upload-time = "2025-12-29T20:19:33.639Z" },
+    { url = "https://files.pythonhosted.org/packages/af/03/1ca7822d4dab9e3816dc43ae278aeb07ec4d504e62bcf0138fd5c8e540ea/onellm-0.20260127.0-py3-none-any.whl", hash = "sha256:268ac6fa89fa584fc423c306ad7b4747447172dceb1012ee584cdb7b1adeb7b3", size = 192551, upload-time = "2026-01-27T22:35:32.187Z" },
 ]
 
 [[package]]
