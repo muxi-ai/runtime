@@ -1327,11 +1327,12 @@ class Agent:
                         or "no tools needed" in data_flow.lower()
                     ):
                         # Generate a direct response for simple conversational requests
+                        # Use the agent's system_message if available, otherwise use default
+                        system_content = self.system_message if self.system_message else (
+                            "You are a helpful assistant. Provide direct, natural responses without using any tools or files."
+                        )
                         simple_messages = [
-                            {
-                                "role": "system",
-                                "content": "You are a helpful assistant. Provide direct, natural responses without using any tools or files.",
-                            },  # noqa: E501
+                            {"role": "system", "content": system_content},
                             {"role": "user", "content": message},
                         ]
 

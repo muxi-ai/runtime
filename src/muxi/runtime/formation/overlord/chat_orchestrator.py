@@ -1082,8 +1082,14 @@ class ChatOrchestrator:
             enhanced_parts.append("")
 
         # 4. Relevant long-term memories (medium priority)
+        # IMPORTANT: Put memories BEFORE the protocol so LLM sees the data first
         if long_term_memories:
-            # Load memory usage protocol from prompts
+            # Add memories section FIRST - before instructions
+            enhanced_parts.append("=== RELEVANT MEMORIES ===")
+            enhanced_parts.append(long_term_memories)
+            enhanced_parts.append("")
+
+            # Then add the usage protocol as guidance
             from ..prompts.loader import PromptLoader
 
             try:
@@ -1093,16 +1099,11 @@ class ChatOrchestrator:
             except KeyError:
                 # Fallback to inline protocol if file not found
                 enhanced_parts.append(
-                    "IMPORTANT: The following are verified FACTS about this specific user. "
-                    "When answering their question, you MUST use ALL relevant items from this list. "
+                    "IMPORTANT: The memories above are verified FACTS about this specific user. "
+                    "When answering their question, you MUST use ALL relevant items from the RELEVANT MEMORIES section. "
                     "These are their stated preferences and information - prioritize these OVER general advice:"
                 )
                 enhanced_parts.append("")
-
-            # Add clear section header for memories - critical for LLM to find them
-            enhanced_parts.append("=== RELEVANT MEMORIES ===")
-            enhanced_parts.append(long_term_memories)
-            enhanced_parts.append("")
 
         # 5. Conversation context (lowest priority - truncated first if needed)
         if context_text:

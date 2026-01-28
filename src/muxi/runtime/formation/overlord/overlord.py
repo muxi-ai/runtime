@@ -2379,6 +2379,8 @@ If this requires complex multi-step work, respond with: COMPLEX"""
 Reformat the agent's response to match your persona while preserving all technical details and information.
 Make it conversational and friendly while keeping accuracy.
 
+CRITICAL: If the agent's response contains specific personal information about the user (like their name, favorite color, profession, preferences, etc.), you MUST preserve that information exactly. The agent has access to the user's stored memories - do NOT replace specific facts with "I don't know" or "I don't have access to personal information". Trust the agent's response.
+
 IMPORTANT: Match response length to the question complexity. Simple questions get brief answers.
 Don't pad responses with unnecessary headers, bullet points, or filler. Be concise.{format_instruction}{repeated_instruction}{ongoing_session_instruction}"""
 
@@ -7015,8 +7017,20 @@ Agent response: {raw_response}"""
                 description="Starting agent selection process",
             )
 
+            # Extract clean user message for routing to avoid security false positives
+            # The enhanced message contains protocol instructions that can trigger security checks
+            routing_message = message
+            if "=== CURRENT REQUEST ===" in message and "User:" in message:
+                lines = message.split("\n")
+                for i, line in enumerate(lines):
+                    if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                        next_line = lines[i + 1].strip()
+                        if next_line.startswith("User:"):
+                            routing_message = next_line[5:].strip()
+                            break
+
             try:
-                agent_name = await self.select_agent_for_message(message, request_id=request_id)
+                agent_name = await self.select_agent_for_message(routing_message, request_id=request_id)
             except SecurityViolation as e:
                 # Security threat detected - but skip if this is a credential/workflow response
                 if skip_security_check:
