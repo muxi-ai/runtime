@@ -255,8 +255,10 @@ class MemoryExtractor:
         prompt = self._create_extraction_prompt(conversation)
 
         # Generate extraction results
+        # IMPORTANT: Disable caching for extraction to avoid returning stale results
+        # when similar prompts are used for different user messages
         try:
-            extraction_response = await model.generate_text(prompt)
+            extraction_response = await model.generate_text(prompt, caching=False)
         except Exception as e:
             observability.observe(
                 event_type=observability.SystemEvents.EXTENSION_FAILED,

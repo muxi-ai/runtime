@@ -1133,11 +1133,11 @@ class ChatOrchestrator:
     ) -> None:
         """Extract user information from conversation without blocking."""
         try:
-            # Use enhanced message for extraction if provided, otherwise use original
-            extraction_message = enhanced_message if enhanced_message else user_message
-
+            # IMPORTANT: Use the ORIGINAL user message for extraction, not enhanced.
+            # The enhanced message contains memories/context that confuses the extraction LLM
+            # into re-extracting old information instead of the new message content.
             await self.overlord.extract_user_information(
-                user_message=extraction_message,  # Use enhanced for better context
+                user_message=user_message,  # Use original message, not enhanced
                 agent_response=agent_response,
                 user_id=user_id,
                 agent_id=agent_id,
