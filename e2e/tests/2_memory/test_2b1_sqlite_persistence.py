@@ -72,8 +72,9 @@ class TestSQLitePersistence(BaseMemoryTest):
             print("  ✓ Information stored in SQLite")
             checks_passed.append("Information stored successfully")
 
-            # Wait for extraction to complete (extraction is async)
-            await asyncio.sleep(10)
+            # Wait for extraction to complete (extraction is async and requires LLM calls)
+            # Increased from 10s to 30s to allow background extraction tasks to finish
+            await asyncio.sleep(30)
 
             # Shutdown formation
             await self.cleanup()
