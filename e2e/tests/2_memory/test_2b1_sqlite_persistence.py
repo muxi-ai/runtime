@@ -88,7 +88,7 @@ class TestSQLitePersistence(BaseMemoryTest):
             print("  ✓ Formation restarted with SQLite")
 
             # Query for persisted information
-            user_msg3 = "What do you remember about my pets and travel plans?"
+            user_msg3 = "What pets do I have and where am I traveling to?"
             response3 = await self.overlord.chat(
                 user_msg3, user_id=user_id, use_async=False, stream=False
             )
@@ -127,7 +127,7 @@ class TestSQLitePersistence(BaseMemoryTest):
                 all_passed = False
 
             # Query for specific detail
-            user_msg4 = "What is my favorite color?"
+            user_msg4 = "What color do I like?"
             response4 = await self.overlord.chat(
                 user_msg4, user_id=user_id, use_async=False, stream=False
             )
@@ -209,7 +209,7 @@ class TestSQLitePersistence(BaseMemoryTest):
             await asyncio.sleep(3)
 
             # Query User 1's information
-            query1 = "What is my profession and favorite cuisine?"
+            query1 = "What do I do for work and what cuisine do I prefer?"
             response3 = await self.overlord.chat(
                 query1, user_id="user_david", use_async=False, stream=False
             )
@@ -234,7 +234,7 @@ class TestSQLitePersistence(BaseMemoryTest):
                 all_passed = False
 
             # Query User 2's information
-            query2 = "What is my profession and favorite food?"
+            query2 = "What job do I have and what food do I enjoy?"
             response4 = await self.overlord.chat(
                 query2, user_id="user_emily", use_async=False, stream=False
             )
