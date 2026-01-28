@@ -86,10 +86,13 @@ class TestBasicConversationContext(BaseMemoryTest):
             # Setup formation with local buffer
             await self.setup_memory_formation("buffer_local")
 
+            # Use consistent session_id for all messages in this conversation
+            test_session_id = "test_conversation_retention"
+
             # First exchange - store information
             user_msg1 = "My name is Alice and I work at TechCorp as a software engineer."
             response1 = await self.overlord.chat(
-                user_msg1, user_id="test_user", use_async=False, stream=False
+                user_msg1, user_id="test_user", session_id=test_session_id, use_async=False, stream=False
             )
 
             # Handle response
@@ -110,9 +113,9 @@ class TestBasicConversationContext(BaseMemoryTest):
             await asyncio.sleep(3)
 
             # Second exchange - test retention
-            user_msg2 = "What did I just tell you about myself?"
+            user_msg2 = "Where do I work again?"
             response2 = await self.overlord.chat(
-                user_msg2, user_id="test_user", use_async=False, stream=False
+                user_msg2, user_id="test_user", session_id=test_session_id, use_async=False, stream=False
             )
 
             # Handle response
@@ -146,7 +149,7 @@ class TestBasicConversationContext(BaseMemoryTest):
             # Third exchange - test deeper retention
             user_msg3 = "What is my profession?"
             response3 = await self.overlord.chat(
-                user_msg3, user_id="test_user", use_async=False, stream=False
+                user_msg3, user_id="test_user", session_id=test_session_id, use_async=False, stream=False
             )
 
             # Handle response
