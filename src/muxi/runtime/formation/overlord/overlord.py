@@ -5651,12 +5651,9 @@ Agent response: {raw_response}"""
         start_time = time.time()
 
         # Check for cancellation at start of sync processing
-        print(f"[DEBUG] _process_sync_chat: checking cancellation for {request_id}")
         if request_id and self.request_tracker.is_cancelled(request_id):
-            print(f"[DEBUG] _process_sync_chat: Request {request_id} IS CANCELLED at start!")
             await self.request_tracker.clear_cancelled(request_id)
             raise RequestCancelledException(request_id)
-        print(f"[DEBUG] _process_sync_chat: Request {request_id} NOT cancelled, continuing")
 
         # Check if streaming is enabled for this request
         is_streaming = streaming_manager.is_streaming_enabled(request_id) if request_id else False
@@ -6499,9 +6496,25 @@ Agent response: {raw_response}"""
                                         elif role == "assistant":
                                             context_lines.append(f"Assistant: {content}")
                                 if context_lines:
+                                    # IMPORTANT: Preserve any existing memory sections from the original message
+                                    # Only add buffer context, don't lose long-term memories
+                                    preserved_sections = ""
+                                    if "=== RELEVANT MEMORIES ===" in message:
+                                        # Extract and preserve the memory section
+                                        mem_start = message.find("=== RELEVANT MEMORIES ===")
+                                        # Find the end of the memory section (next section or end of message)
+                                        mem_end = len(message)
+                                        for section_marker in ["=== CONVERSATION CONTEXT ===", "=== CURRENT REQUEST ==="]:
+                                            if section_marker in message[mem_start + 10:]:
+                                                marker_pos = message.find(section_marker, mem_start + 10)
+                                                if marker_pos != -1 and marker_pos < mem_end:
+                                                    mem_end = marker_pos
+                                        preserved_sections = message[mem_start:mem_end].rstrip() + "\n\n"
+                                    
                                     enhanced_message = (
                                         f"=== CONVERSATION CONTEXT ===\n"
                                         f"{chr(10).join(context_lines)}\n\n"
+                                        f"{preserved_sections}"
                                         f"=== CURRENT REQUEST ===\n"
                                         f"User: {clean_current_message}"
                                     )
@@ -7078,12 +7091,9 @@ Agent response: {raw_response}"""
             )
 
             # Check for cancellation before agent processing
-            print(f"[DEBUG] Overlord: checking cancellation for {request_id}")
             if request_id and self.request_tracker.is_cancelled(request_id):
-                print(f"[DEBUG] Overlord: Request {request_id} IS CANCELLED!")
                 await self.request_tracker.clear_cancelled(request_id)
                 raise RequestCancelledException(request_id)
-            print(f"[DEBUG] Overlord: Request {request_id} NOT cancelled, proceeding")
 
             # Process the message using the agent
             result = await agent.process_message(

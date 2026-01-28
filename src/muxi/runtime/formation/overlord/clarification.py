@@ -1345,8 +1345,9 @@ Answer with just: YES or NO"""
             # It IS a recall question - now check if we have the answer in memory
             user_id = context.get("user_id", "0") if context else "0"
 
-            # Skip for anonymous users
-            if not user_id or user_id == "0":
+            # Note: In single-user mode, user_id is "0" - this is valid and expected
+            # We only skip if user_id is completely None/empty
+            if not user_id:
                 return False
 
             # Search memory using the same API as chat_orchestrator

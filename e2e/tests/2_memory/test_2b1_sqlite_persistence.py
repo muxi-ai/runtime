@@ -88,8 +88,8 @@ class TestSQLitePersistence(BaseMemoryTest):
             await self.setup_memory_formation("sqlite")
             print("  ✓ Formation restarted with SQLite")
 
-            # Query for persisted information
-            user_msg3 = "What pets do I have and where am I traveling to?"
+            # Query for persisted information - ask all stored info at once
+            user_msg3 = "What is my favorite color, what pets do I have, and where am I traveling to?"
             response3 = await self.overlord.chat(
                 user_msg3, user_id=user_id, use_async=False, stream=False
             )
@@ -103,7 +103,8 @@ class TestSQLitePersistence(BaseMemoryTest):
             print(f"\nUser: {user_msg3}")
             print(f"Assistant: {response3_text[:300]}...")
 
-            # Check persistence
+            # Check persistence - all three should be in the combined response
+            color_remembered = "blue" in response3_text.lower()
             pets_remembered = (
                 "whiskers" in response3_text.lower() or "shadow" in response3_text.lower()
             ) or ("cats" in response3_text.lower() or "two cats" in response3_text.lower())
@@ -112,6 +113,13 @@ class TestSQLitePersistence(BaseMemoryTest):
                 or "summer" in response3_text.lower()
                 or "trip" in response3_text.lower()
             )
+
+            if color_remembered:
+                print("  ✓ Color preference persisted")
+                checks_passed.append("Color preference persisted across restart")
+            else:
+                print("  ✗ Color preference not persisted")
+                all_passed = False
 
             if pets_remembered:
                 print("  ✓ Pet information persisted")
@@ -125,30 +133,6 @@ class TestSQLitePersistence(BaseMemoryTest):
                 checks_passed.append("Travel plans persisted across restart")
             else:
                 print("  ✗ Travel plans not persisted")
-                all_passed = False
-
-            # Query for specific detail
-            user_msg4 = "What color do I like?"
-            response4 = await self.overlord.chat(
-                user_msg4, user_id=user_id, use_async=False, stream=False
-            )
-
-            # Handle response (stream=False, so response is a string or object with .content)
-            response4_text = (
-                response4.content if hasattr(response4, "content") else str(response4)
-            )
-
-            transcript.append((user_msg4, response4_text))
-            print(f"\nUser: {user_msg4}")
-            print(f"Assistant: {response4_text[:200]}...")
-
-            color_remembered = "blue" in response4_text.lower()
-
-            if color_remembered:
-                print("  ✓ Color preference persisted")
-                checks_passed.append("Color preference persisted")
-            else:
-                print("  ✗ Color preference not persisted")
                 all_passed = False
 
         except Exception as e:
@@ -210,7 +194,7 @@ class TestSQLitePersistence(BaseMemoryTest):
             await asyncio.sleep(3)
 
             # Query User 1's information
-            query1 = "What do I do for work and what cuisine do I prefer?"
+            query1 = "What is my profession and what is my favorite cuisine?"
             response3 = await self.overlord.chat(
                 query1, user_id="user_david", use_async=False, stream=False
             )
@@ -235,7 +219,7 @@ class TestSQLitePersistence(BaseMemoryTest):
                 all_passed = False
 
             # Query User 2's information
-            query2 = "What job do I have and what food do I enjoy?"
+            query2 = "What is my job and what is my favorite food?"
             response4 = await self.overlord.chat(
                 query2, user_id="user_emily", use_async=False, stream=False
             )
