@@ -27,6 +27,7 @@ htmlcov
 tests/
 e2e/*
 !e2e/assets
+!e2e/utils
 e2e/assets/*
 !e2e/assets/faissx-auth.json
 
