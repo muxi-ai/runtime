@@ -1650,6 +1650,8 @@ Provide a helpful, conversational response that directly addresses what the user
                 "model": embedding_model,
                 "input": text,
             }
+            if self.api_key:
+                params["api_key"] = self.api_key
             params.update(kwargs)
 
             # Check cache first
@@ -1778,6 +1780,8 @@ Provide a helpful, conversational response that directly addresses what the user
                 "model": embedding_model,
                 "input": texts,
             }
+            if self.api_key:
+                params["api_key"] = self.api_key
             params.update(kwargs)
 
             # Check cache first

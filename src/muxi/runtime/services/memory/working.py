@@ -132,6 +132,7 @@ class WorkingMemory:
         remote: Optional[Dict[str, Any]] = None,
         max_memory_mb: int = 1000,
         fifo_interval_min: int = 5,
+        api_key: Optional[str] = None,
     ):
         """
         Initialize working memory with vector search capabilities.
@@ -175,6 +176,7 @@ class WorkingMemory:
         # Model can be either an LLM instance or a model name string
         self._model = None
         self._model_name = None
+        self._model_api_key = api_key
         self._use_local_embeddings = False
         self._local_embedding_logged = False
 
@@ -255,7 +257,7 @@ class WorkingMemory:
             # Note: This is synchronous creation, which should work for most cases
             # If async is needed, the model creation should happen in add/search methods
             try:
-                self._model = LLM(model=self._model_name)
+                self._model = LLM(model=self._model_name, api_key=self._model_api_key)
             except Exception as e:
                 observability.observe(
                     event_type=observability.ErrorEvents.LLM_INITIALIZATION_FAILED,

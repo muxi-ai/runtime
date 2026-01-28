@@ -201,6 +201,15 @@ def initialize_llm_config(formation) -> None:
     formation._global_llm_settings = llm_config.get("settings", {})
     formation._global_api_keys = llm_config.get("api_keys", {})
 
+    # Register API keys globally with OneLLM so all providers (embeddings, chat, etc.)
+    # can authenticate without needing explicit api_key on every LLM() instantiation
+    if formation._global_api_keys:
+        from onellm.config import set_api_key as _onellm_set_api_key
+
+        for provider, api_key in formation._global_api_keys.items():
+            if api_key and "${{ secrets." not in str(api_key):
+                _onellm_set_api_key(api_key, provider)
+
     # CRITICAL: Ensure text model is configured
     if "text" not in formation._capability_models:
         raise ConfigurationValidationError(
@@ -338,12 +347,18 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
 
         # Get embedding model for vector search if enabled
         embedding_model = None
+        embedding_api_key = None
         if vector_search:
             embedding_model_name = _resolve_embedding_model_name(formation=formation)
             if embedding_model_name:
                 # Pass the model name to WorkingMemory
                 # It will create the LLM instance lazily when needed
                 embedding_model = embedding_model_name
+                # Resolve API key for the embedding model's provider
+                if "/" in embedding_model_name:
+                    provider = embedding_model_name.split("/")[0]
+                    global_keys = getattr(formation, "_global_api_keys", {})
+                    embedding_api_key = global_keys.get(provider)
             else:
                 # Disable vector search if no embedding model configured
                 vector_search = False
@@ -360,6 +375,7 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
             model=embedding_model,
             mode=mode,
             remote=remote_config.model_dump() if remote_config and mode == "remote" else None,
+            api_key=embedding_api_key,
         )
 
         # REMOVE - line 339 (redundant with InitEventFormatter)
