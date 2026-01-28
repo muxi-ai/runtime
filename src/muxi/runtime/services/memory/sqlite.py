@@ -453,7 +453,11 @@ class SQLiteMemory(BaseMemory):
         return memory_id
 
     async def search(
-        self, query: str, limit: int = 5, user_id: Optional[str] = None
+        self,
+        query: str,
+        limit: int = 5,
+        user_id: Optional[str] = None,
+        collection: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search for similar content in memory.
@@ -464,6 +468,8 @@ class SQLiteMemory(BaseMemory):
         Args:
             query: The text query to search for
             limit: Maximum number of results to return
+            user_id: Optional user ID for filtering
+            collection: Optional collection name to filter results
 
         Returns:
             List of dictionaries containing the search results with content and metadata
@@ -483,9 +489,9 @@ class SQLiteMemory(BaseMemory):
         else:
             internal_user_id = self.default_user_id
 
-        # Search with embedding (search ALL collections, not just default)
+        # Search with embedding (filter by collection if specified)
         results = self._search_internal(
-            query_embedding, limit, collection=None, user_id=internal_user_id
+            query_embedding, limit, collection=collection, user_id=internal_user_id
         )
 
         # Format results
@@ -530,8 +536,8 @@ class SQLiteMemory(BaseMemory):
         if user_id is not None:
             search_params["user_id"] = user_id
 
-        # Note: SQLiteMemory doesn't support collection or metadata filtering
-        # in its public search API, so we don't include those parameters
+        if collection is not None:
+            search_params["collection"] = collection
 
         return search_params
 

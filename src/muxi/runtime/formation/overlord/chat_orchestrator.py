@@ -931,6 +931,7 @@ class ChatOrchestrator:
                     "relationships",
                     "work_projects",
                     "conversations",
+                    "goals",
                     "default",
                 ]
                 lt_results = await self.overlord.persistent_memory_manager.search_long_term_memory(
@@ -1091,13 +1092,15 @@ class ChatOrchestrator:
                 enhanced_parts.append("")
             except KeyError:
                 # Fallback to inline protocol if file not found
-                enhanced_parts.append("=== RELEVANT MEMORIES ===")
                 enhanced_parts.append(
                     "IMPORTANT: The following are verified FACTS about this specific user. "
                     "When answering their question, you MUST use ALL relevant items from this list. "
                     "These are their stated preferences and information - prioritize these OVER general advice:"
                 )
+                enhanced_parts.append("")
 
+            # Add clear section header for memories - critical for LLM to find them
+            enhanced_parts.append("=== RELEVANT MEMORIES ===")
             enhanced_parts.append(long_term_memories)
             enhanced_parts.append("")
 

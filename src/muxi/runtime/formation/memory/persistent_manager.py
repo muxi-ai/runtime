@@ -252,7 +252,7 @@ class PersistentMemoryManager:
                             f"Unexpected result type in memory search: type={type(item).__name__}"
                         )
 
-                all_results.sort(key=get_sort_key)
+                all_results.sort(key=get_sort_key, reverse=True)  # Higher similarity = better
                 lt_results = all_results[:k]
             else:
                 # No collections specified, search all collections
