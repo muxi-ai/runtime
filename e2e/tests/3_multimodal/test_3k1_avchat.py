@@ -7,7 +7,6 @@ Simple test to show the actual response from avchat
 import asyncio
 import sys
 from pathlib import Path
-import base64
 
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
@@ -26,7 +25,7 @@ async def test_3k7_transcript():
     formation = Formation()
 
     # Load the formation
-    await formation.load(str(formation_path / "formation.afs"))
+    await formation.load(str(formation_path / "formation.yaml"))
     print("\nStarting overlord...")
     overlord = await formation.start_overlord()
     print("✓ Overlord started")
@@ -42,25 +41,26 @@ async def test_3k7_transcript():
     print(f"\n📁 Using audio file: {audio_path.name}")
     print(f"   Size: {audio_path.stat().st_size / 1024:.1f} KB")
 
-    # Read and encode the audio file
+    # Read the audio file (raw bytes, not base64)
     with open(audio_path, 'rb') as f:
         audio_content = f.read()
-        audio_b64 = base64.b64encode(audio_content).decode('utf-8')
 
     audio_file = {
-        'content': audio_b64,
+        'content': audio_content,
         'content_type': 'audio/m4a',
-        'filename': 'short.m4a'
+        'filename': 'audio-request.m4a',
+        'size': len(audio_content)
     }
 
-    # Call avchat with timeout and force synchronous mode
-    print("\n🎤 Calling avchat() with audio file...")
-    print("   Generated prompt: 'Please transcribe this audio and respond to what was said.'")
+    # Call chat with audio file
+    print("\n🎤 Calling chat() with audio file...")
+    print("   Message: 'Please transcribe this audio and respond to what was said.'")
     print("   Mode: Synchronous (use_async=False)")
 
     try:
         response = await asyncio.wait_for(
-            overlord.avchat(
+            overlord.chat(
+                message="Please transcribe this audio and respond to what was said.",
                 files=[audio_file],
                 user_id="test-user",
                 session_id="test-3k7",
@@ -91,22 +91,20 @@ async def test_3k7_transcript():
 
     except asyncio.TimeoutError:
         print("\n❌ Timeout: No response after 120 seconds")
-        formation.kill_overlord()
-        formation.shutdown()
-        return False
+        await formation.shutdown()
+        assert False, "Timeout: No response after 120 seconds"
     except Exception as e:
         print(f"\n❌ Error: {e}")
-        formation.kill_overlord()
-        formation.shutdown()
-        return False
+        await formation.shutdown()
+        raise
+
+    # Verify response is substantial
+    assert len(content) > 20, f"Response too short: {content}"
 
     # shutdown
-    formation.kill_overlord()
-    formation.shutdown()
+    await formation.shutdown()
     print("\n" + "=" * 80)
-    return True
 
 
 if __name__ == "__main__":
-    result = asyncio.run(test_3k7_transcript())
-    sys.exit(0 if result else 1)
+    asyncio.run(test_3k7_transcript())
