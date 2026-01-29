@@ -11,4 +11,4 @@ args: ["-y", "@notionhq/notion-mcp-server"]
 # Authentication
 auth:
   type: "env"
-  token: "${{ secrets.NOTION_MCP_TOKEN }}" # Auth token (for bearer)
+  NOTION_TOKEN: "${{ secrets.NOTION_MCP_TOKEN }}"

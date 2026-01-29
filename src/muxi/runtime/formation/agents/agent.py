@@ -1110,12 +1110,9 @@ class Agent:
                                     if not parameters:
                                         # Get tool schema to understand required parameters
                                         tool_schema = tool_def.get("function", {})
-                                        required_params = tool_schema.get("parameters", {}).get(
-                                            "required", []
-                                        )
-                                        param_properties = tool_schema.get("parameters", {}).get(
-                                            "properties", {}
-                                        )
+                                        full_param_schema = tool_schema.get("parameters", {})
+                                        required_params = full_param_schema.get("required", [])
+                                        param_properties = full_param_schema.get("properties", {})
 
                                         if required_params:
                                             # Try to infer parameters based on tool name, request context, and schema
@@ -1123,6 +1120,7 @@ class Agent:
                                                 tool_name=actual_tool_name,
                                                 required_params=required_params,
                                                 param_properties=param_properties,
+                                                full_schema=full_param_schema,
                                                 action_description=step.get("action", ""),
                                                 user_request=user_message,
                                             )
@@ -4423,11 +4421,47 @@ class Agent:
             # This prevents blocking legitimate use cases with incomplete schemas
             return True, None
 
+    def _resolve_schema_ref(
+        self, param_def: Dict[str, Any], full_schema: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Resolve $ref references in JSON Schema to their actual definitions.
+
+        Args:
+            param_def: Parameter definition that may contain $ref
+            full_schema: Full schema containing $defs
+
+        Returns:
+            Resolved parameter definition
+        """
+        if "$ref" not in param_def:
+            return param_def
+
+        ref_path = param_def["$ref"]
+        # Handle #/$defs/name format
+        if ref_path.startswith("#/$defs/"):
+            def_name = ref_path.split("/")[-1]
+            defs = full_schema.get("$defs", {})
+            if def_name in defs:
+                resolved = defs[def_name].copy()
+                # Recursively resolve nested refs
+                if "$ref" in resolved:
+                    return self._resolve_schema_ref(resolved, full_schema)
+                # Handle oneOf by taking the first option as example
+                if "oneOf" in resolved:
+                    first_option = resolved["oneOf"][0]
+                    if "$ref" in first_option:
+                        return self._resolve_schema_ref(first_option, full_schema)
+                    return first_option
+                return resolved
+        return param_def
+
     async def _infer_tool_parameters(
         self,
         tool_name: str,
         required_params: List[str],
         param_properties: Dict[str, Any],
+        full_schema: Dict[str, Any],
         action_description: str,
         user_request: str,
     ) -> Dict[str, Any]:
@@ -4439,6 +4473,7 @@ class Agent:
             tool_name: Name of the tool
             required_params: List of required parameter names
             param_properties: Parameter definitions from schema
+            full_schema: Full parameter schema including $defs for resolving references
             action_description: Description of what the step is trying to do
             user_request: Original user request
 
@@ -4454,9 +4489,14 @@ class Agent:
             parameters_section = ""
             for param in required_params:
                 param_def = param_properties.get(param, {})
-                param_type = param_def.get("type", "string")
+                # Resolve $ref if present
+                param_def = self._resolve_schema_ref(param_def, full_schema)
+                param_type = param_def.get("type", "object")
                 param_desc = param_def.get("description", "No description available")
                 param_enum = param_def.get("enum", [])
+                # Check for nested object structure
+                nested_props = param_def.get("properties", {})
+                nested_required = param_def.get("required", [])
 
                 parameters_section += f"\n- {param}:"
                 parameters_section += f"\n  Type: {param_type}"
@@ -4467,6 +4507,14 @@ class Agent:
                     parameters_section += f"\n  Minimum: {param_def['minimum']}"
                 if param_def.get("maximum") is not None:
                     parameters_section += f"\n  Maximum: {param_def['maximum']}"
+                # Show nested object structure for complex parameters
+                if nested_props and param_type == "object":
+                    parameters_section += f"\n  Required fields: {nested_required}"
+                    parameters_section += "\n  Structure: {"
+                    for prop_name, prop_def in nested_props.items():
+                        prop_type = prop_def.get("type", "string")
+                        parameters_section += f'\n    "{prop_name}": <{prop_type}>'
+                    parameters_section += "\n  }"
 
             # System prompt for parameter inference
             system_prompt = f"""Based on the user's request and tool requirements, determine the appropriate parameter values.

@@ -526,8 +526,25 @@ class UnifiedClarificationSystem:
         user_id = context.get("user_id", "0") if context else "0"
         credential_info = []
 
+        # First, check which MCP servers use formation-level secrets (not user credentials)
+        # These servers already have credentials configured via formation secrets
+        mcp_coordinator = getattr(self.overlord, "mcp_coordinator", None)
+        formation_auth_services = set()
+        if mcp_coordinator and hasattr(mcp_coordinator, "connections"):
+            for server_id, conn_info in mcp_coordinator.connections.items():
+                # If credentials is NOT the user credential marker, it uses formation secrets
+                creds = conn_info.get("credentials", "")
+                if creds and creds != "$MUXI_USER_CREDENTIALS$":
+                    # Extract service name from server_id (e.g., "notion-mcp" -> "notion")
+                    service_name = server_id.replace("-mcp", "")
+                    formation_auth_services.add(service_name)
+                    credential_info.append(f"{service_name}: configured (formation)")
+
         if hasattr(self.overlord, "credential_resolver") and mcp_servers:
             for service in mcp_servers:
+                # Skip services that use formation-level secrets
+                if service in formation_auth_services:
+                    continue
                 try:
                     credentials = await self.overlord.credential_resolver.resolve(user_id, service)
                     if credentials:

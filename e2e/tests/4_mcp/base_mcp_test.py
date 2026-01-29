@@ -24,12 +24,12 @@ class BaseMCPTest(BaseE2ETest):
     # Shared formation directory for all MCP tests
     FORMATION_DIR = Path(__file__).parent / "formations" / "formation-mcp"
 
-    # MCP server configurations
+    # MCP server configurations - all use the same formation.yaml which includes all MCP servers
     MCP_CONFIGS = {
-        "weather": "formation.afs",  # Default with weather MCP
-        "memory": "formation-memory.yaml",  # With memory MCP
-        "filesystem": "formation-filesystem.yaml",  # File system access
-        "multi": "formation-multi.yaml",  # Multiple MCP servers
+        "weather": "formation.yaml",
+        "memory": "formation.yaml",
+        "filesystem": "formation.yaml",
+        "multi": "formation.yaml",
     }
 
     def __init__(self, test_name: str = "MCP Test", test_description: str = "MCP test", test_area: str = "4_mcp"):
@@ -44,13 +44,12 @@ class BaseMCPTest(BaseE2ETest):
         """Setup formation with MCP servers.
 
         Args:
-            mcp_config: One of the MCP_CONFIGS keys (currently all use formation.afs)
+            mcp_config: One of the MCP_CONFIGS keys
 
         Returns:
             Configured Formation instance
         """
-        # All configs use the same formation.afs for now
-        config_file = "formation.afs"
+        config_file = self.MCP_CONFIGS.get(mcp_config, "formation.yaml")
         formation_path = self.FORMATION_DIR / config_file
 
         self.formation = Formation()

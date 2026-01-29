@@ -15,7 +15,8 @@ current_user = getpass.getuser()
 if "POSTGRES_DATABASE_URL" not in os.environ:
     os.environ["POSTGRES_DATABASE_URL"] = f"postgresql://{current_user}:@localhost:5432/muxi_framework"  # noqa: E402
 
-from muxi.runtime.formation.credentials.resolver import CredentialResolver, Credential, User  # noqa: E402
+from muxi.runtime.formation.credentials.resolver import CredentialResolver, Credential  # noqa: E402
+from muxi.runtime.services.memory.long_term import User  # noqa: E402
 from muxi.runtime.services.db import get_database_manager  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
