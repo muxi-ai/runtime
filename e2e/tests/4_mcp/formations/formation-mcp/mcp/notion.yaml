@@ -1,0 +1,14 @@
+# Command-based MCP server configuration schema
+schema: "1.0.0"
+id: "notion-mcp"
+description: "Notion MCP Server"
+active: true
+type: "command"
+
+command: "npx"
+args: ["-y", "@notionhq/notion-mcp-server"]
+
+# Authentication
+auth:
+  type: "env"
+  token: "${{ secrets.NOTION_MCP_TOKEN }}" # Auth token (for bearer)
