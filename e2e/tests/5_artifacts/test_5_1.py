@@ -52,8 +52,8 @@ class Test51(BaseArtifactsTest):
 
             transcript.append(("System", result1[:100] + "..." if len(result1) > 100 else result1))
 
-            # Check for artifacts
-            artifacts1 = getattr(response1, 'artifacts', [])
+            # Check for artifacts (use 'or []' in case artifacts is None)
+            artifacts1 = getattr(response1, 'artifacts', []) or [] or []
             if artifacts1:
                 print(f"    ✓ Generated {len(artifacts1)} artifact(s)")
                 checks_passed.append(f"Basic chart generation: {len(artifacts1)} artifacts")
@@ -86,7 +86,7 @@ class Test51(BaseArtifactsTest):
             result2 = response2.content if hasattr(response2, "content") else str(response2)
             transcript.append(("System", result2[:100] + "..." if len(result2) > 100 else result2))
 
-            artifacts2 = getattr(response2, 'artifacts', [])
+            artifacts2 = getattr(response2, 'artifacts', []) or [] or []
             if artifacts2:
                 print(f"    ✓ Generated advanced visualization with {len(artifacts2)} artifact(s)")
                 checks_passed.append("Advanced visualization generated")
@@ -109,7 +109,7 @@ class Test51(BaseArtifactsTest):
             result3 = response3.content if hasattr(response3, "content") else str(response3)
             transcript.append(("System", result3[:100] + "..." if len(result3) > 100 else result3))
 
-            artifacts3 = getattr(response3, 'artifacts', [])
+            artifacts3 = getattr(response3, 'artifacts', []) or [] or []
             if len(artifacts3) >= 2:
                 print(f"    ✓ Generated multiple charts: {len(artifacts3)} artifacts")
                 checks_passed.append(f"Multiple chart types: {len(artifacts3)} artifacts")

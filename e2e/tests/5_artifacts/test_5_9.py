@@ -40,7 +40,7 @@ class Testtest59(BaseArtifactsTest):
             result1 = response1.content if hasattr(response1, "content") else str(response1)
             transcript.append(("System", result1[:100] + "..." if len(result1) > 100 else result1))
 
-            artifacts1 = getattr(response1, 'artifacts', [])
+            artifacts1 = getattr(response1, 'artifacts', []) or []
             if artifacts1:
                 print(f"    ✓ Generated {len(artifacts1)} artifact(s) for Presentation creation")
                 checks_passed.append("Presentation generated")
@@ -63,7 +63,7 @@ class Testtest59(BaseArtifactsTest):
             result2 = response2.content if hasattr(response2, "content") else str(response2)
             transcript.append(("System", result2[:100] + "..." if len(result2) > 100 else result2))
 
-            artifacts2 = getattr(response2, 'artifacts', [])
+            artifacts2 = getattr(response2, 'artifacts', []) or []
             if artifacts2:
                 print(f"    ✓ Generated {len(artifacts2)} artifact(s) for Infographic generation")
                 checks_passed.append("Infographic created")
@@ -86,7 +86,7 @@ class Testtest59(BaseArtifactsTest):
             result3 = response3.content if hasattr(response3, "content") else str(response3)
             transcript.append(("System", result3[:100] + "..." if len(result3) > 100 else result3))
 
-            artifacts3 = getattr(response3, 'artifacts', [])
+            artifacts3 = getattr(response3, 'artifacts', []) or []
             if artifacts3:
                 print(f"    ✓ Generated {len(artifacts3)} artifact(s) for Media gallery creation")
                 checks_passed.append("Media gallery generated")

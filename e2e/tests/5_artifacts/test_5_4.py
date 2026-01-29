@@ -49,7 +49,7 @@ class Test54(BaseArtifactsTest):
             security_terms = ["error", "not allowed", "security", "restricted", "dangerous", "blocked"]
             security_detected = any(term in result1.lower() for term in security_terms)
 
-            artifacts1 = getattr(response1, 'artifacts', [])
+            artifacts1 = getattr(response1, 'artifacts', []) or []
             if security_detected or len(artifacts1) == 0:
                 print("    ✓ Dangerous request properly handled")
                 checks_passed.append("Dangerous code rejection working")
@@ -75,7 +75,7 @@ class Test54(BaseArtifactsTest):
 
             # Check for import restriction response
             import_security = any(term in result2.lower() for term in security_terms + ["import", "os.system"])
-            artifacts2 = getattr(response2, 'artifacts', [])
+            artifacts2 = getattr(response2, 'artifacts', []) or []
 
             if import_security or (len(artifacts2) > 0 and "chart" in result2.lower()):
                 print("    ✓ Import restrictions properly enforced")
@@ -102,7 +102,7 @@ class Test54(BaseArtifactsTest):
             # Check for resource limit enforcement
             resource_terms = security_terms + ["timeout", "limit", "infinite", "loop"]
             resource_security = any(term in result3.lower() for term in resource_terms)
-            artifacts3 = getattr(response3, 'artifacts', [])
+            artifacts3 = getattr(response3, 'artifacts', []) or []
 
             if resource_security or (len(artifacts3) > 0 and "chart" in result3.lower()):
                 print("    ✓ Resource limits properly enforced")

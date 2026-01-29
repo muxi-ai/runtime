@@ -61,7 +61,7 @@ class BaseArtifactsTest:
         Returns:
             Configured Formation instance
         """
-        formation_path = self.FORMATION_DIR / "formation.afs"
+        formation_path = self.FORMATION_DIR / "formation.yaml"
 
         self.formation = Formation()
         await self.formation.load(str(formation_path))
