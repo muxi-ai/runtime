@@ -2546,3 +2546,23 @@ The `_extract_user_information_async()` task created via `_create_tracked_task()
 - Error handling is swallowing exceptions
 
 **Workaround:** None currently - SQLite persistence relies on extraction which is broken.
+
+### 2026-01-29: Area 5 Artifacts Test Fixes
+
+**Problem 1:** Tests looking for `formation.afs` but file is `formation.yaml`
+**Fix:** Update `base_artifacts_test.py` to use correct extension.
+
+**Problem 2:** `getattr(response, 'artifacts', [])` returns `None` instead of `[]`
+**Root cause:** When an object has an attribute set to `None`, `getattr` returns `None`, not the default. The default is only used when the attribute doesn't exist at all.
+
+```python
+# WRONG - returns None if response.artifacts exists but is None
+artifacts = getattr(response, 'artifacts', [])
+
+# CORRECT - always returns a list
+artifacts = getattr(response, 'artifacts', []) or []
+```
+
+**Pattern to remember:** Always use `getattr(obj, attr, default) or default` when you need to guarantee a non-None value and the attribute might exist as None.
+
+**Test durations:** Area 5 tests take 23-222 seconds each due to multiple LLM calls for file generation. Budget 3-4 minutes per test.
