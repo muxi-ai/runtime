@@ -52,15 +52,14 @@ async def test_3k7_transcript():
         'size': len(audio_content)
     }
 
-    # Call chat with audio file
-    print("\n🎤 Calling chat() with audio file...")
-    print("   Message: 'Please transcribe this audio and respond to what was said.'")
+    # Call audiochat - transcribes audio and uses it as the user's message
+    print("\n🎤 Calling audiochat() with audio file...")
+    print("   Audio will be transcribed and used as the user message")
     print("   Mode: Synchronous (use_async=False)")
 
     try:
         response = await asyncio.wait_for(
-            overlord.chat(
-                message="Please transcribe this audio and respond to what was said.",
+            overlord.audiochat(
                 files=[audio_file],
                 user_id="test-user",
                 session_id="test-3k7",
