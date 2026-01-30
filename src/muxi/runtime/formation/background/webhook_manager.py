@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
 
-from ...datatypes import observability
+from ...services import observability
 
 # Import unified response types
 from ...datatypes.response import MuxiContentItem, MuxiErrorDetails, MuxiUnifiedResponse

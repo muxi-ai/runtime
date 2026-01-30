@@ -68,9 +68,10 @@ def main():
         return 0 if success else 1
 
     import asyncio
-    return asyncio.run(run_lifecycle_test())
+    import os
+    result = asyncio.run(run_lifecycle_test())
+    os._exit(result)
 
 
 if __name__ == "__main__":
-    exit_code = main()
-    sys.exit(exit_code)
+    main()

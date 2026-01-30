@@ -138,7 +138,23 @@ class BaseE2ETest:
 
                 # Stop overlord if it's running
                 if self.overlord:
-                    await self.formation.stop_overlord()
+                    try:
+                        await asyncio.wait_for(self.formation.stop_overlord(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        self.formatter.print_warning("Overlord stop timed out")
+
+                # Stop observability (cleanup background tasks)
+                if hasattr(self.formation, '_observability_manager') and self.formation._observability_manager:
+                    try:
+                        await self.formation._observability_manager.stop()
+                    except Exception:
+                        pass
+
+                # Stop formation
+                try:
+                    self.formation.stop()
+                except Exception:
+                    pass
 
                 self.formatter.print_teardown("Formation cleaned up")
             except Exception as e:

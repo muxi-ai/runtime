@@ -60,9 +60,10 @@ def main():
         return 0 if result["success"] else 1
 
     import asyncio
-    return asyncio.run(run_async_test())
+    import os
+    result = asyncio.run(run_async_test())
+    os._exit(result)  # Force exit to avoid cleanup hangs
 
 
 if __name__ == "__main__":
-    exit_code = main()
-    sys.exit(exit_code)
+    main()
