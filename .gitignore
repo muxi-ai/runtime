@@ -89,7 +89,7 @@ Thumbs.db
 .history/
 # Build outputs
 dist/
-build/
+/build/
 out/
 docs/_site
 .output/
