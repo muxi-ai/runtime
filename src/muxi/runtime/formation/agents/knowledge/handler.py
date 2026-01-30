@@ -1117,7 +1117,7 @@ class KnowledgeHandler:
                     # Check if this source is required (fail fast)
                     is_required = source_config.get("required", False)
                     if is_required:
-                        from ...datatypes.observability import InitEventFormatter
+                        from ....datatypes.observability import InitEventFormatter
 
                         print(
                             InitEventFormatter.format_fail(
@@ -1225,7 +1225,7 @@ class KnowledgeHandler:
 
         # Init event - visible during startup (Linux init-style)
         if processed_count > 0 or skipped_count > 0:
-            from ...datatypes.observability import InitEventFormatter
+            from ....datatypes.observability import InitEventFormatter
 
             total = processed_count + skipped_count
             details = f"{processed_count} processed, {skipped_count} cached"
@@ -1235,7 +1235,7 @@ class KnowledgeHandler:
             print(InitEventFormatter.format_ok(f"Knowledge sources: {total} loaded", details))
         elif knowledge_sources:
             # Had sources configured but all failed
-            from ...datatypes.observability import InitEventFormatter
+            from ....datatypes.observability import InitEventFormatter
 
             print(
                 InitEventFormatter.format_fail(

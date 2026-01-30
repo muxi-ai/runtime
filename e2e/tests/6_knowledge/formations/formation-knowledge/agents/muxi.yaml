@@ -14,7 +14,7 @@ specialties:
 knowledge:
   enabled: true
   sources:
-  - path: "muxi-business-plan.md"
+  - path: "knowledge/muxi-business-plan.md"
     description: "muxi business plan"
-  - path: "muxi-pricing.md"
+  - path: "knowledge/muxi-pricing.md"
     description: "muxi pricing"
