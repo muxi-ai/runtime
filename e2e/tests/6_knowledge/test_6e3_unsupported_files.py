@@ -20,12 +20,18 @@ async def test_unsupported_file_types():
     print("\n=== Test 6E3: Unsupported File Types ===")
     print("This test verifies the system gracefully handles unsupported file types\n")
 
-    # Create a temporary directory with various file types
+    # Create a temporary directory for the test formation
     temp_dir = tempfile.mkdtemp()
-    mixed_knowledge_dir = os.path.join(temp_dir, "mixed-knowledge")
-    os.makedirs(mixed_knowledge_dir)
 
     try:
+        # Copy the test formation first
+        test_formation_dir = os.path.join(temp_dir, "formation-test")
+        shutil.copytree(str(Path(__file__).parent / "formations" / "formation-knowledge"), test_formation_dir)
+
+        # Create knowledge dir INSIDE the formation for relative path
+        mixed_knowledge_dir = os.path.join(test_formation_dir, "knowledge", "mixed-knowledge")
+        os.makedirs(mixed_knowledge_dir)
+
         # Create various file types
         print("Creating mixed file types in knowledge directory...")
 
@@ -67,8 +73,8 @@ async def test_unsupported_file_types():
 
         print("✓ Created 9 files (2 supported, 7 unsupported/edge cases)")
 
-        # Create agent config
-        agent_yaml = f"""
+        # Create agent config (using relative path)
+        agent_yaml = """
 schema: "1.0.0"
 id: "test-mixed"
 name: "Test Mixed Files Agent"
@@ -82,21 +88,15 @@ role: "assistant"
 knowledge:
   enabled: true
   sources:
-  - path: "{mixed_knowledge_dir}"
+  - path: "knowledge/mixed-knowledge"
     description: "Knowledge directory with mixed file types"
 """
 
-        # Write temporary agent config
-        agent_config_path = os.path.join(temp_dir, "test-mixed.yaml")
+        # Write agent config directly to agents directory
+        agents_dir = os.path.join(test_formation_dir, "agents")
+        agent_config_path = os.path.join(agents_dir, "test-mixed.yaml")
         with open(agent_config_path, 'w') as f:
             f.write(agent_yaml)
-
-        # Copy test formation and add our agent
-        test_formation_dir = os.path.join(temp_dir, "formation-test")
-        shutil.copytree(str(Path(__file__).parent / "formations" / "formation-knowledge"), test_formation_dir)
-
-        agents_dir = os.path.join(test_formation_dir, "agents")
-        shutil.copy(agent_config_path, os.path.join(agents_dir, "test-mixed.yaml"))
 
         print("\n--- Test 1: Formation Loading ---")
         print("Loading formation with mixed file types...")

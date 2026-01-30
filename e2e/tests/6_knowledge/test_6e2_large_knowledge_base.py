@@ -21,12 +21,18 @@ async def test_large_knowledge_base():
     print("\n=== Test 6E2: Large Knowledge Base Performance ===")
     print("This test verifies performance with many knowledge files\n")
 
-    # Create a temporary directory with many files
+    # Create a temporary directory for the test formation
     temp_dir = tempfile.mkdtemp()
-    large_knowledge_dir = os.path.join(temp_dir, "large-knowledge")
-    os.makedirs(large_knowledge_dir)
 
     try:
+        # Copy the test formation first
+        test_formation_dir = os.path.join(temp_dir, "formation-test")
+        shutil.copytree(str(Path(__file__).parent / "formations" / "formation-knowledge"), test_formation_dir)
+
+        # Create knowledge dir INSIDE the formation for relative path
+        large_knowledge_dir = os.path.join(test_formation_dir, "knowledge", "large-knowledge")
+        os.makedirs(large_knowledge_dir)
+
         # Create many small knowledge files
         num_files = 20  # Create 20 knowledge files
         print(f"Creating {num_files} knowledge files...")
@@ -69,7 +75,7 @@ Topic {i} specific details:
 
         print(f"✓ Created {num_files} knowledge files")
 
-        # Create agent config with large knowledge base
+        # Create agent config with large knowledge base (using relative path)
         agent_yaml = f"""
 schema: "1.0.0"
 id: "test-large"
@@ -84,21 +90,15 @@ role: "assistant"
 knowledge:
   enabled: true
   sources:
-  - path: "{large_knowledge_dir}"
+  - path: "knowledge/large-knowledge"
     description: "Large knowledge base with {num_files} files"
 """
 
-        # Write temporary agent config
-        agent_config_path = os.path.join(temp_dir, "test-large.yaml")
+        # Write agent config directly to agents directory
+        agents_dir = os.path.join(test_formation_dir, "agents")
+        agent_config_path = os.path.join(agents_dir, "test-large.yaml")
         with open(agent_config_path, 'w') as f:
             f.write(agent_yaml)
-
-        # Copy the test formation and add our agent
-        test_formation_dir = os.path.join(temp_dir, "formation-test")
-        shutil.copytree(str(Path(__file__).parent / "formations" / "formation-knowledge"), test_formation_dir)
-
-        agents_dir = os.path.join(test_formation_dir, "agents")
-        shutil.copy(agent_config_path, os.path.join(agents_dir, "test-large.yaml"))
 
         print("\n--- Test 1: Formation Loading Performance ---")
         print(f"Loading formation with {num_files} knowledge files...")

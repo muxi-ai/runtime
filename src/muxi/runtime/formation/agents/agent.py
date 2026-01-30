@@ -342,6 +342,10 @@ class Agent:
         Returns:
             List of unified results (default) or dictionary with separate source results
         """
+        # Ensure knowledge handler is initialized before searching
+        if self._knowledge_config and not self._knowledge_initialized:
+            await self._ensure_knowledge_initialized()
+
         if not self.knowledge_handler:
             return {"knowledge": [], "memory": [], "unified": []} if unified else []
 

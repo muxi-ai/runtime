@@ -83,24 +83,24 @@ async def test_knowledge_with_routing():
     # Verify knowledge was used (routing is logged but not in response)
     assert len(response_text) > 100, "Response too short - knowledge likely not used"
 
-    # Check for pricing keywords
-    pricing_keywords = ["basic", "professional", "enterprise", "tier", "plan", "price", "$"]
+    # Check for pricing keywords (using actual terms from MUXI pricing doc)
+    pricing_keywords = ["free", "flex", "pro", "team", "plan", "price", "month", "enterprise", "tier"]
     keywords_found = sum(1 for kw in pricing_keywords if kw.lower() in response_text.lower())
     assert keywords_found >= 2, f"Should contain pricing info, found {keywords_found} pricing keywords"
 
     print(f"✓ Pricing knowledge keywords found: {keywords_found}/7")
     print("\n✅ Test 2 passed: Routed to muxi and used pricing knowledge")
 
-    # Test 3: PDF content question (should route to automaze)
-    print("\n--- Test 3: PDF Knowledge ---")
+    # Test 3: Business model question (should route to muxi)
+    print("\n--- Test 3: Business Model Knowledge ---")
     response3 = await overlord.chat(
-        "What is the Automaze platform architecture?",
+        "What is MUXI's business model and revenue strategy?",
         user_id="test_user",
-        session_id="test_session_pdf",
+        session_id="test_session_business",
         stream=False
     )
 
-    print("\n👤 User: What is the Automaze platform architecture?")
+    print("\n👤 User: What is MUXI's business model and revenue strategy?")
 
     # Extract response content
     if hasattr(response3, 'content'):
@@ -115,15 +115,15 @@ async def test_knowledge_with_routing():
     print(f"🤖 Response: {response_text[:500]}...")
 
     # Verify knowledge was used (routing is logged but not in response)
-    # Check for architecture/technical keywords
-    architecture_keywords = ["architecture", "platform", "system", "component", "service", "api"]
-    keywords_found = sum(1 for kw in architecture_keywords if kw.lower() in response_text.lower())
+    # Check for business model keywords
+    business_keywords = ["business", "revenue", "model", "subscription", "saas", "platform"]
+    keywords_found = sum(1 for kw in business_keywords if kw.lower() in response_text.lower())
 
     assert len(response_text) > 100, "Response too short - knowledge likely not used"
-    assert keywords_found >= 2, f"Should contain architecture knowledge, found {keywords_found}/6 keywords"
+    assert keywords_found >= 2, f"Should contain business model knowledge, found {keywords_found}/6 keywords"
 
-    print(f"✓ Architecture knowledge keywords found: {keywords_found}/6")
-    print("\n✅ Test 3 passed: Routed to automaze and used PDF knowledge")
+    print(f"✓ Business model keywords found: {keywords_found}/6")
+    print("\n✅ Test 3 passed: Routed to muxi and used business model knowledge")
 
     await formation.stop_overlord()
 

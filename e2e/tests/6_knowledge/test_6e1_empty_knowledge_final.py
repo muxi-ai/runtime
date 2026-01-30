@@ -20,14 +20,20 @@ async def test_empty_knowledge_directory():
     print("\n=== Test 6E1: Empty Knowledge Directory ===")
     print("This test verifies agents handle empty knowledge directories gracefully\n")
 
-    # Create a temporary empty knowledge directory
+    # Create a temporary directory for the test formation
     temp_dir = tempfile.mkdtemp()
-    empty_knowledge_dir = os.path.join(temp_dir, "empty-knowledge")
-    os.makedirs(empty_knowledge_dir)
 
     try:
-        # Create a temporary agent config with empty knowledge
-        agent_yaml = f"""
+        # Copy the test formation to temp location first
+        test_formation_dir = os.path.join(temp_dir, "formation-test")
+        shutil.copytree(str(Path(__file__).parent / "formations" / "formation-knowledge"), test_formation_dir)
+
+        # Create empty knowledge directory INSIDE the formation (so we can use relative path)
+        empty_knowledge_dir = os.path.join(test_formation_dir, "knowledge", "empty-knowledge")
+        os.makedirs(empty_knowledge_dir)
+
+        # Create a temporary agent config with empty knowledge using RELATIVE path
+        agent_yaml = """
 schema: "1.0.0"
 id: "test-empty"
 name: "Test Empty Agent"
@@ -41,25 +47,17 @@ role: "assistant"
 knowledge:
   enabled: true
   sources:
-  - path: "{empty_knowledge_dir}"
+  - path: "knowledge/empty-knowledge"
     description: "Empty knowledge directory"
 """
 
-        # Write temporary agent config
-        agent_config_path = os.path.join(temp_dir, "test-empty.yaml")
+        # Write agent config to agents directory
+        agent_config_path = os.path.join(test_formation_dir, "agents", "test-empty.yaml")
         with open(agent_config_path, 'w') as f:
             f.write(agent_yaml)
 
         print(f"Created empty knowledge directory at: {empty_knowledge_dir}")
-        print("Created agent config with empty knowledge source")
-
-        # Copy the test formation to temp location and modify it
-        test_formation_dir = os.path.join(temp_dir, "formation-test")
-        shutil.copytree(str(Path(__file__).parent / "formations" / "formation-knowledge"), test_formation_dir)
-
-        # Add our empty agent config to the agents directory
-        agents_dir = os.path.join(test_formation_dir, "agents")
-        shutil.copy(agent_config_path, os.path.join(agents_dir, "test-empty.yaml"))
+        print("Created agent config with empty knowledge source (relative path)")
 
         print("\n--- Test 1: Formation Loading ---")
         print("Loading formation with agent having empty knowledge...")

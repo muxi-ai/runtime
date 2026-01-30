@@ -20,12 +20,35 @@ async def test_missing_files():
     print("\n=== Test 6E4: Missing Files in Config ===")
     print("This test verifies the system handles missing files gracefully\n")
 
-    # Create a temporary directory
+    # Create a temporary directory for the test formation
     temp_dir = tempfile.mkdtemp()
 
     try:
-        # Create agent config with missing files
-        agent_yaml = f"""
+        # Copy the test formation first
+        test_formation_dir = os.path.join(temp_dir, "formation-test")
+        shutil.copytree(str(Path(__file__).parent / "formations" / "formation-knowledge"), test_formation_dir)
+
+        # Create knowledge directory with one valid file
+        knowledge_dir = os.path.join(test_formation_dir, "knowledge", "partial-knowledge")
+        os.makedirs(knowledge_dir)
+
+        valid_file = os.path.join(knowledge_dir, "valid_knowledge.md")
+        with open(valid_file, 'w') as f:
+            f.write("""# Valid Knowledge Document
+
+This is a valid knowledge document that should be loaded successfully.
+
+## Key Information
+- This file exists and should be processed
+- Other files in the config are missing
+- The system should handle this gracefully
+""")
+
+        print(f"Created 1 valid file: {valid_file}")
+        print("Configured 2 missing files/directories (relative paths)")
+
+        # Create agent config with missing files (using relative paths)
+        agent_yaml = """
 schema: "1.0.0"
 id: "test-missing"
 name: "Test Missing Files Agent"
@@ -39,50 +62,24 @@ role: "assistant"
 knowledge:
   enabled: true
   sources:
-  # Non-existent file
-  - path: "/tmp/does_not_exist/missing_file.md"
+  # Non-existent file (relative path)
+  - path: "knowledge/missing_file.md"
     description: "Non-existent file"
 
-  # Non-existent directory
-  - path: "/tmp/missing_knowledge_directory/"
+  # Non-existent directory (relative path)
+  - path: "knowledge/missing_directory/"
     description: "Non-existent directory"
 
-  # Valid file (we'll create this one)
-  - path: "{temp_dir}/valid_knowledge.md"
+  # Valid file
+  - path: "knowledge/partial-knowledge/valid_knowledge.md"
     description: "Valid knowledge file"
-
-  # Another missing file with absolute path
-  - path: "/Users/nobody/Documents/phantom_knowledge.txt"
-    description: "Phantom knowledge file"
 """
 
-        # Create one valid file
-        valid_file = os.path.join(temp_dir, "valid_knowledge.md")
-        with open(valid_file, 'w') as f:
-            f.write("""# Valid Knowledge Document
-
-This is a valid knowledge document that should be loaded successfully.
-
-## Key Information
-- This file exists and should be processed
-- Other files in the config are missing
-- The system should handle this gracefully
-""")
-
-        print(f"Created 1 valid file: {valid_file}")
-        print("Configured 3 missing files/directories")
-
-        # Write temporary agent config
-        agent_config_path = os.path.join(temp_dir, "test-missing.yaml")
+        # Write agent config directly to agents directory
+        agents_dir = os.path.join(test_formation_dir, "agents")
+        agent_config_path = os.path.join(agents_dir, "test-missing.yaml")
         with open(agent_config_path, 'w') as f:
             f.write(agent_yaml)
-
-        # Copy test formation and add our agent
-        test_formation_dir = os.path.join(temp_dir, "formation-test")
-        shutil.copytree(str(Path(__file__).parent / "formations" / "formation-knowledge"), test_formation_dir)
-
-        agents_dir = os.path.join(test_formation_dir, "agents")
-        shutil.copy(agent_config_path, os.path.join(agents_dir, "test-missing.yaml"))
 
         print("\n--- Test 1: Formation Loading ---")
         print("Loading formation with missing knowledge files...")
