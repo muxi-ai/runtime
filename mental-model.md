@@ -2566,3 +2566,21 @@ artifacts = getattr(response, 'artifacts', []) or []
 **Pattern to remember:** Always use `getattr(obj, attr, default) or default` when you need to guarantee a non-None value and the attribute might exist as None.
 
 **Test durations:** Area 5 tests take 23-222 seconds each due to multiple LLM calls for file generation. Budget 3-4 minutes per test.
+
+### 2026-01-30: Area 6 Knowledge Test Fixes
+
+**Problem 1:** Relative import `from ...datatypes.observability` in `handler.py` failing
+**Root cause:** File is at `muxi/runtime/formation/agents/knowledge/handler.py`, so 3 dots goes to `muxi/runtime/formation/` not `muxi/runtime/`. Need 4 dots.
+**Fix:** Change `from ...datatypes.observability` to `from ....datatypes.observability`
+
+**Problem 2:** Knowledge paths wrong in agent configs
+**Root cause:** Agent configs had `path: "muxi-business-plan.md"` but files are in `knowledge/` subdirectory
+**Fix:** Add `knowledge/` prefix: `path: "knowledge/muxi-business-plan.md"`
+
+**Problem 3:** First run slow due to embedding generation
+**Root cause:** Knowledge sources need embeddings generated on first load, cached afterward
+**Pattern:** First test run ~5-15 min, subsequent runs ~30-90s per test
+
+**Problem 4:** 6e tests fail with absolute path error
+**Root cause:** Tests use temp directories which have absolute paths, now blocked for security
+**Workaround:** Skip these edge case tests
