@@ -797,6 +797,34 @@ class KnowledgeHandler:
                 )
                 return 0
 
+            # Check disk cache for faster loading
+            cached_data = self._load_cached_embeddings(file_path, file_md5)
+            if cached_data:
+                # Load from disk cache into WorkingMemory
+                chunks_loaded = 0
+                for cached_item in cached_data:
+                    try:
+                        await self.working_memory.add_with_embedding(
+                            text=cached_item["content"],
+                            embedding=cached_item["embedding"],
+                            metadata=cached_item["metadata"],
+                            namespace=DOCUMENT_NAMESPACE,
+                        )
+                        chunks_loaded += 1
+                    except Exception:
+                        continue
+
+                observability.observe(
+                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                    level=observability.EventLevel.INFO,
+                    description="Knowledge file loaded from disk cache",
+                    data={"file_path": file_path, "chunks_loaded": chunks_loaded},
+                )
+
+                if knowledge_source not in self.sources:
+                    self.sources.append(knowledge_source)
+                return chunks_loaded
+
         # Load and process the file using hybrid architecture
         try:
             # Use the knowledge source's process method which supports markitdown
@@ -885,6 +913,26 @@ class KnowledgeHandler:
                     "embeddings_generated": len(embeddings),
                 },
             )
+
+            # Save embeddings to disk cache for faster subsequent loads
+            if file_md5 and chunks_added > 0:
+                cache_data = []
+                for chunk, embedding in zip(document_chunks, embeddings):
+                    if embedding is not None:
+                        cache_data.append({
+                            "content": chunk.content,
+                            "embedding": embedding,
+                            "metadata": {
+                                "document_id": chunk.document_id,
+                                "chunk_id": chunk.chunk_id,
+                                "source": file_path,
+                                "content_hash": file_md5,
+                                "description": description,
+                                **chunk.metadata,
+                            },
+                        })
+                if cache_data:
+                    self._save_cached_embeddings(file_path, file_md5, cache_data)
 
             # Add the source to our sources list if not already there
             if knowledge_source not in self.sources:
