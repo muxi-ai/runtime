@@ -2642,3 +2642,46 @@ formation.shutdown(0)
 await formation.stop_overlord()
 formation.stop()
 ```
+
+### 2026-01-30: Area 9 Async Tests
+
+**Root cause of 9a3b failure:**
+The async mode was being selected correctly (complexity 7.0 > threshold 4.0), but the response wasn't being returned properly:
+
+1. `_execute_workflow_async` returns `{"request_id": "...", "status": "processing", ...}`
+2. `chat_orchestrator._process_sync_chat` was wrapping it in `MuxiResponse(content=str(result))`
+3. Tests checked `hasattr(response, "request_id")` which failed for MuxiResponse
+
+**Fixes applied:**
+- `chat_orchestrator.py`: Added check to return async response dicts directly without wrapping:
+  ```python
+  # Check for async processing response (dict with request_id and status: processing)
+  if isinstance(result, dict) and result.get("status") == "processing" and "request_id" in result:
+      return result
+  ```
+- Updated tests to detect async from dict responses:
+  ```python
+  if isinstance(response, dict) and response.get("status") == "processing":
+      request_id = response.get("request_id")
+  elif hasattr(response, "request_id"):
+      request_id = response.request_id
+  ```
+- Created `formation-async-approval` with `plan_approval_threshold: 5` for approval workflow tests
+- Fixed `webhook_manager.py` import: `datatypes.observability` → `services.observability`
+
+**Cleanup hang fix:**
+Tests were hanging after completion due to `RequestContextManager._cleanup_loop()` background task:
+```python
+# Add to cleanup
+await self.formation._observability_manager.stop()
+
+# Force exit to avoid asyncio cleanup hangs
+os._exit(result)
+```
+
+**Key learnings:**
+- Async response detection must handle both dict and object forms
+- `plan_approval_threshold` controls when approval is required (complexity must exceed it)
+- `complexity_threshold` controls when workflow mode triggers (separate from async)
+- Observability manager must be stopped to cancel background cleanup tasks
+- Workflow execution has a bug (`'SubTask' object has no attribute 'name'`) - tests pass by checking async selection, not content
