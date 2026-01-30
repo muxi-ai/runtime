@@ -31,7 +31,7 @@ async def investigate_recall_issue():
     print("INVESTIGATION: Test 8A2 Recall Question Issue")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
+    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
 
     try:
         print("\n1. Loading formation...")

@@ -20,7 +20,7 @@ async def test_safety_critical_responses():
     print("Test 8D1: Safety-Critical Questions")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
+    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
     all_passed = True
     checks_passed = []
 

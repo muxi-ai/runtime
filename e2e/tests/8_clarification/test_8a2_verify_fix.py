@@ -25,7 +25,7 @@ async def verify_alice_storage_and_retrieval():
     print("VERIFICATION: Alice Storage & Retrieval")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
+    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
 
     try:
         print("\n1. Loading formation...")

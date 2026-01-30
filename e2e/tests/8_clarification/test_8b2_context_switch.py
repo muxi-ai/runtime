@@ -19,7 +19,7 @@ async def test_context_switch_detection():
     print("Test 8B2: Context Switch Detection")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
+    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
     all_passed = True
     checks_passed = []
 

@@ -25,7 +25,7 @@ async def investigate_memory_storage():
     print("INVESTIGATION: Memory Storage & Retrieval for 'My name is Alice'")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.afs"
+    formation_path = Path(__file__).parent / "formations" / "formation-clarification" / "formation.yaml"
 
     try:
         print("\n1. Loading formation...")

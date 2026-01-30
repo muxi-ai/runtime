@@ -775,6 +775,11 @@ class ChatOrchestrator:
                 result.metadata = response_metadata
             return result
 
+        # Check for async processing response (dict with request_id and status: processing)
+        # Return as-is to preserve async response structure for callers
+        if isinstance(result, dict) and result.get("status") == "processing" and "request_id" in result:
+            return result
+
         # If we didn't get a MuxiResponse, create one
         # This should rarely happen but ensures consistency
         if result and hasattr(result, "content"):

@@ -5,7 +5,7 @@ import asyncio
 import time
 import os
 
-from .base_clarification_test import Baseclarificationtest
+from base_clarification_test import Baseclarificationtest
 
 
 class Testtest83(Baseclarificationtest):
