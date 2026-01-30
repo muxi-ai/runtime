@@ -23,7 +23,7 @@ async def test_internal_a2a():
     print("Test 7B1: Internal A2A Communication")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-multi-agent-segregated" / "formation.afs"
+    formation_path = Path(__file__).parent / "formations" / "formation-multi-agent-segregated" / "formation.yaml"
     all_passed = True
     checks_passed = []
 

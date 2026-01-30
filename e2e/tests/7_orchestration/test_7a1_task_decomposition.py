@@ -33,7 +33,7 @@ async def test_workflow_task_decomposition():
         # Setup
         print("\n1. Loading formation...")
         formation_path = (
-            Path(__file__).parent / "formations" / "formation-multi-agent" / "formation.afs"
+            Path(__file__).parent / "formations" / "formation-multi-agent" / "formation.yaml"
         )
 
         formation = Formation()

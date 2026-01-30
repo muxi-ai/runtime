@@ -23,7 +23,7 @@ async def test_workflow_approval():
     print("Test 7A2: Workflow Approval Flow")
     print("=" * 80)
 
-    formation_path = Path(__file__).parent / "formations" / "formation-workflow-approval" / "formation.afs"
+    formation_path = Path(__file__).parent / "formations" / "formation-workflow-approval" / "formation.yaml"
     all_passed = True
     checks_passed = []
 

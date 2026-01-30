@@ -31,7 +31,7 @@ async def test_a2a_discovery():
     try:
         # Setup
         print("\n1. Loading formation...")
-        formation_path = Path(__file__).parent / "formations" / "formation-multi-agent" / "formation.afs"
+        formation_path = Path(__file__).parent / "formations" / "formation-multi-agent" / "formation.yaml"
 
         formation = Formation()
         await formation.load(str(formation_path))
