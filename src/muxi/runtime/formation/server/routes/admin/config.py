@@ -104,7 +104,7 @@ async def get_formation_status(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     # Get server instance if available
-    server = getattr(formation, "_server", None)
+    server = getattr(formation, "_formation_server", None)
 
     # Calculate uptime
     uptime_seconds = 0
