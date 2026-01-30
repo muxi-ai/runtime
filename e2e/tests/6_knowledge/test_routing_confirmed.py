@@ -18,7 +18,7 @@ async def test_routing_with_confirmation():
     print("This test verifies that the overlord correctly routes queries to appropriate agents\n")
 
     formation = Formation()
-    await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.afs"))
+    await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
     overlord = await formation.start_overlord()
 
     # Test cases with expected routing

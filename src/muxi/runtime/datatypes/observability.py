@@ -1551,16 +1551,21 @@ class InitEventFormatter:
         return f"{status} {message}"
 
     @staticmethod
-    def format_fail(failure_info: InitFailureInfo) -> str:
+    def format_fail(
+        failure_info_or_component: "InitFailureInfo | str",
+        error_details: str | None = None
+    ) -> str:
         """Format failure event with structured error details.
 
         Args:
-            failure_info: Structured failure information
+            failure_info_or_component: Either an InitFailureInfo object for detailed
+                formatting, or a simple component string for basic error display
+            error_details: When using simple string format, the error message
 
         Returns:
             Multi-line formatted error with operational guidance and technical details
 
-        Example output:
+        Example output (with InitFailureInfo):
             [ FAIL ] MCP server: filesystem
 
               Connection timeout after 5 seconds
@@ -1586,6 +1591,14 @@ class InitEventFormatter:
         reset = InitEventFormatter._c("\033[0m")
         status = f"{red}[ FAIL ]{reset}"
 
+        # Handle simple string format: format_fail("component", "error message")
+        if isinstance(failure_info_or_component, str):
+            component = failure_info_or_component
+            error_msg = error_details or "Unknown error"
+            return f"{status} {component}\n\n  {error_msg}\n"
+
+        # Handle InitFailureInfo object
+        failure_info = failure_info_or_component
         lines = [
             f"{status} {failure_info.component}",
             "",

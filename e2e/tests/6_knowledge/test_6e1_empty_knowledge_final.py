@@ -65,7 +65,7 @@ knowledge:
         print("Loading formation with agent having empty knowledge...")
 
         formation = Formation()
-        await formation.load(os.path.join(test_formation_dir, "formation.afs"))
+        await formation.load(os.path.join(test_formation_dir, "formation.yaml"))
         overlord = await formation.start_overlord()
 
         print("✓ Formation loaded successfully with empty knowledge agent")

@@ -17,7 +17,5 @@ specialties:
 knowledge:
   enabled: true
   sources:
-  - path: "faq/"
+  - path: "knowledge/faq/"
     description: "Frequently asked questions about Automaze"
-  - path: "/Users/ran/Projects/muxi/ran-bio.pdf"
-    description: "Ran Aroussi's bio"

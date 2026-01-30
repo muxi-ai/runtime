@@ -43,7 +43,7 @@ class KnowledgeChangeDetectionTest:
     async def load_formation(self):
         """Load formation and start overlord"""
         self.formation = Formation()
-        await self.formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.afs"))
+        await self.formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
         self.overlord = await self.formation.start_overlord()
 
         # Get muxi agent and ensure knowledge is loaded

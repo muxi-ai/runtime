@@ -19,7 +19,7 @@ async def test_agent_knowledge_isolation():
 
     # Load formation
     formation = Formation()
-    await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.afs"))
+    await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
     overlord = await formation.start_overlord()
 
     print("✓ Formation loaded with agents: muxi and automaze")

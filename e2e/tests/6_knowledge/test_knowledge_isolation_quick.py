@@ -14,7 +14,7 @@ async def quick_isolation_test():
     print("\n=== Quick Knowledge Isolation Test ===")
 
     formation = Formation()
-    await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.afs"))
+    await formation.load(str(Path(__file__).parent / "formations" / "formation-knowledge" / "formation.yaml"))
     overlord = await formation.start_overlord()
 
     # Ask Automaze about MUXI pricing (should not have access)

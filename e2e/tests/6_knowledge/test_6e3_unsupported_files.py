@@ -102,7 +102,7 @@ knowledge:
         print("Loading formation with mixed file types...")
 
         formation = Formation()
-        await formation.load(os.path.join(test_formation_dir, "formation.afs"))
+        await formation.load(os.path.join(test_formation_dir, "formation.yaml"))
         overlord = await formation.start_overlord()
 
         print("✓ Formation loaded successfully despite unsupported files")
