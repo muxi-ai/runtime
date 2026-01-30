@@ -9,7 +9,7 @@ but a different one is passed directly to chat(), the chat() parameter takes pre
 import sys
 from pathlib import Path
 
-from .base_async_test import BaseAsyncTest
+from base_async_test import BaseAsyncTest
 
 
 def main():

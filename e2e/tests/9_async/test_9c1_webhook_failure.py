@@ -9,7 +9,7 @@ according to the formation configuration.
 import sys
 from pathlib import Path
 
-from .base_async_test import BaseAsyncTest
+from base_async_test import BaseAsyncTest
 
 
 def main():
