@@ -2584,3 +2584,42 @@ artifacts = getattr(response, 'artifacts', []) or []
 **Problem 4:** 6e tests fail with absolute path error
 **Root cause:** Tests use temp directories which have absolute paths, now blocked for security
 **Workaround:** Skip these edge case tests
+
+### 2026-01-30: Area 6 Knowledge Tests - Final Fixes
+
+**Problem 5:** Lazy knowledge initialization bug
+**Root cause:** `search_knowledge()` checked `if not self.knowledge_handler` and returned empty, but knowledge handler was never initialized because `_ensure_knowledge_initialized()` wasn't called.
+**Fix:** Added `_ensure_knowledge_initialized()` call at start of `search_knowledge()` in `agent.py`
+
+**Problem 6:** Edge case tests (6e1-6e4) using absolute paths
+**Root cause:** Tests created temp directories with absolute paths, which are now blocked for security
+**Fix:** Rewrote tests to:
+1. Copy formation to temp dir first
+2. Create test knowledge dirs INSIDE the formation
+3. Use relative paths in agent YAML configs
+
+**Problem 7:** Cache files not being created
+**Root cause:** `add_file()` method was missing disk cache integration - only `add_knowledge_source()` had it
+**Fix:** Added `_load_cached_embeddings()` check and `_save_cached_embeddings()` call to `add_file()`
+
+**Problem 8:** Brotli decompression errors from embedding API
+**Root cause:** aiohttp sends `Accept-Encoding: br` when brotli package installed, but OpenAI API returns corrupted brotli responses
+**Fix:** Added `Accept-Encoding: gzip, deflate` header to OneLLM's OpenAI provider to exclude brotli
+
+### Areas 1-6 Complete Summary
+
+| Area | Tests | Status |
+|------|-------|--------|
+| 1 Foundation | 4 | PASS |
+| 2 Memory | 6 | PASS |
+| 3 Multimodal | 6 | PASS |
+| 4 MCP | 10 | PASS |
+| 5 Artifacts | 10 | PASS |
+| 6 Knowledge | 16 | PASS |
+
+**Key patterns learned:**
+- `getattr(obj, attr, []) or []` for safe list extraction
+- 4 dots for imports from `formation/agents/knowledge/` to `runtime/datatypes/`
+- Knowledge tests need relative paths inside formation directory
+- Disk cache saves embeddings for faster subsequent loads
+- Brotli compression can cause intermittent API failures
