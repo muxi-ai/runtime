@@ -2685,3 +2685,20 @@ os._exit(result)
 - `complexity_threshold` controls when workflow mode triggers (separate from async)
 - Observability manager must be stopped to cancel background cleanup tasks
 - Workflow execution has a bug (`'SubTask' object has no attribute 'name'`) - tests pass by checking async selection, not content
+
+### 2026-01-31: Area 8 Clarification Tests
+
+**Fixes applied:**
+- Fixed relative imports: `from .base_clarification_test` → `from base_clarification_test`
+- Fixed `formation.afs` → `formation.yaml` in all tests
+- Fixed `BaseClarificationTest.__init__` to pass required args to parent `BaseE2ETest`
+- Fixed case sensitivity: `Baseclarificationtest` → `BaseClarificationTest`
+- Added `os._exit()` to all tests to avoid cleanup hangs
+- Fixed `overlord.shutdown()` → `formation.stop_overlord()` + `formation.stop()`
+
+**Key learnings:**
+- `BaseE2ETest.__init__` requires 3 args: `test_name`, `test_description`, `test_area`
+- Child classes must pass these or use default values in their own `__init__`
+- Overlord has no `shutdown()` method - use Formation's lifecycle methods instead
+- Sequential test runs can cause resource exhaustion (segfaults, abort traps)
+- Individual tests pass but batch runs may fail from memory pressure
