@@ -12,8 +12,8 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.utils.user_resolution import resolve_user_identifier  # noqa: E402
-from src.muxi.services.db import DatabaseManager  # noqa: E402
+from muxi.runtime.utils.user_resolution import resolve_user_identifier  # noqa: E402
+from muxi.runtime.services.db import DatabaseManager  # noqa: E402
 
 
 async def test_sqlite_multi_identity():
@@ -31,7 +31,7 @@ async def test_sqlite_multi_identity():
     db_manager = DatabaseManager(connection_string=f"sqlite:///{temp_path}")
     
     # Create tables using sync engine
-    from src.muxi.services.memory.long_term import Base
+    from muxi.runtime.services.memory.long_term import Base
     Base.metadata.create_all(db_manager.engine)
     
     formation_id = "test_formation_sqlite"
@@ -90,7 +90,7 @@ async def test_sqlite_multi_identity():
         
         # Test 4: Associate multiple identifiers to first user
         print("\n[Test 4/5] Associate multiple identifiers to existing user...")
-        from src.muxi.utils.user_resolution import associate_user_identifiers
+        from muxi.runtime.utils.user_resolution import associate_user_identifiers
         
         await associate_user_identifiers(
             identifiers=["alice@example.com", "alice_telegram", "alice_discord"],
@@ -160,7 +160,7 @@ async def test_postgres_multi_identity():
     sys.path.insert(0, str(secrets_path.parent.parent))
     
     try:
-        from src.muxi.services.secrets.secrets_manager import SecretsManager
+        from muxi.runtime.services.secrets.secrets_manager import SecretsManager
         secrets_mgr = SecretsManager(str(secrets_path))
         await secrets_mgr.initialize_encryption()
         db_url = await secrets_mgr.get_secret("POSTGRES_URI")
@@ -231,7 +231,7 @@ async def test_postgres_multi_identity():
         
         # Test 4: Associate multiple identifiers to user from test 3
         print("\n[Test 4/5] Associate multiple identifiers to existing user...")
-        from src.muxi.utils.user_resolution import associate_user_identifiers
+        from muxi.runtime.utils.user_resolution import associate_user_identifiers
         
         telegram_id = f"alice_pg_telegram_{int(asyncio.get_event_loop().time())}"
         discord_id = f"alice_pg_discord_{int(asyncio.get_event_loop().time())}"
@@ -316,4 +316,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    import os; os._exit(asyncio.run(main()))

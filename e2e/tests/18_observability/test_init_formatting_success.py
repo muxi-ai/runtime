@@ -11,7 +11,8 @@ from pathlib import Path
 from datetime import datetime
 
 # Add parent directories to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+REPO_ROOT = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from muxi.runtime.formation import Formation
 
@@ -19,22 +20,22 @@ from muxi.runtime.formation import Formation
 TEST_FORMATIONS = [
     {
         "name": "1_foundation_basic",
-        "path": "e2e/tests/1_foundation/formations/formation-base/formation.yaml",
+        "path": str(REPO_ROOT / "e2e/tests/1_foundation/formations/formation-base/formation.yaml"),
         "description": "Basic foundation with single agent",
     },
     {
         "name": "2_memory_persistent",
-        "path": "e2e/tests/2_memory/formations/formation-postgres/formation.yaml",
+        "path": str(REPO_ROOT / "e2e/tests/2_memory/formations/formation-memory/formation-postgres.yaml"),
         "description": "PostgreSQL persistent memory",
     },
     {
         "name": "7_multi_agent_mcp",
-        "path": "e2e/tests/7_orchestration/formations/formation-multi-agent-segregated/formation.yaml",
+        "path": str(REPO_ROOT / "e2e/tests/7_orchestration/formations/formation-multi-agent-segregated/formation.yaml"),
         "description": "Multi-agent with MCP servers",
     },
     {
         "name": "12_scheduling",
-        "path": "e2e/tests/12_scheduling/formation-scheduling/formation.yaml",
+        "path": str(REPO_ROOT / "e2e/tests/12_scheduling/formation-scheduling/formation.yaml"),
         "description": "Scheduler service enabled",
     },
 ]

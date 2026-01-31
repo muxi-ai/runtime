@@ -90,8 +90,9 @@ async def test_multi_identity_quick():
 
 def main():
     """Run the test."""
+    import os
     result = asyncio.run(test_multi_identity_quick())
-    sys.exit(0 if result else 1)
+    os._exit(0 if result else 1)
 
 
 if __name__ == "__main__":

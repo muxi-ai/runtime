@@ -160,7 +160,7 @@ async def test_sqlite_multi_identity():
 def main():
     """Run the test."""
     result = asyncio.run(test_sqlite_multi_identity())
-    sys.exit(0 if result else 1)
+    import os; os._exit(0 if result else 1)
 
 
 if __name__ == "__main__":
