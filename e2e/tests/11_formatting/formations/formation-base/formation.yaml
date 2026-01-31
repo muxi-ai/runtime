@@ -96,4 +96,4 @@ logging:
     streams:
       - transport: "stdout"
         level: "error"  # Only show errors if logging is re-enabled
-      format: "jsonl"
+        format: "jsonl"

@@ -11,7 +11,7 @@ import sys
 
 # Use absolute imports when running as script
 try:
-    from .base_formatting_test import BaseFormattingTest
+    from base_formatting_test import BaseFormattingTest
 except ImportError:
     # When running as script, adjust path
     from pathlib import Path
@@ -170,4 +170,4 @@ def main():
 
 if __name__ == "__main__":
     exit_code = main()
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)
