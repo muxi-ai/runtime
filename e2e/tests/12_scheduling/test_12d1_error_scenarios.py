@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def test_error_scenarios():
@@ -103,9 +103,9 @@ async def test_error_scenarios():
         # Cleanup
         try:
             if overlord:
-                await formation.kill_overlord()
+                await formation.stop_overlord()
             # Note: shutdown() may cause issues, skip it for now
-            # # formation.shutdown() removed - not async
+            # # formation.stop() removed - not async
         except Exception as cleanup_error:
             print(f"Warning: Cleanup error: {cleanup_error}")
 
@@ -123,4 +123,4 @@ async def test_error_scenarios():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_error_scenarios())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

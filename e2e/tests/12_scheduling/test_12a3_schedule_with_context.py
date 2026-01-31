@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def test_schedule_with_context():
@@ -51,8 +51,8 @@ async def test_schedule_with_context():
         print("✅ Daily recurring task scheduled with context")
 
         # Cleanup
-        await formation.kill_overlord()
-        # # formation.shutdown() removed - not async  # Not async, commented out to avoid issues
+        await formation.stop_overlord()
+        # # formation.stop() removed - not async  # Not async, commented out to avoid issues
 
         print("\n✅ TEST PASSED: Schedule with context works")
         return 0
@@ -67,4 +67,4 @@ async def test_schedule_with_context():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_schedule_with_context())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

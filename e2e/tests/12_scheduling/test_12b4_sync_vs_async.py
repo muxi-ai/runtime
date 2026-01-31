@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def test_sync_vs_async():
@@ -78,7 +78,7 @@ async def test_sync_vs_async():
         await asyncio.sleep(10)
 
         # Cleanup
-        await formation.kill_overlord()
+        await formation.stop_overlord()
 
         print("\n✅ TEST COMPLETED: Sync vs Async comparison done")
         print("\nSUMMARY:")
@@ -97,4 +97,4 @@ async def test_sync_vs_async():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_sync_vs_async())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

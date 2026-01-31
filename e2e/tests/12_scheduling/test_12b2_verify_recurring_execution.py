@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def test_verify_recurring_execution():
@@ -71,7 +71,7 @@ async def test_verify_recurring_execution():
             print("\n✅ TEST PASSED: Job created successfully")
             print(f"   - Job ID: {job_id}")
             print("   - Scheduler is working (job creation succeeded)")
-            await formation.kill_overlord()
+            await formation.stop_overlord()
             return 0
 
         # If we can access scheduler, do additional verification
@@ -149,8 +149,8 @@ async def test_verify_recurring_execution():
                 return 1
 
         # Cleanup
-        await formation.kill_overlord()
-        # # formation.shutdown() removed - not async  # Not async, commented out to avoid issues
+        await formation.stop_overlord()
+        # # formation.stop() removed - not async  # Not async, commented out to avoid issues
 
         print("\n✅ TEST PASSED: Recurring job created with proper configuration")
         print("   - Job uses async execution (use_async=True)")
@@ -167,4 +167,4 @@ async def test_verify_recurring_execution():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_verify_recurring_execution())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

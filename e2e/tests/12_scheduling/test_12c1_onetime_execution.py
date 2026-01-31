@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def test_onetime_execution():
@@ -76,7 +76,7 @@ async def test_onetime_execution():
             print("❌ Job scheduling failed")
 
         # Cleanup
-        await formation.kill_overlord()
+        await formation.stop_overlord()
 
         print("\n✅ TEST COMPLETED: One-time job scheduling test done")
         print("\nRESULT: Job scheduled for execution in 1 minute")
@@ -92,4 +92,4 @@ async def test_onetime_execution():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_onetime_execution())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

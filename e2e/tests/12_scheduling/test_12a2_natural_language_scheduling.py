@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def test_natural_language_scheduling():
@@ -50,8 +50,8 @@ async def test_natural_language_scheduling():
         print("✅ Natural language scheduling recognized")
 
         # Cleanup
-        await formation.kill_overlord()
-        # # formation.shutdown() removed - not async  # Not async, commented out to avoid issues
+        await formation.stop_overlord()
+        # # formation.stop() removed - not async  # Not async, commented out to avoid issues
 
         print("\n✅ TEST PASSED: Natural language scheduling works")
         return 0
@@ -66,4 +66,4 @@ async def test_natural_language_scheduling():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_natural_language_scheduling())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

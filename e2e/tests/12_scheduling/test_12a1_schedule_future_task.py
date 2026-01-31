@@ -13,7 +13,7 @@ import re
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 def extract_job_id(response: str) -> str:
@@ -69,8 +69,8 @@ async def test_schedule_future_task():
         print("\n[Note] Job execution verification skipped (would require 70s wait)")
 
         # Cleanup
-        await formation.kill_overlord()
-        # # formation.shutdown() removed - not async  # Not async, commented out to avoid issues
+        await formation.stop_overlord()
+        # # formation.stop() removed - not async  # Not async, commented out to avoid issues
 
         print("\n✅ TEST PASSED: Future task scheduled successfully")
         return 0
@@ -85,4 +85,4 @@ async def test_schedule_future_task():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_schedule_future_task())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

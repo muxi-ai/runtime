@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def test_verify_job_execution():
@@ -117,8 +117,8 @@ async def test_verify_job_execution():
             success = False
 
         # Cleanup
-        await formation.kill_overlord()
-        # # formation.shutdown() removed - not async  # Not async, commented out to avoid issues
+        await formation.stop_overlord()
+        # # formation.stop() removed - not async  # Not async, commented out to avoid issues
 
         if success:
             print("\n✅ TEST PASSED: Job execution verified")
@@ -136,4 +136,4 @@ async def test_verify_job_execution():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_verify_job_execution())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

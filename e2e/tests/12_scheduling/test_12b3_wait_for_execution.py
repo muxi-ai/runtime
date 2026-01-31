@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def test_wait_for_execution():
@@ -83,7 +83,7 @@ async def test_wait_for_execution():
                 print("\n⚠️ No jobs have executed yet")
 
         # Cleanup
-        await formation.kill_overlord()
+        await formation.stop_overlord()
 
         print("\n✅ TEST COMPLETED: Checked existing job execution")
         return 0
@@ -97,4 +97,4 @@ async def test_wait_for_execution():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_wait_for_execution())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

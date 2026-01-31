@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def test_capital_question():
@@ -52,7 +52,7 @@ async def test_capital_question():
             print("✅ Got direct response (no delegation)")
 
         # Cleanup
-        await formation.kill_overlord()
+        await formation.stop_overlord()
 
         print("\n✅ TEST COMPLETED: Capital question test done")
         print(
@@ -71,4 +71,4 @@ async def test_capital_question():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_capital_question())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)
