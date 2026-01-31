@@ -13,7 +13,7 @@ from muxi.runtime.formation import Formation
 # Timeout handler
 def timeout_handler(signum, frame):
     print("\n❌ TIMEOUT - still hanging even with stop()")
-    sys.exit(1)
+    import os; os._exit(1)
 
 signal.signal(signal.SIGALRM, timeout_handler)
 
@@ -44,4 +44,4 @@ if __name__ == "__main__":
     signal.alarm(0)  # Cancel alarm
     print("✅ Script exited cleanly!")
     print(f"   Result: {result}")
-    sys.exit(0)
+    import os; os._exit(0)

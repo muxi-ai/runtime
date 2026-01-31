@@ -19,22 +19,22 @@ from muxi.runtime.formation import Formation
 TEST_FORMATIONS = [
     {
         "name": "1_foundation_basic",
-        "path": "e2e/tests/1_foundation/formations/formation-base/formation.afs",
+        "path": "e2e/tests/1_foundation/formations/formation-base/formation.yaml",
         "description": "Basic foundation with single agent",
     },
     {
         "name": "2_memory_persistent",
-        "path": "e2e/tests/2_memory/formations/formation-postgres/formation.afs",
+        "path": "e2e/tests/2_memory/formations/formation-postgres/formation.yaml",
         "description": "PostgreSQL persistent memory",
     },
     {
         "name": "7_multi_agent_mcp",
-        "path": "e2e/tests/7_orchestration/formations/formation-multi-agent-segregated/formation.afs",
+        "path": "e2e/tests/7_orchestration/formations/formation-multi-agent-segregated/formation.yaml",
         "description": "Multi-agent with MCP servers",
     },
     {
         "name": "12_scheduling",
-        "path": "e2e/tests/12_scheduling/formation-scheduling/formation.afs",
+        "path": "e2e/tests/12_scheduling/formation-scheduling/formation.yaml",
         "description": "Scheduler service enabled",
     },
 ]
@@ -153,4 +153,4 @@ async def main():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(main())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

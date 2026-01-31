@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def test_cache_disabled():
@@ -123,7 +123,7 @@ async def test_cache_disabled():
         print("\n[Cleanup] Stopping formation...")
         try:
             if formation.overlord:
-                await formation.kill_overlord()
+                await formation.stop_overlord()
             print("[Cleanup] Complete")
         except Exception as cleanup_error:
             print(f"[Cleanup] Warning: {cleanup_error}")
@@ -139,4 +139,4 @@ async def test_cache_disabled():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_cache_disabled())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

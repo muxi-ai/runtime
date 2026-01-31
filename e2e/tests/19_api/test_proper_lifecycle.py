@@ -12,7 +12,7 @@ from muxi.runtime.formation import Formation
 
 def timeout_handler(signum, frame):
     print("\n❌ TIMEOUT")
-    sys.exit(1)
+    import os; os._exit(1)
 
 signal.signal(signal.SIGALRM, timeout_handler)
 

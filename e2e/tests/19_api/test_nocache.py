@@ -27,4 +27,4 @@ if __name__ == "__main__":
     result = asyncio.run(test())
     signal.alarm(0)
     print(f"✅ Result: {result}")
-    sys.exit(0)
+    import os; os._exit(0)

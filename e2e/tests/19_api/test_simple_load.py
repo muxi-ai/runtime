@@ -39,4 +39,4 @@ async def simple_test():
 if __name__ == "__main__":
     result = asyncio.run(simple_test())
     print(f"✅ Exited cleanly: {result}")
-    sys.exit(0)
+    import os; os._exit(0)

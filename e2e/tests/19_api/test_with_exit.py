@@ -49,4 +49,4 @@ if __name__ == "__main__":
     print("Forcing exit with sys.exit()...")
     
     # Force exit immediately - don't wait for threads
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

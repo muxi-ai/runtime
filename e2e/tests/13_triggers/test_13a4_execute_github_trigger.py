@@ -107,10 +107,10 @@ async def main():
     finally:
         # Cleanup
         if "formation" in locals():
-            await formation.shutdown()
+            formation.stop()
         await asyncio.sleep(1)
 
 
 if __name__ == "__main__":
     success = asyncio.run(main())
-    sys.exit(0 if success else 1)
+    import os; os._exit(0 if success else 1)

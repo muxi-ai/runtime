@@ -18,7 +18,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def test_multi_identity_memory_carryover_sqlite():
@@ -96,7 +96,7 @@ async def test_different_users_isolated(runtime_from_yaml, backend):
     3. Verify each user's preference is correctly isolated
     """
     formation_dir = Path(__file__).parent / "formations" / f"formation-{backend}"
-    formation_path = formation_dir / "formation.afs"
+    formation_path = formation_dir / "formation.yaml"
 
     if not formation_path.exists():
         pytest.skip(f"Formation not found: {formation_path}")
@@ -268,7 +268,7 @@ async def test_sqlite_compatibility(runtime_from_yaml):
     This ensures our SQL queries are compatible with both PostgreSQL and SQLite.
     """
     formation_dir = Path(__file__).parent / "formations" / "formation-sqlite"
-    formation_path = formation_dir / "formation.afs"
+    formation_path = formation_dir / "formation.yaml"
 
     if not formation_path.exists():
         pytest.skip(f"Formation not found: {formation_path}")
@@ -311,7 +311,7 @@ async def test_request_context_user_ids(runtime_from_yaml):
     Verifies that internal_user_id, muxi_user_id, and user_id are all set.
     """
     formation_dir = Path(__file__).parent / "formations" / "formation-sqlite"
-    formation_path = formation_dir / "formation.afs"
+    formation_path = formation_dir / "formation.yaml"
 
     if not formation_path.exists():
         pytest.skip(f"Formation not found: {formation_path}")

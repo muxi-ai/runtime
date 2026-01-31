@@ -23,7 +23,7 @@ def create_bad_postgres_formation(temp_dir: Path) -> Path:
     formation_dir = temp_dir / "bad_postgres"
     formation_dir.mkdir(parents=True, exist_ok=True)
 
-    formation_yaml = formation_dir / "formation.afs"
+    formation_yaml = formation_dir / "formation.yaml"
     formation_yaml.write_text("""
 schema: "1.0.0"
 id: "bad_postgres_test"
@@ -78,7 +78,7 @@ mcp_servers:
     timeout_seconds: 5
 """)
 
-    formation_yaml = formation_dir / "formation.afs"
+    formation_yaml = formation_dir / "formation.yaml"
     formation_yaml.write_text("""
 schema: "1.0.0"
 id: "bad_mcp_test"
@@ -117,7 +117,7 @@ def create_bad_a2a_formation(temp_dir: Path) -> Path:
     formation_dir = temp_dir / "bad_a2a"
     formation_dir.mkdir(parents=True, exist_ok=True)
 
-    formation_yaml = formation_dir / "formation.afs"
+    formation_yaml = formation_dir / "formation.yaml"
     formation_yaml.write_text("""
 schema: "1.0.0"
 id: "bad_a2a_test"
@@ -295,4 +295,4 @@ async def main():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(main())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

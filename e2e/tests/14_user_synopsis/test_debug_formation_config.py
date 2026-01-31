@@ -10,7 +10,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.muxi.formation.formation import Formation  # noqa: E402
+from muxi.runtime.formation import Formation  # noqa: E402
 
 
 async def debug_formation_config():
@@ -32,7 +32,7 @@ async def debug_formation_config():
         # Just load the raw YAML and secrets without starting overlord
         print("\n[1] Loading raw formation YAML...")
         import yaml
-        formation_yaml = formation_path / "formation.afs"
+        formation_yaml = formation_path / "formation.yaml"
 
         with open(formation_yaml, 'r') as f:
             config = yaml.safe_load(f)
