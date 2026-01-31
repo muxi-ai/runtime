@@ -10,7 +10,7 @@ import asyncio
 import sys
 from pathlib import Path
 
-from .base_streaming_test import BaseStreamingTest
+from base_streaming_test import BaseStreamingTest
 
 
 def main():
@@ -175,4 +175,4 @@ def main():
 
 if __name__ == "__main__":
     exit_code = main()
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)
