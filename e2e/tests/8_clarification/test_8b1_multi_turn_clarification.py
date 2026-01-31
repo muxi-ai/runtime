@@ -148,4 +148,4 @@ async def test_multi_turn_clarification():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_multi_turn_clarification())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

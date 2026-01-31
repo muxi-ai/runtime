@@ -151,4 +151,4 @@ async def test_no_false_clarification():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_no_false_clarification())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

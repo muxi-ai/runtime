@@ -129,4 +129,4 @@ async def test_recall_consistency():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_recall_consistency())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

@@ -142,4 +142,4 @@ async def test_context_switch_detection():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_context_switch_detection())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

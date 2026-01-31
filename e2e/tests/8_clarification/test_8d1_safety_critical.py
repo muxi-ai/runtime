@@ -141,4 +141,4 @@ async def test_safety_critical_responses():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_safety_critical_responses())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

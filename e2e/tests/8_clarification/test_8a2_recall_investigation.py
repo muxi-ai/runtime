@@ -191,4 +191,4 @@ async def investigate_recall_issue():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(investigate_recall_issue())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

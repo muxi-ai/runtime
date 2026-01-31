@@ -83,9 +83,9 @@ class BaseClarificationTest(BaseE2ETest):
         "options": ["would you like", "do you want", "should I", "shall I"],
     }
 
-    def __init__(self):
+    def __init__(self, test_name: str = "clarification_test", test_description: str = "Clarification test", test_area: str = "8_clarification"):
         """Initialize base clarification test."""
-        super().__init__()
+        super().__init__(test_name, test_description, test_area)
         self.formatter = TestOutputFormatter()
         self.formation = None
         self.overlord = None

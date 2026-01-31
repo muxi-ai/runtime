@@ -116,7 +116,8 @@ async def test_multi_turn_clarification():
                     f.write(trace)
 
         # Cleanup
-        await overlord.shutdown()
+        await formation.stop_overlord()
+        formation.stop()
         print("\n✅ Test completed")
 
         if recursion_traces:
@@ -128,7 +129,12 @@ async def test_multi_turn_clarification():
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         traceback.print_exc()
+        return 1
+    
+    return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(test_multi_turn_clarification())
+    import os
+    result = asyncio.run(test_multi_turn_clarification())
+    os._exit(result if result is not None else 0)

@@ -228,4 +228,4 @@ async def test_clarification_modes():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_clarification_modes())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

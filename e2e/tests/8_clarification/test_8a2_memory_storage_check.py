@@ -221,4 +221,4 @@ async def investigate_memory_storage():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(investigate_memory_storage())
-    sys.exit(exit_code)
+    import os; os._exit(exit_code)

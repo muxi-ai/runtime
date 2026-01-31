@@ -5,10 +5,10 @@ import asyncio
 import time
 import os
 
-from base_clarification_test import Baseclarificationtest
+from base_clarification_test import BaseClarificationTest
 
 
-class Testtest88(Baseclarificationtest):
+class Testtest88(BaseClarificationTest):
     """Test class for test_8_8."""
 
     async def test_main(self):
