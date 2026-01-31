@@ -50,26 +50,26 @@ class TestMemoryAdmin(BaseE2ETest):
             assert data["success"] is True
             print("✅ GET /v1/memory passed")
 
-            # GET /v1/memory/buffers
-            print("\n3. Testing GET /v1/memory/buffers...")
+            # GET /v1/memory/buffer
+            print("\n3. Testing GET /v1/memory/buffer...")
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(f"{self.base_url}/memory/buffers", headers=self.headers)
+                response = await client.get(f"{self.base_url}/memory/buffer", headers=self.headers)
             assert response.status_code == 200
             data = response.json()
             assert data["success"] is True
-            print("✅ GET /v1/memory/buffers passed")
+            print("✅ GET /v1/memory/buffer passed")
 
-            # DELETE /v1/memory/buffers
-            print("\n4. Testing DELETE /v1/memory/buffers...")
+            # DELETE /v1/memory/buffer
+            print("\n4. Testing DELETE /v1/memory/buffer...")
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.delete(f"{self.base_url}/memory/buffers", headers=self.headers)
+                response = await client.delete(f"{self.base_url}/memory/buffer", headers=self.headers)
             # May return 200, 204, 501 (not implemented), or 503 (buffer memory not available)
             assert response.status_code in [200, 204, 501, 503]
             if response.status_code == 501:
-                print("   Note: DELETE /v1/memory/buffers returns 501 (not implemented)")
+                print("   Note: DELETE /v1/memory/buffer returns 501 (not implemented)")
             elif response.status_code == 503:
-                print("   Note: DELETE /v1/memory/buffers returns 503 (buffer memory not available)")
-            print("✅ DELETE /v1/memory/buffers verified")
+                print("   Note: DELETE /v1/memory/buffer returns 503 (buffer memory not available)")
+            print("✅ DELETE /v1/memory/buffer verified")
 
             # PATCH /v1/memory
             print("\n5. Testing PATCH /v1/memory...")
@@ -104,8 +104,8 @@ class TestMemoryAdmin(BaseE2ETest):
                 success=True,
                 checks=[
                     "GET /v1/memory passed",
-                    "GET /v1/memory/buffers passed",
-                    "DELETE /v1/memory/buffers passed",
+                    "GET /v1/memory/buffer passed",
+                    "DELETE /v1/memory/buffer passed",
                     "PATCH /v1/memory passed",
                     "DELETE /v1/memory/{item} verified",
                     "Authentication enforced",

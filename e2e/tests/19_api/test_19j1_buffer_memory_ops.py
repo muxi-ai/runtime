@@ -98,10 +98,10 @@ class TestBufferMemoryOps(BaseE2ETest):
                 chat_created = False
 
             # Test 1: GET buffer
-            print("\n3. Testing GET /v1/memory/buffer/{user_id}...")
+            print("\n3. Testing GET /v1/memory/buffer/{session_id}...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
-                    f"{self.base_url}/memory/buffer/{user_id}",
+                    f"{self.base_url}/memory/buffer/{session_id}",
                     headers=self.headers,
                 )
             
@@ -113,13 +113,13 @@ class TestBufferMemoryOps(BaseE2ETest):
             if chat_created:
                 print("✅ Buffer has messages from chat")
             else:
-                print("✅ GET /v1/memory/buffer/{user_id} passed (buffer may be empty)")
+                print("✅ GET /v1/memory/buffer/{session_id} passed (buffer may be empty)")
 
-            # Test 2: DELETE /v1/memory/buffer/{user_id}/{session_id}
+            # Test 2: DELETE /v1/memory/buffer/{session_id}/{session_id}
             print(f"\n4. Testing DELETE /v1/memory/buffer/{{user_id}}/{{session_id}} for {session1}...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.delete(
-                    f"{self.base_url}/memory/buffer/{user_id}/{session1}",
+                    f"{self.base_url}/memory/buffer/{session_id}/{session1}",
                     headers=self.headers,
                 )
             
@@ -130,14 +130,14 @@ class TestBufferMemoryOps(BaseE2ETest):
             data = response.json()
             assert data["success"] is True
             print(f"   Deleted session: {session1}")
-            print("✅ DELETE /v1/memory/buffer/{user_id}/{session_id} passed")
+            print("✅ DELETE /v1/memory/buffer/{session_id}/{session_id} passed")
 
             # Test 3: Verify session was deleted (if chat was created)
             if chat_created and initial_messages > 0:
                 print("\n5. Verifying session was deleted...")
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.get(
-                        f"{self.base_url}/memory/buffer/{user_id}",
+                        f"{self.base_url}/memory/buffer/{session_id}",
                         headers=self.headers,
                     )
                 
@@ -156,11 +156,11 @@ class TestBufferMemoryOps(BaseE2ETest):
                 print("\n5. Skipping session deletion verification (no messages created)")
                 print("✅ DELETE endpoint functional (status 200)")
 
-            # Test 4: DELETE /v1/memory/buffer/{user_id} (delete all)
-            print("\n6. Testing DELETE /v1/memory/buffer/{user_id} (delete all)...")
+            # Test 4: DELETE /v1/memory/buffer/{session_id} (delete all)
+            print("\n6. Testing DELETE /v1/memory/buffer/{session_id} (delete all)...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.delete(
-                    f"{self.base_url}/memory/buffer/{user_id}",
+                    f"{self.base_url}/memory/buffer/{session_id}",
                     headers=self.headers,
                 )
             
@@ -171,13 +171,13 @@ class TestBufferMemoryOps(BaseE2ETest):
             data = response.json()
             assert data["success"] is True
             print("   Deleted all buffer messages")
-            print("✅ DELETE /v1/memory/buffer/{user_id} passed")
+            print("✅ DELETE /v1/memory/buffer/{session_id} passed")
 
             # Test 5: Verify all buffer cleared (if applicable)
             print("\n7. Verifying buffer state after delete all...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
-                    f"{self.base_url}/memory/buffer/{user_id}",
+                    f"{self.base_url}/memory/buffer/{session_id}",
                     headers=self.headers,
                 )
             
@@ -194,7 +194,7 @@ class TestBufferMemoryOps(BaseE2ETest):
             print("\n8. Testing authentication requirement...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.delete(
-                    f"{self.base_url}/memory/buffer/{user_id}",
+                    f"{self.base_url}/memory/buffer/{session_id}",
                     headers={"Content-Type": "application/json"},
                 )
             
@@ -211,12 +211,12 @@ class TestBufferMemoryOps(BaseE2ETest):
                 checks.append("Created messages in 2 sessions")
                 checks.append(f"Initial buffer: {initial_messages} messages")
             else:
-                checks.append("GET /v1/memory/buffer/{user_id} passed (may have timed out on chat)")
+                checks.append("GET /v1/memory/buffer/{session_id} passed (may have timed out on chat)")
             
             checks.extend([
                 f"DELETE /v1/memory/buffer/{{user_id}}/{{session_id}} passed",
                 "Session deletion verified" if (chat_created and initial_messages > 0) else "DELETE session endpoint functional",
-                "DELETE /v1/memory/buffer/{user_id} passed",
+                "DELETE /v1/memory/buffer/{session_id} passed",
                 "Buffer state verified" if (chat_created and initial_messages > 0) else "DELETE all endpoint functional",
                 "Authentication enforced",
             ])

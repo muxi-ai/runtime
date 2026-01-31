@@ -58,13 +58,15 @@ class TestMemoryCRUD(BaseE2ETest):
             print("✅ Formation ready with API server")
 
             user_id = "test_memory_user_19i1"
+            # Add user ID to headers as per spec
+            headers_with_user = {**self.headers, "X-Muxi-User-ID": user_id}
 
-            # Test 1: GET /v1/memories/{user_id} (empty)
-            print("\n2. Testing GET /v1/memories/{user_id} (empty)...")
+            # Test 1: GET /v1/memories (with X-Muxi-User-ID header)
+            print("\n2. Testing GET /v1/memories (empty)...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
-                    f"{self.base_url}/memories/{user_id}",
-                    headers=self.headers,
+                    f"{self.base_url}/memories",
+                    headers=headers_with_user,
                 )
             
             assert response.status_code == 200, f"Expected 200, got {response.status_code}"
@@ -87,8 +89,8 @@ class TestMemoryCRUD(BaseE2ETest):
             
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{self.base_url}/memories/{user_id}",
-                    headers=self.headers,
+                    f"{self.base_url}/memories",
+                    headers=headers_with_user,
                     json=memory_data,
                 )
             
@@ -126,8 +128,8 @@ class TestMemoryCRUD(BaseE2ETest):
             print("\n4. Verifying memory was created...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
-                    f"{self.base_url}/memories/{user_id}",
-                    headers=self.headers,
+                    f"{self.base_url}/memories",
+                    headers=headers_with_user,
                 )
             
             assert response.status_code == 200
@@ -152,8 +154,8 @@ class TestMemoryCRUD(BaseE2ETest):
             
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{self.base_url}/memories/{user_id}",
-                    headers=self.headers,
+                    f"{self.base_url}/memories",
+                    headers=headers_with_user,
                     json=memory_data2,
                 )
             
@@ -163,12 +165,12 @@ class TestMemoryCRUD(BaseE2ETest):
             print(f"   Created second memory: {memory_id2}")
             print("✅ Second memory created")
 
-            # Test 5: DELETE /v1/memories/{user_id}/{memory_id}
-            print("\n6. Testing DELETE /v1/memories/{user_id}/{memory_id}...")
+            # Test 5: DELETE /v1/memories/{memory_id}
+            print("\n6. Testing DELETE /v1/memories/{memory_id}...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.delete(
-                    f"{self.base_url}/memories/{user_id}/{memory_id}",
-                    headers=self.headers,
+                    f"{self.base_url}/memories/{memory_id}",
+                    headers=headers_with_user,
                 )
             
             if response.status_code != 200:
@@ -178,14 +180,14 @@ class TestMemoryCRUD(BaseE2ETest):
             data = response.json()
             assert data["success"] is True
             print(f"   Deleted memory: {memory_id}")
-            print("✅ DELETE /v1/memories/{user_id}/{memory_id} passed")
+            print("✅ DELETE /v1/memories/{memory_id} passed")
 
             # Test 6: Verify memory was deleted
             print("\n7. Verifying memory was deleted...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
-                    f"{self.base_url}/memories/{user_id}",
-                    headers=self.headers,
+                    f"{self.base_url}/memories",
+                    headers=headers_with_user,
                 )
             
             assert response.status_code == 200
@@ -203,8 +205,8 @@ class TestMemoryCRUD(BaseE2ETest):
             print("\n8. Testing DELETE non-existent memory...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.delete(
-                    f"{self.base_url}/memories/{user_id}/non_existent_memory_id",
-                    headers=self.headers,
+                    f"{self.base_url}/memories/non_existent_memory_id",
+                    headers=headers_with_user,
                 )
             
             assert response.status_code == 404, f"Expected 404, got {response.status_code}"
@@ -216,7 +218,7 @@ class TestMemoryCRUD(BaseE2ETest):
             print("\n9. Testing authentication requirement...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
-                    f"{self.base_url}/memories/{user_id}",
+                    f"{self.base_url}/memories",
                     headers={"Content-Type": "application/json"},
                 )
             
@@ -234,7 +236,7 @@ class TestMemoryCRUD(BaseE2ETest):
                     f"POST /v1/memories/{user_id} passed (created {memory_id})",
                     "Memory creation verified",
                     f"Second memory created ({memory_id2})",
-                    "DELETE /v1/memories/{user_id}/{memory_id} passed",
+                    "DELETE /v1/memories/{memory_id} passed",
                     "Memory deletion verified",
                     "404 for non-existent memory",
                     "Authentication enforced",

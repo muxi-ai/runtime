@@ -37,24 +37,24 @@ class TestAsyncJobs(BaseE2ETest):
                 assert r.status_code in [200, 204]
                 print("✅ PATCH /v1/async passed")
 
-                # GET /v1/async/jobs
-                print("\n4. Testing GET /v1/async/jobs...")
-                r = await client.get(f"{self.base_url}/async/jobs", headers=self.headers)
+                # GET /v1/async
+                print("\n4. Testing GET /v1/async...")
+                r = await client.get(f"{self.base_url}/async", headers=self.headers)
                 assert r.status_code == 200
-                print("✅ GET /v1/async/jobs passed")
+                print("✅ GET /v1/async passed")
 
-                # GET /v1/async/jobs/{job_id}
-                print("\n5. Testing GET /v1/async/jobs/{job_id}...")
-                r = await client.get(f"{self.base_url}/async/jobs/test_job", headers=self.headers)
+                # GET /v1/async/{job_id}
+                print("\n5. Testing GET /v1/async/{job_id}...")
+                r = await client.get(f"{self.base_url}/async/test_job", headers=self.headers)
                 assert r.status_code in [200, 404]
-                print("✅ GET /v1/async/jobs/{job_id} verified")
+                print("✅ GET /v1/async/{job_id} verified")
 
-                # DELETE /v1/async/jobs/{job_id}
-                print("\n6. Testing DELETE /v1/async/jobs/{job_id}...")
-                r = await client.delete(f"{self.base_url}/async/jobs/test_job", headers=self.headers)
+                # DELETE /v1/async/{job_id}
+                print("\n6. Testing DELETE /v1/async/{job_id}...")
+                r = await client.delete(f"{self.base_url}/async/test_job", headers=self.headers)
                 # 200 (success), 400 (can't cancel), or 404 (not found) are all valid
                 assert r.status_code in [200, 400, 404]
-                print("✅ DELETE /v1/async/jobs/{job_id} verified")
+                print("✅ DELETE /v1/async/{job_id} verified")
 
                 # Auth test
                 print("\n7. Testing authentication...")

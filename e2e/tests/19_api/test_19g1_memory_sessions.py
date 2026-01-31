@@ -56,11 +56,11 @@ class TestMemorySessions(BaseE2ETest):
             await asyncio.sleep(2)
             print("✅ Formation ready with API server")
 
-            # Test 1: Get initial buffer memory
-            print("\n2. Testing GET /v1/memory/buffer/{user_id}...")
+            # Test 1: Get initial buffer memory (spec uses session_id, not user_id)
+            print("\n2. Testing GET /v1/memory/buffer/{session_id}...")
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self.base_url}/memory/buffer/{self.test_user_id}",
+                    f"{self.base_url}/memory/buffer/{self.test_session_id}",
                     headers=self.headers,
                 )
             
@@ -121,7 +121,7 @@ class TestMemorySessions(BaseE2ETest):
             print("\n4. Testing buffer memory after chat...")
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self.base_url}/memory/buffer/{self.test_user_id}",
+                    f"{self.base_url}/memory/buffer/{self.test_session_id}",
                     headers=self.headers,
                 )
             
@@ -139,7 +139,7 @@ class TestMemorySessions(BaseE2ETest):
             print("\n5. Testing GET /v1/sessions/{user_id}...")
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self.base_url}/sessions/{self.test_user_id}",
+                    f"{self.base_url}/sessions/{self.test_session_id}",
                     headers=self.headers,
                 )
             
@@ -156,7 +156,7 @@ class TestMemorySessions(BaseE2ETest):
             print("\n6. Testing authentication requirement...")
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self.base_url}/memory/buffer/{self.test_user_id}",
+                    f"{self.base_url}/memory/buffer/{self.test_session_id}",
                     headers={"Content-Type": "application/json"},
                 )
             
