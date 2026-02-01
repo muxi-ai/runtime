@@ -57,19 +57,19 @@ class TestLogsStream(BaseE2ETest):
             await asyncio.sleep(2)
             print("✅ Formation ready with API server")
 
-            # Test 1: GET /v1/logs/stream (SSE streaming)
-            print("\n2. Testing GET /v1/logs/stream (SSE streaming)...")
+            # Test 1: GET /v1/logs (SSE streaming) - per spec, endpoint is /logs not /logs/stream
+            print("\n2. Testing GET /v1/logs (SSE streaming)...")
             
             event_count = 0
             received_events = []
             not_implemented = False
             
             try:
-                # Create a streaming request with filter (required)
+                # Create a streaming request with filter (required per spec)
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     async with client.stream(
                         "GET",
-                        f"{self.base_url}/logs/stream?level=INFO",  # Add required filter
+                        f"{self.base_url}/logs?level=INFO",  # Correct endpoint per spec
                         headers=self.headers,
                     ) as response:
                         
@@ -179,7 +179,7 @@ class TestLogsStream(BaseE2ETest):
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.get(
-                        f"{self.base_url}/logs/stream?level=INFO",  # Add required filter
+                        f"{self.base_url}/logs?level=INFO",  # Correct endpoint per spec
                         headers={"Accept": "text/event-stream"},
                     )
                     

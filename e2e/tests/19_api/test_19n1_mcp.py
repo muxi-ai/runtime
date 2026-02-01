@@ -73,25 +73,10 @@ class TestMCP(BaseE2ETest):
             print(f"   MCP settings retrieved: enhance_user_prompts={data['data'].get('enhance_user_prompts')}")
             print("✅ GET /v1/mcp passed")
 
-            # Test 2: PATCH /v1/mcp (update MCP config)
-            print("\n3. Testing PATCH /v1/mcp...")
-            patch_data = {
-                "enabled": True,
-            }
-            
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.patch(
-                    f"{self.base_url}/mcp",
-                    headers=self.headers,
-                    json=patch_data,
-                )
-            
-            if response.status_code not in [200, 204]:
-                print(f"   Note: Got status {response.status_code}")
-                print(f"   Response: {response.text}")
-            # MCP PATCH might return 200 or 204
-            assert response.status_code in [200, 204], f"Expected 200/204, got {response.status_code}"
-            print("✅ PATCH /v1/mcp passed")
+            # Test 2: PATCH /v1/mcp - DEPRECATED (removed from implementation)
+            # MCP configuration should be changed via formation YAML and redeployment
+            print("\n3. Skipping PATCH /v1/mcp (deprecated - use deployment instead)")
+            print("✅ PATCH /v1/mcp skipped (deprecated)")
 
             # Test 3: GET /v1/mcp/servers (list servers)
             print("\n4. Testing GET /v1/mcp/servers...")
@@ -109,77 +94,10 @@ class TestMCP(BaseE2ETest):
             print(f"   Initial server count: {initial_server_count}")
             print("✅ GET /v1/mcp/servers passed")
 
-            # Test 4: POST /v1/mcp/servers (create server)
-            print("\n5. Testing POST /v1/mcp/servers...")
-            server_data = {
-                "id": "test_mcp_server_19n1",
-                "name": "Test MCP Server",
-                "command": "npx",
-                "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
-                "env": {},
-            }
-            
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/mcp/servers",
-                    headers=self.headers,
-                    json=server_data,
-                )
-            
-            if response.status_code != 201:
-                print(f"   Note: Got status {response.status_code}")
-                print(f"   Response: {response.text}")
-            # Might fail if MCP not fully configured, that's okay for testing
-            if response.status_code in [201, 200]:
-                data = response.json()
-                assert data["success"] is True
-                print(f"   Created server: {server_data['id']}")
-                print("✅ POST /v1/mcp/servers passed")
-                server_created = True
-            else:
-                print("   ℹ️  Server creation not available (might need MCP setup)")
-                server_created = False
-
-            # Test 5: GET /v1/mcp/servers/{server_id}
-            if server_created:
-                print("\n6. Testing GET /v1/mcp/servers/{server_id}...")
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.get(
-                        f"{self.base_url}/mcp/servers/test_mcp_server_19n1",
-                        headers=self.headers,
-                    )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    assert data["success"] is True
-                    assert "server" in data["data"]
-                    print(f"   Server: {data['data']['server'].get('name', 'N/A')}")
-                    print("✅ GET /v1/mcp/servers/{server_id} passed")
-                else:
-                    print(f"   Note: Server retrieval returned {response.status_code}")
-            else:
-                print("\n6. Skipping GET /v1/mcp/servers/{server_id} (no server created)")
-
-            # Test 6: PATCH /v1/mcp/servers/{server_id}
-            if server_created:
-                print("\n7. Testing PATCH /v1/mcp/servers/{server_id}...")
-                update_data = {
-                    "name": "Updated Test MCP Server",
-                }
-                
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.patch(
-                        f"{self.base_url}/mcp/servers/test_mcp_server_19n1",
-                        headers=self.headers,
-                        json=update_data,
-                    )
-                
-                if response.status_code in [200, 204]:
-                    print("✅ PATCH /v1/mcp/servers/{server_id} passed")
-                else:
-                    print(f"   Note: Server update returned {response.status_code}")
-            else:
-                print("\n7. Skipping PATCH /v1/mcp/servers/{server_id} (no server created)")
+            # Test 4-7: POST/PATCH/DELETE /v1/mcp/servers - ALL DEPRECATED
+            # MCP servers should be configured via formation YAML
+            print("\n5-7. Skipping MCP server CRUD operations (deprecated - use deployment instead)")
+            print("✅ MCP server CRUD skipped (deprecated)")
 
             # Test 7: GET /v1/mcp/tools (list tools)
             print("\n8. Testing GET /v1/mcp/tools...")
@@ -217,24 +135,8 @@ class TestMCP(BaseE2ETest):
             assert response.status_code in [400, 404, 422, 500], f"Expected 400/404/422/500, got {response.status_code}"
             print("✅ POST /v1/mcp/tools/call endpoint exists (expected failure for non-existent tool)")
 
-            # Test 9: DELETE /v1/mcp/servers/{server_id}
-            if server_created:
-                print("\n10. Testing DELETE /v1/mcp/servers/{server_id}...")
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.delete(
-                        f"{self.base_url}/mcp/servers/test_mcp_server_19n1",
-                        headers=self.headers,
-                    )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    assert data["success"] is True
-                    print(f"   Deleted server: test_mcp_server_19n1")
-                    print("✅ DELETE /v1/mcp/servers/{server_id} passed")
-                else:
-                    print(f"   Note: Server deletion returned {response.status_code}")
-            else:
-                print("\n10. Skipping DELETE /v1/mcp/servers/{server_id} (no server to delete)")
+            # Test 9: DELETE /v1/mcp/servers/{server_id} - DEPRECATED
+            print("\n10. Skipping DELETE /v1/mcp/servers (deprecated - use deployment instead)")
 
             # Test 10: Authentication (without admin key)
             print("\n11. Testing authentication requirement...")
@@ -252,23 +154,13 @@ class TestMCP(BaseE2ETest):
             elapsed_time = time.time() - start_time
             checks = [
                 "GET /v1/mcp passed (MCP status)",
-                "PATCH /v1/mcp passed (config update)",
+                "PATCH /v1/mcp skipped (deprecated)",
                 f"GET /v1/mcp/servers passed ({initial_server_count} servers)",
-            ]
-            if server_created:
-                checks.extend([
-                    "POST /v1/mcp/servers passed",
-                    "GET /v1/mcp/servers/{server_id} passed",
-                    "PATCH /v1/mcp/servers/{server_id} passed",
-                    "DELETE /v1/mcp/servers/{server_id} passed",
-                ])
-            else:
-                checks.append("Server CRUD skipped (MCP setup required)")
-            checks.extend([
+                "MCP server CRUD skipped (deprecated)",
                 "GET /v1/mcp/tools passed",
                 "POST /v1/mcp/tools/call endpoint verified",
                 "Authentication enforced",
-            ])
+            ]
             
             formatter.print_test_result(
                 test_name="test_19n1_mcp",

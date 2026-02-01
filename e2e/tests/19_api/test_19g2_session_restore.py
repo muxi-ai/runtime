@@ -28,7 +28,7 @@ class TestSessionRestore(BaseE2ETest):
             test_area="19_api",
         )
         self.base_url = "http://127.0.0.1:8271/v1"
-        self.client_key = "*******************"  # Matches formation-api/formation.yaml
+        self.client_key = "test-client-key-456"  # Matches formation-api/formation.yaml
         self.test_user_id = "test-user-restore"
         self.test_session_id = "restored_session_001"
 

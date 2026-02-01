@@ -15,6 +15,9 @@ memory:
   buffer:
     size: 100
     vector_search: false
+  persistent:
+    enabled: true
+    connection_string: "${{ secrets.POSTGRES_URI }}"
 
 agents:
   - id: assistant

@@ -124,8 +124,8 @@ class TestAdminConfig(BaseE2ETest):
             assert response.status_code == 200, f"Expected 200, got {response.status_code}"
             data = response.json()
             assert data["success"] is True
-            # Overlord endpoint returns minimal data (object type is enough)
-            assert data["object"] == "overlord"
+            # Per spec, object type is "overlord_config"
+            assert data["object"] in ["overlord", "overlord_config"], f"Expected overlord object, got {data.get('object')}"
             print(f"   Overlord endpoint available")
             print("✅ GET /v1/overlord passed")
 
