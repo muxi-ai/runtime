@@ -315,6 +315,11 @@ class FormationServer:
         # Store formation reference in app state
         app.state.formation = self.formation
 
+        # Initialize audit logger
+        from .audit import AuditLogger
+
+        app.state.audit_logger = AuditLogger(formation_id=self.formation.formation_id)
+
         # Add middleware in order (last added = first executed)
         # 1. CORS (needs to be first to handle preflight)
         app.add_middleware(

@@ -3,17 +3,21 @@ Audit log endpoints.
 
 These endpoints provide access to the formation audit trail,
 requiring admin API key authentication.
-
-NOTE: Audit logging is not yet implemented. See docs/features/audit-logging.md
-for the implementation plan.
 """
 
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
-from ...responses import APIResponse, create_error_response
+from ...responses import (
+    APIEventType,
+    APIObjectType,
+    APIResponse,
+    create_error_response,
+    create_success_response,
+)
 
 router = APIRouter(tags=["Audit"])
 
@@ -33,23 +37,55 @@ async def get_audit_log(
     """
     Get audit log entries with optional filtering.
 
-    **Status: Not Yet Implemented**
+    Returns audit trail of formation initialization and runtime operations.
 
-    Will return audit trail of formation initialization and runtime operations.
-    See docs/features/audit-logging.md for the implementation plan.
-
-    **Planned Tracked Operations:**
+    **Tracked Operations:**
     - Initialization: agent.registered, mcp.server.registered, etc.
     - Runtime: secret.created, secret.deleted, memory.buffer.cleared
     """
     request_id = getattr(request.state, "request_id", None)
 
-    response = create_error_response(
-        error_code="NOT_IMPLEMENTED",
-        message="Audit logging is not yet implemented. See docs/features/audit-logging.md",
-        request_id=request_id,
+    # Get audit logger from app state
+    audit_logger = getattr(request.app.state, "audit_logger", None)
+    if not audit_logger:
+        response = create_error_response(
+            error_code="SERVICE_UNAVAILABLE",
+            message="Audit logging not initialized",
+            request_id=request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    # Parse since timestamp if provided
+    since_dt = None
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+        except ValueError:
+            response = create_error_response(
+                error_code="INVALID_PARAMETER",
+                message=f"Invalid timestamp format: {since}. Use ISO 8601 format.",
+                request_id=request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=400)
+
+    # Get entries
+    entries = await audit_logger.get_entries(
+        limit=limit,
+        action=action,
+        resource_type=resource_type,
+        since=since_dt,
     )
-    return JSONResponse(content=response.model_dump(), status_code=501)
+
+    result = {
+        "entries": entries,
+        "total_entries": len(entries),
+        "limit": limit,
+    }
+
+    response = create_success_response(
+        APIObjectType.AUDIT_LOG, APIEventType.AUDIT_RETRIEVED, result, request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
 
 
 @router.delete("/audit", response_model=APIResponse)
@@ -62,15 +98,42 @@ async def clear_audit_log(
     """
     Clear the audit log file.
 
-    **Status: Not Yet Implemented**
-
-    See docs/features/audit-logging.md for the implementation plan.
+    Requires confirm="yes" query parameter to prevent accidental deletion.
     """
     request_id = getattr(request.state, "request_id", None)
 
-    response = create_error_response(
-        error_code="NOT_IMPLEMENTED",
-        message="Audit logging is not yet implemented. See docs/features/audit-logging.md",
-        request_id=request_id,
+    # Require confirmation
+    if confirm != "clear-audit-log":
+        response = create_error_response(
+            error_code="INVALID_REQUEST",
+            message="Confirmation required: add ?confirm=clear-audit-log to delete",
+            request_id=request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=400)
+
+    # Get audit logger from app state
+    audit_logger = getattr(request.app.state, "audit_logger", None)
+    if not audit_logger:
+        response = create_error_response(
+            error_code="SERVICE_UNAVAILABLE",
+            message="Audit logging not initialized",
+            request_id=request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    # Get user from request state
+    user = getattr(request.state, "authenticated_user", "admin")
+
+    # Clear the log
+    cleared_count = await audit_logger.clear(user=user, request_id=request_id)
+
+    result = {
+        "previous_entries_count": cleared_count,
+        "cleared_by": user,
+        "message": f"Audit log cleared ({cleared_count} entries removed)",
+    }
+
+    response = create_success_response(
+        APIObjectType.AUDIT_LOG, APIEventType.AUDIT_CLEARED, result, request_id
     )
-    return JSONResponse(content=response.model_dump(), status_code=501)
+    return JSONResponse(content=response.model_dump(), status_code=200)
