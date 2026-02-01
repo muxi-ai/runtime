@@ -1552,8 +1552,7 @@ class InitEventFormatter:
 
     @staticmethod
     def format_fail(
-        failure_info_or_component: "InitFailureInfo | str",
-        error_details: str | None = None
+        failure_info_or_component: "InitFailureInfo | str", error_details: str | None = None
     ) -> str:
         """Format failure event with structured error details.
 

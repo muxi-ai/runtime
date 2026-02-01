@@ -6506,12 +6506,19 @@ Agent response: {raw_response}"""
                                         mem_start = message.find("=== RELEVANT MEMORIES ===")
                                         # Find the end of the memory section (next section or end of message)
                                         mem_end = len(message)
-                                        for section_marker in ["=== CONVERSATION CONTEXT ===", "=== CURRENT REQUEST ==="]:
-                                            if section_marker in message[mem_start + 10:]:
-                                                marker_pos = message.find(section_marker, mem_start + 10)
+                                        for section_marker in [
+                                            "=== CONVERSATION CONTEXT ===",
+                                            "=== CURRENT REQUEST ===",
+                                        ]:
+                                            if section_marker in message[mem_start + 10 :]:
+                                                marker_pos = message.find(
+                                                    section_marker, mem_start + 10
+                                                )
                                                 if marker_pos != -1 and marker_pos < mem_end:
                                                     mem_end = marker_pos
-                                        preserved_sections = message[mem_start:mem_end].rstrip() + "\n\n"
+                                        preserved_sections = (
+                                            message[mem_start:mem_end].rstrip() + "\n\n"
+                                        )
 
                                     enhanced_message = (
                                         f"=== CONVERSATION CONTEXT ===\n"
@@ -7030,7 +7037,9 @@ Agent response: {raw_response}"""
                             break
 
             try:
-                agent_name = await self.select_agent_for_message(routing_message, request_id=request_id)
+                agent_name = await self.select_agent_for_message(
+                    routing_message, request_id=request_id
+                )
             except SecurityViolation as e:
                 # Security threat detected - but skip if this is a credential/workflow response
                 if skip_security_check:

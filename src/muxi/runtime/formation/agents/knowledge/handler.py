@@ -919,18 +919,20 @@ class KnowledgeHandler:
                 cache_data = []
                 for chunk, embedding in zip(document_chunks, embeddings):
                     if embedding is not None:
-                        cache_data.append({
-                            "content": chunk.content,
-                            "embedding": embedding,
-                            "metadata": {
-                                "document_id": chunk.document_id,
-                                "chunk_id": chunk.chunk_id,
-                                "source": file_path,
-                                "content_hash": file_md5,
-                                "description": description,
-                                **chunk.metadata,
-                            },
-                        })
+                        cache_data.append(
+                            {
+                                "content": chunk.content,
+                                "embedding": embedding,
+                                "metadata": {
+                                    "document_id": chunk.document_id,
+                                    "chunk_id": chunk.chunk_id,
+                                    "source": file_path,
+                                    "content_hash": file_md5,
+                                    "description": description,
+                                    **chunk.metadata,
+                                },
+                            }
+                        )
                 if cache_data:
                     self._save_cached_embeddings(file_path, file_md5, cache_data)
 

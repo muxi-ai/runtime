@@ -1330,8 +1330,12 @@ class Agent:
                     ):
                         # Generate a direct response for simple conversational requests
                         # Use the agent's system_message if available, otherwise use default
-                        system_content = self.system_message if self.system_message else (
-                            "You are a helpful assistant. Provide direct, natural responses without using any tools or files."
+                        system_content = (
+                            self.system_message
+                            if self.system_message
+                            else (
+                                "You are a helpful assistant. Provide direct, natural responses without using any tools or files."
+                            )
                         )
                         simple_messages = [
                             {"role": "system", "content": system_content},
