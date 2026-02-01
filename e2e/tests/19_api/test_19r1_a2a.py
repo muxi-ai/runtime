@@ -31,19 +31,13 @@ class TestA2A(BaseE2ETest):
                 assert r.status_code == 200
                 print("✅ GET /v1/a2a passed")
 
-                # PATCH /v1/a2a/outbound
-                print("\n3. Testing PATCH /v1/a2a/outbound...")
-                r = await client.patch(f"{self.base_url}/a2a/outbound", headers=self.headers, json={"config": {}})
-                assert r.status_code in [200, 204, 501]  # 501 = Not Implemented yet
-                if r.status_code == 501:
-                    print("   Note: PATCH /v1/a2a/outbound returns 501 (Not Implemented)")
-                print("✅ PATCH /v1/a2a/outbound verified")
+                # PATCH /v1/a2a/outbound - DEPRECATED (commented out in implementation)
+                print("\n3. Skipping PATCH /v1/a2a/outbound (deprecated - use deployment instead)")
+                print("✅ PATCH /v1/a2a/outbound skipped")
 
-                # DELETE /v1/a2a/outbound/{item}
-                print("\n4. Testing DELETE /v1/a2a/outbound/{item}...")
-                r = await client.delete(f"{self.base_url}/a2a/outbound/test_item", headers=self.headers)
-                assert r.status_code in [200, 404]
-                print("✅ DELETE /v1/a2a/outbound/{item} verified")
+                # DELETE /v1/a2a/outbound/{item} - DEPRECATED (commented out in implementation)
+                print("\n4. Skipping DELETE /v1/a2a/outbound/{item} (deprecated - use deployment instead)")
+                print("✅ DELETE /v1/a2a/outbound/{item} skipped")
 
                 # Auth test
                 print("\n5. Testing authentication...")
@@ -52,7 +46,7 @@ class TestA2A(BaseE2ETest):
                 print("✅ Authentication enforced")
 
             formatter.print_test_result(test_name="test_19r1_a2a", success=True, 
-                checks=["GET a2a", "PATCH outbound", "DELETE outbound item", "Auth enforced"], 
+                checks=["GET a2a", "PATCH/DELETE skipped (deprecated)", "Auth enforced"], 
                 transcript=[], duration=time.time()-start_time)
         except Exception as e:
             formatter.print_test_result(test_name="test_19r1_a2a", success=False, checks=[f"Failed: {e}"], transcript=[], duration=time.time()-start_time)

@@ -19,6 +19,18 @@ memory:
     enabled: true
     connection_string: "${{ secrets.POSTGRES_URI }}"
 
+# Scheduler configuration (from Area 12)
+scheduler:
+  enabled: true
+  timezone: "UTC"
+  check_interval_minutes: 1
+  max_concurrent_jobs: 5
+  max_failures_before_pause: 3
+
+# A2A configuration
+a2a:
+  enabled: true
+
 agents:
   - id: assistant
     name: "API Test Assistant"

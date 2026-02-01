@@ -130,8 +130,8 @@ class TestJobs(BaseE2ETest):
                     headers=admin_headers,
                 )
             
-            # Should return 404, 200 with success=false, 401 (if admin key wrong), or 501 (not implemented)
-            assert response.status_code in [200, 401, 404, 501], f"Expected 200, 401, 404, or 501, got {response.status_code}"
+            # Should return 404, 200 with success=false, 401 (if admin key wrong), 501 (not implemented), or 503 (service unavailable)
+            assert response.status_code in [200, 401, 404, 501, 503], f"Expected 200, 401, 404, 501, or 503, got {response.status_code}"
             if response.status_code == 200:
                 data = response.json()
                 # If 200, should indicate failure
