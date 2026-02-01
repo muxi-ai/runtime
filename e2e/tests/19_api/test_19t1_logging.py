@@ -34,32 +34,20 @@ class TestLogging(BaseE2ETest):
                 # GET /v1/logging/destinations
                 print("\n3. Testing GET /v1/logging/destinations...")
                 r = await client.get(f"{self.base_url}/logging/destinations", headers=self.headers)
-                assert r.status_code == 200
+                assert r.status_code == 200, f"Expected 200, got {r.status_code}"
                 print("✅ GET /v1/logging/destinations passed")
 
-                # POST /v1/logging/destinations
-                print("\n4. Testing POST /v1/logging/destinations...")
-                r = await client.post(f"{self.base_url}/logging/destinations", headers=self.headers, 
-                    json={"type": "file", "path": "/tmp/test.log"})
-                assert r.status_code in [200, 201, 400, 422, 501]  # 501 = not implemented (no persistence)
-                if r.status_code == 422:
-                    print("   Note: POST validation error (test payload may be incomplete)")
-                elif r.status_code == 501:
-                    print("   Note: POST returns 501 Not Implemented (persistence not yet available)")
-                print("✅ POST /v1/logging/destinations verified")
+                # POST /v1/logging/destinations - DEPRECATED (commented out in implementation)
+                print("\n4. Skipping POST /v1/logging/destinations (deprecated - use deployment instead)")
+                print("✅ POST /v1/logging/destinations skipped")
 
-                # PATCH /v1/logging/destinations/{destination_id}
-                print("\n5. Testing PATCH /v1/logging/destinations/{destination_id}...")
-                r = await client.patch(f"{self.base_url}/logging/destinations/test_dest", headers=self.headers, 
-                    json={"enabled": True})
-                assert r.status_code in [200, 204, 404, 501]  # 501 = not implemented (no persistence)
-                print("✅ PATCH /v1/logging/destinations/{destination_id} verified")
+                # PATCH /v1/logging/destinations/{destination_id} - DEPRECATED
+                print("\n5. Skipping PATCH /v1/logging/destinations (deprecated - use deployment instead)")
+                print("✅ PATCH /v1/logging/destinations skipped")
 
-                # DELETE /v1/logging/destinations/{destination_id}
-                print("\n6. Testing DELETE /v1/logging/destinations/{destination_id}...")
-                r = await client.delete(f"{self.base_url}/logging/destinations/test_dest", headers=self.headers)
-                assert r.status_code in [200, 404, 501]  # 501 = not implemented (no persistence)
-                print("✅ DELETE /v1/logging/destinations/{destination_id} verified")
+                # DELETE /v1/logging/destinations/{destination_id} - DEPRECATED
+                print("\n6. Skipping DELETE /v1/logging/destinations (deprecated - use deployment instead)")
+                print("✅ DELETE /v1/logging/destinations skipped")
 
                 # Auth test
                 print("\n7. Testing authentication...")
@@ -68,7 +56,7 @@ class TestLogging(BaseE2ETest):
                 print("✅ Authentication enforced")
 
             formatter.print_test_result(test_name="test_19t1_logging", success=True, 
-                checks=["GET logging", "GET destinations", "POST destination", "PATCH destination", "DELETE destination", "Auth enforced"], 
+                checks=["GET logging", "GET destinations", "POST/PATCH/DELETE skipped (deprecated)", "Auth enforced"], 
                 transcript=[], duration=time.time()-start_time)
         except Exception as e:
             formatter.print_test_result(test_name="test_19t1_logging", success=False, checks=[f"Failed: {e}"], transcript=[], duration=time.time()-start_time)
