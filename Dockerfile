@@ -23,6 +23,11 @@ RUN pip install --no-cache-dir uv
 # Copy dependency files
 COPY requirements.txt pyproject.toml setup.py ./
 
+# Install PyTorch CPU-only version first (avoids 4GB+ CUDA dependencies)
+# This must be done before other requirements to prevent CUDA version from being pulled
+RUN uv pip install --prefix=/install --no-cache \
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
 # Install all dependencies to a temporary location
 # This includes compiling binary extensions
 RUN uv pip install --prefix=/install --no-cache -r requirements.txt
@@ -68,6 +73,13 @@ COPY --from=builder /install /usr/local
 
 # Copy MUXI source
 COPY --from=builder /build/src ./src
+
+# Clean up to reduce image size
+RUN find /usr/local -name "*.pyc" -delete \
+    && find /usr/local -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local -name "*.pyo" -delete \
+    && find /usr/local -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true \
+    && rm -rf /root/.cache /tmp/*
 
 # Create necessary directories
 RUN mkdir -p /data /logs /formations ~/.muxi

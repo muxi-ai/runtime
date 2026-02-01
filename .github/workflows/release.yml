@@ -135,6 +135,8 @@ jobs:
           platforms: linux/amd64
           cache-from: type=gha,scope=amd64
           cache-to: type=gha,mode=max,scope=amd64
+          provenance: false
+          sbom: false
 
   # ===== Docker Build (ARM64) - Native =====
   docker-arm64:
@@ -175,6 +177,8 @@ jobs:
           platforms: linux/arm64
           cache-from: type=gha,scope=arm64
           cache-to: type=gha,mode=max,scope=arm64
+          provenance: false
+          sbom: false
 
   # ===== Create Multi-Arch Manifest =====
   docker-manifest:
@@ -246,6 +250,13 @@ jobs:
       packages: read
 
     steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android
+          sudo rm -rf /usr/share/swift /usr/local/julia* /opt/hostedtoolcache
+          sudo apt-get clean
+          df -h
+
       - name: Install Apptainer
         run: |
           sudo apt-get update
