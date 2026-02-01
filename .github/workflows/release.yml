@@ -246,6 +246,13 @@ jobs:
       packages: read
 
     steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android
+          sudo rm -rf /usr/share/swift /usr/local/julia* /opt/hostedtoolcache
+          sudo apt-get clean
+          df -h
+
       - name: Install Apptainer
         run: |
           sudo apt-get update
