@@ -1,6 +1,6 @@
 # Changelog
 
-## X.XXXXXXXX.X - Initial Public Release
+## 0.20260201.0 - Initial Public Release
 
 ### Core Features
 
