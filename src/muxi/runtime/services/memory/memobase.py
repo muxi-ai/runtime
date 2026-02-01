@@ -316,6 +316,48 @@ class Memobase:
             )
             raise
 
+    async def list_memories(
+        self,
+        limit: int = 10,
+        offset: int = 0,
+        external_user_id: Optional[str] = None,
+        collection: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        List memories for a user without vector search (no embeddings required).
+
+        This is USER-SPECIFIC - only returns memories belonging to the specified user.
+        For single-user mode, uses default user.
+        For multi-user mode, requires external_user_id.
+
+        Args:
+            limit: Maximum number of memories to return.
+            offset: Number of memories to skip (for pagination).
+            external_user_id: The external user ID. If None, uses the default.
+            collection: Optional collection name to filter by.
+
+        Returns:
+            List of memory entries for the user.
+        """
+        external_user_id = (
+            external_user_id if external_user_id is not None else self.default_external_user_id
+        )
+
+        # Skip for anonymous users
+        if external_user_id in ["default", "anonymous", "0"]:
+            return []
+
+        # Create collection name based on external user ID if not provided
+        if collection is None:
+            collection = f"user_{external_user_id}"
+
+        return await self.long_term_memory.list_memories(
+            limit=limit,
+            offset=offset,
+            collection=collection,
+            external_user_id=external_user_id,
+        )
+
     def build_search_parameters(
         self,
         query: str,

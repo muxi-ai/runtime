@@ -498,6 +498,7 @@ class LongTermMemory:
         embedding: Optional[Union[List[float], np.ndarray]] = None,
         user_id: Optional[str] = None,
         collection: Optional[str] = None,
+        external_user_id: Optional[str] = None,  # Alias for user_id (for Memobase compatibility)
     ) -> str:
         """
         Asynchronously adds new content to long-term memory, generating an embedding if not provided.
@@ -508,12 +509,16 @@ class LongTermMemory:
             embedding (list[float] or np.ndarray, optional): Pre-computed embedding vector.
             If not provided, an embedding is generated.
             user_id (str, optional): The user identifier (will be resolved to internal_user_id).
+            external_user_id (str, optional): Alias for user_id (for Memobase compatibility).
             collection (str, optional): The collection to store the memory in.
             If not provided, uses the default collection.
 
         Returns:
             str: The unique ID of the newly created memory entry.
         """
+        # Handle external_user_id as alias for user_id
+        if external_user_id is not None and user_id is None:
+            user_id = external_user_id
         # Emit memory storage started event
         observability.observe(
             event_type=observability.ConversationEvents.MEMORY_LONG_TERM_ENHANCED,
@@ -1006,7 +1011,11 @@ class LongTermMemory:
 
             return True
 
-    def delete(self, memory_id: str) -> bool:
+    def delete(
+        self,
+        memory_id: str,
+        external_user_id: Optional[str] = None,  # For Memobase API compatibility (not used here)
+    ) -> bool:
         """
         Delete a memory by ID.
 
@@ -1014,6 +1023,7 @@ class LongTermMemory:
 
         Args:
             memory_id: The ID of the memory to delete.
+            external_user_id: Not used in LongTermMemory (for Memobase API compatibility).
 
         Returns:
             True if the deletion was successful, False otherwise.
@@ -1219,6 +1229,64 @@ class LongTermMemory:
                     "meta_data": m.meta_data,
                     "created_at": m.created_at.isoformat(),
                     "updated_at": m.updated_at.isoformat(),
+                    "collection": m.collection,
+                }
+                for m in memories
+            ]
+
+    async def list_memories(
+        self,
+        limit: int = 10,
+        offset: int = 0,
+        collection: Optional[str] = None,
+        external_user_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        List memories for a specific user without vector search (no embeddings required).
+
+        This is USER-SPECIFIC - only returns memories belonging to the specified user.
+        For single-user mode (SQLite), uses default user "0".
+        For multi-user mode (PostgreSQL), requires external_user_id.
+
+        Parameters:
+            limit: Maximum number of memories to return.
+            offset: Number of memories to skip (for pagination).
+            collection: Optional collection name to filter by.
+            external_user_id: The external user identifier (required in multi-user mode).
+
+        Returns:
+            List of memory dictionaries with id, text, metadata, timestamps.
+        """
+        # Resolve internal user ID (handles single-user vs multi-user)
+        internal_user_id = await self._resolve_user_id_async(external_user_id)
+
+        collection_name = collection or self.default_collection
+
+        async with self.AsyncSession() as session:
+            # Build query filtered by user_id (USER-SPECIFIC)
+            query = (
+                select(Memory)
+                .where(
+                    Memory.user_id == internal_user_id,
+                    Memory.collection == collection_name,
+                )
+                .order_by(desc(Memory.created_at))
+                .offset(offset)
+                .limit(limit)
+            )
+
+            result = await session.execute(query)
+            memories = result.scalars().all()
+
+            return [
+                {
+                    "id": m.id,
+                    "text": m.text,
+                    "content": m.text,  # Alias for API compatibility
+                    "meta_data": m.meta_data,
+                    "metadata": m.meta_data,  # Alias for API compatibility
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                    "updated_at": m.updated_at.isoformat() if m.updated_at else None,
                     "collection": m.collection,
                 }
                 for m in memories

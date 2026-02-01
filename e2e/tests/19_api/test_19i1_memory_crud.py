@@ -69,22 +69,13 @@ class TestMemoryCRUD(BaseE2ETest):
                     headers=headers_with_user,
                 )
             
-            # Accept 200 (success) or 500 (empty query causes pgvector dimension error)
-            # This is a known limitation - search with empty query fails on pgvector
-            if response.status_code == 200:
-                data = response.json()
-                assert data["success"] is True
-                assert "memories" in data["data"]
-                initial_count = len(data["data"]["memories"])
-                print(f"   Initial memory count: {initial_count}")
-                print("✅ GET /v1/memories passed")
-            elif response.status_code == 500:
-                # Known bug: empty query search fails with pgvector
-                print("   Note: Empty query search fails (pgvector dimension issue)")
-                print("✅ GET /v1/memories skipped (known limitation)")
-                initial_count = 0
-            else:
-                assert False, f"Expected 200 or 500, got {response.status_code}"
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+            data = response.json()
+            assert data["success"] is True
+            assert "memories" in data["data"]
+            initial_count = len(data["data"]["memories"])
+            print(f"   Initial memory count: {initial_count}")
+            print("✅ GET /v1/memories passed")
 
             # Test 2: POST /v1/memories/{user_id} (create memory)
             print("\n3. Testing POST /v1/memories/{user_id}...")
@@ -125,11 +116,13 @@ class TestMemoryCRUD(BaseE2ETest):
                 )
                 return  # Exit test successfully
             
-            assert response.status_code == 201, f"Expected 201, got {response.status_code}"
+            # Spec says 200 for created memory (not 201)
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
             data = response.json()
             assert data["success"] is True
-            assert "memory" in data["data"]
-            memory_id = data["data"]["memory"]["id"]
+            # Response has id directly in data, not nested under "memory"
+            memory_id = data["data"].get("id") or data["data"].get("memory", {}).get("id")
+            assert memory_id, "Memory ID not found in response"
             print(f"   Created memory: {memory_id}")
             print("✅ POST /v1/memories/{user_id} passed")
 
@@ -168,9 +161,9 @@ class TestMemoryCRUD(BaseE2ETest):
                     json=memory_data2,
                 )
             
-            assert response.status_code == 201
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
             data = response.json()
-            memory_id2 = data["data"]["memory"]["id"]
+            memory_id2 = data["data"].get("id") or data["data"].get("memory", {}).get("id")
             print(f"   Created second memory: {memory_id2}")
             print("✅ Second memory created")
 

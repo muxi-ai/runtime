@@ -137,10 +137,10 @@ async def get_user_memories(
         return JSONResponse(content=response.model_dump(), status_code=200)
 
     try:
-        # Get recent memories for this user (search with empty query returns all)
-        memories = await overlord.long_term_memory.search(
-            query="",
+        # List memories for this user (no vector search required)
+        memories = await overlord.long_term_memory.list_memories(
             limit=limit,
+            offset=offset,
             external_user_id=user_id,
         )
 
@@ -273,10 +273,18 @@ async def delete_user_memory(
 
     try:
         # Delete memory (with user_id check for security)
-        success = await overlord.long_term_memory.delete(
+        # Handle both sync (LongTermMemory) and async (Memobase) delete methods
+        import asyncio
+        import inspect
+
+        delete_result = overlord.long_term_memory.delete(
             memory_id=memory_id,
             external_user_id=user_id,
         )
+        if inspect.iscoroutine(delete_result):
+            success = await delete_result
+        else:
+            success = delete_result
 
         if success:
             result = {"deleted": memory_id, "user_id": user_id}
