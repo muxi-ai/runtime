@@ -1,0 +1,69 @@
+# Dockerfile.ci-test
+# Mimics GitHub Actions ubuntu-latest runner for local debugging
+#
+# Usage:
+#   docker build -f Dockerfile.ci-test -t muxi-ci-test .
+#   docker run -it --rm -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock muxi-ci-test
+#
+# Inside container:
+#   cd /workspace
+#   docker build -t muxi-runtime-test .
+#   docker images muxi-runtime-test
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install base packages (similar to GitHub Actions runner)
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    jq \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    software-properties-common \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI (to build images inside container)
+RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y docker-ce-cli docker-buildx-plugin \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Apptainer (for SIF builds)
+RUN add-apt-repository -y ppa:apptainer/ppa \
+    && apt-get update \
+    && apt-get install -y apptainer \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install dive (for analyzing Docker image layers)
+RUN wget -q https://github.com/wagoodman/dive/releases/download/v0.12.0/dive_0.12.0_linux_amd64.deb \
+    && dpkg -i dive_0.12.0_linux_amd64.deb \
+    && rm dive_0.12.0_linux_amd64.deb
+
+WORKDIR /workspace
+
+# Helper script for debugging
+RUN echo '#!/bin/bash\n\
+echo "=== Build Docker image ==="\n\
+docker build -t muxi-runtime-test . 2>&1 | tee /tmp/build.log\n\
+\n\
+echo ""\n\
+echo "=== Image size ==="\n\
+docker images muxi-runtime-test --format "{{.Size}}"\n\
+\n\
+echo ""\n\
+echo "=== Analyze layers with dive ==="\n\
+echo "Run: dive muxi-runtime-test"\n\
+\n\
+echo ""\n\
+echo "=== Build SIF ==="\n\
+echo "Run: apptainer build test.sif docker-daemon://muxi-runtime-test:latest"\n\
+' > /usr/local/bin/build-test.sh && chmod +x /usr/local/bin/build-test.sh
+
+CMD ["/bin/bash"]
