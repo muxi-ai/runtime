@@ -69,7 +69,7 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
 
         from .....services.memory.long_term import User, UserIdentifier
 
-        async with db_manager.get_session() as session:
+        async with db_manager.get_async_session() as session:
             # Find user by public_id (muxi_user_id)
             result = await session.execute(select(User).where(User.public_id == user_id))
             user = result.scalar_one_or_none()
@@ -179,7 +179,7 @@ async def associate_user_identifiers(
 
         from .....services.memory.long_term import User, UserIdentifier
 
-        async with db_manager.get_session() as session:
+        async with db_manager.get_async_session() as session:
             user = None
             muxi_user_id = body.muxi_user_id
 
@@ -325,7 +325,7 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
 
         from .....services.memory.long_term import User, UserIdentifier
 
-        async with db_manager.get_session() as session:
+        async with db_manager.get_async_session() as session:
             # Find the identifier
             result = await session.execute(
                 select(UserIdentifier).where(
