@@ -135,6 +135,8 @@ jobs:
           platforms: linux/amd64
           cache-from: type=gha,scope=amd64
           cache-to: type=gha,mode=max,scope=amd64
+          provenance: false
+          sbom: false
 
   # ===== Docker Build (ARM64) - Native =====
   docker-arm64:
@@ -175,6 +177,8 @@ jobs:
           platforms: linux/arm64
           cache-from: type=gha,scope=arm64
           cache-to: type=gha,mode=max,scope=arm64
+          provenance: false
+          sbom: false
 
   # ===== Create Multi-Arch Manifest =====
   docker-manifest:
