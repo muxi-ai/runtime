@@ -2774,3 +2774,71 @@ os._exit(result)
 **API spec notes:**
 - POST /memories returns 200 (not 201) per spec
 - Response structure: `data.id` not `data.memory.id`
+
+### 2026-02-01: CI/CD Pipeline Fixes & SIF Builds
+
+**Release workflow structure (release.yml):**
+```yaml
+# STEP ORDER:
+#   1. version job: calculate version, commit .version + CHANGELOG
+#   2. docker-amd64, docker-arm64, pypi jobs: build + publish (parallel)
+#   3. docker-manifest job: create multi-arch manifest
+#   4. sif-amd64, sif-arm64 jobs: convert Docker images to SIF (parallel)
+#   5. github-release job: create GitHub Release + git tag + upload SIF files
+#   6. merge-back job: merge main → develop
+```
+
+**Major fix: AMD64 Docker image bloat (4.5GB → 800MB SIF)**
+
+Root cause: PyTorch on AMD64 defaults to CUDA version with 4GB+ NVIDIA libraries:
+- `nvidia-curand-cu12`
+- `nvidia-cublas-cu12`
+- `nvidia-cudnn-cu12`
+- etc.
+
+ARM64 doesn't have this issue (no CUDA support).
+
+**Fix in Dockerfile:**
+```dockerfile
+# Install PyTorch CPU-only version first (avoids 4GB+ CUDA dependencies)
+RUN uv pip install --prefix=/install --no-cache \
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Then install rest of requirements
+RUN uv pip install --prefix=/install --no-cache -r requirements.txt
+```
+
+**Results:**
+| Metric | Before | After |
+|--------|--------|-------|
+| AMD64 Docker image | 4.5GB+ | 2.81GB |
+| AMD64 SIF file | 4.5GB (over 2GB limit) | 814MB |
+| AMD64 build time | 35 min | 5 min |
+| ARM64 SIF file | 714MB | 714MB |
+
+**Other CI/CD fixes:**
+1. Removed redundant `tag` job - `softprops/action-gh-release` already creates tag
+2. Removed OpenSSF Scorecard workflow - incompatible with private repos
+3. Added disk cleanup to `sif-amd64` job - prevented "no space left on device"
+4. Disabled `provenance: false` and `sbom: false` in Docker builds - reduces overhead
+5. Replaced slow `jlumbroso/free-disk-space` action with simple `rm -rf` (~13 min saved)
+
+**SIF filename format (expected by muxi-server):**
+```
+muxi-runtime-{version}-linux-amd64.sif
+muxi-runtime-{version}-linux-arm64.sif
+
+# Download URL:
+https://github.com/muxi-ai/runtime/releases/download/v{version}/muxi-runtime-{version}-linux-{arch}.sif
+```
+
+**Local testing setup:**
+- `act` tool for running GitHub Actions locally
+- `Dockerfile.ci-test` for local CI environment simulation
+- `dive` tool for analyzing Docker layer sizes
+
+**Key learnings:**
+- Always check platform-specific dependencies (CUDA on AMD64)
+- Use CPU-only PyTorch for container images unless GPU required
+- SIF compression ratio is roughly 3:1 (2.8GB Docker → 800MB SIF)
+- GitHub release assets have 2GB limit
