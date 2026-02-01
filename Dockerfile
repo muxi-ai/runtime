@@ -77,7 +77,7 @@ COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Set environment variables
-ENV PYTHONPATH=/app/src:/app:$PYTHONPATH
+ENV PYTHONPATH="/app/src:/app"
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV LC_ALL=C.UTF-8
