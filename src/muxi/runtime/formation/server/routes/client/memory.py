@@ -274,7 +274,6 @@ async def delete_user_memory(
     try:
         # Delete memory (with user_id check for security)
         # Handle both sync (LongTermMemory) and async (Memobase) delete methods
-        import asyncio
         import inspect
 
         delete_result = overlord.long_term_memory.delete(

@@ -6512,7 +6512,7 @@ Agent response: {raw_response}"""
                                                 if marker_pos != -1 and marker_pos < mem_end:
                                                     mem_end = marker_pos
                                         preserved_sections = message[mem_start:mem_end].rstrip() + "\n\n"
-                                    
+
                                     enhanced_message = (
                                         f"=== CONVERSATION CONTEXT ===\n"
                                         f"{chr(10).join(context_lines)}\n\n"
