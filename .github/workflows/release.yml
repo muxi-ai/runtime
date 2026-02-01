@@ -7,12 +7,11 @@
 #   1. version job: calculate version, commit .version + CHANGELOG
 #   2. docker-amd64, docker-arm64, pypi jobs: build + publish (parallel)
 #   3. docker-manifest job: create multi-arch manifest
-#   4. github-release job: create GitHub Release
+#   4. github-release job: create GitHub Release + git tag
 #   5. merge-back job: merge main → develop
-#   6. tag job: push git tag (final step, after everything succeeds)
 #
-# Tag is pushed LAST so a failed Docker/PyPI build won't leave a
-# dangling tag pointing at an incomplete release.
+# Tag is created by github-release (softprops/action-gh-release) AFTER
+# Docker/PyPI builds succeed, so a failed build won't leave a dangling tag.
 #
 # VERSION FORMAT (ScalVer):
 #   MAJOR.YYYYMMDD.PATCH
@@ -288,26 +287,5 @@ jobs:
           git merge --no-ff main -m "chore: merge main back to develop (v${{ needs.version.outputs.version }}) [skip ci]"
           git push origin develop
 
-  # ===== Create Git Tag (final step) =====
-  tag:
-    runs-on: ubuntu-latest
-    needs: [version, merge-back]
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ needs.version.outputs.sha }}
-          token: ${{ secrets.MUXI_RELEASE_TOKEN }}
-
-      - name: Create and push git tag
-        run: |
-          TAG="v${{ needs.version.outputs.version }}"
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists"
-          else
-            git tag "$TAG"
-            git push origin "$TAG"
-          fi
+  # NOTE: Git tag is created by github-release job (softprops/action-gh-release)
+  # No separate tag job needed - it was causing "tag already exists" errors

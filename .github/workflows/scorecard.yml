@@ -3,6 +3,9 @@ name: OpenSSF Scorecard
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'pyproject.toml'  # Skip version bump commits from release automation
+      - 'CHANGELOG.md'
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday
 
