@@ -2551,7 +2551,9 @@ def validate_user_credentials_requirements(
 
         # Check if persistent memory is explicitly disabled
         # Default (omitted or empty) = SQLite enabled, which is fine
-        if persistent is False or (isinstance(persistent, dict) and persistent.get("enabled") is False):
+        if persistent is False or (
+            isinstance(persistent, dict) and persistent.get("enabled") is False
+        ):
             raise ValueError(
                 "User credentials (${{ user.credentials.* }}) require persistent database storage. "
                 "Persistent memory is explicitly disabled. Remove 'persistent: false' or set 'enabled: true'."
@@ -2657,7 +2659,9 @@ async def validate_user_credentials_requirements_async(
 
         # Check if persistent memory is explicitly disabled
         # Default (omitted or empty) = SQLite enabled, which is fine
-        if persistent is False or (isinstance(persistent, dict) and persistent.get("enabled") is False):
+        if persistent is False or (
+            isinstance(persistent, dict) and persistent.get("enabled") is False
+        ):
             raise ValueError(
                 "User credentials (${{ user.credentials.* }}) require persistent database storage. "
                 "Persistent memory is explicitly disabled. Remove 'persistent: false' or set 'enabled: true'."
