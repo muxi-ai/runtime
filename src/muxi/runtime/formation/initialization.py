@@ -298,15 +298,41 @@ def initialize_memory_systems(formation) -> None:
     buffer_config = memory_config.get("buffer", {})
     _initialize_buffer_memory(formation, buffer_config)
 
-    # Initialize persistent memory if configured
-    persistent_config = memory_config.get("persistent", {})
-    if persistent_config and persistent_config.get("connection_string"):
-        _initialize_persistent_memory(formation, persistent_config)
+    # Initialize persistent memory
+    # Default behavior: SQLite db file next to formation file
+    # Disable with: persistent: false OR persistent: { enabled: false }
+    persistent_config = memory_config.get("persistent")
 
-        # Create all database tables after persistent memory is initialized
-        # This ensures all models are imported and registered with Base.metadata
-        if hasattr(formation, "_db_manager") and formation._db_manager:
-            _create_all_database_tables(formation._db_manager)
+    # Handle persistent: false (shorthand disable)
+    if persistent_config is False:
+        pass  # Explicitly disabled
+    # Handle persistent: { enabled: false } (disabled but config preserved)
+    elif isinstance(persistent_config, dict) and persistent_config.get("enabled") is False:
+        pass  # Disabled via enabled flag
+    else:
+        # Ensure we have a dict to work with
+        if not persistent_config or not isinstance(persistent_config, dict):
+            persistent_config = {}
+
+        # Default to SQLite in formation directory if no connection_string
+        if not persistent_config.get("connection_string"):
+            formation_path = formation.get_formation_path()
+            if formation_path:
+                from pathlib import Path
+
+                fp = Path(formation_path)
+                formation_dir = fp.parent if fp.is_file() else fp
+                db_path = formation_dir / "memory.db"
+                persistent_config["connection_string"] = str(db_path)
+
+        # Initialize if we have a connection string
+        if persistent_config.get("connection_string"):
+            _initialize_persistent_memory(formation, persistent_config)
+
+            # Create all database tables after persistent memory is initialized
+            # This ensures all models are imported and registered with Base.metadata
+            if hasattr(formation, "_db_manager") and formation._db_manager:
+                _create_all_database_tables(formation._db_manager)
 
 
 def _initialize_working_memory(formation, working_config: Dict[str, Any]) -> None:

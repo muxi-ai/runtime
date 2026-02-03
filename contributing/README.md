@@ -153,6 +153,30 @@ The Overlord is the central orchestrator that:
 - Coordinates workflow decomposition
 - Handles async operations
 
+### Memory Systems
+
+Three-tier memory architecture:
+
+- **Working Memory**: Shared vector storage (always enabled)
+- **Buffer Memory**: Recent conversation context (always enabled)
+- **Persistent Memory**: Long-term SQLite/PostgreSQL storage
+
+**Default Persistent Memory**: When `memory.persistent` is omitted from a formation, SQLite is automatically enabled with `memory.db` created in the formation directory. To disable:
+
+```yaml
+memory:
+  persistent: false  # Explicitly disable
+```
+
+Or to disable while preserving config for later:
+
+```yaml
+memory:
+  persistent:
+    enabled: false
+    connection_string: "postgresql://..."  # Preserved for later use
+```
+
 ### Services
 
 All runtime services (memory, MCP, A2A, LLM) are initialized during formation loading and available to agents.

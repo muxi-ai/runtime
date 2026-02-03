@@ -1425,10 +1425,17 @@ class FormationValidator:
             memory_config["buffer"] = {"size": 10, "multiplier": 10, "vector_search": True}
 
         # Validate persistent memory configuration
+        # Accepts: omitted (default SQLite), false (disabled), { enabled: false } (disabled), { ... }
         if "persistent" in memory_config:
             persistent_config = memory_config["persistent"]
-            if not isinstance(persistent_config, dict):
-                self.result.add_error("Memory persistent configuration must be a dictionary")
+            if persistent_config is False:
+                pass  # Valid shorthand for disabled
+            elif not isinstance(persistent_config, dict):
+                self.result.add_error(
+                    "Memory persistent configuration must be a dictionary or false"
+                )
+            elif persistent_config.get("enabled") is False:
+                pass  # Valid - disabled but config preserved
             else:
                 self._validate_persistent_memory_config(persistent_config)
 
@@ -2538,15 +2545,16 @@ def validate_user_credentials_requirements(
 
     # Check if any part of config uses user credentials
     if contains_user_credentials(config):
-        # Ensure persistent memory is configured
+        # Ensure persistent memory is not explicitly disabled
         memory_config = config.get("memory", {})
-        persistent = memory_config.get("persistent", {})
+        persistent = memory_config.get("persistent")
 
-        # Check if persistent memory is configured using the current schema
-        if not persistent or not persistent.get("connection_string"):
+        # Check if persistent memory is explicitly disabled
+        # Default (omitted or empty) = SQLite enabled, which is fine
+        if persistent is False or (isinstance(persistent, dict) and persistent.get("enabled") is False):
             raise ValueError(
                 "User credentials (${{ user.credentials.* }}) require persistent database storage. "
-                "Please configure memory.persistent with a connection_string in your formation."
+                "Persistent memory is explicitly disabled. Remove 'persistent: false' or set 'enabled: true'."
             )
 
     # Check MCP servers for user credentials that need initialization secrets
@@ -2645,13 +2653,14 @@ async def validate_user_credentials_requirements_async(
     if contains_user_credentials(config):
         # Get memory configuration
         memory = config.get("memory", {})
-        persistent = memory.get("persistent", {})
+        persistent = memory.get("persistent")
 
-        # Check if persistent memory is configured using the current schema
-        if not persistent or not persistent.get("connection_string"):
+        # Check if persistent memory is explicitly disabled
+        # Default (omitted or empty) = SQLite enabled, which is fine
+        if persistent is False or (isinstance(persistent, dict) and persistent.get("enabled") is False):
             raise ValueError(
                 "User credentials (${{ user.credentials.* }}) require persistent database storage. "
-                "Please configure memory.persistent with a connection_string in your formation."
+                "Persistent memory is explicitly disabled. Remove 'persistent: false' or set 'enabled: true'."
             )
 
     # Check MCP servers for user credentials that need initialization secrets

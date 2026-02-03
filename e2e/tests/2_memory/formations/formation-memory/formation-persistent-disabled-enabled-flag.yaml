@@ -1,0 +1,41 @@
+schema: "1.0.0"
+id: "persistent-disabled-enabled-flag-test"
+description: "Formation with persistent memory disabled via enabled flag (preserves config)"
+
+runtime:
+  built_in_mcps: false
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 500
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+
+agents:
+  - id: "basic-agent"
+    name: "Basic Agent"
+    description: "Agent for testing disabled persistent memory"
+    model: "openai/gpt-4o-mini"
+    specialty: "general"
+    system_message: |
+      You are a helpful assistant. Answer questions concisely.
+
+memory:
+  buffer:
+    size: 10
+  working:
+    max_memory_mb: 10
+  persistent:
+    enabled: false  # Disable but preserve config for later
+    connection_string: "${{ secrets.DATABASE_URL }}"  # Placeholder - not used when disabled
+    embedding_model: "text-embedding-ada-002"
+
+overlord:
+  agent_assignment:
+    strategy: "simple"
+  config:
+    response:
+      timeout: 30
