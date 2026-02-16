@@ -144,11 +144,7 @@ from ...utils.user_dirs import set_formation_id
 from ..agents import Agent
 
 # Async Orchestration Components
-from ..background import (
-    RequestTracker,
-    TimeEstimator,
-    WebhookManager,
-)
+from ..background import RequestTracker, TimeEstimator, WebhookManager
 from ..background.cancellation import RequestCancelledException
 from ..background.request_tracker import RequestStatus
 from ..credentials import CredentialHandler, CredentialResolver
@@ -159,11 +155,7 @@ from ..documents.experience import (
 )
 
 # Document Processing Components
-from ..documents.storage import (
-    DocumentChunkManager,
-    DocumentMetadataStore,
-    DocumentReferenceSystem,
-)
+from ..documents.storage import DocumentChunkManager, DocumentMetadataStore, DocumentReferenceSystem
 from ..documents.workflow import (
     DocumentContextPreserver,
     DocumentCrossReferenceManager,
@@ -1936,7 +1928,7 @@ class Overlord:
         return results
 
     def _load_default_persona(self) -> None:
-        """Load the default persona from formation config or system_persona.md file."""
+        """Load the default persona from formation config or soul.md file."""
         try:
             # First check if persona is configured in formation YAML
             overlord_config = self.formation_config.get("overlord", {})
@@ -1949,7 +1941,7 @@ class Overlord:
                 from ..prompts.loader import PromptLoader
 
                 try:
-                    self._default_persona = PromptLoader.get("system_persona.md").strip()
+                    self._default_persona = PromptLoader.get("soul.md").strip()
                 except KeyError:
                     # Fallback if file doesn't exist
                     fallback = "You are a friendly and helpful assistant."
@@ -1957,7 +1949,7 @@ class Overlord:
                     observability.observe(
                         event_type=observability.ErrorEvents.PERSONA_FILE_MISSING,
                         level=observability.EventLevel.WARNING,
-                        data={"file": "system_persona.md"},
+                        data={"file": "soul.md"},
                         description="Persona file not found, using fallback persona",
                     )
 
@@ -7153,10 +7145,7 @@ Agent response: {raw_response}"""
             await self.active_agent_tracker.mark_agent_idle(agent_name)
 
             # Check if this is a credential error that needs clarification
-            from ..credentials import (
-                AmbiguousCredentialError,
-                MissingCredentialError,
-            )
+            from ..credentials import AmbiguousCredentialError, MissingCredentialError
 
             # Extract the actual user message from formatted context if needed (for credential errors)
             actual_message_for_credential = message

@@ -21,23 +21,23 @@ All system prompts are stored as markdown files in `src/muxi/formation/prompts/`
 
 ```
 prompts/
-├── agent_planning.md              # Agent task planning
-├── clarification_analysis.md      # Clarification need detection
+├── agent_planning.md               # Agent task planning
+├── clarification_analysis.md       # Clarification need detection
 ├── clarification_context_switch.md # Context switch detection
-├── clarification_need_more.md     # Continuation check
-├── decomposition_prompt.md        # Workflow decomposition
+├── clarification_need_more.md      # Continuation check
+├── decomposition_prompt.md         # Workflow decomposition
 ├── overlord_actionability_check.md # Message actionability
-├── overlord_greeting_response.md  # Greeting responses
-├── overlord_simple_question.md    # Question classification
-├── scheduler_enhancement.md       # Task enhancement
-├── scheduler_prompt_rewriter.md   # Scheduling pattern removal
-├── scheduler_task_comparison.md   # Task similarity
-├── sop_guide_mode.md             # SOP guide instructions
-├── sop_template_mode.md          # SOP template instructions
-├── system_persona.md             # Default system persona
-├── tool_parameter_inference.md   # Tool parameter extraction
-├── workflow_request_analysis.md  # Request complexity analysis
-└── loader.py                     # PromptLoader utility
+├── overlord_greeting_response.md   # Greeting responses
+├── overlord_simple_question.md     # Question classification
+├── scheduler_enhancement.md        # Task enhancement
+├── scheduler_prompt_rewriter.md    # Scheduling pattern removal
+├── scheduler_task_comparison.md    # Task similarity
+├── sop_guide_mode.md               # SOP guide instructions
+├── sop_template_mode.md            # SOP template instructions
+├── soul.md                         # Default system persona
+├── tool_parameter_inference.md     # Tool parameter extraction
+├── workflow_request_analysis.md    # Request complexity analysis
+└── loader.py                       # PromptLoader utility
 ```
 
 ## Usage
@@ -48,7 +48,7 @@ prompts/
 from muxi.runtime.formation.prompts.loader import PromptLoader
 
 # Get a prompt without variables
-prompt = PromptLoader.get('system_persona.md')
+prompt = PromptLoader.get('soul.md')
 
 # Get a prompt with variable substitution
 prompt = PromptLoader.get(
