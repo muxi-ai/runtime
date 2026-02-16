@@ -49,8 +49,8 @@ class APIEventType(str, Enum):
     # Configuration events
     OVERLORD_CONFIG_RETRIEVED = "overlord.config.retrieved"
     OVERLORD_CONFIG_UPDATED = "overlord.config.updated"
-    PERSONA_RETRIEVED = "persona.retrieved"
-    PERSONA_UPDATED = "persona.updated"
+    SOUL_RETRIEVED = "soul.retrieved"
+    SOUL_UPDATED = "soul.updated"
     MCP_DEFAULTS_RETRIEVED = "mcp.defaults.retrieved"
     MCP_DEFAULTS_UPDATED = "mcp.defaults.updated"
     MCP_SERVER_LIST = "mcp.server.list"
@@ -168,7 +168,7 @@ class APIObjectType(str, Enum):
 
     # Configuration objects
     OVERLORD_CONFIG = "overlord_config"
-    PERSONA = "persona"
+    SOUL = "soul"
     MCP_DEFAULTS = "mcp_defaults"
     MCP_SERVER = "mcp_server"
     MCP_SERVER_LIST = "mcp_server_list"

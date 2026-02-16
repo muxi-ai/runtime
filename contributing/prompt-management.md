@@ -34,7 +34,7 @@ prompts/
 ├── scheduler_task_comparison.md    # Task similarity
 ├── sop_guide_mode.md               # SOP guide instructions
 ├── sop_template_mode.md            # SOP template instructions
-├── soul.md                         # Default system persona
+├── soul.md                         # Default overlord soul
 ├── tool_parameter_inference.md     # Tool parameter extraction
 ├── workflow_request_analysis.md    # Request complexity analysis
 └── loader.py                       # PromptLoader utility

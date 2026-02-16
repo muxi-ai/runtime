@@ -24,7 +24,7 @@
 #    - Capability-based intelligent agent selection and routing
 #    - Multi-agent conversation orchestration with context preservation
 #    - Graceful fallback mechanisms for agent unavailability
-#    - Consistent overlord persona across all interactions
+#    - Consistent overlord soul across all interactions
 #
 # 3. Centralized Memory Systems
 #    - Shared buffer memory for conversation context across agents
@@ -809,8 +809,8 @@ class Overlord:
         self._model_cache: Dict[str, LLM] = {}
         self._capability_models: Dict[str, str] = {}
 
-        # Load default persona from file (intelligence concerns)
-        self._load_default_persona()
+        # Load overlord soul (intelligence concerns)
+        self._load_soul()
 
         # ===================================================================
         # POST-INITIALIZATION SETUP
@@ -1927,30 +1927,44 @@ class Overlord:
 
         return results
 
-    def _load_default_persona(self) -> None:
-        """Load the default persona from formation config or soul.md file."""
-        try:
-            # First check if persona is configured in formation YAML
-            overlord_config = self.formation_config.get("overlord", {})
-            configured_persona = overlord_config.get("persona")
+    def _load_soul(self) -> None:
+        """Load the overlord soul from SOUL.md, inline config, or built-in default.
 
-            if configured_persona:
-                self._default_persona = configured_persona
+        Precedence: SOUL.md > soul.md > overlord.soul (inline) > built-in soul.md
+        """
+        try:
+            overlord_config = self.formation_config.get("overlord", {})
+            configured_soul = overlord_config.get("soul")
+
+            # Check for SOUL.md or soul.md next to formation file
+            formation_dir = self._configured_services.get("formation_path")
+            soul_file_path = None
+            if formation_dir:
+                for candidate in ("SOUL.md", "soul.md"):
+                    path = os.path.join(formation_dir, candidate)
+                    if os.path.isfile(path):
+                        soul_file_path = path
+                        break
+
+            if soul_file_path:
+                with open(soul_file_path, "r") as f:
+                    self._default_persona = f.read().strip()
+            elif configured_soul:
+                self._default_persona = configured_soul
             else:
-                # Load from PromptLoader
+                # Load built-in default from PromptLoader
                 from ..prompts.loader import PromptLoader
 
                 try:
                     self._default_persona = PromptLoader.get("soul.md").strip()
                 except KeyError:
-                    # Fallback if file doesn't exist
                     fallback = "You are a friendly and helpful assistant."
                     self._default_persona = fallback
                     observability.observe(
-                        event_type=observability.ErrorEvents.PERSONA_FILE_MISSING,
+                        event_type=observability.ErrorEvents.SOUL_FILE_MISSING,
                         level=observability.EventLevel.WARNING,
                         data={"file": "soul.md"},
-                        description="Persona file not found, using fallback persona",
+                        description="Soul file not found, using fallback",
                     )
 
             # Append multilingual instruction
@@ -1959,7 +1973,6 @@ class Overlord:
             )
 
         except Exception as e:
-            # Fallback if there's an error reading the file
             fallback = (
                 "You are a friendly and helpful assistant.\n\n"
                 "IMPORTANT: Always reply in the same language as the user's original request."
@@ -1971,9 +1984,9 @@ class Overlord:
                 data={
                     "error_type": type(e).__name__,
                     "error": str(e),
-                    "component": "persona_loader",
+                    "component": "soul_loader",
                 },
-                description="Failed to load persona file, using fallback",
+                description="Failed to load soul, using fallback",
             )
 
     async def _is_actionable_message(self, message: str) -> bool:
@@ -2562,9 +2575,9 @@ Agent response: {raw_response}"""
             # Get overlord configuration from formation config
             overlord_config = self.formation_config.get("overlord", {})
 
-            # Set custom persona if provided
-            overlord_persona = overlord_config.get("persona")
-            self.routing_persona = overlord_persona
+            # Set custom soul if provided
+            overlord_soul = overlord_config.get("soul")
+            self.routing_persona = overlord_soul
 
             # Get overlord.llm config structure
             llm_config = overlord_config.get("llm", {})

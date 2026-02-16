@@ -24,7 +24,7 @@ async def get_overlord_config(request: Request) -> JSONResponse:
     Get complete overlord configuration.
 
     Returns:
-        Full overlord configuration per API spec including persona, llm, caching,
+        Full overlord configuration per API spec including soul, llm, caching,
         response, workflow, and clarification settings.
     """
     formation = request.app.state.formation
@@ -35,7 +35,7 @@ async def get_overlord_config(request: Request) -> JSONResponse:
 
     # Build overlord config per API spec structure
     overlord_config = {
-        "persona": overlord_raw.get("persona", ""),
+        "soul": overlord_raw.get("soul", ""),
         "llm": overlord_raw.get("llm", {}),
         "caching": llm_config.get("settings", {}).get("caching", {"enabled": True, "ttl": 3600}),
         "response": overlord_raw.get(
@@ -85,23 +85,23 @@ async def get_overlord_config(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.get("/overlord/persona", response_model=APIResponse)
-async def get_overlord_persona(request: Request) -> JSONResponse:
+@router.get("/overlord/soul", response_model=APIResponse)
+async def get_overlord_soul(request: Request) -> JSONResponse:
     """
-    Get overlord persona configuration.
+    Get overlord soul configuration.
 
     Returns:
-        Persona string from overlord configuration
+        Soul string from overlord configuration
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    persona = formation.config.get("overlord", {}).get("persona", "")
+    soul = formation.config.get("overlord", {}).get("soul", "")
 
     response = create_success_response(
-        APIObjectType.PERSONA,
-        APIEventType.PERSONA_RETRIEVED,
-        {"persona": persona},
+        APIObjectType.SOUL,
+        APIEventType.SOUL_RETRIEVED,
+        {"soul": soul},
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)

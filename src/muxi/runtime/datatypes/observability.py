@@ -1228,8 +1228,8 @@ class ErrorEvents(Enum):
     THUMBNAIL_GENERATION_FAILED = "error.thumbnail.generation.failed"
     # When document thumbnail generation fails
 
-    PERSONA_FILE_MISSING = "error.persona.file.missing"
-    # When agent persona configuration file is missing
+    SOUL_FILE_MISSING = "error.soul.file.missing"
+    # When overlord soul file is missing
 
     SECRET_INTERPOLATION_FAILED = "error.secret.interpolation.failed"
     # When secret value interpolation in configuration fails

@@ -11,7 +11,7 @@ llm:
 
 # Overlord configuration
 overlord:
-  persona: |
+  soul: |
     You are a helpful AI assistant for testing topic extraction.
 
   # Workflow configuration - REQUIRED for topic tagging

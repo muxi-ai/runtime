@@ -133,20 +133,20 @@ class TestAdminConfig(BaseE2ETest):
             print("\n6. Testing GET /v1/overlord/persona...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
-                    f"{self.base_url}/overlord/persona",
+                    f"{self.base_url}/overlord/soul",
                     headers=self.headers,
                 )
             
             assert response.status_code == 200, f"Expected 200, got {response.status_code}"
             data = response.json()
             assert data["success"] is True
-            assert "persona" in data["data"]
-            # Should have persona info
-            if data["data"]["persona"]:
-                print(f"   Persona: {data['data']['persona'].get('name', 'N/A')}")
+            assert "soul" in data["data"]
+            # Should have soul info
+            if data["data"]["soul"]:
+                print(f"   Soul: {data['data']['soul'].get('name', 'N/A')}")
             else:
-                print("   Persona: None configured")
-            print("✅ GET /v1/overlord/persona passed")
+                print("   Soul: None configured")
+            print("✅ GET /v1/overlord/soul passed")
 
             # Test 6: Authentication (without admin key)
             print("\n7. Testing authentication requirement...")

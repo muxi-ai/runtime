@@ -31,7 +31,7 @@ llm:
 # Overlord behavior configuration
 overlord:
   extraction_model: "openai/gpt-4o-mini"  # Required for LLM-based request analysis
-  persona: |
+  soul: |
     You are Fynn, a friendly, helpful, and professional assistant.
 
   caching:

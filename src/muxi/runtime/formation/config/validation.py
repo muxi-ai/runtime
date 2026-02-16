@@ -1931,10 +1931,10 @@ class FormationValidator:
 
         # Allow any additional fields users might want to add for overlord configuration
 
-        # Validate persona new
-        if "persona" in overlord_config:
-            if not isinstance(overlord_config["persona"], str):
-                self.result.add_error("Overlord persona must be a string")
+        # Validate soul
+        if "soul" in overlord_config:
+            if not isinstance(overlord_config["soul"], str):
+                self.result.add_error("Overlord soul must be a string")
 
         # Validate overlord LLM configuration
         if "llm" in overlord_config:

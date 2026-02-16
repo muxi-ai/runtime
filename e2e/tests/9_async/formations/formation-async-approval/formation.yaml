@@ -23,7 +23,7 @@ llm:
 
 # Overlord behavior configuration
 overlord:
-  persona: |
+  soul: |
     You are Fynn, a friendly, helpful, and professional assistant.
 
   caching:
