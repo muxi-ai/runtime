@@ -16,11 +16,11 @@ Security features:
 import ast
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
-import threading
-from datetime import datetime
+import uuid
 from pathlib import Path
 from typing import Optional, Set
 
@@ -88,15 +88,9 @@ ALLOWED_IMPORTS: Set[str] = {
 # Maximum execution time in seconds
 MAX_EXECUTION_TIME = 30
 
-# Maximum output directory size in MB
-MAX_OUTPUT_SIZE_MB = 100
-
 # Maximum memory limit for subprocess (in bytes)
 MAX_MEMORY_MB = 512
 MAX_MEMORY_BYTES = MAX_MEMORY_MB * 1024 * 1024
-
-# Thread lock for safe file cleanup operations
-_cleanup_lock = threading.Lock()
 
 
 class ArtifactService:
@@ -110,24 +104,21 @@ class ArtifactService:
 
     def __init__(self):
         """Initialize the artifact service."""
-        self.output_dir = self._get_output_directory()
-        self._execution_counter = 0
-        self._counter_lock = threading.Lock()
+        self._base_dir = Path(tempfile.gettempdir()) / "muxi_artifacts"
+        self._base_dir.mkdir(exist_ok=True)
 
-    def _get_output_directory(self) -> Path:
-        """Get or create the output directory for generated files."""
-        # Use system temp directory for file generation
-        temp_dir = Path(tempfile.gettempdir())
-        output_dir = temp_dir / "muxi_artifacts"
-        output_dir.mkdir(exist_ok=True)
-        return output_dir
+    def _create_execution_dir(self) -> Path:
+        """Create an isolated per-execution directory with an unpredictable name."""
+        exec_dir = self._base_dir / f"exec_{uuid.uuid4().hex}"
+        exec_dir.mkdir(mode=0o700, exist_ok=False)
+        return exec_dir
 
-    def _get_next_execution_id(self) -> str:
-        """Generate a unique execution ID."""
-        with self._counter_lock:
-            self._execution_counter += 1
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            return f"exe_{timestamp}_{self._execution_counter:04d}"
+    def _cleanup_execution_dir(self, exec_dir: Path) -> None:
+        """Remove an execution directory and all its contents."""
+        try:
+            shutil.rmtree(exec_dir, ignore_errors=True)
+        except Exception:
+            pass
 
     def _validate_code(self, code: str) -> tuple[bool, Optional[str]]:
         """
@@ -240,33 +231,6 @@ class ArtifactService:
 
         return True, None
 
-    def _cleanup_old_files(self, max_size_mb: int = MAX_OUTPUT_SIZE_MB):
-        """
-        Clean up old files if output directory is too large.
-
-        Args:
-            max_size_mb: Maximum size in megabytes
-        """
-        with _cleanup_lock:
-            # Calculate directory size
-            total_size = sum(f.stat().st_size for f in self.output_dir.rglob("*") if f.is_file())
-            total_size_mb = total_size / (1024 * 1024)
-
-            if total_size_mb > max_size_mb:
-                # Remove oldest files until under limit
-                files = sorted(self.output_dir.rglob("*"), key=lambda f: f.stat().st_mtime)
-                for file in files:
-                    if file.is_file():
-                        try:
-                            file_size = file.stat().st_size
-                            file.unlink()
-                            total_size_mb -= file_size / (1024 * 1024)
-                            if total_size_mb <= max_size_mb * 0.8:  # Leave 20% buffer
-                                break
-                        except Exception:
-                            # File may have been deleted by another thread
-                            pass
-
     def _get_mime_type(self, file_path: Path) -> str:
         """
         Determine MIME type based on file extension.
@@ -336,11 +300,8 @@ class ArtifactService:
         if not is_valid:
             raise ValueError(error_msg)
 
-        # Prepare output directory
-        self._cleanup_old_files()
-
-        # Get unique execution ID
-        execution_id = self._get_next_execution_id()
+        # Create isolated per-execution directory (unpredictable UUID name, mode 700)
+        exec_dir = self._create_execution_dir()
 
         # Modified code to track generated files
         tracking_code = f'''
@@ -362,7 +323,7 @@ open = _tracking_open
 
 def _save_file_list():
     """Save list of generated files on exit."""
-    tracking_file = Path(".muxi_tracking_{execution_id}.json")
+    tracking_file = Path(".muxi_tracking.json")
     with _original_open(tracking_file, 'w') as f:
         json.dump({{"files": _generated_files}}, f)
 
@@ -376,29 +337,24 @@ matplotlib.use('Agg')  # Use non-interactive backend
 {code}
 '''
 
-        # Write to temporary file
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-            f.write(tracking_code)
-            tmp_file_path = f.name
+        # Write to temporary file inside the execution directory
+        tmp_file_path = exec_dir / "_script.py"
+        tmp_file_path.write_text(tracking_code)
 
         try:
-            # Execute the code in the output directory with limitations
-            # Note: ulimit -v doesn't work on macOS, so we make it optional
-            # The timeout will still protect against runaway processes
+            # Execute the code in the isolated directory
             if sys.platform == "linux":
-                # Only apply memory limit on Linux where ulimit -v works reliably
                 memory_limit_cmd = f"ulimit -v {MAX_MEMORY_BYTES // 1024} 2>/dev/null; "
                 cmd = f"{memory_limit_cmd}{sys.executable} {tmp_file_path}"
                 use_shell = True
             else:
-                # On macOS and Windows, run without memory limit
-                cmd = [sys.executable, tmp_file_path]
+                cmd = [sys.executable, str(tmp_file_path)]
                 use_shell = False
 
             result = subprocess.run(
                 cmd,
                 shell=use_shell,
-                cwd=str(self.output_dir),
+                cwd=str(exec_dir),
                 capture_output=True,
                 text=True,
                 timeout=MAX_EXECUTION_TIME,
@@ -406,7 +362,6 @@ matplotlib.use('Agg')  # Use non-interactive backend
 
             if result.returncode != 0:
                 error_msg = result.stderr if result.stderr else "Unknown error"
-                # Provide more helpful error messages for common issues
                 if "ModuleNotFoundError" in error_msg:
                     missing_module = error_msg.split("'")[1]
                     error_msg = (
@@ -420,7 +375,7 @@ matplotlib.use('Agg')  # Use non-interactive backend
                 raise RuntimeError(f"Execution failed: {error_msg}")
 
             # Check tracking file for generated files
-            tracking_file = self.output_dir / f".muxi_tracking_{execution_id}.json"
+            tracking_file = exec_dir / ".muxi_tracking.json"
             generated_files = []
 
             if tracking_file.exists():
@@ -428,32 +383,30 @@ matplotlib.use('Agg')  # Use non-interactive backend
                     with open(tracking_file) as f:
                         tracking_data = json.load(f)
                         generated_files = [Path(p) for p in tracking_data.get("files", [])]
-                    tracking_file.unlink()  # Clean up tracking file
+                    tracking_file.unlink()
                 except Exception:
                     pass
 
-            # If no files tracked, look for new files in output directory
+            # Fallback: find output files in the execution directory
             if not generated_files:
-                # List all files in output directory that aren't tracking files
+                internal_files = {"_script.py", ".muxi_tracking.json"}
                 all_files = [
                     f
-                    for f in self.output_dir.glob("*")
-                    if f.is_file() and not f.name.startswith(".muxi_tracking_")
+                    for f in exec_dir.glob("*")
+                    if f.is_file() and f.name not in internal_files
                 ]
                 if all_files:
-                    # Sort by modification time and take the newest
                     generated_files = sorted(
                         all_files, key=lambda f: f.stat().st_mtime, reverse=True
                     )
 
             if not generated_files:
-                # Check if there was any output that might indicate what went wrong
                 if result.stdout:
                     raise RuntimeError(f"No file was generated. Output: {result.stdout}")
                 else:
                     raise RuntimeError("No file was generated")
 
-            # Return the newest file (or the first one if tracked)
+            # Pick the output file
             if len(generated_files) == 1:
                 newest_file = generated_files[0]
             else:
@@ -461,7 +414,7 @@ matplotlib.use('Agg')  # Use non-interactive backend
                     generated_files, key=lambda f: f.stat().st_mtime if f.exists() else 0
                 )
 
-            # Create complete artifact from the generated file
+            # Create artifact before cleaning up the execution directory
             artifact_metadata = {
                 "message": f"File generated successfully: {newest_file.name}",
                 "tool_name": "generate_file",
@@ -473,7 +426,6 @@ matplotlib.use('Agg')  # Use non-interactive backend
             if artifact:
                 return artifact
             else:
-                # Fallback if artifact creation fails
                 raise RuntimeError(
                     f"Failed to create artifact from generated file: {newest_file.name}"
                 )
@@ -482,18 +434,14 @@ matplotlib.use('Agg')  # Use non-interactive backend
             raise RuntimeError(f"Code execution timed out after {MAX_EXECUTION_TIME} seconds")
 
         except Exception as e:
-            # Re-raise with cleaner error message
             if isinstance(e, (RuntimeError, ValueError)):
                 raise
             else:
                 raise RuntimeError(f"Unexpected error: {str(e)}")
 
         finally:
-            # Clean up temporary script
-            try:
-                os.unlink(tmp_file_path)
-            except Exception:
-                pass
+            # Always clean up the isolated execution directory
+            self._cleanup_execution_dir(exec_dir)
 
 
 # Singleton instance
