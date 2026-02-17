@@ -15,7 +15,6 @@ Security features:
 
 import ast
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -391,9 +390,7 @@ matplotlib.use('Agg')  # Use non-interactive backend
             if not generated_files:
                 internal_files = {"_script.py", ".muxi_tracking.json"}
                 all_files = [
-                    f
-                    for f in exec_dir.glob("*")
-                    if f.is_file() and f.name not in internal_files
+                    f for f in exec_dir.glob("*") if f.is_file() and f.name not in internal_files
                 ]
                 if all_files:
                     generated_files = sorted(
