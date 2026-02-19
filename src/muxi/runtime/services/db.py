@@ -325,6 +325,24 @@ class DatabaseManager:
         # Convert connection string to async driver format
         async_connection_string = self._convert_to_async_connection_string()
 
+        # Fail fast if async driver is missing (prevents silent deadlock)
+        if self.database_type == "sqlite":
+            try:
+                import aiosqlite  # noqa: F401
+            except ImportError:
+                raise ImportError(
+                    "aiosqlite is required for async SQLite support. "
+                    "Install it with: pip install aiosqlite"
+                )
+        elif self.database_type == "postgresql":
+            try:
+                import asyncpg  # noqa: F401
+            except ImportError:
+                raise ImportError(
+                    "asyncpg is required for async PostgreSQL support. "
+                    "Install it with: pip install asyncpg"
+                )
+
         if self.database_type == "postgresql":
             # PostgreSQL async configuration with connection pooling
             # Higher limits than sync due to async concurrency patterns

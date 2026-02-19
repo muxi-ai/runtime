@@ -488,7 +488,6 @@ class Overlord:
                         encryption_key=encryption_key,  # Optional custom key
                         encryption_salt=encryption_salt,  # Optional custom salt
                     )
-                    # REMOVE - line 482 (user: feels pointless)
                 except ImportError:
                     # Fall back to non-encrypted resolver if cryptography not available
                     self.credential_resolver = CredentialResolver(
