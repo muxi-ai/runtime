@@ -186,6 +186,15 @@ wheels = [
 ]
 
 [[package]]
+name = "aiosqlite"
+version = "0.22.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4e/8a/64761f4005f17809769d23e518d915db74e6310474e733e3593cfc854ef1/aiosqlite-0.22.1.tar.gz", hash = "sha256:043e0bd78d32888c0a9ca90fc788b38796843360c855a7262a532813133a0650", size = 14821, upload-time = "2025-12-23T19:25:43.997Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/b7/e3bf5133d697a08128598c8d0abc5e16377b51465a33756de24fa7dee953/aiosqlite-0.22.1-py3-none-any.whl", hash = "sha256:21c002eb13823fad740196c5a2e9d8e62f6243bd9e7e4a1f87fb5e44ecb4fceb", size = 17405, upload-time = "2025-12-23T19:25:42.139Z" },
+]
+
+[[package]]
 name = "altair"
 version = "6.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3140,6 +3149,7 @@ dependencies = [
     { name = "a2a-sdk" },
     { name = "aiofiles" },
     { name = "aiohttp" },
+    { name = "aiosqlite" },
     { name = "altair" },
     { name = "anyio" },
     { name = "beautifulsoup4" },
@@ -3168,7 +3178,7 @@ dependencies = [
     { name = "nltk" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "onellm" },
+    { name = "onellm", extra = ["cache"] },
     { name = "openai" },
     { name = "openpyxl" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -3232,6 +3242,7 @@ requires-dist = [
     { name = "a2a-sdk", specifier = ">=0.3" },
     { name = "aiofiles", specifier = ">=23.2.0" },
     { name = "aiohttp", specifier = ">=3.13.3" },
+    { name = "aiosqlite", specifier = ">=0.19.0" },
     { name = "altair", specifier = ">=5.0.0" },
     { name = "anyio", specifier = ">=3.7.0" },
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
@@ -3264,7 +3275,7 @@ requires-dist = [
     { name = "nanoid", specifier = ">=2.0.0" },
     { name = "nltk", specifier = ">=3.8.0" },
     { name = "numpy", specifier = ">=1.24.0" },
-    { name = "onellm", specifier = ">=0.20260130.0" },
+    { name = "onellm", extras = ["cache"], specifier = ">=0.20260130.0" },
     { name = "openai", specifier = ">=1.3.0" },
     { name = "openpyxl", specifier = ">=3.1.0" },
     { name = "pandas", specifier = ">=2.0.0" },
@@ -3765,6 +3776,12 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/fb/ed/2734d023a35f9152d56ad920b6ba019daa08886e48b3064b5ed31cf5af5f/onellm-0.20260130.0.tar.gz", hash = "sha256:3e60cab2ba5b47e212256aaf03bb07b9e659616ac91bac13dc72a07bd626fd6b", size = 153186, upload-time = "2026-01-30T14:53:23.185Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5c/79/22b006e332839fe5bf0c23fbd5f17285368a2e6ed1583069212796037937/onellm-0.20260130.0-py3-none-any.whl", hash = "sha256:ef4f3c44e19aa3989c672987213008d027f91617e5d808edf62ca17f8cb51fb5", size = 192312, upload-time = "2026-01-30T14:53:21.294Z" },
+]
+
+[package.optional-dependencies]
+cache = [
+    { name = "faiss-cpu" },
+    { name = "sentence-transformers" },
 ]
 
 [[package]]
@@ -4702,14 +4719,14 @@ wheels = [
 
 [[package]]
 name = "pypdf"
-version = "6.6.2"
+version = "6.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b8/bb/a44bab1ac3c54dbcf653d7b8bcdee93dddb2d3bf025a3912cacb8149a2f2/pypdf-6.6.2.tar.gz", hash = "sha256:0a3ea3b3303982333404e22d8f75d7b3144f9cf4b2970b96856391a516f9f016", size = 5281850, upload-time = "2026-01-26T11:57:55.964Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ff/63/3437c4363483f2a04000a48f1cd48c40097f69d580363712fa8b0b4afe45/pypdf-6.7.1.tar.gz", hash = "sha256:6b7a63be5563a0a35d54c6d6b550d75c00b8ccf36384be96365355e296e6b3b0", size = 5302208, upload-time = "2026-02-17T17:00:48.88Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7d/be/549aaf1dfa4ab4aed29b09703d2fb02c4366fc1f05e880948c296c5764b9/pypdf-6.6.2-py3-none-any.whl", hash = "sha256:44c0c9811cfb3b83b28f1c3d054531d5b8b81abaedee0d8cb403650d023832ba", size = 329132, upload-time = "2026-01-26T11:57:54.099Z" },
+    { url = "https://files.pythonhosted.org/packages/68/77/38bd7744bb9e06d465b0c23879e6d2c187d93a383f8fa485c862822bb8a3/pypdf-6.7.1-py3-none-any.whl", hash = "sha256:a02ccbb06463f7c334ce1612e91b3e68a8e827f3cee100b9941771e6066b094e", size = 331048, upload-time = "2026-02-17T17:00:46.991Z" },
 ]
 
 [[package]]
@@ -5724,7 +5741,7 @@ wheels = [
 
 [[package]]
 name = "sentence-transformers"
-version = "5.2.1"
+version = "5.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -5739,9 +5756,9 @@ dependencies = [
     { name = "transformers" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/63/4d/64abf2856ffb704bcaea89a781a081187cc602c1fc7cd9ef1fc8ebf567be/sentence_transformers-5.2.1.tar.gz", hash = "sha256:9c676411becbf2a0e7515501788a7f84b99ca2dcc124ce392639bcdda4a256ff", size = 381393, upload-time = "2026-01-26T14:48:05.265Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5b/30/21664028fc0776eb1ca024879480bbbab36f02923a8ff9e4cae5a150fa35/sentence_transformers-5.2.3.tar.gz", hash = "sha256:3cd3044e1f3fe859b6a1b66336aac502eaae5d3dd7d5c8fc237f37fbf58137c7", size = 381623, upload-time = "2026-02-17T14:05:20.238Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bf/2c/a75cc1e2b48914fe709a6aec3799ceeb0658ec87058d2e3f950d54cc1d06/sentence_transformers-5.2.1-py3-none-any.whl", hash = "sha256:388483e174223958ae71b6888c49a6cc1480306a12655a690b605c7a176162d0", size = 493822, upload-time = "2026-01-26T14:48:03.881Z" },
+    { url = "https://files.pythonhosted.org/packages/46/9f/dba4b3e18ebbe1eaa29d9f1764fbc7da0cd91937b83f2b7928d15c5d2d36/sentence_transformers-5.2.3-py3-none-any.whl", hash = "sha256:6437c62d4112b615ddebda362dfc16a4308d604c5b68125ed586e3e95d5b2e30", size = 494225, upload-time = "2026-02-17T14:05:18.596Z" },
 ]
 
 [[package]]
