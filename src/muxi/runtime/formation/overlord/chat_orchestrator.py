@@ -106,17 +106,39 @@ class ChatOrchestrator:
             )
 
             # Process the request - overlord._process_sync_chat will handle all streaming events
-            result = await self._process_sync_chat(
-                message=enhanced_message,
-                agent_name=agent_name,
-                user_id=user_id,
-                session_id=session_id,
-                request_id=request_id,
-                original_message=original_message,
-                use_async=use_async,
-                webhook_url=webhook_url,
-                bypass_workflow_approval=bypass_workflow_approval,
-            )
+            try:
+                result = await self._process_sync_chat(
+                    message=enhanced_message,
+                    agent_name=agent_name,
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                    original_message=original_message,
+                    use_async=use_async,
+                    webhook_url=webhook_url,
+                    bypass_workflow_approval=bypass_workflow_approval,
+                )
+            except Exception as exc:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "error": str(exc),
+                        "error_type": type(exc).__name__,
+                        "request_id": request_id,
+                    },
+                    description=f"Chat processing failed: {exc}",
+                )
+                streaming.stream(
+                    "completed",
+                    f"I'm sorry, I encountered an error processing your request: {exc}",
+                    status="error",
+                    processing_time_ms=0,
+                )
+                return MuxiResponse(
+                    role="assistant",
+                    content=f"I'm sorry, I encountered an error processing your request: {exc}",
+                )
 
             # Note: The overlord._process_sync_chat method handles all streaming events:
             # - It emits "content" events with the actual response

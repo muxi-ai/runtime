@@ -1495,6 +1495,9 @@ class Overlord:
                 data={"agent_count": 0},
                 description="No agents configured in formation",
             )
+            # Still load MUXI default agents (e.g., generalist) even when no user agents
+            await self._load_muxi_default_agents()
+            await self._set_default_agent_if_needed()
             return
 
         # Load each agent configuration
