@@ -1778,10 +1778,10 @@ class Overlord:
                 print(f"   Error: {error_msg[:200]}")
 
         print("\n   📋 TO FIX THIS:")
-        print("   1. Check that credentials are configured correctly")
-        print("   2. For Linear MCP: Ensure LINEAR_MCP_TOKEN is valid in secrets.enc")
-        print("   3. Verify the token has not expired")
-        print("   4. Regenerate token if needed")
+        print("   1. Check that the MCP server command/binary is installed and available in PATH")
+        print("   2. Verify that credentials and API tokens are configured in secrets.enc")
+        print("   3. Ensure tokens have not expired")
+        print("   4. Regenerate credentials if needed")
 
         if not is_timeout:
             print("\n   Formation cannot start with broken MCP configurations.")
