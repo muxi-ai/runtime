@@ -75,10 +75,12 @@ COPY --from=builder /install /usr/local
 COPY --from=builder /build/src ./src
 
 # Clean up to reduce image size
+# Note: numpy._core.tests is imported at runtime by numpy 2.x (for pd_NA),
+# so we must preserve it while removing other test directories.
 RUN find /usr/local -name "*.pyc" -delete \
     && find /usr/local -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local -name "*.pyo" -delete \
-    && find /usr/local -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local -name "tests" -type d -not -path "*/numpy/_core/tests" -exec rm -rf {} + 2>/dev/null || true \
     && rm -rf /root/.cache /tmp/*
 
 # Create necessary directories
