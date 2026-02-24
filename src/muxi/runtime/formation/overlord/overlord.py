@@ -2583,11 +2583,15 @@ Agent response: {raw_response}"""
 
             # Get overlord.llm config structure
             llm_config = overlord_config.get("llm", {})
+            # Fall back to the formation's text model when no overlord-specific model is set
+            _text_cfg = self._capability_models.get("text", {})
+            _default_routing_model = _text_cfg.get("model", "openai/gpt-4o-mini")
+            _default_routing_api_key = _text_cfg.get("api_key")
             self.routing_model = await self.create_model(
-                model=llm_config.get("model", "openai/gpt-4o-mini"),
+                model=llm_config.get("model", _default_routing_model),
                 temperature=llm_config.get("settings", {}).get("temperature", 0.2),
                 max_tokens=llm_config.get("settings", {}).get("max_tokens", 2000),
-                api_key=llm_config.get("api_key"),
+                api_key=llm_config.get("api_key") or _default_routing_api_key,
             )
 
             # Configure overlord behavior from flattened structure
@@ -5663,6 +5667,54 @@ Agent response: {raw_response}"""
         if request_id and self.request_tracker.is_cancelled(request_id):
             await self.request_tracker.clear_cancelled(request_id)
             raise RequestCancelledException(request_id)
+
+        # ===================================================================
+        # EARLY LLM HEALTH CHECK
+        # ===================================================================
+        # If the circuit breaker is open for the primary text model, every LLM
+        # call (actionability, routing, clarification, planning) will fail
+        # instantly, producing a cascade of silent fallbacks that results in a
+        # nonsensical response. Detect this early and return a clear error.
+        from ...services.llm.llm import _circuit_breakers
+
+        text_model_config = self._capability_models.get("text", {})
+        _text_model_name = text_model_config.get("model", "")
+        if "/" in _text_model_name:
+            _cb_provider, _cb_model = _text_model_name.split("/", 1)
+        else:
+            _cb_provider, _cb_model = "openai", _text_model_name
+        _cb_key = f"{_cb_provider}:{_cb_model}"
+        _cb = _circuit_breakers.get(_cb_key)
+        if _cb and _cb.state == "open":
+            import time as _time_mod
+
+            if _cb.last_failure_time and (_time_mod.time() - _cb.last_failure_time < _cb.timeout):
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "circuit_breaker_key": _cb_key,
+                        "failure_count": _cb.failure_count,
+                        "state": _cb.state,
+                        "request_id": request_id,
+                    },
+                    description=(
+                        f"LLM circuit breaker is open for {_cb_key}. "
+                        "Returning early with user-facing error."
+                    ),
+                )
+                error_msg = (
+                    "I'm temporarily unable to process requests due to a service "
+                    "connectivity issue. Please verify the API key configuration "
+                    "and try again in a moment."
+                )
+                streaming.stream(
+                    "completed",
+                    error_msg,
+                    status="error",
+                    processing_time_ms=int((time.time() - start_time) * 1000),
+                )
+                return MuxiResponse(role="assistant", content=error_msg)
 
         # Check if streaming is enabled for this request
         is_streaming = streaming_manager.is_streaming_enabled(request_id) if request_id else False

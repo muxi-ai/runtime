@@ -1303,17 +1303,15 @@ class Agent:
                             # Collect A2A response
                             planning_response_parts.append(a2a_response)
                         else:
-                            # A2A request failed (likely timeout)
-                            # If this was the only delegation, we should indicate the failure
+                            # A2A request failed (likely timeout or unavailable)
                             if (
                                 not my_results
                                 and len(execution_plan.get("delegate_steps", [])) == 1
                             ):
                                 planning_response_parts.append(
-                                    "I've delegated the task to an external agent, "
-                                    "but there was a delay in receiving the response. "
-                                    "The task may still be processing. "
-                                    "Please check back in a moment."
+                                    "I wasn't able to complete this request. "
+                                    "The required service is currently unavailable. "
+                                    "Please try again shortly."
                                 )
 
                 # Check if this is a simple direct response (no steps needed)

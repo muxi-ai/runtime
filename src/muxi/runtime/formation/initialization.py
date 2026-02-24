@@ -224,8 +224,12 @@ def initialize_llm_config(formation) -> None:
     # Get text model configuration for fallback
     text_model_config = formation._capability_models["text"]
 
-    # Define common capabilities that should default to text model if not configured
-    common_capabilities = ["vision", "audio", "documents", "embedding", "streaming"]
+    # Define common capabilities that should default to text model if not configured.
+    # Note: "embedding" is intentionally excluded -- buffer/working memory always
+    # uses local sentence-transformer embeddings.  The formation-level embedding
+    # capability is only used for document/knowledge uploads and must be explicitly
+    # configured if an external embedding model is desired.
+    common_capabilities = ["vision", "audio", "documents", "streaming"]
     capabilities_using_text_fallback = []
 
     # Apply text model as default for unconfigured common capabilities
@@ -371,37 +375,23 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
         mode = config.mode
         remote_config = config.remote
 
-        # Get embedding model for vector search if enabled
-        embedding_model = None
-        embedding_api_key = None
-        if vector_search:
-            embedding_model_name = _resolve_embedding_model_name(formation=formation)
-            if embedding_model_name:
-                # Pass the model name to WorkingMemory
-                # It will create the LLM instance lazily when needed
-                embedding_model = embedding_model_name
-                # Resolve API key for the embedding model's provider
-                if "/" in embedding_model_name:
-                    provider = embedding_model_name.split("/")[0]
-                    global_keys = getattr(formation, "_global_api_keys", {})
-                    embedding_api_key = global_keys.get(provider)
-            else:
-                # Disable vector search if no embedding model configured
-                vector_search = False
+        # Buffer / working memory always uses local sentence-transformer
+        # embeddings (all-MiniLM-L6-v2, 384 dims).  They are free, fast,
+        # and require no API key.  The formation-level embedding model
+        # (llm.models.embedding) is reserved for document/knowledge uploads
+        # where higher quality matters.
 
         # Get formation_id from formation instance
         formation_id = getattr(formation, "formation_id", "default-formation")
 
-        # Create buffer memory instance
+        # Create buffer memory instance (model=None → local embeddings)
         formation._buffer_memory = WorkingMemory(
             formation_id=formation_id,
             max_size=size,
             buffer_multiplier=multiplier,
-            dimension=dimension,
-            model=embedding_model,
+            model=None,
             mode=mode,
             remote=remote_config.model_dump() if remote_config and mode == "remote" else None,
-            api_key=embedding_api_key,
         )
 
         # REMOVE - line 339 (redundant with InitEventFormatter)
