@@ -1006,16 +1006,13 @@ class Overlord:
             relevant_sops = await self.sop_system.find_relevant_sops(message, top_k=1)
             relevant_sop = relevant_sops[0] if relevant_sops else None
 
-            # Filter out low-relevance SOPs (threshold: 0.7 for semantic search, 3 for tag-based)
+            # Filter out low-relevance SOPs
+            # Semantic search scores are 0-1, tag-based scores are >= 1
+            # (name match = 2 points, each tag match = 1 point)
             if relevant_sop:
                 relevance_score = relevant_sop.get("relevance_score", 0)
-                # If score is between 0 and 1, it's semantic search; if >= 1, it's tag-based
                 if relevance_score < 0.7:
                     # Low semantic relevance, ignore
-                    relevant_sop = None
-                elif relevance_score >= 1.0 and relevance_score < 3:
-                    # Low tag-based relevance (less than 3 points), ignore
-                    # Note: name match = 2 points, each tag = 1 point
                     relevant_sop = None
 
             # Log SOP discovery
@@ -5745,9 +5742,21 @@ Agent response: {raw_response}"""
                         break
 
         # Emit streaming event for processing start
+        import random
+
+        _thinking_messages = [
+            "Thinking...",
+            "Let me think about that...",
+            "Working on it...",
+            "Analyzing your request...",
+            "Processing...",
+            "Give me a moment...",
+            "Let me work through this...",
+            "On it...",
+        ]
         streaming.stream(
             "thinking",
-            "Understanding the user's request...",
+            random.choice(_thinking_messages),
             stage="process_sync_start",
             original_message=sanitize_message_preview(
                 display_msg, 500
@@ -6396,6 +6405,34 @@ Agent response: {raw_response}"""
                 pass  # Don't fail on memory storage error
 
         # ===================================================================
+        # EARLY SOP TAG MATCH - provide SOP context to clarification
+        # ===================================================================
+        # SOP tag matching is cheap (string comparison, no LLM call).
+        # If the message matches a SOP, we pass the match as context to
+        # the clarification system so IT can decide whether to proceed
+        # or ask for more info.
+        _matched_sop = None
+        if not skip_clarification and self._ensure_sop_system():
+            import re as _re
+
+            _sop_match = _re.search(r"User:\s*([^\n]+)", message)
+            _sop_message = _sop_match.group(1).strip() if _sop_match else message
+            _matched_sop = await self._find_relevant_sop(_sop_message)
+            if _matched_sop:
+                observability.observe(
+                    event_type=observability.ConversationEvents.SOP_MATCHED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "sop_id": _matched_sop["id"],
+                        "sop_name": _matched_sop.get("name", _matched_sop["id"]),
+                        "stage": "pre_clarification",
+                    },
+                    description=(
+                        f"SOP '{_matched_sop['id']}' matched early, passing to clarification"
+                    ),
+                )
+
+        # ===================================================================
         # CLARIFICATION CHECK - MUST HAPPEN BEFORE ANY AGENT SELECTION
         # ===================================================================
 
@@ -6590,6 +6627,16 @@ Agent response: {raw_response}"""
                             pass  # Fall back to raw message if buffer search fails
 
                     clarification_context = {"user_id": user_id}
+
+                    # If an SOP matched early, pass it as context so the
+                    # clarification LLM can factor in the procedure match
+                    if _matched_sop:
+                        clarification_context["matched_sop"] = {
+                            "id": _matched_sop["id"],
+                            "name": _matched_sop.get("name", _matched_sop["id"]),
+                            "description": _matched_sop.get("description", ""),
+                            "tags": _matched_sop.get("tags", []),
+                        }
 
                     # Check for cancellation before clarification analysis
                     if request_id and self.request_tracker.is_cancelled(request_id):

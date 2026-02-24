@@ -443,6 +443,17 @@ class UnifiedClarificationSystem:
 
     # Private methods - Analysis and Generation
 
+    @staticmethod
+    def _format_matched_sop(sop: Optional[Dict]) -> str:
+        if not sop:
+            return "None"
+        tags = ", ".join(sop.get("tags", []))
+        return (
+            f"MATCHED SOP: {sop['name']} (id: {sop['id']})\n"
+            f"Description: {sop.get('description', 'N/A')}\n"
+            f"Tags: {tags}"
+        )
+
     async def _analyze_request(self, message: str, context: Dict) -> Dict:
         """
         Analyze request using LLM - no pattern matching.
@@ -579,6 +590,7 @@ class UnifiedClarificationSystem:
             capabilities=", ".join(capabilities) if capabilities else "Conversation",
             mcp_services="\n".join(mcp_services_detail) if mcp_services_detail else "None",
             available_credentials=available_credentials,
+            matched_sop=self._format_matched_sop(context.get("matched_sop")),
             response_style=response_style,
             cred_mode=cred_mode,
             redirect_message=(

@@ -15,6 +15,8 @@ Analyze this transcript to determine if clarification is needed regarding the us
 === AVAILABLE CREDENTIALS ===
 {available_credentials}
 
+=== MATCHED STANDARD OPERATING PROCEDURE ===
+{matched_sop}
 
 === INSTRUCTIONS ===
 Be {response_style}.
@@ -32,6 +34,16 @@ IMPORTANT RULES:
 - For vague requests like "help me" or "fix this", DO clarify
 - If we lack the tools/capabilities, don't clarify (fail fast)
 - Detect if user wants brainstorming/planning vs direct action
+
+STANDARD OPERATING PROCEDURE (SOP) RULES:
+- Check the "MATCHED STANDARD OPERATING PROCEDURE" section above
+- If a SOP matched AND the user's intent clearly aligns with that procedure, set needs_clarification=false
+  * Example: SOP "MUXI Onboarding" matched + user says "onboard me" → intent is clear, proceed
+  * Example: SOP "MUXI Onboarding" matched + user says "get started" → intent is clear, proceed
+- If a SOP matched BUT the user's message is incomplete or ambiguous, DO clarify
+  * Example: SOP "MUXI Onboarding" matched + user says "onboard the" → incomplete sentence, clarify
+  * Example: SOP "MUXI Onboarding" matched + user says "onboard the new intern" → could be SOP or something else, clarify
+- When a SOP matches and you decide NOT to clarify, set reason="sop_match" so the system knows to trigger the SOP workflow
 
 CONVERSATION CONTEXT INFERENCE RULES:
 - **CRITICAL**: Use the conversation transcript above to infer intent for follow-up questions
