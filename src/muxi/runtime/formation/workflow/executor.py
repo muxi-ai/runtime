@@ -1025,6 +1025,11 @@ class WorkflowExecutor:
         # Direct routing implementation without creating temporary SubTask
         strategy = self.config.routing_strategy
 
+        # If the task has an explicitly assigned agent (e.g. from SOP [agent:name]
+        # directives in template mode), use it directly.
+        if state.assigned_agent_id and state.assigned_agent_id in self.agent_registry:
+            return self.agent_registry[state.assigned_agent_id]
+
         # Special case: custom routing function still needs SubTask for backward compatibility
         if strategy == TaskRoutingStrategy.CUSTOM and self.custom_routing_fn:
             from ...datatypes.workflow import SubTask

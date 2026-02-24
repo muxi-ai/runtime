@@ -596,21 +596,22 @@ Analysis Results:
             tasks = {}
 
             # Extract tasks section - handle markdown formatting
+            # LLM may use "## TASKS", "### TASKS:", "**TASKS:**", or "TASKS:" formats
             tasks_section = re.search(
-                r"###\s*TASKS:(.*?)(?=###\s*EXECUTION_STRATEGY:|$)",
+                r"#{2,3}\s*TASKS:?(.*?)(?=#{2,3}\s*EXECUTION_STRATEGY|$)",
                 response,
                 re.DOTALL | re.IGNORECASE,
             )
             if not tasks_section:
                 tasks_section = re.search(
-                    r"\*\*TASKS:\*\*(.*?)(?=\*\*EXECUTION_STRATEGY:\*\*|$)",
+                    r"\*\*TASKS:?\*\*(.*?)(?=\*\*EXECUTION_STRATEGY:?\*\*|$)",
                     response,
                     re.DOTALL | re.IGNORECASE,
                 )
             if not tasks_section:
                 # Fallback to plain text format
                 tasks_section = re.search(
-                    r"TASKS:(.*?)(?=EXECUTION_STRATEGY:|$)", response, re.DOTALL | re.IGNORECASE
+                    r"TASKS:?(.*?)(?=EXECUTION_STRATEGY:?|$)", response, re.DOTALL | re.IGNORECASE
                 )
             if not tasks_section:
                 # Fallback if structure is different
@@ -627,6 +628,9 @@ Analysis Results:
                 task_blocks = re.split(r"-\s*\*\*Task_ID\*\*:\s*", tasks_text)
             if len(task_blocks) == 1:
                 task_blocks = re.split(r"\*\*Task_ID:\*\*", tasks_text)
+            if len(task_blocks) == 1:
+                # Split on markdown headers like "### Task_1" or "### Task_1:"
+                task_blocks = re.split(r"###\s*Task_\d+:?\s*\n", tasks_text)
             if len(task_blocks) == 1:
                 # Fallback to plain text format
                 task_blocks = re.split(r"Task_ID:\s*", tasks_text)
@@ -729,12 +733,18 @@ Analysis Results:
             except (ValueError, TypeError):
                 pass
 
+            # Parse assigned agent (from SOP [agent:name] directives in template mode)
+            assigned_agent = task_data.get("assigned_agent", None)
+            if assigned_agent and assigned_agent.lower() == "none":
+                assigned_agent = None
+
             return SubTask(
                 id=task_id,
                 description=description,
                 required_capabilities=required_capabilities,
                 dependencies=dependencies,
                 estimated_complexity=complexity,
+                assigned_agent_id=assigned_agent,
                 status=TaskStatus.PENDING,
             )
 
