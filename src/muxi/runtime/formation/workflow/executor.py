@@ -38,6 +38,25 @@ def _status_str(status) -> str:
     return status.value if hasattr(status, "value") else str(status)
 
 
+def _status_eq(status, enum_val) -> bool:
+    """Compare a status field against a TaskStatus/WorkflowStatus enum value.
+
+    Handles the Pydantic use_enum_values=True case where status is stored as
+    a plain string (e.g. "done") instead of the enum (TaskStatus.DONE).
+    """
+    return _status_str(status) == _status_str(enum_val)
+
+
+def _is_success(status) -> bool:
+    """Check if a task status represents successful completion.
+
+    Handles both "done" and "completed" as success states, regardless of
+    whether the status is stored as an enum or a plain string.
+    """
+    s = _status_str(status)
+    return s in (_status_str(TaskStatus.DONE), _status_str(TaskStatus.COMPLETED))
+
+
 class WorkflowExecutor:
     """
     Manages execution of multi-agent workflows with DAG-based orchestration.
@@ -91,10 +110,10 @@ class WorkflowExecutor:
             # Check if workflow still active
             if workflow_id in self.active_workflows:
                 workflow = self.active_workflows[workflow_id]
-                if workflow.status == WorkflowStatus.IN_PROGRESS:
+                if _status_eq(workflow.status, WorkflowStatus.IN_PROGRESS):
                     # Cancel all in-progress tasks
                     for task in workflow.tasks.values():
-                        if task.status == TaskStatus.IN_PROGRESS:
+                        if _status_eq(task.status, TaskStatus.IN_PROGRESS):
                             task.status = TaskStatus.FAILED
                             task.error_message = "Workflow timeout exceeded"
                             task.end_time = datetime.now()
@@ -217,7 +236,7 @@ class WorkflowExecutor:
                         "elapsed_seconds": elapsed,
                         "total_tasks": len(workflow.tasks),
                         "completed_tasks": sum(
-                            1 for t in workflow.tasks.values() if t.status == TaskStatus.COMPLETED
+                            1 for t in workflow.tasks.values() if _is_success(t.status)
                         ),
                     },
                     description=(
@@ -299,7 +318,7 @@ class WorkflowExecutor:
                         for task_id in task_ids:
                             if task_id in workflow.tasks:
                                 task = workflow.tasks[task_id]
-                                if task.status == TaskStatus.IN_PROGRESS:
+                                if _status_eq(task.status, TaskStatus.IN_PROGRESS):
                                     task.status = TaskStatus.FAILED
                                     task.error_message = "Phase timeout exceeded"
                 else:
@@ -1002,7 +1021,7 @@ class WorkflowExecutor:
             elif dep_task_id in workflow.tasks:
                 # Dependency task exists but no result yet
                 dep_task = workflow.tasks[dep_task_id]
-                if dep_task.status == TaskStatus.DONE:
+                if _is_success(dep_task.status):
                     inputs[f"from_{dep_task_id}"] = dep_task.outputs or {}
 
         return inputs
@@ -1158,6 +1177,11 @@ class WorkflowExecutor:
         Returns:
             Selected agent or None if no suitable agent found
         """
+        # If the task has an explicitly assigned agent (e.g. from SOP [agent:name]
+        # directives parsed by the decomposer), use it directly.
+        if task.assigned_agent_id and task.assigned_agent_id in self.agent_registry:
+            return self.agent_registry[task.assigned_agent_id]
+
         strategy = self.config.routing_strategy
 
         # Use custom routing function if available
@@ -1265,7 +1289,7 @@ class WorkflowExecutor:
                 1
                 for wf in self.active_workflows.values()
                 for t in wf.tasks.values()
-                if t.assigned_agent_id == agent_id and t.status == TaskStatus.IN_PROGRESS
+                if t.assigned_agent_id == agent_id and _status_eq(t.status, TaskStatus.IN_PROGRESS)
             )
             agent_loads[agent_id] = active_count
 
@@ -1633,7 +1657,7 @@ class WorkflowExecutor:
             True if execution should continue
         """
         # Check if workflow has been cancelled
-        if workflow.status == WorkflowStatus.CANCELLED:
+        if _status_eq(workflow.status, WorkflowStatus.CANCELLED):
             return False
 
         # Check workflow timeout
@@ -1664,7 +1688,7 @@ class WorkflowExecutor:
 
         # Check failure strategy
         failed_tasks = [
-            task for task in workflow.tasks.values() if task.status == TaskStatus.FAILED
+            task for task in workflow.tasks.values() if _status_eq(task.status, TaskStatus.FAILED)
         ]
 
         if not failed_tasks:
@@ -1674,7 +1698,7 @@ class WorkflowExecutor:
         if self.config.enable_partial_results:
             # Continue if we have any successful tasks
             successful_tasks = [
-                task for task in workflow.tasks.values() if task.status == TaskStatus.DONE
+                task for task in workflow.tasks.values() if _is_success(task.status)
             ]
             return len(successful_tasks) > 0
 
@@ -1699,7 +1723,7 @@ class WorkflowExecutor:
             Final workflow status
         """
         # Check if workflow was cancelled
-        if workflow.status == WorkflowStatus.CANCELLED:
+        if _status_eq(workflow.status, WorkflowStatus.CANCELLED):
             return WorkflowStatus.CANCELLED
 
         task_statuses = [task.status for task in workflow.tasks.values()]
@@ -1795,7 +1819,7 @@ class WorkflowExecutor:
             # Cancel in-progress tasks
             cancelled_tasks = []
             for task in workflow.tasks.values():
-                if task.status == TaskStatus.IN_PROGRESS:
+                if _status_eq(task.status, TaskStatus.IN_PROGRESS):
                     task.status = TaskStatus.CANCELLED
                     task.end_time = datetime.now()
                     cancelled_tasks.append(task.id)
@@ -1832,13 +1856,13 @@ class WorkflowExecutor:
         workflow = self.active_workflows[workflow_id]
         total_tasks = len(workflow.tasks)
         completed_tasks = sum(
-            1 for task in workflow.tasks.values() if task.status == TaskStatus.DONE
+            1 for task in workflow.tasks.values() if _is_success(task.status)
         )
         failed_tasks = sum(
-            1 for task in workflow.tasks.values() if task.status == TaskStatus.FAILED
+            1 for task in workflow.tasks.values() if _status_eq(task.status, TaskStatus.FAILED)
         )
         in_progress_tasks = sum(
-            1 for task in workflow.tasks.values() if task.status == TaskStatus.IN_PROGRESS
+            1 for task in workflow.tasks.values() if _status_eq(task.status, TaskStatus.IN_PROGRESS)
         )
 
         return {
@@ -1871,10 +1895,10 @@ class ProgressTracker:
         """
         total_tasks = len(workflow.tasks)
         completed_tasks = sum(
-            1 for task in workflow.tasks.values() if task.status == TaskStatus.DONE
+            1 for task in workflow.tasks.values() if _is_success(task.status)
         )
         failed_tasks = sum(
-            1 for task in workflow.tasks.values() if task.status == TaskStatus.FAILED
+            1 for task in workflow.tasks.values() if _status_eq(task.status, TaskStatus.FAILED)
         )
 
         progress_info = {
@@ -2012,8 +2036,8 @@ class ProgressTracker:
 
         # Calculate metrics
         total_tasks = len(workflow.tasks)
-        completed_tasks = sum(1 for t in workflow.tasks.values() if t.status == TaskStatus.DONE)
-        failed_tasks = sum(1 for t in workflow.tasks.values() if t.status == TaskStatus.FAILED)
+        completed_tasks = sum(1 for t in workflow.tasks.values() if _is_success(t.status))
+        failed_tasks = sum(1 for t in workflow.tasks.values() if _status_eq(t.status, TaskStatus.FAILED))
 
         # Task execution times
         task_times = [
@@ -2067,9 +2091,9 @@ class ProgressTracker:
 
                 agent_tasks[task.assigned_agent_id]["total"] += 1
 
-                if task.status == TaskStatus.DONE:
+                if _is_success(task.status):
                     agent_tasks[task.assigned_agent_id]["completed"] += 1
-                elif task.status == TaskStatus.FAILED:
+                elif _status_eq(task.status, TaskStatus.FAILED):
                     agent_tasks[task.assigned_agent_id]["failed"] += 1
 
         return agent_tasks
@@ -2129,12 +2153,12 @@ class ProgressTracker:
         if result.task_id != task.id:
             raise ValueError(f"Task ID mismatch in result: {result.task_id} != {task.id}")
 
-        if result.status == TaskStatus.FAILED and not result.error_message:
+        if _status_eq(result.status, TaskStatus.FAILED) and not result.error_message:
             raise ValueError("Failed task must have an error message")
 
         # Allow None execution_time for completed tasks to handle quick completions or timing issues
         # Log a warning instead of raising an error
-        if result.status == TaskStatus.DONE and result.execution_time is None:
+        if _is_success(result.status) and result.execution_time is None:
             import warnings
 
             warnings.warn(
