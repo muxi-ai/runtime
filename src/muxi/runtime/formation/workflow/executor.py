@@ -29,6 +29,15 @@ from .config import (
 )
 
 
+def _status_str(status) -> str:
+    """Safely extract string value from a status enum or string.
+
+    Pydantic models with use_enum_values=True store enums as their string
+    values, so .value would fail with AttributeError on a plain string.
+    """
+    return status.value if hasattr(status, "value") else str(status)
+
+
 class WorkflowExecutor:
     """
     Manages execution of multi-agent workflows with DAG-based orchestration.
@@ -313,12 +322,12 @@ class WorkflowExecutor:
                 level=observability.EventLevel.INFO,
                 data={
                     "workflow_id": workflow.id,
-                    "status": workflow.status.value,
+                    "status": _status_str(workflow.status),
                     "total_tasks": len(workflow.tasks),
                     "execution_time_ms": (datetime.now() - workflow.created_at).total_seconds()
                     * 1000,
                 },
-                description=f"Workflow {workflow.id} completed with status {workflow.status.value}",
+                description=f"Workflow {workflow.id} completed with status {_status_str(workflow.status)}",
             )
 
         except Exception as e:
@@ -428,11 +437,7 @@ class WorkflowExecutor:
                     {
                         "type": "workflow_completed",
                         "workflow_id": workflow.id,
-                        "status": (
-                            workflow.status.value
-                            if hasattr(workflow.status, "value")
-                            else str(workflow.status)
-                        ),
+                        "status": _status_str(workflow.status),
                         "total_time": (workflow.completed_at - workflow.started_at).total_seconds(),
                     },
                 )
@@ -735,7 +740,21 @@ class WorkflowExecutor:
                         break
             else:
                 # Execute all tasks concurrently
-                await asyncio.gather(*task_coroutines, return_exceptions=True)
+                results = await asyncio.gather(*task_coroutines, return_exceptions=True)
+                # Log any exceptions that were silently captured
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        observability.observe(
+                            event_type=observability.ConversationEvents.WORKFLOW_EXECUTION_FAILED,
+                            level=observability.EventLevel.ERROR,
+                            data={
+                                "workflow_id": workflow.id,
+                                "task_index": i,
+                                "error_type": type(result).__name__,
+                                "error": str(result),
+                            },
+                            description=f"Task in phase failed silently: {type(result).__name__}: {result}",
+                        )
 
     async def _execute_task(
         self, task: SubTask, workflow: Workflow, context: Optional[Dict[str, Any]] = None
@@ -821,7 +840,7 @@ class WorkflowExecutor:
                 level=observability.EventLevel.INFO,
                 data={
                     "task_id": task.id,
-                    "task_name": task.name,
+                    "task_name": task.id,
                     "agent_id": agent.agent_id,
                     "task_complexity": (
                         task.estimated_complexity if hasattr(task, "estimated_complexity") else None
@@ -833,7 +852,7 @@ class WorkflowExecutor:
                     "workflow_id": workflow.id if workflow else None,
                 },
                 description=(
-                    f"Task '{task.name}' "
+                    f"Task '{task.id}' "
                     f"(complexity {task.estimated_complexity if hasattr(task, 'estimated_complexity') else 'N/A'}) "
                     f"assigned to agent '{agent.agent_id}'"
                 ),
@@ -881,18 +900,18 @@ class WorkflowExecutor:
                 level=observability.EventLevel.INFO,
                 data={
                     "task_id": task.id,
-                    "task_name": task.name,
+                    "task_name": task.id,
                     "agent_id": task.assigned_agent_id,
-                    "status": result.status.value if result else "unknown",
+                    "status": _status_str(result.status) if result else "unknown",
                     "duration_ms": execution_time * 1000 if execution_time else None,
                     "task_complexity": (
                         task.estimated_complexity if hasattr(task, "estimated_complexity") else None
                     ),
-                    "success": result.status.value == "completed" if result else False,
+                    "success": _status_str(result.status) == "completed" if result else False,
                     "workflow_id": workflow.id if workflow else None,
                 },
                 description=(
-                    f"Task '{task.name}' completed in {execution_time:.2f}s "
+                    f"Task '{task.id}' completed in {execution_time:.2f}s "
                     f"by agent '{task.assigned_agent_id}'"
                 ),
             )
@@ -940,13 +959,13 @@ class WorkflowExecutor:
                 level=observability.EventLevel.ERROR,
                 data={
                     "task_id": task.id,
-                    "task_name": task.name,
+                    "task_name": task.id,
                     "assigned_agent_id": task.assigned_agent_id,
                     "error_type": type(e).__name__,
                     "error": str(e),
                     "workflow_id": getattr(task, "workflow_id", None),
                 },
-                description=f"Task '{task.name}' execution failed",
+                description=f"Task '{task.id}' execution failed",
             )
             task.status = TaskStatus.FAILED
             task.error_message = str(e)
@@ -1382,12 +1401,12 @@ class WorkflowExecutor:
                 level=observability.EventLevel.ERROR,
                 data={
                     "task_id": task.id,
-                    "task_name": task.name,
+                    "task_name": task.id,
                     "agent_id": agent.agent_id,
                     "error_type": type(e).__name__,
                     "error": str(e),
                 },
-                description=f"Failed to execute task '{task.name}' with agent '{agent.agent_id}'",
+                description=f"Failed to execute task '{task.id}' with agent '{agent.agent_id}'",
             )
             return TaskResult(
                 task_id=task.id,
@@ -1819,7 +1838,7 @@ class WorkflowExecutor:
 
         return {
             "workflow_id": workflow_id,
-            "status": workflow.status.value,
+            "status": _status_str(workflow.status),
             "total_tasks": total_tasks,
             "completed_tasks": completed_tasks,
             "failed_tasks": failed_tasks,
@@ -1855,7 +1874,7 @@ class ProgressTracker:
 
         progress_info = {
             "workflow_id": workflow_id,
-            "status": workflow.status.value,
+            "status": _status_str(workflow.status),
             "total_tasks": total_tasks,
             "completed_tasks": completed_tasks,
             "failed_tasks": failed_tasks,
@@ -2000,9 +2019,7 @@ class ProgressTracker:
 
         metrics = {
             "workflow_id": workflow_id,
-            "status": (
-                workflow.status.value if hasattr(workflow.status, "value") else str(workflow.status)
-            ),
+            "status": _status_str(workflow.status),
             "total_tasks": total_tasks,
             "completed_tasks": completed_tasks,
             "failed_tasks": failed_tasks,
