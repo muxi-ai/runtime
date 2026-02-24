@@ -1855,9 +1855,7 @@ class WorkflowExecutor:
 
         workflow = self.active_workflows[workflow_id]
         total_tasks = len(workflow.tasks)
-        completed_tasks = sum(
-            1 for task in workflow.tasks.values() if _is_success(task.status)
-        )
+        completed_tasks = sum(1 for task in workflow.tasks.values() if _is_success(task.status))
         failed_tasks = sum(
             1 for task in workflow.tasks.values() if _status_eq(task.status, TaskStatus.FAILED)
         )
@@ -1894,9 +1892,7 @@ class ProgressTracker:
             workflow: Updated workflow
         """
         total_tasks = len(workflow.tasks)
-        completed_tasks = sum(
-            1 for task in workflow.tasks.values() if _is_success(task.status)
-        )
+        completed_tasks = sum(1 for task in workflow.tasks.values() if _is_success(task.status))
         failed_tasks = sum(
             1 for task in workflow.tasks.values() if _status_eq(task.status, TaskStatus.FAILED)
         )
@@ -2037,7 +2033,9 @@ class ProgressTracker:
         # Calculate metrics
         total_tasks = len(workflow.tasks)
         completed_tasks = sum(1 for t in workflow.tasks.values() if _is_success(t.status))
-        failed_tasks = sum(1 for t in workflow.tasks.values() if _status_eq(t.status, TaskStatus.FAILED))
+        failed_tasks = sum(
+            1 for t in workflow.tasks.values() if _status_eq(t.status, TaskStatus.FAILED)
+        )
 
         # Task execution times
         task_times = [

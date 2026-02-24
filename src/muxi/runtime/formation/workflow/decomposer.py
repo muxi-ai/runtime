@@ -736,11 +736,7 @@ Analysis Results:
             # Parse assigned agent (from SOP [agent:name] directives in template mode)
             # The LLM may output "Agent:", "Assigned_Agent:", or "Assigned Agent:" —
             # after key normalization these become "agent", "assigned_agent", etc.
-            assigned_agent = (
-                task_data.get("assigned_agent")
-                or task_data.get("agent")
-                or None
-            )
+            assigned_agent = task_data.get("assigned_agent") or task_data.get("agent") or None
             if assigned_agent and assigned_agent.lower() == "none":
                 assigned_agent = None
 

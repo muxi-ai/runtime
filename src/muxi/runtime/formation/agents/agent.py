@@ -1030,12 +1030,7 @@ class Agent:
         planning_response_parts = []  # Collect response parts during planning
 
         # Only plan for user messages that might need multiple steps (skip for A2A tasks only)
-        if (
-            self._messages
-            and self._messages[-1]["role"] == "user"
-            and tools
-            and not is_a2a_task
-        ):
+        if self._messages and self._messages[-1]["role"] == "user" and tools and not is_a2a_task:
             try:
                 # Use the extracted actual request for planning, not the full enhanced message
                 execution_plan = await self._plan_before_execution(actual_user_request, tools)
@@ -4548,7 +4543,7 @@ If you cannot determine a value from context:
             response = await self.model.chat(
                 messages=messages,
                 temperature=0.1,  # Low temperature for deterministic parameter generation
-                max_tokens=500,
+                max_tokens=16000,  # Must be large enough for code generation (e.g. generate_file)
             )
 
             # Parse the JSON response

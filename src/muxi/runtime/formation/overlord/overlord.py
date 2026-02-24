@@ -7602,13 +7602,15 @@ Agent response: {raw_response}"""
             if (result and hasattr(result, "content"))
             else "Request completed successfully"
         )
-        streaming.stream(
-            "completed",
-            final_content,
-            status="success",
-            processing_time_ms=int((time.time() - start_time) * 1000),
-            agent_used=agent_name,
-        )
+        # Include artifacts in the completed event so streaming clients can download them
+        completed_kwargs = {
+            "status": "success",
+            "processing_time_ms": int((time.time() - start_time) * 1000),
+            "agent_used": agent_name,
+        }
+        if result and hasattr(result, "artifacts") and result.artifacts:
+            completed_kwargs["artifacts"] = [a.model_dump(mode="json") for a in result.artifacts]
+        streaming.stream("completed", final_content, **completed_kwargs)
 
         # Note: We don't disable streaming here - let the client/test handle cleanup
         # This ensures all events can be consumed before the stream is closed
