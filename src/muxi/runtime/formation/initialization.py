@@ -371,7 +371,6 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
         size = config.size
         multiplier = config.multiplier
         vector_search = config.vector_search
-        dimension = config.vector_dimension
         mode = config.mode
         remote_config = config.remote
 
