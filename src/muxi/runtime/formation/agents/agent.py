@@ -1006,22 +1006,22 @@ class Agent:
                         actual_user_request = next_line[5:].strip()  # Remove "User: " prefix
                         break
 
-        # Skip planning for workflow tasks or A2A tasks (to prevent loops)
-        if is_workflow_task or is_a2a_task:
-            # Log that we're bypassing planning
-            reason = "a2a_task_detected" if is_a2a_task else "workflow_task_detected"
+        # Skip planning for A2A tasks only (to prevent loops)
+        # Workflow tasks should go through normal planning so agents can use their MCP tools.
+        # The workflow decomposer creates high-level tasks (WHAT); agents plan the HOW.
+        if is_a2a_task:
             observability.observe(
                 event_type=observability.ConversationEvents.AGENT_PLANNING,
                 level=observability.EventLevel.INFO,
                 data={
                     "agent_id": self.agent_id,
                     "phase": "planning_bypassed",
-                    "reason": reason,
+                    "reason": "a2a_task_detected",
                     "message_preview": (
                         user_message[:100] + "..." if len(user_message) > 100 else user_message
                     ),
                 },
-                description=f"Agent {self.agent_id} bypassing planning phase: {reason}",
+                description=f"Agent {self.agent_id} bypassing planning phase: a2a_task_detected",
             )
 
         # Variables to store planning results
@@ -1029,12 +1029,11 @@ class Agent:
         my_results = {}
         planning_response_parts = []  # Collect response parts during planning
 
-        # Only plan for user messages that might need multiple steps (skip for workflow tasks and A2A tasks)
+        # Only plan for user messages that might need multiple steps (skip for A2A tasks only)
         if (
             self._messages
             and self._messages[-1]["role"] == "user"
             and tools
-            and not is_workflow_task
             and not is_a2a_task
         ):
             try:
