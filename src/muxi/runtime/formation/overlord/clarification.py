@@ -216,7 +216,29 @@ class UnifiedClarificationSystem:
 
         if not state:
             # No active clarification
+            observability.observe(
+                event_type=observability.ConversationEvents.CLARIFICATION_RESPONSE_RECEIVED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "request_id": request_id,
+                    "state_found": False,
+                },
+                description=f"No clarification state found for {request_id}, executing as-is",
+            )
             return ClarificationResult(action="execute", request=response)
+
+        observability.observe(
+            event_type=observability.ConversationEvents.CLARIFICATION_RESPONSE_RECEIVED,
+            level=observability.EventLevel.INFO,
+            data={
+                "request_id": request_id,
+                "state_found": True,
+                "depth": state.get("depth", 0),
+                "max_depth": state.get("max_depth", 0),
+                "mode": state.get("mode"),
+            },
+            description=f"Clarification state: depth={state.get('depth')}/{state.get('max_depth')} mode={state.get('mode')}",
+        )
 
         # Special handling for redirect mode (missing credentials)
         if state.get("mode") == "redirect":
@@ -938,12 +960,12 @@ Please check {mcp_service}'s documentation for specific instructions on obtainin
         """
         # Sensible defaults (used when no config available)
         defaults = {
-            "direct": 3,
-            "brainstorm": 10,
-            "planning": 7,
-            "execution": 3,
-            "credential": 2,  # Updated from 1 to 2
-            "other": 3,
+            "direct": 1,
+            "brainstorm": 5,
+            "planning": 3,
+            "execution": 1,
+            "credential": 2,
+            "other": 1,
         }
 
         # Check for new max_rounds configuration (highest priority)

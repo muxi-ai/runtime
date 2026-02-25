@@ -747,10 +747,9 @@ class Overlord:
             configured_services.get("clarification_config") if configured_services else None
         )
         if not self.clarification_config:
-            # Fallback to defaults
-            self.clarification_config = ClarificationConfig(
-                max_questions=5, style=QuestionStyle.CONVERSATIONAL
-            )
+            # Fallback to defaults -- don't set max_questions so per-mode
+            # defaults in _get_max_depth apply (direct=1, planning=3, etc.)
+            self.clarification_config = ClarificationConfig(style=QuestionStyle.CONVERSATIONAL)
 
         # Create the unified clarification system
         self.clarification = UnifiedClarificationSystem(self)
@@ -2003,37 +2002,56 @@ class Overlord:
         """
         import re
 
-        # Extract actual user message from context format if present
+        # Extract actual user message and recent assistant context from context format
         match = re.search(r"User:\s*([^\n]+)", message)
         actual_message = match.group(1).strip() if match else message
+
+        # Extract last assistant message from buffer context to detect follow-ups
+        last_assistant_msg = None
+        if "=== CURRENT REQUEST ===" in message:
+            context_section = message.split("=== CURRENT REQUEST ===")[0]
+            # Find the last Assistant: line in the context
+            assistant_lines = []
+            capturing = False
+            for line in context_section.split("\n"):
+                if line.strip().startswith("Assistant:"):
+                    capturing = True
+                    assistant_lines = [line.strip()[10:].strip()]
+                elif capturing and line.strip() and not line.strip().startswith("User:"):
+                    assistant_lines.append(line.strip())
+                elif line.strip().startswith("User:"):
+                    capturing = False
+            if assistant_lines:
+                last_assistant_msg = " ".join(assistant_lines)[:500]
 
         # First try fast heuristics for common cases
         message_lower = actual_message.lower().strip()
 
-        # Definite non-actionable patterns
+        # Definite non-actionable patterns (only when no prior assistant question)
         if message_lower in ["hi", "hello", "hey", "thanks", "thank you", "ok", "okay", "got it"]:
-            return False
+            if not last_assistant_msg or "?" not in last_assistant_msg:
+                return False
 
         # For more complex cases, use LLM if available
         if self._capability_models.get("text"):
             try:
-                # Quick LLM check with formation's text model
-                # System prompt contains instructions, user message is just the message to classify
                 system_prompt = """Is this message requesting action or just providing information/greeting?
 
-Examples of ACTIONABLE messages (questions, requests, commands):
-- "What database should I use?" → ACTIONABLE (question needing answer)
-- "How do I implement authentication?" → ACTIONABLE (question needing help)
-- "Create a file" → ACTIONABLE (command to execute)
+Consider the conversation context: if the assistant just asked the user questions,
+the user's response (even if short or numbered) is ACTIONABLE because it answers
+those questions and implicitly requests the assistant to proceed with the task.
 
-Examples of NON_ACTIONABLE messages (information, context, greetings):
-- "I'm working on an e-commerce platform" → NON_ACTIONABLE (just context)
-- "Hi" → NON_ACTIONABLE (greeting)
+Examples of ACTIONABLE messages:
+- "What database should I use?" → ACTIONABLE (question needing answer)
+- "Create a file" → ACTIONABLE (command to execute)
+- "1. core features 2. developers 3. casual" → ACTIONABLE if answering assistant's questions
+
+Examples of NON_ACTIONABLE messages:
+- "Hi" → NON_ACTIONABLE (greeting, unless answering a question)
 - "Thanks" → NON_ACTIONABLE (acknowledgment)
 
 Reply with only: ACTIONABLE or NON_ACTIONABLE"""
 
-                # Use formation's text model for this quick check
                 text_model_config = self._capability_models.get("text")
                 model_name = text_model_config.get("model")
                 cache_key = f"actionability_{model_name}"
@@ -2041,29 +2059,32 @@ Reply with only: ACTIONABLE or NON_ACTIONABLE"""
                 if cache_key in self._model_cache:
                     llm = self._model_cache[cache_key]
                 else:
-                    # Filter out params we're setting explicitly to avoid duplicate kwargs
                     settings = self._filter_llm_settings(text_model_config.get("settings", {}))
                     llm = await self.create_model(
                         model=model_name,
                         api_key=text_model_config.get("api_key"),
-                        temperature=0.1,  # Very low temperature for consistent classification
+                        temperature=0.1,
                         max_tokens=20,
                         **settings,
                     )
                     self._model_cache[cache_key] = llm
 
+                # Include last assistant message so the LLM can see if this is a follow-up
+                user_content = actual_message
+                if last_assistant_msg:
+                    user_content = (
+                        f"Previous assistant message: {last_assistant_msg}\n\n"
+                        f"User reply: {actual_message}"
+                    )
+
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    {
-                        "role": "user",
-                        "content": actual_message,
-                    },  # Use extracted message, not full context
+                    {"role": "user", "content": user_content},
                 ]
                 response = await llm.chat(messages)
                 if response and "NON_ACTIONABLE" in response.upper():
                     return False
             except Exception:
-                # If LLM check fails, continue to default
                 pass
 
         # Default to actionable if unsure
@@ -5773,7 +5794,7 @@ Agent response: {raw_response}"""
         # If so, we'll skip credential and clarification checks
         is_workflow_approval_response = False
         skip_security_check = False  # Flag to bypass security for credential/workflow responses
-        if session_id:
+        if session_id and not skip_clarification:
             pending_clarification = await self._get_pending_clarification(session_id)
             if pending_clarification:
                 clarification_type = pending_clarification.get("type")
@@ -6107,10 +6128,15 @@ Agent response: {raw_response}"""
                                 # has the context and knows we need to ask another question
                                 # We just need to store a new pending and return the question
                                 if session_id:
+                                    # Use the ORIGINAL request_id so the clarification state
+                                    # (with depth counter) is preserved across rounds
+                                    original_request_id = clarification_info.get(
+                                        "request_id", request_id
+                                    )
                                     self._set_pending_clarification(
                                         session_id,
                                         {
-                                            "request_id": request_id,  # Keep the same request_id
+                                            "request_id": original_request_id,
                                             "type": (
                                                 response_result.mode
                                                 if hasattr(response_result, "mode")
