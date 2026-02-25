@@ -6455,6 +6455,15 @@ Agent response: {raw_response}"""
             _sop_message = _sop_match.group(1).strip() if _sop_match else message
             _matched_sop = await self._find_relevant_sop(_sop_message)
             if _matched_sop:
+                _sop_display = _matched_sop.get("name", _matched_sop["id"])
+                streaming.stream(
+                    "progress",
+                    f"Found procedure: {_sop_display}",
+                    stage="sop_matched",
+                    sop_id=_matched_sop["id"],
+                    sop_name=_sop_display,
+                    skip_rephrase=True,
+                )
                 observability.observe(
                     event_type=observability.ConversationEvents.SOP_MATCHED,
                     level=observability.EventLevel.INFO,

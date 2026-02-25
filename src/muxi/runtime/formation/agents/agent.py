@@ -1211,6 +1211,16 @@ class Agent:
                                     # Check for cancellation before tool execution
                                     await self._check_cancellation(request_id)
 
+                                    step_desc = step.get("action", f"Using {tool_name}")
+                                    streaming.stream(
+                                        "progress",
+                                        step_desc,
+                                        stage="plan_step",
+                                        tool_name=tool_name,
+                                        agent_name=self.agent_id,
+                                        skip_rephrase=True,
+                                    )
+
                                     # Execute the tool with validated parameters
                                     tool_result = await self.invoke_tool(
                                         tool_name=actual_tool_name,
@@ -2857,6 +2867,16 @@ class Agent:
                 code = parameters.get("code", "")
                 filename = parameters.get("filename")
 
+                streaming.stream(
+                    "progress",
+                    f"Creating {filename or 'file'}...",
+                    stage="artifact_generating",
+                    tool_name=tool_name,
+                    filename=filename,
+                    agent_name=self.agent_id,
+                    skip_rephrase=True,
+                )
+
                 try:
                     artifact = await self.overlord.artifact_service.generate_file(code, filename)
 
@@ -2876,6 +2896,16 @@ class Agent:
                         # Store the actual artifact for the extractor
                         "_artifact": artifact,
                     }
+
+                    streaming.stream(
+                        "progress",
+                        f"Created {artifact.filename}",
+                        stage="artifact_created",
+                        filename=artifact.filename,
+                        artifact_type=artifact.type,
+                        artifact_format=artifact.format,
+                        skip_rephrase=True,
+                    )
 
                     observability.observe(
                         event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
@@ -2897,6 +2927,16 @@ class Agent:
                     return {"error": str(e), "status": "error"}
 
             # Regular MCP tool invocation
+            streaming.stream(
+                "progress",
+                f"Using {tool_name}...",
+                stage="tool_started",
+                tool_name=tool_name,
+                server_id=server_id,
+                agent_name=self.agent_id,
+                skip_rephrase=True,
+            )
+
             observability.observe(
                 event_type=observability.ConversationEvents.MCP_TOOL_CALL_STARTED,
                 level=observability.EventLevel.INFO,
@@ -3440,6 +3480,15 @@ class Agent:
                 "tool_count": len(tool_names),
             },
             description=f"Agent {self.agent_id} starting planning with {len(tool_names)} tools",
+        )
+
+        streaming.stream(
+            "progress",
+            "Creating plan...",
+            stage="creating_plan",
+            agent_name=self.agent_id,
+            tool_count=len(tool_names),
+            skip_rephrase=True,
         )
 
         # Build context for planning (user message + available resources)
