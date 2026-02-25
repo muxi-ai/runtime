@@ -179,6 +179,13 @@ runtime/
 - **Docker AMD64 image too large**: PyTorch defaults to CUDA on AMD64 (4GB+ NVIDIA libs). Fix: Install CPU-only PyTorch first via `--index-url https://download.pytorch.org/whl/cpu`.
 - **SIF build fails with "no space left"**: Add disk cleanup step before Apptainer install in CI workflow.
 - **GitHub release upload fails (>2GB)**: Check Docker image size—likely CUDA bloat. SIF files must be under 2GB.
+- **Artifact generation returns 0 artifacts (no error logged)**: The `_invoke_tool` catch-all `except Exception` silently converts failures to `{"error": ..., "status": "error"}` dicts that lack `_artifact`, so the artifact extractor skips them. Check server logs for the "using artifact service" event—if "Executed planned step" appears at the same millisecond, the subprocess failed instantly.
+- **Artifact temp directory vanishes between runs**: macOS (and some container runtimes) clean `/var/folders` temp dirs. The `_create_execution_dir` method now re-creates the base dir on every call—do not rely on the `__init__` mkdir alone.
+- **Artifact sandbox `ulimit -v` kills matplotlib/numpy on Linux**: `ulimit -v` limits virtual address space (not RSS). matplotlib + numpy + scipy map many shared libraries that easily exceed 512MB virtual. Current limit is 2GB. If you see subprocess hangs that resolve exactly at the timeout, check the memory limit first.
+- **SIF chart generation times out but works in Docker**: Likely the `ulimit -v` virtual memory limit (Linux-only code path in `artifact_service.py`). Test by running the artifact service directly inside the SIF: `singularity exec ... python -c "from muxi.runtime.formation.artifacts.artifact_service import ArtifactService; ..."`.
+- **`docker system prune -af` breaks SIF deployments**: This removes the runtime-runner image which contains `/opt/muxi-tools` (node, npx, git, curl, fonts). Rebuild with `docker build -t ghcr.io/muxi-ai/runtime-runner:latest .` from the runtime-runner repo.
+- **LLM ignores generate_file constraints**: Claude Haiku may ignore soft phrasing like "Do NOT import requests". Use stronger language: "NEVER", "WILL BE REJECTED", "offline sandbox". Even so, LLMs will generate networking code when the task implies fetching data—allow networking imports rather than fighting the pattern.
+- **generate_file uses fpdf and fails on Unicode**: fpdf's default font (Helvetica) cannot encode non-ASCII characters. The constraint prompt now says "prefer reportlab over fpdf". If fpdf is used, the code must strip or replace non-ASCII characters.
 
 ## Development Patterns
 - **Adding services**: implement in `src/muxi/services/`, wire into formation loading, register with the overlord, and update schemas when configuration is exposed.
@@ -203,6 +210,15 @@ runtime/
 - `scripts/validate_events.py` — event validation utility.
 - `e2e/tests/` — 12 test areas covering all runtime functionality.
 - Formation schema: see [agentformation.org](https://agentformation.org).
+
+## Artifact Service (generate_file)
+- `generate_file` is a **built-in tool**, not an MCP. Registered in `agent.py`, routes to `artifact_service.py`.
+- Architecture: LLM generates Python code via `_infer_tool_parameters()` → code validated via AST (`_validate_code`) → executed via `subprocess.run` in an isolated temp directory → output files tracked and wrapped as `MuxiArtifact`.
+- **Allowed imports** are whitelisted in `ALLOWED_IMPORTS` (artifact_service.py). Includes data science, visualization, document generation, and networking libraries.
+- **Constraints** are injected into the `_infer_tool_parameters` system prompt for `generate_file` calls: library preferences, backend settings, encoding notes.
+- **Sandbox limits**: `MAX_EXECUTION_TIME = 60s`, `MAX_MEMORY_MB = 2048` (virtual, via `ulimit -v` on Linux only).
+- **Artifact extraction**: After planning execution, `my_results` is scanned for dicts containing `_artifact` key. Only results from `generate_file` with a successful `MuxiArtifact` will be extracted. Errors are caught silently—check logs for "using artifact service" followed immediately by "Executed planned step" (same timestamp = instant failure).
+- **SIF considerations**: The subprocess inherits the Singularity environment. Ensure `/tmp` is bind-mounted and writable. The `ulimit -v` code path only runs on Linux—macOS uses direct `subprocess.run` without memory limits.
 
 ## Upcoming Features
 
