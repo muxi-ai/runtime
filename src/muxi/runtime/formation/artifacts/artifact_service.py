@@ -93,7 +93,7 @@ ALLOWED_IMPORTS: Set[str] = {
 MAX_EXECUTION_TIME = 60
 
 # Maximum memory limit for subprocess (in bytes)
-MAX_MEMORY_MB = 512
+MAX_MEMORY_MB = 2048
 MAX_MEMORY_BYTES = MAX_MEMORY_MB * 1024 * 1024
 
 
