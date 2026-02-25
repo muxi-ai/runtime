@@ -4535,12 +4535,28 @@ class Agent:
                         parameters_section += f'\n    "{prop_name}": <{prop_type}>'
                     parameters_section += "\n  }"
 
+            # Include tool-specific constraints (critical for generate_file code generation)
+            tool_constraints = ""
+            if tool_name == "generate_file":
+                tool_constraints = (
+                    "\nIMPORTANT CONSTRAINTS for generate_file:\n"
+                    "- ONLY use these libraries: matplotlib, seaborn, plotly, reportlab, fpdf2, "
+                    "python-docx (docx), openpyxl, xlsxwriter, python-pptx (pptx), "
+                    "Pillow (PIL), pandas, numpy, scipy, qrcode, python-barcode, "
+                    "lxml, markdown, csv, json, datetime, math, random, re, io, base64.\n"
+                    "- Do NOT import requests, urllib, http, or any networking library.\n"
+                    "- Do NOT fetch data from the internet. Use only the data/content "
+                    "provided in the action description.\n"
+                    "- Use matplotlib.use('Agg') before any plotting.\n"
+                    "- Save output files to the current directory.\n"
+                )
+
             # System prompt for parameter inference
             system_prompt = f"""Based on the user's request and tool requirements, determine the appropriate parameter values.
 
 Tool Name: {tool_name}
 Action Description: {action_description}
-
+{tool_constraints}
 Required Parameters:
 {parameters_section}
 
