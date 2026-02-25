@@ -5810,8 +5810,8 @@ Agent response: {raw_response}"""
                     # credentials and should undergo normal security analysis
                     skip_security_check = True
 
-        # Check for ANY pending clarification
-        if session_id:
+        # Check for ANY pending clarification (skip when recursing after clarification resolved)
+        if session_id and not skip_clarification:
             # Check if we have a pending clarification for this session
             clarification_info = await self._get_pending_clarification(session_id)
 
@@ -6116,8 +6116,18 @@ Agent response: {raw_response}"""
                     response_result = None
                     if self.clarification and clarification_info.get("request_id"):
                         try:
+                            # Extract the raw user message (strip buffer context markers)
+                            clean_response = message
+                            if "=== CURRENT REQUEST ===" in message and "User:" in message:
+                                for _line in message.split("\n"):
+                                    _line_s = _line.strip()
+                                    if _line_s.startswith("User:"):
+                                        clean_response = _line_s[5:].strip()
+                                        break
+
                             response_result = await self.clarification.handle_response(
-                                request_id=clarification_info.get("request_id"), response=message
+                                request_id=clarification_info.get("request_id"),
+                                response=clean_response,
                             )
 
                             # ALWAYS clear the pending clarification after handling response
