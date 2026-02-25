@@ -938,17 +938,36 @@ class Agent:
                         "type": "function",
                         "function": {
                             "name": "generate_file",
-                            "description": "Generate files (charts, documents, spreadsheets, images, presentations) by executing Python code with curated libraries.",  # noqa: E501
+                            "description": (
+                                "Generate files by executing Python code in a sandboxed environment. "
+                                "Available libraries: "
+                                "matplotlib, seaborn, plotly (charts/visualizations), "
+                                "reportlab, fpdf2 (PDF documents), "
+                                "python-docx (Word .docx), "
+                                "openpyxl, xlsxwriter (Excel .xlsx), "
+                                "python-pptx (PowerPoint .pptx), "
+                                "Pillow/PIL (images), "
+                                "pandas, numpy, scipy (data processing), "
+                                "qrcode, python-barcode (barcodes), "
+                                "lxml, markdown, csv, json (formats). "
+                                "ONLY use these libraries. "
+                                "Save output files to the current directory. "
+                                "Use matplotlib.use('Agg') for non-interactive plotting."
+                            ),
                             "parameters": {
                                 "type": "object",
                                 "properties": {
                                     "code": {
                                         "type": "string",
-                                        "description": "Python code to execute for file generation. The code should save the output file in the current directory.",  # noqa: E501
+                                        "description": (
+                                            "Python code to execute. Must save output file(s) "
+                                            "in current directory. Only use the libraries listed "
+                                            "in the tool description."
+                                        ),
                                     },
                                     "filename": {
                                         "type": "string",
-                                        "description": "Optional filename hint for the generated file",  # noqa: E501
+                                        "description": "Optional filename hint for the generated file",
                                     },
                                 },
                                 "required": ["code"],
