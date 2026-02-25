@@ -66,6 +66,8 @@ ALLOWED_IMPORTS: Set[str] = {
     "xml",
     "html",
     "markdown",
+    # HTTP (needed when LLM generates fetch-then-render code)
+    "requests",
     # Standard library modules (safe subset)
     "json",
     "csv",
