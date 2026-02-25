@@ -4547,6 +4547,8 @@ class Agent:
                     "- You may use requests/urllib to fetch data if needed.\n"
                     "- Use matplotlib.use('Agg') before any plotting.\n"
                     "- Save output files to the current directory.\n"
+                    "- For PDFs, prefer reportlab over fpdf. If using fpdf2, "
+                    "strip or replace non-ASCII characters to avoid encoding errors.\n"
                 )
 
             # System prompt for parameter inference

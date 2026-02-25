@@ -113,6 +113,7 @@ class ArtifactService:
 
     def _create_execution_dir(self) -> Path:
         """Create an isolated per-execution directory with an unpredictable name."""
+        self._base_dir.mkdir(exist_ok=True)
         exec_dir = self._base_dir / f"exec_{uuid.uuid4().hex}"
         exec_dir.mkdir(mode=0o700, exist_ok=False)
         return exec_dir
