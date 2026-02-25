@@ -948,9 +948,9 @@ class Agent:
                                 "python-pptx (PowerPoint .pptx), "
                                 "Pillow/PIL (images), "
                                 "pandas, numpy, scipy (data processing), "
+                                "requests (HTTP), "
                                 "qrcode, python-barcode (barcodes), "
                                 "lxml, markdown, csv, json (formats). "
-                                "ONLY use these libraries. "
                                 "Save output files to the current directory. "
                                 "Use matplotlib.use('Agg') for non-interactive plotting."
                             ),
@@ -4544,10 +4544,7 @@ class Agent:
                     "python-docx (docx), openpyxl, xlsxwriter, python-pptx (pptx), "
                     "Pillow (PIL), pandas, numpy, scipy, qrcode, python-barcode, "
                     "lxml, markdown, csv, json, datetime, math, random, re, io, base64.\n"
-                    "- NEVER import requests, urllib, http, socket, or any networking library. "
-                    "Code with these imports WILL BE REJECTED.\n"
-                    "- You CANNOT fetch data from the internet. The code runs in an "
-                    "offline sandbox. Hardcode all text content directly in the code.\n"
+                    "- You may use requests/urllib to fetch data if needed.\n"
                     "- Use matplotlib.use('Agg') before any plotting.\n"
                     "- Save output files to the current directory.\n"
                 )
