@@ -4544,9 +4544,10 @@ class Agent:
                     "python-docx (docx), openpyxl, xlsxwriter, python-pptx (pptx), "
                     "Pillow (PIL), pandas, numpy, scipy, qrcode, python-barcode, "
                     "lxml, markdown, csv, json, datetime, math, random, re, io, base64.\n"
-                    "- Do NOT import requests, urllib, http, or any networking library.\n"
-                    "- Do NOT fetch data from the internet. Use only the data/content "
-                    "provided in the action description.\n"
+                    "- NEVER import requests, urllib, http, socket, or any networking library. "
+                    "Code with these imports WILL BE REJECTED.\n"
+                    "- You CANNOT fetch data from the internet. The code runs in an "
+                    "offline sandbox. Hardcode all text content directly in the code.\n"
                     "- Use matplotlib.use('Agg') before any plotting.\n"
                     "- Save output files to the current directory.\n"
                 )
