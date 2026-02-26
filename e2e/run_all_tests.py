@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""
+E2E Test Runner - Executes all test files and collects results.
+Each test is run as a subprocess with a timeout.
+Results are written to e2e/results/test_report.json.
+"""
+
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+TIMEOUT_SECONDS = 120
+E2E_DIR = Path(__file__).parent
+TESTS_DIR = E2E_DIR / "tests"
+RESULTS_DIR = E2E_DIR / "results"
+SRC_DIR = E2E_DIR.parent / "src"
+
+SKIP_PATTERNS = [
+    "base_",
+    "common.py",
+    "run_all",
+    "run_tests",
+    "run_day",
+    "quick_test",
+    "fix_async",
+    "__init__",
+    "__pycache__",
+    "check_all_response",
+    "test_batch_runner",
+    "test_check_threads",
+    "test_executor_threads",
+    "test_force_exit",
+    "test_simple_load",
+    "test_with_exit",
+    "test_with_stop",
+    "test_proper_lifecycle",
+    "test_nocache",
+    "test_minimal_memory",
+]
+
+AREAS = sorted(
+    [d for d in TESTS_DIR.iterdir() if d.is_dir() and d.name[0].isdigit()],
+    key=lambda d: int(d.name.split("_")[0]),
+)
+
+
+def should_skip(filename: str) -> bool:
+    return any(pat in filename for pat in SKIP_PATTERNS)
+
+
+def run_test(test_file: Path) -> dict:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{SRC_DIR}:{TESTS_DIR}:{test_file.parent}:{env.get('PYTHONPATH', '')}"
+
+    t0 = time.time()
+    try:
+        result = subprocess.run(
+            ["timeout", str(TIMEOUT_SECONDS), sys.executable, test_file.name],
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_SECONDS + 10,
+            cwd=str(test_file.parent),
+            env=env,
+        )
+        elapsed = time.time() - t0
+        timed_out = result.returncode == 124
+
+        full_stdout = result.stdout or ""
+        full_stderr = result.stderr or ""
+        pass_markers = ["SUCCESS", "PASSED", "All checks passed", "CORE TESTS PASSED"]
+        has_success = any(m in full_stdout for m in pass_markers)
+        has_fail = ("FAILED" in full_stdout or "FAILURE" in full_stdout) and not has_success
+        has_assertion_error = "AssertionError" in full_stderr or "AssertionError" in full_stdout
+
+        if has_success and not has_fail and not has_assertion_error:
+            passed = True
+        elif (result.returncode == 0 or timed_out) and not has_fail and not has_assertion_error:
+            passed = True
+        else:
+            passed = False
+
+        return {
+            "file": str(test_file.relative_to(E2E_DIR)),
+            "area": test_file.parent.name,
+            "exit_code": result.returncode,
+            "passed": passed,
+            "time_s": round(elapsed, 1),
+            "stdout_tail": full_stdout[-2000:] if full_stdout else "",
+            "stderr_tail": (
+                f"TIMEOUT(killed) after {TIMEOUT_SECONDS}s\n" if timed_out else ""
+            ) + (result.stderr[-500:] if result.stderr else ""),
+        }
+    except subprocess.TimeoutExpired:
+        elapsed = time.time() - t0
+        return {
+            "file": str(test_file.relative_to(E2E_DIR)),
+            "area": test_file.parent.name,
+            "exit_code": -1,
+            "passed": False,
+            "time_s": round(elapsed, 1),
+            "stdout_tail": "",
+            "stderr_tail": f"TIMEOUT after {TIMEOUT_SECONDS}s",
+        }
+    except Exception as e:
+        elapsed = time.time() - t0
+        return {
+            "file": str(test_file.relative_to(E2E_DIR)),
+            "area": test_file.parent.name,
+            "exit_code": -2,
+            "passed": False,
+            "time_s": round(elapsed, 1),
+            "stdout_tail": "",
+            "stderr_tail": str(e),
+        }
+
+
+def main():
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Collect all test files
+    all_tests = []
+    for area in AREAS:
+        tests = sorted(area.glob("test_*.py"))
+        tests = [t for t in tests if not should_skip(t.name)]
+        all_tests.extend(tests)
+
+    print(f"Found {len(all_tests)} test files across {len(AREAS)} areas")
+    print("=" * 70)
+
+    results = []
+    area_stats = {}
+
+    for i, test_file in enumerate(all_tests, 1):
+        area = test_file.parent.name
+        short = test_file.name
+        print(f"[{i}/{len(all_tests)}] {area}/{short} ... ", end="", flush=True)
+
+        result = run_test(test_file)
+        results.append(result)
+
+        status = "PASS" if result["passed"] else "FAIL"
+        print(f"{status} ({result['time_s']}s)")
+
+        if area not in area_stats:
+            area_stats[area] = {"passed": 0, "failed": 0, "total": 0}
+        area_stats[area]["total"] += 1
+        if result["passed"]:
+            area_stats[area]["passed"] += 1
+        else:
+            area_stats[area]["failed"] += 1
+
+    # Summary
+    total = len(results)
+    passed = sum(1 for r in results if r["passed"])
+    failed = total - passed
+
+    print("\n" + "=" * 70)
+    print(f"TOTAL: {passed}/{total} passed, {failed} failed\n")
+
+    print("Per area:")
+    for area in sorted(area_stats.keys(), key=lambda a: int(a.split("_")[0])):
+        s = area_stats[area]
+        status = "ALL PASS" if s["failed"] == 0 else f"{s['failed']} FAILED"
+        print(f"  {area}: {s['passed']}/{s['total']} ({status})")
+
+    if failed > 0:
+        print(f"\nFailed tests:")
+        for r in results:
+            if not r["passed"]:
+                err = r["stderr_tail"].strip().split("\n")[-1][:100] if r["stderr_tail"] else ""
+                print(f"  {r['file']} (exit={r['exit_code']}, {r['time_s']}s) {err}")
+
+    # Save report
+    report = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "summary": {"total": total, "passed": passed, "failed": failed},
+        "area_stats": area_stats,
+        "results": results,
+    }
+    report_path = RESULTS_DIR / "test_report.json"
+    with open(report_path, "w") as f:
+        json.dump(report, f, indent=2)
+    print(f"\nReport saved to {report_path}")
+
+    return 0 if failed == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

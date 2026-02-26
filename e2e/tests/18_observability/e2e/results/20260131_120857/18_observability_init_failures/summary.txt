@@ -1,8 +1,0 @@
-MUXI Init Formatting Tests - Failure Scenarios
-======================================================================
-
-PASS: bad_postgres
-PASS: bad_mcp_command
-PASS: bad_a2a_registry
-
-Total: 3/3 passed

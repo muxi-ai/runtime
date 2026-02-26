@@ -161,3 +161,4 @@ e2e/results/*
 # Factory AI
 .factory/
 old-reports/
+e2e/results/
