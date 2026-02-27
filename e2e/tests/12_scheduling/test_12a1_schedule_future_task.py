@@ -68,18 +68,23 @@ async def test_schedule_future_task():
         # and checking job history, which requires scheduler API access
         print("\n[Note] Job execution verification skipped (would require 70s wait)")
 
-        # Cleanup
+        # Cleanup -- reset scheduler singleton to avoid leaking into other tests
+        try:
+            from muxi.runtime.services.scheduler.service import SchedulerService
+            SchedulerService._instance = None
+        except Exception:
+            pass
         await formation.stop_overlord()
-        # # formation.stop() removed - not async  # Not async, commented out to avoid issues
 
-        print("\n✅ TEST PASSED: Future task scheduled successfully")
+        print("\nTEST PASSED: Future task scheduled successfully")
+        print("SUCCESS", flush=True)
         return 0
 
     except AssertionError as e:
-        print(f"\n❌ TEST FAILED: {e}")
+        print(f"\nTEST FAILED: {e}")
         return 1
     except Exception as e:
-        print(f"\n❌ Test error: {e}")
+        print(f"\nTest error: {e}")
         return 1
 
 

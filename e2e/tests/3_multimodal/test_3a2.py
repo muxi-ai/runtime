@@ -235,19 +235,63 @@ async def test_multiple_images():
     await formation.stop_overlord()
 
 
+async def run_all():
+    """Run all multimodal tests with a single formation load."""
+    formation_path = Path(__file__).parent / "formations" / "formation-multimodal"
+    formation = Formation()
+    await formation.load(str(formation_path))
+    overlord = await formation.start_overlord()
+    print("Formation loaded")
+
+    assets_dir = Path(__file__).parent.parent.parent / "assets/files"
+
+    # Test 1: OCR (1 call)
+    print("\n=== Test 3A2.1: Image OCR ===")
+    with open(assets_dir / "slide.png", "rb") as f:
+        slide_data = f.read()
+    files_ocr = [{"filename": "slide.png", "content": slide_data, "content_type": "image/png", "size": len(slide_data)}]
+    r1 = await overlord.chat(user_id="test_user", message="Extract all text from this image", files=files_ocr, use_async=False, stream=False)
+    t1 = r1.content if hasattr(r1, "content") else str(r1)
+    assert len(t1) > 20, f"OCR response too short: {len(t1)}"
+    print(f"  Response: {t1[:150]}...")
+    print("  PASS")
+
+    # Test 2: Visual analysis (1 call)
+    print("\n=== Test 3A2.2: Visual Analysis ===")
+    with open(assets_dir / "chart.png", "rb") as f:
+        chart_data = f.read()
+    files_chart = [{"filename": "chart.png", "content": chart_data, "content_type": "image/png", "size": len(chart_data)}]
+    r2 = await overlord.chat(user_id="test_user", message="Describe what you see in this diagram", files=files_chart, use_async=False, stream=False)
+    t2 = r2.content if hasattr(r2, "content") else str(r2)
+    assert len(t2) > 20, f"Visual analysis response too short: {len(t2)}"
+    print(f"  Response: {t2[:150]}...")
+    print("  PASS")
+
+    # Test 3: Multiple images (1 call)
+    print("\n=== Test 3A2.3: Multiple Images ===")
+    with open(assets_dir / "photo.jpg", "rb") as f:
+        photo_data = f.read()
+    files_multi = [
+        {"filename": "chart.png", "content": chart_data, "content_type": "image/png", "size": len(chart_data)},
+        {"filename": "photo.jpg", "content": photo_data, "content_type": "image/jpeg", "size": len(photo_data)},
+    ]
+    r3 = await overlord.chat(user_id="test_user", message="Compare these two images briefly", files=files_multi, use_async=False, stream=False)
+    t3 = r3.content if hasattr(r3, "content") else str(r3)
+    assert len(t3) > 20, f"Multi-image response too short: {len(t3)}"
+    print(f"  Response: {t3[:150]}...")
+    print("  PASS")
+
+    await formation.stop_overlord()
+    print("\nAll 3A2 tests passed")
+
+
 if __name__ == "__main__":
     import os as _os
 
-    print("Running Test 3A2: Image OCR and Visual Analysis (Sync Mode)")
+    print("Running Test 3A2: Image OCR and Visual Analysis")
     print("=" * 60)
 
-    asyncio.run(test_image_ocr())
-    print("\n" + "=" * 60 + "\n")
-
-    asyncio.run(test_visual_analysis())
-    print("\n" + "=" * 60 + "\n")
-
-    asyncio.run(test_multiple_images())
+    asyncio.run(run_all())
 
     print("SUCCESS", flush=True)
     _os._exit(0)
