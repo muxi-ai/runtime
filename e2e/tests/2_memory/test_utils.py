@@ -24,25 +24,41 @@ def with_timeout(seconds: float):
     return timeout_test(seconds)
 
 
-async def safe_overlord_chat(overlord, message: str, user_id: str = "test_user", **kwargs):
+async def safe_overlord_chat(overlord, message: str, user_id: str = "test_user", timeout: float = 30.0, **kwargs):
     """Chat with overlord, catching common errors."""
     try:
-        response = await overlord.chat(message, user_id=user_id, **kwargs)
+        coro = overlord.chat(message, user_id=user_id, **kwargs)
+        response = await asyncio.wait_for(coro, timeout=timeout)
         content = response.content if hasattr(response, "content") else str(response)
         return content
+    except asyncio.TimeoutError:
+        print(f"    Chat timeout after {timeout}s")
+        return f"ERROR: timeout after {timeout}s"
     except Exception as e:
         print(f"    Chat error: {e}")
         return f"ERROR: {e}"
 
 
-async def safe_formation_load(formation_path: str):
-    """Load a formation safely with error handling."""
-    try:
-        from muxi.runtime.formation.formation import Formation
+async def safe_formation_load(formation_or_path, formation_path: str = None, timeout: float = 30.0):
+    """Load a formation safely with error handling.
 
-        formation = Formation(formation_path)
-        await formation.start()
-        return formation
+    Can be called as:
+        safe_formation_load("path/to/formation")
+        safe_formation_load(formation_obj, "path/to/formation", timeout=10.0)
+    """
+    try:
+        if isinstance(formation_or_path, str) and formation_path is None:
+            from muxi.runtime.formation.formation import Formation
+            formation = Formation(formation_or_path)
+            await asyncio.wait_for(formation.start(), timeout=timeout)
+            return formation
+        else:
+            formation = formation_or_path
+            await asyncio.wait_for(formation.load(formation_path), timeout=timeout)
+            return formation
+    except asyncio.TimeoutError:
+        print(f"    Formation load timed out after {timeout}s")
+        return None
     except Exception as e:
         print(f"    Formation load error: {e}")
         return None
