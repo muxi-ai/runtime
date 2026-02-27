@@ -25,11 +25,21 @@ class TestMemoryCRUD(BaseE2ETest):
             test_area="19_api",
         )
         self.base_url = "http://127.0.0.1:8271/v1"
-        self.client_key = "test-client-key-456"
+        self.client_key = self._load_key("client_key")
         self.headers = {
             "X-Muxi-Client-Key": self.client_key,
             "Content-Type": "application/json",
         }
+
+    def _load_key(self, key_name):
+        """Load API key from formation YAML."""
+        formation_yaml = Path(__file__).parent / "formation-api" / "formation.yaml"
+        with open(formation_yaml) as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped.startswith(f"{key_name}:"):
+                    return stripped.split(f"{key_name}:", 1)[1].strip().strip("\"").strip("'")
+        return ""
 
     async def test_19i1_memory_crud(self):
         """Test memory CRUD endpoints."""
@@ -52,9 +62,15 @@ class TestMemoryCRUD(BaseE2ETest):
             
             # Start the API server
             await self.formation.start_server(block=False)
-            
-            # Wait for server to be ready
             await asyncio.sleep(2)
+
+            # Sync client key from running server
+            server = getattr(self.formation, "_formation_server", None)
+            if server:
+                server_keys = getattr(server, "api_keys", {})
+                if isinstance(server_keys, dict) and server_keys.get("client"):
+                    self.client_key = server_keys["client"].strip()
+                    self.headers["X-Muxi-Client-Key"] = self.client_key
             print("✅ Formation ready with API server")
 
             user_id = "test_memory_user_19i1"
@@ -229,6 +245,7 @@ class TestMemoryCRUD(BaseE2ETest):
 
             # Success!
             success = True
+            print("SUCCESS", flush=True)
             elapsed_time = time.time() - start_time
             formatter.print_test_result(
                 test_name="test_19i1_memory_crud",

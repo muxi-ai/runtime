@@ -26,11 +26,21 @@ class TestSchedulerPersistence(BaseE2ETest):
             test_area="19_api",
         )
         self.base_url = "http://127.0.0.1:8271/v1"
-        self.admin_key = "test-admin-key-123"
+        self.admin_key = self._load_key("admin_key")
         self.headers = {
             "X-Muxi-Admin-Key": self.admin_key,
             "Content-Type": "application/json",
         }
+
+    def _load_key(self, key_name):
+        """Load API key from formation YAML."""
+        formation_yaml = Path(__file__).parent / "formation-api" / "formation.yaml"
+        with open(formation_yaml) as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped.startswith(f"{key_name}:"):
+                    return stripped.split(f"{key_name}:", 1)[1].strip().strip("\"").strip("'")
+        return ""
 
     async def test_19c1_scheduler_persistence(self):
         """Test scheduler persistence check."""
@@ -53,6 +63,15 @@ class TestSchedulerPersistence(BaseE2ETest):
             
             # Start the API server (now waits for readiness automatically)
             await self.formation.start_server(block=False)
+            await asyncio.sleep(2)
+
+            # Sync admin key from running server
+            server = getattr(self.formation, "_formation_server", None)
+            if server:
+                srv_key = getattr(server, "admin_key", "")
+                if srv_key:
+                    self.admin_key = srv_key.strip()
+                    self.headers["X-Muxi-Admin-Key"] = self.admin_key
             print("✅ Formation ready with API server (buffer memory only)")
 
             # Test 1: Try to create a scheduler job (should return 422)
@@ -96,6 +115,7 @@ class TestSchedulerPersistence(BaseE2ETest):
 
             # Success!
             success = True
+            print("SUCCESS", flush=True)
             elapsed_time = time.time() - start_time
             formatter.print_test_result(
                 test_name="test_19c1_scheduler_persistence",
