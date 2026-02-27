@@ -48,7 +48,7 @@ async def test_llm_error_returns_empty_topics():
 
     # Mock LLM that throws error
     mock_llm = AsyncMock()
-    mock_llm.generate_text = AsyncMock(side_effect=Exception("LLM service unavailable"))
+    mock_llm.chat = AsyncMock(side_effect=Exception("LLM service unavailable"))
 
     analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
 
@@ -70,7 +70,7 @@ async def test_malformed_json_returns_empty_topics():
 
     # Mock LLM that returns invalid JSON
     mock_llm = AsyncMock()
-    mock_llm.generate_text = AsyncMock(return_value="This is not JSON at all!")
+    mock_llm.chat = AsyncMock(return_value="This is not JSON at all!")
 
     analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
 
@@ -91,7 +91,7 @@ async def test_missing_topics_field_returns_empty():
 
     # Mock LLM that returns valid JSON but no topics field
     mock_llm = AsyncMock()
-    mock_llm.generate_text = AsyncMock(return_value="""
+    mock_llm.chat = AsyncMock(return_value="""
     {
         "complexity_score": 5.0,
         "implicit_subtasks": ["Step 1"],
@@ -121,7 +121,7 @@ async def test_topics_not_array_returns_empty():
 
     # Mock LLM that returns topics as string instead of array
     mock_llm = AsyncMock()
-    mock_llm.generate_text = AsyncMock(return_value="""
+    mock_llm.chat = AsyncMock(return_value="""
     {
         "complexity_score": 5.0,
         "implicit_subtasks": [],
@@ -137,7 +137,7 @@ async def test_topics_not_array_returns_empty():
 
     result = await analyzer.analyze_request("Test message")
 
-    # Should convert to empty list (not throw error)
+    # Non-list topics should be converted to empty list
     assert result.topics == []
 
     print(f"\n✓ Non-array topics handled")
@@ -151,7 +151,7 @@ async def test_empty_topics_array_returns_empty():
 
     # Mock LLM that returns empty topics array
     mock_llm = AsyncMock()
-    mock_llm.generate_text = AsyncMock(return_value="""
+    mock_llm.chat = AsyncMock(return_value="""
     {
         "complexity_score": 3.0,
         "implicit_subtasks": [],
@@ -173,14 +173,11 @@ async def test_empty_topics_array_returns_empty():
     print(f"  Topics: {result.topics}")
 
 
-@pytest.mark.asyncio
-async def test_topics_with_empty_strings_filtered():
-    """Test empty strings in topics are filtered out."""
-    from unittest.mock import AsyncMock
+def test_topics_with_empty_strings_filtered():
+    """Test empty strings in topics are filtered out via _parse_llm_analysis."""
+    analyzer = RequestAnalyzer(llm=None, complexity_method=ComplexityMethod.HEURISTIC)
 
-    # Mock LLM that returns topics with empty/whitespace items
-    mock_llm = AsyncMock()
-    mock_llm.generate_text = AsyncMock(return_value="""
+    result = analyzer._parse_llm_analysis("""
     {
         "complexity_score": 5.0,
         "implicit_subtasks": [],
@@ -192,11 +189,6 @@ async def test_topics_with_empty_strings_filtered():
     }
     """)
 
-    analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
-
-    result = await analyzer.analyze_request("Test message")
-
-    # Empty strings should be filtered out
     assert result.topics == ["writing", "blog", "coding"]
     assert "" not in result.topics
     assert "  " not in result.topics
@@ -205,17 +197,14 @@ async def test_topics_with_empty_strings_filtered():
     print(f"  Topics: {result.topics}")
 
 
-@pytest.mark.asyncio
-async def test_topics_normalized_to_lowercase():
-    """Test topics are normalized to lowercase."""
-    from unittest.mock import AsyncMock
+def test_topics_normalized_to_lowercase():
+    """Test topics are normalized to lowercase via _parse_llm_analysis."""
+    analyzer = RequestAnalyzer(llm=None, complexity_method=ComplexityMethod.HEURISTIC)
 
-    # Mock LLM that returns mixed-case topics
-    mock_llm = AsyncMock()
-    mock_llm.generate_text = AsyncMock(return_value="""
+    result = analyzer._parse_llm_analysis("""
     {
         "complexity_score": 5.0,
-        "implicit_subtasks": [],
+        "implicit_subtasks": ["step"],
         "required_capabilities": ["general"],
         "acceptance_criteria": ["Done"],
         "confidence_score": 0.8,
@@ -224,11 +213,6 @@ async def test_topics_normalized_to_lowercase():
     }
     """)
 
-    analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
-
-    result = await analyzer.analyze_request("Test message")
-
-    # All should be lowercase and stripped
     assert result.topics == ["writing", "blog", "sales-analysis", "quarterly-reports"]
     assert all(t == t.lower() for t in result.topics)
     assert all(t == t.strip() for t in result.topics)
@@ -237,17 +221,14 @@ async def test_topics_normalized_to_lowercase():
     print(f"  Topics: {result.topics}")
 
 
-@pytest.mark.asyncio
-async def test_topics_limited_to_five():
-    """Test topics list is limited to maximum of 5 items."""
-    from unittest.mock import AsyncMock
+def test_topics_limited_to_five():
+    """Test topics list is limited to maximum of 5 items via _parse_llm_analysis."""
+    analyzer = RequestAnalyzer(llm=None, complexity_method=ComplexityMethod.HEURISTIC)
 
-    # Mock LLM that returns too many topics
-    mock_llm = AsyncMock()
-    mock_llm.generate_text = AsyncMock(return_value="""
+    result = analyzer._parse_llm_analysis("""
     {
         "complexity_score": 5.0,
-        "implicit_subtasks": [],
+        "implicit_subtasks": ["step"],
         "required_capabilities": ["general"],
         "acceptance_criteria": ["Done"],
         "confidence_score": 0.8,
@@ -256,11 +237,6 @@ async def test_topics_limited_to_five():
     }
     """)
 
-    analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
-
-    result = await analyzer.analyze_request("Test message")
-
-    # Should be limited to 5
     assert len(result.topics) == 5
     assert result.topics == ["topic1", "topic2", "topic3", "topic4", "topic5"]
 

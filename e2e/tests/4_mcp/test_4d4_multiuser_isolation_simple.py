@@ -8,12 +8,23 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import json  # noqa: E402
 import os  # noqa: E402
-import getpass  # noqa: E402
-# Use current OS user for PostgreSQL connection
-current_user = getpass.getuser()
+
+# Load PostgreSQL URI from encrypted secrets (same as other tests)
 if "POSTGRES_DATABASE_URL" not in os.environ:
-    os.environ["POSTGRES_DATABASE_URL"] = f"postgresql://{current_user}:@localhost:5432/muxi_framework"  # noqa: E402
+    try:
+        from cryptography.fernet import Fernet
+
+        _secrets_dir = Path(__file__).parent / "formations" / "formation-mcp"
+        with open(_secrets_dir / ".key") as _f:
+            _key = _f.read().strip()
+        with open(_secrets_dir / "secrets.enc") as _f:
+            _enc = _f.read().strip()
+        _secrets = json.loads(Fernet(_key).decrypt(_enc.encode()).decode())
+        os.environ["POSTGRES_DATABASE_URL"] = _secrets["POSTGRES_URI"]
+    except Exception:
+        os.environ["POSTGRES_DATABASE_URL"] = "postgresql://muxi:@localhost:5432/muxi_test"
 
 from muxi.runtime.formation.credentials.resolver import CredentialResolver, Credential  # noqa: E402
 from muxi.runtime.services.memory.long_term import User  # noqa: E402
