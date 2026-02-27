@@ -236,10 +236,11 @@ async def test_multiple_images():
 
 
 if __name__ == "__main__":
-    print("🧪 Running Test 3A2: Image OCR and Visual Analysis (Sync Mode)")
+    import os as _os
+
+    print("Running Test 3A2: Image OCR and Visual Analysis (Sync Mode)")
     print("=" * 60)
 
-    # Run tests sequentially
     asyncio.run(test_image_ocr())
     print("\n" + "=" * 60 + "\n")
 
@@ -248,4 +249,5 @@ if __name__ == "__main__":
 
     asyncio.run(test_multiple_images())
 
-    print("\n🎉 All Test 3A2 tests completed successfully!")
+    print("SUCCESS", flush=True)
+    _os._exit(0)

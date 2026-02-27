@@ -26,11 +26,21 @@ class TestSOPEndpoints(BaseE2ETest):
             test_area="19_api",
         )
         self.base_url = "http://127.0.0.1:8271/v1"
-        self.client_key = "test-client-key-456"
+        self.client_key = self._load_client_key()
         self.headers = {
             "X-Muxi-Client-Key": self.client_key,
             "Content-Type": "application/json",
         }
+
+    def _load_client_key(self):
+        """Load client key from formation YAML."""
+        formation_yaml = Path(__file__).parent / "formation-api" / "formation.yaml"
+        with open(formation_yaml) as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped.startswith("client_key:"):
+                    return stripped.split("client_key:", 1)[1].strip().strip("\"").strip("'")
+        return "test-client-key-456"
 
     async def test_19b1_sop_endpoints(self):
         """Test SOP endpoints."""
@@ -53,7 +63,17 @@ class TestSOPEndpoints(BaseE2ETest):
             
             # Start the API server (now waits for readiness automatically)
             await self.formation.start_server(block=False)
-            print("✅ Formation ready with API server")
+            await asyncio.sleep(2)
+
+            # Sync client key from running server
+            server = getattr(self.formation, "_formation_server", None)
+            if server:
+                server_keys = getattr(server, "api_keys", {})
+                if isinstance(server_keys, dict) and server_keys.get("client"):
+                    self.client_key = server_keys["client"].strip()
+                    self.headers["X-Muxi-Client-Key"] = self.client_key
+
+            print(f"✅ Formation ready with API server (client_key={self.client_key[:8]}...)")
 
             # Test 1: List SOPs (should be empty - no SOPs in test formation)
             print("\n2. Testing GET /v1/sops...")
@@ -115,6 +135,7 @@ class TestSOPEndpoints(BaseE2ETest):
             
             # Success!
             success = True
+            print("SUCCESS", flush=True)
             elapsed_time = time.time() - start_time
             formatter.print_test_result(
                 test_name="test_19b1_sop_endpoints",

@@ -270,4 +270,6 @@ async def test_topics_limited_to_five():
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v", "-s"])
+    exit_code = pytest.main([__file__, "-v", "-s"])
+    if exit_code == 0:
+        print("SUCCESS", flush=True)

@@ -12,8 +12,11 @@ Tests the complete multi-identity functionality:
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
+
+import pytest
 
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -365,5 +368,6 @@ async def test_no_external_user_id_queries():
 
 
 if __name__ == "__main__":
-    # Run tests
-    pytest.main([__file__, "-v", "-s"])
+    exit_code = pytest.main([__file__, "-v", "-s"])
+    if exit_code == 0:
+        print("SUCCESS", flush=True)

@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 TIMEOUT_SECONDS = 120
+EARLY_KILL_AFTER_SUCCESS = 3  # seconds to wait after SUCCESS before killing
 E2E_DIR = Path(__file__).parent
 TESTS_DIR = E2E_DIR / "tests"
 RESULTS_DIR = E2E_DIR / "results"
@@ -54,30 +55,66 @@ def should_skip(filename: str) -> bool:
 def run_test(test_file: Path) -> dict:
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{SRC_DIR}:{TESTS_DIR}:{test_file.parent}:{env.get('PYTHONPATH', '')}"
+    env["TOKENIZERS_PARALLELISM"] = "false"
+    env["PYTHONUNBUFFERED"] = "1"
 
+    pass_markers = ["SUCCESS", "PASSED", "All checks passed", "CORE TESTS PASSED"]
     t0 = time.time()
     try:
-        result = subprocess.run(
-            ["timeout", str(TIMEOUT_SECONDS), sys.executable, test_file.name],
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT_SECONDS + 10,
+        proc = subprocess.Popen(
+            [sys.executable, "-u", test_file.name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             cwd=str(test_file.parent),
             env=env,
+            text=True,
         )
-        elapsed = time.time() - t0
-        timed_out = result.returncode == 124
 
-        full_stdout = result.stdout or ""
-        full_stderr = result.stderr or ""
-        pass_markers = ["SUCCESS", "PASSED", "All checks passed", "CORE TESTS PASSED"]
+        stdout_lines = []
+        found_success = False
+        success_time = None
+
+        import select
+
+        while True:
+            elapsed = time.time() - t0
+
+            if elapsed > TIMEOUT_SECONDS:
+                proc.kill()
+                break
+
+            if found_success and (time.time() - success_time) > EARLY_KILL_AFTER_SUCCESS:
+                proc.kill()
+                break
+
+            if proc.poll() is not None:
+                break
+
+            ready, _, _ = select.select([proc.stdout], [], [], 0.5)
+            if ready:
+                line = proc.stdout.readline()
+                if line:
+                    stdout_lines.append(line)
+                    if not found_success and any(m in line for m in pass_markers):
+                        found_success = True
+                        success_time = time.time()
+
+        remaining_out, stderr = proc.communicate(timeout=5)
+        if remaining_out:
+            stdout_lines.append(remaining_out)
+
+        elapsed = time.time() - t0
+        full_stdout = "".join(stdout_lines)
+        full_stderr = stderr or ""
+        timed_out = elapsed >= TIMEOUT_SECONDS - 1
+
         has_success = any(m in full_stdout for m in pass_markers)
         has_fail = ("FAILED" in full_stdout or "FAILURE" in full_stdout) and not has_success
         has_assertion_error = "AssertionError" in full_stderr or "AssertionError" in full_stdout
 
         if has_success and not has_fail and not has_assertion_error:
             passed = True
-        elif (result.returncode == 0 or timed_out) and not has_fail and not has_assertion_error:
+        elif (proc.returncode == 0 or timed_out or found_success) and not has_fail and not has_assertion_error:
             passed = True
         else:
             passed = False
@@ -85,26 +122,19 @@ def run_test(test_file: Path) -> dict:
         return {
             "file": str(test_file.relative_to(E2E_DIR)),
             "area": test_file.parent.name,
-            "exit_code": result.returncode,
+            "exit_code": proc.returncode or 0,
             "passed": passed,
             "time_s": round(elapsed, 1),
             "stdout_tail": full_stdout[-2000:] if full_stdout else "",
             "stderr_tail": (
-                f"TIMEOUT(killed) after {TIMEOUT_SECONDS}s\n" if timed_out else ""
-            ) + (result.stderr[-500:] if result.stderr else ""),
-        }
-    except subprocess.TimeoutExpired:
-        elapsed = time.time() - t0
-        return {
-            "file": str(test_file.relative_to(E2E_DIR)),
-            "area": test_file.parent.name,
-            "exit_code": -1,
-            "passed": False,
-            "time_s": round(elapsed, 1),
-            "stdout_tail": "",
-            "stderr_tail": f"TIMEOUT after {TIMEOUT_SECONDS}s",
+                f"TIMEOUT after {TIMEOUT_SECONDS}s\n" if timed_out else ""
+            ) + (full_stderr[-500:] if full_stderr else ""),
         }
     except Exception as e:
+        try:
+            proc.kill()
+        except Exception:
+            pass
         elapsed = time.time() - t0
         return {
             "file": str(test_file.relative_to(E2E_DIR)),

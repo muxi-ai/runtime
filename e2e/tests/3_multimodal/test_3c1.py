@@ -78,13 +78,15 @@ async def test_presentation_video_analysis():
 
 
 if __name__ == "__main__":
-    print("🧪 Running Test 3C1: Video Frame Analysis (Sync Mode)")
+    import os as _os
+
+    print("Running Test 3C1: Video Frame Analysis (Sync Mode)")
     print("=" * 60)
 
-    # Run tests sequentially
     asyncio.run(test_video_frame_analysis())
-    print("\n" + "="*60 + "\n")
+    print("\n" + "=" * 60 + "\n")
 
     asyncio.run(test_presentation_video_analysis())
 
-    print("\n🎉 All Test 3C1 tests completed successfully!")
+    print("SUCCESS", flush=True)
+    _os._exit(0)
