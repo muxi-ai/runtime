@@ -157,4 +157,6 @@ def main():
 
 if __name__ == "__main__":
     exit_code = main()
+    if exit_code == 0:
+        print("SUCCESS")
     import os; os._exit(exit_code)

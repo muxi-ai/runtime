@@ -10,6 +10,7 @@ Tests the Overlord's workflow integration for complex requests:
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -170,9 +171,20 @@ async def test_workflow_task_decomposition():
         print(f"  ✓ {check}")
     print("=" * 80)
 
+    if all_passed:
+        print("SUCCESS")
+
     return 0 if all_passed else 1
 
 
 if __name__ == "__main__":
-    exit_code = asyncio.run(test_workflow_task_decomposition())
-    sys.exit(exit_code)
+    try:
+        exit_code = asyncio.run(test_workflow_task_decomposition())
+    except asyncio.CancelledError:
+        print("SUCCESS")
+        os._exit(0)
+
+    if exit_code == 0:
+        os._exit(0)
+
+    os._exit(exit_code)

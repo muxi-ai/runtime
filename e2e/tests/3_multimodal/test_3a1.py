@@ -4,6 +4,7 @@ Simplified version using synchronous responses for faster testing
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -242,3 +243,5 @@ if __name__ == "__main__":
     asyncio.run(test_multiple_files())
 
     print("\n🎉 All Test 3A1 tests completed successfully!")
+    print("SUCCESS")
+    os._exit(0)

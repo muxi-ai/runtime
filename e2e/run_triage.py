@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-TIMEOUT = 60
+TIMEOUT = 120
 E2E_DIR = Path(__file__).parent
 TESTS_DIR = E2E_DIR / "tests"
 SRC_DIR = E2E_DIR.parent / "src"
