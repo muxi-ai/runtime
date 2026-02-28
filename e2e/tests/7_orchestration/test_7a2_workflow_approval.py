@@ -154,5 +154,12 @@ async def test_workflow_approval():
 
 
 if __name__ == "__main__":
+    import os
+
     exit_code = asyncio.run(test_workflow_approval())
-    sys.exit(exit_code)
+
+    if exit_code == 0:
+
+        print("SUCCESS", flush=True)
+
+    os._exit(exit_code)

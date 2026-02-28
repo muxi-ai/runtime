@@ -108,5 +108,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import os
+    try:
+        main()
+        print("SUCCESS", flush=True)
+        os._exit(0)
+    except SystemExit as e:
+        if e.code == 0:
+            print("SUCCESS", flush=True)
+        os._exit(e.code or 0)
+    except Exception:
+        os._exit(1)
     

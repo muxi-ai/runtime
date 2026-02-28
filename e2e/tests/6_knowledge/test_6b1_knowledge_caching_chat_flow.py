@@ -178,5 +178,12 @@ def test_knowledge_caching_validation():
 
 
 if __name__ == "__main__":
+    import os
+
     exit_code = test_knowledge_caching_validation()
-    exit(exit_code)
+
+    if exit_code == 0:
+
+        print("SUCCESS", flush=True)
+
+    os._exit(exit_code)

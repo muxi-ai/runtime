@@ -101,4 +101,12 @@ async def test_explicit_sop_call():
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(test_explicit_sop_call()))
+    import os
+
+    exit_code = asyncio.run(test_explicit_sop_call())
+
+    if exit_code == 0:
+
+        print("SUCCESS", flush=True)
+
+    os._exit(exit_code)

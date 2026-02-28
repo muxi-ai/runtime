@@ -45,5 +45,12 @@ async def quick_isolation_test():
 
 
 if __name__ == "__main__":
+    import os
+
     success = asyncio.run(quick_isolation_test())
-    exit(0 if success else 1)
+
+    if success:
+
+        print("SUCCESS", flush=True)
+
+    os._exit(0 if success else 1)

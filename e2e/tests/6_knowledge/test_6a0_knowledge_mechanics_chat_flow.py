@@ -164,5 +164,12 @@ def test_core_knowledge_mechanics():
 
 
 if __name__ == "__main__":
+    import os
+
     exit_code = test_core_knowledge_mechanics()
-    exit(exit_code)
+
+    if exit_code == 0:
+
+        print("SUCCESS", flush=True)
+
+    os._exit(exit_code)

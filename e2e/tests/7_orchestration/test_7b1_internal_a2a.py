@@ -111,5 +111,12 @@ async def test_internal_a2a():
 
 
 if __name__ == "__main__":
+    import os
+
     exit_code = asyncio.run(test_internal_a2a())
-    sys.exit(exit_code)
+
+    if exit_code == 0:
+
+        print("SUCCESS", flush=True)
+
+    os._exit(exit_code)

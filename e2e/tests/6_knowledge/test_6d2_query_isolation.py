@@ -174,8 +174,15 @@ async def test_knowledge_query_isolation():
 
 def main():
     try:
+        import os
+
         success = asyncio.run(test_knowledge_query_isolation())
-        exit(0 if success else 1)
+
+        if success:
+
+            print("SUCCESS", flush=True)
+
+        os._exit(0 if success else 1)
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         import traceback
@@ -184,4 +191,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import os
+    try:
+        main()
+        print("SUCCESS", flush=True)
+        os._exit(0)
+    except SystemExit as e:
+        if e.code == 0:
+            print("SUCCESS", flush=True)
+        os._exit(e.code or 0)
+    except Exception:
+        os._exit(1)

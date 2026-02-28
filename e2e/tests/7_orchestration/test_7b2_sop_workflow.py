@@ -124,5 +124,12 @@ async def test_sop_workflow():
 
 
 if __name__ == "__main__":
+    import os
+
     exit_code = asyncio.run(test_sop_workflow())
-    sys.exit(exit_code)
+
+    if exit_code == 0:
+
+        print("SUCCESS", flush=True)
+
+    os._exit(exit_code)
