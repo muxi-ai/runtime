@@ -44,7 +44,7 @@ async def test_preference_detection():
         user_id=test_user,
         use_async=False,
     )
-    await asyncio.sleep(10)  # Wait for preference detection and storage (extraction takes 8-10s)
+    await asyncio.sleep(5)  # Wait for extraction
 
     # First check if ANY memories were stored
     cur.execute("""
@@ -93,7 +93,7 @@ async def test_preference_detection():
     for pref in test_preferences:
         print(f"   Expressing: {pref}")
         await overlord.chat(pref, user_id=test_user, use_async=False, stream=False)
-        await asyncio.sleep(10)  # Wait between preferences (extraction takes 8-10s)
+        await asyncio.sleep(5)  # Wait for extraction
 
     # Check all preferences
     cur.execute("""

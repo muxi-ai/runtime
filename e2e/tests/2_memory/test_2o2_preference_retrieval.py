@@ -50,7 +50,7 @@ async def test_preference_retrieval():
     for pref in preferences:
         print(f"   Expressing: {pref[:50]}...")
         await overlord.chat(pref, user_id=test_user, use_async=False, stream=False)
-        await asyncio.sleep(10)  # Wait for storage (extraction takes 8-10s)
+        await asyncio.sleep(5)  # Wait for extraction
 
     # Verify preferences were stored
     cur.execute(
