@@ -198,4 +198,8 @@ async def test_preference_detection():
     print("✓ Available for context retrieval")
 
 if __name__ == "__main__":
-    asyncio.run(test_preference_detection())
+    import os
+    result = asyncio.run(test_preference_detection())
+    if result:
+        print("SUCCESS", flush=True)
+    os._exit(0 if result else 1)

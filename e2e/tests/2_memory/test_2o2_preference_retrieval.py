@@ -176,4 +176,8 @@ async def test_preference_retrieval():
 
 
 if __name__ == "__main__":
-    asyncio.run(test_preference_retrieval())
+    import os
+    result = asyncio.run(test_preference_retrieval())
+    if result:
+        print("SUCCESS", flush=True)
+    os._exit(0 if result else 1)
