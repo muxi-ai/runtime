@@ -17,7 +17,7 @@ memory:
   buffer:
     size: 10
     multiplier: 10
-    vector_search: true
+    vector_search: false
 
 # Runtime configuration
 runtime:

@@ -50,7 +50,7 @@ memory:
   buffer:
     size: 50
     multiplier: 10
-    vector_search: true
+    vector_search: false
 
   persistent:
     connection_string: "${{ secrets.POSTGRES_URI }}"

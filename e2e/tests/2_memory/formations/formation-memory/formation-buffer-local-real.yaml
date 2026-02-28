@@ -19,7 +19,7 @@ memory:
     enabled: true
     size: 10
     multiplier: 5
-    vector_search: true
+    vector_search: false
     vector_dimension: 1536
     mode: "local"
     # Local mode uses in-memory FAISS index

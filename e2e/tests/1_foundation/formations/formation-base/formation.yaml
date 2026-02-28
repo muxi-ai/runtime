@@ -16,7 +16,7 @@ runtime:
 memory:
   buffer:
     size: 10
-    vector_search: true
+    vector_search: false
 
 agents:
   - id: assistant

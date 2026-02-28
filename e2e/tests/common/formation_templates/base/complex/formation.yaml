@@ -19,7 +19,7 @@ memory:
   buffer:
     size: 20
     multiplier: 10
-    vector_search: true
+    vector_search: false
   persistent:
     connection_string: "sqlite:///test_memory.db"
     embedding_model: "openai/text-embedding-3-small"

@@ -33,7 +33,7 @@ memory:
   buffer:
     size: 10
     multiplier: 5
-    vector_search: true
+    vector_search: false
 
 llm:
   api_keys:
