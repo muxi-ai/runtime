@@ -101,7 +101,7 @@ class TestPostgreSQLUserIsolation(BaseMemoryTest):
 
             # Wait for extraction to complete for all users
             print("\n  ⏳ Waiting for memory extraction to complete...")
-            await asyncio.sleep(8)  # Wait for extraction and storage
+            await asyncio.sleep(20)  # Wait for async extraction to complete for all 3 users
 
             # Test isolation - Alice queries her info
             alice_query = "What is my name and profession?"
@@ -245,7 +245,7 @@ class TestPostgreSQLUserIsolation(BaseMemoryTest):
 
             # Wait for extraction to complete (extraction interval is 1, so it should trigger)
             print("  ⏳ Waiting for memory extraction to complete...")
-            await asyncio.sleep(8)  # Wait for extraction and storage
+            await asyncio.sleep(20)  # Wait for async extraction to complete for all 3 users
 
             # Shutdown formation
             await self.cleanup()

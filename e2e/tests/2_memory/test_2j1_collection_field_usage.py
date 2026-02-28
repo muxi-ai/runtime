@@ -94,7 +94,7 @@ class Test2j1CollectionFieldUsage(BaseMemoryTest):
 
             # Wait for extraction to complete (extraction interval is 1, so all messages should trigger extraction)
             print("\n  ⏳ Waiting for memory extraction to complete...")
-            await asyncio.sleep(8)  # Wait for extraction and storage
+            await asyncio.sleep(20)  # Wait for async extraction to complete
 
             # Check memories and their collections
             print("\n  2. Verifying collection assignments...")
