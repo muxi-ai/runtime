@@ -210,4 +210,8 @@ if __name__ == "__main__":
     print("Running Test 1b1: Response Consistency")
     print("=" * 60)
     result2 = asyncio.run(test.test_1b1_response_consistency())
-    sys.exit(0 if (result1 == 0 and result2 == 0) else 1)
+    import os
+    success = result1 == 0 and result2 == 0
+    if success:
+        print("SUCCESS", flush=True)
+    os._exit(0 if success else 1)

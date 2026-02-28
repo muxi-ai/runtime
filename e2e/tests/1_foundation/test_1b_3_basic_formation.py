@@ -124,5 +124,9 @@ class TestBasicFormation(BaseE2ETest):
 
 
 if __name__ == "__main__":
+    import os
     test = TestBasicFormation()
-    sys.exit(test.run_test())
+    exit_code = test.run_test()
+    if exit_code == 0:
+        print("SUCCESS", flush=True)
+    os._exit(exit_code)
