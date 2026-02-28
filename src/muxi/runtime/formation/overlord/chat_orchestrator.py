@@ -537,6 +537,7 @@ class ChatOrchestrator:
                 )
 
             # Sync processing
+            success = False  # Initialize before try block to prevent UnboundLocalError in finally
             try:
                 result = await self._process_sync_chat(
                     message=enhanced_message,
