@@ -198,5 +198,8 @@ async def verify_alice_storage_and_retrieval():
 
 
 if __name__ == "__main__":
+    import os
     exit_code = asyncio.run(verify_alice_storage_and_retrieval())
-    import os; os._exit(exit_code)
+    if exit_code == 0:
+        print("SUCCESS", flush=True)
+    os._exit(exit_code)

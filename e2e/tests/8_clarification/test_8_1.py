@@ -150,8 +150,11 @@ async def test_basic_clarification():
 
 def main():
     """Main entry point."""
+    import os
     exit_code = asyncio.run(test_basic_clarification())
-    import os; os._exit(exit_code)
+    if exit_code == 0:
+        print("SUCCESS", flush=True)
+    os._exit(exit_code)
 
 
 if __name__ == "__main__":

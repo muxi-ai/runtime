@@ -220,5 +220,8 @@ async def investigate_memory_storage():
 
 
 if __name__ == "__main__":
+    import os
     exit_code = asyncio.run(investigate_memory_storage())
-    import os; os._exit(exit_code)
+    if exit_code == 0:
+        print("SUCCESS", flush=True)
+    os._exit(exit_code)

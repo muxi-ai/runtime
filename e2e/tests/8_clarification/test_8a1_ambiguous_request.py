@@ -104,5 +104,8 @@ async def test_ambiguous_request_clarification():
 
 
 if __name__ == "__main__":
+    import os
     exit_code = asyncio.run(test_ambiguous_request_clarification())
-    import os; os._exit(exit_code)
+    if exit_code == 0:
+        print("SUCCESS", flush=True)
+    os._exit(exit_code)
