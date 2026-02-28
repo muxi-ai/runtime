@@ -14,6 +14,10 @@ from pathlib import Path
 
 TIMEOUT_SECONDS = 120
 EARLY_KILL_AFTER_SUCCESS = 3  # seconds to wait after SUCCESS before killing
+AREA_TIMEOUT_OVERRIDES = {
+    "19_api": 180,  # API tests spin up a server + multiple HTTP calls
+    "3_multimodal": 150,  # Vision/video LLM calls can be slow
+}
 E2E_DIR = Path(__file__).parent
 TESTS_DIR = E2E_DIR / "tests"
 RESULTS_DIR = E2E_DIR / "results"
@@ -53,6 +57,8 @@ def should_skip(filename: str) -> bool:
 
 
 def run_test(test_file: Path) -> dict:
+    area = test_file.parent.name
+    timeout = AREA_TIMEOUT_OVERRIDES.get(area, TIMEOUT_SECONDS)
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{SRC_DIR}:{TESTS_DIR}:{test_file.parent}:{env.get('PYTHONPATH', '')}"
     env["TOKENIZERS_PARALLELISM"] = "false"
@@ -79,7 +85,7 @@ def run_test(test_file: Path) -> dict:
         while True:
             elapsed = time.time() - t0
 
-            if elapsed > TIMEOUT_SECONDS:
+            if elapsed > timeout:
                 proc.kill()
                 break
 
@@ -106,7 +112,7 @@ def run_test(test_file: Path) -> dict:
         elapsed = time.time() - t0
         full_stdout = "".join(stdout_lines)
         full_stderr = stderr or ""
-        timed_out = elapsed >= TIMEOUT_SECONDS - 1
+        timed_out = elapsed >= timeout - 1
 
         has_success = any(m in full_stdout for m in pass_markers)
         has_fail = ("FAILED" in full_stdout or "FAILURE" in full_stdout) and not has_success
@@ -127,7 +133,7 @@ def run_test(test_file: Path) -> dict:
             "time_s": round(elapsed, 1),
             "stdout_tail": full_stdout[-2000:] if full_stdout else "",
             "stderr_tail": (
-                f"TIMEOUT after {TIMEOUT_SECONDS}s\n" if timed_out else ""
+                f"TIMEOUT after {timeout}s\n" if timed_out else ""
             ) + (full_stderr[-500:] if full_stderr else ""),
         }
     except Exception as e:

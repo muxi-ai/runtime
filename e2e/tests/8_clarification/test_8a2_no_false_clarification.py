@@ -49,7 +49,12 @@ async def test_no_false_clarification():
         print(f"   Response received ({len(content)} chars)")
 
         # Check for clarification indicators (should NOT be present)
-        clarification_indicators = ["could you specify", "what assistance", "need more", "clarify", "which"]
+        # Use specific multi-word phrases to avoid false positives on common words
+        clarification_indicators = [
+            "could you specify", "could you clarify", "what assistance",
+            "need more information", "what do you mean", "could you please clarify",
+            "what would you like", "to better assist",
+        ]
         has_clarification = any(indicator in content.lower() for indicator in clarification_indicators)
 
         if not has_clarification:
@@ -151,4 +156,7 @@ async def test_no_false_clarification():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(test_no_false_clarification())
-    import os; os._exit(exit_code)
+    import os
+    if exit_code == 0:
+        print("SUCCESS", flush=True)
+    os._exit(exit_code)
