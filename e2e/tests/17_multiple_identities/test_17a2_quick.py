@@ -92,6 +92,8 @@ def main():
     """Run the test."""
     import os
     result = asyncio.run(test_multi_identity_quick())
+    if result:
+        print("SUCCESS", flush=True)
     os._exit(0 if result else 1)
 
 

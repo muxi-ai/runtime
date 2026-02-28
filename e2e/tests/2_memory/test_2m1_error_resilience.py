@@ -228,5 +228,7 @@ async def test_error_resilience():
 
 
 if __name__ == "__main__":
-    asyncio.run(test_error_resilience())
-    os._exit(0)
+    result = asyncio.run(test_error_resilience())
+    if result:
+        print("SUCCESS", flush=True)
+    os._exit(0 if result else 1)

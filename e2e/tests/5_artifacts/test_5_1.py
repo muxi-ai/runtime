@@ -122,18 +122,20 @@ class Test51(BaseArtifactsTest):
         finally:
             duration = time.time() - start_time
             self.print_test_result(test_name, all_passed, checks_passed, transcript, duration)
-            if all_passed:
-                print("SUCCESS", flush=True)
-            os._exit(0 if all_passed else 1)
+
+        return all_passed
 
     async def run_test(self):
         """Run test."""
         print("\n" + "=" * 60)
         print("AREA 5_1: Chart Generation and File Artifacts")
         print("=" * 60)
-        await self.test_main()
+        return await self.test_main()
 
 
 if __name__ == "__main__":
     test = Test51()
-    asyncio.run(test.run_test())
+    result = asyncio.run(test.run_test())
+    if result:
+        print("SUCCESS", flush=True)
+    os._exit(0 if result else 1)
