@@ -671,14 +671,28 @@ class KnowledgeHandler:
 
         try:
             # Create handler with performance limits
+            # Resolve embedding dimension from formation config or kwargs
+            embedding_dim = kwargs.get("embedding_dimension")
+            if embedding_dim is None:
+                if formation_config:
+                    # Try to get from formation's embedding model
+                    from ....services.memory.local_embeddings import resolve_embedding_dimension
+                    models = formation_config.get("llm", {}).get("models", [])
+                    for m in models:
+                        if isinstance(m, dict) and "embedding" in m:
+                            embedding_dim = resolve_embedding_dimension(m["embedding"])
+                            break
+                if embedding_dim is None:
+                    # Default to local embedding dimension
+                    from ....services.memory.local_embeddings import get_local_embedding_dimension
+                    embedding_dim = get_local_embedding_dimension()
+
             handler = cls(
                 agent_id_or_sources=agent_id,
                 formation_id=kwargs.get(
                     "formation_id", "default-formation"
                 ),  # Use passed formation_id
-                embedding_dimension=kwargs.get(
-                    "embedding_dimension", 1536
-                ),  # Match text-embedding-3-small
+                embedding_dimension=embedding_dim,
                 cache_dir=kwargs.get("cache_dir", get_knowledge_dir()),
                 mode=kwargs.get("mode", "local"),
                 remote=kwargs.get("remote"),

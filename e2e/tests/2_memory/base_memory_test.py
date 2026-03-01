@@ -34,6 +34,8 @@ class BaseMemoryTest(BaseE2ETest):
         "auto_extract": "formation-auto-extract.yaml",
         "memory_limits": "formation-memory-limits.yaml",
         "basic": "formation-basic.yaml",
+        "local_384": "formation-local-384.yaml",
+        "local_768": "formation-local-768.yaml",
     }
 
     def __init__(self):

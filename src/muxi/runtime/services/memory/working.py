@@ -182,9 +182,16 @@ class WorkingMemory:
 
         if model:
             if isinstance(model, str):
-                # Model name provided - will create LLM instance lazily
-                self._model_name = model
-                self.dimension = dimension
+                from .local_embeddings import is_local_model, resolve_embedding_dimension, resolve_local_model_name
+
+                if is_local_model(model):
+                    self._use_local_embeddings = True
+                    self._local_model_name = resolve_local_model_name(model)
+                    self.dimension = resolve_embedding_dimension(model)
+                else:
+                    # API model name — will create LLM instance lazily
+                    self._model_name = model
+                    self.dimension = resolve_embedding_dimension(model)
             else:
                 # Assume it's an LLM instance
                 self._model = model
@@ -192,6 +199,7 @@ class WorkingMemory:
         else:
             # No embedding model configured - use local fallback
             self._use_local_embeddings = True
+            self._local_model_name = None  # uses default
             from .local_embeddings import get_local_embedding_dimension
 
             self.dimension = get_local_embedding_dimension()
@@ -229,9 +237,10 @@ class WorkingMemory:
         # Check if we should use local embeddings
         if self._use_local_embeddings:
             if self._model is None:
-                from .local_embeddings import LocalEmbeddingProvider
+                from .local_embeddings import LOCAL_EMBEDDING_MODEL_NAME, LocalEmbeddingProvider
 
-                self._model = LocalEmbeddingProvider()
+                model_name = getattr(self, "_local_model_name", None) or LOCAL_EMBEDDING_MODEL_NAME
+                self._model = LocalEmbeddingProvider(model_name=model_name)
 
                 # Log once about using local embeddings
                 if not self._local_embedding_logged:

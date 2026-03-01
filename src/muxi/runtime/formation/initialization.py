@@ -336,7 +336,9 @@ def initialize_memory_systems(formation) -> None:
             # Create all database tables after persistent memory is initialized
             # This ensures all models are imported and registered with Base.metadata
             if hasattr(formation, "_db_manager") and formation._db_manager:
-                _create_all_database_tables(formation._db_manager)
+                # Pass embedding dimension so the correct memories_{dim} table is created
+                embedding_dim = getattr(formation._long_term_memory, "dimension", 1536)
+                _create_all_database_tables(formation._db_manager, embedding_dim)
 
 
 def _initialize_working_memory(formation, working_config: Dict[str, Any]) -> None:
@@ -552,7 +554,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
         # Don't raise - persistent memory is optional
 
 
-def _create_all_database_tables(db_manager) -> None:
+def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> None:
     """
     Create all database tables for the MUXI runtime.
 
@@ -561,16 +563,20 @@ def _create_all_database_tables(db_manager) -> None:
 
     Args:
         db_manager: The database manager instance with connection to database
+        embedding_dimension: Vector dimension for the memories table (e.g. 384, 768, 1536)
     """
     try:
         # Import all models to ensure they are registered with Base.metadata
-        # Memory models (users, memories)
+        # Memory models (users, memories_{dimension})
         # Credential models (credentials table) - Note: User is already imported above
         from ..formation.credentials.resolver import Credential  # noqa: F401
 
         # Get Base from db module
         from ..services.db import Base
-        from ..services.memory.long_term import Memory, User  # noqa: F401
+        from ..services.memory.long_term import User, get_memory_model  # noqa: F401
+
+        # Ensure the correct dimension-specific memory model is registered
+        get_memory_model(embedding_dimension)
 
         # Scheduler models (scheduled_jobs, scheduled_job_audit)
         from ..services.scheduler.models import ScheduledJob, ScheduledJobAudit  # noqa: F401
@@ -578,20 +584,20 @@ def _create_all_database_tables(db_manager) -> None:
         # Create all tables using the database manager
         db_manager.create_tables(Base.metadata)
 
+        memories_table = f"memories_{embedding_dimension}"
         table_names = [
             "users",
             "user_identifiers",
-            "memories",  # Memory system tables
+            memories_table,  # Memory system tables (dimension-specific)
             "credentials",  # Credential storage
             "scheduled_jobs",
             "scheduled_job_audit",  # Scheduler tables
         ]
-        pass  # REMOVED: init-phase observe() call
 
         # Print clean formatted line
         print(
             InitEventFormatter.format_ok(
-                "Database schema ready", f"{len(table_names)} tables initialized"
+                "Database schema ready", f"{len(table_names)} tables initialized ({memories_table})"
             )
         )
 
@@ -1148,7 +1154,11 @@ async def initialize_persistent_memory(
 
             # Remove sqlite:// prefix if present
             db_path = connection_string.replace("sqlite://", "")
-            sqlite_memory = SQLiteMemory(db_path=db_path, formation_id=overlord.formation_id)
+            sqlite_memory = SQLiteMemory(
+                db_path=db_path,
+                formation_id=overlord.formation_id,
+                embedding_model=embedding_model_name or embedding_model,
+            )
 
             # Store on both formation and overlord
             formation._long_term_memory = sqlite_memory

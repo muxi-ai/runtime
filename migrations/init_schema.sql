@@ -84,8 +84,10 @@ CREATE INDEX IF NOT EXISTS idx_user_identifiers_lookup ON user_identifiers(ident
 CREATE INDEX IF NOT EXISTS idx_user_identifiers_user_id ON user_identifiers(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_identifiers_formation_id ON user_identifiers(formation_id);
 
--- Memories table
-CREATE TABLE IF NOT EXISTS memories (
+-- Memories table (dimension-specific: memories_384, memories_768, memories_1536, etc.)
+-- The runtime creates the table matching the configured embedding model's dimension.
+-- This schema uses 1536 (OpenAI text-embedding-3-small) as the default example.
+CREATE TABLE IF NOT EXISTS memories_1536 (
     id VARCHAR(21) PRIMARY KEY DEFAULT nanoid(),
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     text TEXT NOT NULL,
@@ -96,15 +98,15 @@ CREATE TABLE IF NOT EXISTS memories (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id);
-CREATE INDEX IF NOT EXISTS idx_memories_collection ON memories(collection);
-CREATE INDEX IF NOT EXISTS idx_memories_created_at ON memories(created_at);
-CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at);
-CREATE INDEX IF NOT EXISTS idx_memories_user_created_at ON memories(user_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_memories_text_gin ON memories USING gin(to_tsvector('english', text));
+CREATE INDEX IF NOT EXISTS idx_memories_1536_user_id ON memories_1536(user_id);
+CREATE INDEX IF NOT EXISTS idx_memories_1536_collection ON memories_1536(collection);
+CREATE INDEX IF NOT EXISTS idx_memories_1536_created_at ON memories_1536(created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_1536_updated_at ON memories_1536(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_1536_user_created_at ON memories_1536(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_1536_text_gin ON memories_1536 USING gin(to_tsvector('english', text));
 
 -- Vector similarity index
-CREATE INDEX IF NOT EXISTS memories_embedding_idx ON memories 
+CREATE INDEX IF NOT EXISTS memories_1536_embedding_idx ON memories_1536
 USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 -- Credentials table
@@ -202,10 +204,10 @@ EXECUTE FUNCTION update_scheduled_jobs_updated_at();
 -- =====================================================================
 
 COMMENT ON TABLE scheduled_job_audit IS 'Audit trail for scheduled job lifecycle events. Does not track executions.';
-COMMENT ON TABLE memories IS 'Stores vector embeddings and text content for semantic search';
+COMMENT ON TABLE memories_1536 IS 'Stores vector embeddings and text content for semantic search (1536-dim)';
 COMMENT ON TABLE users IS 'Multi-user support with formation isolation';
-COMMENT ON COLUMN memories.collection IS 'Collection name for organizing memories (e.g., preferences, user_identity, activities)';
-COMMENT ON COLUMN memories.meta_data IS 'Additional metadata stored as JSON';
+COMMENT ON COLUMN memories_1536.collection IS 'Collection name for organizing memories (e.g., preferences, user_identity, activities)';
+COMMENT ON COLUMN memories_1536.meta_data IS 'Additional metadata stored as JSON';
 
 -- =====================================================================
 -- GRANTS

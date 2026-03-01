@@ -68,9 +68,9 @@ class ModelConfig(BaseModel):
         default=4096,
         description="Maximum number of tokens in model responses",
     )
-    embedding_dimension: int = Field(
-        default=1536,
-        description="Vector dimension for embeddings",
+    embedding_dimension: Optional[int] = Field(
+        default=None,
+        description="Vector dimension for embeddings (derived from embedding model at runtime)",
     )
     top_p: float = Field(
         default=1.0,

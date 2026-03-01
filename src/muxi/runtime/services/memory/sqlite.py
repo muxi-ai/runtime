@@ -60,7 +60,7 @@ class SQLiteMemory(BaseMemory):
         dimension: int = 1536,
         default_collection: str = "default",
         extensions_dir: str = "extensions",
-        embedding_model=None,  # Accept but ignore for compatibility
+        embedding_model=None,
     ):
         """
         Initialize a local SQLite-based vector memory store with support for persistent collections and embeddings.
@@ -71,24 +71,44 @@ class SQLiteMemory(BaseMemory):
             dimension (int, optional): Dimensionality of embedding vectors. Defaults to 1536.
             default_collection (str, optional): Name of the default collection. Defaults to "default".
             extensions_dir (str, optional): Directory containing sqlite-vec extensions. Defaults to "extensions".
-            embedding_model (optional): Accepted for compatibility but not used.
+            embedding_model (optional): Embedding model name or LLM instance.
         """
         self.db_path = db_path
         self.formation_id = formation_id
-        self.dimension = dimension
         self.default_collection = default_collection
         self.extensions_dir = extensions_dir
 
         # Store embedding model config for lazy loading (like LongTermMemory does)
         self._embedding_provider = None
         self._embedding_model_name = None
+        self._use_local_embeddings = False
+        self._local_model_name = None
+
         if embedding_model:
             if isinstance(embedding_model, str):
-                # Store the model name, create LLM on first use
-                self._embedding_model_name = embedding_model
+                from .local_embeddings import is_local_model, resolve_embedding_dimension, resolve_local_model_name
+
+                if is_local_model(embedding_model):
+                    self._use_local_embeddings = True
+                    self._local_model_name = resolve_local_model_name(embedding_model)
+                    self.dimension = resolve_embedding_dimension(embedding_model)
+                else:
+                    # API model name — will create LLM on first use
+                    self._embedding_model_name = embedding_model
+                    self.dimension = resolve_embedding_dimension(embedding_model)
             else:
                 # Already an LLM instance
                 self._embedding_provider = embedding_model
+                self.dimension = dimension
+        else:
+            # No embedding model configured - use local fallback
+            self._use_local_embeddings = True
+            from .local_embeddings import get_local_embedding_dimension
+
+            self.dimension = get_local_embedding_dimension()
+
+        # Dimension-specific table name (memories_384, memories_1536, etc.)
+        self.memories_table = f"memories_{self.dimension}"
 
         # Create database directory if it doesn't exist
         os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
@@ -211,8 +231,8 @@ class SQLiteMemory(BaseMemory):
             )
         """)
 
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS memories (
+        conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS {self.memories_table} (
                 id TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
                 collection TEXT NOT NULL,
@@ -304,6 +324,13 @@ class SQLiteMemory(BaseMemory):
     @property
     def embedding_provider(self):
         """Lazy load embedding provider on first access (like LongTermMemory)."""
+        if self._use_local_embeddings:
+            if self._embedding_provider is None:
+                from .local_embeddings import LOCAL_EMBEDDING_MODEL_NAME, LocalEmbeddingProvider
+
+                model_name = self._local_model_name or LOCAL_EMBEDDING_MODEL_NAME
+                self._embedding_provider = LocalEmbeddingProvider(model_name=model_name)
+            return self._embedding_provider
         if self._embedding_provider is None and self._embedding_model_name:
             from ..llm import LLM
 
@@ -434,8 +461,8 @@ class SQLiteMemory(BaseMemory):
 
         # Insert memory
         self.conn.execute(
-            """
-            INSERT INTO memories
+            f"""
+            INSERT INTO {self.memories_table}
             (id, user_id, collection, text, embedding, metadata)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
@@ -574,14 +601,14 @@ class SQLiteMemory(BaseMemory):
         # Build query with JOIN to ensure formation isolation
         # Search across ALL collections if collection is None
         if collection:
-            query = """
+            query = f"""
                 SELECT
                     m.id,
                     m.text,
                     m.metadata,
                     m.created_at,
                     vec_distance_cosine(m.embedding, ?) as score
-                FROM memories m
+                FROM {self.memories_table} m
                 JOIN users u ON m.user_id = u.id
                 WHERE m.collection = ?
                     AND m.user_id = ?
@@ -592,14 +619,14 @@ class SQLiteMemory(BaseMemory):
             params = (query_embedding, collection, user_id, self.formation_id, k)
         else:
             # Search ALL collections
-            query = """
+            query = f"""
                 SELECT
                     m.id,
                     m.text,
                     m.metadata,
                     m.created_at,
                     vec_distance_cosine(m.embedding, ?) as score
-                FROM memories m
+                FROM {self.memories_table} m
                 JOIN users u ON m.user_id = u.id
                 WHERE m.user_id = ?
                     AND u.formation_id = ?
@@ -644,9 +671,9 @@ class SQLiteMemory(BaseMemory):
             The memory object if found, otherwise None
         """
         cursor = self.conn.execute(
-            """
+            f"""
             SELECT m.id, m.text, m.metadata, m.created_at
-            FROM memories m
+            FROM {self.memories_table} m
             JOIN users u ON m.user_id = u.id
             WHERE m.id = ? AND u.formation_id = ?
             """,
@@ -699,9 +726,9 @@ class SQLiteMemory(BaseMemory):
 
         # Ensure we're sorting by created_at in descending order (newest first)
         cursor = self.conn.execute(
-            """
+            f"""
             SELECT m.id, m.text, m.metadata, m.created_at
-            FROM memories m
+            FROM {self.memories_table} m
             JOIN users u ON m.user_id = u.id
             WHERE m.collection = ?
                 AND m.user_id = ?

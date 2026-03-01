@@ -56,6 +56,47 @@ AVAILABLE_LOCAL_MODELS = {
     },
 }
 
+# Well-known API embedding model dimensions
+API_EMBEDDING_DIMENSIONS = {
+    "openai/text-embedding-3-small": 1536,
+    "openai/text-embedding-3-large": 3072,
+    "openai/text-embedding-ada-002": 1536,
+}
+
+
+def is_local_model(model_name: str) -> bool:
+    """Check if model_name refers to a local embedding model (local/ prefix or known name)."""
+    if model_name.startswith("local/"):
+        return True
+    bare = model_name.split("/")[-1] if "/" in model_name else model_name
+    return bare in AVAILABLE_LOCAL_MODELS
+
+
+def resolve_local_model_name(model_name: str) -> str:
+    """Strip local/ prefix to get the bare sentence-transformer model name."""
+    if model_name.startswith("local/"):
+        return model_name[len("local/"):]
+    return model_name
+
+
+def resolve_embedding_dimension(model_name: str) -> int:
+    """Resolve the embedding dimension for any model name (local or API).
+
+    Args:
+        model_name: Model name, e.g. "local/all-MiniLM-L6-v2" or "openai/text-embedding-3-small"
+
+    Returns:
+        Integer dimension of the embedding vector
+    """
+    if is_local_model(model_name):
+        bare = resolve_local_model_name(model_name)
+        return get_local_embedding_dimension(bare)
+    if model_name in API_EMBEDDING_DIMENSIONS:
+        return API_EMBEDDING_DIMENSIONS[model_name]
+    # Default for unknown API models
+    return 1536
+
+
 # Global model cache with thread-safe initialization
 _model = None
 _model_lock = threading.Lock()

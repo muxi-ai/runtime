@@ -1,0 +1,41 @@
+schema: "1.0.0"
+id: "memory-test-local-384"
+description: "Formation for testing local 384-dim embeddings (default, no embedding model)"
+
+runtime:
+  built_in_mcps: false
+
+overlord:
+  clarification:
+    enabled: false
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 500
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    # No embedding model — defaults to local all-MiniLM-L6-v2 (384-dim)
+
+memory:
+  buffer:
+    size: 10
+    vector_search: false
+
+  persistent:
+    connection_string: "${{ secrets.POSTGRES_URI }}"
+    # No embedding_model — falls back to local 384-dim
+
+logging:
+  system:
+    level: "debug"
+    destination: "stdout"
+
+agents:
+  - id: "test-agent"
+    name: "Test Agent"
+    description: "Agent for testing local embeddings"
+    model: "openai/gpt-4o-mini"
+    system_message: "You are a helpful assistant. Remember what users tell you."

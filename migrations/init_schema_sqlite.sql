@@ -58,8 +58,10 @@ CREATE TABLE IF NOT EXISTS collections (
 CREATE INDEX IF NOT EXISTS idx_collections_user_id ON collections(user_id);
 CREATE INDEX IF NOT EXISTS idx_collections_name ON collections(name);
 
--- Memories table
-CREATE TABLE IF NOT EXISTS memories (
+-- Memories table (dimension-specific: memories_384, memories_768, memories_1536, etc.)
+-- The runtime creates the table matching the configured embedding model's dimension.
+-- This schema uses 1536 (OpenAI text-embedding-3-small) as the default example.
+CREATE TABLE IF NOT EXISTS memories_1536 (
     id TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL,
     collection TEXT NOT NULL DEFAULT 'default',
@@ -71,31 +73,31 @@ CREATE TABLE IF NOT EXISTS memories (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id);
-CREATE INDEX IF NOT EXISTS idx_memories_collection ON memories(collection);
-CREATE INDEX IF NOT EXISTS idx_memories_created_at ON memories(created_at);
-CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at);
-CREATE INDEX IF NOT EXISTS idx_memories_user_created_at ON memories(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_1536_user_id ON memories_1536(user_id);
+CREATE INDEX IF NOT EXISTS idx_memories_1536_collection ON memories_1536(collection);
+CREATE INDEX IF NOT EXISTS idx_memories_1536_created_at ON memories_1536(created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_1536_updated_at ON memories_1536(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_1536_user_created_at ON memories_1536(user_id, created_at);
 
 -- SQLite FTS5 for full-text search (equivalent to PostgreSQL GIN index)
-CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_1536_fts USING fts5(
     text,
-    content='memories',
+    content='memories_1536',
     content_rowid='rowid'
 );
 
 -- Trigger to keep FTS index in sync with memories table
-CREATE TRIGGER IF NOT EXISTS memories_fts_insert AFTER INSERT ON memories BEGIN
-    INSERT INTO memories_fts(rowid, text) VALUES (new.rowid, new.text);
+CREATE TRIGGER IF NOT EXISTS memories_1536_fts_insert AFTER INSERT ON memories_1536 BEGIN
+    INSERT INTO memories_1536_fts(rowid, text) VALUES (new.rowid, new.text);
 END;
 
-CREATE TRIGGER IF NOT EXISTS memories_fts_delete AFTER DELETE ON memories BEGIN
-    DELETE FROM memories_fts WHERE rowid = old.rowid;
+CREATE TRIGGER IF NOT EXISTS memories_1536_fts_delete AFTER DELETE ON memories_1536 BEGIN
+    DELETE FROM memories_1536_fts WHERE rowid = old.rowid;
 END;
 
-CREATE TRIGGER IF NOT EXISTS memories_fts_update AFTER UPDATE ON memories BEGIN
-    DELETE FROM memories_fts WHERE rowid = old.rowid;
-    INSERT INTO memories_fts(rowid, text) VALUES (new.rowid, new.text);
+CREATE TRIGGER IF NOT EXISTS memories_1536_fts_update AFTER UPDATE ON memories_1536 BEGIN
+    DELETE FROM memories_1536_fts WHERE rowid = old.rowid;
+    INSERT INTO memories_1536_fts(rowid, text) VALUES (new.rowid, new.text);
 END;
 
 -- Credentials table
@@ -199,11 +201,11 @@ BEGIN
     UPDATE collections SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
-CREATE TRIGGER IF NOT EXISTS trigger_update_memories_updated_at
-AFTER UPDATE ON memories
+CREATE TRIGGER IF NOT EXISTS trigger_update_memories_1536_updated_at
+AFTER UPDATE ON memories_1536
 FOR EACH ROW
 BEGIN
-    UPDATE memories SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+    UPDATE memories_1536 SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trigger_update_credentials_updated_at

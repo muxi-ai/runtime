@@ -114,28 +114,46 @@ class UserIdentifier(Base, AsyncModelMixin):
     )
 
 
-class Memory(Base, AsyncModelMixin):
+# Dynamic Memory model factory — one ORM class per embedding dimension.
+# Table name: memories_{dimension} (e.g. memories_384, memories_768, memories_1536).
+_memory_models: Dict[int, Any] = {}
+
+
+def get_memory_model(dimension: int):
+    """Return (or create) the SQLAlchemy ORM model for the given embedding dimension.
+
+    Each dimension gets its own table (``memories_384``, ``memories_1536``, etc.)
+    so formations with different embedding models can coexist on the same database.
     """
-    Memory table for storing vector embeddings and metadata.
+    if dimension in _memory_models:
+        return _memory_models[dimension]
 
-    This SQLAlchemy model defines the structure for storing memories in the database,
-    including vector embeddings, text content, metadata, and organizational information.
-    """
+    tablename = f"memories_{dimension}"
 
-    __tablename__ = "memories"
+    model = type(
+        f"Memory_{dimension}",
+        (Base, AsyncModelMixin),
+        {
+            "__tablename__": tablename,
+            "__table_args__": {"extend_existing": True},
+            "id": Column(String(21), primary_key=True, default=get_default_nanoid),
+            "user_id": Column(Integer, ForeignKey("users.id"), nullable=False, index=True),
+            "embedding": Column(Vector(dimension)),
+            "text": Column(Text, nullable=False),
+            "meta_data": Column(JSONType, nullable=False, default={}),
+            "created_at": Column(DateTime, default=utc_now_naive),
+            "updated_at": Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive),
+            "collection": Column(String(255), nullable=False, index=True),
+        },
+    )
 
-    id = Column(String(21), primary_key=True, default=get_default_nanoid)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    embedding = Column(Vector(1536))  # Default dimension for OpenAI embeddings
-    text = Column(Text, nullable=False)
-    meta_data = Column(JSONType, nullable=False, default={})
-    created_at = Column(DateTime, default=utc_now_naive)
-    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
-    collection = Column(String(255), nullable=False, index=True)
+    _memory_models[dimension] = model
+    return model
 
 
-# Note: Collection table has been removed.
-# Memories now use a simple 'collection' column for categorization.
+# Backwards-compat alias used by initialization.py for table registration.
+# Defaults to 1536 (OpenAI) — callers should prefer get_memory_model(dim).
+Memory = get_memory_model(1536)
 
 
 class LongTermMemory:
@@ -181,9 +199,16 @@ class LongTermMemory:
 
         if embedding_model:
             if isinstance(embedding_model, str):
-                # Model name provided - will create LLM instance lazily
-                self._embedding_model_name = embedding_model
-                self.dimension = dimension
+                from .local_embeddings import is_local_model, resolve_embedding_dimension, resolve_local_model_name
+
+                if is_local_model(embedding_model):
+                    self._use_local_embeddings = True
+                    self._local_model_name = resolve_local_model_name(embedding_model)
+                    self.dimension = resolve_embedding_dimension(embedding_model)
+                else:
+                    # API model name — will create LLM instance lazily
+                    self._embedding_model_name = embedding_model
+                    self.dimension = resolve_embedding_dimension(embedding_model)
             else:
                 # Assume it's an LLM instance
                 self._embedding_model = embedding_model
@@ -193,7 +218,11 @@ class LongTermMemory:
             self._use_local_embeddings = True
             from .local_embeddings import get_local_embedding_dimension
 
+            self._local_model_name = None  # uses default
             self.dimension = get_local_embedding_dimension()
+
+        # Resolve the ORM model for this dimension
+        self.MemoryModel = get_memory_model(self.dimension)
 
         # Use provided database manager
         self.db_manager = db_manager
@@ -223,9 +252,10 @@ class LongTermMemory:
         # Check if we should use local embeddings
         if self._use_local_embeddings:
             if self._embedding_model is None:
-                from .local_embeddings import LocalEmbeddingProvider
+                from .local_embeddings import LOCAL_EMBEDDING_MODEL_NAME, LocalEmbeddingProvider
 
-                self._embedding_model = LocalEmbeddingProvider()
+                model_name = getattr(self, "_local_model_name", None) or LOCAL_EMBEDDING_MODEL_NAME
+                self._embedding_model = LocalEmbeddingProvider(model_name=model_name)
 
                 # Log once about using local embeddings
                 if not self._local_embedding_logged:
@@ -602,7 +632,7 @@ class LongTermMemory:
                 embedding = embedding.tolist()
 
             # Create memory using async model helper with internal user ID
-            memory = await Memory.create(
+            memory = await self.MemoryModel.create(
                 session,
                 user_id=internal_user_id,  # Use resolved internal ID
                 text=text,
@@ -653,7 +683,7 @@ class LongTermMemory:
                 embedding = embedding.tolist()
 
             # Create memory
-            memory = Memory(
+            memory = self.MemoryModel(
                 user_id=internal_user_id,
                 text=text,
                 embedding=embedding,
@@ -847,12 +877,12 @@ class LongTermMemory:
             # Build query
             query = (
                 select(
-                    Memory,
-                    func.l2_distance(Memory.embedding, query_embedding_vector).label("distance"),
+                    self.MemoryModel,
+                    func.l2_distance(self.MemoryModel.embedding, query_embedding_vector).label("distance"),
                 )
                 .filter(
-                    Memory.user_id == internal_user_id,
-                    Memory.collection == collection,
+                    self.MemoryModel.user_id == internal_user_id,
+                    self.MemoryModel.collection == collection,
                 )
                 .order_by("distance")
                 .limit(k)
@@ -861,22 +891,23 @@ class LongTermMemory:
             # Add metadata filters if provided
             if filter_metadata:
                 for key, value in filter_metadata.items():
-                    query = query.filter(Memory.meta_data[key].astext == str(value))
+                    query = query.filter(self.MemoryModel.meta_data[key].astext == str(value))
 
             # Execute query
             results = session.execute(query).all()
 
-            # Format results
+            # Format results — use index [0] for the model instance since
+            # the dynamic class name varies (Memory_384, Memory_1536, etc.)
             return [
                 (
                     1.0 / (1.0 + float(result.distance)),  # Convert distance to similarity score
                     {
-                        "id": result.Memory.id,
-                        "text": result.Memory.text,
-                        "meta_data": result.Memory.meta_data,
+                        "id": result[0].id,
+                        "text": result[0].text,
+                        "meta_data": result[0].meta_data,
                         "created_at": (
-                            result.Memory.created_at.isoformat()
-                            if result.Memory.created_at
+                            result[0].created_at.isoformat()
+                            if result[0].created_at
                             else None
                         ),
                     },
@@ -899,10 +930,10 @@ class LongTermMemory:
         """
         with self.Session() as session:
             memory = (
-                session.query(Memory)
-                .join(User, Memory.user_id == User.id)
+                session.query(self.MemoryModel)
+                .join(User, self.MemoryModel.user_id == User.id)
                 .filter(
-                    Memory.id == memory_id,
+                    self.MemoryModel.id == memory_id,
                     User.formation_id == self.formation_id,
                 )
                 .first()
@@ -958,10 +989,10 @@ class LongTermMemory:
 
         with self.Session() as session:
             memory = (
-                session.query(Memory)
-                .join(User, Memory.user_id == User.id)
+                session.query(self.MemoryModel)
+                .join(User, self.MemoryModel.user_id == User.id)
                 .filter(
-                    Memory.id == memory_id,
+                    self.MemoryModel.id == memory_id,
                     User.formation_id == self.formation_id,
                 )
                 .first()
@@ -1038,10 +1069,10 @@ class LongTermMemory:
 
         with self.Session() as session:
             memory = (
-                session.query(Memory)
-                .join(User, Memory.user_id == User.id)
+                session.query(self.MemoryModel)
+                .join(User, self.MemoryModel.user_id == User.id)
                 .filter(
-                    Memory.id == memory_id,
+                    self.MemoryModel.id == memory_id,
                     User.formation_id == self.formation_id,
                 )
                 .first()
@@ -1095,9 +1126,9 @@ class LongTermMemory:
             from sqlalchemy import distinct
 
             collections = (
-                session.query(distinct(Memory.collection))
+                session.query(distinct(self.MemoryModel.collection))
                 .filter(
-                    Memory.user_id == internal_user_id,
+                    self.MemoryModel.user_id == internal_user_id,
                 )
                 .all()
             )
@@ -1167,10 +1198,10 @@ class LongTermMemory:
         with self.Session() as session:
             # Check if there are memories in this collection (no JOIN needed)
             memories_count = (
-                session.query(Memory)
+                session.query(self.MemoryModel)
                 .filter(
-                    Memory.collection == name,
-                    Memory.user_id == internal_user_id,
+                    self.MemoryModel.collection == name,
+                    self.MemoryModel.user_id == internal_user_id,
                 )
                 .count()
             )
@@ -1180,13 +1211,13 @@ class LongTermMemory:
 
             if delete_memories:
                 # Delete all memories in the collection for this user
-                session.query(Memory).filter(
-                    Memory.collection == name, Memory.user_id == internal_user_id
+                session.query(self.MemoryModel).filter(
+                    self.MemoryModel.collection == name, self.MemoryModel.user_id == internal_user_id
                 ).delete()
             else:
                 # Move memories to default collection for this user
-                session.query(Memory).filter(
-                    Memory.collection == name, Memory.user_id == internal_user_id
+                session.query(self.MemoryModel).filter(
+                    self.MemoryModel.collection == name, self.MemoryModel.user_id == internal_user_id
                 ).update({"collection": self.default_collection})
 
             session.commit()
@@ -1211,13 +1242,13 @@ class LongTermMemory:
 
         with self.Session() as session:
             memories = (
-                session.query(Memory)
-                .join(User, Memory.user_id == User.id)
+                session.query(self.MemoryModel)
+                .join(User, self.MemoryModel.user_id == User.id)
                 .filter(
-                    Memory.collection == collection_name,
+                    self.MemoryModel.collection == collection_name,
                     User.formation_id == self.formation_id,
                 )
-                .order_by(desc(Memory.created_at))
+                .order_by(desc(self.MemoryModel.created_at))
                 .limit(limit)
                 .all()
             )
@@ -1265,12 +1296,12 @@ class LongTermMemory:
         async with self.AsyncSession() as session:
             # Build query filtered by user_id (USER-SPECIFIC)
             query = (
-                select(Memory)
+                select(self.MemoryModel)
                 .where(
-                    Memory.user_id == internal_user_id,
-                    Memory.collection == collection_name,
+                    self.MemoryModel.user_id == internal_user_id,
+                    self.MemoryModel.collection == collection_name,
                 )
-                .order_by(desc(Memory.created_at))
+                .order_by(desc(self.MemoryModel.created_at))
                 .offset(offset)
                 .limit(limit)
             )
@@ -1342,12 +1373,12 @@ class LongTermMemory:
             # Build query
             query = (
                 select(
-                    Memory,
-                    func.l2_distance(Memory.embedding, query_embedding_vector).label("distance"),
+                    self.MemoryModel,
+                    func.l2_distance(self.MemoryModel.embedding, query_embedding_vector).label("distance"),
                 )
                 .filter(
-                    Memory.user_id == internal_user_id,
-                    Memory.collection == collection,
+                    self.MemoryModel.user_id == internal_user_id,
+                    self.MemoryModel.collection == collection,
                 )
                 .order_by("distance")
                 .limit(k)
@@ -1356,23 +1387,24 @@ class LongTermMemory:
             # Add metadata filters if provided
             if filter_metadata:
                 for key, value in filter_metadata.items():
-                    query = query.filter(Memory.meta_data[key].astext == str(value))
+                    query = query.filter(self.MemoryModel.meta_data[key].astext == str(value))
 
             # Execute query
             result = await session.execute(query)
             results = result.all()
 
-            # Format results
+            # Format results — use index [0] for the model instance since
+            # the dynamic class name varies (Memory_384, Memory_1536, etc.)
             return [
                 (
                     1.0 / (1.0 + float(result.distance)),  # Convert distance to similarity score
                     {
-                        "id": result.Memory.id,
-                        "text": result.Memory.text,
-                        "meta_data": result.Memory.meta_data,
+                        "id": result[0].id,
+                        "text": result[0].text,
+                        "meta_data": result[0].meta_data,
                         "created_at": (
-                            result.Memory.created_at.isoformat()
-                            if result.Memory.created_at
+                            result[0].created_at.isoformat()
+                            if result[0].created_at
                             else None
                         ),
                     },
@@ -1450,11 +1482,11 @@ class LongTermMemory:
             else:
                 # Fallback for SQLite - use LIKE with proper user filtering
                 query_obj = (
-                    select(Memory)
+                    select(self.MemoryModel)
                     .filter(
-                        Memory.user_id == internal_user_id,
-                        Memory.collection == collection,
-                        Memory.text.ilike(f"%{query}%"),
+                        self.MemoryModel.user_id == internal_user_id,
+                        self.MemoryModel.collection == collection,
+                        self.MemoryModel.text.ilike(f"%{query}%"),
                     )
                     .limit(limit)
                 )
