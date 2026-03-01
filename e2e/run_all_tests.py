@@ -15,7 +15,7 @@ from pathlib import Path
 TIMEOUT_SECONDS = 120
 EARLY_KILL_AFTER_SUCCESS = 3  # seconds to wait after SUCCESS before killing
 AREA_TIMEOUT_OVERRIDES = {
-    "19_api": 240,       # API tests spin up a server + multiple HTTP calls (memory CRUD can be slow)
+    "19_api": 360,       # API tests spin up a server + memory CRUD with extraction waits
     "3_multimodal": 360,  # Vision/video LLM calls can be very slow (14MB video analysis)
     "2_memory": 180,    # Memory tests with extraction waits, multi-user, PG queries
 }
@@ -64,6 +64,9 @@ def run_test(test_file: Path) -> dict:
     env["PYTHONPATH"] = f"{SRC_DIR}:{TESTS_DIR}:{test_file.parent}:{env.get('PYTHONPATH', '')}"
     env["TOKENIZERS_PARALLELISM"] = "false"
     env["PYTHONUNBUFFERED"] = "1"
+    env["OMP_NUM_THREADS"] = "1"       # Prevent OpenMP thread pool crashes
+    env["MKL_NUM_THREADS"] = "1"       # Prevent MKL thread pool crashes
+    env["OPENBLAS_NUM_THREADS"] = "1"  # Prevent OpenBLAS thread pool crashes
 
     pass_markers = ["SUCCESS", "PASSED", "All checks passed", "CORE TESTS PASSED"]
     t0 = time.time()
