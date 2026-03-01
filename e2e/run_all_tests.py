@@ -16,7 +16,7 @@ TIMEOUT_SECONDS = 120
 EARLY_KILL_AFTER_SUCCESS = 3  # seconds to wait after SUCCESS before killing
 AREA_TIMEOUT_OVERRIDES = {
     "19_api": 360,       # API tests spin up a server + memory CRUD with extraction waits
-    "3_multimodal": 360,  # Vision/video LLM calls can be very slow (14MB video analysis)
+    "3_multimodal": 480,  # Vision/video LLM calls can be very slow (14MB video, Gemini API)
     "2_memory": 180,    # Memory tests with extraction waits, multi-user, PG queries
 }
 E2E_DIR = Path(__file__).parent
