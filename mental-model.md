@@ -485,10 +485,15 @@ async def search(self, query: str, limit: int = 5, recency_bias: float = 0.3):
 ```
 
 **Local Embeddings Fallback:**
-If no embedding model configured, auto-falls back to:
+If no embedding model configured, auto-falls back to local sentence-transformers.
+Supports `local/` prefix in formation config for explicit model selection:
 ```python
+# Default fallback (no model configured): all-MiniLM-L6-v2, 384-dim
+# Explicit local model: "local/all-mpnet-base-v2", 768-dim
+# Resolution via: is_local_model(), resolve_embedding_dimension() in local_embeddings.py
 from sentence_transformers import SentenceTransformer
-model = SentenceTransformer('all-MiniLM-L6-v2')  # 384 dimensions
+model = SentenceTransformer('all-MiniLM-L6-v2')  # 384 dimensions (default)
+# or: SentenceTransformer('all-mpnet-base-v2')    # 768 dimensions (higher quality)
 ```
 
 **FIFO Cleanup:**
@@ -506,7 +511,38 @@ Background task runs every `fifo_interval_min` (default: 5 minutes) to clean up 
 
 **Purpose:** Durable, scalable semantic storage with pgvector
 
-**Schema:**
+**Dynamic Dimension Tables (as of 2026-03-01):**
+
+The `memories` table is now dimension-specific. A factory function `get_memory_model(dimension)`
+creates ORM models for `memories_384`, `memories_768`, `memories_1536`, etc. The runtime picks
+the table based on the configured embedding model:
+
+```python
+# Factory creates/caches one ORM class per dimension
+_memory_models: Dict[int, Any] = {}
+
+def get_memory_model(dimension: int):
+    tablename = f"memories_{dimension}"
+    # returns dynamically-created SQLAlchemy model class
+    ...
+
+# Backwards-compat alias (used by initialization.py for default table registration)
+Memory = get_memory_model(1536)
+```
+
+**Three Embedding Tiers:**
+
+| Model | Dim | Cost | Formation Config |
+|-------|-----|------|-----------------|
+| `local/all-MiniLM-L6-v2` | 384 | Free | Default (no model configured) |
+| `local/all-mpnet-base-v2` | 768 | Free | `embedding: "local/all-mpnet-base-v2"` |
+| `openai/text-embedding-3-small` | 1536 | Paid | `embedding: "openai/text-embedding-3-small"` |
+
+When no embedding model is configured, both PostgreSQL and SQLite default to local
+embeddings (`all-MiniLM-L6-v2`, 384-dim). The `local/` prefix is resolved by helpers
+in `local_embeddings.py` (`is_local_model()`, `resolve_embedding_dimension()`).
+
+**Schema (per dimension):**
 ```python
 class User(Base):
     id = Column(Integer, primary_key=True)
@@ -521,15 +557,28 @@ class UserIdentifier(Base):
     formation_id = Column(String(255))
     # Unique constraint: (identifier, formation_id)
 
-class Memory(Base):
+# Dynamic — table name and Vector dimension vary:
+class Memory_{dim}(Base):  # e.g. Memory_384, Memory_1536
+    __tablename__ = "memories_{dim}"
     id = Column(String(21), primary_key=True)  # Nano ID
     user_id = Column(Integer, ForeignKey('users.id'))
-    embedding = Column(Vector(1536))  # pgvector type
+    embedding = Column(Vector(dim))  # pgvector type, matches embedding model
     text = Column(Text)
     meta_data = Column(JSONType)
     collection = Column(String(255), index=True)
     created_at = Column(DateTime)
 ```
+
+**Migration between dimensions:**
+Use `scripts/migrate_embeddings.py` to re-embed memories when switching models:
+```bash
+python scripts/migrate_embeddings.py \
+    --connection-string "postgresql://localhost/muxi" \
+    --from-dim 384 --to-dim 1536 \
+    --to-model "openai/text-embedding-3-small"
+```
+The script reads from `memories_{from_dim}`, re-embeds with the target model,
+and inserts into `memories_{to_dim}`. Source table is NOT deleted.
 
 **Collections:**
 Memories are organized into collections for semantic grouping:
@@ -575,8 +624,12 @@ async def search(
 
 **Gotchas:**
 - Uses **cosine distance** for similarity (pgvector operator: `<=>`)
-- Index created with: `CREATE INDEX ON memories USING ivfflat (embedding vector_cosine_ops)`
+- Index created with: `CREATE INDEX ON memories_{dim} USING ivfflat (embedding vector_cosine_ops)`
 - Query timeout configurable via `query_timeout_seconds` (default: 30s)
+- All queries inside `LongTermMemory` use `self.MemoryModel` (set in `__init__`), NOT the global `Memory` alias
+- Result rows from `select(self.MemoryModel, distance)` use `result[0].field` (index-based access) since dynamic class names vary
+- Multiple dimension tables can coexist in the same database — each formation uses only its own table
+- Legacy databases with a bare `memories` table need manual rename: `ALTER TABLE memories RENAME TO memories_1536;`
 
 ### Memobase (Multi-User Wrapper)
 
@@ -2842,3 +2895,26 @@ https://github.com/muxi-ai/runtime/releases/download/v{version}/muxi-runtime-{ve
 - Use CPU-only PyTorch for container images unless GPU required
 - SIF compression ratio is roughly 3:1 (2.8GB Docker → 800MB SIF)
 - GitHub release assets have 2GB limit
+
+### 2026-03-01: Dynamic Embedding Dimensions
+
+**Problem:** `memories` table hardcoded `Vector(1536)`. When a formation used local embeddings
+(384-dim) with a PostgreSQL DB that already had a 1536-dim table, inserts failed with
+`expected 1536 dimensions, not 384`.
+
+**Solution:** Dimension-specific tables (`memories_384`, `memories_768`, `memories_1536`).
+
+**Key changes:**
+- `get_memory_model(dim)` factory in `long_term.py` replaces static `Memory` class
+- `local/` prefix support for embedding models (`local/all-mpnet-base-v2` = 768-dim)
+- SQLite now falls back to local embeddings (was raising `ValueError`)
+- `_create_all_database_tables()` accepts dimension param
+- Knowledge handler derives dimension from formation config
+- Migration script: `scripts/migrate_embeddings.py` (re-embeds between any dim pair)
+- 12 unit tests + 3 e2e tests (384, 768, coexistence)
+
+**Gotchas discovered:**
+- SQLAlchemy dynamic models need `extend_existing=True` in `__table_args__` to avoid conflicts
+- Result rows from `select(DynamicModel, label)` must use `result[0].field` (not `result.ClassName.field`) since class names are dynamic
+- The `Memobase` wrapper delegates to `LongTermMemory` — dimension flows through transparently
+- Multiple formations sharing a PostgreSQL DB can each have their own dimension table with no conflicts
