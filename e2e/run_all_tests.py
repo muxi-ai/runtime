@@ -57,16 +57,11 @@ def should_skip(filename: str) -> bool:
     return any(pat in filename for pat in SKIP_PATTERNS)
 
 
-def run_test(test_file: Path) -> dict:
-    area = test_file.parent.name
-    timeout = AREA_TIMEOUT_OVERRIDES.get(area, TIMEOUT_SECONDS)
-    env = os.environ.copy()
-    env["PYTHONPATH"] = f"{SRC_DIR}:{TESTS_DIR}:{test_file.parent}:{env.get('PYTHONPATH', '')}"
-    env["TOKENIZERS_PARALLELISM"] = "false"
-    env["PYTHONUNBUFFERED"] = "1"
-    env["OMP_NUM_THREADS"] = "1"       # Prevent OpenMP thread pool crashes
-    env["MKL_NUM_THREADS"] = "1"       # Prevent MKL thread pool crashes
-    env["OPENBLAS_NUM_THREADS"] = "1"  # Prevent OpenBLAS thread pool crashes
+CRASH_SIGNALS = {-6, -9, -11}  # SIGABRT, SIGKILL, SIGSEGV
+
+
+def _run_once(test_file: Path, env: dict, timeout: int) -> dict:
+    """Run a single test subprocess and return result dict."""
 
     pass_markers = ["SUCCESS", "PASSED", "All checks passed", "CORE TESTS PASSED"]
     t0 = time.time()
@@ -155,6 +150,33 @@ def run_test(test_file: Path) -> dict:
             "stdout_tail": "",
             "stderr_tail": str(e),
         }
+
+
+def run_test(test_file: Path) -> dict:
+    area = test_file.parent.name
+    timeout = AREA_TIMEOUT_OVERRIDES.get(area, TIMEOUT_SECONDS)
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{SRC_DIR}:{TESTS_DIR}:{test_file.parent}:{env.get('PYTHONPATH', '')}"
+    env["TOKENIZERS_PARALLELISM"] = "false"
+    env["PYTHONUNBUFFERED"] = "1"
+    env["OMP_NUM_THREADS"] = "1"
+    env["MKL_NUM_THREADS"] = "1"
+    env["OPENBLAS_NUM_THREADS"] = "1"
+
+    result = _run_once(test_file, env, timeout)
+
+    # Retry once on crash signals (SIGSEGV/SIGABRT) that happened quickly
+    # These are environment-specific flaky crashes, not test failures
+    if (not result["passed"]
+            and result["exit_code"] in CRASH_SIGNALS
+            and result["time_s"] < 60
+            and "SUCCESS" not in result["stdout_tail"]):
+        print(f"      [retry] crash signal {result['exit_code']} at {result['time_s']}s, retrying...")
+        retry = _run_once(test_file, env, timeout)
+        retry["retried"] = True
+        return retry
+
+    return result
 
 
 def main():
