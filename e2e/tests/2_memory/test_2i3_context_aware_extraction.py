@@ -52,7 +52,7 @@ class Test2i3ContextAwareExtraction(BaseMemoryTest):
 
             # Clear test data
             test_user = "context_aware_user"
-            cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
+            cur.execute("DELETE FROM memories_1536 WHERE meta_data->>'user_id' = %s", (test_user,))
             cur.execute("""
                 DELETE FROM users WHERE id IN (
                     SELECT user_id FROM user_identifiers WHERE identifier = %s
@@ -83,7 +83,7 @@ class Test2i3ContextAwareExtraction(BaseMemoryTest):
             # Check if context was used
             cur.execute("""
                 SELECT text, collection
-                FROM memories
+                FROM memories_1536
                 WHERE meta_data->>'user_id' = %s
                 ORDER BY created_at ASC
             """, (test_user,))
@@ -132,7 +132,7 @@ class Test2i3ContextAwareExtraction(BaseMemoryTest):
             # Check combined understanding
             cur.execute("""
                 SELECT text, collection
-                FROM memories
+                FROM memories_1536
                 WHERE meta_data->>'user_id' = %s
                 ORDER BY created_at ASC
             """, (test_user,))
@@ -187,7 +187,7 @@ class Test2i3ContextAwareExtraction(BaseMemoryTest):
             # Check if connection was made
             cur.execute("""
                 SELECT text, collection
-                FROM memories
+                FROM memories_1536
                 WHERE meta_data->>'user_id' = %s
                 ORDER BY created_at ASC
             """, (test_user,))

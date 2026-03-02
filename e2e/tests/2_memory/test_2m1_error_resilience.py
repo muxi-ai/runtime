@@ -120,7 +120,7 @@ async def test_error_resilience():
             result = cur.fetchone()
             if result:
                 user_db_id = result[0]
-                cur.execute("DELETE FROM memories WHERE user_id = %s", (user_db_id,))
+                cur.execute("DELETE FROM memories_1536 WHERE user_id = %s", (user_db_id,))
         conn.commit()
         conn.close()
 

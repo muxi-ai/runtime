@@ -76,7 +76,7 @@ class TestDatabaseOptimization(BaseMemoryTest):
 
             # First, ensure we have some data
             test_user = "optimization_test_user"
-            cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
+            cur.execute("DELETE FROM memories_1536 WHERE meta_data->>'user_id' = %s", (test_user,))
 
             # Get or create user
             cur.execute("""
@@ -105,7 +105,7 @@ class TestDatabaseOptimization(BaseMemoryTest):
                 """, (user_db_id, test_user))
 
             # Clean up existing memories for this user
-            cur.execute("DELETE FROM memories WHERE user_id = %s", (user_db_id,))
+            cur.execute("DELETE FROM memories_1536 WHERE user_id = %s", (user_db_id,))
 
             conn.commit()
 
@@ -233,7 +233,7 @@ class TestDatabaseOptimization(BaseMemoryTest):
 
             cur.execute("""
                 SELECT text, ts_rank(to_tsvector('english', text), query) as rank
-                FROM memories,
+                FROM memories_1536,
                      to_tsquery('english', 'python') query
                 WHERE to_tsvector('english', text) @@ query
                 ORDER BY rank DESC

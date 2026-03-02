@@ -62,7 +62,7 @@ class Test2j1CollectionFieldUsage(BaseMemoryTest):
 
             # Clear test data
             test_user = "collection_test_user"
-            cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
+            cur.execute("DELETE FROM memories_1536 WHERE meta_data->>'user_id' = %s", (test_user,))
             cur.execute("""
                 DELETE FROM users WHERE id IN (
                     SELECT user_id FROM user_identifiers WHERE identifier = %s
@@ -100,7 +100,7 @@ class Test2j1CollectionFieldUsage(BaseMemoryTest):
             print("\n  2. Verifying collection assignments...")
             cur.execute("""
                 SELECT text, collection
-                FROM memories
+                FROM memories_1536
                 WHERE meta_data->>'user_id' = %s
                 ORDER BY created_at
             """, (test_user,))

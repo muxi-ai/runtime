@@ -49,7 +49,7 @@ class Test2k2MemoryPriority(BaseMemoryTest):
 
             # Clear test data
             test_user = "priority_test_user"
-            cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
+            cur.execute("DELETE FROM memories_1536 WHERE meta_data->>'user_id' = %s", (test_user,))
             cur.execute("""
                 DELETE FROM users WHERE id IN (
                     SELECT user_id FROM user_identifiers WHERE identifier = %s
@@ -147,7 +147,7 @@ class Test2k2MemoryPriority(BaseMemoryTest):
                     SELECT text, collection,
                            ts_rank(to_tsvector('english', text),
                                    to_tsquery('english', 'peanut | allergy')) as rank
-                    FROM memories
+                    FROM memories_1536
                     WHERE meta_data->>'user_id' = %s
                     AND to_tsvector('english', text) @@ to_tsquery('english', 'peanut | allergy')
                     ORDER BY rank DESC

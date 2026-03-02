@@ -47,7 +47,7 @@ class Test2i2ComplexExtraction(BaseMemoryTest):
 
             # Clear test data
             test_user = "complex_extraction_user"
-            cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
+            cur.execute("DELETE FROM memories_1536 WHERE meta_data->>'user_id' = %s", (test_user,))
             cur.execute("""
                 DELETE FROM users WHERE id IN (
                     SELECT user_id FROM user_identifiers WHERE identifier = %s
@@ -79,7 +79,7 @@ class Test2i2ComplexExtraction(BaseMemoryTest):
             cur.execute(
                 """
                 SELECT text, collection
-                FROM memories
+                FROM memories_1536
                 WHERE meta_data->>'user_id' = %s
                 ORDER BY created_at ASC
             """,
@@ -136,7 +136,7 @@ class Test2i2ComplexExtraction(BaseMemoryTest):
             cur.execute(
                 """
                 SELECT text, collection
-                FROM memories
+                FROM memories_1536
                 WHERE meta_data->>'user_id' = %s
                 ORDER BY created_at ASC
             """,

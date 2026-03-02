@@ -48,7 +48,7 @@ class Test2k1EnhancedPromptIntegration(BaseMemoryTest):
             # Clear any existing memories
             conn = psycopg2.connect("postgresql://muxi@localhost/muxi_test")
             cur = conn.cursor()
-            cur.execute("DELETE FROM memories WHERE meta_data->>'user_id' = %s", (test_user,))
+            cur.execute("DELETE FROM memories_1536 WHERE meta_data->>'user_id' = %s", (test_user,))
             cur.execute("""
                 DELETE FROM users WHERE id IN (
                     SELECT user_id FROM user_identifiers WHERE identifier = %s
