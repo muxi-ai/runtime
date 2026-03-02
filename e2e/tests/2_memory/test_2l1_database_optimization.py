@@ -45,7 +45,7 @@ class TestDatabaseOptimization(BaseMemoryTest):
             cur.execute("""
                 SELECT indexname, indexdef
                 FROM pg_indexes
-                WHERE tablename = 'memories'
+                WHERE tablename = 'memories_1536'
                 AND indexname LIKE '%gin%'
             """)
 
@@ -58,7 +58,7 @@ class TestDatabaseOptimization(BaseMemoryTest):
                 cur.execute("""
                     SELECT indexname, indexdef
                     FROM pg_indexes
-                    WHERE tablename = 'memories'
+                    WHERE tablename = 'memories_1536'
                 """)
                 all_indexes = cur.fetchall()
                 for idx_name, idx_def in all_indexes:
@@ -146,7 +146,7 @@ class TestDatabaseOptimization(BaseMemoryTest):
             cur.execute("""
                 SELECT indexname
                 FROM pg_indexes
-                WHERE tablename = 'memories'
+                WHERE tablename = 'memories_1536'
                 AND indexdef LIKE '%collection%'
             """)
 
@@ -156,7 +156,7 @@ class TestDatabaseOptimization(BaseMemoryTest):
             else:
                 print("  ⚠️  No index found on collection column")
                 print("  Checking all indexes...")
-                cur.execute("SELECT indexname FROM pg_indexes WHERE tablename = 'memories'")
+                cur.execute("SELECT indexname FROM pg_indexes WHERE tablename = 'memories_1536'")
                 all_idx = [row[0] for row in cur.fetchall()]
                 print(f"  Available indexes: {all_idx}")
                 # This is actually okay if collection queries are fast enough without index

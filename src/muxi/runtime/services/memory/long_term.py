@@ -1446,14 +1446,15 @@ class LongTermMemory:
                 from sqlalchemy import text as sql_text
 
                 # Using parameterized query for safety
-                sql = sql_text("""
+                table_name = self.MemoryModel.__tablename__
+                sql = sql_text(f"""
                     SELECT
                         m.id,
                         m.text,
                         m.meta_data,
                         m.created_at,
                         ts_rank(to_tsvector('simple', m.text), plainto_tsquery('simple', :query)) as rank
-                    FROM memories m
+                    FROM {table_name} m
                     JOIN users u ON m.user_id = u.id
                     WHERE u.id = :user_id
                         AND u.formation_id = :formation_id

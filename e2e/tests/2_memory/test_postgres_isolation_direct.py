@@ -62,7 +62,7 @@ def test_user_isolation():
             # Insert memory
             memory_id = str(uuid.uuid4())[:21]
             cursor.execute("""
-                INSERT INTO memories (id, user_id, text, meta_data, collection, created_at)
+                INSERT INTO memories_1536 (id, user_id, text, meta_data, collection, created_at)
                 VALUES (%s, %s, %s, '{}', 'default', NOW())
             """, (memory_id, user_db_id, content))
 
@@ -75,7 +75,7 @@ def test_user_isolation():
         for test_user in ["alice_test", "bob_test", "charlie_test"]:
             cursor.execute("""
                 SELECT m.text
-                FROM memories m
+                FROM memories_1536 m
                 JOIN users u ON m.user_id = u.id
                 JOIN user_identifiers ui ON u.id = ui.user_id
                 WHERE ui.identifier = %s AND ui.formation_id = 'test'
@@ -109,7 +109,7 @@ def test_user_isolation():
         # Cleanup test data
         for test_user in ["alice_test", "bob_test", "charlie_test"]:
             cursor.execute("""
-                DELETE FROM memories
+                DELETE FROM memories_1536
                 WHERE user_id IN (
                     SELECT u.id FROM users u
                     JOIN user_identifiers ui ON u.id = ui.user_id

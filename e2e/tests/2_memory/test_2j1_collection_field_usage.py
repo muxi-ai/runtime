@@ -157,7 +157,7 @@ class Test2j1CollectionFieldUsage(BaseMemoryTest):
             cur.execute("""
                 SELECT indexname
                 FROM pg_indexes
-                WHERE tablename = 'memories'
+                WHERE tablename = 'memories_1536'
                 AND indexdef LIKE '%collection%'
             """)
 
