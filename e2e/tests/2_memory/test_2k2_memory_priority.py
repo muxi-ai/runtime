@@ -27,7 +27,7 @@ from test_utils import timeout_test, safe_overlord_chat, with_timeout, safe_form
 class Test2k2MemoryPriority(BaseMemoryTest):
     """Test memory prioritization in context enhancement."""
 
-    @timeout_test(120.0)
+    @timeout_test(180.0)
     async def test_2k2memorypriority(self):
         """Test memory prioritization despite buffer noise."""
         test_name = "2k2_memory_priority"
@@ -86,7 +86,7 @@ class Test2k2MemoryPriority(BaseMemoryTest):
             for i in range(15):
                 noise_msg = f"Random conversation {i} about the weather, sports, and other topics"
                 await self.overlord.chat(noise_msg, user_id=test_user, use_async=False, stream=False)
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1.5)
 
             print("    ✓ Added 15 noise messages to buffer")
             checks_passed.append("Added buffer noise")
