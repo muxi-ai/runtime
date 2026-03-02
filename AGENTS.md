@@ -10,6 +10,8 @@ This repository is part of the larger MUXI ecosystem.
 
 **Complete architectural overview:** See [ARCHITECTURE.md](https://github.com/muxi-ai/muxi/blob/main/ARCHITECTURE.md) in the main MUXI repo.
 
+**Deep codebase mental model:** See [mental-model.md](mental-model.md) for detailed architecture, data flows, module internals, and agent context.
+
 **This repo (runtime):** The formation execution environment - FastAPI-based Python runtime packaged as SIF container.
 
 ---

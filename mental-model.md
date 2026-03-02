@@ -1,6 +1,6 @@
 # MUXI Runtime Architecture Analysis
 
-**Generated:** 2026-01-28  
+**Generated:** 2026-02-28
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 

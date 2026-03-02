@@ -54,18 +54,24 @@ def parse_args():
         description="Migrate memories between dimension-specific tables"
     )
     parser.add_argument(
-        "--connection-string", required=True,
+        "--connection-string",
+        required=True,
         help="PostgreSQL URI or SQLite .db file path",
     )
     parser.add_argument("--from-dim", type=int, help="Source dimension (e.g. 384)")
     parser.add_argument("--to-dim", type=int, required=True, help="Target dimension (e.g. 1536)")
     parser.add_argument(
-        "--to-model", required=True,
+        "--to-model",
+        required=True,
         help='Target embedding model (e.g. "openai/text-embedding-3-small" or "local/all-mpnet-base-v2")',
     )
-    parser.add_argument("--from-table", help='Override source table name (e.g. "memories" for legacy)')
+    parser.add_argument(
+        "--from-table", help='Override source table name (e.g. "memories" for legacy)'
+    )
     parser.add_argument("--openai-api-key", help="OpenAI API key (required for OpenAI models)")
-    parser.add_argument("--batch-size", type=int, default=BATCH_SIZE, help=f"Batch size (default {BATCH_SIZE})")
+    parser.add_argument(
+        "--batch-size", type=int, default=BATCH_SIZE, help=f"Batch size (default {BATCH_SIZE})"
+    )
     parser.add_argument("--dry-run", action="store_true", help="Show counts without migrating")
     return parser.parse_args()
 
@@ -81,7 +87,10 @@ def is_sqlite(conn_str: str) -> bool:
 
 def get_embedder(model_name: str, api_key: Optional[str] = None):
     """Return an async callable(text) -> List[float]."""
-    from muxi.runtime.services.memory.local_embeddings import is_local_model, resolve_local_model_name
+    from muxi.runtime.services.memory.local_embeddings import (
+        is_local_model,
+        resolve_local_model_name,
+    )
 
     if is_local_model(model_name):
         bare = resolve_local_model_name(model_name)
@@ -156,8 +165,8 @@ async def migrate_postgres(args):
             return
 
         # Ensure target table (let ORM handle it via get_memory_model)
-        from muxi.runtime.services.memory.long_term import get_memory_model
         from muxi.runtime.services.db import Base
+        from muxi.runtime.services.memory.long_term import get_memory_model
 
         get_memory_model(args.to_dim)
         await conn.run_sync(Base.metadata.create_all)
@@ -169,7 +178,9 @@ async def migrate_postgres(args):
 
     async with engine.begin() as conn:
         rows = await conn.execute(
-            text(f"SELECT id, user_id, text, meta_data, collection, created_at, updated_at FROM {src_table}")
+            text(
+                f"SELECT id, user_id, text, meta_data, collection, created_at, updated_at FROM {src_table}"
+            )
         )
         all_rows = rows.fetchall()
 

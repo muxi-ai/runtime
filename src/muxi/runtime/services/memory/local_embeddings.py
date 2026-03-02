@@ -75,7 +75,7 @@ def is_local_model(model_name: str) -> bool:
 def resolve_local_model_name(model_name: str) -> str:
     """Strip local/ prefix to get the bare sentence-transformer model name."""
     if model_name.startswith("local/"):
-        return model_name[len("local/"):]
+        return model_name[len("local/") :]
     return model_name
 
 

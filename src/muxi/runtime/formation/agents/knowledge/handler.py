@@ -677,6 +677,7 @@ class KnowledgeHandler:
                 if formation_config:
                     # Try to get from formation's embedding model
                     from ....services.memory.local_embeddings import resolve_embedding_dimension
+
                     models = formation_config.get("llm", {}).get("models", [])
                     for m in models:
                         if isinstance(m, dict) and "embedding" in m:
@@ -685,6 +686,7 @@ class KnowledgeHandler:
                 if embedding_dim is None:
                     # Default to local embedding dimension
                     from ....services.memory.local_embeddings import get_local_embedding_dimension
+
                     embedding_dim = get_local_embedding_dimension()
 
             handler = cls(

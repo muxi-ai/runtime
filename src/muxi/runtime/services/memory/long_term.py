@@ -199,7 +199,11 @@ class LongTermMemory:
 
         if embedding_model:
             if isinstance(embedding_model, str):
-                from .local_embeddings import is_local_model, resolve_embedding_dimension, resolve_local_model_name
+                from .local_embeddings import (
+                    is_local_model,
+                    resolve_embedding_dimension,
+                    resolve_local_model_name,
+                )
 
                 if is_local_model(embedding_model):
                     self._use_local_embeddings = True
@@ -878,7 +882,9 @@ class LongTermMemory:
             query = (
                 select(
                     self.MemoryModel,
-                    func.l2_distance(self.MemoryModel.embedding, query_embedding_vector).label("distance"),
+                    func.l2_distance(self.MemoryModel.embedding, query_embedding_vector).label(
+                        "distance"
+                    ),
                 )
                 .filter(
                     self.MemoryModel.user_id == internal_user_id,
@@ -906,9 +912,7 @@ class LongTermMemory:
                         "text": result[0].text,
                         "meta_data": result[0].meta_data,
                         "created_at": (
-                            result[0].created_at.isoformat()
-                            if result[0].created_at
-                            else None
+                            result[0].created_at.isoformat() if result[0].created_at else None
                         ),
                     },
                 )
@@ -1212,12 +1216,14 @@ class LongTermMemory:
             if delete_memories:
                 # Delete all memories in the collection for this user
                 session.query(self.MemoryModel).filter(
-                    self.MemoryModel.collection == name, self.MemoryModel.user_id == internal_user_id
+                    self.MemoryModel.collection == name,
+                    self.MemoryModel.user_id == internal_user_id,
                 ).delete()
             else:
                 # Move memories to default collection for this user
                 session.query(self.MemoryModel).filter(
-                    self.MemoryModel.collection == name, self.MemoryModel.user_id == internal_user_id
+                    self.MemoryModel.collection == name,
+                    self.MemoryModel.user_id == internal_user_id,
                 ).update({"collection": self.default_collection})
 
             session.commit()
@@ -1374,7 +1380,9 @@ class LongTermMemory:
             query = (
                 select(
                     self.MemoryModel,
-                    func.l2_distance(self.MemoryModel.embedding, query_embedding_vector).label("distance"),
+                    func.l2_distance(self.MemoryModel.embedding, query_embedding_vector).label(
+                        "distance"
+                    ),
                 )
                 .filter(
                     self.MemoryModel.user_id == internal_user_id,
@@ -1403,9 +1411,7 @@ class LongTermMemory:
                         "text": result[0].text,
                         "meta_data": result[0].meta_data,
                         "created_at": (
-                            result[0].created_at.isoformat()
-                            if result[0].created_at
-                            else None
+                            result[0].created_at.isoformat() if result[0].created_at else None
                         ),
                     },
                 )

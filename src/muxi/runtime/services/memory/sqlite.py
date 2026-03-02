@@ -86,7 +86,11 @@ class SQLiteMemory(BaseMemory):
 
         if embedding_model:
             if isinstance(embedding_model, str):
-                from .local_embeddings import is_local_model, resolve_embedding_dimension, resolve_local_model_name
+                from .local_embeddings import (
+                    is_local_model,
+                    resolve_embedding_dimension,
+                    resolve_local_model_name,
+                )
 
                 if is_local_model(embedding_model):
                     self._use_local_embeddings = True

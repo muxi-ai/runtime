@@ -1,7 +1,5 @@
 """Unit tests for dynamic memory model factory and dimension resolution."""
 
-import pytest
-
 
 class TestMemoryModelFactory:
     """Tests for get_memory_model() factory function."""
@@ -38,8 +36,14 @@ class TestMemoryModelFactory:
         model = get_memory_model(384)
         columns = {c.name for c in model.__table__.columns}
         assert columns == {
-            "id", "user_id", "embedding", "text", "meta_data",
-            "created_at", "updated_at", "collection",
+            "id",
+            "user_id",
+            "embedding",
+            "text",
+            "meta_data",
+            "created_at",
+            "updated_at",
+            "collection",
         }
 
 

@@ -78,8 +78,6 @@ class TestLocal384Embeddings(BaseE2ETest):
             assert found, "Stored memory should be found in search results"
             checks_passed.append("Memory search works with 384-dim vectors")
 
-            # Check 5: Verify embedding dimension of stored vector
-            embedding_info = inner._get_embedding_info() if hasattr(inner, "_get_embedding_info") else None
             print(f"  Using local embeddings: {inner._use_local_embeddings}")
             assert inner._use_local_embeddings, "Should use local embeddings"
             checks_passed.append("Uses local embedding model")

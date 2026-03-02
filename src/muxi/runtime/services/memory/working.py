@@ -182,7 +182,11 @@ class WorkingMemory:
 
         if model:
             if isinstance(model, str):
-                from .local_embeddings import is_local_model, resolve_embedding_dimension, resolve_local_model_name
+                from .local_embeddings import (
+                    is_local_model,
+                    resolve_embedding_dimension,
+                    resolve_local_model_name,
+                )
 
                 if is_local_model(model):
                     self._use_local_embeddings = True
