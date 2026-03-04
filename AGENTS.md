@@ -17,7 +17,7 @@ This repository is part of the larger MUXI ecosystem.
 ---
 
 ## TL;DR: Non-Negotiables
-- Use sub-agents: `file-analyzer` for reading files, `code-analyzer` for code search/analysis, `test-runner` for any tests (invoke with `bash .claude/scripts/test-and-log.sh path/to/test.py` and include the post-run success + transcript block).
+- Use sub-agents: `file-analyzer` for reading files, `code-analyzer` for code search/analysis, `test-runner` for any tests.
 - Maintain required LLM config: formations must declare `llm.models` with a `text` entry (e.g., `openai/gpt-4o-mini`). System aborts if missing.
 - Respect the formation loading order: Observability → LLM configuration → Memory systems → Document processing → Background services → Agents.
 - Follow the absolute rules: no partial implementations, no dead code, no duplication, consistent naming, no over-engineering, keep concerns separated, prevent resource leaks, and study existing code before writing new logic.
@@ -267,5 +267,12 @@ Group-based permission filtering via `muxi-enterprise` package:
    - Await approval before applying adjustments, then return to task completion flow.
 
 ## Operational Notes
-- Always route e2e executions through `bash .claude/scripts/test-and-log.sh e2e/tests/path/to/test.py`.
 - Secrets live beside formation YAMLs in encrypted `secrets.enc` files (with `secrets` template showing required keys); avoid environment variables for runtime config.
+
+## Running Tests
+- **Unit tests**: `python -m pytest tests/unit/ -v` (standard pytest).
+- **E2E tests**: Each e2e test is a **standalone script**, not a pytest test. Do NOT run them with `pytest`. Use the dedicated runners from the `e2e/` directory:
+  - **Full suite**: `cd e2e && python run_all_tests.py` — runs every test sequentially with per-area timeouts, early-kill on success, and crash-signal retries. Saves report to `e2e/results/test_report.json`.
+  - **Random sample** (sniff-test): `cd e2e && python run_random_tests.py N` — picks N random tests from the full pool and runs them. Defaults to 10. Saves report to `e2e/results/random_test_report.json`.
+  - **Single test**: `cd e2e/tests/<area> && python test_<name>.py` — run one test directly as a script.
+- Both runners handle `PYTHONPATH`, timeouts, early-kill after SUCCESS markers, and retry on SIGSEGV/SIGABRT crashes.

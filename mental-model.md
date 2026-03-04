@@ -2950,3 +2950,79 @@ violations (memories in `memories_1536` blocked user deletion when cleanup targe
 **E2E test baseline (2026-03-02):** 216/230 -> estimated 226-230/230 after fixes.
 6 remaining tests are flaky due to LLM non-determinism (pass on retry).
 See `e2e/test-report.json` and `e2e/FAILURE_TRACKER.md` for details.
+
+### 2026-03-04: Performance Optimization (feature/parallelization branch)
+
+**Problem:** A simple "How are you doing today?" greeting took ~3.4s end-to-end.
+Trace analysis showed three sequential bottlenecks in `_enhance_message_with_context()`:
+1. `get_user_synopsis()` — synopsis fetch
+2. `search_long_term_memory()` — persistent memory search
+3. `search_buffer_memory()` — buffer context retrieval
+
+Plus an LLM call in `_is_actionable_message()` for messages not matching the
+exact-match heuristic list (~2.6s for the actionability check alone).
+
+**Three optimizations applied:**
+
+1. **Parallelized context enhancement** (`chat_orchestrator.py`):
+   The three fetch functions in `_enhance_message_with_context()` now run
+   concurrently via `asyncio.gather()` instead of sequentially. Each is wrapped
+   in its own async helper that catches exceptions independently. Saves ~300-500ms
+   on every request with memory configured.
+
+2. **Early greeting fast-path** (`chat_orchestrator.py`):
+   Before context enhancement, `chat()` checks if the raw message is an exact match
+   against a small heuristic list: `["hi", "hello", "hey", "thanks", "thank you",
+   "ok", "okay", "got it"]`. If matched AND there is no recent assistant message
+   containing a question mark (checked via a lightweight buffer search), the entire
+   context enhancement + LLM actionability check is skipped. Only `_apply_persona()`
+   runs (single LLM call). The buffer check guards against misclassifying follow-up
+   answers (e.g., user says "ok" in response to "Which account?").
+
+3. **Empty-query buffer search fast-path** (`working.py`):
+   When `WorkingMemory.search()` is called with `query=""` and no `query_vector`,
+   it now returns `_recency_search()` results immediately without accessing the
+   `self.model` property. This avoids the lazy initialization of the
+   sentence-transformer embedding model (~1.8s on first call). Affects both the
+   early heuristic buffer check and the recency-only path in context enhancement.
+
+**Measured results (Claude Haiku formation):**
+- "hi" (greeting): 4410ms -> 2416ms (45% faster)
+  - Buffer check: 1800ms -> 48ms (fixed by empty-query fast-path)
+  - Remaining time is Anthropic API response (~2.4s, not optimizable)
+- "How are you doing today?": Still ~4.4s (not in heuristic list, needs LLM
+  actionability check). Parallelization saves ~300-500ms but masked by LLM latency.
+- Normal actionable requests: ~300-500ms faster from parallelized context.
+
+**Gotchas discovered:**
+- `WorkingMemory.search()` accessing `self.model` (a @property) triggers lazy
+  initialization of the sentence-transformer model even when the query is empty
+  and only recency results are needed. The `if not self.model:` check at the top
+  of the method was itself triggering model load. Always guard with a query check
+  before touching self.model.
+- The streaming events in the early fast-path must mirror the same event types
+  (`process_sync_start`, `response_preparation`, `completed`) as the normal path
+  so clients don't break.
+- The early heuristic metadata includes `"early_heuristic": true` to distinguish
+  from the existing `fast_path` flag set by `_is_actionable_message()` in the
+  normal code path.
+
+**Files changed:**
+- `src/muxi/runtime/formation/overlord/chat_orchestrator.py` — parallelized
+  `_enhance_message_with_context()`, added early greeting fast-path in `chat()`
+- `src/muxi/runtime/services/memory/working.py` — empty-query fast-path in `search()`
+
+**Branch:** `feature/parallelization` (commits: 093a66b0, eae21389)
+
+### 2026-03-04: E2E Test Runner Updates
+
+**Added `e2e/run_random_tests.py`** — picks N random tests from the full pool
+and runs them using the same infrastructure as `run_all_tests.py` (timeouts,
+early-kill, crash retries). Usage: `cd e2e && python run_random_tests.py 10`.
+Saves report to `e2e/results/random_test_report.json`.
+
+**Updated AGENTS.md** — replaced stale `.claude/scripts/test-and-log.sh` reference
+with actual runner instructions. E2E tests are standalone scripts, never use pytest.
+- Full suite: `cd e2e && python run_all_tests.py`
+- Random sample: `cd e2e && python run_random_tests.py N`
+- Single test: `cd e2e/tests/<area> && python test_<name>.py`
