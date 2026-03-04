@@ -41,7 +41,6 @@
 # =============================================================================
 
 import datetime
-import json
 import re
 import time
 import traceback
@@ -53,6 +52,7 @@ from ...services import observability, streaming
 from ...services.intent import IntentDetectionService
 from ...services.llm import LLM
 from ...services.mcp.service import MCPService
+from ...utils.fastjson import json
 from ...utils.id_generator import generate_nanoid
 from ...utils.security import sanitize_message_preview
 from ..artifacts.extractor import extract_artifacts_from_tool_results

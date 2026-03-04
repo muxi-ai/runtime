@@ -63,7 +63,6 @@
 import asyncio
 import base64
 import hashlib
-import json
 
 # Filter noisy OneLLM cache warnings that don't affect functionality
 import logging
@@ -87,6 +86,7 @@ from onellm.audio import AudioTranscription
 from onellm.config import set_api_key
 from onellm.errors import AuthenticationError, InvalidRequestError, RateLimitError
 
+from ...utils.fastjson import json
 from .. import observability
 
 # Import multimodal components

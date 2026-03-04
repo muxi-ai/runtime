@@ -6,7 +6,6 @@ quickly without triggering the heavy import chain (formation, ML libraries, etc)
 """
 
 import asyncio
-import json
 import os
 import re
 import threading
@@ -14,6 +13,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from cryptography.fernet import Fernet
+
+from ...utils.fastjson import json
 
 
 class SecretsManager:

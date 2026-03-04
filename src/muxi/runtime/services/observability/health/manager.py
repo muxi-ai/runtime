@@ -6,7 +6,6 @@ This module provides centralized health status management using a shared
 """
 
 import asyncio
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -14,6 +13,7 @@ from typing import Any, Dict, Optional
 import aiofiles
 import aiofiles.os
 
+from ....utils.fastjson import json
 from ....utils.user_dirs import get_observability_dir
 
 

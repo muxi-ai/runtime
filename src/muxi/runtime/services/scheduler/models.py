@@ -8,13 +8,13 @@ Models:
 - ScheduledJob: Main table for storing scheduled tasks with execution tracking
 """
 
-import json
 from typing import Any, Dict
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text
 
 from ...datatypes.json_type import JSONType
 from ...utils.datetime_utils import utc_now_naive
+from ...utils.fastjson import json
 from ..db import AsyncModelMixin, Base
 
 

@@ -10,7 +10,6 @@ Usage:
 """
 
 import argparse
-import json
 import socket
 import sys
 import threading
@@ -21,6 +20,8 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Dict, Optional, cast
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
+
+from ..utils.fastjson import json
 
 # MUXI logo for OAuth providers that support it
 MUXI_LOGO_URL = "https://raw.githubusercontent.com/muxi-ai/.github/refs/heads/main/profile/logo.png"

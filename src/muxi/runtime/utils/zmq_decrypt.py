@@ -4,10 +4,11 @@
 import base64
 import binascii
 import hashlib
-import json
 from typing import Any, Dict
 
 from cryptography.fernet import Fernet, InvalidToken
+
+from ..utils.fastjson import json
 
 
 def decrypt_zmq_message(encrypted_data: Dict[str, Any], token: str) -> Dict[str, Any]:

@@ -5,7 +5,6 @@ Provides secure, encrypted secrets storage with GitHub Actions-style interpolati
 """
 
 import asyncio
-import json
 import logging
 import os
 import re
@@ -15,6 +14,7 @@ from typing import Any, Dict, List, Optional, Set, Union
 
 from cryptography.fernet import Fernet
 
+from ...utils.fastjson import json
 from .. import observability
 
 # Get logger for this module

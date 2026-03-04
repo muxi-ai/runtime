@@ -11,7 +11,6 @@ Features:
 - Context relevance scoring
 """
 
-import json
 import time
 from collections import defaultdict
 from dataclasses import dataclass
@@ -19,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ....datatypes import observability
+from ....utils.fastjson import json
 
 
 @dataclass

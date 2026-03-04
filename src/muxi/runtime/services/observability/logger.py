@@ -5,7 +5,6 @@ This module contains the EventLogger class for handling event emission
 with configurable outputs and routing.
 """
 
-import json
 import socket
 import time
 from typing import Any, Dict, List, Optional, Union
@@ -21,6 +20,7 @@ from ...datatypes.observability import (
     ServerEvents,
     SystemEvents,
 )
+from ...utils.fastjson import json
 from ...utils.id_generator import generate_nanoid
 from ...utils.user_dirs import get_observability_dir
 from ...utils.version import get_version

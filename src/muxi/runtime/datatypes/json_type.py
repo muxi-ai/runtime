@@ -5,10 +5,10 @@ Provides a database-agnostic JSON column type that works with both
 PostgreSQL (JSONB) and SQLite (TEXT with JSON serialization).
 """
 
-import json
-
 from sqlalchemy import JSON
 from sqlalchemy.types import TEXT, TypeDecorator
+
+from ..utils.fastjson import json
 
 
 class JSONType(TypeDecorator):

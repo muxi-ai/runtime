@@ -6,7 +6,6 @@ Uses zero-configuration encryption with formation_id and per-user key derivation
 """
 
 import base64
-import json
 from typing import Any, Dict, Optional
 
 from cachetools import LRUCache
@@ -16,6 +15,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from ...services import observability
+from ...utils.fastjson import json
 from ...utils.user_resolution import resolve_user_identifier
 from .resolver import CredentialResolver
 

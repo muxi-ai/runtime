@@ -9,7 +9,6 @@ webhook payload verification.
 import asyncio
 import hashlib
 import hmac
-import json
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
@@ -19,6 +18,7 @@ import aiohttp
 # Import unified response types
 from ...datatypes.response import MuxiContentItem, MuxiErrorDetails, MuxiUnifiedResponse
 from ...services import observability
+from ...utils.fastjson import json
 from ...utils.response_converter import create_unified_response
 
 

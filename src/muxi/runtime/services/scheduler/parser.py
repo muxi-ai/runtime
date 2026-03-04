@@ -23,7 +23,6 @@ Exclusions:
 - "only during business hours" → inverse exclusion logic
 """
 
-import json
 import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -34,6 +33,7 @@ from ...datatypes.intent import IntentDetectionContext, IntentType
 from ...services.intent import IntentDetectionService
 from ...services.llm import LLM
 from ...utils.datetime_utils import utc_now
+from ...utils.fastjson import json
 from .. import observability
 from .validation import SchedulerInputValidator
 

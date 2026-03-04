@@ -1,5 +1,4 @@
 import asyncio
-import json
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -20,6 +19,7 @@ from ...datatypes.workflow_models import (
     create_execution_result,
 )
 from ...services import observability, streaming
+from ...utils.fastjson import json
 from ..agents.agent import Agent
 from .config import (
     AgentRoutingRule,

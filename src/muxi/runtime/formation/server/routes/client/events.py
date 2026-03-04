@@ -8,13 +8,13 @@ Supports both ClientKey and AdminKey authentication:
 """
 
 import asyncio
-import json
 import secrets
 from typing import Optional, Tuple
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from .....utils.fastjson import json
 from ...responses import create_error_response
 
 router = APIRouter(tags=["Events"])

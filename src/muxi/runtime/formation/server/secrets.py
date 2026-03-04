@@ -5,11 +5,12 @@ This module provides utilities for restoring original secret placeholders
 in configuration data before sending API responses.
 """
 
-import json
 import os
 import re
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Set, Union
+
+from ...utils.fastjson import json
 
 
 def restore_secret_placeholders(

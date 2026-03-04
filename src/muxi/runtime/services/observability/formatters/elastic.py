@@ -1,6 +1,6 @@
-import json
 from typing import Any, Dict, List
 
+from ....utils.fastjson import json
 from .base import BaseFormatter
 
 

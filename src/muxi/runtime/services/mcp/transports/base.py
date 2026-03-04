@@ -8,9 +8,10 @@
 # Author:       Muxi Framework Team
 # =============================================================================
 
-import json
 from datetime import datetime
 from typing import Any, Dict, Optional
+
+from ....utils.fastjson import json
 
 
 class MCPError(Exception):

@@ -31,10 +31,10 @@
 # explicit memory commands, creating a more natural and personalized experience.
 # =============================================================================
 
-import json
 import time
 from typing import Any, Set
 
+from ...utils.fastjson import json
 from .. import observability
 
 

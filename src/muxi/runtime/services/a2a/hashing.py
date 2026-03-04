@@ -1,6 +1,7 @@
 import hashlib
-import json
 from typing import Any, Dict, List, Optional
+
+from ...utils.fastjson import json
 
 
 class AgentCardHasher:
