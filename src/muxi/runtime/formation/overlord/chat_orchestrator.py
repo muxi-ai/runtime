@@ -419,6 +419,113 @@ class ChatOrchestrator:
                 name=f"store_user_message_{request_id}",
             )
 
+            # Early non-actionable heuristic on raw message (before context enhancement).
+            # If the message is a simple greeting/acknowledgment and this is the first
+            # message (no buffer context with a prior assistant question), we can skip
+            # the expensive context enhancement and LLM actionability check entirely.
+            _raw_lower = message.lower().strip()
+            _skip_context_enhancement = False
+            if _raw_lower in [
+                "hi",
+                "hello",
+                "hey",
+                "thanks",
+                "thank you",
+                "ok",
+                "okay",
+                "got it",
+            ]:
+                # Check if there's a recent assistant message with a question
+                # (which would mean this is a follow-up answer, not a greeting)
+                _has_prior_question = False
+                if self.overlord.buffer_memory_manager:
+                    try:
+                        _filter = {"user_id": user_id}
+                        if session_id:
+                            _filter["session_id"] = session_id
+                        _recent = await self.overlord.buffer_memory_manager.search_buffer_memory(
+                            query="",
+                            k=1,
+                            filter_metadata=_filter,
+                        )
+                        if _recent:
+                            _last = _recent[-1]
+                            _last_role = _last.get("metadata", {}).get("role", "")
+                            _last_text = _last.get("text", "")
+                            if _last_role == "assistant" and "?" in _last_text:
+                                _has_prior_question = True
+                    except Exception:
+                        pass
+                if not _has_prior_question:
+                    _skip_context_enhancement = True
+
+            if _skip_context_enhancement:
+                # Fast path: skip context enhancement, go straight to persona response
+                if request_id:
+                    is_streaming = streaming.streaming_manager.is_streaming_enabled(request_id)
+                else:
+                    is_streaming = False
+                if is_streaming:
+                    streaming.stream(
+                        "thinking",
+                        "Processing...",
+                        stage="process_sync_start",
+                        original_message=message,
+                        skip_rephrase=True,
+                    )
+                    streaming.stream(
+                        "progress",
+                        "Preparing response...",
+                        stage="response_preparation",
+                        skip_rephrase=True,
+                    )
+
+                response = await self.overlord._apply_persona(None, message)
+
+                if self.overlord.buffer_memory_manager:
+                    self.overlord._create_tracked_task(
+                        self.overlord.buffer_memory_manager.add_to_buffer_memory(
+                            message=response,
+                            metadata={
+                                "user_id": user_id,
+                                "session_id": session_id,
+                                "role": "assistant",
+                                "timestamp": time.time(),
+                                "request_id": request_id,
+                            },
+                            agent_id="overlord",
+                        ),
+                        name=f"store_response_{request_id}",
+                    )
+
+                if is_streaming:
+                    streaming.stream(
+                        "completed",
+                        response,
+                        status="success",
+                        processing_time_ms=int((time.time() - timestamp) * 1000),
+                        fast_path=True,
+                    )
+
+                # Record framework mode telemetry
+                if _is_framework_mode:
+                    telemetry = get_telemetry()
+                    if telemetry:
+                        latency_ms = (time.time() - _framework_start_time) * 1000
+                        telemetry.record_request(True, latency_ms, "framework")
+
+                return MuxiResponse(
+                    role="assistant",
+                    content=response,
+                    metadata={
+                        "handled_by": "overlord_direct",
+                        "is_actionable": False,
+                        "fast_path": True,
+                        "early_heuristic": True,
+                        "processing_time_ms": (time.time() - timestamp) * 1000,
+                    },
+                )
+
             # Enhance message with conversation context (memories + buffer)
             enhanced_message = await self._enhance_message_with_context(
                 message=message,
@@ -938,155 +1045,142 @@ class ChatOrchestrator:
         buffer_size = buffer_config.get("size", 10)
         vector_search = buffer_config.get("vector_search", True)
 
-        # 1. Get user synopsis (cached) from user context manager
-        user_profile_text = ""
-        if self.overlord.is_multi_user and user_id:
-            try:
-                # Use cached synopsis instead of querying Memobase every time
-                synopsis = await self.overlord.get_user_synopsis(external_user_id=user_id)
-                # Only set if we got actual content (not empty string)
-                if synopsis and synopsis.strip():
-                    user_profile_text = synopsis
-            except Exception:
-                pass  # Continue without user profile
+        # Run all three context sources concurrently
+        async def _fetch_user_synopsis():
+            if self.overlord.is_multi_user and user_id:
+                try:
+                    synopsis = await self.overlord.get_user_synopsis(external_user_id=user_id)
+                    if synopsis and synopsis.strip():
+                        return synopsis
+                except Exception:
+                    pass
+            return ""
 
-        # 2. Search for relevant long-term memories
-        long_term_memories = ""
-        if self.overlord.long_term_memory and user_id:
-            try:
-                # Search long-term memory using current message as query
-                # Search specific collections that are commonly used
-                collections_to_search = [
-                    "activities",
-                    "preferences",
-                    "user_identity",
-                    "relationships",
-                    "work_projects",
-                    "conversations",
-                    "goals",
-                    "default",
-                ]
-                lt_results = await self.overlord.persistent_memory_manager.search_long_term_memory(
-                    query=message,
-                    k=5,  # Get top 5 relevant memories
-                    user_id=user_id,
-                    collections=collections_to_search,
-                )
-                if lt_results:
-                    # Format long-term memories
-                    memory_parts = []
-                    for mem in lt_results:
-                        content = mem.get("text", "")
-                        if content:
-                            # Truncate very long memories
-                            if len(content) > 200:
-                                content = content[:197] + "..."
-                            memory_parts.append(f"- {content}")
-                    if memory_parts:
-                        long_term_memories = "\n".join(memory_parts[:3])  # Limit to top 3
-            except Exception as e:
-                # Log error but continue without long-term memories
-                from ...services import observability
+        async def _fetch_long_term_memories():
+            if self.overlord.long_term_memory and user_id:
+                try:
+                    collections_to_search = [
+                        "activities",
+                        "preferences",
+                        "user_identity",
+                        "relationships",
+                        "work_projects",
+                        "conversations",
+                        "goals",
+                        "default",
+                    ]
+                    lt_results = (
+                        await self.overlord.persistent_memory_manager.search_long_term_memory(
+                            query=message,
+                            k=5,
+                            user_id=user_id,
+                            collections=collections_to_search,
+                        )
+                    )
+                    if lt_results:
+                        memory_parts = []
+                        for mem in lt_results:
+                            content = mem.get("text", "")
+                            if content:
+                                if len(content) > 200:
+                                    content = content[:197] + "..."
+                                memory_parts.append(f"- {content}")
+                        if memory_parts:
+                            return "\n".join(memory_parts[:3])
+                except Exception as e:
+                    from ...services import observability
 
-                observability.observe(
-                    event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
-                    level=observability.EventLevel.ERROR,  # Changed to ERROR to see it
-                    data={
-                        "operation": "long_term_memory_search",
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                        "traceback": str(e.__traceback__) if hasattr(e, "__traceback__") else None,
-                    },
-                    description=f"Long-term memory search failed: {str(e)}",
-                )
-                # Make sure long_term_memories is empty
-                long_term_memories = ""
+                    observability.observe(
+                        event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "operation": "long_term_memory_search",
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "traceback": (
+                                str(e.__traceback__) if hasattr(e, "__traceback__") else None
+                            ),
+                        },
+                        description=f"Long-term memory search failed: {str(e)}",
+                    )
+            return ""
 
-        # 3. Search for recent conversation context (buffer memory)
+        async def _fetch_buffer_context():
+            if self.overlord.buffer_memory_manager:
+                try:
+                    metadata_filter = {"user_id": user_id}
+                    if session_id:
+                        metadata_filter["session_id"] = session_id
+
+                    if vector_search:
+                        context_messages_list = (
+                            await self.overlord.buffer_memory_manager.search_buffer_memory(
+                                query=message,
+                                k=buffer_size,
+                                filter_metadata=metadata_filter,
+                            )
+                        )
+                    else:
+                        context_messages_list = (
+                            await self.overlord.buffer_memory_manager.search_buffer_memory(
+                                query="",
+                                k=buffer_size,
+                                filter_metadata=metadata_filter,
+                            )
+                        )
+                    return context_messages_list
+                except Exception:
+                    pass
+            return None
+
+        import asyncio
+
+        user_profile_text, long_term_memories, context_messages_list = await asyncio.gather(
+            _fetch_user_synopsis(),
+            _fetch_long_term_memories(),
+            _fetch_buffer_context(),
+        )
+
+        # Format buffer context results
         context_text = ""
-        if self.overlord.buffer_memory_manager:
-            try:
-                # Build metadata filter
-                metadata_filter = {"user_id": user_id}
-                if session_id:
-                    metadata_filter["session_id"] = session_id
+        if context_messages_list:
+            context_parts = []
+            for msg in reversed(context_messages_list):
+                role = msg.get("metadata", {}).get("role", "unknown")
+                timestamp = msg.get("metadata", {}).get("timestamp", "")
+                content = msg.get("text", "")
 
-                # Retrieve context based on vector_search setting
-                if vector_search:
-                    # Semantic search using current message as query
-                    context_messages_list = (
-                        await self.overlord.buffer_memory_manager.search_buffer_memory(
-                            query=message,  # Use current message for semantic search
-                            k=buffer_size,
-                            filter_metadata=metadata_filter,
-                        )
-                    )
+                if any(
+                    marker in content
+                    for marker in [
+                        "=== CONVERSATION CONTEXT",
+                        "=== CURRENT REQUEST ===",
+                        "=== USER PROFILE ===",
+                        "=== FILE PROCESSING RESULTS ===",
+                        "=== RELEVANT MEMORIES ===",
+                    ]
+                ):
+                    if "=== CURRENT REQUEST ===" in content and "User:" in content:
+                        lines = content.split("\n")
+                        for i, line in enumerate(lines):
+                            if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                                next_line = lines[i + 1].strip()
+                                if next_line.startswith("User:"):
+                                    content = next_line[5:].strip()
+                                    break
+                    else:
+                        continue
+
+                if timestamp:
+                    import datetime
+
+                    dt = datetime.datetime.fromtimestamp(timestamp)
+                    time_str = dt.strftime("%H:%M")
+                    context_parts.append(f"[{time_str}] {role.capitalize()}: {content}")
                 else:
-                    # Chronological retrieval
-                    context_messages_list = (
-                        await self.overlord.buffer_memory_manager.search_buffer_memory(
-                            query="",  # Empty query for chronological order
-                            k=buffer_size,
-                            filter_metadata=metadata_filter,
-                        )
-                    )
+                    context_parts.append(f"{role.capitalize()}: {content}")
 
-                if context_messages_list:
-                    # Format context with timestamps in REVERSE order (most recent first)
-                    context_parts = []
-                    for msg in reversed(context_messages_list):  # Reverse for most recent first
-                        role = msg.get("metadata", {}).get("role", "unknown")
-                        timestamp = msg.get("metadata", {}).get("timestamp", "")
-                        content = msg.get("text", "")
-
-                        # CRITICAL FIX: Skip messages that already contain context markers
-                        # This prevents the matryoshka doll effect of nested contexts
-                        if any(
-                            marker in content
-                            for marker in [
-                                "=== CONVERSATION CONTEXT",
-                                "=== CURRENT REQUEST ===",
-                                "=== USER PROFILE ===",
-                                "=== FILE PROCESSING RESULTS ===",
-                                "=== RELEVANT MEMORIES ===",
-                            ]
-                        ):
-                            # This is an enhanced message, extract just the actual content
-                            # Look for the actual user/assistant message
-                            if "=== CURRENT REQUEST ===" in content and "User:" in content:
-                                # Extract just the user's actual message
-                                lines = content.split("\n")
-                                for i, line in enumerate(lines):
-                                    if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(
-                                        lines
-                                    ):
-                                        next_line = lines[i + 1].strip()
-                                        if next_line.startswith("User:"):
-                                            content = next_line[
-                                                5:
-                                            ].strip()  # Remove "User: " prefix
-                                            break
-                            else:
-                                # Skip this message entirely if we can't extract clean content
-                                continue
-
-                        if timestamp:
-                            # Format timestamp for readability
-                            import datetime
-
-                            dt = datetime.datetime.fromtimestamp(timestamp)
-                            time_str = dt.strftime("%H:%M")
-                            context_parts.append(f"[{time_str}] {role.capitalize()}: {content}")
-                        else:
-                            context_parts.append(f"{role.capitalize()}: {content}")
-
-                    context_text = "\n".join(context_parts)
-                    # Note: No truncation needed - LLM will naturally truncate oldest messages
-
-            except Exception:
-                # Log error but continue without context
-                # Failed to retrieve conversation context - continue without it
-                pass
+            context_text = "\n".join(context_parts)
 
         # Build enhanced message with priority ordering (most important first)
         enhanced_parts = []
