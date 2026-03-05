@@ -924,12 +924,14 @@ class Overlord:
             try:
                 loop = asyncio.get_running_loop()
                 # We're in an event loop, schedule the async startup as a task
-                startup_task = loop.create_task(self._async_startup())
+                startup_task = loop.create_task(self._async_startup(persistent_loop=True))
                 # Store the task so we can wait for it if needed
                 self._startup_task = startup_task
             except RuntimeError:
                 # No event loop running, we can use asyncio.run()
-                asyncio.run(self._async_startup())
+                # Note: persistent_loop=False because asyncio.run() destroys
+                # background tasks when the coroutine returns.
+                asyncio.run(self._async_startup(persistent_loop=False))
                 self._startup_task = None
 
         except Exception:
@@ -1045,10 +1047,23 @@ class Overlord:
             )
             return None
 
-    async def _async_startup(self) -> None:
-        """Async startup logic extracted to a separate method."""
+    async def _async_startup(self, persistent_loop: bool = True) -> None:
+        """Async startup logic extracted to a separate method.
+
+        Args:
+            persistent_loop: True when running inside a long-lived event loop
+                (e.g. uvicorn), False when called via asyncio.run() which
+                destroys background tasks on return. When False, background
+                tasks like the cleanup loop are deferred to the server lifespan.
+        """
         # Services are now initialized by Formation before Overlord creation
         # Only handle intelligence-specific initialization here
+
+        # Start request tracker cleanup loop only in a persistent event loop.
+        # Under asyncio.run(), background tasks are destroyed when the
+        # coroutine returns, so the server lifespan starts it instead.
+        if self.request_tracker and persistent_loop:
+            self.request_tracker.start_cleanup_loop()
 
         # LLM configuration is already initialized by Formation
         # Just copy the configuration for local use
@@ -5066,12 +5081,11 @@ Agent response: {raw_response}"""
             # Normalize user_id - lowercase and strip whitespace
             user_id = str(user_id).lower().strip()
 
-        # Get webhook URL from formation config or parameter
-        webhook_url = webhook_url or self.formation_config.get("async", {}).get("webhook_url")
+        # Get webhook URL from formation config if not provided per-request
+        if webhook_url is None:
+            webhook_url = self.formation_config.get("async", {}).get("webhook_url")
 
-        # Force use_async=False if no webhook URL available
-        if use_async is not False and webhook_url is None:
-            use_async = False
+        # Async without webhook is valid -- clients can poll GET /requests/{id}
 
         # Handle streaming conflict: async mode takes precedence over streaming
         # When both async and streaming are requested, ignore streaming
@@ -6245,8 +6259,8 @@ Agent response: {raw_response}"""
                                 # Log final decision
 
                                 # Check if we should execute async
-                                if use_async and webhook_url:
-                                    # Execute asynchronously with webhook notification
+                                if use_async:
+                                    # Execute asynchronously (webhook or polling)
                                     return await self._execute_workflow_async(
                                         workflow=workflow,
                                         message=original_message or message,
@@ -7943,8 +7957,8 @@ Agent response: {raw_response}"""
                 # Execute immediately without approval
 
                 # Check if we should execute async or sync
-                if use_async and webhook_url:
-                    # Execute asynchronously
+                if use_async:
+                    # Execute asynchronously (webhook or polling)
 
                     result = await self._execute_workflow_async(
                         workflow=workflow,
@@ -8240,10 +8254,8 @@ Agent response: {raw_response}"""
                 ttl=172800,  # 48 hours in seconds
                 namespace="request_status",
             )
-            # Remove from active RequestTracker to prevent memory leaks
-            await self.request_tracker.remove_request(request_id)
-
-            # Log before sending webhook
+            # Completed requests stay in RequestTracker for client polling;
+            # background cleanup purges them after the configured TTL.
 
             # Convert result to JSON-serializable format
             serializable_result = None
@@ -8288,8 +8300,7 @@ Agent response: {raw_response}"""
                 ttl=172800,  # 48 hours in seconds
                 namespace="request_status",
             )
-            # Remove from active RequestTracker to prevent memory leaks
-            await self.request_tracker.remove_request(request_id)
+            # Completed requests stay in RequestTracker; TTL cleanup handles purging.
 
             # Send error webhook
             await self._send_completion_webhook(
@@ -8445,8 +8456,7 @@ Agent response: {raw_response}"""
                 ttl=172800,  # 48 hours in seconds
                 namespace="request_status",
             )
-            # Remove from active RequestTracker to prevent memory leaks
-            await self.request_tracker.remove_request(request_id)
+            # Cancelled requests stay in RequestTracker; TTL cleanup handles purging.
 
             # Send cancellation webhook if configured
             if request_state.webhook_url:
@@ -10159,8 +10169,7 @@ Agent response: {raw_response}"""
                         error=f"Clarification failed: {result.error_message}",
                     )
 
-                    # Auto-remove failed request to prevent memory buildup
-                    await self.request_tracker.remove_request(request_id)
+                    # Failed requests stay in tracker; TTL cleanup handles purging.
 
                     # Remove from async requests set even on failure
                     self.observability_manager._async_requests.discard(request_id)
@@ -10187,8 +10196,7 @@ Agent response: {raw_response}"""
                     request_id, RequestStatus.FAILED, error=f"Clarification processing error: {e}"
                 )
 
-                # Auto-remove failed request to prevent memory buildup
-                await self.request_tracker.remove_request(request_id)
+                # Failed requests stay in tracker; TTL cleanup handles purging.
 
                 # Remove from async requests set even on failure
                 self.observability_manager._async_requests.discard(request_id)

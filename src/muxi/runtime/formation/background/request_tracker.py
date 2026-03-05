@@ -2,10 +2,13 @@
 Request tracking for async request-response patterns.
 
 This module provides in-memory tracking of async requests with
-thread-safe operations.
+thread-safe operations. Completed/failed requests are retained
+for a configurable TTL (default 5 minutes) so clients can poll
+for results after completion.
 """
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -67,13 +70,27 @@ class RequestState:
         return getattr(self, "created_at", None) or getattr(self, "start_time", None)
 
 
-class RequestTracker:
-    """In-memory tracking of async requests with thread-safe operations."""
+_TERMINAL_STATUSES = frozenset(
+    {RequestStatus.COMPLETED, RequestStatus.FAILED, RequestStatus.CANCELLED}
+)
 
-    def __init__(self):
+DEFAULT_COMPLETED_TTL_SECONDS = 300  # 5 minutes
+
+
+class RequestTracker:
+    """In-memory tracking of async requests with thread-safe operations.
+
+    Completed/failed/cancelled requests are retained for ``completed_ttl``
+    seconds so that clients can poll for results after the request finishes.
+    A background cleanup task purges expired terminal requests automatically.
+    """
+
+    def __init__(self, completed_ttl: float = DEFAULT_COMPLETED_TTL_SECONDS):
         self._requests: Dict[str, RequestState] = {}
         self._cancelled: Set[str] = set()  # For cooperative cancellation
         self._lock = asyncio.Lock()
+        self.completed_ttl = completed_ttl
+        self._cleanup_task: Optional[asyncio.Task] = None
 
     async def track_request(self, request_id: str, initial_state: RequestState) -> None:
         """
@@ -118,7 +135,7 @@ class RequestTracker:
             if error is not None:
                 request_state.error = error
 
-            if status in (RequestStatus.COMPLETED, RequestStatus.FAILED):
+            if status in _TERMINAL_STATUSES and request_state.end_time is None:
                 request_state.end_time = time.time()
 
             return True
@@ -213,3 +230,53 @@ class RequestTracker:
         """
         async with self._lock:
             return len(self._requests)
+
+    async def cleanup_expired(self) -> int:
+        """
+        Remove terminal requests whose TTL has expired.
+
+        Returns:
+            Number of requests purged
+        """
+        now = time.time()
+        purged = 0
+        async with self._lock:
+            expired_ids = [
+                req_id
+                for req_id, state in self._requests.items()
+                if state.status in _TERMINAL_STATUSES
+                and state.end_time is not None
+                and (now - state.end_time) > self.completed_ttl
+            ]
+            for req_id in expired_ids:
+                del self._requests[req_id]
+                self._cancelled.discard(req_id)
+                purged += 1
+        return purged
+
+    def start_cleanup_loop(self, interval: float = 60.0) -> None:
+        """Start a background task that periodically purges expired requests."""
+        if self._cleanup_task is not None and not self._cleanup_task.done():
+            return
+
+        async def _loop():
+            while True:
+                await asyncio.sleep(interval)
+                try:
+                    await self.cleanup_expired()
+                except Exception as exc:
+                    logging.getLogger(__name__).warning(
+                        "RequestTracker cleanup_expired raised: %s", exc, exc_info=True
+                    )
+
+        self._cleanup_task = asyncio.create_task(_loop())
+
+    async def stop_cleanup_loop(self) -> None:
+        """Cancel the background cleanup task."""
+        if self._cleanup_task and not self._cleanup_task.done():
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+            self._cleanup_task = None
