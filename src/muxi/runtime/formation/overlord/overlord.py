@@ -711,7 +711,6 @@ class Overlord:
         )
         if not self.request_tracker:
             self.request_tracker = RequestTracker()
-        self.request_tracker.start_cleanup_loop()
 
         self.webhook_manager = (
             configured_services.get("webhook_manager") if configured_services else None
@@ -1050,6 +1049,10 @@ class Overlord:
         """Async startup logic extracted to a separate method."""
         # Services are now initialized by Formation before Overlord creation
         # Only handle intelligence-specific initialization here
+
+        # Start request tracker cleanup loop (requires running event loop)
+        if self.request_tracker:
+            self.request_tracker.start_cleanup_loop()
 
         # LLM configuration is already initialized by Formation
         # Just copy the configuration for local use
