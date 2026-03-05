@@ -6,7 +6,6 @@ via Server-Sent Events (SSE) with required filtering to prevent firehose.
 """
 
 import asyncio
-import json
 import re
 from functools import lru_cache
 from typing import Optional, Pattern
@@ -15,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from .....services import observability
+from .....utils.fastjson import json
 
 router = APIRouter(tags=["Logs"])
 

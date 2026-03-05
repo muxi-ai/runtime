@@ -1,10 +1,10 @@
-import json
 import re
 import time
 from dataclasses import dataclass
 from typing import Dict, Optional
 
 from ...services import observability
+from ...utils.fastjson import json
 
 
 @dataclass

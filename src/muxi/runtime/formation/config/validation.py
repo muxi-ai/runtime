@@ -6,7 +6,6 @@ detecting common issues, and ensuring configurations are well-formed.
 """
 
 import asyncio
-import json
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -15,6 +14,7 @@ import yaml
 
 # Import the MCP registry to get valid MCP names dynamically
 from ...services.mcp.built_in import BUILTIN_MCP_REGISTRY
+from ...utils.fastjson import json
 
 # Pattern for detecting user credentials in configuration
 USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")

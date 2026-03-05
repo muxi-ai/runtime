@@ -7,7 +7,6 @@ Replaces keyword-based detection with language-agnostic LLM-based approach.
 
 import hashlib
 import inspect
-import json
 from typing import Optional
 
 from ...datatypes.intent import (
@@ -16,6 +15,7 @@ from ...datatypes.intent import (
     IntentType,
     QueryType,
 )
+from ...utils.fastjson import json
 from .. import observability
 from ..llm import LLM
 from .cache import IntentCache

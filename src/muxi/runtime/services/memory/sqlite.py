@@ -30,7 +30,6 @@
 # smaller deployments or environments where PostgreSQL is not available.
 # =============================================================================
 
-import json
 import os
 import sqlite3
 import time
@@ -39,6 +38,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...extensions import SQLiteVecExtension
+from ...utils.fastjson import json
 from .. import observability
 from .base import BaseMemory
 

@@ -11,13 +11,13 @@ Features:
 - Query and filtering capabilities
 """
 
-import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from ....services import observability
+from ....utils.fastjson import json
 
 
 @dataclass

@@ -5,7 +5,6 @@ These endpoints provide CRUD operations for user credentials,
 requiring either ClientKey or AdminKey with X-Muxi-User-ID header.
 """
 
-import json
 import secrets
 from typing import Any, Dict, Optional, Tuple
 
@@ -14,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .....datatypes.api import APIEventType, APIObjectType
+from .....utils.fastjson import json
 from ...responses import (
     APIResponse,
     create_error_response,

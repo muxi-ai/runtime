@@ -1,11 +1,11 @@
 import asyncio
-import json
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from ...datatypes.workflow import RequestAnalysis
 from ...services import observability
 from ...services.llm import LLM
+from ...utils.fastjson import json
 
 
 class ComplexityMethod(Enum):

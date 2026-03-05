@@ -1,8 +1,8 @@
-import json
 import time
 from datetime import datetime
 from typing import Any, Dict, List
 
+from ....utils.fastjson import json
 from .base import BaseFormatter
 
 

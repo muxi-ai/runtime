@@ -7,7 +7,6 @@ destinations, async configuration, and memory operations.
 """
 
 import asyncio
-import json
 import logging
 import threading
 from datetime import datetime, timezone
@@ -15,6 +14,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from fastapi import Request
 
+from ...utils.fastjson import json
 from ...utils.user_dirs import get_user_dir
 
 logger = logging.getLogger(__name__)

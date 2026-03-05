@@ -33,11 +33,12 @@
 # by accurately identifying and processing tool calls embedded in LLM responses.
 # =============================================================================
 
-import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from muxi.runtime.datatypes import observability
+
+from ...utils.fastjson import json
 
 
 class ToolCall:

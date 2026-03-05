@@ -14,7 +14,6 @@ Security features:
 """
 
 import ast
-import json
 import shutil
 import subprocess
 import sys
@@ -24,6 +23,7 @@ from pathlib import Path
 from typing import Optional, Set
 
 from ...datatypes.artifacts import MuxiArtifact
+from ...utils.fastjson import json
 from .processor import create_artifact_from_file
 
 # Whitelist of allowed imports for file generation

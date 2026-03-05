@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""
+E2E Random Test Runner - Picks N random tests and runs them.
+Usage: python run_random_tests.py [N]   (default: 10)
+"""
+
+import json
+import random
+import sys
+import time
+
+from run_all_tests import (
+    AREAS,
+    RESULTS_DIR,
+    run_test,
+    should_skip,
+)
+
+
+def main():
+    n = int(sys.argv[1]) if len(sys.argv) > 1 else 10
+
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    all_tests = []
+    for area in AREAS:
+        tests = sorted(area.glob("test_*.py"))
+        tests = [t for t in tests if not should_skip(t.name)]
+        all_tests.extend(tests)
+
+    if n > len(all_tests):
+        n = len(all_tests)
+
+    selected = random.sample(all_tests, n)
+    selected.sort(key=lambda t: (t.parent.name, t.name))
+
+    print(f"Running {n} random tests (from {len(all_tests)} total)")
+    print("=" * 70)
+
+    results = []
+    area_stats = {}
+
+    for i, test_file in enumerate(selected, 1):
+        area = test_file.parent.name
+        short = test_file.name
+        print(f"[{i}/{n}] {area}/{short} ... ", end="", flush=True)
+
+        result = run_test(test_file)
+        results.append(result)
+
+        status = "PASS" if result["passed"] else "FAIL"
+        print(f"{status} ({result['time_s']}s)")
+
+        if not result["passed"]:
+            tail = (
+                result["stderr_tail"].strip().split("\n")[-1][:120] if result["stderr_tail"] else ""
+            )
+            if tail:
+                print(f"      {tail}")
+
+        if area not in area_stats:
+            area_stats[area] = {"passed": 0, "failed": 0, "total": 0}
+        area_stats[area]["total"] += 1
+        if result["passed"]:
+            area_stats[area]["passed"] += 1
+        else:
+            area_stats[area]["failed"] += 1
+
+    total = len(results)
+    passed = sum(1 for r in results if r["passed"])
+    failed = total - passed
+
+    print("\n" + "=" * 70)
+    print(f"TOTAL: {passed}/{total} passed, {failed} failed\n")
+
+    print("Per area:")
+    for area in sorted(area_stats.keys(), key=lambda a: int(a.split("_")[0])):
+        s = area_stats[area]
+        status = "ALL PASS" if s["failed"] == 0 else f"{s['failed']} FAILED"
+        print(f"  {area}: {s['passed']}/{s['total']} ({status})")
+
+    if failed > 0:
+        print("\nFailed tests:")
+        for r in results:
+            if not r["passed"]:
+                err = r["stderr_tail"].strip().split("\n")[-1][:100] if r["stderr_tail"] else ""
+                print(f"  {r['file']} (exit={r['exit_code']}, {r['time_s']}s) {err}")
+
+    report = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "mode": "random",
+        "sample_size": n,
+        "pool_size": len(all_tests),
+        "summary": {"total": total, "passed": passed, "failed": failed},
+        "area_stats": area_stats,
+        "results": results,
+    }
+    report_path = RESULTS_DIR / "random_test_report.json"
+    with open(report_path, "w") as f:
+        json.dump(report, f, indent=2)
+    print(f"\nReport saved to {report_path}")
+
+    return 0 if failed == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

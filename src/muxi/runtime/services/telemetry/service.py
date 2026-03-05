@@ -5,7 +5,6 @@ All data is aggregated and contains no PII or user content.
 """
 
 import asyncio
-import json
 import logging
 import os
 import threading
@@ -18,6 +17,7 @@ from typing import Any
 
 import httpx
 
+from ...utils.fastjson import json
 from .machine_id import get_machine_id
 
 logger = logging.getLogger(__name__)

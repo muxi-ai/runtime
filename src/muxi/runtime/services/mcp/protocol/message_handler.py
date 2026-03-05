@@ -2,13 +2,13 @@
 Real MCP protocol message handling.
 """
 
-import json
 import logging
 from typing import Any, Dict, Union
 
 from mcp.shared.message import SessionMessage
 from mcp.types import JSONRPCError, JSONRPCRequest, JSONRPCResponse
 
+from ....utils.fastjson import json
 from ....utils.id_generator import generate_nanoid
 
 logger = logging.getLogger(__name__)

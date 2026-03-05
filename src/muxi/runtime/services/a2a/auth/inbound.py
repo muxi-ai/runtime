@@ -7,7 +7,6 @@ Uses SDK security schemes for protocol compliance.
 """
 
 import base64
-import json
 import os
 from dataclasses import dataclass, field
 from enum import Enum
@@ -15,6 +14,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from fastapi import Header, Request
 
+from ....utils.fastjson import json
 from ... import observability
 from ...secrets import SecretsManager
 

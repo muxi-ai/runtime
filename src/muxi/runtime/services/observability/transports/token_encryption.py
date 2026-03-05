@@ -7,11 +7,12 @@ ensuring both authentication and data protection for observability data.
 
 import base64
 import hashlib
-import json
 import time
 from typing import Any, Dict
 
 from cryptography.fernet import Fernet
+
+from ....utils.fastjson import json
 
 
 class TokenEncryption:

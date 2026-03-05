@@ -6,7 +6,6 @@ It enables automatic registration, discovery, and health monitoring of agents.
 """
 
 import asyncio
-import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from ...utils.fastjson import json
 from .. import observability
 from .cache_manager import A2ACacheManager
 from .card_generator import AgentCardGenerator

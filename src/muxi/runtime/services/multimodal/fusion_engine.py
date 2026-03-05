@@ -6,13 +6,13 @@ context fusion, cross-modal attention mechanisms, and unified task processing.
 """
 
 import asyncio
-import json
 import re
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
+from ...utils.fastjson import json
 from .. import observability
 
 if TYPE_CHECKING:

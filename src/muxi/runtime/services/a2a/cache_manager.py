@@ -6,12 +6,12 @@ configuration hash to avoid regeneration when configs haven't changed.
 """
 
 import hashlib
-import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ...utils.fastjson import json
 from ...utils.user_dirs import get_a2a_cache_dir
 from .. import observability
 from .models import AgentCard

@@ -79,7 +79,6 @@
 
 import asyncio
 import base64
-import json
 import os
 import signal
 import sys
@@ -138,6 +137,7 @@ from ...services.scheduler.service import SchedulerService
 # A2A models imported when needed
 from ...services.secrets.secrets_manager import SecretsManager
 from ...services.streaming import streaming_manager
+from ...utils.fastjson import json
 from ...utils.security import redact_message_preview, sanitize_message_preview
 from ...utils.text_cleaner import clean_response_text
 from ...utils.user_dirs import set_formation_id
@@ -10283,7 +10283,8 @@ Agent response: {raw_response}"""
             # Convert properties to first-person prompt with JSON
             try:
                 # Use compact JSON format to minimize tokens
-                json_str = json.dumps(properties, separators=(",", ":"), default=str)
+                # (orjson produces compact output by default, no separators kwarg needed)
+                json_str = json.dumps(properties, default=str)
             except (TypeError, ValueError) as e:
                 # Fallback to string representation if JSON serialization fails
                 observability.observe(

@@ -5,7 +5,6 @@ Complete implementation using the unified database infrastructure.
 All methods converted to use SQLAlchemy ORM with cross-database support.
 """
 
-import json
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -13,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from ...utils.datetime_utils import utc_now
+from ...utils.fastjson import json
 from ...utils.id_generator import generate_nanoid
 from .. import observability
 from ..db import DatabaseManager

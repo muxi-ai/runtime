@@ -6,7 +6,6 @@ requiring client API key authentication.
 """
 
 import asyncio
-import json
 from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, HTTPException, Request
@@ -14,6 +13,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .....services import observability
+from .....utils.fastjson import json
 from ...utils import get_header_case_insensitive
 
 router = APIRouter(tags=["Chat"])

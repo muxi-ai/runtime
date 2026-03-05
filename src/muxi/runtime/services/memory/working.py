@@ -630,6 +630,28 @@ class WorkingMemory:
             # Create a copy of filter_metadata without session_id to avoid double filtering
             filter_metadata = {k: v for k, v in filter_metadata.items() if k != "session_id"}
 
+        # Fast path: empty query means recency-only search -- skip embedding model
+        # initialization entirely to avoid lazy-loading overhead on first call.
+        if not query and query_vector is None:
+            recency_results = self._recency_search(
+                limit,
+                filter_metadata,
+                use_entire_buffer=True,
+                namespace=namespace,
+                session_id=session_id,
+            )
+            observability.observe(
+                event_type=observability.ConversationEvents.MEMORY_WORKING_RETRIEVED,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "results_count": len(recency_results),
+                    "search_type": "recency_fast_path",
+                    "buffer_size": len(self.buffer),
+                },
+                description="Working memory empty-query fast path",
+            )
+            return recency_results
+
         # Emit memory retrieval started event
         observability.observe(
             event_type=observability.ConversationEvents.MEMORY_WORKING_LOOKUP,

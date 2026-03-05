@@ -38,12 +38,13 @@
 #   config = loader.load_and_process("path/to/config.afs", secrets_manager)
 # =============================================================================
 
-import json
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
+
+from ...utils.fastjson import json
 
 
 class ConfigLoader:

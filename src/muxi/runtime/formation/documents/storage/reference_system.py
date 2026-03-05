@@ -13,13 +13,13 @@ Features:
 
 import datetime
 import hashlib
-import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from ....services import observability
+from ....utils.fastjson import json
 from ....utils.id_generator import generate_nanoid
 
 

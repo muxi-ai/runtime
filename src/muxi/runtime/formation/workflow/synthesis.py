@@ -5,7 +5,6 @@ This module provides intelligent response synthesis with quality assessment,
 multi-modal integration, and sophisticated persona consistency management.
 """
 
-import json
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -14,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ...datatypes import observability
 from ...datatypes.workflow import TaskStatus, Workflow
 from ...services.llm import LLM
+from ...utils.fastjson import json
 
 
 class ResponseQuality(Enum):

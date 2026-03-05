@@ -5,7 +5,6 @@ This module provides functionality to extract artifacts from tool execution resu
 specifically looking for file generation results and converting them to MuxiArtifact objects.
 """
 
-import json
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +13,7 @@ from typing import List
 from ...datatypes.artifacts import ArtifactMetadata, ArtifactPreview, MuxiArtifact
 from ...datatypes.clarification import ToolExecutionResult
 from ...services import observability
+from ...utils.fastjson import json
 from .processor import create_artifact_from_file
 
 
