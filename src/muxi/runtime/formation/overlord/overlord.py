@@ -711,6 +711,7 @@ class Overlord:
         )
         if not self.request_tracker:
             self.request_tracker = RequestTracker()
+        self.request_tracker.start_cleanup_loop()
 
         self.webhook_manager = (
             configured_services.get("webhook_manager") if configured_services else None
@@ -5069,9 +5070,7 @@ Agent response: {raw_response}"""
         # Get webhook URL from formation config or parameter
         webhook_url = webhook_url or self.formation_config.get("async", {}).get("webhook_url")
 
-        # Force use_async=False if no webhook URL available
-        if use_async is not False and webhook_url is None:
-            use_async = False
+        # Async without webhook is valid -- clients can poll GET /requests/{id}
 
         # Handle streaming conflict: async mode takes precedence over streaming
         # When both async and streaming are requested, ignore streaming
@@ -8240,10 +8239,8 @@ Agent response: {raw_response}"""
                 ttl=172800,  # 48 hours in seconds
                 namespace="request_status",
             )
-            # Remove from active RequestTracker to prevent memory leaks
-            await self.request_tracker.remove_request(request_id)
-
-            # Log before sending webhook
+            # Completed requests stay in RequestTracker for client polling;
+            # background cleanup purges them after the configured TTL.
 
             # Convert result to JSON-serializable format
             serializable_result = None
@@ -8288,8 +8285,7 @@ Agent response: {raw_response}"""
                 ttl=172800,  # 48 hours in seconds
                 namespace="request_status",
             )
-            # Remove from active RequestTracker to prevent memory leaks
-            await self.request_tracker.remove_request(request_id)
+            # Completed requests stay in RequestTracker; TTL cleanup handles purging.
 
             # Send error webhook
             await self._send_completion_webhook(
@@ -8445,8 +8441,7 @@ Agent response: {raw_response}"""
                 ttl=172800,  # 48 hours in seconds
                 namespace="request_status",
             )
-            # Remove from active RequestTracker to prevent memory leaks
-            await self.request_tracker.remove_request(request_id)
+            # Cancelled requests stay in RequestTracker; TTL cleanup handles purging.
 
             # Send cancellation webhook if configured
             if request_state.webhook_url:
@@ -10159,8 +10154,7 @@ Agent response: {raw_response}"""
                         error=f"Clarification failed: {result.error_message}",
                     )
 
-                    # Auto-remove failed request to prevent memory buildup
-                    await self.request_tracker.remove_request(request_id)
+                    # Failed requests stay in tracker; TTL cleanup handles purging.
 
                     # Remove from async requests set even on failure
                     self.observability_manager._async_requests.discard(request_id)
@@ -10187,8 +10181,7 @@ Agent response: {raw_response}"""
                     request_id, RequestStatus.FAILED, error=f"Clarification processing error: {e}"
                 )
 
-                # Auto-remove failed request to prevent memory buildup
-                await self.request_tracker.remove_request(request_id)
+                # Failed requests stay in tracker; TTL cleanup handles purging.
 
                 # Remove from async requests set even on failure
                 self.observability_manager._async_requests.discard(request_id)

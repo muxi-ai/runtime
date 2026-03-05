@@ -216,6 +216,16 @@ async def get_request_status(
     if request_state.error:
         data["error"] = request_state.error
 
+    # Include result for completed requests so clients can poll for it
+    if request_state.status.value == "completed" and request_state.result is not None:
+        result = request_state.result
+        if hasattr(result, "content"):
+            data["result"] = str(result.content)
+        elif isinstance(result, dict):
+            data["result"] = result
+        else:
+            data["result"] = str(result)
+
     response = create_success_response(
         APIObjectType.REQUEST_STATUS,
         APIEventType.REQUEST_STATUS_RETRIEVED,

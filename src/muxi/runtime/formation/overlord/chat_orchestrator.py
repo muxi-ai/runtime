@@ -550,20 +550,18 @@ class ChatOrchestrator:
                 self.overlord, "async_threshold_seconds", 30
             )
 
-            # FAIL-SAFE: Force sync mode if no webhook URL is available
-            if use_async is not False and webhook_url is None:
+            # Log when async mode is used without a webhook (polling-only)
+            if use_async and webhook_url is None:
                 observability.observe(
                     event_type=observability.ConversationEvents.REQUEST_MODE_CHANGED,
-                    level=observability.EventLevel.WARNING,
+                    level=observability.EventLevel.INFO,
                     data={
                         "requested_mode": "async",
-                        "forced_mode": "sync",
-                        "reason": "no_webhook_url",
-                        "webhook_url_provided": webhook_url is not None,
+                        "webhook_url_provided": False,
+                        "delivery_method": "polling",
                     },
-                    description="Request mode forced from async to sync due to missing webhook URL",
+                    description="Async request without webhook; client must poll GET /requests/{id}",
                 )
-                use_async = False
 
             # Smart async/sync decision making
             should_use_async = await self._determine_async_mode(
@@ -769,9 +767,10 @@ class ChatOrchestrator:
 
         if webhook_url:
             response["webhook_url"] = webhook_url
-            response["webhook_info"] = (
-                "Results will be delivered to the webhook URL upon completion"
-            )
+            response["delivery"] = "webhook"
+        else:
+            response["delivery"] = "polling"
+            response["poll_url"] = f"/v1/requests/{request_id}"
 
         return response
 
