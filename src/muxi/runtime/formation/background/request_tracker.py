@@ -135,7 +135,7 @@ class RequestTracker:
             if error is not None:
                 request_state.error = error
 
-            if status in (RequestStatus.COMPLETED, RequestStatus.FAILED):
+            if status in _TERMINAL_STATUSES and request_state.end_time is None:
                 request_state.end_time = time.time()
 
             return True

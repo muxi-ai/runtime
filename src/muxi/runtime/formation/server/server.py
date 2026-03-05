@@ -245,6 +245,11 @@ class FormationServer:
 
         yield
 
+        # Stop request tracker cleanup loop before draining connections
+        overlord = getattr(self.formation, "_overlord", None)
+        if overlord and hasattr(overlord, "request_tracker") and overlord.request_tracker:
+            await overlord.request_tracker.stop_cleanup_loop()
+
         # Shutdown - drain connections gracefully
         observability.observe(
             event_type=observability.SystemEvents.CLEANUP,

@@ -6259,8 +6259,8 @@ Agent response: {raw_response}"""
                                 # Log final decision
 
                                 # Check if we should execute async
-                                if use_async and webhook_url:
-                                    # Execute asynchronously with webhook notification
+                                if use_async:
+                                    # Execute asynchronously (webhook or polling)
                                     return await self._execute_workflow_async(
                                         workflow=workflow,
                                         message=original_message or message,
@@ -7957,8 +7957,8 @@ Agent response: {raw_response}"""
                 # Execute immediately without approval
 
                 # Check if we should execute async or sync
-                if use_async and webhook_url:
-                    # Execute asynchronously
+                if use_async:
+                    # Execute asynchronously (webhook or polling)
 
                     result = await self._execute_workflow_async(
                         workflow=workflow,
