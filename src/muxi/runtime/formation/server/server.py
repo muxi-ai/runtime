@@ -531,7 +531,7 @@ class FormationServer:
         """Generate and mount an MCP server from existing FastAPI routes."""
         try:
             from fastmcp import FastMCP
-            from fastmcp.server.openapi import MCPType, RouteMap
+            from fastmcp.server.providers.openapi import MCPType, RouteMap
             from fastmcp.utilities.lifespan import combine_lifespans
 
             formation_id = self.formation.formation_id
@@ -542,21 +542,42 @@ class FormationServer:
                 auth_headers["X-MUXI-CLIENT-KEY"] = self.client_key
 
             # Generate MCP server from our FastAPI app
+            # Only expose client routes (those with explicit operation_id, no _v1_ in name)
+            # Admin/health routes don't have operation_id and get ugly auto-generated names
+            client_route_paths = {
+                r".*/chat$",
+                r".*/audiochat$",
+                r".*/requests$",
+                r".*/requests/.*",
+                r".*/memories$",
+                r".*/memories/.*",
+                r".*/memory/buffer$",
+                r".*/memory/buffer/.*",
+                r".*/sessions$",
+                r".*/sessions/.*",
+                r".*/events$",
+                r".*/events/.*",
+                r".*/triggers$",
+                r".*/triggers/.*",
+                r".*/sops$",
+                r".*/sops/.*",
+                r".*/credentials$",
+                r".*/credentials/.*",
+                r".*/users/.*",
+            }
+
+            route_maps = [RouteMap(pattern=p, mcp_type=MCPType.TOOL) for p in client_route_paths]
+            route_maps.append(RouteMap(pattern=r".*", mcp_type=MCPType.EXCLUDE))
+
             mcp = FastMCP.from_fastapi(
                 app=app,
                 name=f"muxi-{formation_id}",
-                route_maps=[
-                    # Exclude admin endpoints
-                    RouteMap(pattern=r".*/admin/.*", mcp_type=MCPType.EXCLUDE),
-                    # Exclude health/status endpoints
-                    RouteMap(pattern=r".*/health.*", mcp_type=MCPType.EXCLUDE),
-                    RouteMap(pattern=r".*/version.*", mcp_type=MCPType.EXCLUDE),
-                ],
+                route_maps=route_maps,
                 httpx_client_kwargs={"headers": auth_headers} if auth_headers else None,
             )
 
-            # Create MCP ASGI app and mount it
-            mcp_app = mcp.http_app(path="/mcp")
+            # Create MCP ASGI app -- path="/" because app.mount("/mcp") strips the prefix
+            mcp_app = mcp.http_app(path="/")
 
             # Combine lifespans so both FastAPI and MCP session managers initialize
             app.router.lifespan_context = combine_lifespans(
