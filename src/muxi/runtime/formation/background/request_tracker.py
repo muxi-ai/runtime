@@ -8,6 +8,7 @@ for results after completion.
 """
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -263,8 +264,10 @@ class RequestTracker:
                 await asyncio.sleep(interval)
                 try:
                     await self.cleanup_expired()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.getLogger(__name__).warning(
+                        "RequestTracker cleanup_expired raised: %s", exc, exc_info=True
+                    )
 
         self._cleanup_task = asyncio.create_task(_loop())
 
