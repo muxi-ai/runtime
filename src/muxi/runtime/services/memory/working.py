@@ -640,6 +640,16 @@ class WorkingMemory:
                 namespace=namespace,
                 session_id=session_id,
             )
+            observability.observe(
+                event_type=observability.ConversationEvents.MEMORY_WORKING_RETRIEVED,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "results_count": len(recency_results),
+                    "search_type": "recency_fast_path",
+                    "buffer_size": len(self.buffer),
+                },
+                description="Working memory empty-query fast path",
+            )
             return recency_results
 
         # Emit memory retrieval started event

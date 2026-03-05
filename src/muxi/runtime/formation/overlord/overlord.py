@@ -10283,7 +10283,8 @@ Agent response: {raw_response}"""
             # Convert properties to first-person prompt with JSON
             try:
                 # Use compact JSON format to minimize tokens
-                json_str = json.dumps(properties, separators=(",", ":"), default=str)
+                # (orjson produces compact output by default, no separators kwarg needed)
+                json_str = json.dumps(properties, default=str)
             except (TypeError, ValueError) as e:
                 # Fallback to string representation if JSON serialization fails
                 observability.observe(

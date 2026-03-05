@@ -425,7 +425,13 @@ class ChatOrchestrator:
             # the expensive context enhancement and LLM actionability check entirely.
             _raw_lower = message.lower().strip()
             _skip_context_enhancement = False
-            if _raw_lower in [
+            # Only attempt fast-path for non-streaming sync requests.
+            # Streaming callers expect an AsyncGenerator return type which the
+            # fast-path does not produce.
+            _use_streaming = (
+                stream if stream is not None else getattr(self.overlord, "streaming", False)
+            )
+            if not _use_streaming and _raw_lower in (
                 "hi",
                 "hello",
                 "hey",
@@ -434,9 +440,10 @@ class ChatOrchestrator:
                 "ok",
                 "okay",
                 "got it",
-            ]:
+            ):
                 # Check if there's a recent assistant message with a question
-                # (which would mean this is a follow-up answer, not a greeting)
+                # (which would mean this is a follow-up answer, not a greeting).
+                # Fetch k=5 to avoid race with the just-stored user message.
                 _has_prior_question = False
                 if self.overlord.buffer_memory_manager:
                     try:
@@ -445,15 +452,15 @@ class ChatOrchestrator:
                             _filter["session_id"] = session_id
                         _recent = await self.overlord.buffer_memory_manager.search_buffer_memory(
                             query="",
-                            k=1,
+                            k=5,
                             filter_metadata=_filter,
                         )
-                        if _recent:
-                            _last = _recent[-1]
-                            _last_role = _last.get("metadata", {}).get("role", "")
-                            _last_text = _last.get("text", "")
-                            if _last_role == "assistant" and "?" in _last_text:
-                                _has_prior_question = True
+                        for _item in _recent or []:
+                            _role = _item.get("metadata", {}).get("role", "")
+                            if _role == "assistant":
+                                if "?" in _item.get("text", ""):
+                                    _has_prior_question = True
+                                break
                     except Exception:
                         pass
                 if not _has_prior_question:
@@ -461,25 +468,6 @@ class ChatOrchestrator:
 
             if _skip_context_enhancement:
                 # Fast path: skip context enhancement, go straight to persona response
-                if request_id:
-                    is_streaming = streaming.streaming_manager.is_streaming_enabled(request_id)
-                else:
-                    is_streaming = False
-                if is_streaming:
-                    streaming.stream(
-                        "thinking",
-                        "Processing...",
-                        stage="process_sync_start",
-                        original_message=message,
-                        skip_rephrase=True,
-                    )
-                    streaming.stream(
-                        "progress",
-                        "Preparing response...",
-                        stage="response_preparation",
-                        skip_rephrase=True,
-                    )
-
                 response = await self.overlord._apply_persona(None, message)
 
                 if self.overlord.buffer_memory_manager:
@@ -498,21 +486,17 @@ class ChatOrchestrator:
                         name=f"store_response_{request_id}",
                     )
 
-                if is_streaming:
-                    streaming.stream(
-                        "completed",
-                        response,
-                        status="success",
-                        processing_time_ms=int((time.time() - timestamp) * 1000),
-                        fast_path=True,
-                    )
-
                 # Record framework mode telemetry
                 if _is_framework_mode:
                     telemetry = get_telemetry()
                     if telemetry:
                         latency_ms = (time.time() - _framework_start_time) * 1000
                         telemetry.record_request(True, latency_ms, "framework")
+
+                # Mark request as completed in tracker
+                await self.overlord.request_tracker.update_request(
+                    request_id, RequestStatus.COMPLETED, result=response
+                )
 
                 return MuxiResponse(
                     role="assistant",
@@ -1132,8 +1116,6 @@ class ChatOrchestrator:
                 except Exception:
                     pass
             return None
-
-        import asyncio
 
         user_profile_text, long_term_memories, context_messages_list = await asyncio.gather(
             _fetch_user_synopsis(),

@@ -1007,8 +1007,6 @@ Return only valid JSON, no explanation.
             response = await llm.generate_text(prompt)
 
             # Try to parse JSON response
-            import json
-
             rule_data = json.loads(response.strip())
 
             # Validate required fields

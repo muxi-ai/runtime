@@ -4,18 +4,17 @@ E2E Random Test Runner - Picks N random tests and runs them.
 Usage: python run_random_tests.py [N]   (default: 10)
 """
 
+import json
 import random
 import sys
+import time
 
 from run_all_tests import (
     AREAS,
     RESULTS_DIR,
-    main as _unused,  # noqa: F401 - ensure module loads
     run_test,
     should_skip,
 )
-import json
-import time
 
 
 def main():
@@ -53,7 +52,9 @@ def main():
         print(f"{status} ({result['time_s']}s)")
 
         if not result["passed"]:
-            tail = result["stderr_tail"].strip().split("\n")[-1][:120] if result["stderr_tail"] else ""
+            tail = (
+                result["stderr_tail"].strip().split("\n")[-1][:120] if result["stderr_tail"] else ""
+            )
             if tail:
                 print(f"      {tail}")
 
@@ -79,7 +80,7 @@ def main():
         print(f"  {area}: {s['passed']}/{s['total']} ({status})")
 
     if failed > 0:
-        print(f"\nFailed tests:")
+        print("\nFailed tests:")
         for r in results:
             if not r["passed"]:
                 err = r["stderr_tail"].strip().split("\n")[-1][:100] if r["stderr_tail"] else ""

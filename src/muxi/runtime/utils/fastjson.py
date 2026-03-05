@@ -4,7 +4,16 @@ Drop-in replacement for stdlib json backed by orjson for speed.
 Usage:
     from muxi.runtime.utils.fastjson import json
 
-All stdlib json functions are supported: dumps, loads, dump, load, JSONDecodeError.
+Supported functions: dumps, loads, dump, load, JSONDecodeError.
+
+Limitations vs stdlib json:
+- indent is always 2-space when truthy (orjson only supports OPT_INDENT_2).
+  Any non-None indent value (e.g. indent=4) is coerced to 2-space output.
+- separators is accepted but ignored. orjson always produces compact output
+  (no trailing spaces) by default, or 2-space indented output with OPT_INDENT_2.
+- Parsing hooks (object_hook, parse_float, parse_int, parse_constant, cls)
+  and formatting options (skipkeys, ensure_ascii, check_circular, allow_nan)
+  are accepted via **kwargs but silently ignored.
 """
 
 import orjson
