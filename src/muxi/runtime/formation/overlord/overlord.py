@@ -5070,8 +5070,9 @@ Agent response: {raw_response}"""
             # Normalize user_id - lowercase and strip whitespace
             user_id = str(user_id).lower().strip()
 
-        # Get webhook URL from formation config or parameter
-        webhook_url = webhook_url or self.formation_config.get("async", {}).get("webhook_url")
+        # Get webhook URL from formation config if not provided per-request
+        if webhook_url is None:
+            webhook_url = self.formation_config.get("async", {}).get("webhook_url")
 
         # Async without webhook is valid -- clients can poll GET /requests/{id}
 
