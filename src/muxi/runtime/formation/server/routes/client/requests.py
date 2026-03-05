@@ -14,6 +14,7 @@ from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 
 from .....datatypes.api import APIEventType, APIObjectType
+from ....background.request_tracker import RequestStatus
 from ...responses import (
     APIResponse,
     create_error_response,
@@ -217,7 +218,7 @@ async def get_request_status(
         data["error"] = request_state.error
 
     # Include result for completed requests so clients can poll for it
-    if request_state.status.value == "completed" and request_state.result is not None:
+    if request_state.status == RequestStatus.COMPLETED and request_state.result is not None:
         result = request_state.result
         if hasattr(result, "content"):
             data["result"] = str(result.content)

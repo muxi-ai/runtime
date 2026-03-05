@@ -545,10 +545,10 @@ class ChatOrchestrator:
                 )
 
             # Use provided values or formation defaults
-            webhook_url = webhook_url or getattr(self.overlord, "async_webhook_url", None)
-            threshold_seconds = threshold_seconds or getattr(
-                self.overlord, "async_threshold_seconds", 30
-            )
+            if webhook_url is None:
+                webhook_url = getattr(self.overlord, "async_webhook_url", None)
+            if threshold_seconds is None:
+                threshold_seconds = getattr(self.overlord, "async_threshold_seconds", 30)
 
             # Log when async mode is used without a webhook (polling-only)
             if use_async and webhook_url is None:
