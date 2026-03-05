@@ -126,7 +126,9 @@ def _check_auth_and_user_id(
     return x_user_id, is_admin, None
 
 
-@router.get("/credentials/services", response_model=APIResponse)
+@router.get(
+    "/credentials/services", response_model=APIResponse, operation_id="list_credential_services"
+)
 async def list_credential_services(
     request: Request,
 ) -> JSONResponse:
@@ -163,7 +165,7 @@ async def list_credential_services(
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.get("/credentials", response_model=APIResponse)
+@router.get("/credentials", response_model=APIResponse, operation_id="list_credentials")
 async def list_credentials(
     request: Request,
     x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
@@ -241,7 +243,7 @@ async def list_credentials(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.post("/credentials", response_model=APIResponse)
+@router.post("/credentials", response_model=APIResponse, operation_id="create_credential")
 async def create_credential(
     request: Request,
     body: CredentialCreate,
@@ -321,7 +323,9 @@ async def create_credential(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.get("/credentials/{credential_id}", response_model=APIResponse)
+@router.get(
+    "/credentials/{credential_id}", response_model=APIResponse, operation_id="get_credential"
+)
 async def get_credential(
     request: Request,
     credential_id: str,
@@ -403,7 +407,9 @@ async def get_credential(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.delete("/credentials/{credential_id}", response_model=APIResponse)
+@router.delete(
+    "/credentials/{credential_id}", response_model=APIResponse, operation_id="delete_credential"
+)
 async def delete_credential(
     request: Request,
     credential_id: str,

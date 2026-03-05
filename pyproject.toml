@@ -57,6 +57,7 @@ dependencies = [
 
     # MCP Package
     "mcp>=1.23.0",  # Required for Streamable HTTP transport support (security fix)
+    "fastmcp>=3.0.0",  # MCP server generation from FastAPI app
 
     # File processing and utilities
     "aiofiles>=23.2.0",

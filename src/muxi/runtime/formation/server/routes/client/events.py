@@ -70,7 +70,7 @@ def _check_auth_and_user_id(
     return x_user_id, is_admin, None
 
 
-@router.get("/events")
+@router.get("/events", operation_id="list_events")
 async def user_events(
     request: Request,
     x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
@@ -163,7 +163,7 @@ async def user_events(
     )
 
 
-@router.get("/events/{session_id}")
+@router.get("/events/{session_id}", operation_id="get_session_events")
 async def session_events(
     request: Request,
     session_id: str,
@@ -247,7 +247,7 @@ async def session_events(
     )
 
 
-@router.get("/events/{session_id}/{request_id}")
+@router.get("/events/{session_id}/{request_id}", operation_id="get_request_events")
 async def request_events(
     request: Request,
     session_id: str,
