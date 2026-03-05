@@ -2356,7 +2356,8 @@ pytest e2e/tests/2_memory/ -v
       
       # 7. Background Services
       await initialize_background_services(formation)
-      → Initialize RequestTracker (async job tracking)
+      → Initialize RequestTracker (async job tracking, 5-min TTL for completed requests)
+      → Start cleanup loop (purges expired terminal requests every 60s)
       → Initialize WebhookManager (async callbacks)
       → Initialize TimeEstimator (request duration prediction)
    
@@ -3026,3 +3027,55 @@ with actual runner instructions. E2E tests are standalone scripts, never use pyt
 - Full suite: `cd e2e && python run_all_tests.py`
 - Random sample: `cd e2e && python run_random_tests.py N`
 - Single test: `cd e2e/tests/<area> && python test_<name>.py`
+
+### 2026-03-05: Better Async DX
+
+**RequestTracker TTL retention** (`background/request_tracker.py`):
+Completed, failed, and cancelled requests are no longer removed from the in-memory
+`RequestTracker` immediately after webhook delivery. They stay for 5 minutes
+(`DEFAULT_COMPLETED_TTL_SECONDS = 300`) so clients can poll `GET /v1/requests/{id}`
+for results. A background cleanup task (`start_cleanup_loop()`, 60s interval) purges
+expired terminal requests automatically. The cleanup loop starts when the overlord
+initializes the tracker (`overlord.py` line ~714).
+
+Key changes:
+- `_TERMINAL_STATUSES = {COMPLETED, FAILED, CANCELLED}` — defines which statuses
+  are eligible for TTL-based cleanup
+- `cleanup_expired()` — scans for terminal requests past TTL, removes them
+- `start_cleanup_loop(interval=60)` / `stop_cleanup_loop()` — background task lifecycle
+- All 4 active `remove_request()` calls in `overlord.py` replaced with comments
+  explaining TTL cleanup handles purging
+
+**Polling-only async** (`chat_orchestrator.py`, `overlord.py`):
+Async requests no longer require a webhook URL. Previously, both `overlord.chat()`
+and `chat_orchestrator.chat()` forced `use_async=False` when no webhook was configured.
+Now async without webhook is valid — the response includes `"delivery": "polling"`
+with `"poll_url": "/v1/requests/{request_id}"`. Clients poll the request status
+endpoint to retrieve the result when ready.
+
+**Result payload in request status** (`server/routes/client/requests.py`):
+`GET /v1/requests/{request_id}` now includes the `result` field for completed
+requests. The result is extracted from `RequestState.result` (which stores the
+response content set by `update_request(COMPLETED, result=...)`) and serialized
+as string or dict depending on type.
+
+**Per-request async threshold** (`server/routes/client/chat.py`):
+`ChatRequest` now accepts `threshold_seconds` and `webhook_url` fields, both
+optional. These are passed through to `overlord.chat()` which already supported
+them as parameters but never exposed them via the REST API. Same override pattern
+as the existing formation-level config: per-request value takes precedence.
+
+**Files changed:**
+- `src/muxi/runtime/formation/background/request_tracker.py` — TTL retention,
+  cleanup loop, terminal status detection
+- `src/muxi/runtime/formation/overlord/overlord.py` — removed 4 `remove_request()`
+  calls, start cleanup loop on init, removed force-sync guard
+- `src/muxi/runtime/formation/overlord/chat_orchestrator.py` — removed force-sync
+  guard, added polling info to async response
+- `src/muxi/runtime/formation/server/routes/client/chat.py` — added `threshold_seconds`
+  and `webhook_url` to `ChatRequest`, wired to overlord
+- `src/muxi/runtime/formation/server/routes/client/requests.py` — return `result`
+  for completed requests
+- `tests/unit/test_request_tracker.py` — 9 new tests
+
+**Branch:** `feature/better-api-dx` (commit: c9afbb41)
