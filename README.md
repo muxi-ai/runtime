@@ -1,7 +1,6 @@
 # MUXI Runtime
 
-[![License](https://img.shields.io/badge/License-Elastic%202.0-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-Elastic%202.0-blue.svg)](LICENSE)  [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
 The execution engine for AI agent formations.
 
@@ -30,12 +29,12 @@ MUXI Runtime transforms declarative YAML configurations into running AI systems.
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  MUXI Server (Go) - Formation lifecycle management  │
+│     MUXI Server - Formation lifecycle management    │
 └─────────────────────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│  MUXI Runtime (Python) ◄── THIS REPO                │
+│           MUXI Runtime ◄── THIS REPO                │
 │  ┌───────────────────────────────────────────────┐  │
 │  │  Formation Engine (YAML loader & validator)   │  │
 │  ├───────────────────────────────────────────────┤  │
@@ -47,7 +46,7 @@ MUXI Runtime transforms declarative YAML configurations into running AI systems.
                          │
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│  External Services (LLM APIs, MCP Servers, DBs)     │
+│   External Services (LLM APIs, MCP Servers, DBs)    │
 └─────────────────────────────────────────────────────┘
 ```
 

@@ -237,7 +237,18 @@ class FormationServer:
                     )
                 )
 
+        # Ensure request tracker cleanup loop is running in this long-lived event loop.
+        # start_cleanup_loop() is idempotent -- skips if already started.
+        overlord = getattr(self.formation, "_overlord", None)
+        if overlord and hasattr(overlord, "request_tracker") and overlord.request_tracker:
+            overlord.request_tracker.start_cleanup_loop()
+
         yield
+
+        # Stop request tracker cleanup loop before draining connections
+        overlord = getattr(self.formation, "_overlord", None)
+        if overlord and hasattr(overlord, "request_tracker") and overlord.request_tracker:
+            await overlord.request_tracker.stop_cleanup_loop()
 
         # Shutdown - drain connections gracefully
         observability.observe(
