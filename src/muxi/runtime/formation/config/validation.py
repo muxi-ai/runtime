@@ -518,7 +518,9 @@ class FormationValidator:
                     # String ID reference -- validated during loader resolution
                     continue
                 if not isinstance(server_config, dict):
-                    self.result.add_error(f"MCP server {i} configuration must be a string ID or dictionary")
+                    self.result.add_error(
+                        f"MCP server {i} configuration must be a string ID or dictionary"
+                    )
                     continue
 
                 self._validate_single_mcp_server(server_config, i, server_ids, is_inline)

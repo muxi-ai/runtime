@@ -3,12 +3,12 @@
 Add Secret - MUXI Runtime Utility (Fixed for direct execution)
 """
 
-import sys
 import argparse
 import asyncio
+import os
+import sys
 import warnings
 from pathlib import Path
-import os
 
 # Fix the import path
 sys.path.insert(0, "/Users/ran/Projects/muxi/code/runtime/src")

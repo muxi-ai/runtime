@@ -2,7 +2,7 @@
 Unit tests for security utilities.
 """
 
-from muxi.runtime.utils.security import sanitize_message_preview, redact_sensitive_content
+from muxi.runtime.utils.security import redact_sensitive_content, sanitize_message_preview
 
 
 class TestSanitizeMessagePreview:

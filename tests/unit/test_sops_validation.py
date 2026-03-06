@@ -2,16 +2,21 @@
 Unit tests for SOP endpoint validation and safety.
 """
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from muxi.runtime.formation.server.routes.client.sops import get_sop_details, _extract_agents_from_sop
+from muxi.runtime.formation.server.routes.client.sops import (
+    _extract_agents_from_sop,
+    get_sop_details,
+)
 
 
 def test_is_numbered_line_safe_with_empty_lines():
     """Test that step counting handles empty lines safely."""
+
     # Define the same helper function used in the endpoint
     def is_numbered_line(line: str) -> bool:
         stripped = line.strip()
@@ -29,6 +34,7 @@ def test_is_numbered_line_safe_with_empty_lines():
 
 def test_step_counting_with_mixed_content():
     """Test step counting with realistic SOP content."""
+
     def is_numbered_line(line: str) -> bool:
         stripped = line.strip()
         return len(stripped) > 0 and stripped[0].isdigit()
@@ -96,7 +102,7 @@ async def test_sop_name_validation_allows_valid_names():
     sop_system.sops = {
         "valid-sop_name123": {
             "metadata": {"title": "Valid SOP"},
-            "content": "1. Step one\n2. Step two"
+            "content": "1. Step one\n2. Step two",
         }
     }
 
@@ -120,7 +126,7 @@ async def test_sop_name_validation_allows_valid_names():
         # Add to mock SOPs
         sop_system.sops[valid_name] = {
             "metadata": {"title": f"SOP {valid_name}"},
-            "content": "1. Step one"
+            "content": "1. Step one",
         }
 
         response = await get_sop_details(request, valid_name)
@@ -146,9 +152,7 @@ def test_extract_agents_from_sop_handles_empty_content():
 
 def test_extract_agents_from_metadata():
     """Test that agent extraction prefers metadata over content parsing."""
-    metadata = {
-        "agents": ["agent1", "agent2", "agent3"]
-    }
+    metadata = {"agents": ["agent1", "agent2", "agent3"]}
     content = "agent: agent4\nagent: agent5"  # These should be ignored
 
     agents = _extract_agents_from_sop(metadata, content)

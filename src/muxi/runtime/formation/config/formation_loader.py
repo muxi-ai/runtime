@@ -396,8 +396,7 @@ class FormationLoader:
             registry = {}
 
         resolved = self._resolve_declared_list(
-            agents, registry, "Agent", "agents",
-            placeholder_registry, "agents"
+            agents, registry, "Agent", "agents", placeholder_registry, "agents"
         )
         config["agents"] = resolved
 
@@ -436,8 +435,7 @@ class FormationLoader:
             registry = {}
 
         resolved = self._resolve_declared_list(
-            servers, registry, "MCP server", "mcp",
-            placeholder_registry, "mcp.servers"
+            servers, registry, "MCP server", "mcp", placeholder_registry, "mcp.servers"
         )
         config["mcp"]["servers"] = resolved
 
@@ -475,8 +473,7 @@ class FormationLoader:
             registry = {}
 
         resolved = self._resolve_declared_list(
-            services, registry, "A2A service", "a2a",
-            placeholder_registry, "a2a.outbound.services"
+            services, registry, "A2A service", "a2a", placeholder_registry, "a2a.outbound.services"
         )
         config["a2a"]["outbound"]["services"] = resolved
 

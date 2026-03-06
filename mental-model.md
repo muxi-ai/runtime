@@ -1,6 +1,6 @@
 # MUXI Runtime Architecture Analysis
 
-**Generated:** 2026-02-28
+**Generated:** 2026-03-06
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -58,12 +58,12 @@ The initialization order is strictly enforced and failure to follow it causes sy
 **Path:** `formation.py:250-350`
 
 Entry point for loading a formation configuration. Handles both:
-- **Flattened formations:** Single `formation.afs` file
-- **Modular formations:** Directory with `formation.afs` + `agents/`, `mcp/`, `a2a/` subdirectories
+- **Flattened formations:** Single `formation.yaml` file with inline agent/MCP definitions
+- **Modular formations:** Directory with `formation.yaml` + `agents/`, `mcp/`, `a2a/` subdirectories
 
 **Flow:**
 ```python
-1. Normalize path (directory → formation.afs or direct file)
+1. Normalize path (directory → formation.yaml or direct file)
 2. Initialize secrets manager (Fernet encryption, .key + secrets.enc)
 3. Load config via FormationLoader (handles secrets interpolation)
 4. Validate config schema
@@ -72,7 +72,6 @@ Entry point for loading a formation configuration. Handles both:
 ```
 
 **Gotchas:**
-- If `config_path` is a directory, auto-discovers `formation.afs`, `agents/*.afs`, `mcp/*.afs`
 - Secrets interpolation happens during load, not after (synchronous path)
 - Missing secrets cause immediate failure with helpful error messages
 
@@ -181,6 +180,71 @@ await initialize_background_services(formation)
 - Secrets are normalized to UPPERCASE (e.g., `openai-api-key` → `OPENAI_API_KEY`)
 - Interpolation happens BEFORE validation (so validators see actual values)
 - Missing secrets cause immediate failure with helpful CLI command suggestion
+
+### Explicit Component Declaration (as of 2026-03-06)
+
+**Path:** `formation/config/formation_loader.py`
+
+**Core change:** Auto-discovery of components from subdirectories has been replaced with explicit manifest-based declaration. Only components listed in the formation YAML are loaded.
+
+**How it works:**
+
+```yaml
+# formation.yaml
+agents:
+  - support-agent        # String ID → resolved from agents/support-agent.yaml
+  - research-agent       # String ID → resolved from agents/research-agent.yaml
+
+mcp:
+  servers:
+    - github-mcp         # String ID → resolved from mcp/github-mcp.yaml
+    - id: "inline-tool"  # Dict → inline definition (passed through as-is)
+      type: "http"
+      endpoint: "https://example.com/mcp"
+
+a2a:
+  outbound:
+    services:
+      - analytics        # String ID → resolved from a2a/analytics.yaml
+```
+
+**Key methods in FormationLoader:**
+
+| Method | Purpose |
+|--------|---------|
+| `_build_id_registry(subdir)` | Scans a subdirectory, reads each YAML file, returns `{id: config_dict}` |
+| `_resolve_declared_list(declared, registry, label)` | Resolves a list of string IDs + inline dicts against a registry |
+| `_resolve_agents(config, dir)` | Resolves `config["agents"]` using agents/ registry |
+| `_resolve_mcp_servers(config, dir)` | Resolves `config["mcp"]["servers"]` using mcp/ registry |
+| `_resolve_a2a_services(config, dir)` | Resolves `config["a2a"]["outbound"]["services"]` using a2a/ registry |
+| `_resolve_agent_mcp_references(config)` | Resolves string MCP references inside agent `mcp_servers` lists against formation-level MCPs |
+
+**ID resolution rules:**
+- String in list → look up by `id:` field in file, or by filename stem (without extension)
+- Dict in list → pass through as inline definition
+- Omitted key or empty list → nothing loaded (no auto-discovery fallback)
+- Unknown ID → `ValueError` with message listing available IDs
+
+**Agent-level MCP references:**
+Agents can reference formation-level MCPs by string ID in their `mcp_servers` field:
+```yaml
+# agents/my-agent.yaml
+mcp_servers:
+  - github-mcp                    # Resolves against formation-level MCP registry
+  - id: "agent-private-tool"      # Inline, agent-private
+    type: "http"
+    endpoint: "https://example.com"
+```
+
+**Validation changes:**
+- `validation.py`, `formation.py`, `runtime_agent_processor.py` all accept string IDs via early `isinstance(str)` returns
+- The `active` field is no longer recognized (removed from spec and all formation files)
+
+**Impact on dynamic agent creation (API):**
+- `save_agent_to_file(auto_load=True)` writes the YAML file and adds the agent to in-memory config
+- It does NOT update the formation YAML manifest on disk
+- API-created agents work at runtime but are lost on restart (ephemeral)
+- Same applies to `POST /mcp/servers` (in-memory only)
 
 ---
 
@@ -2255,11 +2319,15 @@ pytest e2e/tests/2_memory/ -v
    
    c. Config loading:
       - FormationLoader.load(config_path, secrets_manager)
-      - If modular formation:
-        → Load formation.afs (main config)
-        → Discover agents/*.afs → append to config["agents"]
-        → Discover mcp/*.afs → append to config["mcp"]["servers"]
-        → Discover a2a/*.afs → append to config["a2a"]["outbound"]["services"]
+      - If modular formation (has subdirectories):
+        → Load formation.yaml (main config)
+        → Build ID registry from agents/, mcp/, a2a/ subdirectories
+        → Resolve declared agents: config["agents"] string IDs → full dicts from files
+        → Resolve declared MCP servers: config["mcp"]["servers"] string IDs → full dicts from files
+        → Resolve declared A2A services: config["a2a"]["outbound"]["services"] string IDs → full dicts
+        → Dict entries pass through as inline definitions
+        → Omitted or empty lists = nothing loaded (no auto-discovery fallback)
+        → Unknown ID raises ValueError with available IDs listed
       - Interpolate secrets:
         → Regex: r"\$\{\{\s*secrets\.(\w+)\s*\}\}"
         → Replace with secrets_manager.get_secret_sync(name)

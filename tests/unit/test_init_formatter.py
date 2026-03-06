@@ -1,6 +1,6 @@
 """Test InitEventFormatter and InitFailureInfo."""
 
-import pytest
+
 from muxi.runtime.datatypes.observability import InitEventFormatter, InitFailureInfo
 
 
@@ -55,14 +55,14 @@ def test_format_fail_complete():
         causes=[
             "Server executable not installed or not in PATH",
             "Incorrect command in formation config",
-            "Server crashed on launch"
+            "Server crashed on launch",
         ],
         fixes=[
             "Test manually: npx @modelcontextprotocol/server-filesystem",
             "Install if needed: npm install -g @modelcontextprotocol/server-filesystem",
-            "Check formation.afs → mcp.servers.filesystem.command"
+            "Check formation.afs → mcp.servers.filesystem.command",
         ],
-        technical="Traceback (most recent call last):\n  File \"test.py\", line 1\nTimeoutError: Server did not respond"
+        technical='Traceback (most recent call last):\n  File "test.py", line 1\nTimeoutError: Server did not respond',
     )
 
     result = InitEventFormatter.format_fail(failure_info)
@@ -87,7 +87,7 @@ def test_format_fail_minimal():
         context="formation.afs:12 (database.connection)",
         causes=[],
         fixes=[],
-        technical="ConnectionError: Could not connect"
+        technical="ConnectionError: Could not connect",
     )
 
     result = InitEventFormatter.format_fail(failure_info)

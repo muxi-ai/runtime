@@ -3,12 +3,12 @@
 Delete Secret - MUXI Runtime Utility (Fixed for direct execution)
 """
 
-import sys
 import argparse
 import asyncio
+import os
+import sys
 import warnings
 from pathlib import Path
-import os
 
 # Fix the import path
 sys.path.insert(0, "/Users/ran/Projects/muxi/code/runtime/src")
@@ -105,7 +105,9 @@ Examples:
             asyncio.run(list_secrets_in_formation())
         elif args.command:
             # Confirm deletion
-            response = input(f"⚠️  Are you sure you want to delete secret '{args.command}'? (y/N): ")
+            response = input(
+                f"⚠️  Are you sure you want to delete secret '{args.command}'? (y/N): "
+            )
             if response.lower() == "y":
                 asyncio.run(delete_secret_from_formation(args.command))
             else:

@@ -2,16 +2,17 @@
 Unit tests for atomic_yaml function renaming and deprecation.
 """
 
-import pytest
 import tempfile
 import warnings
 from pathlib import Path
 
+import pytest
+
 from muxi.runtime.formation.utils.atomic_yaml import (
-    update_yaml,
+    atomic_read_yaml,
     atomic_update_yaml,
     atomic_write_yaml,
-    atomic_read_yaml,
+    update_yaml,
 )
 
 
@@ -41,15 +42,12 @@ async def test_update_yaml_deep_merge():
         file_path = Path(tmpdir) / "test.yaml"
 
         # Create initial file with nested structure
-        await atomic_write_yaml(file_path, {
-            "section1": {"a": 1, "b": 2},
-            "section2": {"c": 3}
-        })
+        await atomic_write_yaml(file_path, {"section1": {"a": 1, "b": 2}, "section2": {"c": 3}})
 
         # Update with deep merge
-        await update_yaml(file_path, {
-            "section1": {"b": 20, "d": 4}  # Should merge, not replace
-        }, deep_merge=True)
+        await update_yaml(
+            file_path, {"section1": {"b": 20, "d": 4}}, deep_merge=True  # Should merge, not replace
+        )
 
         # Read and verify
         result = await atomic_read_yaml(file_path)
@@ -66,15 +64,12 @@ async def test_update_yaml_shallow_merge():
         file_path = Path(tmpdir) / "test.yaml"
 
         # Create initial file
-        await atomic_write_yaml(file_path, {
-            "section1": {"a": 1, "b": 2},
-            "section2": {"c": 3}
-        })
+        await atomic_write_yaml(file_path, {"section1": {"a": 1, "b": 2}, "section2": {"c": 3}})
 
         # Update with shallow merge
-        await update_yaml(file_path, {
-            "section1": {"d": 4}  # Should replace entire section1
-        }, deep_merge=False)
+        await update_yaml(
+            file_path, {"section1": {"d": 4}}, deep_merge=False  # Should replace entire section1
+        )
 
         # Read and verify
         result = await atomic_read_yaml(file_path)
@@ -127,6 +122,7 @@ async def test_update_yaml_preserves_permissions():
         # Create file with specific permissions
         await atomic_write_yaml(file_path, {"key": "value"})
         import os
+
         os.chmod(file_path, 0o600)  # Read/write for owner only
 
         original_mode = file_path.stat().st_mode
