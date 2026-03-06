@@ -12,44 +12,44 @@ def test_a2a_response_formatting():
     # Simulate what happens in the current code
     # This is what we're getting from tool results
     tool_result = {
-        'content': {
-            'meta': None,
-            'content': [
+        "content": {
+            "meta": None,
+            "content": [
                 {
-                    'type': 'text',
-                    'text': '{\n  "usage_percent": 61.1,\n  "core_count": 10,\n  "logical_count": 10,\n  "frequency": "not_available"\n}',  # noqa: E501
-                    'annotations': None,
-                    'meta': None
+                    "type": "text",
+                    "text": '{\n  "usage_percent": 61.1,\n  "core_count": 10,\n  "logical_count": 10,\n  "frequency": "not_available"\n}',  # noqa: E501
+                    "annotations": None,
+                    "meta": None,
                 }
             ],
-            'structuredContent': None,
-            'isError': False
+            "structuredContent": None,
+            "isError": False,
         },
-        'isError': False,
-        'links': [],
-        '_meta': {},
-        'type': 'legacy'
+        "isError": False,
+        "links": [],
+        "_meta": {},
+        "type": "legacy",
     }
 
     # Current behavior - converts to string representation
     current_output = str(tool_result)
     print("Current output (raw dict as string):")
     print(current_output)
-    print("\n" + "="*60 + "\n")
+    print("\n" + "=" * 60 + "\n")
 
     # Desired behavior - extract meaningful content
     def format_tool_result(result):
         """Extract and format tool result content properly"""
         if isinstance(result, dict):
             # Check if it has the expected structure
-            if 'content' in result and isinstance(result['content'], dict):
-                content_obj = result['content']
-                if 'content' in content_obj and isinstance(content_obj['content'], list):
+            if "content" in result and isinstance(result["content"], dict):
+                content_obj = result["content"]
+                if "content" in content_obj and isinstance(content_obj["content"], list):
                     # Extract text from content array
                     text_parts = []
-                    for item in content_obj['content']:
-                        if isinstance(item, dict) and item.get('type') == 'text':
-                            text = item.get('text', '')
+                    for item in content_obj["content"]:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            text = item.get("text", "")
                             # Try to parse as JSON for pretty formatting
                             try:
                                 parsed = json.loads(text)
@@ -57,7 +57,7 @@ def test_a2a_response_formatting():
                             except Exception:
                                 text_parts.append(text)
                     if text_parts:
-                        return '\n'.join(text_parts)
+                        return "\n".join(text_parts)
 
             # Fallback to JSON formatting
             try:
@@ -71,20 +71,20 @@ def test_a2a_response_formatting():
     formatted_output = format_tool_result(tool_result)
     print("Desired output (properly formatted):")
     print(formatted_output)
-    print("\n" + "="*60 + "\n")
+    print("\n" + "=" * 60 + "\n")
 
     # Test with multiple tool results
     cpu_info = tool_result
     memory_info = {
-        'content': {
-            'content': [
+        "content": {
+            "content": [
                 {
-                    'type': 'text',
-                    'text': '{\n  "virtual": {\n    "total": 34359738368,\n    "available": 7282622464,\n    "percent": 78.8\n  }\n}'  # noqa: E501
+                    "type": "text",
+                    "text": '{\n  "virtual": {\n    "total": 34359738368,\n    "available": 7282622464,\n    "percent": 78.8\n  }\n}',  # noqa: E501
                 }
             ]
         },
-        'type': 'legacy'
+        "type": "legacy",
     }
 
     # How it should be formatted in an A2A response

@@ -37,6 +37,12 @@ llm:
 
 
 # Overlord behavior configuration
+agents:
+  - coder
+  - project-manager
+  - researcher
+  - writer
+
 overlord:
   soul: |
     You are Fynn, a friendly, helpful, and professional assistant.

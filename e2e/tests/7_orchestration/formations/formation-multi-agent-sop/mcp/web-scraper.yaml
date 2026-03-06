@@ -1,7 +1,6 @@
 schema: "1.0.0"
 id: "web-scraper-mcp"
 description: "Web scraper using firecrawl"
-active: true
 
 type: "command"
 

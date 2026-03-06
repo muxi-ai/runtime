@@ -20,7 +20,6 @@ specialties:
 mcp_servers:
   - id: "linear"
     description: "Linear MCP Server"
-    active: true
     timeout_seconds: 30
     retry_attempts: 3
     type: "http"

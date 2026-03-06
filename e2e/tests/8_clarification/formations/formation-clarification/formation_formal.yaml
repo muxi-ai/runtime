@@ -23,6 +23,16 @@ memory:
     multiplier: 5
     size: 10
     vector_search: false
+mcp:
+  servers:
+    - filesystem-mcp
+    - github-mcp
+    - web-scraper-mcp
+
+agents:
+  - assistant1
+  - assistant2
+
 overlord:
   clarification:
     style: formal

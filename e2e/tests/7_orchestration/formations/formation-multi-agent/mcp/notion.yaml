@@ -2,7 +2,6 @@
 schema: "1.0.0"
 id: "notion-mcp"
 description: "Notion MCP Server"
-active: true
 type: "command"
 
 command: "npx"

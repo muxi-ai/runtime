@@ -1,0 +1,6 @@
+schema: "1.0.0"
+id: undeclared-mcp
+description: "Undeclared MCP server -- should NOT load"
+type: "command"
+command: "echo"
+args: ["should-not-load"]

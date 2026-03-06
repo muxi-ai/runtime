@@ -85,6 +85,12 @@ async def process_agent_for_runtime(
 
         server_ids = set()
         for i, server_config in enumerate(mcp_servers):
+            if isinstance(server_config, str):
+                raise ValueError(
+                    f"Agent '{agent_id}' mcp_servers[{i}] contains unresolved string "
+                    f"ID '{server_config}'. MCP references must be resolved to full "
+                    f"config dicts before runtime processing."
+                )
             if not isinstance(server_config, dict):
                 raise ValueError(
                     f"Agent {agent_id} MCP server {i} configuration must be a dictionary"

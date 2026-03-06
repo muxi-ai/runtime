@@ -1,7 +1,6 @@
 schema: "1.0.0"
 id: "filesystem-test"
 description: "Local filesystem tools for API testing"
-active: true
 
 type: "command"
 

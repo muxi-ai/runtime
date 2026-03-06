@@ -3,9 +3,10 @@
 Fast List Secrets - Minimal implementation without heavy imports
 """
 
-import json
 import asyncio
+import json
 from pathlib import Path
+
 from cryptography.fernet import Fernet
 
 

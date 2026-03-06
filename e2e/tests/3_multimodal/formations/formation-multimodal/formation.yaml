@@ -22,6 +22,9 @@ llm:
     - embedding: "openai/text-embedding-3-small"
 
 # Minimize clarification for direct multimodal analysis (min is 1)
+agents:
+  - multimodal-agent
+
 overlord:
   clarification:
     max_rounds:

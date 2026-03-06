@@ -9,7 +9,6 @@ import pytest
 
 from muxi.runtime.formation.overlord.overlord import Overlord
 
-
 MULTILINGUAL_SUFFIX = (
     "\n\nIMPORTANT: Always reply in the same language as the user's original request."
 )

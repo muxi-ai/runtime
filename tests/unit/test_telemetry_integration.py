@@ -1,6 +1,5 @@
 """Integration tests for telemetry service with mock endpoint."""
 
-import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 

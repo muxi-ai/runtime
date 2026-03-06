@@ -6,6 +6,9 @@ auto_extract_user_info: true
 runtime:
   built_in_mcps: false
 
+agents:
+  - memory_agent
+
 overlord:
   clarification:
     enabled: false

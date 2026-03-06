@@ -29,6 +29,9 @@ llm:
         fallback_model: "anthropic/claude-3.5-haiku"
 
 # Overlord behavior configuration
+agents:
+  - example_agent
+
 overlord:
   soul: |
     You are Fynn, a friendly, helpful, and professional assistant.

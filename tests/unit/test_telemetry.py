@@ -1,6 +1,5 @@
 """Unit tests for the telemetry service."""
 
-import asyncio
 import threading
 
 import pytest

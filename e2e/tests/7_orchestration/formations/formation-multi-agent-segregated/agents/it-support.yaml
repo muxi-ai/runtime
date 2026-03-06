@@ -21,7 +21,6 @@ specialties:
 mcp_servers:
   - id: "filesystem"
     description: "Local filesystem tools"
-    active: true
     type: "command"
     command: "npx"
     args: ["-y", "@modelcontextprotocol/server-filesystem", "/Users/ran/Desktop/"]
@@ -29,7 +28,6 @@ mcp_servers:
 
   - id: "system-info"
     description: "Get system information like CPU, memory, disk, etc."
-    active: true
     type: "command"
     command: "python"
     args: ["/Users/ran/Projects/muxi/code/mcp-testing-servers/stdio.py"]

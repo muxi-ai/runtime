@@ -1,0 +1,7 @@
+schema: "1.0.0"
+id: declared-mcp
+description: "Declared MCP server"
+type: "command"
+command: "echo"
+args: ["hello"]
+timeout_seconds: 10

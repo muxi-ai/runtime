@@ -56,6 +56,17 @@ knowledge:
         with open(agent_config_path, 'w') as f:
             f.write(agent_yaml)
 
+        # Add the new agent to the formation manifest
+        formation_yaml_path = os.path.join(test_formation_dir, "formation.yaml")
+        with open(formation_yaml_path, 'r') as f:
+            formation_content = f.read()
+        formation_content = formation_content.replace(
+            "agents:\n  - automaze\n  - muxi",
+            "agents:\n  - automaze\n  - muxi\n  - test-empty",
+        )
+        with open(formation_yaml_path, 'w') as f:
+            f.write(formation_content)
+
         print(f"Created empty knowledge directory at: {empty_knowledge_dir}")
         print("Created agent config with empty knowledge source (relative path)")
 

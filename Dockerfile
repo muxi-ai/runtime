@@ -83,6 +83,14 @@ RUN find /usr/local -name "*.pyc" -delete \
     && find /usr/local -name "tests" -type d -not -path "*/numpy/_core/tests" -exec rm -rf {} + 2>/dev/null || true \
     && rm -rf /root/.cache /tmp/*
 
+# Pre-download the sentence-transformers model used by OneLLM cache.
+# Without this, the first formation startup downloads ~118MB from HuggingFace,
+# adding ~80s to cold-start time inside SIF containers.
+# Stored in /opt/hf-cache (not /root/.cache) because Singularity mounts the
+# host home directory over /root, hiding anything baked into the image there.
+ENV HF_HOME=/opt/hf-cache
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
+
 # Create necessary directories
 RUN mkdir -p /data /logs /formations ~/.muxi
 

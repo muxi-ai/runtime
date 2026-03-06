@@ -443,8 +443,11 @@ class FormationValidator:
 
         agent_ids = set()
         for i, agent_config in enumerate(agents_config):
+            if isinstance(agent_config, str):
+                # String ID reference -- validated during loader resolution
+                continue
             if not isinstance(agent_config, dict):
-                self.result.add_error(f"Agent {i} configuration must be a dictionary")
+                self.result.add_error(f"Agent {i} configuration must be a string ID or dictionary")
                 continue
 
             # Check required fields
@@ -511,8 +514,13 @@ class FormationValidator:
 
             server_ids = set()
             for i, server_config in enumerate(servers):
+                if isinstance(server_config, str):
+                    # String ID reference -- validated during loader resolution
+                    continue
                 if not isinstance(server_config, dict):
-                    self.result.add_error(f"MCP server {i} configuration must be a dictionary")
+                    self.result.add_error(
+                        f"MCP server {i} configuration must be a string ID or dictionary"
+                    )
                     continue
 
                 self._validate_single_mcp_server(server_config, i, server_ids, is_inline)
@@ -908,9 +916,12 @@ class FormationValidator:
 
         server_ids = set()
         for i, server_config in enumerate(mcp_servers):
+            if isinstance(server_config, str):
+                # String ID reference -- resolved against formation MCPs by loader
+                continue
             if not isinstance(server_config, dict):
                 self.result.add_error(
-                    f"Agent {agent_identifier} MCP server {i} configuration must be a dictionary"
+                    f"Agent {agent_identifier} MCP server {i} configuration must be a string ID or dictionary"
                 )
                 continue
 

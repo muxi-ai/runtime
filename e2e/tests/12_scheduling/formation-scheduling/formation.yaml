@@ -29,6 +29,9 @@ llm:
         fallback_model: "openai/gpt-4o-mini"
 
 # Overlord behavior configuration
+agents:
+  - example_agent
+
 overlord:
   extraction_model: "openai/gpt-4o-mini"  # Required for LLM-based request analysis
   soul: |

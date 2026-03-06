@@ -59,4 +59,8 @@ runtime:
   built_in_mcps: false
 
 # Agents configuration remains in agents/ directory
-agents: []
+agents:
+  - coder
+  - project-manager
+  - researcher
+  - writer
