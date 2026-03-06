@@ -239,8 +239,6 @@ class FormationLoader:
         component_dir: Path,
         component_type: str,
         secrets_manager: Optional[Any] = None,
-        secrets_in_use: Optional[set[str]] = None,
-        placeholder_registry: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Dict[str, Any]]:
         """
         Scan a component directory and build an {id: config} registry.
@@ -249,12 +247,13 @@ class FormationLoader:
         stem as fallback), and returns the registry without loading anything into
         the formation config.
 
+        Secrets and placeholder accumulation is deferred to _resolve_declared_list
+        so only declared (actually loaded) components contribute.
+
         Args:
             component_dir: Path to the component directory (agents/, mcp/, a2a/)
             component_type: Human-readable type for warnings ("Agent", "MCP", "A2A")
             secrets_manager: SecretsManager instance for secret interpolation
-            secrets_in_use: Set to accumulate secret names in use
-            placeholder_registry: Registry to accumulate placeholder mappings
 
         Returns:
             Dict mapping component ID to its full processed configuration
@@ -279,18 +278,24 @@ class FormationLoader:
                     await self.config_loader.process_secrets(file_config, secrets_manager)
                 )
 
-                if secrets_in_use is not None:
-                    secrets_in_use.update(file_secrets)
-
-                # Note: placeholder_registry paths are adjusted later during resolution
-                # when we know the final array index. Store raw placeholders for now.
-                if placeholder_registry is not None and file_placeholders:
+                # Defer secrets_in_use and placeholder accumulation to resolution
+                # time so only declared (actually loaded) components contribute.
+                if file_secrets:
+                    file_config["_raw_secrets"] = file_secrets
+                if file_placeholders:
                     file_config["_raw_placeholders"] = file_placeholders
 
                 if "id" not in file_config:
                     file_config["id"] = config_file.stem
 
                 component_id = file_config["id"]
+                if component_id in registry:
+                    existing_file = registry[component_id].get("_source_file", "unknown")
+                    raise ValueError(
+                        f"Duplicate {component_type} ID '{component_id}' found in "
+                        f"'{config_file.name}' (already defined in '{existing_file}')"
+                    )
+                file_config["_source_file"] = config_file.name
                 registry[component_id] = file_config
 
             except Exception as e:
@@ -311,6 +316,7 @@ class FormationLoader:
         placeholder_registry: Optional[Dict[str, str]] = None,
         placeholder_prefix: str = "",
         existing_count: int = 0,
+        secrets_in_use: Optional[set[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Resolve a list of declared component references (string IDs or inline dicts).
@@ -323,6 +329,7 @@ class FormationLoader:
             placeholder_registry: Registry to accumulate placeholder mappings
             placeholder_prefix: Prefix for placeholder paths (e.g., "agents", "mcp.servers")
             existing_count: Number of already-resolved items (for placeholder indexing)
+            secrets_in_use: Set to accumulate secret names (only for declared items)
 
         Returns:
             List of resolved component configurations
@@ -331,9 +338,15 @@ class FormationLoader:
             ValueError: If a string ID is not found in the registry
         """
         resolved: List[Dict[str, Any]] = []
+        seen_ids: set[str] = set()
 
         for item in declared:
             if isinstance(item, str):
+                if item in seen_ids:
+                    raise ValueError(
+                        f"Duplicate {component_type} ID '{item}' in formation manifest."
+                    )
+                seen_ids.add(item)
                 if item not in registry:
                     raise ValueError(
                         f"{component_type} '{item}' declared in formation but not found "
@@ -341,6 +354,12 @@ class FormationLoader:
                     )
                 config = registry[item].copy()
                 config["source"] = "formation"
+                config.pop("_source_file", None)
+
+                # Accumulate secrets only for declared (resolved) components
+                raw_secrets = config.pop("_raw_secrets", None)
+                if secrets_in_use is not None and raw_secrets:
+                    secrets_in_use.update(raw_secrets)
 
                 # Adjust placeholder paths now that we know the final index
                 raw_placeholders = config.pop("_raw_placeholders", None)
@@ -359,6 +378,12 @@ class FormationLoader:
             elif isinstance(item, dict):
                 item["source"] = "formation"
                 resolved.append(item)
+
+            else:
+                raise ValueError(
+                    f"Invalid entry in {dir_name}/ declaration: expected string ID or "
+                    f"inline dict, got {type(item).__name__} ({item!r})"
+                )
 
         return resolved
 
@@ -390,13 +415,19 @@ class FormationLoader:
         if has_string_refs:
             agents_dir = formation_dir / "agents"
             registry = await self._build_id_registry(
-                agents_dir, "Agent", secrets_manager, secrets_in_use, placeholder_registry
+                agents_dir, "Agent", secrets_manager
             )
         else:
             registry = {}
 
         resolved = self._resolve_declared_list(
-            agents, registry, "Agent", "agents", placeholder_registry, "agents"
+            agents,
+            registry,
+            "Agent",
+            "agents",
+            placeholder_registry,
+            "agents",
+            secrets_in_use=secrets_in_use,
         )
         config["agents"] = resolved
 
@@ -429,13 +460,19 @@ class FormationLoader:
             if not mcp_dir.exists():
                 mcp_dir = formation_dir / "mcp"
             registry = await self._build_id_registry(
-                mcp_dir, "MCP", secrets_manager, secrets_in_use, placeholder_registry
+                mcp_dir, "MCP", secrets_manager
             )
         else:
             registry = {}
 
         resolved = self._resolve_declared_list(
-            servers, registry, "MCP server", "mcp", placeholder_registry, "mcp.servers"
+            servers,
+            registry,
+            "MCP server",
+            "mcp",
+            placeholder_registry,
+            "mcp.servers",
+            secrets_in_use=secrets_in_use,
         )
         config["mcp"]["servers"] = resolved
 
@@ -467,13 +504,19 @@ class FormationLoader:
         if has_string_refs:
             a2a_dir = formation_dir / "a2a"
             registry = await self._build_id_registry(
-                a2a_dir, "A2A", secrets_manager, secrets_in_use, placeholder_registry
+                a2a_dir, "A2A", secrets_manager
             )
         else:
             registry = {}
 
         resolved = self._resolve_declared_list(
-            services, registry, "A2A service", "a2a", placeholder_registry, "a2a.outbound.services"
+            services,
+            registry,
+            "A2A service",
+            "a2a",
+            placeholder_registry,
+            "a2a.outbound.services",
+            secrets_in_use=secrets_in_use,
         )
         config["a2a"]["outbound"]["services"] = resolved
 
@@ -516,6 +559,12 @@ class FormationLoader:
                     resolved.append(formation_mcps[item].copy())
                 elif isinstance(item, dict):
                     resolved.append(item)
+                else:
+                    agent_id = agent.get("id", "unknown")
+                    raise ValueError(
+                        f"Agent '{agent_id}' mcp_servers: expected string ID or "
+                        f"inline dict, got {type(item).__name__} ({item!r})"
+                    )
 
             agent["mcp_servers"] = resolved
 

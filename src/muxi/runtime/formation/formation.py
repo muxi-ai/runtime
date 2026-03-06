@@ -1724,7 +1724,14 @@ class Formation:
         agent_ids = set()
         for i, agent_config in enumerate(self._agents_config):
             if isinstance(agent_config, str):
-                # String ID reference -- resolved during loader phase
+                # String ID reference -- resolved during loader phase.
+                # Track for duplicate detection across string and dict entries.
+                if agent_config in agent_ids:
+                    raise ConfigurationValidationError(
+                        [f"Duplicate agent ID '{agent_config}'"],
+                        {"agent_position": i, "agent_id": agent_config},
+                    )
+                agent_ids.add(agent_config)
                 continue
             if not isinstance(agent_config, dict):
                 raise ConfigurationValidationError(
