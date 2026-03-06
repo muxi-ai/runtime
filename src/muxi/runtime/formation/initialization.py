@@ -337,7 +337,8 @@ def initialize_memory_systems(formation) -> None:
             # This ensures all models are imported and registered with Base.metadata
             if hasattr(formation, "_db_manager") and formation._db_manager:
                 # Pass embedding dimension so the correct memories_{dim} table is created
-                embedding_dim = getattr(formation._long_term_memory, "dimension", 1536)
+                ltm = getattr(formation, "_long_term_memory", None)
+                embedding_dim = getattr(ltm, "dimension", 1536) if ltm else 1536
                 _create_all_database_tables(formation._db_manager, embedding_dim)
 
 
