@@ -536,12 +536,12 @@ class FormationServer:
 
             formation_id = self.formation.formation_id
 
-            # Build auth headers for the internal httpx client
-            auth_headers = {}
-            if self.client_key:
-                auth_headers["X-MUXI-CLIENT-KEY"] = self.client_key
-
             # Generate MCP server from our FastAPI app
+            # Auth: MCP clients must provide X-Muxi-Client-Key in their transport headers.
+            # FastMCP's get_http_headers() automatically forwards custom headers from the
+            # incoming MCP HTTP request to internal REST API calls, so authentication
+            # works exactly the same as calling the REST API directly.
+            #
             # Only expose client routes (those with explicit operation_id, no _v1_ in name)
             # Admin/health routes don't have operation_id and get ugly auto-generated names
             client_route_paths = {
@@ -573,7 +573,6 @@ class FormationServer:
                 app=app,
                 name=f"muxi-{formation_id}",
                 route_maps=route_maps,
-                httpx_client_kwargs={"headers": auth_headers} if auth_headers else None,
             )
 
             # Create MCP ASGI app -- path="/" because app.mount("/mcp") strips the prefix

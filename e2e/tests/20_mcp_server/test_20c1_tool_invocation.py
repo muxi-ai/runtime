@@ -26,6 +26,7 @@ class TestMCPToolInvocation(BaseE2ETest):
             test_area="20_mcp_server",
         )
         self.base_url = "http://127.0.0.1:8271"
+        self.client_key = "test-client-key"
 
     async def test_20c1_tool_invocation(self):
         formatter = TestOutputFormatter()
@@ -48,8 +49,13 @@ class TestMCPToolInvocation(BaseE2ETest):
             import json
 
             from fastmcp import Client
+            from fastmcp.client.transports.http import StreamableHttpTransport
 
-            async with Client(f"{self.base_url}/mcp") as client:
+            transport = StreamableHttpTransport(
+                f"{self.base_url}/mcp/",
+                headers={"X-Muxi-Client-Key": self.client_key},
+            )
+            async with Client(transport) as client:
 
                 # First, inspect the list_sessions tool schema
                 tools = await client.list_tools()

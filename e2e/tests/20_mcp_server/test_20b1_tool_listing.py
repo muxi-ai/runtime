@@ -71,6 +71,7 @@ class TestMCPToolListing(BaseE2ETest):
             test_area="20_mcp_server",
         )
         self.base_url = "http://127.0.0.1:8271"
+        self.client_key = "test-client-key"
 
     async def test_20b1_tool_listing(self):
         formatter = TestOutputFormatter()
@@ -93,8 +94,13 @@ class TestMCPToolListing(BaseE2ETest):
             # Connect with FastMCP client
             print("\n2. Connecting FastMCP client to /mcp...")
             from fastmcp import Client
+            from fastmcp.client.transports.http import StreamableHttpTransport
 
-            async with Client(f"{self.base_url}/mcp") as client:
+            transport = StreamableHttpTransport(
+                f"{self.base_url}/mcp/",
+                headers={"X-Muxi-Client-Key": self.client_key},
+            )
+            async with Client(transport) as client:
                 tools = await client.list_tools()
 
             tool_names = {t.name for t in tools}

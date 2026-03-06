@@ -55,8 +55,13 @@ class TestMCPRestParity(BaseE2ETest):
             print("  Formation ready")
 
             from fastmcp import Client
+            from fastmcp.client.transports.http import StreamableHttpTransport
 
-            async with Client(f"{self.base_url}/mcp") as mcp_client:
+            transport = StreamableHttpTransport(
+                f"{self.base_url}/mcp/",
+                headers={"X-Muxi-Client-Key": self.client_key},
+            )
+            async with Client(transport) as mcp_client:
 
                 # Test 1: list_sessions parity
                 print("\n2. Comparing list_sessions...")
