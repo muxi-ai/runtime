@@ -542,31 +542,23 @@ class FormationServer:
             # incoming MCP HTTP request to internal REST API calls, so authentication
             # works exactly the same as calling the REST API directly.
             #
-            # Only expose client routes (those with explicit operation_id, no _v1_ in name)
-            # Admin/health routes don't have operation_id and get ugly auto-generated names
-            client_route_paths = {
-                r".*/chat$",
-                r".*/audiochat$",
-                r".*/requests$",
-                r".*/requests/.*",
-                r".*/memories$",
-                r".*/memories/.*",
-                r".*/memory/buffer$",
-                r".*/memory/buffer/.*",
-                r".*/sessions$",
-                r".*/sessions/.*",
-                r".*/events$",
-                r".*/events/.*",
-                r".*/triggers$",
-                r".*/triggers/.*",
-                r".*/sops$",
-                r".*/sops/.*",
-                r".*/credentials$",
-                r".*/credentials/.*",
-                r".*/users/.*",
-            }
+            # Only expose client routes as MCP tools.
+            # Client routes have explicit operation_id; admin/health routes don't.
+            # Build include patterns dynamically so new client endpoints are
+            # picked up automatically without maintaining a hardcoded allowlist.
+            client_patterns = set()
+            for route in app.routes:
+                op_id = getattr(route, "operation_id", None)
+                if not op_id:
+                    continue
+                path = getattr(route, "path", "")
+                if path:
+                    escaped = re.escape(path)
+                    # Convert \{param\} back to .* for path parameters
+                    pattern = re.sub(r"\\{[^}]+\\}", ".*", escaped)
+                    client_patterns.add(f".*{pattern}$")
 
-            route_maps = [RouteMap(pattern=p, mcp_type=MCPType.TOOL) for p in client_route_paths]
+            route_maps = [RouteMap(pattern=p, mcp_type=MCPType.TOOL) for p in client_patterns]
             route_maps.append(RouteMap(pattern=r".*", mcp_type=MCPType.EXCLUDE))
 
             mcp = FastMCP.from_fastapi(
