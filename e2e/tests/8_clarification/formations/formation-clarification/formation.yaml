@@ -31,6 +31,10 @@ logging:
         level: "info"
         format: "jsonl"
 
+agents:
+  - assistant1
+  - assistant2
+
 overlord:
   clarification:
     style: "conversational"  # Options: conversational, formal, brief
@@ -44,5 +48,9 @@ user_credentials:
   redirect_message: "Please configure your API credentials in the external credential manager."
 
 mcp:
+  servers:
+    - filesystem-mcp
+    - github-mcp
+    - web-scraper-mcp
   default_timeout_seconds: 10         # Timeout per individual tool call
 

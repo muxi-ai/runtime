@@ -81,6 +81,17 @@ knowledge:
         with open(agent_config_path, 'w') as f:
             f.write(agent_yaml)
 
+        # Add the new agent to the formation manifest so the loader picks it up
+        formation_yaml_path = os.path.join(test_formation_dir, "formation.yaml")
+        with open(formation_yaml_path, 'r') as f:
+            formation_content = f.read()
+        formation_content = formation_content.replace(
+            "agents:\n  - automaze\n  - muxi",
+            "agents:\n  - automaze\n  - muxi\n  - test-missing",
+        )
+        with open(formation_yaml_path, 'w') as f:
+            f.write(formation_content)
+
         print("\n--- Test 1: Formation Loading ---")
         print("Loading formation with missing knowledge files...")
 

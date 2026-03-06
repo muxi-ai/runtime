@@ -1,0 +1,36 @@
+schema: "1.0.0"
+id: explicit-declaration-test
+description: "Formation for testing explicit component declaration"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+runtime:
+  built_in_mcps: false
+
+memory:
+  buffer:
+    size: 10
+    vector_search: false
+
+agents:
+  - declared-agent
+  # undeclared-agent is NOT listed -- it should NOT load
+
+mcp:
+  servers:
+    - declared-mcp
+    # undeclared-mcp is NOT listed -- it should NOT load
+
+overlord:
+  clarification:
+    style: "brief"
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"

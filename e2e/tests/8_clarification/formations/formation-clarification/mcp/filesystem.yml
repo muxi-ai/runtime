@@ -1,7 +1,6 @@
 schema: "1.0.0"
 id: "filesystem-mcp"
 description: "Local filesystem tools"
-active: true
 
 type: "command"
 install: "npm install -g @modelcontextprotocol/server-filesystem"

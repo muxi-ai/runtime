@@ -15,6 +15,9 @@ llm:
     - text: "openai/gpt-4o"
     - embedding: "openai/text-embedding-3-small"
 
+agents:
+  - memory_agent
+
 memory:
   working:
     # Shared storage backend configuration (always enabled with defaults)

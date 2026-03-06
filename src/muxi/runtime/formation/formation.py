@@ -1723,6 +1723,9 @@ class Formation:
         # Validate individual agent configurations
         agent_ids = set()
         for i, agent_config in enumerate(self._agents_config):
+            if isinstance(agent_config, str):
+                # String ID reference -- resolved during loader phase
+                continue
             if not isinstance(agent_config, dict):
                 raise ConfigurationValidationError(
                     [f"Agent {i} configuration must be a dictionary"],

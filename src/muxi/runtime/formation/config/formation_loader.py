@@ -26,10 +26,10 @@
 #    - Automatically chooses appropriate loading strategy
 #    - Fallback handling for edge cases
 #
-# 2. Modular Directory Support
-#    - Auto-discovery of agents/, mcp/, a2a/ subdirectories
-#    - Merges individual YAML files into unified configuration
-#    - Knowledge path resolution relative to formation directory
+# 2. Explicit Component Declaration
+#    - Components (agents, MCPs, A2A) must be declared in the formation file
+#    - Files in subdirectories are definitions, the formation file is the manifest
+#    - String entries reference files by ID, dict entries are inline definitions
 #
 # 3. Secrets Integration
 #    - Processes GitHub Actions-style secrets syntax
@@ -137,33 +137,28 @@ class FormationLoader:
             - set[str]: Set of secret names that are in use
             - Dict[str, str]: Registry mapping paths to original placeholder values
         """
-        # Use existing ConfigLoader to load and process the file
         config = self.config_loader.load(file_path)
         config, secrets_in_use, placeholder_registry = await self.config_loader.process_secrets(
             config, secrets_manager
         )
 
-        # Filter inline agents by active field
-        self._filter_inline_agents_by_active(config)
-
-        # Filter inline MCP servers by active field
-        self._filter_inline_mcp_servers_by_active(config)
-
         # Resolve knowledge paths relative to formation file directory
         formation_dir = os.path.dirname(os.path.abspath(file_path))
         formation_dir_path = Path(formation_dir)
 
-        # Auto-discover and merge component configurations if available
-        # This allows flattened formations to also benefit from auto-discovery
-        await self._discover_and_merge_agents(
+        # Resolve declared component references against subdirectory files
+        await self._resolve_agents(
             config, formation_dir_path, secrets_manager, secrets_in_use, placeholder_registry
         )
-        await self._discover_and_merge_mcp_servers(
+        await self._resolve_mcp_servers(
             config, formation_dir_path, secrets_manager, secrets_in_use, placeholder_registry
         )
-        await self._discover_and_merge_a2a_services(
+        await self._resolve_a2a_services(
             config, formation_dir_path, secrets_manager, secrets_in_use, placeholder_registry
         )
+
+        # Resolve agent-level MCP references against formation-level MCP registry
+        self._resolve_agent_mcp_references(config)
 
         config = self._resolve_knowledge_paths(config, formation_dir)
 
@@ -177,14 +172,14 @@ class FormationLoader:
 
         Expected directory structure:
         formation-directory/
-        ├── formation.afs         # Main formation configuration
-        ├── agents/               # Agent configurations
+        ├── formation.afs         # Main formation configuration (the manifest)
+        ├── agents/               # Agent definitions (loaded only if declared)
         │   ├── agent1.afs
         │   └── agent2.afs
-        ├── mcp/                  # MCP server configurations
+        ├── mcp/                  # MCP server definitions (loaded only if declared)
         │   ├── tool1.afs
         │   └── tool2.afs
-        ├── a2a/                  # A2A service configurations
+        ├── a2a/                  # A2A service definitions (loaded only if declared)
         │   ├── service1.afs
         │   └── service2.afs
         ├── knowledge/            # Knowledge base files
@@ -215,35 +210,159 @@ class FormationLoader:
                 f"Main formation config (formation.afs/yaml/yml) not found in directory: {directory_path}"
             )
 
-        # Load the main configuration
         main_config = self.config_loader.load(str(main_config_path))
         main_config, secrets_in_use, placeholder_registry = (
             await self.config_loader.process_secrets(main_config, secrets_manager)
         )
 
-        # Filter inline agents by active field before merging external agents
-        self._filter_inline_agents_by_active(main_config)
+        # Resolve declared component references against subdirectory files
+        await self._resolve_agents(
+            main_config, formation_dir, secrets_manager, secrets_in_use, placeholder_registry
+        )
+        await self._resolve_mcp_servers(
+            main_config, formation_dir, secrets_manager, secrets_in_use, placeholder_registry
+        )
+        await self._resolve_a2a_services(
+            main_config, formation_dir, secrets_manager, secrets_in_use, placeholder_registry
+        )
 
-        # Filter inline MCP servers by active field before merging external servers
-        self._filter_inline_mcp_servers_by_active(main_config)
-
-        # Auto-discover and merge component configurations
-        await self._discover_and_merge_agents(
-            main_config, formation_dir, secrets_manager, secrets_in_use, placeholder_registry
-        )
-        await self._discover_and_merge_mcp_servers(
-            main_config, formation_dir, secrets_manager, secrets_in_use, placeholder_registry
-        )
-        await self._discover_and_merge_a2a_services(
-            main_config, formation_dir, secrets_manager, secrets_in_use, placeholder_registry
-        )
+        # Resolve agent-level MCP references against formation-level MCP registry
+        self._resolve_agent_mcp_references(main_config)
 
         # Resolve knowledge paths relative to formation directory
         main_config = self._resolve_knowledge_paths(main_config, str(formation_dir))
 
         return main_config, secrets_in_use, placeholder_registry
 
-    async def _discover_and_merge_agents(
+    async def _build_id_registry(
+        self,
+        component_dir: Path,
+        component_type: str,
+        secrets_manager: Optional[Any] = None,
+        secrets_in_use: Optional[set[str]] = None,
+        placeholder_registry: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Scan a component directory and build an {id: config} registry.
+
+        Reads all .afs/.yaml/.yml files, processes secrets, assigns IDs (filename
+        stem as fallback), and returns the registry without loading anything into
+        the formation config.
+
+        Args:
+            component_dir: Path to the component directory (agents/, mcp/, a2a/)
+            component_type: Human-readable type for warnings ("Agent", "MCP", "A2A")
+            secrets_manager: SecretsManager instance for secret interpolation
+            secrets_in_use: Set to accumulate secret names in use
+            placeholder_registry: Registry to accumulate placeholder mappings
+
+        Returns:
+            Dict mapping component ID to its full processed configuration
+        """
+        registry: Dict[str, Dict[str, Any]] = {}
+
+        if not component_dir.exists():
+            return registry
+
+        files = []
+        for pattern in ["*.afs", "*.yaml", "*.yml"]:
+            files.extend(component_dir.glob(pattern))
+
+        for config_file in sorted(files):
+            try:
+                file_config = self.config_loader.load(str(config_file))
+
+                if not self._validate_config_is_dict(file_config, config_file.name, component_type):
+                    continue
+
+                file_config, file_secrets, file_placeholders = (
+                    await self.config_loader.process_secrets(file_config, secrets_manager)
+                )
+
+                if secrets_in_use is not None:
+                    secrets_in_use.update(file_secrets)
+
+                # Note: placeholder_registry paths are adjusted later during resolution
+                # when we know the final array index. Store raw placeholders for now.
+                if placeholder_registry is not None and file_placeholders:
+                    file_config["_raw_placeholders"] = file_placeholders
+
+                if "id" not in file_config:
+                    file_config["id"] = config_file.stem
+
+                component_id = file_config["id"]
+                registry[component_id] = file_config
+
+            except Exception as e:
+                print(
+                    f"Warning: Failed to load {component_type} file "
+                    f"'{config_file.name}': {type(e).__name__}: {str(e)}"
+                )
+                continue
+
+        return registry
+
+    def _resolve_declared_list(
+        self,
+        declared: List[Any],
+        registry: Dict[str, Dict[str, Any]],
+        component_type: str,
+        dir_name: str,
+        placeholder_registry: Optional[Dict[str, str]] = None,
+        placeholder_prefix: str = "",
+        existing_count: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """
+        Resolve a list of declared component references (string IDs or inline dicts).
+
+        Args:
+            declared: List of string IDs and/or inline dict definitions
+            registry: ID -> config map built from directory scan
+            component_type: Human-readable type for error messages
+            dir_name: Directory name for error messages (e.g., "agents/")
+            placeholder_registry: Registry to accumulate placeholder mappings
+            placeholder_prefix: Prefix for placeholder paths (e.g., "agents", "mcp.servers")
+            existing_count: Number of already-resolved items (for placeholder indexing)
+
+        Returns:
+            List of resolved component configurations
+
+        Raises:
+            ValueError: If a string ID is not found in the registry
+        """
+        resolved: List[Dict[str, Any]] = []
+
+        for item in declared:
+            if isinstance(item, str):
+                if item not in registry:
+                    raise ValueError(
+                        f"{component_type} '{item}' declared in formation but not found "
+                        f"in {dir_name}/ directory. Available: {list(registry.keys())}"
+                    )
+                config = registry[item].copy()
+                config["source"] = "formation"
+
+                # Adjust placeholder paths now that we know the final index
+                raw_placeholders = config.pop("_raw_placeholders", None)
+                if placeholder_registry is not None and raw_placeholders:
+                    idx = existing_count + len(resolved)
+                    for path, placeholder in raw_placeholders.items():
+                        adjusted_path = (
+                            f"{placeholder_prefix}[{idx}].{path}"
+                            if path
+                            else f"{placeholder_prefix}[{idx}]"
+                        )
+                        placeholder_registry[adjusted_path] = placeholder
+
+                resolved.append(config)
+
+            elif isinstance(item, dict):
+                item["source"] = "formation"
+                resolved.append(item)
+
+        return resolved
+
+    async def _resolve_agents(
         self,
         config: Dict[str, Any],
         formation_dir: Path,
@@ -252,85 +371,11 @@ class FormationLoader:
         placeholder_registry: Optional[Dict[str, str]] = None,
     ) -> None:
         """
-        Discover agent configurations in the agents/ directory and merge them.
+        Resolve declared agent references against agent files in agents/ directory.
 
-        Args:
-            config: Main formation configuration to merge into
-            formation_dir: Path to the formation directory
-            secrets_manager: SecretsManager instance for secret interpolation
-            secrets_in_use: Set to accumulate secret names in use
-            placeholder_registry: Registry to accumulate placeholder mappings
-        """
-        agents_dir = formation_dir / "agents"
-        if not agents_dir.exists():
-            #  AGENT_MESSAGE_PROCESSING
-            return
-
-        # Find all config files in agents directory (support .afs, .yaml, .yml)
-        agent_files = []
-        for pattern in ["*.afs", "*.yaml", "*.yml"]:
-            agent_files.extend(agents_dir.glob(pattern))
-
-        if not agent_files:
-            #  AGENT_MESSAGE_PROCESSING
-            return
-
-        # Initialize agents list if not present
-        if "agents" not in config:
-            config["agents"] = []
-
-        # Load and merge each agent configuration
-        for agent_file in sorted(agent_files):
-            try:
-                #  AGENT_MESSAGE_PROCESSING
-                agent_config = self.config_loader.load(str(agent_file))
-
-                # Validate that agent config is a dictionary
-                if not self._validate_config_is_dict(agent_config, agent_file.name, "Agent"):
-                    continue
-
-                agent_config, agent_secrets, agent_placeholders = (
-                    await self.config_loader.process_secrets(agent_config, secrets_manager)
-                )
-
-                # Accumulate secrets from this agent
-                if secrets_in_use is not None:
-                    secrets_in_use.update(agent_secrets)
-
-                # Accumulate placeholders with adjusted paths for agent array
-                if placeholder_registry is not None:
-                    agent_index = len(config["agents"])
-                    for path, placeholder in agent_placeholders.items():
-                        # Adjust path to include agent array index
-                        adjusted_path = (
-                            f"agents[{agent_index}].{path}" if path else f"agents[{agent_index}]"
-                        )
-                        placeholder_registry[adjusted_path] = placeholder
-
-                # Ensure agent has an ID (use filename if not specified)
-                if "id" not in agent_config:
-                    agent_config["id"] = agent_file.stem
-
-                # Check if agent is active (default to True)
-                is_active = agent_config.get("active", True)
-
-                if is_active:
-                    agent_config["source"] = "formation"
-                    config["agents"].append(agent_config)
-
-            except Exception as e:
-                print(
-                    f"⚠️  Warning: Failed to load agent file '{agent_file.name}': {type(e).__name__}: {str(e)}"
-                )
-                continue
-        #  AGENT_MESSAGE_PROCESSING
-
-    def _filter_inline_agents_by_active(self, config: Dict[str, Any]) -> None:
-        """
-        Filter inline agents based on the active field.
-
-        Args:
-            config: Formation configuration to filter inline agents in
+        String entries in config["agents"] are resolved by ID against files in agents/.
+        Dict entries (inline definitions) are kept as-is.
+        If config["agents"] is not present, no agents are loaded.
         """
         if "agents" not in config:
             return
@@ -339,25 +384,36 @@ class FormationLoader:
         if not isinstance(agents, list):
             return
 
-        filtered_agents = []
-        for agent_config in agents:
-            if not isinstance(agent_config, dict):
-                continue
+        # Separate inline dicts (already in config) from string references
+        has_string_refs = any(isinstance(item, str) for item in agents)
 
-            is_active = agent_config.get("active", True)
+        if has_string_refs:
+            agents_dir = formation_dir / "agents"
+            registry = await self._build_id_registry(
+                agents_dir, "Agent", secrets_manager, secrets_in_use, placeholder_registry
+            )
+        else:
+            registry = {}
 
-            if is_active:
-                agent_config["source"] = "formation"
-                filtered_agents.append(agent_config)
+        resolved = self._resolve_declared_list(
+            agents, registry, "Agent", "agents",
+            placeholder_registry, "agents"
+        )
+        config["agents"] = resolved
 
-        config["agents"] = filtered_agents
-
-    def _filter_inline_mcp_servers_by_active(self, config: Dict[str, Any]) -> None:
+    async def _resolve_mcp_servers(
+        self,
+        config: Dict[str, Any],
+        formation_dir: Path,
+        secrets_manager: Optional[Any] = None,
+        secrets_in_use: Optional[set[str]] = None,
+        placeholder_registry: Optional[Dict[str, str]] = None,
+    ) -> None:
         """
-        Filter inline MCP servers based on the active field.
+        Resolve declared MCP server references against files in mcp/ or mcps/ directory.
 
-        Args:
-            config: Formation configuration to filter inline MCP servers in
+        String entries in config["mcp"]["servers"] are resolved by ID.
+        Dict entries (inline definitions) are kept as-is.
         """
         if "mcp" not in config or "servers" not in config.get("mcp", {}):
             return
@@ -366,20 +422,26 @@ class FormationLoader:
         if not isinstance(servers, list):
             return
 
-        filtered_servers = []
-        for server_config in servers:
-            if not isinstance(server_config, dict):
-                continue
+        has_string_refs = any(isinstance(item, str) for item in servers)
 
-            is_active = server_config.get("active", True)
+        if has_string_refs:
+            # Support both mcp/ and mcps/ directory names
+            mcp_dir = formation_dir / "mcps"
+            if not mcp_dir.exists():
+                mcp_dir = formation_dir / "mcp"
+            registry = await self._build_id_registry(
+                mcp_dir, "MCP", secrets_manager, secrets_in_use, placeholder_registry
+            )
+        else:
+            registry = {}
 
-            if is_active:
-                server_config["source"] = "formation"
-                filtered_servers.append(server_config)
+        resolved = self._resolve_declared_list(
+            servers, registry, "MCP server", "mcp",
+            placeholder_registry, "mcp.servers"
+        )
+        config["mcp"]["servers"] = resolved
 
-        config["mcp"]["servers"] = filtered_servers
-
-    async def _discover_and_merge_mcp_servers(
+    async def _resolve_a2a_services(
         self,
         config: Dict[str, Any],
         formation_dir: Path,
@@ -388,175 +450,77 @@ class FormationLoader:
         placeholder_registry: Optional[Dict[str, str]] = None,
     ) -> None:
         """
-        Discover MCP server configurations in the mcp/ or mcps/ directory and merge them.
+        Resolve declared A2A service references against files in a2a/ directory.
 
-        Args:
-            config: Main formation configuration to merge into
-            formation_dir: Path to the formation directory
-            secrets_manager: SecretsManager instance for secret interpolation
-            secrets_in_use: Set to accumulate secret names in use
-            placeholder_registry: Registry to accumulate placeholder mappings
+        String entries in config["a2a"]["outbound"]["services"] are resolved by ID.
+        Dict entries (inline definitions) are kept as-is.
         """
-        # Support both mcp/ and mcps/ directory names
-        mcp_dir = formation_dir / "mcps"
-        if not mcp_dir.exists():
-            mcp_dir = formation_dir / "mcp"
-        if not mcp_dir.exists():
-            #  MCP_SERVER_CONNECTING
+        a2a_config = config.get("a2a", {})
+        outbound = a2a_config.get("outbound", {})
+        if "services" not in outbound:
             return
 
-        # Find all config files in mcp directory (support .afs, .yaml, .yml)
-        mcp_files = []
-        for pattern in ["*.afs", "*.yaml", "*.yml"]:
-            mcp_files.extend(mcp_dir.glob(pattern))
-
-        if not mcp_files:
-            #  MCP_SERVER_CONNECTING
+        services = outbound["services"]
+        if not isinstance(services, list):
             return
 
-        # Initialize MCP servers structure if not present
-        if "mcp" not in config:
-            config["mcp"] = {}
-        if "servers" not in config["mcp"]:
-            config["mcp"]["servers"] = []
+        has_string_refs = any(isinstance(item, str) for item in services)
 
-        # Load and merge each MCP server configuration
-        for mcp_file in sorted(mcp_files):
-            try:
-                #  MCP_SERVER_CONNECTING
-                mcp_config = self.config_loader.load(str(mcp_file))
+        if has_string_refs:
+            a2a_dir = formation_dir / "a2a"
+            registry = await self._build_id_registry(
+                a2a_dir, "A2A", secrets_manager, secrets_in_use, placeholder_registry
+            )
+        else:
+            registry = {}
 
-                # Validate that MCP config is a dictionary
-                if not self._validate_config_is_dict(mcp_config, mcp_file.name, "MCP"):
-                    continue
+        resolved = self._resolve_declared_list(
+            services, registry, "A2A service", "a2a",
+            placeholder_registry, "a2a.outbound.services"
+        )
+        config["a2a"]["outbound"]["services"] = resolved
 
-                mcp_config, mcp_secrets, mcp_placeholders = (
-                    await self.config_loader.process_secrets(mcp_config, secrets_manager)
-                )
+    def _resolve_agent_mcp_references(self, config: Dict[str, Any]) -> None:
+        """
+        Resolve agent-level mcp_servers string references against formation-level MCPs.
 
-                # Accumulate secrets from this MCP server
-                if secrets_in_use is not None:
-                    secrets_in_use.update(mcp_secrets)
+        After formation-level MCP servers are resolved, this method iterates through
+        each agent's mcp_servers list and replaces string IDs with the full MCP config
+        from the formation-level registry.
+        """
+        if "agents" not in config:
+            return
 
-                # Accumulate placeholders with adjusted paths for MCP server array
-                if placeholder_registry is not None:
-                    server_index = len(config["mcp"]["servers"])
-                    for path, placeholder in mcp_placeholders.items():
-                        # Adjust path to include MCP server array index
-                        adjusted_path = (
-                            f"mcp.servers[{server_index}].{path}"
-                            if path
-                            else f"mcp.servers[{server_index}]"
-                        )
-                        placeholder_registry[adjusted_path] = placeholder
+        # Build formation-level MCP registry
+        formation_mcps: Dict[str, Dict[str, Any]] = {}
+        mcp_servers = config.get("mcp", {}).get("servers", [])
+        for server in mcp_servers:
+            if isinstance(server, dict) and "id" in server:
+                formation_mcps[server["id"]] = server
 
-                # Ensure MCP server has an ID (use filename if not specified)
-                if "id" not in mcp_config:
-                    mcp_config["id"] = mcp_file.stem
-
-                # Check if MCP server is active (default to True)
-                is_active = mcp_config.get("active", True)
-
-                if is_active:
-                    mcp_config["source"] = "formation"
-                    config["mcp"]["servers"].append(mcp_config)
-
-            except Exception as e:
-                print(
-                    f"⚠️  Warning: Failed to load MCP file '{mcp_file.name}': {type(e).__name__}: {str(e)}"
-                )
+        for agent in config["agents"]:
+            if not isinstance(agent, dict):
                 continue
 
-        #  MCP_SERVER_CONNECTING
-        #     f"✅ Discovered {len(config['mcp']['servers'])} MCP servers from mcp/ directory"
-        # )
-
-    async def _discover_and_merge_a2a_services(
-        self,
-        config: Dict[str, Any],
-        formation_dir: Path,
-        secrets_manager: Optional[Any] = None,
-        secrets_in_use: Optional[set[str]] = None,
-        placeholder_registry: Optional[Dict[str, str]] = None,
-    ) -> None:
-        """
-        Discover A2A service configurations in the a2a/ directory and merge them.
-
-        Args:
-            config: Main formation configuration to merge into
-            formation_dir: Path to the formation directory
-            secrets_manager: SecretsManager instance for secret interpolation
-            secrets_in_use: Set to accumulate secret names in use
-            placeholder_registry: Registry to accumulate placeholder mappings
-        """
-        a2a_dir = formation_dir / "a2a"
-        if not a2a_dir.exists():
-            #  A2A_MESSAGE_SENT
-            return
-
-        # Find all config files in a2a directory (support .afs, .yaml, .yml)
-        a2a_files = []
-        for pattern in ["*.afs", "*.yaml", "*.yml"]:
-            a2a_files.extend(a2a_dir.glob(pattern))
-
-        if not a2a_files:
-            #  A2A_MESSAGE_SENT
-            return
-
-        # Initialize A2A outbound services structure if not present
-        if "a2a" not in config:
-            config["a2a"] = {}
-        if "outbound" not in config["a2a"]:
-            config["a2a"]["outbound"] = {}
-        if "services" not in config["a2a"]["outbound"]:
-            config["a2a"]["outbound"]["services"] = []
-
-        # Load and merge each A2A service configuration
-        for a2a_file in sorted(a2a_files):
-            try:
-                #  A2A_MESSAGE_SENT
-                a2a_config = self.config_loader.load(str(a2a_file))
-
-                # Validate that A2A config is a dictionary
-                if not self._validate_config_is_dict(a2a_config, a2a_file.name, "A2A"):
-                    continue
-
-                a2a_config, a2a_secrets, a2a_placeholders = (
-                    await self.config_loader.process_secrets(a2a_config, secrets_manager)
-                )
-
-                # Accumulate secrets from this A2A service
-                if secrets_in_use is not None:
-                    secrets_in_use.update(a2a_secrets)
-
-                # Accumulate placeholders with adjusted paths for A2A service array
-                if placeholder_registry is not None:
-                    service_index = len(config["a2a"]["outbound"]["services"])
-                    for path, placeholder in a2a_placeholders.items():
-                        # Adjust path to include A2A service array index
-                        adjusted_path = (
-                            f"a2a.outbound.services[{service_index}].{path}"
-                            if path
-                            else f"a2a.outbound.services[{service_index}]"
-                        )
-                        placeholder_registry[adjusted_path] = placeholder
-
-                # Ensure A2A service has an ID (use filename if not specified)
-                if "id" not in a2a_config:
-                    a2a_config["id"] = a2a_file.stem
-
-                config["a2a"]["outbound"]["services"].append(a2a_config)
-
-            except Exception as e:
-                print(
-                    f"⚠️  Warning: Failed to load A2A file '{a2a_file.name}': {type(e).__name__}: {str(e)}"
-                )
+            agent_mcps = agent.get("mcp_servers")
+            if not agent_mcps or not isinstance(agent_mcps, list):
                 continue
 
-        #  A2A_MESSAGE_SENT
-        #     f"✅ Discovered {len(config['a2a']['outbound']['services'])} "
-        #     "A2A services from a2a/ directory"
-        # )
+            resolved = []
+            for item in agent_mcps:
+                if isinstance(item, str):
+                    if item not in formation_mcps:
+                        agent_id = agent.get("id", "unknown")
+                        raise ValueError(
+                            f"Agent '{agent_id}' references MCP server '{item}' "
+                            f"but it is not declared in formation mcp.servers. "
+                            f"Available: {list(formation_mcps.keys())}"
+                        )
+                    resolved.append(formation_mcps[item].copy())
+                elif isinstance(item, dict):
+                    resolved.append(item)
+
+            agent["mcp_servers"] = resolved
 
     def _resolve_knowledge_paths(
         self, config: Dict[str, Any], formation_dir: str

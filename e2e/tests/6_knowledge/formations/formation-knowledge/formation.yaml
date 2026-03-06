@@ -21,6 +21,10 @@ llm:
           strategy: "adaptive"
     - embedding: "openai/text-embedding-3-small"
 
+agents:
+  - automaze
+  - muxi
+
 memory:
   buffer:
     size: 50

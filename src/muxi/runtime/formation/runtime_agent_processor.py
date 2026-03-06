@@ -85,6 +85,9 @@ async def process_agent_for_runtime(
 
         server_ids = set()
         for i, server_config in enumerate(mcp_servers):
+            if isinstance(server_config, str):
+                # String ID references should be resolved by this point
+                continue
             if not isinstance(server_config, dict):
                 raise ValueError(
                     f"Agent {agent_id} MCP server {i} configuration must be a dictionary"

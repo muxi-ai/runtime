@@ -33,6 +33,9 @@ mcp:
   max_tool_calls: 50
   max_tool_iterations: 10
 
+agents:
+  - example_agent
+
 memory:
   working:
     max_memory_mb: 1
