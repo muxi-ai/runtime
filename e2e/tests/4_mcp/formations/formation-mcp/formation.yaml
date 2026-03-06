@@ -46,6 +46,8 @@ mcp:
     - notion-mcp
     - system-mcp
     - web-search-mcp
+    - web-search-secrets-mcp
+    - web-search-user-mcp
   enhance_user_prompts: true  # Enable message enhancement for better tool selection
   max_tool_calls: 50
   max_tool_iterations: 10

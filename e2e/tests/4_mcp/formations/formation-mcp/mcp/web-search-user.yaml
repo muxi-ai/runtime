@@ -1,5 +1,5 @@
 schema: "1.0.0"
-id: "web-search-mcp"
+id: "web-search-user-mcp"
 description: "Web search using free google search"
 
 type: "command"
