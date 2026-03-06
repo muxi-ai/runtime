@@ -414,9 +414,7 @@ class FormationLoader:
 
         if has_string_refs:
             agents_dir = formation_dir / "agents"
-            registry = await self._build_id_registry(
-                agents_dir, "Agent", secrets_manager
-            )
+            registry = await self._build_id_registry(agents_dir, "Agent", secrets_manager)
         else:
             registry = {}
 
@@ -459,9 +457,7 @@ class FormationLoader:
             mcp_dir = formation_dir / "mcps"
             if not mcp_dir.exists():
                 mcp_dir = formation_dir / "mcp"
-            registry = await self._build_id_registry(
-                mcp_dir, "MCP", secrets_manager
-            )
+            registry = await self._build_id_registry(mcp_dir, "MCP", secrets_manager)
         else:
             registry = {}
 
@@ -503,9 +499,7 @@ class FormationLoader:
 
         if has_string_refs:
             a2a_dir = formation_dir / "a2a"
-            registry = await self._build_id_registry(
-                a2a_dir, "A2A", secrets_manager
-            )
+            registry = await self._build_id_registry(a2a_dir, "A2A", secrets_manager)
         else:
             registry = {}
 
