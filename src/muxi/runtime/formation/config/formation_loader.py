@@ -298,6 +298,8 @@ class FormationLoader:
                 file_config["_source_file"] = config_file.name
                 registry[component_id] = file_config
 
+            except ValueError:
+                raise
             except Exception as e:
                 print(
                     f"Warning: Failed to load {component_type} file "
