@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.20260306.1 - Explicit Component Declaration
+
+### Breaking Changes
+
+- **Explicit component declaration** - Auto-discovery of agents, MCP servers, and A2A services from subdirectories has been replaced with explicit manifest-based declaration. Components must now be listed in `formation.yaml` to be loaded. Files in `agents/`, `mcp/`, `a2a/` directories are definitions only -- they are inert unless referenced by the manifest.
+- **`active` field removed** - The `active: true/false` field on agents, MCP servers, and A2A services is no longer recognized. Remove it from all component files.
+
+### New Features
+
+- **String ID references** - Formation manifests now support string IDs that resolve against subdirectory files:
+  ```yaml
+  agents:
+    - support-agent        # Resolves to agents/support-agent.yaml
+    - id: "inline-agent"   # Inline dict definition still supported
+      role: "assistant"
+  ```
+- **Agent-level MCP references** - Agents can reference formation-level MCP servers by string ID in their `mcp_servers` field, instead of duplicating the full config inline.
+
+### Improvements
+
+- **Deferred secrets accumulation** - Secrets from component files are only added to `secrets_in_use` when the component is actually declared in the manifest, preventing undeclared files from polluting secret tracking.
+- **Duplicate ID detection** - Duplicate component IDs are now caught at multiple levels: within subdirectory files (two files with same `id:`), within the manifest (same string ID listed twice), and across string/dict entries (string "foo" + inline `{id: "foo"}`).
+- **Fail-fast on invalid types** - Non-string/non-dict entries in component lists raise `ValueError` immediately instead of being silently ignored.
+- **Unresolved MCP refs fail hard** - `runtime_agent_processor.py` raises `ValueError` for unresolved string MCP IDs instead of logging a warning and silently dropping them.
+
 ## 0.20260306.0 - MCP, Performance & Better Async DX
 
 ### New Features

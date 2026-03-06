@@ -222,8 +222,16 @@ a2a:
 **ID resolution rules:**
 - String in list → look up by `id:` field in file, or by filename stem (without extension)
 - Dict in list → pass through as inline definition
+- Any other type → `ValueError` (fail-fast)
 - Omitted key or empty list → nothing loaded (no auto-discovery fallback)
 - Unknown ID → `ValueError` with message listing available IDs
+- Duplicate string ID in manifest → `ValueError`
+- Duplicate `id:` across files in same subdirectory → `ValueError` naming both files
+
+**Secrets and placeholder accumulation:**
+- `_build_id_registry` stores secrets/placeholders as `_raw_secrets`/`_raw_placeholders` on each config dict
+- `_resolve_declared_list` accumulates them into `secrets_in_use`/`placeholder_registry` only for declared items
+- This ensures undeclared component files don't pollute the secrets-in-use set
 
 **Agent-level MCP references:**
 Agents can reference formation-level MCPs by string ID in their `mcp_servers` field:
@@ -237,7 +245,9 @@ mcp_servers:
 ```
 
 **Validation changes:**
-- `validation.py`, `formation.py`, `runtime_agent_processor.py` all accept string IDs via early `isinstance(str)` returns
+- `validation.py`, `formation.py`, `runtime_agent_processor.py` all accept string IDs via early `isinstance(str)` checks
+- `formation.py` tracks string IDs in `agent_ids` for cross-type duplicate detection (string vs dict)
+- `runtime_agent_processor.py` raises `ValueError` on unresolved string MCP IDs (not just a warning)
 - The `active` field is no longer recognized (removed from spec and all formation files)
 
 **Impact on dynamic agent creation (API):**
