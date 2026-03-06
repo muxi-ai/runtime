@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.20260305.0 - Performance & Better Async DX
+## 0.20260306.0 - MCP, Performance & Better Async DX
 
 ### New Features
 
