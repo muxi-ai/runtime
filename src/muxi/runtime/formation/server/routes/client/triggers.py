@@ -40,7 +40,7 @@ class TriggerRequest(BaseModel):
     )
 
 
-@router.get("/triggers")
+@router.get("/triggers", operation_id="list_triggers")
 async def list_triggers(request: Request) -> APIResponse:
     """
     List available triggers for the formation.
@@ -102,7 +102,7 @@ def _extract_data_placeholders(content: str) -> List[str]:
     return sorted(set(matches))
 
 
-@router.get("/triggers/{trigger_name}")
+@router.get("/triggers/{trigger_name}", operation_id="get_trigger")
 async def get_trigger(request: Request, trigger_name: str) -> JSONResponse:
     """
     Get detailed information about a specific trigger.
@@ -191,7 +191,7 @@ async def get_trigger(request: Request, trigger_name: str) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.post("/triggers/{trigger_name}")
+@router.post("/triggers/{trigger_name}", operation_id="execute_trigger")
 async def execute_trigger(
     trigger_name: str,
     request: Request,

@@ -37,7 +37,9 @@ class AssociateIdentifiersRequest(BaseModel):
     )
 
 
-@router.get("/users/identifiers/{user_id}", response_model=APIResponse)
+@router.get(
+    "/users/identifiers/{user_id}", response_model=APIResponse, operation_id="get_user_identifiers"
+)
 async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
     """
     List all identifiers associated with a MUXI user.
@@ -141,7 +143,9 @@ async def get_user_identifiers(request: Request, user_id: str) -> JSONResponse:
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.post("/users/identifiers", response_model=APIResponse)
+@router.post(
+    "/users/identifiers", response_model=APIResponse, operation_id="associate_user_identifiers"
+)
 async def associate_user_identifiers(
     request: Request, body: AssociateIdentifiersRequest
 ) -> JSONResponse:
@@ -294,7 +298,11 @@ async def associate_user_identifiers(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.delete("/users/identifiers/{identifier}", response_model=APIResponse)
+@router.delete(
+    "/users/identifiers/{identifier}",
+    response_model=APIResponse,
+    operation_id="delete_user_identifier",
+)
 async def delete_user_identifier(request: Request, identifier: str) -> JSONResponse:
     """
     Remove a specific identifier mapping from a user.
@@ -403,7 +411,7 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.get("/users/{identifier}", response_model=APIResponse)
+@router.get("/users/{identifier}", response_model=APIResponse, operation_id="lookup_user")
 async def lookup_identifier(request: Request, identifier: str) -> JSONResponse:
     """
     Look up which MUXI user an identifier belongs to (read-only, no creation).
@@ -501,7 +509,7 @@ async def lookup_identifier(request: Request, identifier: str) -> JSONResponse:
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.post("/users/resolve", response_model=APIResponse)
+@router.post("/users/resolve", response_model=APIResponse, operation_id="resolve_user")
 async def resolve_identifier(request: Request) -> JSONResponse:
     """
     Resolve an identifier to a MUXI user (creates user if needed).

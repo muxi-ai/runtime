@@ -37,7 +37,7 @@ def _get_user_id(
     return x_user_id, None
 
 
-@router.get("/sessions", response_model=APIResponse)
+@router.get("/sessions", response_model=APIResponse, operation_id="list_sessions")
 def list_user_sessions(
     request: Request,
     x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
@@ -163,7 +163,7 @@ def list_user_sessions(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.get("/sessions/{session_id}", response_model=APIResponse)
+@router.get("/sessions/{session_id}", response_model=APIResponse, operation_id="get_session")
 def get_session(
     request: Request,
     session_id: str,
@@ -388,7 +388,11 @@ def clear_session(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.get("/sessions/{session_id}/messages", response_model=APIResponse)
+@router.get(
+    "/sessions/{session_id}/messages",
+    response_model=APIResponse,
+    operation_id="get_session_messages",
+)
 def get_session_messages(
     request: Request,
     session_id: str,
@@ -531,7 +535,9 @@ class SessionRestoreRequest(BaseModel):
     messages: List[SessionMessage] = Field(..., description="Messages to load into session")
 
 
-@router.post("/sessions/{session_id}/restore", response_model=APIResponse)
+@router.post(
+    "/sessions/{session_id}/restore", response_model=APIResponse, operation_id="restore_session"
+)
 async def restore_session(
     request: Request,
     session_id: str,
