@@ -14,6 +14,7 @@ from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 
 from .....datatypes.api import APIEventType, APIObjectType
+from ....background.request_tracker import RequestStatus
 from ...responses import (
     APIResponse,
     create_error_response,
@@ -81,7 +82,7 @@ def _check_auth_and_user_id(
     return x_user_id, is_admin, None
 
 
-@router.get("/requests", response_model=APIResponse)
+@router.get("/requests", response_model=APIResponse, operation_id="list_requests")
 async def list_requests(
     request: Request,
     x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
@@ -151,7 +152,7 @@ async def list_requests(
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.get("/requests/{request_id}", response_model=APIResponse)
+@router.get("/requests/{request_id}", response_model=APIResponse, operation_id="get_request_status")
 async def get_request_status(
     request: Request,
     request_id: str,
@@ -216,6 +217,16 @@ async def get_request_status(
     if request_state.error:
         data["error"] = request_state.error
 
+    # Include result for completed requests so clients can poll for it
+    if request_state.status == RequestStatus.COMPLETED and request_state.result is not None:
+        result = request_state.result
+        if hasattr(result, "content"):
+            data["result"] = str(result.content)
+        elif isinstance(result, dict):
+            data["result"] = result
+        else:
+            data["result"] = str(result)
+
     response = create_success_response(
         APIObjectType.REQUEST_STATUS,
         APIEventType.REQUEST_STATUS_RETRIEVED,
@@ -225,7 +236,7 @@ async def get_request_status(
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.delete("/requests/{request_id}", response_model=APIResponse)
+@router.delete("/requests/{request_id}", response_model=APIResponse, operation_id="cancel_request")
 async def cancel_request(
     request: Request,
     request_id: str,

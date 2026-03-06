@@ -31,6 +31,8 @@ class ChatRequest(BaseModel):
     mode: Optional[str] = "sync"  # sync or async
     files: Optional[List[Dict[str, Any]]] = None
     stream: Optional[bool] = True  # Enable/disable streaming (default: True)
+    webhook_url: Optional[str] = None  # Per-request webhook override
+    threshold_seconds: Optional[float] = None  # Per-request async threshold override
 
 
 class AudioChatRequest(BaseModel):
@@ -48,7 +50,7 @@ class AudioChatRequest(BaseModel):
     stream: Optional[bool] = True  # Enable/disable streaming (default: True)
 
 
-@router.post("/chat", response_model=None)
+@router.post("/chat", response_model=None, operation_id="chat")
 async def chat(
     request: Request, chat_request: ChatRequest
 ) -> Union[StreamingResponse, JSONResponse]:
@@ -121,6 +123,8 @@ async def chat(
                 agent_name=chat_request.agent_id,
                 files=chat_request.files,
                 stream=False,  # Disable streaming
+                webhook_url=chat_request.webhook_url,
+                threshold_seconds=chat_request.threshold_seconds,
             )
 
             # Return complete response as JSON
@@ -186,6 +190,8 @@ async def chat(
                 agent_name=chat_request.agent_id,
                 files=chat_request.files,
                 stream=True,  # Enable streaming
+                webhook_url=chat_request.webhook_url,
+                threshold_seconds=chat_request.threshold_seconds,
             )
 
             # Stream the tokens
@@ -238,7 +244,7 @@ async def chat(
     )
 
 
-@router.post("/audiochat", response_model=None)
+@router.post("/audiochat", response_model=None, operation_id="audiochat")
 async def audiochat(
     request: Request, audiochat_request: AudioChatRequest
 ) -> Union[StreamingResponse, JSONResponse]:

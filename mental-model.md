@@ -2356,7 +2356,8 @@ pytest e2e/tests/2_memory/ -v
       
       # 7. Background Services
       await initialize_background_services(formation)
-      → Initialize RequestTracker (async job tracking)
+      → Initialize RequestTracker (async job tracking, 5-min TTL for completed requests)
+      → Start cleanup loop (purges expired terminal requests every 60s)
       → Initialize WebhookManager (async callbacks)
       → Initialize TimeEstimator (request duration prediction)
    
@@ -3026,3 +3027,137 @@ with actual runner instructions. E2E tests are standalone scripts, never use pyt
 - Full suite: `cd e2e && python run_all_tests.py`
 - Random sample: `cd e2e && python run_random_tests.py N`
 - Single test: `cd e2e/tests/<area> && python test_<name>.py`
+
+### 2026-03-05: Better Async DX
+
+**RequestTracker TTL retention** (`background/request_tracker.py`):
+Completed, failed, and cancelled requests are no longer removed from the in-memory
+`RequestTracker` immediately after webhook delivery. They stay for 5 minutes
+(`DEFAULT_COMPLETED_TTL_SECONDS = 300`) so clients can poll `GET /v1/requests/{id}`
+for results. A background cleanup task (`start_cleanup_loop()`, 60s interval) purges
+expired terminal requests automatically. The cleanup loop starts when the overlord
+initializes the tracker (`overlord.py` line ~714).
+
+Key changes:
+- `_TERMINAL_STATUSES = {COMPLETED, FAILED, CANCELLED}` — defines which statuses
+  are eligible for TTL-based cleanup
+- `cleanup_expired()` — scans for terminal requests past TTL, removes them
+- `start_cleanup_loop(interval=60)` / `stop_cleanup_loop()` — background task lifecycle
+- All 4 active `remove_request()` calls in `overlord.py` replaced with comments
+  explaining TTL cleanup handles purging
+
+**Polling-only async** (`chat_orchestrator.py`, `overlord.py`):
+Async requests no longer require a webhook URL. Previously, both `overlord.chat()`
+and `chat_orchestrator.chat()` forced `use_async=False` when no webhook was configured.
+Now async without webhook is valid — the response includes `"delivery": "polling"`
+with `"poll_url": "/v1/requests/{request_id}"`. Clients poll the request status
+endpoint to retrieve the result when ready.
+
+**Result payload in request status** (`server/routes/client/requests.py`):
+`GET /v1/requests/{request_id}` now includes the `result` field for completed
+requests. The result is extracted from `RequestState.result` (which stores the
+response content set by `update_request(COMPLETED, result=...)`) and serialized
+as string or dict depending on type.
+
+**Per-request async threshold** (`server/routes/client/chat.py`):
+`ChatRequest` now accepts `threshold_seconds` and `webhook_url` fields, both
+optional. These are passed through to `overlord.chat()` which already supported
+them as parameters but never exposed them via the REST API. Same override pattern
+as the existing formation-level config: per-request value takes precedence.
+
+**Files changed:**
+- `src/muxi/runtime/formation/background/request_tracker.py` — TTL retention,
+  cleanup loop, terminal status detection
+- `src/muxi/runtime/formation/overlord/overlord.py` — removed 4 `remove_request()`
+  calls, start cleanup loop on init, removed force-sync guard
+- `src/muxi/runtime/formation/overlord/chat_orchestrator.py` — removed force-sync
+  guard, added polling info to async response
+- `src/muxi/runtime/formation/server/routes/client/chat.py` — added `threshold_seconds`
+  and `webhook_url` to `ChatRequest`, wired to overlord
+- `src/muxi/runtime/formation/server/routes/client/requests.py` — return `result`
+  for completed requests
+- `tests/unit/test_request_tracker.py` — 9 new tests
+
+**Branch:** `feature/better-api-dx` (commit: c9afbb41)
+
+### 2026-03-05: MCP Server Interface (feature/mcp-server branch)
+
+**Purpose:** Expose the MUXI Runtime as an MCP server so external MCP clients
+(Claude Desktop, Cursor, custom agents) can interact with formations using the
+standard MCP protocol alongside the existing REST API.
+
+**Approach: `FastMCP.from_fastapi()`**
+
+Instead of hand-writing MCP tool wrappers, FastMCP v3 auto-generates an MCP server
+from the existing FastAPI app's OpenAPI spec. This means MCP tools stay in sync with
+REST endpoints automatically -- zero duplication.
+
+**Key implementation details:**
+
+1. **`operation_id` on all 32 client routes** (10 route files):
+   FastAPI auto-generates ugly operation IDs like `create_chat_response_v1_chat_post`.
+   Explicit `operation_id` on each route gives clean MCP tool names: `chat`,
+   `list_sessions`, `get_request_status`, `search_memories`, etc.
+
+2. **`_mount_mcp_server()` in `server.py`**:
+   Called after all routers are registered in `_create_app()`. Creates the MCP server
+   and mounts it at `/mcp`:
+   ```python
+   mcp = FastMCP.from_fastapi(
+       app=app,
+       name=f"muxi-{formation_id}",
+       route_maps=[...],  # Include-only client routes
+       httpx_client_kwargs={"headers": {"X-MUXI-CLIENT-KEY": client_key}},
+   )
+   mcp_app = mcp.http_app(path="/")  # path="/" because app.mount strips prefix
+   app.router.lifespan_context = combine_lifespans(existing, mcp_app.lifespan)
+   app.mount("/mcp", mcp_app)
+   ```
+
+3. **Route filtering via include-only patterns**:
+   Admin and client routes share the same `/v1/` URL prefix (differentiated by auth
+   middleware, not path). Initial exclude-only patterns leaked 30+ admin routes as
+   MCP tools. Fixed by switching to include-only: explicit path patterns for each
+   client route group (`/chat`, `/sessions/*`, `/memories/*`, etc.) with a catch-all
+   exclude at the end. Result: exactly 33 MCP tools exposed (32 client + credential_services).
+
+4. **Auth passthrough**:
+   `from_fastapi()` makes internal HTTP calls to the FastAPI app via httpx. The client
+   key is passed via `httpx_client_kwargs={"headers": {...}}` so all MCP tool calls
+   authenticate against the existing middleware. MCP clients themselves don't need to
+   pass auth -- the MCP server handles it.
+
+5. **MCP tool parameter naming**:
+   FastAPI `Header()` parameters with aliases (e.g., `x_user_id: str = Header(None,
+   alias="X-Muxi-User-ID")`) appear in the MCP tool schema under the alias name
+   (`X-Muxi-User-ID`), not the Python parameter name. MCP clients must use the alias.
+   For the `chat` tool, `user_id` is a body parameter in `ChatRequest` and works directly.
+
+6. **Graceful fallback**:
+   `ImportError` silently passes (MCP just doesn't mount if fastmcp isn't installed).
+   Other errors log a warning and the REST API continues unaffected.
+
+**Gotchas discovered:**
+- `mcp.http_app(path="/mcp")` + `app.mount("/mcp", mcp_app)` double-nests the path.
+  The mount strips `/mcp`, so `http_app` must use `path="/"`.
+- `fastmcp.server.openapi` is deprecated in v3.1.0; use `fastmcp.server.providers.openapi`.
+- `RouteMap.tags` field exists but didn't work as expected for filtering (returned 0 tools).
+  Path-based include patterns are more reliable.
+- FastMCP `Client.call_tool()` returns `CallToolResult` (not a list). Access response
+  via `result.content[0].text`.
+- FastMCP `Client.call_tool()` raises `ToolError` for HTTP 4xx/5xx errors instead of
+  returning them in the response body. MCP clients must catch `ToolError` for error handling.
+- The `combine_lifespans()` call wraps the existing app lifespan. This is the only
+  non-additive change -- it could theoretically affect startup/shutdown ordering, but
+  passed all 24 API e2e tests.
+
+**Files changed:**
+- `pyproject.toml` -- added `fastmcp>=3.0.0`
+- `src/muxi/runtime/formation/server/server.py` -- new `_mount_mcp_server()` method
+- 10 client route files -- added `operation_id` to all 32 endpoints
+- `e2e/tests/20_mcp_server/` -- 5 e2e tests (endpoint, tool listing, invocation, chat, parity)
+- `e2e/run_all_tests.py` -- added `20_mcp_server` timeout override
+
+**Test results:** 157/157 unit, 24/24 API e2e, 5/5 MCP e2e.
+
+**Branch:** `feature/mcp-server` (commits: 1cbf9c30, c123c662)

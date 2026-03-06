@@ -29,12 +29,12 @@ MUXI Runtime transforms declarative YAML configurations into running AI systems.
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  MUXI Server (Go) - Formation lifecycle management  │
+│     MUXI Server - Formation lifecycle management    │
 └─────────────────────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│  MUXI Runtime (Python) ◄── THIS REPO                │
+│           MUXI Runtime ◄── THIS REPO                │
 │  ┌───────────────────────────────────────────────┐  │
 │  │  Formation Engine (YAML loader & validator)   │  │
 │  ├───────────────────────────────────────────────┤  │
@@ -46,7 +46,7 @@ MUXI Runtime transforms declarative YAML configurations into running AI systems.
                          │
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│  External Services (LLM APIs, MCP Servers, DBs)     │
+│   External Services (LLM APIs, MCP Servers, DBs)    │
 └─────────────────────────────────────────────────────┘
 ```
 

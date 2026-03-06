@@ -15,9 +15,10 @@ from pathlib import Path
 TIMEOUT_SECONDS = 120
 EARLY_KILL_AFTER_SUCCESS = 3  # seconds to wait after SUCCESS before killing
 AREA_TIMEOUT_OVERRIDES = {
-    "19_api": 360,       # API tests spin up a server + memory CRUD with extraction waits
+    "19_api": 360,  # API tests spin up a server + memory CRUD with extraction waits
+    "20_mcp_server": 360,  # MCP tests spin up server + MCP client calls + LLM chat
     "3_multimodal": 480,  # Vision/video LLM calls can be very slow (14MB video, Gemini API)
-    "2_memory": 180,    # Memory tests with extraction waits, multi-user, PG queries
+    "2_memory": 180,  # Memory tests with extraction waits, multi-user, PG queries
 }
 E2E_DIR = Path(__file__).parent
 TESTS_DIR = E2E_DIR / "tests"
@@ -119,7 +120,11 @@ def _run_once(test_file: Path, env: dict, timeout: int) -> dict:
 
         if has_success and not has_fail and not has_assertion_error:
             passed = True
-        elif (proc.returncode == 0 or timed_out or found_success) and not has_fail and not has_assertion_error:
+        elif (
+            (proc.returncode == 0 or timed_out or found_success)
+            and not has_fail
+            and not has_assertion_error
+        ):
             passed = True
         else:
             passed = False
@@ -131,9 +136,8 @@ def _run_once(test_file: Path, env: dict, timeout: int) -> dict:
             "passed": passed,
             "time_s": round(elapsed, 1),
             "stdout_tail": full_stdout[-2000:] if full_stdout else "",
-            "stderr_tail": (
-                f"TIMEOUT after {timeout}s\n" if timed_out else ""
-            ) + (full_stderr[-500:] if full_stderr else ""),
+            "stderr_tail": (f"TIMEOUT after {timeout}s\n" if timed_out else "")
+            + (full_stderr[-500:] if full_stderr else ""),
         }
     except Exception as e:
         try:
@@ -167,11 +171,15 @@ def run_test(test_file: Path) -> dict:
 
     # Retry once on crash signals (SIGSEGV/SIGABRT) that happened quickly
     # These are environment-specific flaky crashes, not test failures
-    if (not result["passed"]
-            and result["exit_code"] in CRASH_SIGNALS
-            and result["time_s"] < 60
-            and "SUCCESS" not in result["stdout_tail"]):
-        print(f"      [retry] crash signal {result['exit_code']} at {result['time_s']}s, retrying...")
+    if (
+        not result["passed"]
+        and result["exit_code"] in CRASH_SIGNALS
+        and result["time_s"] < 60
+        and "SUCCESS" not in result["stdout_tail"]
+    ):
+        print(
+            f"      [retry] crash signal {result['exit_code']} at {result['time_s']}s, retrying..."
+        )
         retry = _run_once(test_file, env, timeout)
         retry["retried"] = True
         return retry
@@ -229,7 +237,7 @@ def main():
         print(f"  {area}: {s['passed']}/{s['total']} ({status})")
 
     if failed > 0:
-        print(f"\nFailed tests:")
+        print("\nFailed tests:")
         for r in results:
             if not r["passed"]:
                 err = r["stderr_tail"].strip().split("\n")[-1][:100] if r["stderr_tail"] else ""

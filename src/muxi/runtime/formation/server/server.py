@@ -237,7 +237,18 @@ class FormationServer:
                     )
                 )
 
+        # Ensure request tracker cleanup loop is running in this long-lived event loop.
+        # start_cleanup_loop() is idempotent -- skips if already started.
+        overlord = getattr(self.formation, "_overlord", None)
+        if overlord and hasattr(overlord, "request_tracker") and overlord.request_tracker:
+            overlord.request_tracker.start_cleanup_loop()
+
         yield
+
+        # Stop request tracker cleanup loop before draining connections
+        overlord = getattr(self.formation, "_overlord", None)
+        if overlord and hasattr(overlord, "request_tracker") and overlord.request_tracker:
+            await overlord.request_tracker.stop_cleanup_loop()
 
         # Shutdown - drain connections gracefully
         observability.observe(
@@ -511,7 +522,82 @@ class FormationServer:
         self._register_admin_routes(app)
         self._register_client_routes(app)
 
+        # Mount MCP server (auto-generated from FastAPI routes)
+        self._mount_mcp_server(app)
+
         return app
+
+    def _mount_mcp_server(self, app: FastAPI) -> None:
+        """Generate and mount an MCP server from existing FastAPI routes."""
+        try:
+            from fastmcp import FastMCP
+            from fastmcp.server.providers.openapi import MCPType, RouteMap
+            from fastmcp.utilities.lifespan import combine_lifespans
+
+            formation_id = self.formation.formation_id
+
+            # Generate MCP server from our FastAPI app
+            # Auth: MCP clients must provide X-Muxi-Client-Key in their transport headers.
+            # FastMCP's get_http_headers() automatically forwards custom headers from the
+            # incoming MCP HTTP request to internal REST API calls, so authentication
+            # works exactly the same as calling the REST API directly.
+            #
+            # Only expose client routes as MCP tools.
+            # Client routes have explicit operation_id; admin/health routes don't.
+            # Build include patterns dynamically so new client endpoints are
+            # picked up automatically without maintaining a hardcoded allowlist.
+            client_patterns = set()
+            for route in app.routes:
+                op_id = getattr(route, "operation_id", None)
+                if not op_id:
+                    continue
+                path = getattr(route, "path", "")
+                if path:
+                    escaped = re.escape(path)
+                    # Convert \{param\} back to .* for path parameters
+                    pattern = re.sub(r"\\{[^}]+\\}", ".*", escaped)
+                    client_patterns.add(f".*{pattern}$")
+
+            route_maps = [RouteMap(pattern=p, mcp_type=MCPType.TOOL) for p in client_patterns]
+            route_maps.append(RouteMap(pattern=r".*", mcp_type=MCPType.EXCLUDE))
+
+            mcp = FastMCP.from_fastapi(
+                app=app,
+                name=f"muxi-{formation_id}",
+                route_maps=route_maps,
+            )
+
+            # Create MCP ASGI app -- path="/" because app.mount("/mcp") strips the prefix
+            mcp_app = mcp.http_app(path="/")
+
+            # Combine lifespans so both FastAPI and MCP session managers initialize
+            app.router.lifespan_context = combine_lifespans(
+                app.router.lifespan_context, mcp_app.lifespan
+            )
+            app.mount("/mcp", mcp_app)
+
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_REGISTERED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "component": "mcp_server",
+                    "formation_id": formation_id,
+                    "endpoint": "/mcp",
+                },
+                description="MCP server mounted at /mcp",
+            )
+            print(observability.InitEventFormatter.format_ok("MCP server", "mounted at /mcp"))
+
+        except ImportError:
+            pass
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"error": str(e), "component": "mcp_server"},
+                description=f"Failed to mount MCP server: {e}",
+            )
+            print(observability.InitEventFormatter.format_warn(f"MCP server not mounted: {e}"))
 
     def _register_health_routes(self, app: FastAPI) -> None:
         """Register health and status endpoints."""
