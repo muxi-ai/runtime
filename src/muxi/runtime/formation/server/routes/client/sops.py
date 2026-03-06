@@ -58,7 +58,7 @@ def _extract_agents_from_sop(metadata: Dict[str, Any], content: str) -> List[str
     return agents_used
 
 
-@router.get("/sops", response_model=APIResponse)
+@router.get("/sops", response_model=APIResponse, operation_id="list_sops")
 async def list_sops(request: Request) -> JSONResponse:
     """
     List all available Standard Operating Procedures.
@@ -128,7 +128,7 @@ async def list_sops(request: Request) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.get("/sops/{sop_name}", response_model=APIResponse)
+@router.get("/sops/{sop_name}", response_model=APIResponse, operation_id="get_sop")
 async def get_sop_details(request: Request, sop_name: str) -> JSONResponse:
     """
     Get detailed information about a specific Standard Operating Procedure.

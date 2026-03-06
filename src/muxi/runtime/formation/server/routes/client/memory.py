@@ -99,7 +99,7 @@ def _check_auth_and_user_id(
     return x_user_id, is_admin, None
 
 
-@router.get("/memories", response_model=APIResponse)
+@router.get("/memories", response_model=APIResponse, operation_id="search_memories")
 async def get_user_memories(
     request: Request,
     x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
@@ -166,7 +166,7 @@ async def get_user_memories(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.post("/memories", response_model=APIResponse)
+@router.post("/memories", response_model=APIResponse, operation_id="create_memory")
 async def create_user_memory(
     request: Request,
     memory: MemoryCreate,
@@ -232,7 +232,7 @@ async def create_user_memory(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.delete("/memories/{memory_id}", response_model=APIResponse)
+@router.delete("/memories/{memory_id}", response_model=APIResponse, operation_id="delete_memory")
 async def delete_user_memory(
     request: Request,
     memory_id: str,
@@ -305,7 +305,7 @@ async def delete_user_memory(
 
 
 # Buffer Memory Operations
-@router.get("/memory/buffer", response_model=APIResponse)
+@router.get("/memory/buffer", response_model=APIResponse, operation_id="get_buffer_memory")
 def get_buffer_status(
     request: Request,
     x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
@@ -406,7 +406,7 @@ def get_buffer_status(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.delete("/memory/buffer", response_model=APIResponse)
+@router.delete("/memory/buffer", response_model=APIResponse, operation_id="clear_buffer_memory")
 def clear_buffer(
     request: Request,
     x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
@@ -506,7 +506,9 @@ def clear_buffer(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
-@router.delete("/memory/buffer/{session_id}", response_model=APIResponse)
+@router.delete(
+    "/memory/buffer/{session_id}", response_model=APIResponse, operation_id="clear_session_buffer"
+)
 def clear_session_buffer(
     request: Request,
     session_id: str,

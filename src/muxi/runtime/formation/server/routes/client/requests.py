@@ -82,7 +82,7 @@ def _check_auth_and_user_id(
     return x_user_id, is_admin, None
 
 
-@router.get("/requests", response_model=APIResponse)
+@router.get("/requests", response_model=APIResponse, operation_id="list_requests")
 async def list_requests(
     request: Request,
     x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
@@ -152,7 +152,7 @@ async def list_requests(
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.get("/requests/{request_id}", response_model=APIResponse)
+@router.get("/requests/{request_id}", response_model=APIResponse, operation_id="get_request_status")
 async def get_request_status(
     request: Request,
     request_id: str,
@@ -236,7 +236,7 @@ async def get_request_status(
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.delete("/requests/{request_id}", response_model=APIResponse)
+@router.delete("/requests/{request_id}", response_model=APIResponse, operation_id="cancel_request")
 async def cancel_request(
     request: Request,
     request_id: str,

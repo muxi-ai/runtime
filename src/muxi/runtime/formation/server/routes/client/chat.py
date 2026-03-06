@@ -50,7 +50,7 @@ class AudioChatRequest(BaseModel):
     stream: Optional[bool] = True  # Enable/disable streaming (default: True)
 
 
-@router.post("/chat", response_model=None)
+@router.post("/chat", response_model=None, operation_id="chat")
 async def chat(
     request: Request, chat_request: ChatRequest
 ) -> Union[StreamingResponse, JSONResponse]:
@@ -244,7 +244,7 @@ async def chat(
     )
 
 
-@router.post("/audiochat", response_model=None)
+@router.post("/audiochat", response_model=None, operation_id="audiochat")
 async def audiochat(
     request: Request, audiochat_request: AudioChatRequest
 ) -> Union[StreamingResponse, JSONResponse]:
