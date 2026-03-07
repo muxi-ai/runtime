@@ -1209,7 +1209,8 @@ def initialize_skills(formation, config: Dict[str, Any]) -> None:
     if not public_skills and not agent_skills:
         return
 
-    skills_dir = Path(formation.formation_path) / "skills" if formation.formation_path else None
+    formation_dir = Path(formation._formation_path).parent if formation._formation_path else None
+    skills_dir = formation_dir / "skills" if formation_dir else None
     if not skills_dir or not skills_dir.is_dir():
         raise ConfigurationValidationError(
             [f"Skills declared but skills/ directory not found at {skills_dir}"]
@@ -1227,13 +1228,13 @@ def initialize_skills(formation, config: Dict[str, Any]) -> None:
     formation._skill_manager = manager
 
     all_names = list(manager.skills.keys())
-    InitEventFormatter.add(
-        "skills",
-        f"Loaded {len(all_names)} skill(s): {', '.join(all_names)}",
-    )
+    print(InitEventFormatter.format_ok(
+        f"Skills loaded: {', '.join(all_names)}",
+        f"{len(all_names)} skill(s)",
+    ))
 
     observability.observe(
-        event_type=observability.SystemEvents.FORMATION_INITIALIZED,
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
         level=observability.EventLevel.INFO,
         data={
             "skill_count": len(all_names),
