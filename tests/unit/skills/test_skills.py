@@ -260,3 +260,26 @@ class TestSkillManager:
         manager.activate("pdf-processing", "session-1")
         assert manager.is_activated("pdf-processing", "session-1")
         assert not manager.is_activated("pdf-processing", "session-2")
+
+    def test_has_scripts(self, tmp_skills_dir):
+        manager = SkillManager(tmp_skills_dir)
+        manager.load_public_skills(["pdf-processing", "data-analysis"])
+        assert manager.has_scripts("pdf-processing") is True
+        assert manager.has_scripts("data-analysis") is False
+
+    def test_build_run_skill_tool(self, tmp_skills_dir):
+        manager = SkillManager(tmp_skills_dir)
+        manager.load_public_skills(["pdf-processing", "data-analysis"])
+        tool = manager.build_run_skill_tool("agent-1")
+        assert tool is not None
+        assert tool["function"]["name"] == "run_skill"
+        enum = tool["function"]["parameters"]["properties"]["skill_name"]["enum"]
+        assert "pdf-processing" in enum
+        assert "data-analysis" not in enum  # no scripts
+        assert "command" in tool["function"]["parameters"]["properties"]
+
+    def test_build_run_skill_tool_no_scripts(self, tmp_skills_dir):
+        manager = SkillManager(tmp_skills_dir)
+        manager.load_public_skills(["data-analysis"])
+        tool = manager.build_run_skill_tool("agent-1")
+        assert tool is None

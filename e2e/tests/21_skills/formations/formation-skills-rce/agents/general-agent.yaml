@@ -1,0 +1,7 @@
+id: general-agent
+name: General Agent
+role: general
+description: "A general-purpose assistant"
+system_message: "You are a helpful general-purpose assistant."
+specialties:
+  - "General knowledge and conversation"

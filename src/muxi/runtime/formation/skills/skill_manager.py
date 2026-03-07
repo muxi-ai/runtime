@@ -136,6 +136,64 @@ class SkillManager:
             },
         }
 
+    def build_run_skill_tool(self, agent_id: str) -> Optional[Dict[str, Any]]:
+        """Build the run_skill tool definition for an agent.
+
+        Only available when:
+        - Agent has skills with scripts/ directories
+        - RCE client is configured on the overlord
+
+        Returns None if no executable skills are available.
+        """
+        available = self.get_available_skills(agent_id)
+        executable = [n for n in available if self.has_scripts(n)]
+        if not executable:
+            return None
+
+        script_list = []
+        for name in executable:
+            resources = self._get_resources(name)
+            scripts = [r for r in resources if r.startswith("scripts/")]
+            if scripts:
+                script_list.append(f"{name}: {', '.join(scripts)}")
+
+        return {
+            "type": "function",
+            "function": {
+                "name": "run_skill",
+                "description": (
+                    "Execute a command inside a skill's sandboxed environment. "
+                    "The skill directory is mounted read-only; any files created by "
+                    "the command are returned as artifacts. "
+                    "Available skill scripts:\n"
+                    + "\n".join(f"  - {s}" for s in script_list)
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "skill_name": {
+                            "type": "string",
+                            "enum": executable,
+                            "description": "Name of the skill to execute against",
+                        },
+                        "command": {
+                            "type": "string",
+                            "description": (
+                                "Shell command to run (e.g., 'python3 scripts/run.py input.csv'). "
+                                "Paths are relative to the skill root directory."
+                            ),
+                        },
+                    },
+                    "required": ["skill_name", "command"],
+                },
+            },
+        }
+
+    def has_scripts(self, skill_name: str) -> bool:
+        """Check if a skill has any scripts/ files."""
+        resources = self._get_resources(skill_name)
+        return any(r.startswith("scripts/") for r in resources)
+
     def is_activated(self, skill_name: str, session_id: str) -> bool:
         """Check if a skill is already activated in a session."""
         return skill_name in self._activated.get(session_id, set())

@@ -991,6 +991,14 @@ class Agent:
                     if skill_tool:
                         tools.append(skill_tool)
 
+                    # Add run_skill tool if RCE client is available and skills have scripts
+                    if hasattr(self.overlord, "rce_client") and self.overlord.rce_client:
+                        run_tool = self.overlord.skill_manager.build_run_skill_tool(
+                            self.agent_id
+                        )
+                        if run_tool:
+                            tools.append(run_tool)
+
             except Exception as e:
                 # Log but don't fail if we can't get tools
                 observability.observe(
@@ -2917,6 +2925,89 @@ class Agent:
                     ),
                 }
 
+            # Special handling for run_skill tool - execute via RCE
+            if (
+                tool_name == "run_skill"
+                and self.overlord
+                and hasattr(self.overlord, "rce_client")
+                and self.overlord.rce_client
+                and hasattr(self.overlord, "skill_manager")
+                and self.overlord.skill_manager
+            ):
+                skill_name = parameters.get("skill_name", "")
+                command = parameters.get("command", "")
+                manager = self.overlord.skill_manager
+                rce = self.overlord.rce_client
+
+                if skill_name not in manager.skills:
+                    return {"status": "error", "error": f"Skill '{skill_name}' not found."}
+
+                metadata = manager.skills[skill_name]
+                content_hash = manager.get_skill_hash(skill_name)
+
+                streaming.stream(
+                    "progress",
+                    f"Running skill '{skill_name}'...",
+                    stage="skill_executing",
+                    skill_name=skill_name,
+                    command=command,
+                    agent_name=self.agent_id,
+                    skip_rephrase=True,
+                )
+
+                try:
+                    await rce.ensure_cached(skill_name, metadata.base_dir, content_hash)
+
+                    result = await rce.run_skill(
+                        skill_name,
+                        command,
+                        timeout=60,
+                    )
+
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "agent_id": self.agent_id,
+                            "skill_name": skill_name,
+                            "command": command,
+                            "status": result.status,
+                            "exit_code": result.exit_code,
+                            "duration_ms": result.duration_ms,
+                            "artifact_count": len(result.artifacts),
+                        },
+                        description=f"Skill '{skill_name}' executed: {result.status}",
+                    )
+
+                    response = {
+                        "status": result.status,
+                        "exit_code": result.exit_code,
+                        "stdout": result.stdout,
+                        "duration_ms": result.duration_ms,
+                    }
+                    if result.stderr:
+                        response["stderr"] = result.stderr
+                    if result.artifacts:
+                        response["artifacts"] = [
+                            {"name": a["name"], "mime": a["mime"], "size": a["size"]}
+                            for a in result.artifacts
+                        ]
+                        response["_artifacts_full"] = result.artifacts
+                    return response
+
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "agent_id": self.agent_id,
+                            "skill_name": skill_name,
+                            "error": str(e),
+                        },
+                        description=f"Skill execution failed: {e}",
+                    )
+                    return {"status": "error", "error": str(e)}
+
             # Special handling for generate_file tool - use artifact service directly
             if (
                 tool_name == "generate_file"
@@ -3661,7 +3752,25 @@ class Agent:
                 for skill_name in available_skill_names:
                     skill = self.overlord.skill_manager.skills.get(skill_name)
                     if skill:
-                        planning_prompt += f"- **{skill.name}**: {skill.description}\n"
+                        resources = self.overlord.skill_manager._get_resources(skill_name)
+                        scripts = [r for r in resources if r.startswith("scripts/")]
+                        script_note = f" (scripts: {', '.join(scripts)})" if scripts else ""
+                        planning_prompt += f"- **{skill.name}**: {skill.description}{script_note}\n"
+
+                # Add note about run_skill if RCE is available
+                has_rce = (
+                    hasattr(self.overlord, "rce_client") and self.overlord.rce_client
+                )
+                has_executable = any(
+                    self.overlord.skill_manager.has_scripts(n)
+                    for n in available_skill_names
+                )
+                if has_rce and has_executable:
+                    planning_prompt += (
+                        "\nSkills with scripts can be executed using the run_skill tool. "
+                        "Use activate_skill first to load instructions, then run_skill "
+                        "to execute the script (e.g., command: 'python3 scripts/run.py').\n"
+                    )
                 planning_prompt += "\n"
 
         from ..prompts.loader import PromptLoader

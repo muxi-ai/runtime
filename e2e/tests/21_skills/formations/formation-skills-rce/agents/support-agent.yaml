@@ -1,0 +1,9 @@
+id: support-agent
+name: Support Agent
+role: specialist
+description: "Customer support specialist"
+system_message: "You are a customer support specialist."
+specialties:
+  - "Customer support and ticket management"
+skills:
+  - ticket-handling
