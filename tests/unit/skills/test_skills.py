@@ -169,16 +169,16 @@ class TestSkillManager:
     def test_build_catalog_xml(self, tmp_skills_dir):
         manager = SkillManager(tmp_skills_dir)
         manager.load_public_skills(["pdf-processing", "data-analysis"])
-        xml = manager.build_catalog_xml("agent-1")
-        assert "<available_skills>" in xml
-        assert "<name>pdf-processing</name>" in xml
-        assert "<name>data-analysis</name>" in xml
-        assert "activate_skill" in xml
+        catalog = manager.build_catalog_xml("agent-1")
+        assert "## Available Skills" in catalog
+        assert "**pdf-processing**" in catalog
+        assert "**data-analysis**" in catalog
+        assert "activate_skill" in catalog
 
     def test_build_catalog_xml_no_skills(self, tmp_skills_dir):
         manager = SkillManager(tmp_skills_dir)
-        xml = manager.build_catalog_xml("agent-1")
-        assert xml is None
+        catalog = manager.build_catalog_xml("agent-1")
+        assert catalog is None
 
     def test_build_activate_skill_tool(self, tmp_skills_dir):
         manager = SkillManager(tmp_skills_dir)

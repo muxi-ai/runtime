@@ -94,20 +94,15 @@ class SkillManager:
         for name in available:
             skill = self.skills.get(name)
             if skill:
-                entries.append(
-                    f"  <skill>\n"
-                    f"    <name>{skill.name}</name>\n"
-                    f"    <description>{skill.description}</description>\n"
-                    f"  </skill>"
-                )
+                entries.append(f"- **{skill.name}**: {skill.description}")
 
         return (
-            "<available_skills>\n"
-            "The following skills provide specialized instructions for specific tasks.\n"
-            "When a task matches a skill's description, call the activate_skill tool\n"
-            "with the skill's name to load its full instructions.\n\n"
+            "## Available Skills\n\n"
+            "You have access to specialized skills that provide detailed instructions "
+            "for specific tasks. BEFORE working on a task that matches a skill below, "
+            "you MUST first call the activate_skill tool with the skill name to load "
+            "its full instructions into your context.\n\n"
             + "\n".join(entries)
-            + "\n</available_skills>"
         )
 
     def build_activate_skill_tool(self, agent_id: str) -> Optional[Dict[str, Any]]:

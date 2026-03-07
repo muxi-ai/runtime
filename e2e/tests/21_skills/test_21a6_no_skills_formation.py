@@ -58,7 +58,7 @@ class TestNoSkillsFormation(BaseE2ETest):
             for agent_id, agent in overlord.agents.items():
                 if agent._messages and agent._messages[0]["role"] == "system":
                     content = agent._messages[0]["content"]
-                    assert "<available_skills>" not in content, \
+                    assert "## Available Skills" not in content, \
                         f"Agent {agent_id} should not have skills catalog"
                 print(f"   {agent_id}: no skills catalog (correct)")
             checks.append("No skills catalog in agent system prompts")

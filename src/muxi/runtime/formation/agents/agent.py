@@ -3643,6 +3643,27 @@ class Agent:
             planning_prompt += "You MUST handle all requests yourself without delegation.\n"
             planning_prompt += "Even if you lack specific tools or capabilities, provide your best effort response.\n\n"
 
+        # Section 4: Available skills (injected into planning context)
+        if (
+            self.overlord
+            and hasattr(self.overlord, "skill_manager")
+            and self.overlord.skill_manager
+        ):
+            available_skill_names = self.overlord.skill_manager.get_available_skills(self.agent_id)
+            if available_skill_names:
+                planning_prompt += "\n\n---\n\n## Available skills:\n"
+                planning_prompt += (
+                    "Skills provide specialized instructions for specific tasks. "
+                    "BEFORE working on a task that matches a skill, you MUST first call "
+                    "the activate_skill tool with the skill name. This loads detailed "
+                    "instructions into your context. Do NOT skip this step.\n\n"
+                )
+                for skill_name in available_skill_names:
+                    skill = self.overlord.skill_manager.skills.get(skill_name)
+                    if skill:
+                        planning_prompt += f"- **{skill.name}**: {skill.description}\n"
+                planning_prompt += "\n"
+
         from ..prompts.loader import PromptLoader
 
         try:

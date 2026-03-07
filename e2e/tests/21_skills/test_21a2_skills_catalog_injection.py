@@ -43,11 +43,11 @@ class TestSkillsCatalogInjection(BaseE2ETest):
             assert general_agent is not None, "general-agent not found"
 
             system_msg = general_agent._messages[0]["content"] if general_agent._messages else ""
-            assert "<available_skills>" in system_msg, "Catalog XML not in general-agent system prompt"
-            assert "<name>pdf-processing</name>" in system_msg
-            assert "<name>data-analysis</name>" in system_msg
+            assert "## Available Skills" in system_msg, "Catalog not in general-agent system prompt"
+            assert "**pdf-processing**" in system_msg
+            assert "**data-analysis**" in system_msg
             # general-agent should NOT see ticket-handling (private to support-agent)
-            assert "<name>ticket-handling</name>" not in system_msg, \
+            assert "**ticket-handling**" not in system_msg, \
                 "ticket-handling should not be in general-agent catalog"
             print("   general-agent: has pdf-processing + data-analysis, NOT ticket-handling")
             checks.append("General agent catalog: public skills only")
@@ -58,10 +58,10 @@ class TestSkillsCatalogInjection(BaseE2ETest):
             assert support_agent is not None, "support-agent not found"
 
             system_msg = support_agent._messages[0]["content"] if support_agent._messages else ""
-            assert "<available_skills>" in system_msg, "Catalog XML not in support-agent system prompt"
-            assert "<name>pdf-processing</name>" in system_msg
-            assert "<name>data-analysis</name>" in system_msg
-            assert "<name>ticket-handling</name>" in system_msg
+            assert "## Available Skills" in system_msg, "Catalog not in support-agent system prompt"
+            assert "**pdf-processing**" in system_msg
+            assert "**data-analysis**" in system_msg
+            assert "**ticket-handling**" in system_msg
             print("   support-agent: has pdf-processing + data-analysis + ticket-handling")
             checks.append("Support agent catalog: public + private skills")
 

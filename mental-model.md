@@ -38,10 +38,11 @@ The initialization order is strictly enforced and failure to follow it causes sy
 2. LLM Configuration
 3. Memory Systems
 4. Document Processing
-5. Background Services
-6. MCP Services
-7. Agents
-8. Server (if configured)
+5. Clarification Config
+6. Skills (before agents so metadata is ready for specialty enhancement)
+7. Background Services
+8. Agents
+9. Server (if configured)
 ```
 
 **Why this order matters:**
@@ -3239,3 +3240,233 @@ REST endpoints automatically -- zero duplication.
 **Test results:** 157/157 unit, 24/24 API e2e, 5/5 MCP e2e.
 
 **Branch:** `feature/mcp-server` (commits: 1cbf9c30, c123c662)
+
+### 2026-03-07: Agent Skills Stage 1 (feature/agent-skills branch)
+
+**Purpose:** Implement the [Agent Skills specification](https://agentskills.io) --
+model-driven skill discovery, catalog injection, and activation via built-in tool.
+
+**New modules:**
+
+1. **`formation/skills/parser.py`** -- SKILL.md parser
+   - `SkillMetadata` dataclass: name, description, license, skill_dir path
+   - `SkillContent` dataclass: full markdown body, scripts list, references list
+   - `parse_skill_md(path)` -- parses YAML frontmatter with lenient handling
+     (unquoted colons in description values)
+   - `load_skill_content(metadata)` -- reads full SKILL.md + enumerates
+     `scripts/` and `references/` subdirectories
+   - `_enumerate_resources(dir)` -- lists files in a skill subdirectory
+   - Name validation: lowercase alphanumeric + hyphens, 2-50 chars
+
+2. **`formation/skills/skill_manager.py`** -- SkillManager
+   - `load_public_skills(names)` -- loads skills declared at formation level
+   - `load_agent_skills(agent_id, names)` -- loads skills private to an agent
+   - `get_available_skills(agent_id)` -- returns public + agent-private skill names
+   - `get_skill_descriptions(agent_id)` -- returns descriptions for specialty enhancement
+   - `build_catalog_xml(agent_id)` -- builds markdown catalog for system prompt injection
+     (method name kept for compat, output is markdown not XML)
+   - `build_activate_skill_tool(agent_id)` -- builds tool definition with `enum`
+     restricted to available skills (isolation enforcement)
+   - `activate(skill_name, session_id)` -- loads full content, marks activated,
+     returns wrapped content (`<skill_content name="...">...</skill_content>`)
+   - `is_activated(skill_name, session_id)` -- session-scoped deduplication check
+   - `get_skill_hash(skill_name)` -- SHA-256 for RCE cache validation (Stage 2)
+   - `get_all_skills_info()` -- metadata dicts for REST API
+   - `_content_cache` -- lazy-loaded content, persists across sessions
+   - `_activated` -- `Dict[session_id, Set[skill_name]]` for dedup tracking
+
+**Formation config:**
+
+```yaml
+# formation.yaml -- public skills (all agents see these)
+skills:
+  - pdf-processing
+  - data-analysis
+
+# agents/support-agent.yaml -- private skills (only this agent sees these)
+skills:
+  - ticket-handling
+```
+
+Skills directory layout:
+```
+formation/
+  skills/
+    pdf-processing/
+      SKILL.md              # Required: frontmatter (name, description) + body
+      scripts/              # Optional: executable scripts (Stage 2)
+        extract.py
+      references/           # Optional: reference docs
+        pdf-spec.md
+    data-analysis/
+      SKILL.md
+    ticket-handling/
+      SKILL.md
+```
+
+**Initialization order (updated):**
+
+```
+1. Observability
+2. LLM Configuration
+3. Memory Systems
+4. Document Processing
+5. Clarification Config
+6. Skills (NEW - before agents so metadata ready for specialty enhancement)
+7. Background Services
+8. Agents (overlord injects catalog + specialties during agent init)
+```
+
+`initialize_skills()` in `initialization.py`:
+- Reads `config["skills"]` for public skills
+- Reads `config["agents"][*]["skills"]` for per-agent skills
+- Creates `SkillManager(skills_dir)`, calls `load_public_skills()` + `load_agent_skills()`
+- Stores as `formation._skill_manager`
+- Raises `ConfigurationValidationError` if skills declared but `skills/` dir missing
+
+**Overlord integration (`overlord.py` agent loading):**
+
+After `self.agents[agent_id] = agent`, the overlord does two things:
+1. **Specialty enhancement**: `agent.specialties.extend(skill_manager.get_skill_descriptions(agent_id))`
+   -- adds skill descriptions to the agent's specialty list, improving routing accuracy
+2. **Catalog injection**: Appends markdown catalog to `agent.system_message` and
+   `agent._messages[0]["content"]` -- the agent sees skill names and descriptions
+
+**Agent integration (`agent.py`):**
+
+1. **Tool registration**: During tool list building in `process_message()`, if the agent
+   has skills, `skill_manager.build_activate_skill_tool(agent_id)` is appended to the
+   tools list. The tool's `enum` field restricts which skills the LLM can request.
+
+2. **Planning prompt injection** (`_plan_before_execution()`): Skills are injected as
+   Section 4 in the planning prompt, alongside agents and tools. This is **critical**
+   because the planner uses a completely separate message chain from the agent's system
+   prompt. Without this, the planner never sees the skill catalog and never plans to
+   call `activate_skill`.
+
+   ```
+   ## Available skills:
+   Skills provide specialized instructions for specific tasks.
+   BEFORE working on a task that matches a skill, you MUST first call
+   the activate_skill tool with the skill name. This loads detailed
+   instructions into your context. Do NOT skip this step.
+
+   - **pdf-processing**: Extract text, tables, and metadata from PDF files.
+   - **data-analysis**: Analyze datasets, generate charts, and create summary reports.
+   ```
+
+3. **Activation dispatch** (`invoke_tool()`): When the LLM calls `activate_skill`,
+   the handler checks dedup (`is_activated`), calls `manager.activate()`, and injects
+   the wrapped content into `_messages[0]["content"]` (system prompt addendum).
+   Content persists for the rest of the session.
+
+4. **Session tracking**: `_current_session_id` is set in `process_message()` so
+   `invoke_tool()` can pass it to the dedup check.
+
+**Catalog format:**
+
+Changed from XML to markdown during development. XML tags (`<available_skills>`,
+`<skill>`, `<name>`) were invisible to the planning system because the planner's
+system prompt is a plain "You are a planning assistant" instruction -- it doesn't
+parse XML. Markdown with `**bold names**` and bullet points matches the same format
+used for agent and tool descriptions in the planning prompt.
+
+```
+## Available Skills
+
+You have access to specialized skills that provide detailed instructions
+for specific tasks. BEFORE working on a task that matches a skill below,
+you MUST first call the activate_skill tool with the skill name to load
+its full instructions into your context.
+
+- **pdf-processing**: Extract text, tables, and metadata from PDF files.
+- **data-analysis**: Analyze datasets, generate charts, and summary reports.
+```
+
+**Isolation model:**
+
+Three layers enforce that agents only see/activate their allowed skills:
+
+| Layer | Mechanism | What it prevents |
+|-------|-----------|-----------------|
+| Catalog injection | `get_available_skills(agent_id)` filters public + private | Agent never sees private skills of other agents in system prompt |
+| Tool enum | `build_activate_skill_tool(agent_id)` restricts `enum` | LLM structurally cannot pass unauthorized skill names |
+| Planning prompt | Section 4 only lists `get_available_skills(agent_id)` | Planner only plans to use authorized skills |
+
+Note: `activate()` itself does NOT check agent permissions -- it trusts the
+upstream layers. If called directly with an unauthorized name, it would succeed.
+
+**REST API (3 endpoints in `server/routes/client/skills.py`):**
+
+| Endpoint | `operation_id` | Purpose |
+|----------|---------------|---------|
+| `GET /v1/skills` | `list_skills` | All skills with metadata |
+| `GET /v1/skills/{name}` | `get_skill` | Single skill metadata |
+| `GET /v1/agents/{agent_id}/skills` | `get_agent_skills` | Skills available to specific agent |
+
+All three have `operation_id` so they auto-expose via MCP (FastMCP scans routes
+with `operation_id`).
+
+**Test coverage:**
+
+- **29 unit tests** (`tests/unit/skills/test_skills.py`): parser, manager, catalog,
+  activation, dedup, hash, info, error cases
+- **8 e2e tests** (`e2e/tests/21_skills/`):
+  - `21a1`: Formation loading (metadata, scoping, overlord wiring)
+  - `21a2`: Catalog injection (markdown in system prompts, scoping, specialties)
+  - `21a3`: LLM activates skill via tool call (content injection verified)
+  - `21a4`: Session-scoped deduplication
+  - `21a5`: REST API endpoints
+  - `21a6`: No-skills formation regression
+  - `21b1`: Explicit skill request via `overlord.chat()` (deterministic activation)
+  - `21b2`: Contextual skill activation (LLM infers skill from task description)
+  - `21b3`: Agent vs global skill isolation + private skill triggering
+
+**Gotchas discovered:**
+
+- **`_formation_path` is a file path, not a directory**: Formation stores path as
+  `_formation_path` (e.g., `/path/to/formation.yaml`). Skills init needs
+  `Path(_formation_path).parent / "skills"`.
+
+- **`InitEventFormatter.add` doesn't exist**: The correct static method is
+  `format_ok(component, details)`.
+
+- **`FORMATION_INITIALIZED` event doesn't exist**: Use `CONFIG_FORMATION_LOADED`.
+
+- **Planning prompt is blind to agent system message**: The planner uses a separate
+  message chain (`[{"role": "system", "content": "You are a planning assistant..."},
+  {"role": "user", "content": planning_prompt}]`). The agent's system message
+  (which contains the skill catalog) is NOT included. Without injecting skills into
+  the planning prompt itself, the planner never knows to call `activate_skill`.
+
+- **A2A tasks bypass planning**: When `is_a2a_task=True`, `_plan_before_execution()`
+  is skipped entirely. The receiving agent still gets `activate_skill` in its tool
+  list (via `chat_with_tools`), but without planning it rarely invokes it. The fix
+  was ensuring the *routing* agent (muxi-generalist) sees skills in its planning
+  prompt and calls `activate_skill` as step 1 before delegating.
+
+- **XML catalog format was ineffective**: The LLM planning system uses a plain-text
+  planning prompt. XML blocks were treated as opaque text and not parsed. Switching
+  to markdown (matching the same format used for agents/tools) made skills visible
+  to the planner.
+
+- **YAML frontmatter with unquoted colons**: Skill descriptions like
+  `description: Extract text, tables, and metadata` fail YAML parsing because the
+  colon after "text" starts a new mapping. Parser has lenient fallback: if strict
+  YAML fails, regex-extract name/description as raw strings.
+
+**Files:**
+
+- `src/muxi/runtime/formation/skills/__init__.py`
+- `src/muxi/runtime/formation/skills/parser.py`
+- `src/muxi/runtime/formation/skills/skill_manager.py`
+- `src/muxi/runtime/formation/initialization.py` -- `initialize_skills()` (step 6)
+- `src/muxi/runtime/formation/formation.py` -- calls step 6, passes `_skill_manager` to overlord
+- `src/muxi/runtime/formation/overlord/overlord.py` -- specialty enhancement + catalog injection
+- `src/muxi/runtime/formation/agents/agent.py` -- tool registration, planning prompt Section 4,
+  `activate_skill` dispatch in `invoke_tool()`, `_current_session_id` tracking
+- `src/muxi/runtime/formation/server/routes/client/skills.py` -- 3 REST endpoints
+- `tests/unit/skills/test_skills.py` -- 29 unit tests
+- `e2e/tests/21_skills/` -- 9 e2e tests + test formation
+
+**Branch:** `feature/agent-skills` (commits: c31c5380, f7337e29, + pending)
