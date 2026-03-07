@@ -107,6 +107,7 @@ from .initialization import (
     initialize_llm_config,
     initialize_mcp_services,
     initialize_skills,
+    initialize_rce,
     initialize_memory_systems,
     initialize_observability,
     load_agents_from_configuration,
@@ -1282,6 +1283,9 @@ class Formation:
 
         # 6. Initialize skills (before agents so metadata is ready for specialty enhancement)
         initialize_skills(self, self.config or {})
+
+        # 6b. Initialize RCE client (connects to Skills RCE server, fails fast if configured but unreachable)
+        await initialize_rce(self, self.config or {})
 
         # 7. Initialize background services
         initialize_background_services(self)
@@ -2592,6 +2596,9 @@ class Formation:
 
             # Pass skill manager to overlord if available
             self._overlord.skill_manager = getattr(self, "_skill_manager", None)
+
+            # Pass RCE client to overlord if available
+            self._overlord.rce_client = getattr(self, "_rce_client", None)
 
             # Mark as running
             self._is_running = True

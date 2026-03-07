@@ -1243,3 +1243,83 @@ def initialize_skills(formation, config: Dict[str, Any]) -> None:
         },
         description=f"Skills loaded: {', '.join(all_names)}",
     )
+
+
+async def initialize_rce(formation, config: Dict[str, Any]) -> None:
+    """Initialize the RCE client if configured.
+
+    Connects to the Skills RCE server, fetches capabilities, and optionally
+    starts background warm-up of skill caches.
+
+    Fails fast if rce.url is configured but the server is unreachable.
+    """
+    rce_config = config.get("rce", {})
+    if not rce_config:
+        return
+
+    rce_url = rce_config.get("url")
+    if not rce_url:
+        return
+
+    from ..services.rce.client import RCEClient, RCEError
+
+    token = rce_config.get("token")
+    timeout = rce_config.get("timeout", 60)
+
+    client = RCEClient(url=rce_url, token=token, timeout=float(timeout))
+
+    try:
+        status = await client.connect()
+    except RCEError as e:
+        raise ConfigurationValidationError(
+            [f"RCE server unreachable at {rce_url}: {e}"]
+        )
+
+    formation._rce_client = client
+
+    langs = ", ".join(status.languages)
+    print(InitEventFormatter.format_ok(
+        f"RCE connected ({rce_url})",
+        f"v{status.version}, languages: {langs}",
+    ))
+
+    observability.observe(
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        level=observability.EventLevel.INFO,
+        data={
+            "rce_url": rce_url,
+            "rce_version": status.version,
+            "languages": status.languages,
+            "runtimes": [r["name"] for r in status.runtimes if r.get("version")],
+        },
+        description=f"RCE connected: {rce_url} v{status.version}",
+    )
+
+    # Warm up skill caches in the background (non-blocking)
+    skill_manager = getattr(formation, "_skill_manager", None)
+    if skill_manager and skill_manager.skills:
+        import asyncio
+
+        async def _warm_up_skills():
+            for name, metadata in skill_manager.skills.items():
+                try:
+                    content_hash = skill_manager.get_skill_hash(name)
+                    uploaded = await client.ensure_cached(
+                        name, metadata.skill_dir, content_hash
+                    )
+                    if uploaded:
+                        observability.observe(
+                            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+                            level=observability.EventLevel.DEBUG,
+                            data={"skill": name, "action": "uploaded"},
+                            description=f"Skill '{name}' uploaded to RCE cache",
+                        )
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={"skill": name, "error": str(e)},
+                        description=f"Failed to warm up skill '{name}' in RCE cache: {e}",
+                    )
+
+        asyncio.create_task(_warm_up_skills())
