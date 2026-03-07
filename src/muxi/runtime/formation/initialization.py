@@ -10,7 +10,8 @@ The initialization order is critical:
 2. Then other services can be initialized
 """
 
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from ..datatypes.clarification import ClarificationConfig, QuestionStyle
 from ..datatypes.exceptions import ConfigurationValidationError
@@ -1185,3 +1186,59 @@ async def initialize_persistent_memory(
             description=f"Critical error during persistent memory initialization: {str(e)}",
         )
         raise
+
+
+def initialize_skills(formation, config: Dict[str, Any]) -> None:
+    """Initialize skill manager from formation config.
+
+    Skills are loaded BEFORE agents so metadata is ready for specialty
+    enhancement and tool registration during agent init.
+    """
+    from .skills.skill_manager import SkillManager
+
+    public_skills: List[str] = config.get("skills", [])
+
+    agent_skills: Dict[str, List[str]] = {}
+    for agent_config in config.get("agents", []):
+        if isinstance(agent_config, dict):
+            agent_id = agent_config.get("id")
+            skill_list = agent_config.get("skills", [])
+            if agent_id and skill_list:
+                agent_skills[agent_id] = skill_list
+
+    if not public_skills and not agent_skills:
+        return
+
+    skills_dir = Path(formation.formation_path) / "skills" if formation.formation_path else None
+    if not skills_dir or not skills_dir.is_dir():
+        raise ConfigurationValidationError(
+            [f"Skills declared but skills/ directory not found at {skills_dir}"]
+        )
+
+    manager = SkillManager(skills_dir)
+
+    try:
+        manager.load_public_skills(public_skills)
+        for agent_id, skill_names in agent_skills.items():
+            manager.load_agent_skills(agent_id, skill_names)
+    except ValueError as e:
+        raise ConfigurationValidationError([str(e)])
+
+    formation._skill_manager = manager
+
+    all_names = list(manager.skills.keys())
+    InitEventFormatter.add(
+        "skills",
+        f"Loaded {len(all_names)} skill(s): {', '.join(all_names)}",
+    )
+
+    observability.observe(
+        event_type=observability.SystemEvents.FORMATION_INITIALIZED,
+        level=observability.EventLevel.INFO,
+        data={
+            "skill_count": len(all_names),
+            "public_skills": public_skills,
+            "agent_skills": agent_skills,
+        },
+        description=f"Skills loaded: {', '.join(all_names)}",
+    )

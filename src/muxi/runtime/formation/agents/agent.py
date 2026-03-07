@@ -805,6 +805,9 @@ class Agent:
             message_obj.metadata if hasattr(message_obj, "metadata") else None
         )
 
+        # Store session_id for skill activation scoping
+        self._current_session_id = session_id or "default"
+
         # Reset A2A attempt counter for each new request to prevent cascading failures
         self._a2a_attempt_count = 0
 
@@ -975,6 +978,19 @@ class Agent:
                         },
                     }
                     tools.append(generate_file_tool)
+
+                # Add activate_skill tool if skill manager has skills for this agent
+                if (
+                    self.overlord
+                    and hasattr(self.overlord, "skill_manager")
+                    and self.overlord.skill_manager
+                ):
+                    skill_tool = self.overlord.skill_manager.build_activate_skill_tool(
+                        self.agent_id
+                    )
+                    if skill_tool:
+                        tools.append(skill_tool)
+
             except Exception as e:
                 # Log but don't fail if we can't get tools
                 observability.observe(
@@ -2845,6 +2861,62 @@ class Agent:
         """
 
         try:
+            # Special handling for activate_skill tool
+            if (
+                tool_name == "activate_skill"
+                and self.overlord
+                and hasattr(self.overlord, "skill_manager")
+                and self.overlord.skill_manager
+            ):
+                skill_name = parameters.get("skill_name", "")
+                session_id = getattr(self, "_current_session_id", "default")
+                manager = self.overlord.skill_manager
+
+                if manager.is_activated(skill_name, session_id):
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
+                        level=observability.EventLevel.DEBUG,
+                        data={
+                            "agent_id": self.agent_id,
+                            "skill_name": skill_name,
+                            "session_id": session_id,
+                            "deduplicated": True,
+                        },
+                        description=f"Skill '{skill_name}' already active (deduped)",
+                    )
+                    return {
+                        "status": "already_active",
+                        "message": (
+                            f"Skill '{skill_name}' is already active. "
+                            "Refer to the instructions already in your context."
+                        ),
+                    }
+
+                content = manager.activate(skill_name, session_id)
+
+                # Inject into persistent context (system prompt addendum)
+                if self._messages and self._messages[0]["role"] == "system":
+                    self._messages[0]["content"] += f"\n\n{content}"
+
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "agent_id": self.agent_id,
+                        "skill_name": skill_name,
+                        "session_id": session_id,
+                    },
+                    description=f"Skill '{skill_name}' activated by agent '{self.agent_id}'",
+                )
+
+                return {
+                    "status": "activated",
+                    "message": (
+                        f"Skill '{skill_name}' activated. "
+                        "Instructions are now available in your context."
+                    ),
+                }
+
             # Special handling for generate_file tool - use artifact service directly
             if (
                 tool_name == "generate_file"
