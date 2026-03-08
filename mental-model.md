@@ -3469,4 +3469,281 @@ with `operation_id`).
 - `tests/unit/skills/test_skills.py` -- 29 unit tests
 - `e2e/tests/21_skills/` -- 9 e2e tests + test formation
 
-**Branch:** `feature/agent-skills` (commits: c31c5380, f7337e29, + pending)
+**Branch:** `feature/agent-skills` (commits: c31c5380, f7337e29, 7ef7309a)
+
+### 2026-03-08: Agent Skills Stage 2 - RCE Client + Execution (feature/agent-skills branch)
+
+**Purpose:** Enable agents to execute skill scripts via a remote code execution (RCE) server.
+Skills with `scripts/` directories can be uploaded, cached, and executed through the
+[Skills RCE service](https://github.com/muxi-ai/skills-rce) (`muxi/skills-rce` Docker image).
+
+**New modules:**
+
+1. **`services/rce/__init__.py`** -- RCE package init
+2. **`services/rce/client.py`** -- `RCEClient`, `RCEStatus`, `ExecResult`, `RCEError`
+
+**RCEClient (`services/rce/client.py`):**
+
+```python
+class RCEClient:
+    def __init__(self, url: str, token: Optional[str] = None):
+        self.url = url
+        self.token = token          # Bearer token (optional)
+        self.status: RCEStatus      # Populated by connect()
+        self._client: httpx.AsyncClient
+
+    async def connect(self) -> None:
+        # Health check + fetch /status → populate self.status
+        # Raises RCEError if unreachable (fail-fast)
+
+    async def run(self, language, code, ...) -> ExecResult:
+        # POST /run — ad-hoc code execution
+
+    async def ensure_cached(self, name, directory, content_hash) -> bool:
+        # GET /skill/{name} → check if cached + hash matches
+        # If stale/missing → POST /skill/{name} with zip upload
+        # Returns True if upload was needed
+
+    async def run_skill(self, name, command, ...) -> ExecResult:
+        # POST /skill/{name}/run — execute in cached skill context
+
+    async def delete_skill(self, name) -> bool:
+        # DELETE /skill/{name}
+
+    async def close(self) -> None:
+        # Close httpx client
+```
+
+**Key design decisions:**
+
+- **Hash-based cache busting**: `ensure_cached()` computes SHA-256 of skill directory.
+  GET `/skill/{name}` returns the cached hash. If mismatch, zip + re-upload. The hot
+  path is one cheap GET; uploads only happen on first call or content change.
+
+- **Zip upload**: `_zip_directory(path)` creates an in-memory zip of the skill directory.
+  RCE server accepts `Content-Type: application/zip` for efficient bulk transfer. This
+  replaced the original JSON base64 approach (simpler, handles binary files).
+
+- **Fail-fast on init**: If `rce.url` is configured in formation YAML and the server
+  is unreachable, `connect()` raises `RCEError` which aborts formation initialization.
+  This prevents silent failures where agents try to execute skills against a dead server.
+
+- **Non-blocking warm-up**: After `connect()` succeeds, `initialize_rce()` starts
+  `_warm_up_skills()` as a fire-and-forget `asyncio.create_task()`. This uploads all
+  skills with `scripts/` directories in the background. No task tracking needed --
+  `ensure_cached()` before every `run_skill()` is the authoritative check.
+
+**RCE Status dataclass:**
+```python
+@dataclass
+class RCEStatus:
+    version: str
+    languages: List[str]    # ["python", "javascript", "bash", ...]
+    runtimes: Dict          # {"python": "3.11.9", "node": "20.18.1", ...}
+    packages: Dict          # {"pip": [...], "npm": [...]}
+    resources: Dict         # {"max_timeout": 300, "max_file_size": ...}
+```
+
+**ExecResult dataclass:**
+```python
+@dataclass
+class ExecResult:
+    status: str             # "success" or "error"
+    exit_code: int
+    stdout: str
+    stderr: str
+    artifacts: List[Dict]   # [{"name": "output.pdf", "content": "<base64>"}]
+    duration_ms: int
+```
+
+**Formation config:**
+```yaml
+rce:
+  url: "http://localhost:7891"
+  token: "optional-bearer-token"    # For authenticated RCE servers
+```
+
+**Initialization (`initialization.py` step 6b):**
+
+```python
+async def initialize_rce(formation) -> Optional[RCEClient]:
+    rce_config = formation.config.get("rce")
+    if not rce_config or not rce_config.get("url"):
+        return None
+
+    client = RCEClient(url=rce_config["url"], token=rce_config.get("token"))
+    await client.connect()  # Fail fast if unreachable
+
+    # Non-blocking warm-up: upload all skills with scripts/
+    skill_manager = formation._skill_manager
+    if skill_manager:
+        asyncio.create_task(_warm_up_skills(client, skill_manager))
+
+    return client
+```
+
+**Formation flow:**
+```
+formation.py step 6:  initialize_skills() → _skill_manager
+formation.py step 6b: initialize_rce() → _rce_client (uses _skill_manager)
+formation.py:         overlord = Overlord(..., rce_client=_rce_client)
+overlord.py:          passes rce_client to agents during registration
+```
+
+**run_skill tool (`skill_manager.py` + `agent.py`):**
+
+`SkillManager.build_run_skill_tool(agent_id)`:
+- Returns `None` if no skills have `scripts/` directories (checked via `has_scripts()`)
+- `enum` field restricted to skills with scripts (not all available skills)
+- Tool parameters: `skill_name` (enum), `command` (string)
+
+`SkillManager.has_scripts(skill_name)`:
+- Checks `_content_cache` for loaded content with non-empty `scripts` list
+- Falls back to `_metadata_cache` and checks `skill_dir / "scripts"` on disk
+
+**Agent dispatch (`agent.py invoke_tool()`):**
+
+```python
+elif tool_name == "run_skill":
+    skill_name = parameters["skill_name"]
+    command = parameters["command"]
+    skill_dir = self._skill_manager._metadata_cache[skill_name].skill_dir
+    content_hash = self._skill_manager.get_skill_hash(skill_name)
+
+    await self._rce_client.ensure_cached(skill_name, skill_dir, content_hash)
+    result = await self._rce_client.run_skill(
+        name=skill_name,
+        command=command,
+        input_files=parameters.get("input_files"),
+        env=parameters.get("env"),
+        timeout=parameters.get("timeout"),
+    )
+    return {
+        "status": result.status,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "artifacts": result.artifacts,
+    }
+```
+
+**Planning prompt (Section 4 update for RCE):**
+
+When RCE is configured and skills have scripts, Section 4 of the planning prompt
+includes script paths and a note about `run_skill`:
+
+```
+## Available skills:
+...
+- **pdf-processing**: Extract text from PDF files.
+  Scripts: scripts/extract.py
+
+When a skill has scripts listed, you can execute them using the run_skill tool
+after activating the skill. Use activate_skill first to get instructions,
+then run_skill to execute.
+```
+
+**RCE API (9 endpoints on Skills RCE server):**
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /health` | Health check (always unauthenticated) |
+| `GET /status` | Server capabilities (always unauthenticated) |
+| `POST /run` | Ad-hoc code execution (language + code) |
+| `POST /skill/{id}` | Upload skill (JSON base64 or ZIP) |
+| `GET /skill/{id}` | Check cache (returns hash) |
+| `PATCH /skill/{id}` | Partial update |
+| `DELETE /skill/{id}` | Remove from cache |
+| `POST /skill/{id}/run` | Execute command in cached skill context |
+
+**Gotchas discovered:**
+
+- **`python` vs `python3` in RCE container**: The RCE Docker image has `python3` on
+  PATH but not `python`. The `/run` endpoint handles this via the `language` enum, but
+  `/skill/{id}/run` takes a raw command string. Must use `python3 scripts/extract.py`,
+  not `python scripts/extract.py`.
+
+- **`artifacts` is `null` not `[]`**: RCE server returns `"artifacts": null` when no
+  files are created, not an empty list. Client handles with `data.get("artifacts") or []`.
+
+- **RCE unsupported language returns 200**: Requesting an unsupported language returns
+  HTTP 200 with `"status": "error"`, not HTTP 400. Client and tests must check the
+  `status` field, not the HTTP status code.
+
+- **Zip upload Content-Type**: Must be `application/zip` for the RCE server to detect
+  zip format. If sent as `application/json`, server tries to parse as JSON base64 and fails.
+
+- **Non-blocking warm-up race**: Between `asyncio.create_task(_warm_up_skills())` and
+  the first `run_skill()` call, the skill might not be cached yet. This is safe because
+  `ensure_cached()` always runs before `run_skill()` -- worst case, the warm-up upload
+  and the `ensure_cached` upload overlap, with the second being a no-op GET.
+
+**Test coverage:**
+
+- **26 unit tests** (`tests/unit/rce/test_rce_client.py`): All 9 endpoints, error
+  handling, timeouts, auth, zip upload. Auto-skip if RCE server not running.
+- **3 new unit tests** in `tests/unit/skills/test_skills.py`: `build_run_skill_tool()`
+  for skills with/without scripts
+- **1 e2e test** (`e2e/tests/21_skills/test_21c1_skill_execution.py`): Direct dispatch
+  + `overlord.chat()` path, both verified against live RCE server
+
+**Files:**
+
+- `src/muxi/runtime/services/rce/__init__.py`
+- `src/muxi/runtime/services/rce/client.py` -- RCEClient, RCEStatus, ExecResult, RCEError
+- `src/muxi/runtime/formation/initialization.py` -- `initialize_rce()` (step 6b)
+- `src/muxi/runtime/formation/formation.py` -- calls step 6b, passes `_rce_client` to overlord
+- `src/muxi/runtime/formation/overlord/overlord.py` -- stores `rce_client`, passes to agents
+- `src/muxi/runtime/formation/agents/agent.py` -- `run_skill` tool registration + dispatch,
+  planning prompt Section 4 with script paths and RCE note
+- `src/muxi/runtime/formation/skills/skill_manager.py` -- `build_run_skill_tool()`, `has_scripts()`
+- `tests/unit/rce/test_rce_client.py` -- 26 unit tests
+- `tests/unit/skills/test_skills.py` -- 3 new tests (32 total)
+- `e2e/tests/21_skills/test_21c1_skill_execution.py`
+- `e2e/tests/21_skills/formations/formation-skills-rce/`
+
+**Branch:** `feature/agent-skills` (commits: 984a3d95, bcd632f8)
+
+### Agent Skills: Complete Architecture Summary
+
+**Full execution path:**
+```
+1. Formation init:
+   → initialize_skills() loads SKILL.md metadata [step 6]
+   → initialize_rce() connects to RCE server, starts background warm-up [step 6b]
+   → Overlord injects skill descriptions into agent.specialties (routing)
+   → Overlord injects markdown catalog into agent system prompt
+
+2. Request processing:
+   → Planner sees Section 4 with skill names, descriptions, script paths
+   → Planner includes activate_skill (and optionally run_skill) in plan
+   → Agent executes activate_skill → loads full SKILL.md content into system prompt
+   → Agent executes run_skill → ensure_cached + rce.run_skill → stdout/stderr/artifacts
+
+3. Isolation (3 layers):
+   → Catalog: get_available_skills(agent_id) filters public + private
+   → Tool enum: build_*_tool(agent_id) restricts enum values
+   → Planning: Section 4 only lists authorized skills
+```
+
+**RCE client lifecycle:**
+```
+Init: RCEClient(url, token) → connect() [health + /status] → fail fast if unreachable
+      → asyncio.create_task(_warm_up_skills()) [non-blocking upload all skills]
+Run:  ensure_cached(name, dir, hash) [GET check, POST zip if stale]
+      → run_skill(name, command, input_files, env, timeout)
+      → ExecResult(status, stdout, stderr, artifacts)
+```
+
+**Initialization order (final):**
+```
+1. Observability
+2. LLM Configuration
+3. Memory Systems
+4. Document Processing
+5. Clarification Config
+6. Skills (SKILL.md parsing + SkillManager)
+6b. RCE (connect + warm-up, requires skills from step 6)
+7. Background Services
+8. Agents (overlord injects catalog + specialties)
+9. Server
+```
