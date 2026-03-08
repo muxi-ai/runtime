@@ -39,29 +39,38 @@ class TestNoSkillsFormation(BaseE2ETest):
             overlord = self.overlord
             checks.append("Formation loaded (no skills)")
 
-            # 2. Verify no skill manager
-            print("\n2. Checking no skill manager...")
+            # 2. Verify skill manager has only built-in skills
+            print("\n2. Checking skill manager (built-in only)...")
             skill_manager = getattr(self.formation, "_skill_manager", None)
-            assert skill_manager is None, "Skill manager should not exist for no-skills formation"
-            print("   No skill manager (correct)")
-            checks.append("No skill manager initialized")
+            assert skill_manager is not None, "Skill manager should exist (built-in skills)"
+            assert len(skill_manager._builtin_skills) > 0, "Should have built-in skills"
+            # No formation-declared skills
+            formation_skills = [
+                n for n in skill_manager.skills
+                if n not in skill_manager._builtin_skills
+            ]
+            assert len(formation_skills) == 0, \
+                f"Should have no formation skills, got: {formation_skills}"
+            print(f"   Built-in skills only: {skill_manager._builtin_skills}")
+            checks.append("Only built-in skills loaded")
 
-            # 3. Verify overlord has no skill_manager (or it's None)
+            # 3. Verify overlord has skill_manager with built-in skills
             print("\n3. Checking overlord...")
             overlord_sm = getattr(overlord, "skill_manager", None)
-            assert overlord_sm is None, "Overlord should not have skill manager"
-            print("   Overlord skill_manager is None (correct)")
-            checks.append("Overlord has no skill manager")
+            assert overlord_sm is not None, "Overlord should have skill manager (built-in)"
+            print("   Overlord skill_manager has built-in skills (correct)")
+            checks.append("Overlord has skill manager with built-in skills")
 
-            # 4. Verify agents don't have activate_skill in system prompt
+            # 4. Verify agents have built-in skills in catalog but no formation skills
             print("\n4. Checking agent system prompts...")
             for agent_id, agent in overlord.agents.items():
                 if agent._messages and agent._messages[0]["role"] == "system":
                     content = agent._messages[0]["content"]
-                    assert "## Available Skills" not in content, \
-                        f"Agent {agent_id} should not have skills catalog"
-                print(f"   {agent_id}: no skills catalog (correct)")
-            checks.append("No skills catalog in agent system prompts")
+                    # Built-in skills should be present
+                    assert "file-generation" in content, \
+                        f"Agent {agent_id} should have built-in file-generation skill"
+                print(f"   {agent_id}: has built-in skills catalog (correct)")
+            checks.append("Built-in skills in agent system prompts")
 
             # 5. Basic chat still works
             print("\n5. Testing basic chat...")

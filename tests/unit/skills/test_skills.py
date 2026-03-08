@@ -283,3 +283,84 @@ class TestSkillManager:
         manager.load_public_skills(["data-analysis"])
         tool = manager.build_run_skill_tool("agent-1")
         assert tool is None
+
+
+class TestBuiltinSkills:
+    """Tests for built-in skill loading."""
+
+    def test_load_builtin_skills(self):
+        manager = SkillManager()
+        loaded = manager.load_builtin_skills()
+        assert "file-generation" in loaded
+        assert "file-generation" in manager.skills
+        assert "file-generation" in manager.public_skills
+        assert "file-generation" in manager._builtin_skills
+
+    def test_builtin_skills_are_public(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        available = manager.get_available_skills("any-agent")
+        assert "file-generation" in available
+
+    def test_builtin_skill_metadata(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        skill = manager.skills["file-generation"]
+        assert skill.name == "file-generation"
+        assert "file" in skill.description.lower() or "generate" in skill.description.lower()
+        assert skill.base_dir.is_dir()
+
+    def test_builtin_skill_activation(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        content = manager.activate("file-generation", "session-1")
+        assert "skill_content" in content
+        assert "matplotlib" in content.lower() or "chart" in content.lower()
+
+    def test_builtin_skill_has_scripts(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        assert manager.has_scripts("file-generation")
+
+    def test_builtin_skill_disable(self):
+        manager = SkillManager()
+        loaded = manager.load_builtin_skills(disabled=["file-generation"])
+        assert "file-generation" not in loaded
+        assert "file-generation" not in manager.skills
+
+    def test_builtin_skill_info_scope(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        infos = manager.get_all_skills_info()
+        fg = [i for i in infos if i["name"] == "file-generation"]
+        assert len(fg) == 1
+        assert fg[0]["scope"] == "builtin"
+        assert fg[0]["has_scripts"] is True
+
+    def test_builtin_with_formation_skills(self, tmp_skills_dir):
+        manager = SkillManager(tmp_skills_dir)
+        manager.load_builtin_skills()
+        manager.load_public_skills(["pdf-processing"])
+        available = manager.get_available_skills("agent-1")
+        assert "file-generation" in available
+        assert "pdf-processing" in available
+
+    def test_builtin_skill_no_duplicate_load(self, tmp_skills_dir):
+        manager = SkillManager(tmp_skills_dir)
+        loaded1 = manager.load_builtin_skills()
+        loaded2 = manager.load_builtin_skills()
+        assert len(loaded1) > 0
+        assert len(loaded2) == 0  # Already loaded, skip
+
+    def test_builtin_catalog_includes_file_generation(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        catalog = manager.build_catalog_xml("agent-1")
+        assert catalog is not None
+        assert "file-generation" in catalog
+
+    def test_manager_no_skills_dir(self):
+        manager = SkillManager()
+        assert manager.skills_dir is None
+        with pytest.raises(ValueError, match="no skills directory"):
+            manager.load_public_skills(["nonexistent"])

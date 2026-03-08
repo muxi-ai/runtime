@@ -1193,10 +1193,21 @@ def initialize_skills(formation, config: Dict[str, Any]) -> None:
 
     Skills are loaded BEFORE agents so metadata is ready for specialty
     enhancement and tool registration during agent init.
+
+    Built-in skills (shipped with the runtime) are always loaded unless
+    explicitly disabled via skills.disable_builtin.
     """
     from .skills.skill_manager import SkillManager
 
     public_skills: List[str] = config.get("skills", [])
+    # Support both list and dict formats for skills config
+    disable_builtin: List[str] = []
+    skills_config = config.get("skills", [])
+    if isinstance(skills_config, dict):
+        public_skills = skills_config.get("names", [])
+        disable_builtin = skills_config.get("disable_builtin", [])
+    elif isinstance(skills_config, list):
+        public_skills = skills_config
 
     agent_skills: Dict[str, List[str]] = {}
     for agent_config in config.get("agents", []):
@@ -1206,31 +1217,47 @@ def initialize_skills(formation, config: Dict[str, Any]) -> None:
             if agent_id and skill_list:
                 agent_skills[agent_id] = skill_list
 
-    if not public_skills and not agent_skills:
-        return
+    has_formation_skills = bool(public_skills or agent_skills)
 
     formation_dir = Path(formation._formation_path).parent if formation._formation_path else None
     skills_dir = formation_dir / "skills" if formation_dir else None
-    if not skills_dir or not skills_dir.is_dir():
+
+    if has_formation_skills and (not skills_dir or not skills_dir.is_dir()):
         raise ConfigurationValidationError(
             [f"Skills declared but skills/ directory not found at {skills_dir}"]
         )
 
-    manager = SkillManager(skills_dir)
+    manager = SkillManager(skills_dir if has_formation_skills else None)
 
+    # Always load built-in skills first
+    builtin_loaded = manager.load_builtin_skills(disabled=disable_builtin)
+
+    # Then load formation-declared skills
     try:
-        manager.load_public_skills(public_skills)
+        if public_skills:
+            manager.load_public_skills(public_skills)
         for agent_id, skill_names in agent_skills.items():
             manager.load_agent_skills(agent_id, skill_names)
     except ValueError as e:
         raise ConfigurationValidationError([str(e)])
 
+    if not manager.skills:
+        return
+
     formation._skill_manager = manager
 
     all_names = list(manager.skills.keys())
+    detail_parts = []
+    if builtin_loaded:
+        detail_parts.append(f"{len(builtin_loaded)} built-in")
+    formation_count = len(all_names) - len(builtin_loaded)
+    if formation_count > 0:
+        detail_parts.append(f"{formation_count} formation")
+    detail = f"{len(all_names)} skill(s) ({', '.join(detail_parts)})"
+
     print(InitEventFormatter.format_ok(
         f"Skills loaded: {', '.join(all_names)}",
-        f"{len(all_names)} skill(s)",
+        detail,
     ))
 
     observability.observe(

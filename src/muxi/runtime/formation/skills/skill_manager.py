@@ -6,6 +6,9 @@ from ...datatypes import observability
 from .parser import SkillMetadata, load_skill_content, parse_skill_md
 
 
+BUILTIN_SKILLS_DIR = Path(__file__).parent / "builtin"
+
+
 class SkillManager:
     """
     Manages skill discovery, catalog generation, and activation.
@@ -16,19 +19,70 @@ class SkillManager:
     - Tier 3 (resources): scripts/references/assets listed on activation
     """
 
-    def __init__(self, skills_dir: Path):
+    def __init__(self, skills_dir: Optional[Path] = None):
         self.skills_dir = skills_dir
         self.skills: Dict[str, SkillMetadata] = {}
         self.public_skills: List[str] = []
         self.agent_skills: Dict[str, List[str]] = {}
         self._content_cache: Dict[str, Any] = {}
         self._activated: Dict[str, Set[str]] = {}
+        self._builtin_skills: List[str] = []
+
+    def load_builtin_skills(self, disabled: Optional[List[str]] = None) -> List[str]:
+        """Load built-in skills shipped with the runtime.
+
+        Built-in skills are always public (all agents see them).
+
+        Args:
+            disabled: List of built-in skill names to skip.
+
+        Returns:
+            List of loaded built-in skill names.
+        """
+        disabled = disabled or []
+        loaded = []
+        if not BUILTIN_SKILLS_DIR.is_dir():
+            return loaded
+
+        for skill_dir in sorted(BUILTIN_SKILLS_DIR.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            name = skill_dir.name
+            if name in disabled or name in self.skills:
+                continue
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_md.is_file():
+                continue
+            try:
+                metadata, _body, warnings = parse_skill_md(skill_md)
+                for warning in warnings:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={"skill_name": name, "warning": warning},
+                        description=f"Built-in skill '{name}': {warning}",
+                    )
+                self.skills[name] = metadata
+                self._builtin_skills.append(name)
+                if name not in self.public_skills:
+                    self.public_skills.append(name)
+                loaded.append(name)
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"skill_name": name, "error": str(e)},
+                    description=f"Failed to load built-in skill '{name}': {e}",
+                )
+        return loaded
 
     def load_public_skills(self, skill_names: List[str]) -> None:
         """Load formation-level (public) skills from the skills directory."""
         for name in skill_names:
             self._load_skill(name)
-        self.public_skills = list(skill_names)
+        for name in skill_names:
+            if name not in self.public_skills:
+                self.public_skills.append(name)
 
     def load_agent_skills(self, agent_id: str, skill_names: List[str]) -> None:
         """Load agent-specific (private) skills."""
@@ -39,6 +93,10 @@ class SkillManager:
 
     def _load_skill(self, name: str) -> SkillMetadata:
         """Parse SKILL.md frontmatter for a single skill."""
+        if not self.skills_dir:
+            raise ValueError(
+                f"Skill '{name}' declared but no skills directory configured"
+            )
         skill_dir = self.skills_dir / name
         skill_md = skill_dir / "SKILL.md"
 
@@ -254,7 +312,12 @@ class SkillManager:
         """Get info for all loaded skills (for REST API)."""
         result = []
         for name, skill in self.skills.items():
-            scope = "public" if name in self.public_skills else "private"
+            if name in self._builtin_skills:
+                scope = "builtin"
+            elif name in self.public_skills:
+                scope = "public"
+            else:
+                scope = "private"
             result.append({
                 "name": skill.name,
                 "description": skill.description,

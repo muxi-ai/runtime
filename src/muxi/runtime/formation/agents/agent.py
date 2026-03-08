@@ -3008,86 +3008,161 @@ class Agent:
                     )
                     return {"status": "error", "error": str(e)}
 
-            # Special handling for generate_file tool - use artifact service directly
+            # Special handling for generate_file tool
             if (
                 tool_name == "generate_file"
                 and self.overlord
-                and hasattr(self.overlord, "artifact_service")
             ):
-                observability.observe(
-                    event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "agent_id": self.agent_id,
-                        "tool_name": tool_name,
-                        "parameters": parameters,
-                        "using_artifact_service": True,
-                    },
-                    description=f"Agent {self.agent_id} using artifact service for file generation",
-                )
-
-                # Call artifact service directly
                 code = parameters.get("code", "")
                 filename = parameters.get("filename")
 
-                streaming.stream(
-                    "progress",
-                    f"Creating {filename or 'file'}...",
-                    stage="artifact_generating",
-                    tool_name=tool_name,
-                    filename=filename,
-                    agent_name=self.agent_id,
-                    skip_rephrase=True,
+                # Route through RCE if available and file-generation skill is loaded
+                rce_client = getattr(self.overlord, "rce_client", None)
+                skill_manager = getattr(self.overlord, "skill_manager", None)
+                use_rce = (
+                    rce_client
+                    and skill_manager
+                    and "file-generation" in skill_manager.skills
                 )
 
-                try:
-                    artifact = await self.overlord.artifact_service.generate_file(code, filename)
-
-                    # Convert MuxiArtifact to a simplified tool response
-                    # Don't include full artifact details in the tool response to avoid
-                    # the agent mentioning file paths or download links
-                    result = {
-                        "success": True,
-                        "message": (
-                            f"Successfully created {artifact.filename}. "
-                            "The file has been automatically attached to this response."
-                        ),
-                        "filename": artifact.filename,
-                        "type": artifact.type,
-                        "format": artifact.format,
-                        "size_bytes": artifact.metadata.size_bytes if artifact.metadata else None,
-                        # Store the actual artifact for the extractor
-                        "_artifact": artifact,
-                    }
-
-                    streaming.stream(
-                        "progress",
-                        f"Created {artifact.filename}",
-                        stage="artifact_created",
-                        filename=artifact.filename,
-                        artifact_type=artifact.type,
-                        artifact_format=artifact.format,
-                        skip_rephrase=True,
-                    )
-
+                if use_rce:
                     observability.observe(
                         event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
                         level=observability.EventLevel.INFO,
                         data={
                             "agent_id": self.agent_id,
                             "tool_name": tool_name,
-                            "success": True,
-                            "artifact_type": artifact.type,
-                            "artifact_format": artifact.format,
+                            "using_rce": True,
                         },
-                        description=f"Agent {self.agent_id} successfully generated file using artifact service",
+                        description=f"Agent {self.agent_id} using RCE for file generation",
                     )
 
-                    return result
+                    streaming.stream(
+                        "progress",
+                        f"Creating {filename or 'file'}...",
+                        stage="artifact_generating",
+                        tool_name=tool_name,
+                        filename=filename,
+                        agent_name=self.agent_id,
+                        skip_rephrase=True,
+                    )
 
-                except Exception as e:
-                    # Return error in expected format
-                    return {"error": str(e), "status": "error"}
+                    try:
+                        metadata = skill_manager.skills["file-generation"]
+                        content_hash = skill_manager.get_skill_hash("file-generation")
+                        await rce_client.ensure_cached(
+                            "file-generation", metadata.base_dir, content_hash
+                        )
+
+                        # Write code to a temp input and run via the generate script
+                        result = await rce_client.run_skill(
+                            "file-generation",
+                            f"python3 scripts/generate.py code.py",
+                            input_files={"code.py": code},
+                            timeout=60,
+                        )
+
+                        if result.status != "success":
+                            error_msg = result.stderr or f"RCE execution failed (exit {result.exit_code})"
+                            return {"error": error_msg, "status": "error"}
+
+                        # Build response compatible with artifact extractor
+                        response = {
+                            "success": True,
+                            "message": (
+                                f"Successfully created file. "
+                                "The file has been automatically attached to this response."
+                            ),
+                            "status": result.status,
+                            "stdout": result.stdout,
+                        }
+                        if result.artifacts:
+                            response["artifacts"] = [
+                                {"name": a["name"], "mime": a["mime"], "size": a["size"]}
+                                for a in result.artifacts
+                            ]
+                            response["_artifacts_full"] = result.artifacts
+
+                        streaming.stream(
+                            "progress",
+                            "File created via RCE",
+                            stage="artifact_created",
+                            filename=filename,
+                            skip_rephrase=True,
+                        )
+
+                        return response
+
+                    except Exception as e:
+                        return {"error": str(e), "status": "error"}
+
+                # Fallback: use local artifact service
+                elif hasattr(self.overlord, "artifact_service"):
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "agent_id": self.agent_id,
+                            "tool_name": tool_name,
+                            "parameters": parameters,
+                            "using_artifact_service": True,
+                        },
+                        description=f"Agent {self.agent_id} using artifact service for file generation",
+                    )
+
+                    streaming.stream(
+                        "progress",
+                        f"Creating {filename or 'file'}...",
+                        stage="artifact_generating",
+                        tool_name=tool_name,
+                        filename=filename,
+                        agent_name=self.agent_id,
+                        skip_rephrase=True,
+                    )
+
+                    try:
+                        artifact = await self.overlord.artifact_service.generate_file(code, filename)
+
+                        result = {
+                            "success": True,
+                            "message": (
+                                f"Successfully created {artifact.filename}. "
+                                "The file has been automatically attached to this response."
+                            ),
+                            "filename": artifact.filename,
+                            "type": artifact.type,
+                            "format": artifact.format,
+                            "size_bytes": artifact.metadata.size_bytes if artifact.metadata else None,
+                            "_artifact": artifact,
+                        }
+
+                        streaming.stream(
+                            "progress",
+                            f"Created {artifact.filename}",
+                            stage="artifact_created",
+                            filename=artifact.filename,
+                            artifact_type=artifact.type,
+                            artifact_format=artifact.format,
+                            skip_rephrase=True,
+                        )
+
+                        observability.observe(
+                            event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "agent_id": self.agent_id,
+                                "tool_name": tool_name,
+                                "success": True,
+                                "artifact_type": artifact.type,
+                                "artifact_format": artifact.format,
+                            },
+                            description=f"Agent {self.agent_id} successfully generated file using artifact service",
+                        )
+
+                        return result
+
+                    except Exception as e:
+                        return {"error": str(e), "status": "error"}
 
             # Regular MCP tool invocation
             streaming.stream(
