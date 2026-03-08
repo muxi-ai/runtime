@@ -219,13 +219,11 @@ class TestSkillLifecycle:
         h = "sha256:" + "f" * 64
         await client.ensure_cached("unit-test-skill-5", skill_dir, h)
 
-        csv_b64 = base64.b64encode(b"x,y\n1,2\n3,4").decode()
-        # Use a script file as input to avoid shell quoting issues
-        script_b64 = base64.b64encode(b"print(open('data.csv').read())").decode()
+        # run_skill auto-encodes input_files to base64
         result = await client.run_skill(
             "unit-test-skill-5",
             "python3 reader.py",
-            input_files={"data.csv": csv_b64, "reader.py": script_b64},
+            input_files={"data.csv": "x,y\n1,2\n3,4", "reader.py": "print(open('data.csv').read())"},
         )
         assert result.ok
         assert "x,y" in result.stdout

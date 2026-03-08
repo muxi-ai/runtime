@@ -3066,22 +3066,61 @@ class Agent:
                             error_msg = result.stderr or f"RCE execution failed (exit {result.exit_code})"
                             return {"error": error_msg, "status": "error"}
 
-                        # Build response compatible with artifact extractor
-                        response = {
-                            "success": True,
-                            "message": (
-                                f"Successfully created file. "
-                                "The file has been automatically attached to this response."
-                            ),
-                            "status": result.status,
-                            "stdout": result.stdout,
-                        }
+                        # Convert RCE artifacts to MuxiArtifact for extractor compatibility
                         if result.artifacts:
-                            response["artifacts"] = [
-                                {"name": a["name"], "mime": a["mime"], "size": a["size"]}
-                                for a in result.artifacts
-                            ]
-                            response["_artifacts_full"] = result.artifacts
+                            from ...datatypes.artifacts import (
+                                ArtifactMetadata,
+                                MuxiArtifact,
+                            )
+
+                            rce_artifact = result.artifacts[0]
+                            artifact_name = rce_artifact.get("name", filename or "output")
+                            artifact_mime = rce_artifact.get("mime", "application/octet-stream")
+                            artifact_content = rce_artifact.get("content", "")
+                            artifact_size = rce_artifact.get("size", 0)
+
+                            ext = artifact_name.rsplit(".", 1)[-1] if "." in artifact_name else ""
+                            if artifact_mime.startswith("image/"):
+                                artifact_type = "image"
+                            elif artifact_mime.startswith("text/"):
+                                artifact_type = "text"
+                            elif ext in ("json", "csv", "xml", "xlsx", "xls"):
+                                artifact_type = "data"
+                            else:
+                                artifact_type = "document"
+
+                            data_url = f"data:{artifact_mime};base64,{artifact_content}"
+
+                            muxi_artifact = MuxiArtifact(
+                                type=artifact_type,
+                                format=ext,
+                                filename=artifact_name,
+                                data_url=data_url,
+                                metadata=ArtifactMetadata(
+                                    size_bytes=artifact_size,
+                                    created_at=__import__("datetime").datetime.now(),
+                                ),
+                            )
+
+                            response = {
+                                "success": True,
+                                "message": (
+                                    f"Successfully created {artifact_name}. "
+                                    "The file has been automatically attached to this response."
+                                ),
+                                "filename": artifact_name,
+                                "type": artifact_type,
+                                "format": ext,
+                                "size_bytes": artifact_size,
+                                "_artifact": muxi_artifact,
+                            }
+                        else:
+                            response = {
+                                "success": True,
+                                "message": "Code executed successfully but no output files were generated.",
+                                "status": result.status,
+                                "stdout": result.stdout,
+                            }
 
                         streaming.stream(
                             "progress",
@@ -3829,8 +3868,16 @@ class Agent:
                     if skill:
                         resources = self.overlord.skill_manager._get_resources(skill_name)
                         scripts = [r for r in resources if r.startswith("scripts/")]
-                        script_note = f" (scripts: {', '.join(scripts)})" if scripts else ""
-                        planning_prompt += f"- **{skill.name}**: {skill.description}{script_note}\n"
+                        # Don't show scripts for file-generation (uses generate_file tool instead)
+                        is_builtin_fg = skill_name == "file-generation"
+                        if is_builtin_fg:
+                            planning_prompt += (
+                                f"- **{skill.name}**: {skill.description} "
+                                f"(use the generate_file tool for this, NOT run_skill)\n"
+                            )
+                        else:
+                            script_note = f" (scripts: {', '.join(scripts)})" if scripts else ""
+                            planning_prompt += f"- **{skill.name}**: {skill.description}{script_note}\n"
 
                 # Add note about run_skill if RCE is available
                 has_rce = (

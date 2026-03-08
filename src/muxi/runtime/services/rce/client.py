@@ -242,7 +242,14 @@ class RCEClient:
             "timeout": timeout,
         }
         if input_files:
-            payload["input_files"] = input_files
+            import base64
+
+            payload["input_files"] = {
+                name: base64.b64encode(content.encode()).decode()
+                if isinstance(content, str)
+                else base64.b64encode(content).decode()
+                for name, content in input_files.items()
+            }
         if env:
             payload["env"] = env
 

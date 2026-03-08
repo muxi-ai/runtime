@@ -204,7 +204,11 @@ class SkillManager:
         Returns None if no executable skills are available.
         """
         available = self.get_available_skills(agent_id)
-        executable = [n for n in available if self.has_scripts(n)]
+        # Exclude file-generation from run_skill (uses generate_file tool instead)
+        executable = [
+            n for n in available
+            if self.has_scripts(n) and n != "file-generation"
+        ]
         if not executable:
             return None
 

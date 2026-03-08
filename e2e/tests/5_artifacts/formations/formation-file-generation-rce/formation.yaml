@@ -1,0 +1,25 @@
+schema: "1.0.0"
+id: "file-generation-rce-test"
+description: "Formation with RCE-based file generation"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+
+rce:
+  url: "http://localhost:7891"
+
+agents:
+  - generator
+
+memory:
+  buffer:
+    size: 10
+    vector_search: false
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"
