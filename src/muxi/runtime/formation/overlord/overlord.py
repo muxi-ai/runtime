@@ -1525,17 +1525,7 @@ class Overlord:
                 # Add to agents dictionary
                 self.agents[agent_id] = agent
 
-                # Enhance agent with skills (catalog injection + specialty enhancement)
-                if hasattr(self, "skill_manager") and self.skill_manager:
-                    skill_descriptions = self.skill_manager.get_skill_descriptions(agent_id)
-                    if skill_descriptions:
-                        agent.specialties.extend(skill_descriptions)
-
-                    catalog_xml = self.skill_manager.build_catalog_xml(agent_id)
-                    if catalog_xml:
-                        agent.system_message += f"\n\n{catalog_xml}"
-                        if agent._messages and agent._messages[0]["role"] == "system":
-                            agent._messages[0]["content"] += f"\n\n{catalog_xml}"
+                self._inject_skill_catalog(agent, agent_id)
 
                 # Add to pending external registrations if external A2A is enabled
                 if self.a2a_coordinator.external_registry_enabled:
@@ -1595,6 +1585,21 @@ class Overlord:
         # Set default agent if not already configured
         await self._set_default_agent_if_needed()
 
+    def _inject_skill_catalog(self, agent: Any, agent_id: str) -> None:
+        """Inject skill catalog and specialty descriptions into an agent."""
+        if not (hasattr(self, "skill_manager") and self.skill_manager):
+            return
+
+        skill_descriptions = self.skill_manager.get_skill_descriptions(agent_id)
+        if skill_descriptions:
+            agent.specialties.extend(skill_descriptions)
+
+        catalog_xml = self.skill_manager.build_catalog_xml(agent_id)
+        if catalog_xml:
+            agent.system_message += f"\n\n{catalog_xml}"
+            if agent._messages and agent._messages[0]["role"] == "system":
+                agent._messages[0]["content"] += f"\n\n{catalog_xml}"
+
     async def _load_muxi_default_agents(self) -> None:
         """
         Load default agents that ship with MUXI (e.g., generalist fallback).
@@ -1636,17 +1641,7 @@ class Overlord:
                 agent = await self._create_agent_from_config(agent_config)
                 self.agents[agent_id] = agent
 
-                # Enhance built-in agent with skills (same as user agents)
-                if hasattr(self, "skill_manager") and self.skill_manager:
-                    skill_descriptions = self.skill_manager.get_skill_descriptions(agent_id)
-                    if skill_descriptions:
-                        agent.specialties.extend(skill_descriptions)
-
-                    catalog_xml = self.skill_manager.build_catalog_xml(agent_id)
-                    if catalog_xml:
-                        agent.system_message += f"\n\n{catalog_xml}"
-                        if agent._messages and agent._messages[0]["role"] == "system":
-                            agent._messages[0]["content"] += f"\n\n{catalog_xml}"
+                self._inject_skill_catalog(agent, agent_id)
 
                 # Store agent metadata
                 self.agent_descriptions[agent_id] = agent_config.get("description", "")

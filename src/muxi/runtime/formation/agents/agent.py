@@ -2869,63 +2869,28 @@ class Agent:
         """
 
         try:
-            # Special handling for activate_skill tool
+            # Skill-related tool dispatch (activate_skill, run_skill, generate_file)
+            from .skill_dispatch import (
+                handle_activate_skill,
+                handle_generate_file_local,
+                handle_generate_file_rce,
+                handle_run_skill,
+            )
+
             if (
                 tool_name == "activate_skill"
                 and self.overlord
                 and hasattr(self.overlord, "skill_manager")
                 and self.overlord.skill_manager
             ):
-                skill_name = parameters.get("skill_name", "")
-                session_id = getattr(self, "_current_session_id", "default")
-                manager = self.overlord.skill_manager
-
-                if manager.is_activated(skill_name, session_id):
-                    observability.observe(
-                        event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
-                        level=observability.EventLevel.DEBUG,
-                        data={
-                            "agent_id": self.agent_id,
-                            "skill_name": skill_name,
-                            "session_id": session_id,
-                            "deduplicated": True,
-                        },
-                        description=f"Skill '{skill_name}' already active (deduped)",
-                    )
-                    return {
-                        "status": "already_active",
-                        "message": (
-                            f"Skill '{skill_name}' is already active. "
-                            "Refer to the instructions already in your context."
-                        ),
-                    }
-
-                content = manager.activate(skill_name, session_id)
-
-                # Inject into persistent context (system prompt addendum)
-                if self._messages and self._messages[0]["role"] == "system":
-                    self._messages[0]["content"] += f"\n\n{content}"
-
-                observability.observe(
-                    event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "agent_id": self.agent_id,
-                        "skill_name": skill_name,
-                        "session_id": session_id,
-                    },
-                    description=f"Skill '{skill_name}' activated by agent '{self.agent_id}'",
+                return await handle_activate_skill(
+                    self.agent_id,
+                    parameters,
+                    self.overlord,
+                    self._messages,
+                    getattr(self, "_current_session_id", "default"),
                 )
 
-                return {
-                    "status": "activated",
-                    "message": (
-                        f"Skill '{skill_name}' activated. "
-                        "Instructions are now available in your context."
-                    ),
-                }
-
-            # Special handling for run_skill tool - execute via RCE
             if (
                 tool_name == "run_skill"
                 and self.overlord
@@ -2934,89 +2899,14 @@ class Agent:
                 and hasattr(self.overlord, "skill_manager")
                 and self.overlord.skill_manager
             ):
-                skill_name = parameters.get("skill_name", "")
-                command = parameters.get("command", "")
-                manager = self.overlord.skill_manager
-                rce = self.overlord.rce_client
-
-                if skill_name not in manager.skills:
-                    return {"status": "error", "error": f"Skill '{skill_name}' not found."}
-
-                metadata = manager.skills[skill_name]
-                content_hash = manager.get_skill_hash(skill_name)
-
-                streaming.stream(
-                    "progress",
-                    f"Running skill '{skill_name}'...",
-                    stage="skill_executing",
-                    skill_name=skill_name,
-                    command=command,
-                    agent_name=self.agent_id,
-                    skip_rephrase=True,
+                return await handle_run_skill(
+                    self.agent_id, parameters, self.overlord
                 )
 
-                try:
-                    await rce.ensure_cached(skill_name, metadata.base_dir, content_hash)
-
-                    result = await rce.run_skill(
-                        skill_name,
-                        command,
-                        timeout=60,
-                    )
-
-                    observability.observe(
-                        event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "agent_id": self.agent_id,
-                            "skill_name": skill_name,
-                            "command": command,
-                            "status": result.status,
-                            "exit_code": result.exit_code,
-                            "duration_ms": result.duration_ms,
-                            "artifact_count": len(result.artifacts),
-                        },
-                        description=f"Skill '{skill_name}' executed: {result.status}",
-                    )
-
-                    response = {
-                        "status": result.status,
-                        "exit_code": result.exit_code,
-                        "stdout": result.stdout,
-                        "duration_ms": result.duration_ms,
-                    }
-                    if result.stderr:
-                        response["stderr"] = result.stderr
-                    if result.artifacts:
-                        response["artifacts"] = [
-                            {"name": a["name"], "mime": a["mime"], "size": a["size"]}
-                            for a in result.artifacts
-                        ]
-                        response["_artifacts_full"] = result.artifacts
-                    return response
-
-                except Exception as e:
-                    observability.observe(
-                        event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
-                        level=observability.EventLevel.ERROR,
-                        data={
-                            "agent_id": self.agent_id,
-                            "skill_name": skill_name,
-                            "error": str(e),
-                        },
-                        description=f"Skill execution failed: {e}",
-                    )
-                    return {"status": "error", "error": str(e)}
-
-            # Special handling for generate_file tool
-            if (
-                tool_name == "generate_file"
-                and self.overlord
-            ):
+            if tool_name == "generate_file" and self.overlord:
                 code = parameters.get("code", "")
                 filename = parameters.get("filename")
 
-                # Route through RCE if available and file-generation skill is loaded
                 rce_client = getattr(self.overlord, "rce_client", None)
                 skill_manager = getattr(self.overlord, "skill_manager", None)
                 use_rce = (
@@ -3026,182 +2916,13 @@ class Agent:
                 )
 
                 if use_rce:
-                    observability.observe(
-                        event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "agent_id": self.agent_id,
-                            "tool_name": tool_name,
-                            "using_rce": True,
-                        },
-                        description=f"Agent {self.agent_id} using RCE for file generation",
+                    return await handle_generate_file_rce(
+                        self.agent_id, code, filename, self.overlord
                     )
-
-                    streaming.stream(
-                        "progress",
-                        f"Creating {filename or 'file'}...",
-                        stage="artifact_generating",
-                        tool_name=tool_name,
-                        filename=filename,
-                        agent_name=self.agent_id,
-                        skip_rephrase=True,
-                    )
-
-                    try:
-                        metadata = skill_manager.skills["file-generation"]
-                        content_hash = skill_manager.get_skill_hash("file-generation")
-                        await rce_client.ensure_cached(
-                            "file-generation", metadata.base_dir, content_hash
-                        )
-
-                        # Write code to a temp input and run via the generate script
-                        result = await rce_client.run_skill(
-                            "file-generation",
-                            f"python3 scripts/generate.py code.py",
-                            input_files={"code.py": code},
-                            timeout=60,
-                        )
-
-                        if result.status != "success":
-                            error_msg = result.stderr or f"RCE execution failed (exit {result.exit_code})"
-                            return {"error": error_msg, "status": "error"}
-
-                        # Convert RCE artifacts to MuxiArtifact for extractor compatibility
-                        if result.artifacts:
-                            from ...datatypes.artifacts import (
-                                ArtifactMetadata,
-                                MuxiArtifact,
-                            )
-
-                            rce_artifact = result.artifacts[0]
-                            artifact_name = rce_artifact.get("name", filename or "output")
-                            artifact_mime = rce_artifact.get("mime", "application/octet-stream")
-                            artifact_content = rce_artifact.get("content", "")
-                            artifact_size = rce_artifact.get("size", 0)
-
-                            ext = artifact_name.rsplit(".", 1)[-1] if "." in artifact_name else ""
-                            if artifact_mime.startswith("image/"):
-                                artifact_type = "image"
-                            elif artifact_mime.startswith("text/"):
-                                artifact_type = "text"
-                            elif ext in ("json", "csv", "xml", "xlsx", "xls"):
-                                artifact_type = "data"
-                            else:
-                                artifact_type = "document"
-
-                            data_url = f"data:{artifact_mime};base64,{artifact_content}"
-
-                            muxi_artifact = MuxiArtifact(
-                                type=artifact_type,
-                                format=ext,
-                                filename=artifact_name,
-                                data_url=data_url,
-                                metadata=ArtifactMetadata(
-                                    size_bytes=artifact_size,
-                                    created_at=__import__("datetime").datetime.now(),
-                                ),
-                            )
-
-                            response = {
-                                "success": True,
-                                "message": (
-                                    f"Successfully created {artifact_name}. "
-                                    "The file has been automatically attached to this response."
-                                ),
-                                "filename": artifact_name,
-                                "type": artifact_type,
-                                "format": ext,
-                                "size_bytes": artifact_size,
-                                "_artifact": muxi_artifact,
-                            }
-                        else:
-                            response = {
-                                "success": True,
-                                "message": "Code executed successfully but no output files were generated.",
-                                "status": result.status,
-                                "stdout": result.stdout,
-                            }
-
-                        streaming.stream(
-                            "progress",
-                            "File created via RCE",
-                            stage="artifact_created",
-                            filename=filename,
-                            skip_rephrase=True,
-                        )
-
-                        return response
-
-                    except Exception as e:
-                        return {"error": str(e), "status": "error"}
-
-                # Fallback: use local artifact service
                 elif hasattr(self.overlord, "artifact_service"):
-                    observability.observe(
-                        event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "agent_id": self.agent_id,
-                            "tool_name": tool_name,
-                            "parameters": parameters,
-                            "using_artifact_service": True,
-                        },
-                        description=f"Agent {self.agent_id} using artifact service for file generation",
+                    return await handle_generate_file_local(
+                        self.agent_id, code, filename, self.overlord
                     )
-
-                    streaming.stream(
-                        "progress",
-                        f"Creating {filename or 'file'}...",
-                        stage="artifact_generating",
-                        tool_name=tool_name,
-                        filename=filename,
-                        agent_name=self.agent_id,
-                        skip_rephrase=True,
-                    )
-
-                    try:
-                        artifact = await self.overlord.artifact_service.generate_file(code, filename)
-
-                        result = {
-                            "success": True,
-                            "message": (
-                                f"Successfully created {artifact.filename}. "
-                                "The file has been automatically attached to this response."
-                            ),
-                            "filename": artifact.filename,
-                            "type": artifact.type,
-                            "format": artifact.format,
-                            "size_bytes": artifact.metadata.size_bytes if artifact.metadata else None,
-                            "_artifact": artifact,
-                        }
-
-                        streaming.stream(
-                            "progress",
-                            f"Created {artifact.filename}",
-                            stage="artifact_created",
-                            filename=artifact.filename,
-                            artifact_type=artifact.type,
-                            artifact_format=artifact.format,
-                            skip_rephrase=True,
-                        )
-
-                        observability.observe(
-                            event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
-                            level=observability.EventLevel.INFO,
-                            data={
-                                "agent_id": self.agent_id,
-                                "tool_name": tool_name,
-                                "success": True,
-                                "artifact_type": artifact.type,
-                                "artifact_format": artifact.format,
-                            },
-                            description=f"Agent {self.agent_id} successfully generated file using artifact service",
-                        )
-
-                        return result
-
-                    except Exception as e:
-                        return {"error": str(e), "status": "error"}
 
             # Regular MCP tool invocation
             streaming.stream(
