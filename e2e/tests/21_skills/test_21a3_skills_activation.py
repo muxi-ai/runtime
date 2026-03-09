@@ -2,6 +2,7 @@
 """Test 21a3: Skills Activation via Chat - verify the LLM calls activate_skill and content is injected."""
 
 import asyncio
+import os
 import time
 from pathlib import Path
 import sys
@@ -129,4 +130,4 @@ class TestSkillsActivation(BaseE2ETest):
 if __name__ == "__main__":
     test = TestSkillsActivation()
     result = asyncio.run(test.test_skills_activation())
-    sys.exit(0 if result else 1)
+    os._exit(0 if result else 1)

@@ -2,6 +2,7 @@
 """Test 21a4: Skills Deduplication - verify activate_skill is deduplicated within a session."""
 
 import asyncio
+import os
 import time
 from pathlib import Path
 import sys
@@ -105,4 +106,4 @@ class TestSkillsDeduplication(BaseE2ETest):
 if __name__ == "__main__":
     test = TestSkillsDeduplication()
     result = asyncio.run(test.test_skills_deduplication())
-    sys.exit(0 if result else 1)
+    os._exit(0 if result else 1)

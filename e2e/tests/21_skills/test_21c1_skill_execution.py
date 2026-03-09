@@ -8,6 +8,7 @@ Requires: Skills RCE server running on localhost:7891.
 """
 
 import asyncio
+import os
 import sys
 import time
 from pathlib import Path
@@ -166,4 +167,4 @@ class TestSkillExecution(BaseE2ETest):
 if __name__ == "__main__":
     test = TestSkillExecution()
     result = asyncio.run(test.test_skill_execution())
-    sys.exit(0 if result else 1)
+    os._exit(0 if result else 1)

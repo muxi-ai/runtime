@@ -2,6 +2,7 @@
 """Test 21b1: Explicit Skill Request - verify agent activates skill when explicitly asked."""
 
 import asyncio
+import os
 import time
 from pathlib import Path
 import sys
@@ -128,4 +129,4 @@ class TestExplicitSkillRequest(BaseE2ETest):
 if __name__ == "__main__":
     test = TestExplicitSkillRequest()
     result = asyncio.run(test.test_explicit_skill_request())
-    sys.exit(0 if result else 1)
+    os._exit(0 if result else 1)

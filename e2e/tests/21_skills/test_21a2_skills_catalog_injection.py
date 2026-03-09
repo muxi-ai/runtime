@@ -2,6 +2,7 @@
 """Test 21a2: Skills Catalog Injection - verify skill catalog is injected into agent system prompts."""
 
 import asyncio
+import os
 import time
 from pathlib import Path
 import sys
@@ -121,4 +122,4 @@ class TestSkillsCatalogInjection(BaseE2ETest):
 if __name__ == "__main__":
     test = TestSkillsCatalogInjection()
     result = asyncio.run(test.test_skills_catalog_injection())
-    sys.exit(0 if result else 1)
+    os._exit(0 if result else 1)

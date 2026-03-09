@@ -8,6 +8,7 @@ Verifies:
 """
 
 import asyncio
+import os
 import time
 from pathlib import Path
 import sys
@@ -206,4 +207,4 @@ class TestSkillIsolation(BaseE2ETest):
 if __name__ == "__main__":
     test = TestSkillIsolation()
     result = asyncio.run(test.test_skill_isolation())
-    sys.exit(0 if result else 1)
+    os._exit(0 if result else 1)

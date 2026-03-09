@@ -3,6 +3,7 @@
 without the user mentioning the skill by name."""
 
 import asyncio
+import os
 import time
 from pathlib import Path
 import sys
@@ -133,4 +134,4 @@ class TestContextualSkillActivation(BaseE2ETest):
 if __name__ == "__main__":
     test = TestContextualSkillActivation()
     result = asyncio.run(test.test_contextual_skill_activation())
-    sys.exit(0 if result else 1)
+    os._exit(0 if result else 1)

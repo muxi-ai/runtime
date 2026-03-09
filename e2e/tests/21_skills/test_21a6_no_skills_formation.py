@@ -2,6 +2,7 @@
 """Test 21a6: No Skills Formation - verify formations without skills work unchanged."""
 
 import asyncio
+import os
 import time
 from pathlib import Path
 import sys
@@ -118,4 +119,4 @@ class TestNoSkillsFormation(BaseE2ETest):
 if __name__ == "__main__":
     test = TestNoSkillsFormation()
     result = asyncio.run(test.test_no_skills_formation())
-    sys.exit(0 if result else 1)
+    os._exit(0 if result else 1)

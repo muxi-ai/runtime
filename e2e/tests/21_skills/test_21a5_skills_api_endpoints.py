@@ -2,6 +2,7 @@
 """Test 21a5: Skills API Endpoints - verify REST API returns correct skill data."""
 
 import asyncio
+import os
 import time
 from pathlib import Path
 import sys
@@ -163,4 +164,4 @@ class TestSkillsAPIEndpoints(BaseE2ETest):
 if __name__ == "__main__":
     test = TestSkillsAPIEndpoints()
     result = asyncio.run(test.test_skills_api_endpoints())
-    sys.exit(0 if result else 1)
+    os._exit(0 if result else 1)
