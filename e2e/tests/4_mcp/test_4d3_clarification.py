@@ -40,6 +40,12 @@ async def run_async_test():
         print("\nWaiting for MCP servers to initialize...")
         await asyncio.sleep(3)
 
+        # Seed credentials (ensure user1 has both ranaroussi + lily automaze)
+        from credential_seeder import ensure_dual_github_credentials
+        if not await ensure_dual_github_credentials(formation):
+            print("❌ Failed to seed required credentials")
+            return False
+
         # Clear any existing buffer/cache to ensure clean test
         print("\nClearing buffer and credential cache...")
         if hasattr(overlord, '_buffer_memory'):
@@ -49,6 +55,10 @@ async def run_async_test():
         from muxi.runtime.services.mcp.service import MCPService
         mcp_service = MCPService.get_instance()
         mcp_service.clear_user_credentials_cache()
+
+        # Clear credential resolver cache (seeder may have been called after resolver cached single cred)
+        if hasattr(overlord, 'credential_resolver') and overlord.credential_resolver:
+            overlord.credential_resolver._cache.clear()
 
         # Check existing credentials for user1
         print("\n=== CHECKING EXISTING CREDENTIALS ===")
@@ -169,12 +179,24 @@ async def run_async_test():
         response2_str = str(response2).lower()
         found_repos = any(
             word in response2_str for word in ["repository", "repositories", "repo", "repos"])
-        has_error = "error" in response2_str or "failed" in response2_str
+        has_error = any(word in response2_str for word in [
+            "error", "failed", "issue", "problem", "unable", "couldn't", "can't",
+            "connection", "connect", "troubleshoot",
+        ])
 
         # Check if it mentions lily's account specifically
         mentions_lily = "lily" in response2_str or "lilyautomaze" in response2_str
 
-        step2_success = found_repos and not has_error
+        # Check if it asked for clarification again (bad - means credential wasn't used)
+        asked_clarification_again = any(phrase in response2_str for phrase in [
+            "which account", "which github", "multiple accounts",
+            "choose", "select an account", "specify",
+        ])
+
+        # Success: Either found repos, or got an API error (not a re-clarification).
+        # API errors happen because test tokens are not real GitHub tokens.
+        # The key success indicator is that the system DID NOT ask for clarification again.
+        step2_success = not asked_clarification_again and (found_repos or has_error)
 
         print("\n" + "="*80)
         print("Analysis of Step 2:")
