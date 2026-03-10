@@ -674,6 +674,7 @@ class FormationServer:
             memory,
             requests,
             sessions,
+            skills,
             sops,
             triggers,
             users,
@@ -689,6 +690,7 @@ class FormationServer:
             triggers.router,
             users.router,
             sessions.router,
+            skills.router,
             sops.router,
         ]
 

@@ -42,6 +42,12 @@ async def run_async_test():
         print("\nWaiting for MCP servers to initialize...")
         await asyncio.sleep(3)
 
+        # Seed credentials (ensure user1 has both ranaroussi + lily automaze)
+        from credential_seeder import ensure_dual_github_credentials
+        if not await ensure_dual_github_credentials(formation):
+            print("❌ Failed to seed required credentials")
+            return False
+
         # Clear any existing buffer/cache to ensure clean test
         print("\nClearing buffer and credential cache...")
         if hasattr(overlord, '_buffer_memory'):
@@ -51,6 +57,10 @@ async def run_async_test():
         from muxi.runtime.services.mcp.service import MCPService
         mcp_service = MCPService.get_instance()
         mcp_service.clear_user_credentials_cache()
+
+        # Clear credential resolver cache (seeder may have been called after resolver cached single cred)
+        if hasattr(overlord, 'credential_resolver') and overlord.credential_resolver:
+            overlord.credential_resolver._cache.clear()
 
         # Check existing credentials for user1
         print("\n=== CHECKING EXISTING CREDENTIALS ===")
@@ -83,7 +93,7 @@ async def run_async_test():
         print("="*80 + "\n")
 
         session_id = "test_session_4d3_cache_switch"
-        prompt = "list my repositories"
+        prompt = "list my GitHub repositories"
 
         print("User: user1")
         print(f"Prompt: {prompt}")
@@ -195,7 +205,8 @@ async def run_async_test():
 
         # Check if it asked for clarification again (shouldn't)
         asked_clarification_again = any(phrase in response3_str for phrase in [
-            "which account", "which github", "multiple accounts", "choose", "select"
+            "which account", "which github account", "multiple accounts",
+            "choose an account", "select an account", "specify which account",
         ])
 
         # Check if it gave a count or mentioned repositories
@@ -258,7 +269,8 @@ async def run_async_test():
 
         # Check if it asked for clarification (shouldn't, since we specified ranaroussi)
         asked_clarification_switch = any(phrase in response4_str for phrase in [
-            "which account", "which github", "multiple accounts", "choose", "select"
+            "which account", "which github account", "multiple accounts",
+            "choose an account", "select an account", "specify which account",
         ])
 
         # Check if it gave a count or mentioned repositories

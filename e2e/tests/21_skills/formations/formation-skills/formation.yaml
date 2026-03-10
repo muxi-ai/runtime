@@ -1,0 +1,34 @@
+schema: "1.0.0"
+id: skills-test-formation
+description: "Formation for testing Agent Skills Stage 1"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+
+runtime:
+  built_in_mcps: false
+
+memory:
+  buffer:
+    size: 10
+    vector_search: false
+
+skills:
+  - pdf-processing
+  - data-analysis
+
+agents:
+  - general-agent
+  - support-agent
+
+overlord:
+  clarification:
+    style: "brief"
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"

@@ -10,7 +10,8 @@ The initialization order is critical:
 2. Then other services can be initialized
 """
 
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from ..datatypes.clarification import ClarificationConfig, QuestionStyle
 from ..datatypes.exceptions import ConfigurationValidationError
@@ -1185,3 +1186,167 @@ async def initialize_persistent_memory(
             description=f"Critical error during persistent memory initialization: {str(e)}",
         )
         raise
+
+
+def initialize_skills(formation, config: Dict[str, Any]) -> None:
+    """Initialize skill manager from formation config.
+
+    Skills are loaded BEFORE agents so metadata is ready for specialty
+    enhancement and tool registration during agent init.
+
+    Built-in skills (shipped with the runtime) are always loaded unless
+    explicitly disabled via skills.disable_builtin.
+    """
+    from .skills.skill_manager import SkillManager
+
+    public_skills: List[str] = config.get("skills", [])
+    # Support both list and dict formats for skills config
+    disable_builtin: List[str] = []
+    skills_config = config.get("skills", [])
+    if isinstance(skills_config, dict):
+        public_skills = skills_config.get("names", [])
+        disable_builtin = skills_config.get("disable_builtin", [])
+    elif isinstance(skills_config, list):
+        public_skills = skills_config
+
+    agent_skills: Dict[str, List[str]] = {}
+    for agent_config in config.get("agents", []):
+        if isinstance(agent_config, dict):
+            agent_id = agent_config.get("id")
+            skill_list = agent_config.get("skills", [])
+            if agent_id and skill_list:
+                agent_skills[agent_id] = skill_list
+
+    has_formation_skills = bool(public_skills or agent_skills)
+
+    formation_dir = Path(formation._formation_path).parent if formation._formation_path else None
+    skills_dir = formation_dir / "skills" if formation_dir else None
+
+    if has_formation_skills and (not skills_dir or not skills_dir.is_dir()):
+        raise ConfigurationValidationError(
+            [f"Skills declared but skills/ directory not found at {skills_dir}"]
+        )
+
+    manager = SkillManager(skills_dir if has_formation_skills else None)
+
+    # Always load built-in skills first
+    builtin_loaded = manager.load_builtin_skills(disabled=disable_builtin)
+
+    # Then load formation-declared skills
+    try:
+        if public_skills:
+            manager.load_public_skills(public_skills)
+        for agent_id, skill_names in agent_skills.items():
+            manager.load_agent_skills(agent_id, skill_names)
+    except ValueError as e:
+        raise ConfigurationValidationError([str(e)])
+
+    if not manager.skills:
+        return
+
+    formation._skill_manager = manager
+
+    all_names = list(manager.skills.keys())
+    detail_parts = []
+    if builtin_loaded:
+        detail_parts.append(f"{len(builtin_loaded)} built-in")
+    formation_count = len(all_names) - len(builtin_loaded)
+    if formation_count > 0:
+        detail_parts.append(f"{formation_count} formation")
+    detail = f"{len(all_names)} skill(s) ({', '.join(detail_parts)})"
+
+    print(
+        InitEventFormatter.format_ok(
+            f"Skills loaded: {', '.join(all_names)}",
+            detail,
+        )
+    )
+
+    observability.observe(
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        level=observability.EventLevel.INFO,
+        data={
+            "skill_count": len(all_names),
+            "public_skills": public_skills,
+            "agent_skills": agent_skills,
+        },
+        description=f"Skills loaded: {', '.join(all_names)}",
+    )
+
+
+async def initialize_rce(formation, config: Dict[str, Any]) -> None:
+    """Initialize the RCE client if configured.
+
+    Connects to the Skills RCE server, fetches capabilities, and optionally
+    starts background warm-up of skill caches.
+
+    Fails fast if rce.url is configured but the server is unreachable.
+    """
+    rce_config = config.get("rce", {})
+    if not rce_config:
+        return
+
+    rce_url = rce_config.get("url")
+    if not rce_url:
+        return
+
+    from ..services.rce.client import RCEClient, RCEError
+
+    token = rce_config.get("token")
+    timeout = rce_config.get("timeout", 60)
+
+    client = RCEClient(url=rce_url, token=token, timeout=float(timeout))
+
+    try:
+        status = await client.connect()
+    except RCEError as e:
+        raise ConfigurationValidationError([f"RCE server unreachable at {rce_url}: {e}"])
+
+    formation._rce_client = client
+
+    langs = ", ".join(status.languages)
+    print(
+        InitEventFormatter.format_ok(
+            f"RCE connected ({rce_url})",
+            f"v{status.version}, languages: {langs}",
+        )
+    )
+
+    observability.observe(
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        level=observability.EventLevel.INFO,
+        data={
+            "rce_url": rce_url,
+            "rce_version": status.version,
+            "languages": status.languages,
+            "runtimes": [r["name"] for r in status.runtimes if r.get("version")],
+        },
+        description=f"RCE connected: {rce_url} v{status.version}",
+    )
+
+    # Warm up skill caches in the background (non-blocking)
+    skill_manager = getattr(formation, "_skill_manager", None)
+    if skill_manager and skill_manager.skills:
+        import asyncio
+
+        async def _warm_up_skills():
+            for name, metadata in skill_manager.skills.items():
+                try:
+                    content_hash = skill_manager.get_skill_hash(name)
+                    uploaded = await client.ensure_cached(name, metadata.base_dir, content_hash)
+                    if uploaded:
+                        observability.observe(
+                            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+                            level=observability.EventLevel.DEBUG,
+                            data={"skill": name, "action": "uploaded"},
+                            description=f"Skill '{name}' uploaded to RCE cache",
+                        )
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={"skill": name, "error": str(e)},
+                        description=f"Failed to warm up skill '{name}' in RCE cache: {e}",
+                    )
+
+        asyncio.create_task(_warm_up_skills())

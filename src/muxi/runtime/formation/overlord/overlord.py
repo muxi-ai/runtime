@@ -1525,6 +1525,8 @@ class Overlord:
                 # Add to agents dictionary
                 self.agents[agent_id] = agent
 
+                self._inject_skill_catalog(agent, agent_id)
+
                 # Add to pending external registrations if external A2A is enabled
                 if self.a2a_coordinator.external_registry_enabled:
                     self.pending_external_registrations.add(agent_id)
@@ -1583,6 +1585,21 @@ class Overlord:
         # Set default agent if not already configured
         await self._set_default_agent_if_needed()
 
+    def _inject_skill_catalog(self, agent: Any, agent_id: str) -> None:
+        """Inject skill catalog and specialty descriptions into an agent."""
+        if not (hasattr(self, "skill_manager") and self.skill_manager):
+            return
+
+        skill_descriptions = self.skill_manager.get_skill_descriptions(agent_id)
+        if skill_descriptions:
+            agent.specialties.extend(skill_descriptions)
+
+        catalog_xml = self.skill_manager.build_catalog_xml(agent_id)
+        if catalog_xml:
+            agent.system_message += f"\n\n{catalog_xml}"
+            if agent._messages and agent._messages[0]["role"] == "system":
+                agent._messages[0]["content"] += f"\n\n{catalog_xml}"
+
     async def _load_muxi_default_agents(self) -> None:
         """
         Load default agents that ship with MUXI (e.g., generalist fallback).
@@ -1623,6 +1640,8 @@ class Overlord:
                 # Create agent from config
                 agent = await self._create_agent_from_config(agent_config)
                 self.agents[agent_id] = agent
+
+                self._inject_skill_catalog(agent, agent_id)
 
                 # Store agent metadata
                 self.agent_descriptions[agent_id] = agent_config.get("description", "")
@@ -5646,6 +5665,23 @@ Agent response: {raw_response}"""
             name=f"set_pending_clarification_{session_id}",
         )
 
+    async def _set_pending_clarification_sync(self, session_id: str, data: Dict[str, Any]) -> None:
+        """
+        Store pending clarification synchronously (awaited).
+        Use when the caller needs to guarantee the write completes before returning.
+        """
+        if not session_id or self.buffer_memory is None:
+            return
+        try:
+            await self.buffer_memory.kv_set(
+                key=session_id,
+                value=data,
+                ttl=None,
+                namespace=self.pending_clarification_namespace,
+            )
+        except Exception:
+            pass
+
     def _delete_pending_clarification(self, session_id: str) -> None:
         """
         Delete pending clarification from buffer memory KV store.
@@ -5669,6 +5705,81 @@ Agent response: {raw_response}"""
         except RuntimeError:
             # No event loop running - this is fine for fire-and-forget
             pass
+
+    async def _delete_pending_clarification_sync(self, session_id: str) -> None:
+        """
+        Delete pending clarification synchronously (awaited).
+        Use when the caller needs to guarantee deletion before continuing.
+        """
+        if not session_id or self.buffer_memory is None:
+            return
+        try:
+            await self.buffer_memory.kv_delete(
+                key=session_id, namespace=self.pending_clarification_namespace
+            )
+        except Exception:
+            pass
+
+    async def _cache_selected_credential(
+        self, service_name: str, selected_account: str, user_id: str
+    ) -> bool:
+        """
+        Cache a selected credential in the MCP service so subsequent requests
+        use it without re-triggering credential selection.
+
+        Returns True if cached successfully.
+        """
+        try:
+            mcp_svc = MCPService.get_instance()
+            if not mcp_svc or not self.credential_resolver:
+                return False
+
+            server_ids = await mcp_svc.list_servers()
+            matching_server = None
+            for sid_c in server_ids:
+                if service_name.lower() in sid_c.lower():
+                    matching_server = sid_c
+                    break
+            if not matching_server:
+                return False
+
+            # Resolve the selected account's credential data from the database
+            resolved = await self.credential_resolver.resolve(user_id, service_name)
+            cred_data = None
+            if isinstance(resolved, list):
+                for cred_entry in resolved:
+                    if (
+                        isinstance(cred_entry, dict)
+                        and cred_entry.get("name", "").lower() == selected_account.lower()
+                    ):
+                        cred_data = cred_entry.get("credentials")
+                        break
+            if not cred_data:
+                return False
+
+            if matching_server not in mcp_svc.user_credentials:
+                mcp_svc.user_credentials[matching_server] = {}
+
+            # Get the stored auth template from the MCP server config
+            stored_creds = None
+            if matching_server in mcp_svc.server_configs:
+                stored_creds = mcp_svc.server_configs[matching_server].get("stored_credentials")
+
+            if stored_creds:
+                resolved_auth = mcp_svc._replace_credential_in_auth(stored_creds, cred_data)
+                mcp_svc.user_credentials[matching_server][user_id] = resolved_auth
+            else:
+                # Fallback: assume bearer token
+                token = (
+                    cred_data if isinstance(cred_data, str) else cred_data.get("token", cred_data)
+                )
+                mcp_svc.user_credentials[matching_server][user_id] = {
+                    "type": "bearer",
+                    "token": token,
+                }
+            return True
+        except Exception:
+            return False
 
     async def _process_sync_chat(
         self,
@@ -5900,8 +6011,9 @@ Agent response: {raw_response}"""
                             # Get the original message that triggered the clarification
                             original_message = clarification_info.get("original_message")
 
-                            # Clean up pending clarification
-                            self._delete_pending_clarification(session_id)
+                            # Clean up pending clarification (must be synchronous to prevent
+                            # stale state on subsequent requests in the same session)
+                            await self._delete_pending_clarification_sync(session_id)
 
                             # Track service use in session history
                             if session_id and service:
@@ -5990,71 +6102,29 @@ Agent response: {raw_response}"""
                             # User selected by name
                             message_lower = actual_message.lower().strip()
                             for cred in available_credentials:
+                                cred_name = cred["name"] if isinstance(cred, dict) else cred
                                 if (
-                                    cred["name"].lower() in message_lower
-                                    or message_lower in cred["name"].lower()
+                                    cred_name.lower() in message_lower
+                                    or message_lower in cred_name.lower()
                                 ):
                                     selected_credential = cred
                                     break
 
                         if selected_credential and self.credential_resolver:
-                            # Debug logging
-
-                            # Store the selected credential in MCP service cache
-                            # Get the MCP service - it's a singleton so should be the same everywhere
-                            mcp_service = MCPService.get_instance()
-                            if mcp_service:
-                                # Get server list and check which one matches our service
-                                server_ids = await mcp_service.list_servers()
-
-                                # Find the server that matches this service
-                                # For GitHub, we expect server_id like "github-mcp"
-                                matching_server = None
-                                for server_id in server_ids:
-                                    if service.lower() in server_id.lower():
-                                        matching_server = server_id
-                                        break
-
-                                if matching_server:
-                                    # Cache the selected credential
-                                    if matching_server not in mcp_service.user_credentials:
-                                        mcp_service.user_credentials[matching_server] = {}
-
-                                    # Get the original auth config from the MCP server to preserve auth type
-                                    original_auth_config = None
-                                    if (
-                                        hasattr(mcp_service, "servers")
-                                        and matching_server in mcp_service.servers
-                                    ):
-                                        server_config = mcp_service.servers[matching_server]
-                                        original_auth_config = server_config.get("auth", {})
-
-                                    # Handle both "credential_data" and "credentials" keys
-                                    credential_data = selected_credential.get(
-                                        "credential_data"
-                                    ) or selected_credential.get("credentials")
-
-                                    # Use MCP service's method to properly format the auth based on server's auth type
-                                    if original_auth_config:
-                                        resolved_auth = mcp_service._replace_credential_in_auth(
-                                            original_auth_config, credential_data
-                                        )
-                                        mcp_service.user_credentials[matching_server][
-                                            user_id
-                                        ] = resolved_auth
-                                    else:
-                                        # Fallback: assume bearer token if we can't get the original config
-                                        mcp_service.user_credentials[matching_server][user_id] = {
-                                            "type": "bearer",
-                                            "token": credential_data,
-                                        }
+                            # Cache credential using shared helper
+                            cred_name = (
+                                selected_credential["name"]
+                                if isinstance(selected_credential, dict)
+                                else selected_credential
+                            )
+                            await self._cache_selected_credential(service, cred_name, user_id)
 
                             # Get the original message and clean up
                             # Try both "original_message" and "original_request" for compatibility
                             original_message = clarification_info.get(
                                 "original_message"
                             ) or clarification_info.get("original_request")
-                            self._delete_pending_clarification(session_id)
+                            await self._delete_pending_clarification_sync(session_id)
 
                             # Track service use in session history
                             if session_id and service:
@@ -6176,9 +6246,20 @@ Agent response: {raw_response}"""
                                 )
 
                             elif response_result.action == "execute":
+                                # If this was a credential selection, cache the credential
+                                # in the MCP service before re-processing to avoid re-triggering
+                                # AmbiguousCredentialError on the retry.
+                                ctx = getattr(response_result, "context", None) or {}
+                                selected_account = ctx.get("selected_account")
+                                mcp_service_name = ctx.get("mcp_service")
+                                if selected_account and mcp_service_name:
+                                    await self._cache_selected_credential(
+                                        mcp_service_name,
+                                        selected_account,
+                                        ctx.get("user_id", user_id),
+                                    )
+
                                 # Process the enhanced/final request
-                                # If this was a credential selection, the context will be used
-                                # by the MCP service to automatically resolve the credential
                                 return await self._process_sync_chat(
                                     message=response_result.request,
                                     agent_name=agent_name,
@@ -6535,7 +6616,7 @@ Agent response: {raw_response}"""
                     "reactive",
                     "proactive",
                     "multi_turn",
-                    "credential",  # Handle credential selection responses
+                    "credential",  # Handle missing credential responses (user provides token)
                     "redirect",  # Handle missing credential redirect responses (e.g., help requests)
                 ]:
                     # This is a response to an existing clarification - call handle_response
@@ -7475,11 +7556,16 @@ Agent response: {raw_response}"""
                             await self.clarification._store_state(request_id, state)
 
                         # Store pending clarification if we have a session
+                        # Use "ambiguous_credential" (not "credential") so the response
+                        # handler routes to the credential selection handler instead of
+                        # treating the user's selection as a new credential to store.
+                        # Must be synchronous to ensure the pending is stored before the
+                        # response reaches the caller and the next message arrives.
                         if session_id:
-                            self._set_pending_clarification(
+                            await self._set_pending_clarification_sync(
                                 session_id,
                                 {
-                                    "type": "credential",
+                                    "type": "ambiguous_credential",
                                     "service": e.service,
                                     "user_id": e.user_id,
                                     "timestamp": time.time(),

@@ -1,6 +1,6 @@
 # MUXI Runtime Architecture Analysis
 
-**Generated:** 2026-03-06
+**Generated:** 2026-03-10
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -38,10 +38,11 @@ The initialization order is strictly enforced and failure to follow it causes sy
 2. LLM Configuration
 3. Memory Systems
 4. Document Processing
-5. Background Services
-6. MCP Services
-7. Agents
-8. Server (if configured)
+5. Clarification Config
+6. Skills (before agents so metadata is ready for specialty enhancement)
+7. Background Services
+8. Agents
+9. Server (if configured)
 ```
 
 **Why this order matters:**
@@ -475,6 +476,65 @@ Manages MCP server lifecycle and tool execution with user credential resolution.
 3. Pass resolved credentials to MCP handler
 4. Execute tool call
 ```
+
+**Credential Selection and Caching (as of 2026-03-10):**
+
+Two paths lead to credential clarification:
+
+```
+A) Proactive: _analyze_request → LLM sees multiple accounts → clarify (mode="direct")
+   → handle_response detects available_accounts → credential selection path
+   → _cache_selected_credential → _process_sync_chat with skip_clarification
+
+B) Reactive: Agent calls MCP → CredentialSelectionNeededError → AmbiguousCredentialError
+   → overlord except handler → _set_pending_clarification_sync(type="ambiguous_credential")
+   → user responds → ambiguous_credential handler → _cache_selected_credential
+   → _delete_pending_clarification_sync → _process_sync_chat with skip_clarification
+```
+
+**`_cache_selected_credential` helper (`overlord.py`):**
+```python
+1. MCPService.get_instance() → find matching server by service name
+2. credential_resolver.resolve(user_id, service) → get all credentials
+3. Match by selected_account name (case-insensitive)
+4. Get auth template from server_configs[server_id]["stored_credentials"]
+5. _replace_credential_in_auth(template, cred_data) → resolve placeholders
+6. Cache in mcp_svc.user_credentials[server_id][user_id]
+```
+
+**Cache-aware clarification skip (`clarification.py`):**
+```python
+# _analyze_request checks MCP credential cache AFTER LLM analysis
+# If credential cached for user+service → return needs_clarification: False
+# Prevents re-asking after user already selected an account
+```
+
+**Critical gotchas (2026-03-10):**
+
+1. **WorkingMemory truthiness**: `WorkingMemory.__len__` returns `len(self.buffer)`.
+   When buffer is empty, `bool(working_memory)` is `False`. ALL guards must use
+   `is None` checks, not `not buffer_memory`. The sync KV helpers
+   (`_set_pending_clarification_sync`, `_delete_pending_clarification_sync`) use
+   `self.buffer_memory is None` to guard correctly.
+
+2. **Sync vs async KV operations**: Fire-and-forget `_set_pending_clarification`
+   (via `asyncio.ensure_future`) would not complete before the response was returned
+   to the user. Credential-related clarification MUST use the sync variants
+   (`_set_pending_clarification_sync`, `_delete_pending_clarification_sync`) that
+   are awaited directly.
+
+3. **String vs dict credentials**: `available_credentials` from
+   `AmbiguousCredentialError` contains strings (account names), but the clarification
+   handler originally assumed dicts with a `"name"` key. Both paths now check
+   `isinstance(cred, dict)` before accessing `.get("name")`.
+
+4. **Auth template source**: Uses `mcp_svc.server_configs[server_id]["stored_credentials"]`
+   to get the auth template with credential placeholders. `mcp_svc.servers` does NOT
+   exist -- that was a bug in the original implementation.
+
+5. **Proactive vs reactive mode mismatch**: Proactive clarification uses `mode="direct"`
+   but the credential path in `handle_response` originally required `mode="credential"`.
+   Fixed by checking for `available_accounts` presence regardless of mode.
 
 #### A2A Coordinator
 
@@ -3239,3 +3299,550 @@ REST endpoints automatically -- zero duplication.
 **Test results:** 157/157 unit, 24/24 API e2e, 5/5 MCP e2e.
 
 **Branch:** `feature/mcp-server` (commits: 1cbf9c30, c123c662)
+
+### 2026-03-07: Agent Skills Stage 1 (feature/agent-skills branch)
+
+**Purpose:** Implement the [Agent Skills specification](https://agentskills.io) --
+model-driven skill discovery, catalog injection, and activation via built-in tool.
+
+**New modules:**
+
+1. **`formation/skills/parser.py`** -- SKILL.md parser
+   - `SkillMetadata` dataclass: name, description, license, skill_dir path
+   - `SkillContent` dataclass: full markdown body, scripts list, references list
+   - `parse_skill_md(path)` -- parses YAML frontmatter with lenient handling
+     (unquoted colons in description values)
+   - `load_skill_content(metadata)` -- reads full SKILL.md + enumerates
+     `scripts/` and `references/` subdirectories
+   - `_enumerate_resources(dir)` -- lists files in a skill subdirectory
+   - Name validation: lowercase alphanumeric + hyphens, 2-50 chars
+
+2. **`formation/skills/skill_manager.py`** -- SkillManager
+   - `load_public_skills(names)` -- loads skills declared at formation level
+   - `load_agent_skills(agent_id, names)` -- loads skills private to an agent
+   - `get_available_skills(agent_id)` -- returns public + agent-private skill names
+   - `get_skill_descriptions(agent_id)` -- returns descriptions for specialty enhancement
+   - `build_catalog_xml(agent_id)` -- builds markdown catalog for system prompt injection
+     (method name kept for compat, output is markdown not XML)
+   - `build_activate_skill_tool(agent_id)` -- builds tool definition with `enum`
+     restricted to available skills (isolation enforcement)
+   - `activate(skill_name, session_id)` -- loads full content, marks activated,
+     returns wrapped content (`<skill_content name="...">...</skill_content>`)
+   - `is_activated(skill_name, session_id)` -- session-scoped deduplication check
+   - `get_skill_hash(skill_name)` -- SHA-256 for RCE cache validation (Stage 2)
+   - `get_all_skills_info()` -- metadata dicts for REST API
+   - `_content_cache` -- lazy-loaded content, persists across sessions
+   - `_activated` -- `Dict[session_id, Set[skill_name]]` for dedup tracking
+
+**Formation config:**
+
+```yaml
+# formation.yaml -- public skills (all agents see these)
+skills:
+  - pdf-processing
+  - data-analysis
+
+# agents/support-agent.yaml -- private skills (only this agent sees these)
+skills:
+  - ticket-handling
+```
+
+Skills directory layout:
+```
+formation/
+  skills/
+    pdf-processing/
+      SKILL.md              # Required: frontmatter (name, description) + body
+      scripts/              # Optional: executable scripts (Stage 2)
+        extract.py
+      references/           # Optional: reference docs
+        pdf-spec.md
+    data-analysis/
+      SKILL.md
+    ticket-handling/
+      SKILL.md
+```
+
+**Initialization order (updated):**
+
+```
+1. Observability
+2. LLM Configuration
+3. Memory Systems
+4. Document Processing
+5. Clarification Config
+6. Skills (NEW - before agents so metadata ready for specialty enhancement)
+7. Background Services
+8. Agents (overlord injects catalog + specialties during agent init)
+```
+
+`initialize_skills()` in `initialization.py`:
+- Reads `config["skills"]` for public skills
+- Reads `config["agents"][*]["skills"]` for per-agent skills
+- Creates `SkillManager(skills_dir)`, calls `load_public_skills()` + `load_agent_skills()`
+- Stores as `formation._skill_manager`
+- Raises `ConfigurationValidationError` if skills declared but `skills/` dir missing
+
+**Overlord integration (`overlord.py` agent loading):**
+
+After `self.agents[agent_id] = agent`, the overlord does two things:
+1. **Specialty enhancement**: `agent.specialties.extend(skill_manager.get_skill_descriptions(agent_id))`
+   -- adds skill descriptions to the agent's specialty list, improving routing accuracy
+2. **Catalog injection**: Appends markdown catalog to `agent.system_message` and
+   `agent._messages[0]["content"]` -- the agent sees skill names and descriptions
+
+**Agent integration (`agent.py`):**
+
+1. **Tool registration**: During tool list building in `process_message()`, if the agent
+   has skills, `skill_manager.build_activate_skill_tool(agent_id)` is appended to the
+   tools list. The tool's `enum` field restricts which skills the LLM can request.
+
+2. **Planning prompt injection** (`_plan_before_execution()`): Skills are injected as
+   Section 4 in the planning prompt, alongside agents and tools. This is **critical**
+   because the planner uses a completely separate message chain from the agent's system
+   prompt. Without this, the planner never sees the skill catalog and never plans to
+   call `activate_skill`.
+
+   ```
+   ## Available skills:
+   Skills provide specialized instructions for specific tasks.
+   BEFORE working on a task that matches a skill, you MUST first call
+   the activate_skill tool with the skill name. This loads detailed
+   instructions into your context. Do NOT skip this step.
+
+   - **pdf-processing**: Extract text, tables, and metadata from PDF files.
+   - **data-analysis**: Analyze datasets, generate charts, and create summary reports.
+   ```
+
+3. **Activation dispatch** (`invoke_tool()`): When the LLM calls `activate_skill`,
+   the handler checks dedup (`is_activated`), calls `manager.activate()`, and injects
+   the wrapped content into `_messages[0]["content"]` (system prompt addendum).
+   Content persists for the rest of the session.
+
+4. **Session tracking**: `_current_session_id` is set in `process_message()` so
+   `invoke_tool()` can pass it to the dedup check.
+
+**Catalog format:**
+
+Changed from XML to markdown during development. XML tags (`<available_skills>`,
+`<skill>`, `<name>`) were invisible to the planning system because the planner's
+system prompt is a plain "You are a planning assistant" instruction -- it doesn't
+parse XML. Markdown with `**bold names**` and bullet points matches the same format
+used for agent and tool descriptions in the planning prompt.
+
+```
+## Available Skills
+
+You have access to specialized skills that provide detailed instructions
+for specific tasks. BEFORE working on a task that matches a skill below,
+you MUST first call the activate_skill tool with the skill name to load
+its full instructions into your context.
+
+- **pdf-processing**: Extract text, tables, and metadata from PDF files.
+- **data-analysis**: Analyze datasets, generate charts, and summary reports.
+```
+
+**Isolation model:**
+
+Three layers enforce that agents only see/activate their allowed skills:
+
+| Layer | Mechanism | What it prevents |
+|-------|-----------|-----------------|
+| Catalog injection | `get_available_skills(agent_id)` filters public + private | Agent never sees private skills of other agents in system prompt |
+| Tool enum | `build_activate_skill_tool(agent_id)` restricts `enum` | LLM structurally cannot pass unauthorized skill names |
+| Planning prompt | Section 4 only lists `get_available_skills(agent_id)` | Planner only plans to use authorized skills |
+
+Note: `activate()` itself does NOT check agent permissions -- it trusts the
+upstream layers. If called directly with an unauthorized name, it would succeed.
+
+**REST API (3 endpoints in `server/routes/client/skills.py`):**
+
+| Endpoint | `operation_id` | Purpose |
+|----------|---------------|---------|
+| `GET /v1/skills` | `list_skills` | All skills with metadata |
+| `GET /v1/skills/{name}` | `get_skill` | Single skill metadata |
+| `GET /v1/agents/{agent_id}/skills` | `get_agent_skills` | Skills available to specific agent |
+
+All three have `operation_id` so they auto-expose via MCP (FastMCP scans routes
+with `operation_id`).
+
+**Test coverage:**
+
+- **29 unit tests** (`tests/unit/skills/test_skills.py`): parser, manager, catalog,
+  activation, dedup, hash, info, error cases
+- **8 e2e tests** (`e2e/tests/21_skills/`):
+  - `21a1`: Formation loading (metadata, scoping, overlord wiring)
+  - `21a2`: Catalog injection (markdown in system prompts, scoping, specialties)
+  - `21a3`: LLM activates skill via tool call (content injection verified)
+  - `21a4`: Session-scoped deduplication
+  - `21a5`: REST API endpoints
+  - `21a6`: No-skills formation regression
+  - `21b1`: Explicit skill request via `overlord.chat()` (deterministic activation)
+  - `21b2`: Contextual skill activation (LLM infers skill from task description)
+  - `21b3`: Agent vs global skill isolation + private skill triggering
+
+**Gotchas discovered:**
+
+- **`_formation_path` is a file path, not a directory**: Formation stores path as
+  `_formation_path` (e.g., `/path/to/formation.yaml`). Skills init needs
+  `Path(_formation_path).parent / "skills"`.
+
+- **`InitEventFormatter.add` doesn't exist**: The correct static method is
+  `format_ok(component, details)`.
+
+- **`FORMATION_INITIALIZED` event doesn't exist**: Use `CONFIG_FORMATION_LOADED`.
+
+- **Planning prompt is blind to agent system message**: The planner uses a separate
+  message chain (`[{"role": "system", "content": "You are a planning assistant..."},
+  {"role": "user", "content": planning_prompt}]`). The agent's system message
+  (which contains the skill catalog) is NOT included. Without injecting skills into
+  the planning prompt itself, the planner never knows to call `activate_skill`.
+
+- **A2A tasks bypass planning**: When `is_a2a_task=True`, `_plan_before_execution()`
+  is skipped entirely. The receiving agent still gets `activate_skill` in its tool
+  list (via `chat_with_tools`), but without planning it rarely invokes it. The fix
+  was ensuring the *routing* agent (muxi-generalist) sees skills in its planning
+  prompt and calls `activate_skill` as step 1 before delegating.
+
+- **XML catalog format was ineffective**: The LLM planning system uses a plain-text
+  planning prompt. XML blocks were treated as opaque text and not parsed. Switching
+  to markdown (matching the same format used for agents/tools) made skills visible
+  to the planner.
+
+- **YAML frontmatter with unquoted colons**: Skill descriptions like
+  `description: Extract text, tables, and metadata` fail YAML parsing because the
+  colon after "text" starts a new mapping. Parser has lenient fallback: if strict
+  YAML fails, regex-extract name/description as raw strings.
+
+**Files:**
+
+- `src/muxi/runtime/formation/skills/__init__.py`
+- `src/muxi/runtime/formation/skills/parser.py`
+- `src/muxi/runtime/formation/skills/skill_manager.py`
+- `src/muxi/runtime/formation/initialization.py` -- `initialize_skills()` (step 6)
+- `src/muxi/runtime/formation/formation.py` -- calls step 6, passes `_skill_manager` to overlord
+- `src/muxi/runtime/formation/overlord/overlord.py` -- specialty enhancement + catalog injection
+- `src/muxi/runtime/formation/agents/agent.py` -- tool registration, planning prompt Section 4,
+  `activate_skill` dispatch in `invoke_tool()`, `_current_session_id` tracking
+- `src/muxi/runtime/formation/server/routes/client/skills.py` -- 3 REST endpoints
+- `tests/unit/skills/test_skills.py` -- 29 unit tests
+- `e2e/tests/21_skills/` -- 9 e2e tests + test formation
+
+**Branch:** `feature/agent-skills` (commits: c31c5380, f7337e29, 7ef7309a)
+
+### 2026-03-08: Agent Skills Stage 2 - RCE Client + Execution (feature/agent-skills branch)
+
+**Purpose:** Enable agents to execute skill scripts via a remote code execution (RCE) server.
+Skills with `scripts/` directories can be uploaded, cached, and executed through the
+[Skills RCE service](https://github.com/muxi-ai/skills-rce) (`muxi/skills-rce` Docker image).
+
+**New modules:**
+
+1. **`services/rce/__init__.py`** -- RCE package init
+2. **`services/rce/client.py`** -- `RCEClient`, `RCEStatus`, `ExecResult`, `RCEError`
+
+**RCEClient (`services/rce/client.py`):**
+
+```python
+class RCEClient:
+    def __init__(self, url: str, token: Optional[str] = None):
+        self.url = url
+        self.token = token          # Bearer token (optional)
+        self.status: RCEStatus      # Populated by connect()
+        self._client: httpx.AsyncClient
+
+    async def connect(self) -> None:
+        # Health check + fetch /status → populate self.status
+        # Raises RCEError if unreachable (fail-fast)
+
+    async def run(self, language, code, ...) -> ExecResult:
+        # POST /run — ad-hoc code execution
+
+    async def ensure_cached(self, name, directory, content_hash) -> bool:
+        # GET /skill/{name} → check if cached + hash matches
+        # If stale/missing → POST /skill/{name} with zip upload
+        # Returns True if upload was needed
+
+    async def run_skill(self, name, command, ...) -> ExecResult:
+        # POST /skill/{name}/run — execute in cached skill context
+
+    async def delete_skill(self, name) -> bool:
+        # DELETE /skill/{name}
+
+    async def close(self) -> None:
+        # Close httpx client
+```
+
+**Key design decisions:**
+
+- **Hash-based cache busting**: `ensure_cached()` computes SHA-256 of skill directory.
+  GET `/skill/{name}` returns the cached hash. If mismatch, zip + re-upload. The hot
+  path is one cheap GET; uploads only happen on first call or content change.
+
+- **Zip upload**: `_zip_directory(path)` creates an in-memory zip of the skill directory.
+  RCE server accepts `Content-Type: application/zip` for efficient bulk transfer. This
+  replaced the original JSON base64 approach (simpler, handles binary files).
+
+- **Fail-fast on init**: If `rce.url` is configured in formation YAML and the server
+  is unreachable, `connect()` raises `RCEError` which aborts formation initialization.
+  This prevents silent failures where agents try to execute skills against a dead server.
+
+- **Non-blocking warm-up**: After `connect()` succeeds, `initialize_rce()` starts
+  `_warm_up_skills()` as a fire-and-forget `asyncio.create_task()`. This uploads all
+  skills with `scripts/` directories in the background. No task tracking needed --
+  `ensure_cached()` before every `run_skill()` is the authoritative check.
+
+**RCE Status dataclass:**
+```python
+@dataclass
+class RCEStatus:
+    version: str
+    languages: List[str]    # ["python", "javascript", "bash", ...]
+    runtimes: Dict          # {"python": "3.11.9", "node": "20.18.1", ...}
+    packages: Dict          # {"pip": [...], "npm": [...]}
+    resources: Dict         # {"max_timeout": 300, "max_file_size": ...}
+```
+
+**ExecResult dataclass:**
+```python
+@dataclass
+class ExecResult:
+    status: str             # "success" or "error"
+    exit_code: int
+    stdout: str
+    stderr: str
+    artifacts: List[Dict]   # [{"name": "output.pdf", "content": "<base64>"}]
+    duration_ms: int
+```
+
+**Formation config:**
+```yaml
+rce:
+  url: "http://localhost:7891"
+  token: "optional-bearer-token"    # For authenticated RCE servers
+```
+
+**Initialization (`initialization.py` step 6b):**
+
+```python
+async def initialize_rce(formation) -> Optional[RCEClient]:
+    rce_config = formation.config.get("rce")
+    if not rce_config or not rce_config.get("url"):
+        return None
+
+    client = RCEClient(url=rce_config["url"], token=rce_config.get("token"))
+    await client.connect()  # Fail fast if unreachable
+
+    # Non-blocking warm-up: upload all skills with scripts/
+    skill_manager = formation._skill_manager
+    if skill_manager:
+        asyncio.create_task(_warm_up_skills(client, skill_manager))
+
+    return client
+```
+
+**Formation flow:**
+```
+formation.py step 6:  initialize_skills() → _skill_manager
+formation.py step 6b: initialize_rce() → _rce_client (uses _skill_manager)
+formation.py:         overlord = Overlord(..., rce_client=_rce_client)
+overlord.py:          passes rce_client to agents during registration
+```
+
+**run_skill tool (`skill_manager.py` + `agent.py`):**
+
+`SkillManager.build_run_skill_tool(agent_id)`:
+- Returns `None` if no skills have `scripts/` directories (checked via `has_scripts()`)
+- `enum` field restricted to skills with scripts (not all available skills)
+- Tool parameters: `skill_name` (enum), `command` (string)
+
+`SkillManager.has_scripts(skill_name)`:
+- Checks `_content_cache` for loaded content with non-empty `scripts` list
+- Falls back to `_metadata_cache` and checks `skill_dir / "scripts"` on disk
+
+**Agent dispatch (`agent.py invoke_tool()`):**
+
+```python
+elif tool_name == "run_skill":
+    skill_name = parameters["skill_name"]
+    command = parameters["command"]
+    skill_dir = self._skill_manager._metadata_cache[skill_name].skill_dir
+    content_hash = self._skill_manager.get_skill_hash(skill_name)
+
+    await self._rce_client.ensure_cached(skill_name, skill_dir, content_hash)
+    result = await self._rce_client.run_skill(
+        name=skill_name,
+        command=command,
+        input_files=parameters.get("input_files"),
+        env=parameters.get("env"),
+        timeout=parameters.get("timeout"),
+    )
+    return {
+        "status": result.status,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "artifacts": result.artifacts,
+    }
+```
+
+**Planning prompt (Section 4 update for RCE):**
+
+When RCE is configured and skills have scripts, Section 4 of the planning prompt
+includes script paths and a note about `run_skill`:
+
+```
+## Available skills:
+...
+- **pdf-processing**: Extract text from PDF files.
+  Scripts: scripts/extract.py
+
+When a skill has scripts listed, you can execute them using the run_skill tool
+after activating the skill. Use activate_skill first to get instructions,
+then run_skill to execute.
+```
+
+**RCE API (9 endpoints on Skills RCE server):**
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /health` | Health check (always unauthenticated) |
+| `GET /status` | Server capabilities (always unauthenticated) |
+| `POST /run` | Ad-hoc code execution (language + code) |
+| `POST /skill/{id}` | Upload skill (JSON base64 or ZIP) |
+| `GET /skill/{id}` | Check cache (returns hash) |
+| `PATCH /skill/{id}` | Partial update |
+| `DELETE /skill/{id}` | Remove from cache |
+| `POST /skill/{id}/run` | Execute command in cached skill context |
+
+**Gotchas discovered:**
+
+- **`python` vs `python3` in RCE container**: The RCE Docker image has `python3` on
+  PATH but not `python`. The `/run` endpoint handles this via the `language` enum, but
+  `/skill/{id}/run` takes a raw command string. Must use `python3 scripts/extract.py`,
+  not `python scripts/extract.py`.
+
+- **`artifacts` is `null` not `[]`**: RCE server returns `"artifacts": null` when no
+  files are created, not an empty list. Client handles with `data.get("artifacts") or []`.
+
+- **RCE unsupported language returns 200**: Requesting an unsupported language returns
+  HTTP 200 with `"status": "error"`, not HTTP 400. Client and tests must check the
+  `status` field, not the HTTP status code.
+
+- **Zip upload Content-Type**: Must be `application/zip` for the RCE server to detect
+  zip format. If sent as `application/json`, server tries to parse as JSON base64 and fails.
+
+- **Non-blocking warm-up race**: Between `asyncio.create_task(_warm_up_skills())` and
+  the first `run_skill()` call, the skill might not be cached yet. This is safe because
+  `ensure_cached()` always runs before `run_skill()` -- worst case, the warm-up upload
+  and the `ensure_cached` upload overlap, with the second being a no-op GET.
+
+**Test coverage:**
+
+- **26 unit tests** (`tests/unit/rce/test_rce_client.py`): All 9 endpoints, error
+  handling, timeouts, auth, zip upload. Auto-skip if RCE server not running.
+- **3 new unit tests** in `tests/unit/skills/test_skills.py`: `build_run_skill_tool()`
+  for skills with/without scripts
+- **1 e2e test** (`e2e/tests/21_skills/test_21c1_skill_execution.py`): Direct dispatch
+  + `overlord.chat()` path, both verified against live RCE server
+
+**Files:**
+
+- `src/muxi/runtime/services/rce/__init__.py`
+- `src/muxi/runtime/services/rce/client.py` -- RCEClient, RCEStatus, ExecResult, RCEError
+- `src/muxi/runtime/formation/initialization.py` -- `initialize_rce()` (step 6b)
+- `src/muxi/runtime/formation/formation.py` -- calls step 6b, passes `_rce_client` to overlord
+- `src/muxi/runtime/formation/overlord/overlord.py` -- stores `rce_client`, passes to agents
+- `src/muxi/runtime/formation/agents/agent.py` -- `run_skill` tool registration + dispatch,
+  planning prompt Section 4 with script paths and RCE note
+- `src/muxi/runtime/formation/skills/skill_manager.py` -- `build_run_skill_tool()`, `has_scripts()`
+- `tests/unit/rce/test_rce_client.py` -- 26 unit tests
+- `tests/unit/skills/test_skills.py` -- 3 new tests (32 total)
+- `e2e/tests/21_skills/test_21c1_skill_execution.py`
+- `e2e/tests/21_skills/formations/formation-skills-rce/`
+
+**Branch:** `feature/agent-skills` (commits: 984a3d95, bcd632f8)
+
+### Agent Skills: Complete Architecture Summary
+
+**Full execution path:**
+```
+1. Formation init:
+   → initialize_skills() loads SKILL.md metadata [step 6]
+   → initialize_rce() connects to RCE server, starts background warm-up [step 6b]
+   → Overlord injects skill descriptions into agent.specialties (routing)
+   → Overlord injects markdown catalog into agent system prompt
+
+2. Request processing:
+   → Planner sees Section 4 with skill names, descriptions, script paths
+   → Planner includes activate_skill (and optionally run_skill) in plan
+   → Agent executes activate_skill → loads full SKILL.md content into system prompt
+   → Agent executes run_skill → ensure_cached + rce.run_skill → stdout/stderr/artifacts
+
+3. Isolation (3 layers):
+   → Catalog: get_available_skills(agent_id) filters public + private
+   → Tool enum: build_*_tool(agent_id) restricts enum values
+   → Planning: Section 4 only lists authorized skills
+```
+
+**RCE client lifecycle:**
+```
+Init: RCEClient(url, token) → connect() [health + /status] → fail fast if unreachable
+      → asyncio.create_task(_warm_up_skills()) [non-blocking upload all skills]
+Run:  ensure_cached(name, dir, hash) [GET check, POST zip if stale]
+      → run_skill(name, command, input_files, env, timeout)
+      → ExecResult(status, stdout, stderr, artifacts)
+```
+
+**Initialization order (final):**
+```
+1. Observability
+2. LLM Configuration
+3. Memory Systems
+4. Document Processing
+5. Clarification Config
+6. Skills (SKILL.md parsing + SkillManager)
+6b. RCE (connect + warm-up, requires skills from step 6)
+7. Background Services
+8. Agents (overlord injects catalog + specialties)
+9. Server
+```
+
+### 2026-03-09: MCP Streamable HTTP Transport Hangs on 401
+
+**Problem:** MCP connection attempts to servers with invalid tokens hung indefinitely,
+causing e2e tests to block until the global timeout killed them.
+
+**Root cause:** The MCP SDK's `connect()` and `cleanup()` are async generators that
+never complete when the server rejects auth. No built-in timeout existed.
+
+**Fix (commit `207bf0dd`):**
+- Wrap all MCP SDK async operations with `asyncio.wait_for()` timeouts
+- `connect()`: 30s timeout (covers TLS handshake + auth exchange)
+- `cleanup()`: 10s timeout (prevents hang during error recovery)
+- Invalid tokens now fail in <1s instead of hanging forever
+- E2e tests use `os._exit()` instead of `sys.exit()` to prevent cleanup hang
+
+**File:** `src/muxi/runtime/services/mcp/transports/streamable.py`
+
+### 2026-03-10: Credential Selection Flow Fix
+
+**Problem:** Multi-credential MCP flows (user has 2+ GitHub accounts) failed at
+multiple points -- clarification not persisted, credentials not cached, re-asking
+after selection, type mismatches.
+
+**Root causes and fixes (commit `c0de2927`):**
+
+| # | Bug | Fix |
+|---|-----|-----|
+| 1 | `WorkingMemory.__len__` returns 0 when empty, `not buffer_memory` is True | Use `is None` guard in sync KV helpers |
+| 2 | Fire-and-forget `_set_pending_clarification` not completing before response | Created `_set_pending_clarification_sync` / `_delete_pending_clarification_sync` (awaited) |
+| 3 | Used `mcp_svc.servers` (doesn't exist) for auth template | Use `mcp_svc.server_configs[server_id]["stored_credentials"]` |
+| 4 | Credential not cached after proactive clarification resolves | Cache at `response_result.action == "execute"` point via `_cache_selected_credential` |
+| 5 | Proactive clarification re-asks after selection | Post-LLM check: if credential already cached for user+service, skip clarification |
+| 6 | Proactive path uses `mode="direct"`, handler required `mode="credential"` | Check `available_accounts` presence regardless of mode |
+| 7 | `available_credentials` are strings, handler assumed dicts | `isinstance(cred, dict)` checks |
+
+**Key files:**
+- `src/muxi/runtime/formation/overlord/overlord.py` -- sync KV helpers, `_cache_selected_credential`, string/dict handling
+- `src/muxi/runtime/formation/overlord/clarification.py` -- credential cache check in `_analyze_request`
+- `e2e/tests/4_mcp/credential_seeder.py` -- seeds dual GitHub credentials via direct SQL

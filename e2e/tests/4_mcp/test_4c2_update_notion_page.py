@@ -2,6 +2,7 @@
 """Test 4C2: Update Notion Page - Page updates via MCP"""
 
 import sys
+import os
 import time
 from pathlib import Path
 
@@ -118,4 +119,4 @@ def test_update_notion_page():
 
 if __name__ == "__main__":
     success = test_update_notion_page()
-    sys.exit(0 if success else 1)
+    os._exit(0 if success else 1)

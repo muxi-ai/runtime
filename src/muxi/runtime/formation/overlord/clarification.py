@@ -260,7 +260,12 @@ class UnifiedClarificationSystem:
                 )
 
         # Special handling for credential selection mode
-        if state.get("mode") == "credential" and state.get("available_accounts"):
+        # This handles both explicit "credential" mode (from handle_credential_error)
+        # and proactive clarification that detected multiple accounts
+        if state.get("available_accounts") and (
+            state.get("mode") == "credential"
+            or (state.get("mcp_service") and state.get("available_accounts"))
+        ):
             # First check if user is asking for help
             if self._is_help_request(response):
                 return await self._provide_credential_help(state)
@@ -663,6 +668,28 @@ class UnifiedClarificationSystem:
                 mcp_service = result["mcp_service"]
                 # Extract user_id from context or message
                 user_id = context.get("user_id", "0") if context else "0"
+
+                # If a credential is already cached for this user+service,
+                # skip clarification -- the user already selected an account
+                try:
+                    from ...services.mcp.service import MCPService
+
+                    mcp_svc = MCPService.get_instance()
+                    if mcp_svc:
+                        for sid_c in await mcp_svc.list_servers():
+                            if mcp_service.lower() in sid_c.lower():
+                                if mcp_svc.user_credentials.get(sid_c, {}).get(user_id):
+                                    return {
+                                        "needs_clarification": False,
+                                        "reason": "credential_cached",
+                                        "mode": "direct",
+                                        "question": None,
+                                        "confidence": 1.0,
+                                        "mcp_service": mcp_service,
+                                    }
+                                break
+                except Exception:
+                    pass
 
                 # Check if we have credential resolver to get available accounts
                 available_accounts = []

@@ -108,6 +108,8 @@ from .initialization import (
     initialize_mcp_services,
     initialize_memory_systems,
     initialize_observability,
+    initialize_rce,
+    initialize_skills,
     load_agents_from_configuration,
 )
 
@@ -1279,16 +1281,22 @@ class Formation:
         # 5. Initialize document processing configuration
         initialize_document_processing_config(self)
 
-        # 6. Initialize background services
+        # 6. Initialize skills (before agents so metadata is ready for specialty enhancement)
+        initialize_skills(self, self.config or {})
+
+        # 6b. Initialize RCE client (connects to Skills RCE server, fails fast if configured but unreachable)
+        await initialize_rce(self, self.config or {})
+
+        # 7. Initialize background services
         initialize_background_services(self)
 
-        # 7. Initialize MCP services (now async to register servers immediately)
+        # 8. Initialize MCP services (now async to register servers immediately)
         await initialize_mcp_services(self)
 
-        # 8. Initialize clarification configuration
+        # 9. Initialize clarification configuration
         initialize_clarification_config(self)
 
-        # 9. Load agents configuration
+        # 10. Load agents configuration
         load_agents_from_configuration(self)
 
         # 10. Start observability manager (enables event processing and logging)
@@ -2585,6 +2593,12 @@ class Formation:
 
             # Set the formation instance reference for memory initialization
             self._overlord._formation_instance = self
+
+            # Pass skill manager to overlord if available
+            self._overlord.skill_manager = getattr(self, "_skill_manager", None)
+
+            # Pass RCE client to overlord if available
+            self._overlord.rce_client = getattr(self, "_rce_client", None)
 
             # Mark as running
             self._is_running = True

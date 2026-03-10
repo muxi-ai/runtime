@@ -805,6 +805,9 @@ class Agent:
             message_obj.metadata if hasattr(message_obj, "metadata") else None
         )
 
+        # Store session_id for skill activation scoping
+        self._current_session_id = session_id or "default"
+
         # Reset A2A attempt counter for each new request to prevent cascading failures
         self._a2a_attempt_count = 0
 
@@ -975,6 +978,25 @@ class Agent:
                         },
                     }
                     tools.append(generate_file_tool)
+
+                # Add activate_skill tool if skill manager has skills for this agent
+                if (
+                    self.overlord
+                    and hasattr(self.overlord, "skill_manager")
+                    and self.overlord.skill_manager
+                ):
+                    skill_tool = self.overlord.skill_manager.build_activate_skill_tool(
+                        self.agent_id
+                    )
+                    if skill_tool:
+                        tools.append(skill_tool)
+
+                    # Add run_skill tool if RCE client is available and skills have scripts
+                    if hasattr(self.overlord, "rce_client") and self.overlord.rce_client:
+                        run_tool = self.overlord.skill_manager.build_run_skill_tool(self.agent_id)
+                        if run_tool:
+                            tools.append(run_tool)
+
             except Exception as e:
                 # Log but don't fail if we can't get tools
                 observability.observe(
@@ -2845,86 +2867,54 @@ class Agent:
         """
 
         try:
-            # Special handling for generate_file tool - use artifact service directly
+            # Skill-related tool dispatch (activate_skill, run_skill, generate_file)
+            from .skill_dispatch import (
+                handle_activate_skill,
+                handle_generate_file_local,
+                handle_generate_file_rce,
+                handle_run_skill,
+            )
+
             if (
-                tool_name == "generate_file"
+                tool_name == "activate_skill"
                 and self.overlord
-                and hasattr(self.overlord, "artifact_service")
+                and hasattr(self.overlord, "skill_manager")
+                and self.overlord.skill_manager
             ):
-                observability.observe(
-                    event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "agent_id": self.agent_id,
-                        "tool_name": tool_name,
-                        "parameters": parameters,
-                        "using_artifact_service": True,
-                    },
-                    description=f"Agent {self.agent_id} using artifact service for file generation",
+                return await handle_activate_skill(
+                    self.agent_id,
+                    parameters,
+                    self.overlord,
+                    self._messages,
+                    getattr(self, "_current_session_id", "default"),
                 )
 
-                # Call artifact service directly
+            if (
+                tool_name == "run_skill"
+                and self.overlord
+                and hasattr(self.overlord, "rce_client")
+                and self.overlord.rce_client
+                and hasattr(self.overlord, "skill_manager")
+                and self.overlord.skill_manager
+            ):
+                return await handle_run_skill(self.agent_id, parameters, self.overlord)
+
+            if tool_name == "generate_file" and self.overlord:
                 code = parameters.get("code", "")
                 filename = parameters.get("filename")
 
-                streaming.stream(
-                    "progress",
-                    f"Creating {filename or 'file'}...",
-                    stage="artifact_generating",
-                    tool_name=tool_name,
-                    filename=filename,
-                    agent_name=self.agent_id,
-                    skip_rephrase=True,
-                )
+                rce_client = getattr(self.overlord, "rce_client", None)
+                skill_manager = getattr(self.overlord, "skill_manager", None)
+                use_rce = rce_client and skill_manager and "file-generation" in skill_manager.skills
 
-                try:
-                    artifact = await self.overlord.artifact_service.generate_file(code, filename)
-
-                    # Convert MuxiArtifact to a simplified tool response
-                    # Don't include full artifact details in the tool response to avoid
-                    # the agent mentioning file paths or download links
-                    result = {
-                        "success": True,
-                        "message": (
-                            f"Successfully created {artifact.filename}. "
-                            "The file has been automatically attached to this response."
-                        ),
-                        "filename": artifact.filename,
-                        "type": artifact.type,
-                        "format": artifact.format,
-                        "size_bytes": artifact.metadata.size_bytes if artifact.metadata else None,
-                        # Store the actual artifact for the extractor
-                        "_artifact": artifact,
-                    }
-
-                    streaming.stream(
-                        "progress",
-                        f"Created {artifact.filename}",
-                        stage="artifact_created",
-                        filename=artifact.filename,
-                        artifact_type=artifact.type,
-                        artifact_format=artifact.format,
-                        skip_rephrase=True,
+                if use_rce:
+                    return await handle_generate_file_rce(
+                        self.agent_id, code, filename, self.overlord
                     )
-
-                    observability.observe(
-                        event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "agent_id": self.agent_id,
-                            "tool_name": tool_name,
-                            "success": True,
-                            "artifact_type": artifact.type,
-                            "artifact_format": artifact.format,
-                        },
-                        description=f"Agent {self.agent_id} successfully generated file using artifact service",
+                elif hasattr(self.overlord, "artifact_service"):
+                    return await handle_generate_file_local(
+                        self.agent_id, code, filename, self.overlord
                     )
-
-                    return result
-
-                except Exception as e:
-                    # Return error in expected format
-                    return {"error": str(e), "status": "error"}
 
             # Regular MCP tool invocation
             streaming.stream(
@@ -3570,6 +3560,52 @@ class Agent:
             planning_prompt += "\n⚠️ CRITICAL: You are the ONLY agent in this formation!\n"
             planning_prompt += "You MUST handle all requests yourself without delegation.\n"
             planning_prompt += "Even if you lack specific tools or capabilities, provide your best effort response.\n\n"
+
+        # Section 4: Available skills (injected into planning context)
+        if (
+            self.overlord
+            and hasattr(self.overlord, "skill_manager")
+            and self.overlord.skill_manager
+        ):
+            available_skill_names = self.overlord.skill_manager.get_available_skills(self.agent_id)
+            if available_skill_names:
+                planning_prompt += "\n\n---\n\n## Available skills:\n"
+                planning_prompt += (
+                    "Skills provide specialized instructions for specific tasks. "
+                    "BEFORE working on a task that matches a skill, you MUST first call "
+                    "the activate_skill tool with the skill name. This loads detailed "
+                    "instructions into your context. Do NOT skip this step.\n\n"
+                )
+                for skill_name in available_skill_names:
+                    skill = self.overlord.skill_manager.skills.get(skill_name)
+                    if skill:
+                        resources = self.overlord.skill_manager._get_resources(skill_name)
+                        scripts = [r for r in resources if r.startswith("scripts/")]
+                        # Don't show scripts for file-generation (uses generate_file tool instead)
+                        is_builtin_fg = skill_name == "file-generation"
+                        if is_builtin_fg:
+                            planning_prompt += (
+                                f"- **{skill.name}**: {skill.description} "
+                                f"(use the generate_file tool for this, NOT run_skill)\n"
+                            )
+                        else:
+                            script_note = f" (scripts: {', '.join(scripts)})" if scripts else ""
+                            planning_prompt += (
+                                f"- **{skill.name}**: {skill.description}{script_note}\n"
+                            )
+
+                # Add note about run_skill if RCE is available
+                has_rce = hasattr(self.overlord, "rce_client") and self.overlord.rce_client
+                has_executable = any(
+                    self.overlord.skill_manager.has_scripts(n) for n in available_skill_names
+                )
+                if has_rce and has_executable:
+                    planning_prompt += (
+                        "\nSkills with scripts can be executed using the run_skill tool. "
+                        "Use activate_skill first to load instructions, then run_skill "
+                        "to execute the script (e.g., command: 'python3 scripts/run.py').\n"
+                    )
+                planning_prompt += "\n"
 
         from ..prompts.loader import PromptLoader
 
