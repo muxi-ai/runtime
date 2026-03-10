@@ -106,10 +106,10 @@ from .initialization import (
     initialize_document_processing_config,
     initialize_llm_config,
     initialize_mcp_services,
-    initialize_skills,
-    initialize_rce,
     initialize_memory_systems,
     initialize_observability,
+    initialize_rce,
+    initialize_skills,
     load_agents_from_configuration,
 )
 

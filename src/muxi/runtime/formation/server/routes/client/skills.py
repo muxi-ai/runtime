@@ -4,8 +4,6 @@ Skills endpoints.
 Read-only access to formation skills, requiring client API key authentication.
 """
 
-from typing import Any, Dict, List, Optional
-
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 

@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional, Set
 from ...datatypes import observability
 from .parser import SkillMetadata, load_skill_content, parse_skill_md
 
-
 BUILTIN_SKILLS_DIR = Path(__file__).parent / "builtin"
 
 
