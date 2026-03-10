@@ -7,8 +7,8 @@ Validates that:
 3. Security analyzer blocks dangerous content in requests
 """
 
-import sys
 import os
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))

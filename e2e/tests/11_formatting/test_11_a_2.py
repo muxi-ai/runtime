@@ -128,4 +128,5 @@ def main():
 
 if __name__ == "__main__":
     exit_code = main()
-    import os; os._exit(exit_code)
+    import os
+    os._exit(exit_code)
