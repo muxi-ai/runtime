@@ -2,6 +2,7 @@
 """Test 4E2: Multiple Users Permissions - Private content isolation"""
 
 import sys
+import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
@@ -223,4 +224,4 @@ def test_multiple_users_permissions():
 
 if __name__ == "__main__":
     success = test_multiple_users_permissions()
-    sys.exit(0 if success else 1)
+    os._exit(0 if success else 1)

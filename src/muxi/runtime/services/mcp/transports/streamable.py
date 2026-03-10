@@ -98,6 +98,8 @@ class StreamableHTTPTransport(BaseTransport):
 
     async def connect(self) -> bool:
         """Connect using MCP SDK streamablehttp_client."""
+        import asyncio
+
         if self.connected:
             return True
 
@@ -111,16 +113,23 @@ class StreamableHTTPTransport(BaseTransport):
             )
 
             # Enter context and get streams
+            # Timeout protects against SDK hanging on auth errors (e.g. 401)
             self.read_stream, self.write_stream, self.get_session_id = (
-                await self.client_context.__aenter__()
+                await asyncio.wait_for(
+                    self.client_context.__aenter__(), timeout=self.request_timeout
+                )
             )
 
             # Create session for high-level operations
             self.session = ClientSession(self.read_stream, self.write_stream)
-            await self.session.__aenter__()
+            await asyncio.wait_for(
+                self.session.__aenter__(), timeout=self.request_timeout
+            )
 
             # Initialize the connection
-            await self.session.initialize()
+            await asyncio.wait_for(
+                self.session.initialize(), timeout=self.request_timeout
+            )
 
             self.connected = True
             self.connect_time = datetime.now()
@@ -128,6 +137,24 @@ class StreamableHTTPTransport(BaseTransport):
 
             pass  # REMOVED: init-phase observe() call
             return True
+
+        except asyncio.TimeoutError as e:
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_CONNECTION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "service": "mcp",
+                    "transport": "streamable_http",
+                    "action": "connect_timeout",
+                    "url": self.url,
+                    "timeout": self.request_timeout,
+                },
+                description=f"Connection timed out after {self.request_timeout}s: {self.url}",
+            )
+            await self._cleanup()
+            raise MCPConnectionError(
+                f"Connection to {self.url} timed out after {self.request_timeout}s"
+            ) from e
 
         except Exception as e:
             observability.observe(
@@ -206,22 +233,33 @@ class StreamableHTTPTransport(BaseTransport):
             raise MCPRequestError(f"Request failed: {e}") from e
 
     async def _cleanup(self):
-        """Proper cleanup in same async context."""
+        """Proper cleanup in same async context.
+
+        Uses a timeout because the MCP SDK's streamablehttp_client async
+        generator can hang indefinitely during teardown when the connection
+        was interrupted by an auth error (401) or network failure.
+        """
+        import asyncio
+
         try:
             # Close session first
             if self.session:
                 try:
-                    await self.session.__aexit__(None, None, None)
-                except Exception:
+                    await asyncio.wait_for(
+                        self.session.__aexit__(None, None, None), timeout=5.0
+                    )
+                except (Exception, asyncio.TimeoutError):
                     pass
                 finally:
                     self.session = None
 
-            # Then close client context
+            # Then close client context (this is where the SDK can hang)
             if self.client_context:
                 try:
-                    await self.client_context.__aexit__(None, None, None)
-                except Exception:
+                    await asyncio.wait_for(
+                        self.client_context.__aexit__(None, None, None), timeout=5.0
+                    )
+                except (Exception, asyncio.TimeoutError):
                     pass
                 finally:
                     self.client_context = None

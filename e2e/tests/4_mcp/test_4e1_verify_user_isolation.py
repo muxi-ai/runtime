@@ -2,6 +2,7 @@
 """Test 4E1: Verify User Isolation - Cross-user credential protection"""
 
 import sys
+import os
 from pathlib import Path
 
 import asyncio
@@ -194,4 +195,4 @@ def test_verify_user_isolation():
 
 if __name__ == "__main__":
     success = test_verify_user_isolation()
-    sys.exit(0 if success else 1)
+    os._exit(0 if success else 1)

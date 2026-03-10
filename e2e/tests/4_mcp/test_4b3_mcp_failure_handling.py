@@ -2,6 +2,7 @@
 """Test 4B3: MCP Failure Handling - Error recovery and graceful degradation"""
 
 import sys
+import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
@@ -161,4 +162,4 @@ def test_mcp_failure_handling():
 
 if __name__ == "__main__":
     success = test_mcp_failure_handling()
-    sys.exit(0 if success else 1)
+    os._exit(0 if success else 1)

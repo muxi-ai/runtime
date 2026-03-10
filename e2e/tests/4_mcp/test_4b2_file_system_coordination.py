@@ -2,6 +2,7 @@
 """Test 4B2: File + System Info Coordination - Multi-MCP coordination"""
 
 import sys
+import os
 import asyncio
 import shutil
 from pathlib import Path
@@ -128,4 +129,4 @@ def test_file_system_coordination():
 
 if __name__ == "__main__":
     success = test_file_system_coordination()
-    sys.exit(0 if success else 1)
+    os._exit(0 if success else 1)
