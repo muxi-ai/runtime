@@ -993,9 +993,7 @@ class Agent:
 
                     # Add run_skill tool if RCE client is available and skills have scripts
                     if hasattr(self.overlord, "rce_client") and self.overlord.rce_client:
-                        run_tool = self.overlord.skill_manager.build_run_skill_tool(
-                            self.agent_id
-                        )
+                        run_tool = self.overlord.skill_manager.build_run_skill_tool(self.agent_id)
                         if run_tool:
                             tools.append(run_tool)
 
@@ -2899,9 +2897,7 @@ class Agent:
                 and hasattr(self.overlord, "skill_manager")
                 and self.overlord.skill_manager
             ):
-                return await handle_run_skill(
-                    self.agent_id, parameters, self.overlord
-                )
+                return await handle_run_skill(self.agent_id, parameters, self.overlord)
 
             if tool_name == "generate_file" and self.overlord:
                 code = parameters.get("code", "")
@@ -2909,11 +2905,7 @@ class Agent:
 
                 rce_client = getattr(self.overlord, "rce_client", None)
                 skill_manager = getattr(self.overlord, "skill_manager", None)
-                use_rce = (
-                    rce_client
-                    and skill_manager
-                    and "file-generation" in skill_manager.skills
-                )
+                use_rce = rce_client and skill_manager and "file-generation" in skill_manager.skills
 
                 if use_rce:
                     return await handle_generate_file_rce(
@@ -3598,15 +3590,14 @@ class Agent:
                             )
                         else:
                             script_note = f" (scripts: {', '.join(scripts)})" if scripts else ""
-                            planning_prompt += f"- **{skill.name}**: {skill.description}{script_note}\n"
+                            planning_prompt += (
+                                f"- **{skill.name}**: {skill.description}{script_note}\n"
+                            )
 
                 # Add note about run_skill if RCE is available
-                has_rce = (
-                    hasattr(self.overlord, "rce_client") and self.overlord.rce_client
-                )
+                has_rce = hasattr(self.overlord, "rce_client") and self.overlord.rce_client
                 has_executable = any(
-                    self.overlord.skill_manager.has_scripts(n)
-                    for n in available_skill_names
+                    self.overlord.skill_manager.has_scripts(n) for n in available_skill_names
                 )
                 if has_rce and has_executable:
                     planning_prompt += (

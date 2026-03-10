@@ -5665,9 +5665,7 @@ Agent response: {raw_response}"""
             name=f"set_pending_clarification_{session_id}",
         )
 
-    async def _set_pending_clarification_sync(
-        self, session_id: str, data: Dict[str, Any]
-    ) -> None:
+    async def _set_pending_clarification_sync(self, session_id: str, data: Dict[str, Any]) -> None:
         """
         Store pending clarification synchronously (awaited).
         Use when the caller needs to guarantee the write completes before returning.
@@ -5750,7 +5748,10 @@ Agent response: {raw_response}"""
             cred_data = None
             if isinstance(resolved, list):
                 for cred_entry in resolved:
-                    if isinstance(cred_entry, dict) and cred_entry.get("name", "").lower() == selected_account.lower():
+                    if (
+                        isinstance(cred_entry, dict)
+                        and cred_entry.get("name", "").lower() == selected_account.lower()
+                    ):
                         cred_data = cred_entry.get("credentials")
                         break
             if not cred_data:
@@ -5769,9 +5770,12 @@ Agent response: {raw_response}"""
                 mcp_svc.user_credentials[matching_server][user_id] = resolved_auth
             else:
                 # Fallback: assume bearer token
-                token = cred_data if isinstance(cred_data, str) else cred_data.get("token", cred_data)
+                token = (
+                    cred_data if isinstance(cred_data, str) else cred_data.get("token", cred_data)
+                )
                 mcp_svc.user_credentials[matching_server][user_id] = {
-                    "type": "bearer", "token": token,
+                    "type": "bearer",
+                    "token": token,
                 }
             return True
         except Exception:
@@ -6108,10 +6112,12 @@ Agent response: {raw_response}"""
 
                         if selected_credential and self.credential_resolver:
                             # Cache credential using shared helper
-                            cred_name = selected_credential["name"] if isinstance(selected_credential, dict) else selected_credential
-                            await self._cache_selected_credential(
-                                service, cred_name, user_id
+                            cred_name = (
+                                selected_credential["name"]
+                                if isinstance(selected_credential, dict)
+                                else selected_credential
                             )
+                            await self._cache_selected_credential(service, cred_name, user_id)
 
                             # Get the original message and clean up
                             # Try both "original_message" and "original_request" for compatibility
@@ -6248,7 +6254,8 @@ Agent response: {raw_response}"""
                                 mcp_service_name = ctx.get("mcp_service")
                                 if selected_account and mcp_service_name:
                                     await self._cache_selected_credential(
-                                        mcp_service_name, selected_account,
+                                        mcp_service_name,
+                                        selected_account,
                                         ctx.get("user_id", user_id),
                                     )
 

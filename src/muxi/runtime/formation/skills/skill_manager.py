@@ -95,20 +95,14 @@ class SkillManager:
     def _load_skill(self, name: str) -> SkillMetadata:
         """Parse SKILL.md frontmatter for a single skill."""
         if not self.skills_dir:
-            raise ValueError(
-                f"Skill '{name}' declared but no skills directory configured"
-            )
+            raise ValueError(f"Skill '{name}' declared but no skills directory configured")
         skill_dir = self.skills_dir / name
         skill_md = skill_dir / "SKILL.md"
 
         if not skill_dir.is_dir():
-            raise ValueError(
-                f"Skill '{name}' declared but directory not found: {skill_dir}"
-            )
+            raise ValueError(f"Skill '{name}' declared but directory not found: {skill_dir}")
         if not skill_md.is_file():
-            raise ValueError(
-                f"Skill '{name}' missing SKILL.md: {skill_md}"
-            )
+            raise ValueError(f"Skill '{name}' missing SKILL.md: {skill_md}")
 
         metadata, _body, warnings = parse_skill_md(skill_md)
 
@@ -160,8 +154,7 @@ class SkillManager:
             "You have access to specialized skills that provide detailed instructions "
             "for specific tasks. BEFORE working on a task that matches a skill below, "
             "you MUST first call the activate_skill tool with the skill name to load "
-            "its full instructions into your context.\n\n"
-            + "\n".join(entries)
+            "its full instructions into your context.\n\n" + "\n".join(entries)
         )
 
     def build_activate_skill_tool(self, agent_id: str) -> Optional[Dict[str, Any]]:
@@ -206,10 +199,7 @@ class SkillManager:
         """
         available = self.get_available_skills(agent_id)
         # Exclude file-generation from run_skill (uses generate_file tool instead)
-        executable = [
-            n for n in available
-            if self.has_scripts(n) and n != "file-generation"
-        ]
+        executable = [n for n in available if self.has_scripts(n) and n != "file-generation"]
         if not executable:
             return None
 
@@ -228,8 +218,7 @@ class SkillManager:
                     "Execute a command inside a skill's sandboxed environment. "
                     "The skill directory is mounted read-only; any files created by "
                     "the command are returned as artifacts. "
-                    "Available skill scripts:\n"
-                    + "\n".join(f"  - {s}" for s in script_list)
+                    "Available skill scripts:\n" + "\n".join(f"  - {s}" for s in script_list)
                 ),
                 "parameters": {
                     "type": "object",
@@ -325,15 +314,15 @@ class SkillManager:
                 scope = "public"
             else:
                 scope = "private"
-            result.append({
-                "name": skill.name,
-                "description": skill.description,
-                "scope": scope,
-                "has_scripts": any(
-                    r.startswith("scripts/") for r in self._get_resources(name)
-                ),
-                "resource_count": len(self._get_resources(name)),
-            })
+            result.append(
+                {
+                    "name": skill.name,
+                    "description": skill.description,
+                    "scope": scope,
+                    "has_scripts": any(r.startswith("scripts/") for r in self._get_resources(name)),
+                    "resource_count": len(self._get_resources(name)),
+                }
+            )
         return result
 
     def _get_resources(self, skill_name: str) -> List[str]:
@@ -344,4 +333,5 @@ class SkillManager:
         if not metadata:
             return []
         from .parser import _enumerate_resources
+
         return _enumerate_resources(metadata.base_dir)

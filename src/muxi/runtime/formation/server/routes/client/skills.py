@@ -87,10 +87,12 @@ async def list_agent_skills(request: Request, agent_id: str) -> JSONResponse:
     for name in available:
         skill = skill_manager.skills.get(name)
         if skill:
-            skills.append({
-                "name": skill.name,
-                "description": skill.description,
-                "scope": "public" if name in skill_manager.public_skills else "private",
-            })
+            skills.append(
+                {
+                    "name": skill.name,
+                    "description": skill.description,
+                    "scope": "public" if name in skill_manager.public_skills else "private",
+                }
+            )
 
     return create_success_response(data={"skills": skills, "agent_id": agent_id})

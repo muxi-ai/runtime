@@ -91,9 +91,7 @@ def parse_skill_md(path: Path) -> tuple[SkillMetadata, str, list]:
     # Lenient validation: warn but don't fail on name issues
     warnings = []
     if name != dir_name:
-        warnings.append(
-            f"Skill name '{name}' does not match directory '{dir_name}'"
-        )
+        warnings.append(f"Skill name '{name}' does not match directory '{dir_name}'")
     if len(name) > 64:
         warnings.append(f"Skill name '{name}' exceeds 64 characters")
     if not _NAME_PATTERN.match(name):
@@ -103,9 +101,7 @@ def parse_skill_md(path: Path) -> tuple[SkillMetadata, str, list]:
 
     # Parse allowed-tools (space-delimited string -> list)
     allowed_tools_raw = fm.get("allowed-tools", "")
-    allowed_tools = (
-        allowed_tools_raw.split() if isinstance(allowed_tools_raw, str) else []
-    )
+    allowed_tools = allowed_tools_raw.split() if isinstance(allowed_tools_raw, str) else []
 
     metadata = SkillMetadata(
         name=name,

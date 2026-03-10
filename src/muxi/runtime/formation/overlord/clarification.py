@@ -673,6 +673,7 @@ class UnifiedClarificationSystem:
                 # skip clarification -- the user already selected an account
                 try:
                     from ...services.mcp.service import MCPService
+
                     mcp_svc = MCPService.get_instance()
                     if mcp_svc:
                         for sid_c in await mcp_svc.list_servers():

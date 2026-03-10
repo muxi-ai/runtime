@@ -213,9 +213,7 @@ class RCEClient:
         resp.raise_for_status()
         return resp.json()
 
-    async def ensure_cached(
-        self, skill_id: str, skill_dir: Path, content_hash: str
-    ) -> bool:
+    async def ensure_cached(self, skill_id: str, skill_dir: Path, content_hash: str) -> bool:
         """Check cache, upload if stale. Returns True if upload was needed."""
         cache_status = await self.check_skill(skill_id)
         if cache_status.get("cached") and cache_status.get("hash") == content_hash:
@@ -247,9 +245,11 @@ class RCEClient:
             import base64
 
             payload["input_files"] = {
-                name: base64.b64encode(content.encode()).decode()
-                if isinstance(content, str)
-                else base64.b64encode(content).decode()
+                name: (
+                    base64.b64encode(content.encode()).decode()
+                    if isinstance(content, str)
+                    else base64.b64encode(content).decode()
+                )
                 for name, content in input_files.items()
             }
         if env:
@@ -272,7 +272,11 @@ class RCEClient:
         self._ensure_connected()
         resp = await self._client.post(path, json=payload)
         if resp.status_code >= 400:
-            body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            body = (
+                resp.json()
+                if resp.headers.get("content-type", "").startswith("application/json")
+                else {}
+            )
             raise RCEError(
                 body.get("error", f"HTTP {resp.status_code}"),
                 resp.status_code,
@@ -298,4 +302,5 @@ def _zip_directory(directory: Path) -> io.BytesIO:
 
 def _generate_job_id() -> str:
     from ...utils.id_generator import generate_nanoid
+
     return f"rce_{generate_nanoid()}"

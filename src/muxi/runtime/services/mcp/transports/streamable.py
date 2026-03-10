@@ -114,22 +114,16 @@ class StreamableHTTPTransport(BaseTransport):
 
             # Enter context and get streams
             # Timeout protects against SDK hanging on auth errors (e.g. 401)
-            self.read_stream, self.write_stream, self.get_session_id = (
-                await asyncio.wait_for(
-                    self.client_context.__aenter__(), timeout=self.request_timeout
-                )
+            self.read_stream, self.write_stream, self.get_session_id = await asyncio.wait_for(
+                self.client_context.__aenter__(), timeout=self.request_timeout
             )
 
             # Create session for high-level operations
             self.session = ClientSession(self.read_stream, self.write_stream)
-            await asyncio.wait_for(
-                self.session.__aenter__(), timeout=self.request_timeout
-            )
+            await asyncio.wait_for(self.session.__aenter__(), timeout=self.request_timeout)
 
             # Initialize the connection
-            await asyncio.wait_for(
-                self.session.initialize(), timeout=self.request_timeout
-            )
+            await asyncio.wait_for(self.session.initialize(), timeout=self.request_timeout)
 
             self.connected = True
             self.connect_time = datetime.now()
@@ -245,9 +239,7 @@ class StreamableHTTPTransport(BaseTransport):
             # Close session first
             if self.session:
                 try:
-                    await asyncio.wait_for(
-                        self.session.__aexit__(None, None, None), timeout=5.0
-                    )
+                    await asyncio.wait_for(self.session.__aexit__(None, None, None), timeout=5.0)
                 except (Exception, asyncio.TimeoutError):
                     pass
                 finally:

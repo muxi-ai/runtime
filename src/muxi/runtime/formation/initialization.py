@@ -1255,10 +1255,12 @@ def initialize_skills(formation, config: Dict[str, Any]) -> None:
         detail_parts.append(f"{formation_count} formation")
     detail = f"{len(all_names)} skill(s) ({', '.join(detail_parts)})"
 
-    print(InitEventFormatter.format_ok(
-        f"Skills loaded: {', '.join(all_names)}",
-        detail,
-    ))
+    print(
+        InitEventFormatter.format_ok(
+            f"Skills loaded: {', '.join(all_names)}",
+            detail,
+        )
+    )
 
     observability.observe(
         event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
@@ -1298,17 +1300,17 @@ async def initialize_rce(formation, config: Dict[str, Any]) -> None:
     try:
         status = await client.connect()
     except RCEError as e:
-        raise ConfigurationValidationError(
-            [f"RCE server unreachable at {rce_url}: {e}"]
-        )
+        raise ConfigurationValidationError([f"RCE server unreachable at {rce_url}: {e}"])
 
     formation._rce_client = client
 
     langs = ", ".join(status.languages)
-    print(InitEventFormatter.format_ok(
-        f"RCE connected ({rce_url})",
-        f"v{status.version}, languages: {langs}",
-    ))
+    print(
+        InitEventFormatter.format_ok(
+            f"RCE connected ({rce_url})",
+            f"v{status.version}, languages: {langs}",
+        )
+    )
 
     observability.observe(
         event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
@@ -1331,9 +1333,7 @@ async def initialize_rce(formation, config: Dict[str, Any]) -> None:
             for name, metadata in skill_manager.skills.items():
                 try:
                     content_hash = skill_manager.get_skill_hash(name)
-                    uploaded = await client.ensure_cached(
-                        name, metadata.base_dir, content_hash
-                    )
+                    uploaded = await client.ensure_cached(name, metadata.base_dir, content_hash)
                     if uploaded:
                         observability.observe(
                             event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,

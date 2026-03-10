@@ -61,8 +61,7 @@ async def handle_activate_skill(
     return {
         "status": "activated",
         "message": (
-            f"Skill '{skill_name}' activated. "
-            "Instructions are now available in your context."
+            f"Skill '{skill_name}' activated. " "Instructions are now available in your context."
         ),
     }
 
@@ -124,8 +123,7 @@ async def handle_run_skill(
             response["stderr"] = result.stderr
         if result.artifacts:
             response["artifacts"] = [
-                {"name": a["name"], "mime": a["mime"], "size": a["size"]}
-                for a in result.artifacts
+                {"name": a["name"], "mime": a["mime"], "size": a["size"]} for a in result.artifacts
             ]
             response["_artifacts_full"] = result.artifacts
         return response
@@ -210,9 +208,7 @@ async def handle_generate_file_rce(
     try:
         metadata = skill_manager.skills["file-generation"]
         content_hash = skill_manager.get_skill_hash("file-generation")
-        await rce_client.ensure_cached(
-            "file-generation", metadata.base_dir, content_hash
-        )
+        await rce_client.ensure_cached("file-generation", metadata.base_dir, content_hash)
 
         result = await rce_client.run_skill(
             "file-generation",
