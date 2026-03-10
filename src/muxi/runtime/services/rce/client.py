@@ -193,6 +193,7 @@ class RCEClient:
     ) -> Dict[str, Any]:
         """Zip a skill directory and upload it."""
         buf = _zip_directory(skill_dir)
+        self._ensure_connected()
         resp = await self._client.post(
             f"/skill/{skill_id}",
             params={"hash": content_hash},
@@ -205,6 +206,7 @@ class RCEClient:
 
     async def delete_skill(self, skill_id: str) -> Dict[str, Any]:
         """Delete a cached skill."""
+        self._ensure_connected()
         resp = await self._client.delete(f"/skill/{skill_id}")
         if resp.status_code == 404:
             raise RCEError(resp.json().get("error", "not cached"), 404)
