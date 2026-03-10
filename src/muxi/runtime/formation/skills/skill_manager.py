@@ -1,4 +1,5 @@
 import hashlib
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -24,7 +25,8 @@ class SkillManager:
         self.public_skills: List[str] = []
         self.agent_skills: Dict[str, List[str]] = {}
         self._content_cache: Dict[str, Any] = {}
-        self._activated: Dict[str, Set[str]] = {}
+        self._activated: OrderedDict[str, Set[str]] = OrderedDict()
+        self._activated_max = 10_000
         self._builtin_skills: List[str] = []
 
     def load_builtin_skills(self, disabled: Optional[List[str]] = None) -> List[str]:
@@ -279,6 +281,8 @@ class SkillManager:
         wrapped = self._wrap_skill_content(content)
 
         self._activated.setdefault(session_id, set()).add(skill_name)
+        if len(self._activated) > self._activated_max:
+            self._activated.popitem(last=False)
 
         return wrapped
 
