@@ -1,6 +1,6 @@
 # MUXI Runtime Architecture Analysis
 
-**Generated:** 2026-03-06
+**Generated:** 2026-03-10
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -476,6 +476,65 @@ Manages MCP server lifecycle and tool execution with user credential resolution.
 3. Pass resolved credentials to MCP handler
 4. Execute tool call
 ```
+
+**Credential Selection and Caching (as of 2026-03-10):**
+
+Two paths lead to credential clarification:
+
+```
+A) Proactive: _analyze_request → LLM sees multiple accounts → clarify (mode="direct")
+   → handle_response detects available_accounts → credential selection path
+   → _cache_selected_credential → _process_sync_chat with skip_clarification
+
+B) Reactive: Agent calls MCP → CredentialSelectionNeededError → AmbiguousCredentialError
+   → overlord except handler → _set_pending_clarification_sync(type="ambiguous_credential")
+   → user responds → ambiguous_credential handler → _cache_selected_credential
+   → _delete_pending_clarification_sync → _process_sync_chat with skip_clarification
+```
+
+**`_cache_selected_credential` helper (`overlord.py`):**
+```python
+1. MCPService.get_instance() → find matching server by service name
+2. credential_resolver.resolve(user_id, service) → get all credentials
+3. Match by selected_account name (case-insensitive)
+4. Get auth template from server_configs[server_id]["stored_credentials"]
+5. _replace_credential_in_auth(template, cred_data) → resolve placeholders
+6. Cache in mcp_svc.user_credentials[server_id][user_id]
+```
+
+**Cache-aware clarification skip (`clarification.py`):**
+```python
+# _analyze_request checks MCP credential cache AFTER LLM analysis
+# If credential cached for user+service → return needs_clarification: False
+# Prevents re-asking after user already selected an account
+```
+
+**Critical gotchas (2026-03-10):**
+
+1. **WorkingMemory truthiness**: `WorkingMemory.__len__` returns `len(self.buffer)`.
+   When buffer is empty, `bool(working_memory)` is `False`. ALL guards must use
+   `is None` checks, not `not buffer_memory`. The sync KV helpers
+   (`_set_pending_clarification_sync`, `_delete_pending_clarification_sync`) use
+   `self.buffer_memory is None` to guard correctly.
+
+2. **Sync vs async KV operations**: Fire-and-forget `_set_pending_clarification`
+   (via `asyncio.ensure_future`) would not complete before the response was returned
+   to the user. Credential-related clarification MUST use the sync variants
+   (`_set_pending_clarification_sync`, `_delete_pending_clarification_sync`) that
+   are awaited directly.
+
+3. **String vs dict credentials**: `available_credentials` from
+   `AmbiguousCredentialError` contains strings (account names), but the clarification
+   handler originally assumed dicts with a `"name"` key. Both paths now check
+   `isinstance(cred, dict)` before accessing `.get("name")`.
+
+4. **Auth template source**: Uses `mcp_svc.server_configs[server_id]["stored_credentials"]`
+   to get the auth template with credential placeholders. `mcp_svc.servers` does NOT
+   exist -- that was a bug in the original implementation.
+
+5. **Proactive vs reactive mode mismatch**: Proactive clarification uses `mode="direct"`
+   but the credential path in `handle_response` originally required `mode="credential"`.
+   Fixed by checking for `available_accounts` presence regardless of mode.
 
 #### A2A Coordinator
 
@@ -3747,3 +3806,43 @@ Run:  ensure_cached(name, dir, hash) [GET check, POST zip if stale]
 8. Agents (overlord injects catalog + specialties)
 9. Server
 ```
+
+### 2026-03-09: MCP Streamable HTTP Transport Hangs on 401
+
+**Problem:** MCP connection attempts to servers with invalid tokens hung indefinitely,
+causing e2e tests to block until the global timeout killed them.
+
+**Root cause:** The MCP SDK's `connect()` and `cleanup()` are async generators that
+never complete when the server rejects auth. No built-in timeout existed.
+
+**Fix (commit `207bf0dd`):**
+- Wrap all MCP SDK async operations with `asyncio.wait_for()` timeouts
+- `connect()`: 30s timeout (covers TLS handshake + auth exchange)
+- `cleanup()`: 10s timeout (prevents hang during error recovery)
+- Invalid tokens now fail in <1s instead of hanging forever
+- E2e tests use `os._exit()` instead of `sys.exit()` to prevent cleanup hang
+
+**File:** `src/muxi/runtime/services/mcp/transports/streamable.py`
+
+### 2026-03-10: Credential Selection Flow Fix
+
+**Problem:** Multi-credential MCP flows (user has 2+ GitHub accounts) failed at
+multiple points -- clarification not persisted, credentials not cached, re-asking
+after selection, type mismatches.
+
+**Root causes and fixes (commit `c0de2927`):**
+
+| # | Bug | Fix |
+|---|-----|-----|
+| 1 | `WorkingMemory.__len__` returns 0 when empty, `not buffer_memory` is True | Use `is None` guard in sync KV helpers |
+| 2 | Fire-and-forget `_set_pending_clarification` not completing before response | Created `_set_pending_clarification_sync` / `_delete_pending_clarification_sync` (awaited) |
+| 3 | Used `mcp_svc.servers` (doesn't exist) for auth template | Use `mcp_svc.server_configs[server_id]["stored_credentials"]` |
+| 4 | Credential not cached after proactive clarification resolves | Cache at `response_result.action == "execute"` point via `_cache_selected_credential` |
+| 5 | Proactive clarification re-asks after selection | Post-LLM check: if credential already cached for user+service, skip clarification |
+| 6 | Proactive path uses `mode="direct"`, handler required `mode="credential"` | Check `available_accounts` presence regardless of mode |
+| 7 | `available_credentials` are strings, handler assumed dicts | `isinstance(cred, dict)` checks |
+
+**Key files:**
+- `src/muxi/runtime/formation/overlord/overlord.py` -- sync KV helpers, `_cache_selected_credential`, string/dict handling
+- `src/muxi/runtime/formation/overlord/clarification.py` -- credential cache check in `_analyze_request`
+- `e2e/tests/4_mcp/credential_seeder.py` -- seeds dual GitHub credentials via direct SQL
