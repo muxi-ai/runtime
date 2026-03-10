@@ -1332,7 +1332,7 @@ async def initialize_rce(formation, config: Dict[str, Any]) -> None:
                 try:
                     content_hash = skill_manager.get_skill_hash(name)
                     uploaded = await client.ensure_cached(
-                        name, metadata.skill_dir, content_hash
+                        name, metadata.base_dir, content_hash
                     )
                     if uploaded:
                         observability.observe(

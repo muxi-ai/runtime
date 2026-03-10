@@ -33,7 +33,7 @@ class SkillContent:
 _NAME_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 
 
-def parse_skill_md(path: Path) -> tuple[SkillMetadata, str]:
+def parse_skill_md(path: Path) -> tuple[SkillMetadata, str, list]:
     """
     Parse a SKILL.md file into metadata + body.
 
@@ -44,7 +44,7 @@ def parse_skill_md(path: Path) -> tuple[SkillMetadata, str]:
         path: Absolute path to SKILL.md
 
     Returns:
-        Tuple of (SkillMetadata, body_text)
+        Tuple of (SkillMetadata, body_text, warnings)
 
     Raises:
         ValueError: If frontmatter is missing/unparseable or description is empty
