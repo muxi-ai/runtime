@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.20260310.0 - Agent Skills & MCP Reliability
+## 0.20260311.0 - Agent Skills & MCP Reliability
 
 ### New Features
 
