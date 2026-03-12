@@ -36,6 +36,25 @@ RUN uv pip install --prefix=/install --no-cache -r requirements.txt
 COPY src ./src
 RUN uv pip install --prefix=/install --no-cache -e .
 
+# Fix sqlite-vec: the published aarch64 wheel ships a 32-bit ARM binary.
+# Compile the correct 64-bit shared library from the amalgamation source.
+# Need libsqlite3-dev for sqlite3ext.h header.
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then \
+        echo "Compiling sqlite-vec for aarch64..." && \
+        apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev && \
+        VEC_VERSION="0.1.7-alpha.10" && \
+        python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/asg017/sqlite-vec/releases/download/v${VEC_VERSION}/sqlite-vec-${VEC_VERSION}-amalgamation.tar.gz', 'sqlite-vec.tar.gz')" && \
+        tar xzf sqlite-vec.tar.gz && \
+        gcc -O2 -fPIC -shared sqlite-vec.c -o vec0.so && \
+        cp vec0.so /install/lib/python3.10/site-packages/sqlite_vec/vec0.so && \
+        echo "sqlite-vec compiled and installed for aarch64" && \
+        rm -f sqlite-vec.tar.gz sqlite-vec.c sqlite-vec.h vec0.so && \
+        apt-get purge -y libsqlite3-dev && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*; \
+    else \
+        echo "sqlite-vec: skipping recompilation for $ARCH"; \
+    fi
+
 # Note: Skipping spaCy model download to save ~45MB
 # Can be downloaded at runtime if needed: python -m spacy download en_core_web_sm
 
