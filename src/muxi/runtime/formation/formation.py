@@ -2528,6 +2528,10 @@ class Formation:
         tools, seeding data, etc.
 
         Fails fast if the command exits with a non-zero status.
+
+        Security: shell=True is intentional -- the init command is authored by
+        the formation owner and is equivalent to a Dockerfile RUN directive.
+        The formation YAML is a trusted input boundary.
         """
         if not self.config:
             return
@@ -2542,31 +2546,30 @@ class Formation:
                 {"current_type": type(init_cmd).__name__},
             )
 
-        import subprocess
-
         from ..datatypes.observability import InitEventFormatter
 
+        cwd = (
+            os.path.dirname(self._formation_path)
+            if self._formation_path and os.path.isfile(self._formation_path)
+            else self._formation_path
+        )
+
         try:
-            result = subprocess.run(
+            proc = await asyncio.create_subprocess_shell(
                 init_cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=120,
-                cwd=(
-                    os.path.dirname(self._formation_path)
-                    if self._formation_path and os.path.isfile(self._formation_path)
-                    else self._formation_path
-                ),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
             )
-            if result.returncode != 0:
-                stderr = result.stderr.strip() or result.stdout.strip()
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+            if proc.returncode != 0:
+                err_text = stderr.decode().strip() or stdout.decode().strip()
                 raise ConfigurationLoadError(
-                    f"Init hook failed (exit code {result.returncode}): {stderr}",
-                    {"init": init_cmd, "exit_code": result.returncode},
+                    f"Init hook failed (exit code {proc.returncode}): {err_text}",
+                    {"init": init_cmd, "exit_code": proc.returncode},
                 )
             print(InitEventFormatter.format_ok("Init hook completed"))
-        except subprocess.TimeoutExpired:
+        except asyncio.TimeoutError:
             raise ConfigurationLoadError(
                 "Init hook timed out after 120 seconds",
                 {"init": init_cmd},
@@ -2580,8 +2583,8 @@ class Formation:
         for arg in args:
             if not isinstance(arg, str):
                 continue
-            if arg.startswith("/") or arg.startswith("./"):
-                if not os.path.exists(arg):
+            if arg.startswith(("/", "./", "../", "~")):
+                if not os.path.exists(os.path.expanduser(arg)):
                     missing.append(arg)
         return missing
 

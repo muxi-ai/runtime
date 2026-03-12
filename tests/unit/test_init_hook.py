@@ -43,6 +43,20 @@ class TestCheckMissingPathArgs:
         config = {"args": [123, True, None, "/tmp"]}
         assert Formation._check_missing_path_args(config) == []
 
+    def test_missing_dotdot_path(self):
+        config = {"args": ["../nonexistent_dir_xyz_12345"]}
+        result = Formation._check_missing_path_args(config)
+        assert result == ["../nonexistent_dir_xyz_12345"]
+
+    def test_missing_tilde_path(self):
+        config = {"args": ["~/nonexistent_dir_xyz_12345"]}
+        result = Formation._check_missing_path_args(config)
+        assert result == ["~/nonexistent_dir_xyz_12345"]
+
+    def test_existing_home_dir(self):
+        config = {"args": ["~"]}
+        assert Formation._check_missing_path_args(config) == []
+
 
 class TestRunInitHook:
     """Tests for _run_init_hook."""
