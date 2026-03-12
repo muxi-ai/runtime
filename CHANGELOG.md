@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.20260312.0 - Formation Init Hook & MCP Path Diagnostics
+
+### New Features
+
+- **Formation `init` hook** - New top-level `init:` field runs a shell command before any services are initialized. Use for environment setup: creating directories, installing tools, seeding data. Runs with 120s timeout, cwd = formation directory, fails fast on non-zero exit.
+  ```yaml
+  init: "mkdir -p /tmp/workspace"
+  ```
+- **MCP path-existence hints** - When a command-type MCP server fails with "Connection closed", the runtime checks if any args look like filesystem paths that don't exist and prints a diagnostic hint pointing to the `init` hook.
+
 ## 0.20260311.0 - Agent Skills & MCP Reliability
 
 ### New Features

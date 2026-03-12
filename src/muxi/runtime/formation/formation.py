@@ -468,6 +468,9 @@ class Formation:
             # Prepare services (but don't start them yet)
             self._prepare_services()
 
+            # Run init hook before service initialization
+            await self._run_init_hook()
+
             # Initialize all services (observability first!)
             await self._initialize_services()
 
@@ -2432,6 +2435,16 @@ class Formation:
                             f"MCP server: {server_id}", f"connection failed - {error_msg}"
                         )
                     )
+                    # Check if any args look like missing filesystem paths
+                    missing_paths = self._check_missing_path_args(server_config)
+                    if missing_paths:
+                        for mp in missing_paths:
+                            print(
+                                InitEventFormatter.format_info(
+                                    f'  hint: argument "{mp}" looks like a path but does not exist',
+                                    "ensure the directory exists, or use the 'init' hook to create it",
+                                )
+                            )
 
                 failed_servers.append(server_id)
                 continue  # Continue with other servers instead of crashing
@@ -2506,6 +2519,74 @@ class Formation:
                     f"{len(successful_servers)} server(s) connected, {len(failed_servers)} failed",
                 )
             )
+
+    async def _run_init_hook(self) -> None:
+        """Run the formation init hook if configured.
+
+        The init hook runs a shell command before any services are initialized.
+        It is intended for environment setup: creating directories, installing
+        tools, seeding data, etc.
+
+        Fails fast if the command exits with a non-zero status.
+
+        Security: shell=True is intentional -- the init command is authored by
+        the formation owner and is equivalent to a Dockerfile RUN directive.
+        The formation YAML is a trusted input boundary.
+        """
+        if not self.config:
+            return
+
+        init_cmd = self.config.get("init")
+        if not init_cmd:
+            return
+
+        if not isinstance(init_cmd, str):
+            raise ConfigurationValidationError(
+                ["'init' must be a string (shell command)"],
+                {"current_type": type(init_cmd).__name__},
+            )
+
+        from ..datatypes.observability import InitEventFormatter
+
+        cwd = (
+            os.path.dirname(self._formation_path)
+            if self._formation_path and os.path.isfile(self._formation_path)
+            else self._formation_path
+        )
+
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                init_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+            if proc.returncode != 0:
+                err_text = stderr.decode().strip() or stdout.decode().strip()
+                raise ConfigurationLoadError(
+                    f"Init hook failed (exit code {proc.returncode}): {err_text}",
+                    {"init": init_cmd, "exit_code": proc.returncode},
+                )
+            print(InitEventFormatter.format_ok("Init hook completed"))
+        except asyncio.TimeoutError:
+            raise ConfigurationLoadError(
+                "Init hook timed out after 120 seconds",
+                {"init": init_cmd},
+            )
+
+    @staticmethod
+    def _check_missing_path_args(server_config: Dict[str, Any]) -> List[str]:
+        """Check if any MCP server args look like filesystem paths that don't exist."""
+        missing = []
+        args = server_config.get("args", [])
+        for arg in args:
+            if not isinstance(arg, str):
+                continue
+            if arg.startswith(("/", "./", "../", "~")):
+                if not os.path.exists(os.path.expanduser(arg)):
+                    missing.append(arg)
+        return missing
 
     async def start_overlord(self):
         """
