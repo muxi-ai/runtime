@@ -562,6 +562,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             data={"error": str(e), "service": "persistent_memory"},
             description=f"Failed to initialize persistent memory: {str(e)}",
         )
+        print(InitEventFormatter.format_fail("Persistent memory", f"{type(e).__name__}: {e}"))
         # Don't raise - persistent memory is optional
 
 
