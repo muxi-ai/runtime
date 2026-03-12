@@ -511,8 +511,17 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             db_manager = get_database_manager(db_connection_string, statement_timeout)
             formation._db_manager = db_manager
 
+            # Strip sqlite:/// prefix to get a raw file path for SQLiteMemory.
+            # Users may write "sqlite:///./memory.db" (SQLAlchemy style) but
+            # SQLiteMemory needs a plain file path like "./memory.db".
+            db_file_path = connection_string
+            if db_file_path.startswith("sqlite:///"):
+                db_file_path = db_file_path[len("sqlite:///") :]
+            elif db_file_path.startswith("sqlite://"):
+                db_file_path = db_file_path[len("sqlite://") :]
+
             formation._long_term_memory = SQLiteMemory(
-                db_path=connection_string,
+                db_path=db_file_path,
                 formation_id=formation_id,
                 embedding_model=embedding_model_name,
             )
@@ -1154,8 +1163,12 @@ async def initialize_persistent_memory(
             from ..services.db import get_database_manager
             from ..services.memory.sqlite import SQLiteMemory
 
-            # Remove sqlite:// prefix if present
-            db_path = connection_string.replace("sqlite://", "")
+            # Strip sqlite:/// prefix to get a raw file path for SQLiteMemory
+            db_path = connection_string
+            if db_path.startswith("sqlite:///"):
+                db_path = db_path[len("sqlite:///") :]
+            elif db_path.startswith("sqlite://"):
+                db_path = db_path[len("sqlite://") :]
             sqlite_memory = SQLiteMemory(
                 db_path=db_path,
                 formation_id=overlord.formation_id,

@@ -488,8 +488,93 @@ llm:
     - text: "openai/gpt-4o-mini"
 """,
         )
-        with pytest.raises(ValueError, match="nonexistent-mcp.*not declared"):
+        with pytest.raises(ValueError, match="nonexistent-mcp.*not found"):
             await loader.load(str(tmp_path))
+
+    @pytest.mark.asyncio
+    async def test_agent_private_mcp_from_directory(self, loader, tmp_path):
+        """Agent references MCP from mcp/ directory without formation-level declaration."""
+        _write_yaml(
+            tmp_path / "formation.yaml",
+            """
+schema: "1.0.0"
+id: test
+description: test
+agents:
+  - my-agent
+llm:
+  models:
+    - text: "openai/gpt-4o-mini"
+""",
+        )
+        _write_yaml(
+            tmp_path / "agents" / "my-agent.yaml",
+            """
+id: my-agent
+name: My Agent
+description: Test agent
+system_message: "Hello"
+mcp_servers:
+  - filesystem
+""",
+        )
+        _write_yaml(
+            tmp_path / "mcp" / "filesystem.yaml",
+            """
+id: filesystem
+type: command
+command: npx
+args:
+  - "-y"
+  - "@modelcontextprotocol/server-filesystem"
+  - "/tmp/workspace"
+""",
+        )
+        config, _, _ = await loader.load(str(tmp_path))
+        agent = config["agents"][0]
+        assert len(agent["mcp_servers"]) == 1
+        assert agent["mcp_servers"][0]["id"] == "filesystem"
+        assert agent["mcp_servers"][0]["type"] == "command"
+
+    @pytest.mark.asyncio
+    async def test_agent_private_mcp_not_in_formation_servers(self, loader, tmp_path):
+        """Agent-private MCPs should NOT appear in formation-level mcp.servers."""
+        _write_yaml(
+            tmp_path / "formation.yaml",
+            """
+schema: "1.0.0"
+id: test
+description: test
+agents:
+  - my-agent
+llm:
+  models:
+    - text: "openai/gpt-4o-mini"
+""",
+        )
+        _write_yaml(
+            tmp_path / "agents" / "my-agent.yaml",
+            """
+id: my-agent
+name: My Agent
+description: Test agent
+system_message: "Hello"
+mcp_servers:
+  - filesystem
+""",
+        )
+        _write_yaml(
+            tmp_path / "mcp" / "filesystem.yaml",
+            """
+id: filesystem
+type: command
+command: npx
+""",
+        )
+        config, _, _ = await loader.load(str(tmp_path))
+        formation_mcps = config.get("mcp", {}).get("servers", [])
+        mcp_ids = [s["id"] for s in formation_mcps if isinstance(s, dict)]
+        assert "filesystem" not in mcp_ids
 
     @pytest.mark.asyncio
     async def test_agent_mixes_references_and_inline(self, loader, tmp_path):

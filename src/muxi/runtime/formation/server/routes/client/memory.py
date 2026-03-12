@@ -27,10 +27,33 @@ router = APIRouter(tags=["Memory"])
 
 
 class MemoryCreate(BaseModel):
-    """Model for creating a memory."""
+    """Model for creating a memory.
 
-    content: str
+    Accepts the SDK/spec format: { type, detail } and/or the flat format: { content }.
+    """
+
+    content: Optional[str] = None
+    type: Optional[str] = None
+    detail: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+
+    def get_content_string(self) -> str:
+        """Build the content string for storage.
+
+        SDK format: { type: "preference", detail: "Prefers Python" }
+        Flat format: { content: "User prefers Python" }
+        """
+        if self.content:
+            return self.content
+        if self.detail:
+            return self.detail
+        raise ValueError("Either 'content' or 'detail' must be provided")
+
+    def get_metadata(self) -> Dict[str, Any]:
+        meta = self.metadata or {}
+        if self.type and "type" not in meta:
+            meta["type"] = self.type
+        return meta
 
 
 def _get_user_id(
@@ -206,18 +229,29 @@ async def create_user_memory(
         return JSONResponse(content=response.model_dump(), status_code=503)
 
     try:
+        content_str = memory.get_content_string()
+    except ValueError as e:
+        response = create_error_response(
+            "INVALID_PARAMS",
+            str(e),
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=422)
+
+    try:
         # Add memory
         memory_id = await overlord.long_term_memory.add(
-            content=memory.content,
-            metadata=memory.metadata or {},
+            content=content_str,
+            metadata=memory.get_metadata(),
             external_user_id=user_id,
         )
 
         result = {
             "id": memory_id,
-            "content": memory.content,
+            "content": {"type": memory.type or "general", "detail": content_str},
             "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "metadata": memory.metadata or {},
+            "metadata": memory.get_metadata(),
         }
 
         response = create_success_response(
