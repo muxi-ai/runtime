@@ -158,7 +158,8 @@ class FormationLoader:
         )
 
         # Resolve agent-level MCP references against formation-level MCP registry
-        self._resolve_agent_mcp_references(config)
+        # and mcp/ directory files for agent-private servers
+        await self._resolve_agent_mcp_references(config, formation_dir_path, secrets_manager)
 
         config = self._resolve_knowledge_paths(config, formation_dir)
 
@@ -227,7 +228,8 @@ class FormationLoader:
         )
 
         # Resolve agent-level MCP references against formation-level MCP registry
-        self._resolve_agent_mcp_references(main_config)
+        # and mcp/ directory files for agent-private servers
+        await self._resolve_agent_mcp_references(main_config, formation_dir, secrets_manager)
 
         # Resolve knowledge paths relative to formation directory
         main_config = self._resolve_knowledge_paths(main_config, str(formation_dir))
@@ -516,23 +518,52 @@ class FormationLoader:
         )
         config["a2a"]["outbound"]["services"] = resolved
 
-    def _resolve_agent_mcp_references(self, config: Dict[str, Any]) -> None:
+    async def _resolve_agent_mcp_references(
+        self,
+        config: Dict[str, Any],
+        formation_dir: Path,
+        secrets_manager: Optional[Any] = None,
+    ) -> None:
         """
-        Resolve agent-level mcp_servers string references against formation-level MCPs.
+        Resolve agent-level mcp_servers string references.
 
-        After formation-level MCP servers are resolved, this method iterates through
-        each agent's mcp_servers list and replaces string IDs with the full MCP config
-        from the formation-level registry.
+        Resolution order for string IDs:
+        1. Formation-level MCP registry (config["mcp"]["servers"]) -- shared MCPs
+        2. mcp/ directory files -- agent-private MCPs
+
+        Formation-level MCPs are available to ALL agents.
+        Agent-level MCPs are private to the declaring agent.
         """
         if "agents" not in config:
             return
 
-        # Build formation-level MCP registry
+        # Build formation-level MCP registry (already resolved dicts with "id")
         formation_mcps: Dict[str, Dict[str, Any]] = {}
         mcp_servers = config.get("mcp", {}).get("servers", [])
         for server in mcp_servers:
             if isinstance(server, dict) and "id" in server:
                 formation_mcps[server["id"]] = server
+
+        # Collect all agent string refs that are NOT in formation-level MCPs
+        needs_directory_lookup = False
+        for agent in config["agents"]:
+            if not isinstance(agent, dict):
+                continue
+            for item in agent.get("mcp_servers") or []:
+                if isinstance(item, str) and item not in formation_mcps:
+                    needs_directory_lookup = True
+                    break
+            if needs_directory_lookup:
+                break
+
+        # Lazily build directory registry only if needed
+        directory_mcps: Dict[str, Dict[str, Any]] = {}
+        if needs_directory_lookup:
+            mcp_dir = formation_dir / "mcps"
+            if not mcp_dir.exists():
+                mcp_dir = formation_dir / "mcp"
+            if mcp_dir.exists():
+                directory_mcps = await self._build_id_registry(mcp_dir, "MCP", secrets_manager)
 
         for agent in config["agents"]:
             if not isinstance(agent, dict):
@@ -545,14 +576,24 @@ class FormationLoader:
             resolved = []
             for item in agent_mcps:
                 if isinstance(item, str):
-                    if item not in formation_mcps:
+                    if item in formation_mcps:
+                        resolved.append(formation_mcps[item].copy())
+                    elif item in directory_mcps:
+                        mcp_config = directory_mcps[item].copy()
+                        mcp_config.pop("_source_file", None)
+                        mcp_config.pop("_raw_secrets", None)
+                        mcp_config.pop("_raw_placeholders", None)
+                        resolved.append(mcp_config)
+                    else:
                         agent_id = agent.get("id", "unknown")
+                        available = sorted(
+                            set(list(formation_mcps.keys()) + list(directory_mcps.keys()))
+                        )
                         raise ValueError(
                             f"Agent '{agent_id}' references MCP server '{item}' "
-                            f"but it is not declared in formation mcp.servers. "
-                            f"Available: {list(formation_mcps.keys())}"
+                            f"but it was not found in formation mcp.servers or "
+                            f"mcp/ directory. Available: {available}"
                         )
-                    resolved.append(formation_mcps[item].copy())
                 elif isinstance(item, dict):
                     resolved.append(item)
                 else:
