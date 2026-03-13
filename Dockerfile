@@ -46,7 +46,7 @@ RUN ARCH=$(uname -m) && \
         VEC_VERSION="0.1.7-alpha.10" && \
         python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/asg017/sqlite-vec/releases/download/v${VEC_VERSION}/sqlite-vec-${VEC_VERSION}-amalgamation.tar.gz', 'sqlite-vec.tar.gz')" && \
         echo "c50a6caef46eb32e99f69f1b26808a2e28043b358c9513fed3846ce4776e5ee1  sqlite-vec.tar.gz" | sha256sum -c - && \
-        tar xzf sqlite-vec.tar.gz --strip-components=1 && \
+        tar xzf sqlite-vec.tar.gz && \
         gcc -O2 -fPIC -shared sqlite-vec.c -o vec0.so && \
         PYVER=$(python -c "import sys; print(f'python{sys.version_info.major}.{sys.version_info.minor}')") && \
         cp vec0.so /install/lib/${PYVER}/site-packages/sqlite_vec/vec0.so && \
