@@ -45,9 +45,11 @@ RUN ARCH=$(uname -m) && \
         apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev && \
         VEC_VERSION="0.1.7-alpha.10" && \
         python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/asg017/sqlite-vec/releases/download/v${VEC_VERSION}/sqlite-vec-${VEC_VERSION}-amalgamation.tar.gz', 'sqlite-vec.tar.gz')" && \
+        echo "c50a6caef46eb32e99f69f1b26808a2e28043b358c9513fed3846ce4776e5ee1  sqlite-vec.tar.gz" | sha256sum -c - && \
         tar xzf sqlite-vec.tar.gz && \
         gcc -O2 -fPIC -shared sqlite-vec.c -o vec0.so && \
-        cp vec0.so /install/lib/python3.10/site-packages/sqlite_vec/vec0.so && \
+        PYVER=$(python -c "import sys; print(f'python{sys.version_info.major}.{sys.version_info.minor}')") && \
+        cp vec0.so /install/lib/${PYVER}/site-packages/sqlite_vec/vec0.so && \
         echo "sqlite-vec compiled and installed for aarch64" && \
         rm -f sqlite-vec.tar.gz sqlite-vec.c sqlite-vec.h vec0.so && \
         apt-get purge -y libsqlite3-dev && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*; \
@@ -123,10 +125,6 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
-# Prevent HuggingFace from writing to the (read-only) model cache in SIF containers.
-# Models are pre-downloaded at build time; no network/write access needed at runtime.
-ENV HF_HUB_OFFLINE=1
-ENV TRANSFORMERS_OFFLINE=1
 
 # Expose default port
 EXPOSE 8000
