@@ -11,7 +11,12 @@ import time
 
 from run_all_tests import (
     AREAS,
+    EVIDENCE_DIR,
+    PROOF_APP,
+    PROOF_AVAILABLE,
     RESULTS_DIR,
+    capture_proof,
+    generate_proof_reports,
     run_test,
     should_skip,
 )
@@ -35,10 +40,13 @@ def main():
     selected.sort(key=lambda t: (t.parent.name, t.name))
 
     print(f"Running {n} random tests (from {len(all_tests)} total)")
+    if PROOF_AVAILABLE:
+        print(f"Proof evidence: {EVIDENCE_DIR}")
     print("=" * 70)
 
     results = []
     area_stats = {}
+    proof_runs = set()
 
     for i, test_file in enumerate(selected, 1):
         area = test_file.parent.name
@@ -65,6 +73,17 @@ def main():
             area_stats[area]["passed"] += 1
         else:
             area_stats[area]["failed"] += 1
+
+        # Capture proof evidence (grouped by area)
+        if PROOF_AVAILABLE:
+            proof_runs.add(area)
+            capture_proof(test_file, area)
+
+    # Generate proof reports per area
+    if proof_runs:
+        print("\nGenerating proof reports...")
+        generate_proof_reports(sorted(proof_runs))
+        print(f"Evidence saved to {EVIDENCE_DIR}/{PROOF_APP}/")
 
     total = len(results)
     passed = sum(1 for r in results if r["passed"])

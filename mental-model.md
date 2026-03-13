@@ -2270,6 +2270,31 @@ pytest e2e/tests/2_memory/ -v
 - Test contracts, not implementations
 - Focus on edge cases and error paths
 
+### Test Evidence (Proof)
+
+**Tool:** [@automaze/proof](https://www.npmjs.com/package/@automaze/proof) CLI
+
+Both `run_all_tests.py` and `run_random_tests.py` capture proof evidence for each test when the `proof` CLI is available (`PROOF_AVAILABLE` flag). If not installed, tests run identically without evidence capture.
+
+**How it works:**
+- After each test completes (pass or fail), `capture_proof()` re-runs the test under `proof capture --mode terminal`
+- Tests are grouped by area (`--run <area_name>`)
+- After all tests complete, `generate_proof_reports()` creates a `report.md` per area
+
+**Output structure:**
+```
+e2e/evidence/muxi-runtime/<YYYYMMDD>/<area>/
+  report.md                    # Markdown summary with artifact links
+  proof.json                   # Machine-readable manifest
+  <test_label>-HHMMSS.html     # Self-contained terminal replay
+  <test_label>-HHMMSS.cast     # asciicast v2 recording
+```
+
+**Key exports from `run_all_tests.py`:**
+- `PROOF_AVAILABLE`, `PROOF_APP`, `EVIDENCE_DIR` -- constants
+- `capture_proof(test_file, run_name)` -- capture one test
+- `generate_proof_reports(run_names)` -- generate reports per area
+
 ---
 
 ## 10. Key Data Flows

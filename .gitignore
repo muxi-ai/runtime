@@ -152,6 +152,7 @@ tests/assets/files/slide.png
 # E2E test results
 e2e/results/*
 e2e/tests/**/e2e/results/
+e2e/evidence/
 
 # Singularity/Apptainer images (can be very large)
 *.sif

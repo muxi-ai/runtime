@@ -3,10 +3,12 @@
 E2E Test Runner - Executes all test files and collects results.
 Each test is run as a subprocess with a timeout.
 Results are written to e2e/results/test_report.json.
+Proof evidence is captured per test and reported per area.
 """
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -23,7 +25,11 @@ AREA_TIMEOUT_OVERRIDES = {
 E2E_DIR = Path(__file__).parent
 TESTS_DIR = E2E_DIR / "tests"
 RESULTS_DIR = E2E_DIR / "results"
+EVIDENCE_DIR = E2E_DIR / "evidence"
 SRC_DIR = E2E_DIR.parent / "src"
+
+PROOF_APP = "muxi-runtime"
+PROOF_AVAILABLE = shutil.which("proof") is not None
 
 SKIP_PATTERNS = [
     "base_",
@@ -187,6 +193,48 @@ def run_test(test_file: Path) -> dict:
     return result
 
 
+def capture_proof(test_file: Path, run_name: str) -> None:
+    """Capture proof evidence for a test. Fails silently if proof CLI is unavailable."""
+    if not PROOF_AVAILABLE:
+        return
+    area = test_file.parent.name
+    label = test_file.stem.replace("test_", "")
+    timeout = AREA_TIMEOUT_OVERRIDES.get(area, TIMEOUT_SECONDS) + 10
+    command = f"cd {test_file.parent} && {sys.executable} {test_file.name}"
+    try:
+        subprocess.run(
+            [
+                "proof", "capture",
+                "--app", PROOF_APP,
+                "--command", command,
+                "--mode", "terminal",
+                "--label", label,
+                "--dir", str(EVIDENCE_DIR),
+                "--run", run_name,
+                "--description", test_file.stem.replace("_", " "),
+            ],
+            timeout=timeout,
+            capture_output=True,
+        )
+    except Exception:
+        pass
+
+
+def generate_proof_reports(run_names: list) -> None:
+    """Generate proof reports for each run. Fails silently if proof CLI is unavailable."""
+    if not PROOF_AVAILABLE:
+        return
+    for run_name in run_names:
+        try:
+            subprocess.run(
+                ["proof", "report", "--app", PROOF_APP, "--dir", str(EVIDENCE_DIR), "--run", run_name],
+                timeout=30,
+                capture_output=True,
+            )
+        except Exception:
+            pass
+
+
 def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -198,10 +246,13 @@ def main():
         all_tests.extend(tests)
 
     print(f"Found {len(all_tests)} test files across {len(AREAS)} areas")
+    if PROOF_AVAILABLE:
+        print(f"Proof evidence: {EVIDENCE_DIR}")
     print("=" * 70)
 
     results = []
     area_stats = {}
+    proof_runs = set()
 
     for i, test_file in enumerate(all_tests, 1):
         area = test_file.parent.name
@@ -221,6 +272,17 @@ def main():
             area_stats[area]["passed"] += 1
         else:
             area_stats[area]["failed"] += 1
+
+        # Capture proof evidence (per area group)
+        if PROOF_AVAILABLE:
+            proof_runs.add(area)
+            capture_proof(test_file, area)
+
+    # Generate proof reports per area
+    if proof_runs:
+        print("\nGenerating proof reports...")
+        generate_proof_reports(sorted(proof_runs))
+        print(f"Evidence saved to {EVIDENCE_DIR}/{PROOF_APP}/")
 
     # Summary
     total = len(results)
