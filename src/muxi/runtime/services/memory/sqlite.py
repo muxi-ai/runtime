@@ -517,8 +517,6 @@ class SQLiteMemory(BaseMemory):
         internal_user_id = None
         if user_id:
             internal_user_id = await self.get_or_create_user(user_id)
-        else:
-            internal_user_id = self.default_user_id
 
         # Search with embedding (filter by collection if specified)
         results = self._search_internal(
@@ -599,12 +597,9 @@ class SQLiteMemory(BaseMemory):
         elif isinstance(query_embedding, list):
             query_embedding = np.array(query_embedding, dtype=np.float32).tobytes()
 
-        # Use defaults if not specified
-        user_id = user_id or self.default_user_id
-
         # Build query with JOIN to ensure formation isolation
         # Search across ALL collections if collection is None
-        if collection:
+        if collection and user_id:
             query = f"""
                 SELECT
                     m.id,
@@ -621,8 +616,26 @@ class SQLiteMemory(BaseMemory):
                 LIMIT ?
             """
             params = (query_embedding, collection, user_id, self.formation_id, k)
-        else:
-            # Search ALL collections
+        elif collection:
+            # No user_id — single-user mode: search the given collection
+            # across all users in this formation (only one user exists in
+            # single-user deployments).
+            query = f"""
+                SELECT
+                    m.id,
+                    m.text,
+                    m.metadata,
+                    m.created_at,
+                    vec_distance_cosine(m.embedding, ?) as score
+                FROM {self.memories_table} m
+                JOIN users u ON m.user_id = u.id
+                WHERE m.collection = ?
+                    AND u.formation_id = ?
+                ORDER BY score ASC
+                LIMIT ?
+            """
+            params = (query_embedding, collection, self.formation_id, k)
+        elif user_id:
             query = f"""
                 SELECT
                     m.id,
@@ -638,6 +651,23 @@ class SQLiteMemory(BaseMemory):
                 LIMIT ?
             """
             params = (query_embedding, user_id, self.formation_id, k)
+        else:
+            # No user_id and no collection — single-user mode: search all
+            # memories in this formation regardless of user or collection.
+            query = f"""
+                SELECT
+                    m.id,
+                    m.text,
+                    m.metadata,
+                    m.created_at,
+                    vec_distance_cosine(m.embedding, ?) as score
+                FROM {self.memories_table} m
+                JOIN users u ON m.user_id = u.id
+                WHERE u.formation_id = ?
+                ORDER BY score ASC
+                LIMIT ?
+            """
+            params = (query_embedding, self.formation_id, k)
 
         # Execute search
         cursor = self.conn.execute(query, params)

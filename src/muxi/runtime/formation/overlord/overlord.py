@@ -2667,7 +2667,9 @@ Agent response: {raw_response}"""
             workflow_config_data = overlord_config.get("workflow", {})
 
             # Core workflow settings
-            self.auto_decomposition = workflow_config_data.get("auto_decomposition", True)
+            self.auto_decomposition = workflow_config_data.get(
+                "auto_decomposition", self.enable_workflow_by_default
+            )
             self.plan_approval_threshold = workflow_config_data.get("plan_approval_threshold", 7)
 
             # Now that workflow config is loaded, set up SOP system path if workflows are enabled

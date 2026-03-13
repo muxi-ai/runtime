@@ -36,6 +36,27 @@ RUN uv pip install --prefix=/install --no-cache -r requirements.txt
 COPY src ./src
 RUN uv pip install --prefix=/install --no-cache -e .
 
+# Fix sqlite-vec: the published aarch64 wheel ships a 32-bit ARM binary.
+# Compile the correct 64-bit shared library from the amalgamation source.
+# Need libsqlite3-dev for sqlite3ext.h header.
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then \
+        echo "Compiling sqlite-vec for aarch64..." && \
+        apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev && \
+        VEC_VERSION="0.1.7-alpha.10" && \
+        python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/asg017/sqlite-vec/releases/download/v${VEC_VERSION}/sqlite-vec-${VEC_VERSION}-amalgamation.tar.gz', 'sqlite-vec.tar.gz')" && \
+        echo "c50a6caef46eb32e99f69f1b26808a2e28043b358c9513fed3846ce4776e5ee1  sqlite-vec.tar.gz" | sha256sum -c - && \
+        tar xzf sqlite-vec.tar.gz --strip-components=1 && \
+        gcc -O2 -fPIC -shared sqlite-vec.c -o vec0.so && \
+        PYVER=$(python -c "import sys; print(f'python{sys.version_info.major}.{sys.version_info.minor}')") && \
+        cp vec0.so /install/lib/${PYVER}/site-packages/sqlite_vec/vec0.so && \
+        echo "sqlite-vec compiled and installed for aarch64" && \
+        rm -f sqlite-vec.tar.gz sqlite-vec.c sqlite-vec.h vec0.so && \
+        apt-get purge -y libsqlite3-dev && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*; \
+    else \
+        echo "sqlite-vec: skipping recompilation for $ARCH"; \
+    fi
+
 # Note: Skipping spaCy model download to save ~45MB
 # Can be downloaded at runtime if needed: python -m spacy download en_core_web_sm
 
@@ -89,7 +110,7 @@ RUN find /usr/local -name "*.pyc" -delete \
 # Stored in /opt/hf-cache (not /root/.cache) because Singularity mounts the
 # host home directory over /root, hiding anything baked into the image there.
 ENV HF_HOME=/opt/hf-cache
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2'); SentenceTransformer('all-MiniLM-L6-v2')"
 
 # Create necessary directories
 RUN mkdir -p /data /logs /formations ~/.muxi
