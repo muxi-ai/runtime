@@ -617,6 +617,9 @@ class SQLiteMemory(BaseMemory):
             """
             params = (query_embedding, collection, user_id, self.formation_id, k)
         elif collection:
+            # No user_id — single-user mode: search the given collection
+            # across all users in this formation (only one user exists in
+            # single-user deployments).
             query = f"""
                 SELECT
                     m.id,
@@ -649,7 +652,8 @@ class SQLiteMemory(BaseMemory):
             """
             params = (query_embedding, user_id, self.formation_id, k)
         else:
-            # No user_id filter (single-user mode)
+            # No user_id and no collection — single-user mode: search all
+            # memories in this formation regardless of user or collection.
             query = f"""
                 SELECT
                     m.id,
