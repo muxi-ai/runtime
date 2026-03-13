@@ -108,7 +108,7 @@ RUN find /usr/local -name "*.pyc" -delete \
 # Stored in /opt/hf-cache (not /root/.cache) because Singularity mounts the
 # host home directory over /root, hiding anything baked into the image there.
 ENV HF_HOME=/opt/hf-cache
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2'); SentenceTransformer('all-MiniLM-L6-v2')"
 
 # Create necessary directories
 RUN mkdir -p /data /logs /formations ~/.muxi
@@ -123,6 +123,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
+# Prevent HuggingFace from writing to the (read-only) model cache in SIF containers.
+# Models are pre-downloaded at build time; no network/write access needed at runtime.
+ENV HF_HUB_OFFLINE=1
+ENV TRANSFORMERS_OFFLINE=1
 
 # Expose default port
 EXPOSE 8000
