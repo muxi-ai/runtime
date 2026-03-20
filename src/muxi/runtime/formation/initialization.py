@@ -529,20 +529,22 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             memory_type = "SQLite"
 
         else:
-            # Default to Memobase
+            # Default to Memobase (wraps LongTermMemory for multi-user isolation)
             from ..services.db import get_database_manager
+            from ..services.memory.long_term import LongTermMemory
             from ..services.memory.memobase import Memobase
 
             # Create database manager with configured timeout
             db_manager = get_database_manager(connection_string, statement_timeout)
             formation._db_manager = db_manager
 
-            formation._long_term_memory = Memobase(
-                connection_string=connection_string,
+            ltm = LongTermMemory(
+                db_manager=db_manager,
                 formation_id=formation_id,
                 embedding_model=embedding_model_name,
             )
-            formation._is_multi_user = True  # PostgreSQL/Memobase is multi-user mode
+            formation._long_term_memory = Memobase(long_term_memory=ltm)
+            formation._is_multi_user = True  # Memobase is multi-user mode
             memory_type = "Memobase"
 
         # REMOVE - line 456 (redundant with InitEventFormatter)

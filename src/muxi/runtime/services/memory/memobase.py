@@ -61,6 +61,7 @@ class Memobase:
         """
         self.default_external_user_id = default_external_user_id
         self.long_term_memory = long_term_memory
+        self.dimension = getattr(long_term_memory, "dimension", 1536)
 
         # Log initialization
         observability.observe(

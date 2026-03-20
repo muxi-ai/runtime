@@ -212,8 +212,9 @@ async def list_scheduled_jobs(request: Request) -> JSONResponse:
     if error_response:
         return error_response
 
-    # Get scheduler service
-    scheduler = getattr(formation, "_scheduler", None)
+    # Get scheduler service from overlord
+    overlord = getattr(formation, "_overlord", None)
+    scheduler = getattr(overlord, "scheduler_service", None) if overlord else None
     if not scheduler:
         response = create_success_response(
             APIObjectType.SCHEDULED_JOB_LIST,
@@ -401,8 +402,9 @@ def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONRespo
         )
         return JSONResponse(content=response.model_dump(), status_code=422)
 
-    # Get scheduler service
-    scheduler = getattr(formation, "_scheduler", None)
+    # Get scheduler service from overlord
+    overlord = getattr(formation, "_overlord", None)
+    scheduler = getattr(overlord, "scheduler_service", None) if overlord else None
     if not scheduler:
         response = create_error_response(
             "SERVICE_UNAVAILABLE",
@@ -474,8 +476,9 @@ def get_scheduled_job(request: Request, job_id: str) -> JSONResponse:
     if error_response:
         return error_response
 
-    # Get scheduler service
-    scheduler = getattr(formation, "_scheduler", None)
+    # Get scheduler service from overlord
+    overlord = getattr(formation, "_overlord", None)
+    scheduler = getattr(overlord, "scheduler_service", None) if overlord else None
     if not scheduler:
         response = create_error_response(
             "SERVICE_UNAVAILABLE",
@@ -539,8 +542,9 @@ def remove_scheduled_job(request: Request, job_id: str) -> JSONResponse:
     if error_response:
         return error_response
 
-    # Get scheduler service
-    scheduler = getattr(formation, "_scheduler", None)
+    # Get scheduler service from overlord
+    overlord = getattr(formation, "_overlord", None)
+    scheduler = getattr(overlord, "scheduler_service", None) if overlord else None
     if not scheduler:
         response = create_error_response(
             "SERVICE_UNAVAILABLE",
