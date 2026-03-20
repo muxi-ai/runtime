@@ -3871,3 +3871,35 @@ after selection, type mismatches.
 - `src/muxi/runtime/formation/overlord/overlord.py` -- sync KV helpers, `_cache_selected_credential`, string/dict handling
 - `src/muxi/runtime/formation/overlord/clarification.py` -- credential cache check in `_analyze_request`
 - `e2e/tests/4_mcp/credential_seeder.py` -- seeds dual GitHub credentials via direct SQL
+
+### 2026-03-20: Scheduler Routes, Memobase Init & Dimension Propagation
+
+**Problem 1: Scheduler always SERVICE_UNAVAILABLE**
+- All 4 scheduler job endpoints in `routes/admin/scheduler.py` used `getattr(formation, "_scheduler", None)`
+- `formation._scheduler` is never assigned anywhere in `formation.py`
+- The scheduler service lives on `overlord.scheduler_service` (initialized at `overlord.py:1411`)
+- Fix: Changed all 4 endpoints to `getattr(formation._overlord, "scheduler_service", None)`
+
+**Problem 2: Memobase fallback crashed with wrong kwargs**
+- In `initialization.py`, the `else` branch (non-postgresql, non-sqlite connection strings) called
+  `Memobase(connection_string=..., formation_id=..., embedding_model=...)` but `Memobase.__init__`
+  only accepts `(long_term_memory: LongTermMemory, default_external_user_id: str)`
+- Fix: Create `LongTermMemory` first, then wrap with `Memobase(long_term_memory=ltm)`
+
+**Problem 3: Wrong memories table created when Memobase is used**
+- `_create_all_database_tables` reads `getattr(ltm, "dimension", 1536)` to pick the table name
+- `Memobase` didn't expose `.dimension`, so it always defaulted to `memories_1536`
+- Fix: `Memobase.__init__` now sets `self.dimension = getattr(long_term_memory, "dimension", 1536)`
+
+**Problem 4: Memory extraction not persisting (user report)**
+- Not a runtime bug. The extraction system requires a text LLM model for extraction prompts.
+  If no valid text model is available during `_initialize_extraction_model()`, extraction is
+  silently disabled (`auto_extract_user_info = False`). Users configuring only a local embedding
+  model without a text model will see no extraction.
+- The silent disabling is logged via observability events but not surfaced to the user.
+
+**Key files:**
+- `src/muxi/runtime/formation/server/routes/admin/scheduler.py` -- 4 endpoints fixed
+- `src/muxi/runtime/formation/initialization.py` -- Memobase fallback fixed
+- `src/muxi/runtime/services/memory/memobase.py` -- `.dimension` propagation added
+- `tests/unit/test_bugfix_verification.py` -- 9 verification tests
