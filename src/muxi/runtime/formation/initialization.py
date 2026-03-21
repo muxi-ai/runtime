@@ -588,8 +588,7 @@ def _migrate_add_meta_data_column(db_manager, table_name: str) -> None:
                 if "meta_data" not in columns:
                     conn.execute(
                         text(
-                            f"ALTER TABLE {table_name} ADD COLUMN "
-                            f"meta_data TEXT DEFAULT '{{}}'"
+                            f"ALTER TABLE {table_name} ADD COLUMN " f"meta_data TEXT DEFAULT '{{}}'"
                         )
                     )
             conn.commit()
