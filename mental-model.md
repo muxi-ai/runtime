@@ -3903,3 +3903,31 @@ after selection, type mismatches.
 - `src/muxi/runtime/formation/initialization.py` -- Memobase fallback fixed
 - `src/muxi/runtime/services/memory/memobase.py` -- `.dimension` propagation added
 - `tests/unit/test_bugfix_verification.py` -- 9 verification tests
+
+### 2026-03-21: SIF Read-Only Filesystem and Schema Migration
+
+**Problem 1: `all-mpnet-base-v2` fails in SIF container**
+- SIF containers mount `/opt/hf-cache` as read-only. Models not pre-bundled in the Docker image
+  cannot be downloaded at runtime (`[Errno 30] Read-only file system`).
+- `all-MiniLM-L6-v2` and `paraphrase-multilingual-MiniLM-L12-v2` were pre-downloaded in the
+  Dockerfile, but `all-mpnet-base-v2` was not.
+- Fix: Added `SentenceTransformer('all-mpnet-base-v2')` to the Dockerfile pre-download step.
+- **Pattern:** Any new local embedding model added to `AVAILABLE_LOCAL_MODELS` in
+  `local_embeddings.py` MUST also be added to the Dockerfile pre-download line, otherwise
+  it will fail silently in SIF deployments.
+
+**Problem 2: `meta_data` column missing on upgraded databases**
+- `create_tables()` uses `CREATE TABLE IF NOT EXISTS` which does not add new columns to
+  existing tables. Databases created by older runtime versions lacked the `meta_data` column
+  added later to the SQLAlchemy model.
+- Fix: Added `_migrate_add_meta_data_column()` in `initialization.py` that runs after
+  `create_tables()`. Uses `ALTER TABLE ADD COLUMN IF NOT EXISTS` for PostgreSQL and
+  `PRAGMA table_info` check for SQLite. Idempotent and safe on first run (handles
+  non-existent tables gracefully).
+- **Pattern:** Any new column added to an existing SQLAlchemy model needs a corresponding
+  migration step in `_create_all_database_tables()` -- relying solely on `create_all()`
+  will not upgrade existing tables.
+
+**Key files:**
+- `Dockerfile` -- line 113, pre-download step
+- `src/muxi/runtime/formation/initialization.py` -- `_migrate_add_meta_data_column()`
