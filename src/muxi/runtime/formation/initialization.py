@@ -568,6 +568,35 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
         # Don't raise - persistent memory is optional
 
 
+def _migrate_add_meta_data_column(db_manager, table_name: str) -> None:
+    """Add meta_data column to memories table if it was created by an older schema version."""
+    from sqlalchemy import text
+
+    try:
+        with db_manager.engine.connect() as conn:
+            if db_manager.database_type == "postgresql":
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS "
+                        f"meta_data JSON NOT NULL DEFAULT '{{}}'"
+                    )
+                )
+            else:
+                # SQLite: check if column exists via PRAGMA, add if missing
+                result = conn.execute(text(f"PRAGMA table_info({table_name})"))
+                columns = [row[1] for row in result]
+                if "meta_data" not in columns:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table_name} ADD COLUMN "
+                            f"meta_data TEXT DEFAULT '{{}}'"
+                        )
+                    )
+            conn.commit()
+    except Exception:
+        pass  # Table may not exist yet on first run; create_tables handles it
+
+
 def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> None:
     """
     Create all database tables for the MUXI runtime.
@@ -598,7 +627,10 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
         # Create all tables using the database manager
         db_manager.create_tables(Base.metadata)
 
+        # Migrate: ensure meta_data column exists on memories tables created by older versions
+        # (CREATE TABLE IF NOT EXISTS won't add columns to existing tables)
         memories_table = f"memories_{embedding_dimension}"
+        _migrate_add_meta_data_column(db_manager, memories_table)
         table_names = [
             "users",
             "user_identifiers",

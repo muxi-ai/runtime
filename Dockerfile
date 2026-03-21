@@ -110,7 +110,7 @@ RUN find /usr/local -name "*.pyc" -delete \
 # Stored in /opt/hf-cache (not /root/.cache) because Singularity mounts the
 # host home directory over /root, hiding anything baked into the image there.
 ENV HF_HOME=/opt/hf-cache
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2'); SentenceTransformer('all-MiniLM-L6-v2')"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2'); SentenceTransformer('all-MiniLM-L6-v2'); SentenceTransformer('all-mpnet-base-v2')"
 
 # Create necessary directories
 RUN mkdir -p /data /logs /formations ~/.muxi
