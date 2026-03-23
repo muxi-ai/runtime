@@ -3931,3 +3931,57 @@ after selection, type mismatches.
 **Key files:**
 - `Dockerfile` -- line 113, pre-download step
 - `src/muxi/runtime/formation/initialization.py` -- `_migrate_add_meta_data_column()`
+
+### 2026-03-23: Scheduler Blocking Event Loop & Docker Networking
+
+**Problem 1: Scheduler blocks event loop, preventing formation startup**
+- `SchedulerService.start()` called `process_due_jobs_continuously()` directly. That method
+  enters an infinite `while self._running: ... time.sleep(interval)` loop, which blocked the
+  asyncio event loop forever. The HTTP server (uvicorn) never started, so the server's health
+  checks always timed out.
+- Only affects formations with `scheduler.enabled: true`. The Desktop formation (no scheduler)
+  was unaffected, which is why the two formations had different behavior.
+- Fix: `start()` now spawns `process_due_jobs_continuously()` in a daemon thread via
+  `threading.Thread(target=..., daemon=True)`.
+
+**Problem 2: `count_active_jobs()` blocks event loop on unreachable DB**
+- After the thread fix, `start()` still called `await self.job_manager.count_active_jobs()`
+  which uses a synchronous psycopg2 session. If PostgreSQL was unreachable (common in Docker
+  networking scenarios), this call would hang or take a long time, blocking the event loop.
+- Fix: Added `count_active_jobs_sync()` to `JobManager` and wrapped the call in
+  `asyncio.wait_for(loop.run_in_executor(None, ...), timeout=10)`. On failure, defaults to 0.
+
+**Problem 3: Docker container cannot reach host PostgreSQL via localhost**
+- On Docker Desktop (macOS/Windows), `localhost` inside a container refers to the container
+  itself, not the host machine. Formations using `POSTGRES_URI=postgresql://muxi@localhost/db`
+  get "Connection refused" because no PostgreSQL runs inside the runtime-runner container.
+- Fix (server repo): Added `--add-host localhost:host-gateway` and
+  `--add-host host.docker.internal:host-gateway` to the Docker run command in
+  `spawn_common.go:buildDockerSingularityCommand()`.
+- **Caveat:** `--add-host localhost:host-gateway` makes DNS resolution work, but the TCP
+  source IP seen by PostgreSQL is the Docker gateway (e.g., `192.168.65.254`), not `127.0.0.1`.
+  If `pg_hba.conf` only trusts `127.0.0.1/32`, the connection is rejected. The PostgreSQL
+  instance must either: (a) accept connections from the Docker network range, or (b) the
+  connection string must include a password and `pg_hba.conf` must allow `scram-sha-256` or
+  `md5` for the Docker gateway IP range.
+- **Pattern:** Any formation using `localhost` in connection strings for services running on
+  the host machine will encounter this in Docker Desktop environments. Native Linux with
+  `--network host` does not have this issue.
+
+**Problem 4: Memobase parameter naming inconsistency (preventive)**
+- External callers might use `user_id` vs `external_user_id` or `filter_metadata` vs
+  `additional_filter` depending on which interface they reference.
+- Fix: Added parameter aliases in `memobase.py`: `add()` accepts `user_id` as alias for
+  `external_user_id`, `search()` accepts `filter_metadata` as alias for `additional_filter`.
+
+**Key files:**
+- `src/muxi/runtime/services/scheduler/service.py` -- daemon thread + non-blocking count
+- `src/muxi/runtime/services/scheduler/manager.py` -- `count_active_jobs_sync()`
+- `src/muxi/runtime/services/memory/memobase.py` -- parameter aliases
+- Server: `src/pkg/process/spawn_common.go` -- `--add-host` flags
+
+**Key pattern: Formation config differences cause different startup behavior**
+- Desktop formation (no scheduler, no PostgreSQL) starts immediately and passes health checks.
+- Downloads formation (scheduler + PostgreSQL) blocked the event loop and never started the
+  HTTP server. The server's health checker saw no response and reported "crash".
+- When debugging startup failures, always diff the working vs failing formation configs first.
