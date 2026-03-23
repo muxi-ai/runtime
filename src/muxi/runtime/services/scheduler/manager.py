@@ -385,9 +385,10 @@ class JobManager:
             )
             raise
 
-    async def count_active_jobs(self) -> int:
-        """Count total active jobs."""
-        await self.initialize()
+    def count_active_jobs_sync(self) -> int:
+        """Count total active jobs (synchronous, safe to call from a thread)."""
+        if not self._initialized:
+            self._initialized = True
 
         try:
             with self.db_manager.get_session() as session:
@@ -410,6 +411,11 @@ class JobManager:
                 description=f"Failed to count active jobs: {e}",
             )
             raise
+
+    async def count_active_jobs(self) -> int:
+        """Count total active jobs."""
+        await self.initialize()
+        return self.count_active_jobs_sync()
 
     async def pause_job(self, job_id: str, user_id: str, reason: Optional[str] = None) -> bool:
         """Pause a scheduled job."""

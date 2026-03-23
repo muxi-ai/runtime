@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>no-deprecation-warnings — proof terminal recording</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { margin: 0; height: 100%; }
+  body { background: transparent; -webkit-font-smoothing: antialiased; font-family: system-ui, sans-serif; }
+  .player {
+    background: #0d1117;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+  }
+  #terminal {
+    height: calc(100% - 40px);
+    padding: 14px;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #fff;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-y: auto;
+    opacity: .9;
+  }
+  .controls {
+    padding: 6px 10px;
+    border-top: 1px solid #30363d;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 40px;
+  }
+  .btn {
+    background: none;
+    border: 1px solid #30363d;
+    color: #e6edf3;
+    padding: 4px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: system-ui;
+  }
+  .btn:hover { background: #21262d; }
+  .speed-select {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #e6edf3;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: system-ui;
+    cursor: pointer;
+  }
+  .speed-select:hover { background: #21262d; }
+  .progress {
+    flex: 1;
+    height: 4px;
+    background: #21262d;
+    border-radius: 2px;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .progress-bar {
+    height: 100%;
+    background: #58a6ff;
+    width: 0%;
+    transition: width 0.1s linear;
+  }
+  .time { color: #8b949e; font-size: 12px; font-family: monospace; min-width: 40px; text-align: right; line-height: 27px; }
+</style>
+</head>
+<body>
+<div class="player">
+  <div id="terminal"></div>
+  <div class="controls">
+    <button class="btn" id="playBtn" onclick="toggle()">Play</button>
+    <select class="speed-select" id="speedSelect" onchange="changeSpeed(this.value)"><option value="0.1">0.1x</option><option value="0.25">0.25x</option><option value="0.5" selected>0.5x</option><option value="1">1x</option><option value="1.25">1.25x</option><option value="1.5">1.5x</option><option value="1.75">1.75x</option><option value="2">2x</option><option value="4">4x</option></select>
+    <div class="progress" onclick="seek(event)"><div class="progress-bar" id="bar"></div></div>
+    <span class="time" id="time">0.0s / 751ms</span>
+  </div>
+</div>
+<script>
+const events = [{"time":0,"data":"\u001b[1m================================================= test session starts ==================================================\u001b[0m\nplatform darwin -- Python 3.10.18, pytest-8.4.2, pluggy-1.5.0 -- /Users/ran/opt/anaconda3/bin/python\n"},{"time":0.13800000000000012,"data":"cachedir: .pytest_cache\nhypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('/Users/ran/Projects/muxi/code/runtime/.hypothesis/examples'))\nrootdir: /Users/ran/Projects/muxi/code/runtime\nconfigfile: pytest.ini\nplugins: cov-6.0.0, asyncio-1.2.0, anyio-4.12.0, typeguard-3.0.2, mock-3.10.0, requests-mock-1.10.0, hypothesis-6.131.9\nasyncio: mode=auto, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function\n\u001b[1mcollecting ... \u001b[0m"},{"time":0.14600000000000013,"data":"collected 9 items\n"},{"time":0.14600000000000013,"data":"\ntests/unit/test_bugfix_verification.py::TestSchedulerRoutesFix::test_no_formation_scheduler_references "},{"time":0.14700000000000002,"data":"\u001b[32mPASSED\u001b[0m"},{"time":0.14700000000000002,"data":"\u001b[32m    [ 11%]\u001b[0m"},{"time":0.14700000000000002,"data":"\ntests/unit/test_bugfix_verification.py::TestSchedulerRoutesFix::test_uses_overlord_scheduler_service "},{"time":0.14700000000000002,"data":"\u001b[32mPASSED\u001b[0m"},{"time":0.14700000000000002,"data":"\u001b[32m      [ 22%]\u001b[0m"},{"time":0.14800000000000013,"data":"\ntests/unit/test_bugfix_verification.py::TestSchedulerRoutesFix::test_all_four_endpoints_fixed "},{"time":0.14800000000000013,"data":"\u001b[32mPASSED\u001b[0m"},{"time":0.14800000000000013,"data":"\u001b[32m             [ 33%]\u001b[0m"},{"time":0.14800000000000013,"data":"\ntests/unit/test_bugfix_verification.py::TestMemobaseDimensionFix::test_memobase_exposes_dimension "},{"time":0.75,"data":"Fatal Python error: Segmentation fault\n\nCurrent thread 0x00000001f7442240 (most recent call first):\n  File \"<frozen importlib._bootstrap>\", line 241 in _call_with_frames_removed\n  File \"<frozen importlib._bootstrap_external>\", line 1176 in create_module\n  File "},{"time":0.75,"data":"\"<frozen importlib._bootstrap>\", line 571 in module_from_spec\n  File \"<frozen importlib._bootstrap>\", line 674 in _load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1006 in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1027 in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 241 in _call_with_frames_removed\n  File \"<frozen importlib._bootstrap>\", line 1078 in _handle_fromlist\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/faiss/swigfaiss.py\", line 10 in <module>\n  File \"<frozen importlib._bootstrap>\", line 241 in _call_with_frames_removed\n  File \"<frozen importlib._bootstrap_external>\", line 883 in exec_module\n  File \"<frozen importlib._bootstrap>\", line 688 in _load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1006 in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1027 in _find_and_load\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/faiss/loader.py\", line 157 in <module>\n  File \"<frozen importlib._bootstrap>\", line 241 in _call_with_frames_removed\n  File \"<frozen importlib._bootstrap_external>\", line 883 in exec_module\n  File \"<frozen importlib._bootstrap>\", line 688 in _load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1006 in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1027 in _find_and_load\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/faiss/__init__.py\", line 17 in <module>\n  File \"<frozen importlib._bootstrap>\", line 241 in _call_with_frames_removed\n  File \"<frozen importlib._bootstrap_external>\", line 883 in exec_module\n  File \"<frozen importlib._bootstrap>\", line 688 in _load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1006 in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1027 in _find_and_load\n  File \"/Users/ran/Projects/muxi/code/faissx/faissx/client/indices/factory.py\", line 75 in <module>\n  File \"<frozen importlib._bootstrap>\", line 241 in _call_with_frames_removed\n  File \"<frozen importlib._bootstrap_external>\", line 883 in exec_module\n  File \"<frozen importlib._bootstrap>\", line 688 in _load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1006 in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1027 in _find_and_load\n  File \"/Users/ran/Projects/muxi/code/faissx/faissx/client/indices/__init__.py\", line 30 in <module>\n  File \"<frozen importlib._bootstrap>\", line 241 in _call_with_frames_removed\n  File \"<frozen importlib._bootstrap_external>\", line 883 in exec_module\n  File \"<frozen importlib._bootstrap>\", line 688 in _load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1006 in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1027 in _find_and_load\n  File \"/Users/ran/Projects/muxi/code/faissx/faissx/client/__init__.py\", line 66 in <module>\n  File \"<frozen importlib._bootstrap>\", line 241 in _call_with_frames_removed\n  File \"<frozen importlib._bootstrap_external>\", line 883 in exec_module\n  File \"<frozen importlib._bootstrap>\", line 688 in _load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1006 in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1027 in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 241 in _call_with_frames_removed\n  File \"<frozen importlib._bootstrap>\", line 992 in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1027 in _find_and_load\n  File \"/Users/ran/Projects/muxi/code/faissx/faissx/__init__.py\", line 57 in <module>\n  File \"<frozen importlib._bootstrap>\", line 241 in _call_with_frames_removed\n  File \"<frozen importlib._bootstrap_external>\", line 883 in exec_module\n  File \"<frozen importlib._bootstrap>\", line 688 in _load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1006 in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1027 in _find_and_load\n  File \"/Users/ran/Projects/muxi/code/runtime/src/muxi/runtime/services/memory/working.py\", line 75 in <module>\n"},{"time":0.75,"data":"  File \"<frozen importlib._bootstrap>\", line 241 in _call_with_frames_removed\n  File \"<frozen importlib._bootstrap_external>\", line 883 in exec_module\n  File \"<frozen importlib._bootstrap>\", line 688 in _load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1006 in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1027 in _find_and_load\n  File \"/Users/ran/Projects/muxi/code/runtime/src/muxi/runtime/services/memory/__init__.py\", line 73 in <module>\n  File "},{"time":0.75,"data":"\"<frozen importlib._bootstrap>\", line 241 in _call_with_frames_removed\n  File \"<frozen importlib._bootstrap_external>\", line 883 in exec_module\n  File \"<frozen importlib._bootstrap>\", line "},{"time":0.75,"data":"688 in _load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1006 in _find_and_load_unlocked"},{"time":0.75,"data":"\n  File \"<frozen importlib._bootstrap>\", line 1027 in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 241 in _call_with_frames_removed"},{"time":0.75,"data":"\n  File \"<frozen importlib._bootstrap>\", line 992 in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 1027 in "},{"time":0.75,"data":"_find_and_load\n  File \"/Users/ran/Projects/muxi/code/runtime/tests/unit/test_bugfix_verification.py\", line 55 in test_memobase_exposes_dimension\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/python.py\", line 157 in pytest_pyfunc_call\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_callers.py\", line 103"},{"time":0.75,"data":" in _multicall\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_manager.py\", line 120 in _hookexec\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_hooks.py"},{"time":0.75,"data":"\", line 513 in __call__\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/python.py\", line 1671 in runtest\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/runner.py\", line 178 in pytest_runtest_call\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_callers.py\", line 103 in _multicall\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_manager.py\", line 120 in _hookexec\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_hooks.py\", line 513 in __call__\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/runner.py\", line 246 in <lambda>\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/runner.py\", line 344 in from_call\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/runner.py\", line 245 in call_and_report\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/runner.py\", line 136 in runtestprotocol\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/runner.py\", line 117 in pytest_runtest_protocol\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_callers.py\", line 103 in _multicall\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_manager.py\", line 120 in _hookexec\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_hooks.py\", line 513 in __call__\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/main.py\", line 367 in pytest_runtestloop\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_callers.py\", line 103 in _multicall\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_manager.py\", line 120 in _hookexec\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_hooks.py\", line 513 in __call__\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/main.py\", line 343 in _main\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/main.py\", line 289 in wrap_session\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/main.py"},{"time":0.75,"data":"\", line 336 in "},{"time":0.75,"data":"pytest_cmdline_main\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_callers.py\", line 103 in _multicall\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_manager.py\", line 120 in "},{"time":0.75,"data":"_hookexec\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pluggy/_hooks.py\", line 513 in __call__"},{"time":0.75,"data":"\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/config/__init__.py\", line 175 in main\n  File "},{"time":0.75,"data":"\"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/_pytest/config/__init__.py\", line 201 in console_main\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/site-packages/pytest/__main__.py"},{"time":0.75,"data":"\", line 9 in <module>\n  File \"/Users/ran/opt/anaconda3/lib/python3.10/runpy.py\", line "},{"time":0.75,"data":"86 in _run_code\n  ...\n"},{"time":0.75,"data":"\nExtension modules: _cffi_backend, simplejson._speedups, charset_normalizer.md"},{"time":0.75,"data":", multidict._multidict, yarl._quoting_c, propcache._helpers_c, aiohttp._http_writer, aiohttp._http_parser, aiohttp._websocket.mask, aiohttp._websocket.reader_c, frozenlist._frozenlist, zmq.backend.cython._zmq"},{"time":0.75,"data":", zstandard.backend_c"},{"time":0.75,"data":", lz4._version, lz4.frame._frame"},{"time":0.75,"data":", xxhash._xxhash"},{"time":0.7509999999999999,"data":", numpy._core._multiarray_umath"},{"time":0.7509999999999999,"data":", numpy.linalg._umath_linalg"},{"time":0.7509999999999999,"data":", sqlalchemy.cyextension.collections"},{"time":0.7509999999999999,"data":", sqlalchemy.cyextension.immutabledict, sqlalchemy.cyextension.processors"},{"time":0.7509999999999999,"data":", sqlalchemy.cyextension.resultproxy, sqlalchemy.cyextension.util"},{"time":0.7509999999999999,"data":", greenlet._greenlet"},{"time":0.7509999999999999,"data":", msgpack._cmsgpack (total: 25)"},{"time":0.7509999999999999,"data":"\n"}];
+const totalDuration = 0.751;
+const realDuration = 0.751;
+const term = document.getElementById('terminal');
+const bar = document.getElementById('bar');
+const timeEl = document.getElementById('time');
+const playBtn = document.getElementById('playBtn');
+
+let playing = false;
+let currentIdx = 0;
+let startTs = 0;
+let pausedAt = 0;
+let speed = 0.5;
+let raf = null;
+
+// Convert ANSI to styled HTML spans
+function ansiToHtml(str) {
+  const colors = ['#0d1117','#ff7b72','#3fb950','#d29922','#58a6ff','#bc8cff','#39d2e0','#e6edf3'];
+  const brights = ['#484f58','#ffa198','#56d364','#e3b341','#79c0ff','#d2a8ff','#56d4dd','#f0f6fc'];
+  let out = '';
+  let i = 0;
+  while (i < str.length) {
+    if (str[i] === '\x1b' || str.charCodeAt(i) === 0x1b) {
+      const m = str.slice(i).match(/^(?:\x1b|\u001b|\033|\x1B)\[([0-9;]*)m/);
+      if (m) {
+        const codes = m[1].split(';').map(Number);
+        let style = '';
+        for (const c of codes) {
+          if (c === 0) style += 'color:#e6edf3;font-weight:normal;font-style:normal;text-decoration:none;';
+          else if (c === 1) style += 'font-weight:bold;';
+          else if (c === 2) style += 'opacity:0.6;';
+          else if (c === 3) style += 'font-style:italic;';
+          else if (c === 4) style += 'text-decoration:underline;';
+          else if (c >= 30 && c <= 37) style += 'color:' + colors[c - 30] + ';';
+          else if (c >= 90 && c <= 97) style += 'color:' + brights[c - 90] + ';';
+        }
+        if (style) out += '</span><span style="' + style + '">';
+        i += m[0].length;
+        continue;
+      }
+    }
+    const ch = str[i];
+    if (ch === '<') out += '&lt;';
+    else if (ch === '>') out += '&gt;';
+    else if (ch === '&') out += '&amp;';
+    else out += ch;
+    i++;
+  }
+  return out;
+}
+
+function renderUpTo(elapsed) {
+  let html = '<span>';
+  for (let j = 0; j < events.length; j++) {
+    if (events[j].time > elapsed) { currentIdx = j; break; }
+    html += ansiToHtml(events[j].data);
+    if (j === events.length - 1) currentIdx = events.length;
+  }
+  html += '</span>';
+  term.innerHTML = html;
+  term.scrollTop = term.scrollHeight;
+  const pct = totalDuration > 0 ? Math.min(100, (elapsed / totalDuration) * 100) : 100;
+  bar.style.width = pct + '%';
+  timeEl.textContent = elapsed.toFixed(1) + 's';
+}
+
+function tick() {
+  if (!playing) return;
+  const elapsed = ((Date.now() - startTs) / 1000) * speed;
+  if (elapsed >= totalDuration) {
+    renderUpTo(totalDuration);
+    playing = false;
+    playBtn.textContent = 'Replay';
+    return;
+  }
+  renderUpTo(elapsed);
+  raf = requestAnimationFrame(tick);
+}
+
+function toggle() {
+  if (playing) {
+    playing = false;
+    pausedAt = ((Date.now() - startTs) / 1000) * speed;
+    playBtn.textContent = 'Play';
+    if (raf) cancelAnimationFrame(raf);
+  } else {
+    if (currentIdx >= events.length) {
+      pausedAt = 0;
+      term.innerHTML = '';
+      currentIdx = 0;
+    }
+    playing = true;
+    playBtn.textContent = 'Pause';
+    startTs = Date.now() - (pausedAt / speed) * 1000;
+    tick();
+  }
+}
+
+function changeSpeed(val) {
+  if (playing) pausedAt = ((Date.now() - startTs) / 1000) * speed;
+  speed = parseFloat(val);
+  if (playing) {
+    startTs = Date.now() - (pausedAt / speed) * 1000;
+  }
+}
+
+function seek(e) {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const pct = (e.clientX - rect.left) / rect.width;
+  pausedAt = pct * totalDuration;
+  renderUpTo(pausedAt);
+  if (playing) {
+    startTs = Date.now() - (pausedAt / speed) * 1000;
+  }
+}
+
+// Render first frame
+renderUpTo(0);
+</script>
+</body>
+</html>

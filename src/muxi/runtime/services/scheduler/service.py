@@ -189,10 +189,27 @@ class SchedulerService:
 
         self._running = True
 
-        # Start background worker
-        self.process_due_jobs_continuously()
+        # Start background worker in a daemon thread so it doesn't block the event loop
+        import threading
 
-        active_jobs_count = await self.job_manager.count_active_jobs()
+        self._worker_thread = threading.Thread(
+            target=self.process_due_jobs_continuously, daemon=True
+        )
+        self._worker_thread.start()
+
+        # count_active_jobs uses a sync psycopg2 session which blocks the event
+        # loop. Run it in a thread executor with a timeout so a slow or failing
+        # database connection doesn't prevent the formation from starting.
+        active_jobs_count = 0
+        try:
+            active_jobs_count = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, self.job_manager.count_active_jobs_sync
+                ),
+                timeout=10,
+            )
+        except Exception:
+            pass  # Non-critical -- default to 0
 
         return {
             "status": "started",

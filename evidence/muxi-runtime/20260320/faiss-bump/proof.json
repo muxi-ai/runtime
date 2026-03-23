@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "appName": "muxi-runtime",
+  "run": "faiss-bump",
+  "createdAt": "2026-03-20T11:30:32.439Z",
+  "entries": [
+    {
+      "timestamp": "2026-03-20T11:30:34.529Z",
+      "mode": "terminal",
+      "label": "no-deprecation-warnings",
+      "command": "python -m pytest tests/unit/test_bugfix_verification.py -v -W error::DeprecationWarning",
+      "duration": 750.9999999999999,
+      "artifact": "no-deprecation-warnings-113032.html",
+      "description": "9/9 tests pass with -W error::DeprecationWarning — zero numpy warnings after faiss-cpu 1.13.2"
+    }
+  ]
+}
