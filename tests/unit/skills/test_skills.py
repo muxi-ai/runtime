@@ -1,11 +1,10 @@
 import pytest
-from pathlib import Path
+
 from muxi.runtime.formation.skills.parser import (
-    SkillMetadata,
-    parse_skill_md,
-    load_skill_content,
     _enumerate_resources,
     _fix_unquoted_colons,
+    load_skill_content,
+    parse_skill_md,
 )
 from muxi.runtime.formation.skills.skill_manager import SkillManager
 

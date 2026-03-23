@@ -4,13 +4,16 @@ These tests run against the live RCE server at localhost:7891.
 Skip if the server is not running.
 """
 
-import asyncio
 import base64
-import os
-import tempfile
-from pathlib import Path
 
 import pytest
+
+from muxi.runtime.services.rce.client import (
+    ExecResult,
+    RCEClient,
+    RCEError,
+    RCEStatus,
+)
 
 # Skip entire module if RCE server is not reachable
 try:
@@ -22,13 +25,6 @@ except Exception:
     RCE_AVAILABLE = False
 
 pytestmark = pytest.mark.skipif(not RCE_AVAILABLE, reason="RCE server not running on localhost:7891")
-
-from muxi.runtime.services.rce.client import (
-    ExecResult,
-    RCEClient,
-    RCEError,
-    RCEStatus,
-)
 
 
 @pytest.fixture

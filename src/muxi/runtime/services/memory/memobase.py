@@ -156,6 +156,7 @@ class Memobase:
                 embedding=embedding,
                 metadata=metadata,
                 external_user_id=external_user_id,
+                collection=collection,
             )
 
             # Log successful memory store
@@ -253,9 +254,6 @@ class Memobase:
             return []
 
         additional_filter = additional_filter or {}
-
-        # Add external_user_id to filter
-        additional_filter["external_user_id"] = external_user_id
 
         # Create a collection name based on the external user ID if not provided
         if collection is None:

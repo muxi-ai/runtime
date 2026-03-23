@@ -2066,6 +2066,12 @@ class Overlord:
             if not last_assistant_msg or "?" not in last_assistant_msg:
                 return False
 
+        # If relevant long-term memories were injected into the context, this is
+        # a recall question (e.g. "what is my favorite turtle?") and MUST be
+        # routed through the agent so the memories are used in the response.
+        if "=== RELEVANT MEMORIES ===" in message:
+            return True
+
         # For more complex cases, use LLM if available
         if self._capability_models.get("text"):
             try:
@@ -2374,9 +2380,39 @@ If this requires complex multi-step work, respond with: COMPLEX"""
                         "'Hey there', 'Hi', 'Hello', etc. Get straight to the point."
                     )
 
+                # Build user content with available context so the persona model
+                # can answer recall questions and reference prior conversation.
+                user_content = f"Respond to: {actual_user_message}"
+
+                # Include relevant memories if present in the enhanced message
+                if "=== RELEVANT MEMORIES ===" in user_message:
+                    try:
+                        mem_start = user_message.index("=== RELEVANT MEMORIES ===")
+                        mem_section = user_message[mem_start:]
+                        # Take until next section or end
+                        for marker in [
+                            "=== CONVERSATION CONTEXT",
+                            "=== FILE PROCESSING",
+                        ]:
+                            if marker in mem_section[25:]:
+                                mem_section = mem_section[: mem_section.index(marker, 25)]
+                                break
+                        user_content = f"{mem_section.strip()}\n\n{user_content}"
+                    except (ValueError, IndexError):
+                        pass
+
+                # Include conversation context if present
+                if "=== CONVERSATION CONTEXT" in user_message:
+                    try:
+                        ctx_start = user_message.index("=== CONVERSATION CONTEXT")
+                        ctx_section = user_message[ctx_start:]
+                        user_content = f"{user_content}\n\n{ctx_section.strip()}"
+                    except (ValueError, IndexError):
+                        pass
+
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Respond to: {actual_user_message}"},
+                    {"role": "user", "content": user_content},
                 ]
                 # Force non-streaming for persona application, disable caching for varied responses
                 response = await llm.chat(
@@ -6506,36 +6542,9 @@ Agent response: {raw_response}"""
         #     user_id=str(user_id) if user_id else None
         # )
 
-        # ===================================================================
-        # STORE USER MESSAGE IN BUFFER MEMORY
-        # ===================================================================
-        # Store the user's message BEFORE any processing so it's available
-        # for conversation context in clarification and other checks
-        if self.buffer_memory_manager and session_id:
-            try:
-                # Extract clean message if it has context format
-                clean_user_message = message
-                if "=== CURRENT REQUEST ===" in message:
-                    lines = message.split("\n")
-                    for i, line in enumerate(lines):
-                        if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                            next_line = lines[i + 1].strip()
-                            if next_line.startswith("User:"):
-                                clean_user_message = next_line[5:].strip()
-                                break
-
-                await self.buffer_memory_manager.add_to_buffer_memory(
-                    message=clean_user_message,
-                    metadata={
-                        "user_id": user_id,
-                        "session_id": session_id,
-                        "role": "user",
-                        "timestamp": time.time(),
-                        "request_id": request_id,
-                    },
-                )
-            except Exception:
-                pass  # Don't fail on memory storage error
+        # NOTE: User message buffer storage is handled by chat_orchestrator.chat()
+        # via _store_user_message_async(). Removed duplicate storage here to
+        # prevent wasting buffer capacity (each message was stored twice).
 
         # ===================================================================
         # EARLY SOP TAG MATCH - provide SOP context to clarification
@@ -6896,22 +6905,8 @@ Agent response: {raw_response}"""
             )
             response = await self._apply_persona(None, message)
 
-            # Store assistant response in memory (user message already stored at entry) - fire-and-forget with tracking
-            if self.buffer_memory_manager:
-                self._create_tracked_task(
-                    self.buffer_memory_manager.add_to_buffer_memory(
-                        message=response,  # Store without "Assistant: " prefix - role is in metadata
-                        metadata={
-                            "user_id": user_id,
-                            "session_id": session_id,
-                            "role": "assistant",
-                            "timestamp": time.time(),
-                            "request_id": request_id,
-                        },
-                        agent_id="overlord",
-                    ),
-                    name=f"store_response_{request_id}",
-                )
+            # NOTE: Assistant response buffer storage is handled by
+            # chat_orchestrator._process_sync_chat() after this returns.
 
             # Emit streaming completed event for fast path
             streaming.stream(
@@ -7374,24 +7369,8 @@ Agent response: {raw_response}"""
                 request_id=request_id,
             )
 
-            # Store assistant response in buffer memory (fire-and-forget with tracking)
-            if self.buffer_memory_manager and result:
-                response_content = result.content if hasattr(result, "content") else str(result)
-                self._create_tracked_task(
-                    self.buffer_memory_manager.add_to_buffer_memory(
-                        message=response_content,  # Store without "Assistant: " prefix - role is in metadata
-                        metadata={
-                            "user_id": user_id,
-                            "session_id": session_id,
-                            "role": "assistant",
-                            "timestamp": time.time(),
-                            "agent_name": agent_name,
-                            "request_id": request_id,
-                        },
-                        agent_id=agent_name or "overlord",
-                    ),
-                    name=f"store_agent_response_{request_id}_{agent_name}",
-                )
+            # NOTE: Assistant response buffer storage is handled by
+            # chat_orchestrator._process_sync_chat() after this returns.
 
             # Mark agent as idle
             await self.active_agent_tracker.mark_agent_idle(agent_name)

@@ -5,12 +5,9 @@ Verification tests for bugfixes:
 - Memobase fallback path in initialization creates LongTermMemory correctly
 """
 
-import ast
 import inspect
 from pathlib import Path
 from unittest.mock import MagicMock
-
-import pytest
 
 SRC_ROOT = Path(__file__).parent.parent.parent / "src"
 

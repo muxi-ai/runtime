@@ -340,6 +340,24 @@ The overlord maintains a consistent persona across all agents, so users experien
 - Without explicit instruction, safety-tuned models may replace memory-based facts (e.g., "Your favorite color is blue") with "I don't have access to personal information"
 - Fix: The persona prompt includes explicit instruction to preserve personal information from agent responses
 
+**Gotchas - Non-Actionable Path Context Loss (fixed 2026-03-23):**
+- When `_is_actionable_message()` classifies a message as non-actionable, the non-actionable
+  path in `_apply_persona()` extracted only the raw user question via regex, discarding all
+  `=== RELEVANT MEMORIES ===` and `=== CONVERSATION CONTEXT ===` sections from the enhanced
+  message. The persona LLM saw zero context and could not answer recall questions.
+- Fix: The non-actionable path now preserves and includes memory and conversation context
+  sections in the persona prompt.
+- Additionally, `_is_actionable_message()` now forces actionable=True when the enhanced
+  message contains `=== RELEVANT MEMORIES ===`, preventing recall questions from being
+  misclassified. Greetings for users with no stored memories still fast-path correctly.
+
+**Gotchas - Buffer Double Storage (fixed 2026-03-23):**
+- Both `chat_orchestrator.chat()` and `overlord._process_sync_chat()` independently stored
+  each user message and assistant response in buffer memory -- 4 buffer writes per exchange
+  instead of 2. This halved the effective buffer lifetime.
+- Fix: Removed duplicate storage from `_process_sync_chat()`. The `chat_orchestrator` is the
+  sole owner of buffer storage for all code paths (actionable, non-actionable, streaming).
+
 #### Agent Router
 
 **Path:** `overlord/agent_router.py`
@@ -3985,3 +4003,52 @@ after selection, type mismatches.
 - Downloads formation (scheduler + PostgreSQL) blocked the event loop and never started the
   HTTP server. The server's health checker saw no response and reported "crash".
 - When debugging startup failures, always diff the working vs failing formation configs first.
+
+### 2026-03-23: Buffer Memory Recall Failures (3 bugs in overlord pipeline)
+
+**Problem:** The assistant could not recall information from earlier in the same conversation.
+Buffer memory stored and retrieved facts correctly in isolation, but recall questions like
+"what is my favorite turtle?" returned "I don't have that information" despite the answer
+being present in both buffer and long-term memory.
+
+**Root cause:** Three distinct bugs in the overlord message processing pipeline, not in
+the memory system itself.
+
+**Bug 1: Non-actionable path stripped all context (`_apply_persona`, overlord.py:2383)**
+- When `_is_actionable_message()` classified a recall question as non-actionable (which
+  the LLM did for questions like "what is my favorite turtle?"), the non-actionable path
+  in `_apply_persona()` used regex to extract only the raw user question, discarding the
+  `=== RELEVANT MEMORIES ===` and `=== CONVERSATION CONTEXT ===` sections that had been
+  injected by `_enhance_message_with_context()`.
+- The persona LLM saw only "Respond to: what is my favorite turtle?" with zero context,
+  so it correctly said "I don't have that information."
+- Fix: The non-actionable path now extracts and includes memory and conversation context
+  sections in the persona prompt.
+
+**Bug 2: Recall questions misclassified as non-actionable (`_is_actionable_message`, overlord.py:2061)**
+- The actionability LLM call could classify recall questions as NON_ACTIONABLE since they
+  don't look like commands or task requests. When this happened, Bug 1 kicked in.
+- Fix: If the enhanced message contains `=== RELEVANT MEMORIES ===` (meaning long-term
+  memory found relevant user facts for this query), the message is forced actionable. This
+  bypasses the LLM classification entirely and routes through the full agent pipeline where
+  the memories are available. Greetings for users with no stored memories still fast-path.
+
+**Bug 3: Double buffer storage (`_process_sync_chat`, overlord.py:6545/6908/7378)**
+- Both `chat_orchestrator.chat()` and `overlord._process_sync_chat()` independently stored
+  each user message and each assistant response in buffer memory -- 4 buffer entries per
+  exchange instead of 2. This halved the effective buffer capacity/lifetime.
+- Fix: Removed the 3 duplicate `add()` calls from `_process_sync_chat()`. The
+  `chat_orchestrator` is the sole owner of buffer storage for all code paths.
+
+**Verification:** All 3 fixes verified against a deployed SIF with Claude Sonnet 4. Same-session
+recall, cross-session recall (long-term memory), combined multi-fact recall, and greeting
+fast-path all confirmed working. 3/3 consistency on combined recall test.
+
+**Key files:**
+- `src/muxi/runtime/formation/overlord/overlord.py` -- all 3 fixes (net -28 lines)
+
+**Diagnostic insight:** When debugging memory recall failures, the memory system itself
+(buffer + long-term) is likely working correctly. Trace the message from `chat_orchestrator`
+through `_enhance_message_with_context()` → `_is_actionable_message()` → `_apply_persona()`
+/ agent pipeline to find where context is dropped. The enhanced message format with
+`=== RELEVANT MEMORIES ===` sections is the critical context carrier.
