@@ -81,6 +81,7 @@ class Memobase:
         metadata: Optional[Dict[str, Any]] = None,
         external_user_id: Optional[str] = None,
         collection: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> str:
         """
         Add content to memory for a specific user.
@@ -97,10 +98,14 @@ class Memobase:
                 external user ID.
             collection: Optional collection name to store the memory in.
                 If None, uses the default user collection.
+            user_id: Alias for external_user_id (extractor compatibility).
 
         Returns:
             The ID of the newly created memory entry.
         """
+        if external_user_id is None and user_id is not None:
+            external_user_id = user_id
+
         external_user_id = (
             external_user_id if external_user_id is not None else self.default_external_user_id
         )
@@ -191,6 +196,7 @@ class Memobase:
         external_user_id: Optional[str] = None,
         additional_filter: Optional[Dict[str, Any]] = None,
         collection: Optional[str] = None,
+        filter_metadata: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search for similar content in memory for a specific user.
@@ -208,10 +214,13 @@ class Memobase:
             additional_filter: Optional additional metadata filter.
             collection: Optional collection name to search in. If None, uses
                 the default collection for the user.
+            filter_metadata: Alias for additional_filter (LongTermMemory compatibility).
 
         Returns:
             A list of memory entries, ordered by relevance.
         """
+        if additional_filter is None and filter_metadata is not None:
+            additional_filter = filter_metadata
         external_user_id = (
             external_user_id if external_user_id is not None else self.default_external_user_id
         )
