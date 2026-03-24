@@ -115,7 +115,7 @@ class JobManager:
                     UserIdentifier.formation_id == self.formation_id,
                 )
             )
-            return result.scalar_one_or_none()
+            return result.scalars().first()
 
     def _enrich_job_dict(self, job_dict: Dict[str, Any], session=None) -> Dict[str, Any]:
         """Replace internal integer user_id with external string identifier."""
