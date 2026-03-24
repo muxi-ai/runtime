@@ -392,7 +392,12 @@ async def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSO
     # Retrieve the created job to return full data
     job_data = await scheduler.job_manager.get_job(job_id)
     if not job_data:
-        job_data = {"id": job_id, "type": job.type, "schedule": job.schedule, "message": job.message}
+        job_data = {
+            "id": job_id,
+            "type": job.type,
+            "schedule": job.schedule,
+            "message": job.message,
+        }
 
     response = create_success_response(
         APIObjectType.SCHEDULED_JOB,
