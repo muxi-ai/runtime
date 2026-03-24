@@ -31,14 +31,18 @@ class TestSchedulerRoutesFix:
     def test_uses_overlord_scheduler_service(self):
         """Route handlers must access scheduler via overlord.scheduler_service."""
         source = self._get_scheduler_route_source()
-        assert 'getattr(formation, "_overlord"' in source
-        assert 'getattr(overlord, "scheduler_service"' in source
+        # The helper _get_scheduler_service centralizes access
+        assert "scheduler_service" in source
+        assert "_overlord" in source
 
-    def test_all_four_endpoints_fixed(self):
-        """All 4 scheduler endpoints must use the overlord path."""
+    def test_all_endpoints_use_service_layer(self):
+        """All scheduler job endpoints must call the service/manager, not in-memory dicts."""
         source = self._get_scheduler_route_source()
-        count = source.count('getattr(overlord, "scheduler_service"')
-        assert count == 4, f"Expected 4 overlord lookups, found {count}"
+        # Must NOT have in-memory dict fallback patterns
+        assert "scheduler.jobs[" not in source, "Routes must not use in-memory dicts"
+        assert "scheduler.jobs =" not in source, "Routes must not use in-memory dicts"
+        # Must use async service methods (job_manager or scheduler service)
+        assert "scheduler.job_manager" in source or "scheduler.pause_job" in source
 
 
 class TestMemobaseDimensionFix:

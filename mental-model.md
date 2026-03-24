@@ -4052,3 +4052,45 @@ fast-path all confirmed working. 3/3 consistency on combined recall test.
 through `_enhance_message_with_context()` → `_is_actionable_message()` → `_apply_persona()`
 / agent pipeline to find where context is dropped. The enhanced message format with
 `=== RELEVANT MEMORIES ===` sections is the critical context carrier.
+
+### 2026-03-24: Scheduler API Routes Rewrite (4 bugs + 3 new endpoints)
+
+**Problem:** Scheduler HTTP routes (`scheduler.py`) never called the actual service layer.
+Every route handler used `hasattr` checks for methods that don't exist on `SchedulerService`,
+then fell into `else` branches that wrote to in-memory Python dicts. Jobs vanished on restart.
+
+**Bug 1 (Critical): Jobs not persisted to database**
+- `create_scheduled_job` tried `scheduler.add_job()` (doesn't exist), fell back to
+  `scheduler.jobs[job_id] = job_data` (in-memory dict). Same pattern in list/get/delete.
+- Fix: All routes now call `scheduler.job_manager.create_job()`, `.get_job()`,
+  `.get_all_jobs()`, `.delete_job()` which persist via SQLAlchemy to PostgreSQL.
+
+**Bug 2 (Medium): user_id body field ignored**
+- `ScheduledJobCreate` Pydantic model had no `user_id` field; FastAPI silently stripped it.
+- Fix: `user_id` comes from `X-Muxi-User-ID` header (per API spec).
+
+**Bug 3 (Medium): Missing update/pause/resume endpoints**
+- `SchedulerService` and `JobManager` have `pause_job()`, `resume_job()`,
+  `update_or_replace_job()` fully implemented. No HTTP routes existed.
+- Fix: Added `PUT /scheduler/jobs/{job_id}`, `POST .../pause`, `POST .../resume`.
+
+**Additional bugs found during implementation:**
+- `SchedulerService.pause_job(job_id)` called `self.job_manager.pause_job(job_id)` without
+  passing `user_id`, but manager requires it for audit trail. Same for `resume_job` and
+  `delete_job`. Added `user_id` parameter to all three service methods.
+- `get_default_nanoid()()` double-call in `manager.py:73` -- `get_default_nanoid()` returns
+  a string, calling it again raises `'str' object is not callable`. Fixed to single call.
+- `JobManager.delete_job()` failed with FK constraint violation because `scheduled_job_audit`
+  has a FK to `scheduled_jobs.id` without `ON DELETE CASCADE`. Fix: delete audit records
+  before deleting the job.
+
+**API spec updated:** Added `PUT /scheduler/jobs/{job_id}`, `POST .../pause`,
+`POST .../resume` endpoints and `ScheduledJobUpdate` schema to
+`muxi-formation-api-v1.yaml`.
+
+**Key files:**
+- `src/muxi/runtime/formation/server/routes/admin/scheduler.py` -- full rewrite
+- `src/muxi/runtime/services/scheduler/service.py` -- added `user_id` to pause/resume/delete
+- `src/muxi/runtime/services/scheduler/manager.py` -- nanoid fix, FK cascade fix
+- `src/muxi/runtime/datatypes/api.py` -- `SCHEDULER_JOB_UPDATED/PAUSED/RESUMED` events
+- `e2e/tests/19_api/test_19p2_scheduler_job_lifecycle.py` -- 15-check lifecycle test

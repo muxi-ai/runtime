@@ -70,7 +70,7 @@ class JobManager:
             from ...utils.id_generator import get_default_nanoid
 
             new_user = User(
-                public_id=get_default_nanoid()(),
+                public_id=get_default_nanoid(),
                 formation_id=self.formation_id,
             )
 
@@ -599,6 +599,10 @@ class JobManager:
                 )
 
                 if job:
+                    # Delete audit records first (FK constraint)
+                    session.query(ScheduledJobAudit).filter(
+                        ScheduledJobAudit.job_id == job_id
+                    ).delete()
                     session.delete(job)
                     session.commit()
                     success = True

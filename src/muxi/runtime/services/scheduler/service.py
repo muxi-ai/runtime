@@ -972,17 +972,18 @@ class SchedulerService:
 
         return True
 
-    async def pause_job(self, job_id: str) -> bool:
+    async def pause_job(self, job_id: str, user_id: str = "0") -> bool:
         """
         Pause a scheduled job.
 
         Args:
             job_id: Job ID to pause
+            user_id: User requesting the pause (for audit trail)
 
         Returns:
             True if successful, False otherwise
         """
-        success = await self.job_manager.pause_job(job_id)
+        success = await self.job_manager.pause_job(job_id, user_id=user_id)
 
         if success:
             observability.observe(
@@ -994,17 +995,18 @@ class SchedulerService:
 
         return success
 
-    async def resume_job(self, job_id: str) -> bool:
+    async def resume_job(self, job_id: str, user_id: str = "0") -> bool:
         """
         Resume a paused scheduled job.
 
         Args:
             job_id: Job ID to resume
+            user_id: User requesting the resume (for audit trail)
 
         Returns:
             True if successful, False otherwise
         """
-        success = await self.job_manager.resume_job(job_id)
+        success = await self.job_manager.resume_job(job_id, user_id=user_id)
 
         if success:
             observability.observe(
@@ -1016,17 +1018,18 @@ class SchedulerService:
 
         return success
 
-    async def delete_job(self, job_id: str) -> bool:
+    async def delete_job(self, job_id: str, user_id: str = "0") -> bool:
         """
         Delete a scheduled job.
 
         Args:
             job_id: Job ID to delete
+            user_id: User requesting the deletion (for audit trail)
 
         Returns:
             True if successful, False otherwise
         """
-        success = await self.job_manager.delete_job(job_id)
+        success = await self.job_manager.delete_job(job_id, user_id=user_id)
 
         if success:
             observability.observe(

@@ -78,6 +78,9 @@ class APIEventType(str, Enum):
     SCHEDULER_JOBS_LIST = "scheduler.jobs.list"
     SCHEDULER_JOB_CREATED = "scheduler.job.created"
     SCHEDULER_JOB_RETRIEVED = "scheduler.job.retrieved"
+    SCHEDULER_JOB_UPDATED = "scheduler.job.updated"
+    SCHEDULER_JOB_PAUSED = "scheduler.job.paused"
+    SCHEDULER_JOB_RESUMED = "scheduler.job.resumed"
     SCHEDULER_JOB_DELETED = "scheduler.job.deleted"
 
     # Session events
