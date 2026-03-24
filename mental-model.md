@@ -4094,3 +4094,52 @@ then fell into `else` branches that wrote to in-memory Python dicts. Jobs vanish
 - `src/muxi/runtime/services/scheduler/manager.py` -- nanoid fix, FK cascade fix
 - `src/muxi/runtime/datatypes/api.py` -- `SCHEDULER_JOB_UPDATED/PAUSED/RESUMED` events
 - `e2e/tests/19_api/test_19p2_scheduler_job_lifecycle.py` -- 15-check lifecycle test
+
+### 2026-03-24: Scheduler LLM Timeout, User ID Exposure & Delete Audit (v0.20260324.1)
+
+**Bug 1 (Critical): Scheduler NL queries hung for ~5 minutes**
+- `ScheduleParser._get_llm()` and `PromptRewriter._get_llm()` created bare `LLM()` instances
+  defaulting to `openai/gpt-4o` with no API key. With 30s timeout x 3 retries + exponential
+  backoff = ~3-5 minute total hang matching the dev's observation.
+- Fix: `SchedulerService.__init__` now reads `overlord.extraction_model` (already an LLM object
+  by the time the scheduler initializes at line 1411, after `_initialize_extraction_model()` at
+  line 1094) and sets it on `schedule_parser.llm` and `prompt_rewriter.llm`.
+- Important: the extraction_model string-to-LLM branch is a safety fallback that should rarely
+  fire since `_initialize_extraction_model()` runs first.
+
+**Bug 2 (Medium): API responses exposed internal integer user_id**
+- `ScheduledJob.to_dict()` returned the raw integer FK (`user_id` column is `Integer,
+  ForeignKey("users.id")`). API consumers saw `"user_id": 5` instead of `"user_id": "tester"`.
+- Fix: added `_resolve_external_user_id()` (reverse lookup via `user_identifiers` table) and
+  `_enrich_job_dict()` wrapper. Applied to all 6 job query methods.
+- Uses `scalars().first()` not `scalar_one_or_none()` to avoid `MultipleResultsFound` for
+  users with multiple identifiers (email + Slack ID etc).
+- N+1 query pattern: each job triggers a separate DB lookup. Acceptable for scheduler workloads
+  (tens of jobs), but a batch version would be cleaner for scale.
+
+**Bug 3 (Low): Delete job FK audit violation**
+- Flow was: delete audit records, delete job, INSERT "deleted" audit record. The INSERT failed
+  because the FK to `scheduled_jobs.id` no longer exists (job already deleted).
+- Fix: skip the post-deletion audit INSERT. Deletion is tracked via observability events.
+
+**Gotcha: auto_decomposition required for NL scheduler routing**
+- The NL scheduler path (`is_scheduling_request` detection) only fires when
+  `auto_decomposition=True` (which requires `enable_workflow_by_default: true` or
+  `workflow.auto_decomposition: true` in formation config). Default is `False`.
+- Without it, `analysis` stays `None` and the scheduler routing check at line 7200
+  (`if analysis and analysis.is_scheduling_request`) is never true.
+- NL scheduling messages just go to the regular agent pipeline (which has no scheduler tool).
+
+**Gotcha: SIF + host PostgreSQL port conflict on macOS**
+- The muxi server's `buildDockerSingularityCommand()` adds `--add-host localhost:host-gateway`
+  so `localhost` inside the SIF resolves to `192.168.65.254` (Docker Desktop gateway).
+- But if the host also runs PostgreSQL on port 5432 (ServBay, Homebrew, etc.), `psycopg2` tries
+  `::1` and `127.0.0.1` first (connection refused inside container), then `192.168.65.254`
+  which routes to the host's PostgreSQL -- not the Docker e2e one.
+- Solution: either stop the host PostgreSQL or use a connection string with a port that only
+  the Docker PostgreSQL maps (no conflict).
+
+**Key files:**
+- `src/muxi/runtime/services/scheduler/service.py` -- formation LLM injection into parser/rewriter
+- `src/muxi/runtime/services/scheduler/manager.py` -- `_resolve_external_user_id()`,
+  `_enrich_job_dict()`, delete audit fix
