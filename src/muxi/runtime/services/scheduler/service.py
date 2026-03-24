@@ -131,11 +131,38 @@ class SchedulerService:
             timeout=self._config.get("llm_circuit_timeout", 60.0),
         )
 
-        # Initialize parser and rewriter with performance components
+        # Initialize parser and rewriter with performance components.
+        # Pass the overlord's extraction model so they use the formation's
+        # configured LLM (with proper API key) instead of a bare LLM() default.
+        formation_llm = None
+        if overlord and hasattr(overlord, "extraction_model") and overlord.extraction_model:
+            extraction = overlord.extraction_model
+            if isinstance(extraction, str):
+                # extraction_model is a model name string, create LLM from it
+                from ..llm import LLM as LLMClass
+
+                text_config = (
+                    overlord._capability_models.get("text", {})
+                    if hasattr(overlord, "_capability_models")
+                    else {}
+                )
+                api_key = text_config.get("api_key") if isinstance(text_config, dict) else None
+                try:
+                    formation_llm = LLMClass(model=extraction, api_key=api_key)
+                except Exception:
+                    pass
+            else:
+                formation_llm = extraction
+
         self.schedule_parser = ScheduleParser(
             cache=self.cache, circuit_breaker=self.llm_circuit_breaker
         )
+        if formation_llm:
+            self.schedule_parser.llm = formation_llm
+
         self.prompt_rewriter = PromptRewriter()
+        if formation_llm:
+            self.prompt_rewriter.llm = formation_llm
 
         # State tracking
         self._active_executions = set()

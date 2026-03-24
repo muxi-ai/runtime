@@ -104,9 +104,27 @@ class JobManager:
                     f"Failed to resolve user after concurrent creation: {external_user_id}"
                 )
 
-    # DEPRECATED: Old method removed - use _resolve_user_id_sync() instead
-    # This method queried external_user_id column which no longer exists.
-    # See _resolve_user_id_sync() for the new multi-identity approach.
+    def _resolve_external_user_id(self, internal_user_id: int) -> Optional[str]:
+        """Resolve internal integer user_id back to external identifier string."""
+        with self.db_manager.get_session() as session:
+            from ...services.memory.long_term import UserIdentifier
+
+            result = session.execute(
+                select(UserIdentifier.identifier).where(
+                    UserIdentifier.user_id == internal_user_id,
+                    UserIdentifier.formation_id == self.formation_id,
+                )
+            )
+            return result.scalar_one_or_none()
+
+    def _enrich_job_dict(self, job_dict: Dict[str, Any], session=None) -> Dict[str, Any]:
+        """Replace internal integer user_id with external string identifier."""
+        internal_id = job_dict.get("user_id")
+        if internal_id is not None and isinstance(internal_id, int):
+            external = self._resolve_external_user_id(internal_id)
+            if external:
+                job_dict["user_id"] = external
+        return job_dict
 
     async def initialize(self):
         """Initialize scheduler service. Tables are now created centrally during formation init."""
@@ -246,10 +264,10 @@ class JobManager:
                     .all()
                 )
 
-                # Build result with external_user_id from User table
+                # Build result, replacing internal user_id with external identifier
                 result = []
                 for job in jobs:
-                    job_dict = job.to_dict()
+                    job_dict = self._enrich_job_dict(job.to_dict())
                     result.append(job_dict)
 
                 return result
@@ -283,8 +301,7 @@ class JobManager:
 
                 jobs = query.order_by(ScheduledJob.created_at.desc()).all()
 
-                # Build result
-                result = [job.to_dict() for job in jobs]
+                result = [self._enrich_job_dict(job.to_dict()) for job in jobs]
                 return result
 
         except SQLAlchemyError as e:
@@ -336,10 +353,10 @@ class JobManager:
 
                 jobs = query.all()
 
-                # Build result with external_user_id from User table
+                # Replace internal user_id with external identifier
                 result = []
                 for job in jobs:
-                    job_dict = job.to_dict()
+                    job_dict = self._enrich_job_dict(job.to_dict())
                     result.append(job_dict)
 
                 return result
@@ -374,7 +391,7 @@ class JobManager:
                     )
                     .first()
                 )
-                return job.to_dict() if job else None
+                return self._enrich_job_dict(job.to_dict()) if job else None
 
         except SQLAlchemyError as e:
             observability.observe(
@@ -1035,10 +1052,10 @@ class JobManager:
                     .all()
                 )
 
-                # Build result with external_user_id from User table
+                # Replace internal user_id with external identifier
                 result = []
                 for job in jobs:
-                    job_dict = job.to_dict()
+                    job_dict = self._enrich_job_dict(job.to_dict())
                     result.append(job_dict)
 
                 return result
