@@ -616,7 +616,7 @@ class JobManager:
                 )
 
                 if job:
-                    # Delete audit records first (FK constraint)
+                    # Delete audit records first (FK constraint prevents deleting job otherwise)
                     session.query(ScheduledJobAudit).filter(
                         ScheduledJobAudit.job_id == job_id
                     ).delete()
@@ -627,10 +627,9 @@ class JobManager:
                     success = False
 
             if success:
-                # Audit the deletion
-                await self._audit_job_action(
-                    job_id=job_id, user_id=user_id, action="deleted", reason=reason
-                )
+                # Note: Cannot insert a "deleted" audit record because the FK to
+                # scheduled_jobs.id would fail (job is already gone). The deletion
+                # is tracked via the observability event below instead.
 
                 observability.observe(
                     event_type=observability.ConversationEvents.SCHEDULED_JOB_EXECUTION_TRACKED,
