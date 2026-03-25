@@ -4680,17 +4680,57 @@ If you cannot determine a value from context:
                 max_tokens=16000,  # Must be large enough for code generation (e.g. generate_file)
             )
 
-            # Parse the JSON response
-            import json
-
             response_text = response.strip()
-            # Clean up response if it has markdown code blocks
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0]
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0]
 
-            parameters = json.loads(response_text)
+            parameters = self._extract_json_from_response(response_text, required_params)
+
+            if parameters is None:
+                # First attempt failed -- retry with a stronger prompt
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_PLANNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "tool_name": tool_name,
+                        "first_response": response_text[:500],
+                    },
+                    description=(
+                        f"Parameter inference returned non-JSON for {tool_name}, retrying"
+                    ),
+                )
+                retry_messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_request},
+                    {"role": "assistant", "content": response_text},
+                    {
+                        "role": "user",
+                        "content": (
+                            "Your response was not valid JSON. "
+                            "Respond with ONLY a JSON object, no explanation, no XML, "
+                            "no function calls, no markdown. "
+                            'Example: {"param": "value"}'
+                        ),
+                    },
+                ]
+                retry_response = await self.model.chat(
+                    messages=retry_messages,
+                    temperature=0.0,
+                    max_tokens=4000,
+                )
+                parameters = self._extract_json_from_response(
+                    retry_response.strip(), required_params
+                )
+
+            if parameters is None:
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_PLANNING,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "tool_name": tool_name,
+                        "response": response_text[:500],
+                    },
+                    description="Failed to parse LLM parameter inference as JSON after retry",
+                )
+                return {}
 
             # Validate we have all required parameters
             if all(param in parameters for param in required_params):
@@ -4718,19 +4758,6 @@ If you cannot determine a value from context:
                     description=f"LLM inference missing required params: {missing}",
                 )
                 return {}
-
-        except json.JSONDecodeError as e:
-            observability.observe(
-                event_type=observability.ConversationEvents.AGENT_PLANNING,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "tool_name": tool_name,
-                    "error": str(e),
-                    "response": response_text if "response_text" in locals() else None,
-                },
-                description="Failed to parse LLM parameter inference as JSON",
-            )
-            return {}
         except Exception as e:
             observability.observe(
                 event_type=observability.ConversationEvents.AGENT_PLANNING,
@@ -4739,3 +4766,63 @@ If you cannot determine a value from context:
                 description="Exception in LLM parameter inference",
             )
             return {}
+
+    @staticmethod
+    def _extract_json_from_response(
+        text: str, required_params: List[str]
+    ) -> Optional[Dict[str, Any]]:
+        """Extract JSON parameters from an LLM response that may contain
+        markdown code blocks, XML function-call wrappers, or embedded JSON
+        objects mixed with prose. Returns None if extraction fails."""
+        import json
+        import re
+
+        cleaned = text.strip()
+        if "```json" in cleaned:
+            cleaned = cleaned.split("```json")[1].split("```")[0].strip()
+        elif "```" in cleaned:
+            cleaned = cleaned.split("```")[1].split("```")[0].strip()
+
+        try:
+            result = json.loads(cleaned)
+            if isinstance(result, dict):
+                return result
+        except json.JSONDecodeError:
+            pass
+
+        # Extract from XML function-call wrappers (e.g. Anthropic tool-call format)
+        arg_match = re.search(
+            r'<parameter\s+name="arguments">\s*(\{[^<]+\})\s*</parameter>',
+            text,
+            re.DOTALL,
+        )
+        if arg_match:
+            try:
+                result = json.loads(arg_match.group(1))
+                if isinstance(result, dict):
+                    return result
+            except json.JSONDecodeError:
+                pass
+
+        # Find any JSON object containing at least one required param
+        brace_starts = [i for i, c in enumerate(text) if c == "{"]
+        for start in brace_starts:
+            depth = 0
+            for i in range(start, len(text)):
+                if text[i] == "{":
+                    depth += 1
+                elif text[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidate = text[start : i + 1]
+                        try:
+                            result = json.loads(candidate)
+                            if isinstance(result, dict) and any(
+                                p in result for p in required_params
+                            ):
+                                return result
+                        except json.JSONDecodeError:
+                            pass
+                        break
+
+        return None

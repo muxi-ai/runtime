@@ -43,6 +43,12 @@ DELEGATION PREFERENCES: When you need to delegate tasks to other agents:
 - Remote agents don't share your memory, so include all relevant information
 - NEVER DELEGATE TO AGENTS WITH THE SAME CAPABILITIES AS YOU UNLESS THEY HAVE TOOLS THAT YOU NEED BUT DO NOT HAVE.
 
+TOOL CHAINING RULE: Many tools require IDs or references from other tools. If a tool needs an ID you don't have (e.g., a task ID, list ID, record ID), you MUST add a preceding step to fetch/search for it first. Common patterns:
+- Update/delete a named item → first list/search to find its ID, then update/delete using the ID
+- Act on a specific resource → first get/list to discover the resource identifier
+- The output_placeholder from the lookup step flows into the parameters of the subsequent step
+Never assume you know an ID — always fetch it from the source system first.
+
 IMPORTANT: For each step you can do yourself, you MUST include appropriate parameters:
 - Look at the tool name and the user's request to determine what parameters are needed
 - For system info tools: use parameters like {"info_type": "cpu"} or {"info_type": "memory"}
