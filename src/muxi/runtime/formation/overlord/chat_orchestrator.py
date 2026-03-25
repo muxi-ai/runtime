@@ -8,6 +8,7 @@ streaming support, and workflow coordination.
 import asyncio
 import time
 import traceback
+from contextlib import suppress
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
 from ...datatypes.response import MuxiResponse
@@ -149,14 +150,32 @@ class ChatOrchestrator:
             return result
 
         # Create task with context propagation (Python 3.10 compatible)
+        processing_task = None
+
         def create_task_with_context():
-            return asyncio.create_task(delayed_process())
+            nonlocal processing_task
+            processing_task = asyncio.create_task(delayed_process())
+            return processing_task
 
         current_context.run(create_task_with_context)
 
-        # Yield events from the stream
-        async for event in self._stream_request(request_id, user_id, session_id):
-            yield event
+        # Yield events from the stream; cancel processing on client disconnect
+        try:
+            async for event in self._stream_request(request_id, user_id, session_id):
+                yield event
+        finally:
+            # Client disconnected or stream ended -- cancel if still running
+            if processing_task and not processing_task.done():
+                processing_task.cancel()
+                # Wait briefly for the task to acknowledge cancellation.
+                # Don't wait forever -- the task may be stuck in a blocking
+                # MCP/DB call that doesn't respond to cancellation.
+                with suppress(asyncio.CancelledError, asyncio.TimeoutError):
+                    await asyncio.wait_for(asyncio.shield(processing_task), timeout=5.0)
+                # Mark request as cancelled so it doesn't block future requests
+                await self.overlord.request_tracker.update_request(
+                    request_id, RequestStatus.CANCELLED
+                )
 
     async def chat(
         self,

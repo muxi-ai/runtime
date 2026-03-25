@@ -188,6 +188,9 @@ class SOPSystem:
                         "bypass_approval": metadata.get(
                             "bypass_approval", True
                         ),  # Default to bypass
+                        "synthesis": metadata.get(
+                            "synthesis", True
+                        ),  # Default to True (run synthesis)
                         "content": content,  # Full markdown content for decomposer
                         "raw_content": md_file.read_text(),  # Original content with frontmatter
                         "steps": metadata.get(

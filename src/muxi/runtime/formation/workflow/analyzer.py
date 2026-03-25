@@ -120,6 +120,7 @@ class RequestAnalyzer:
                 acceptance_criteria=["Request completed successfully"],
                 confidence_score=0.3,
                 is_scheduling_request=False,
+                is_scheduler_query_request=False,
                 is_explicit_approval_request=False,
                 topics=[],
                 is_security_threat=False,
@@ -284,6 +285,9 @@ class RequestAnalyzer:
         # Clamp complexity score
         complexity_score = min(10.0, max(1.0, complexity_score))
 
+        # Heuristic scheduler query detection
+        is_scheduler_query = self._heuristic_detect_scheduler_query(message_lower)
+
         return RequestAnalysis(
             complexity_score=complexity_score,
             requires_decomposition=False,  # Will be set by should_decompose
@@ -293,11 +297,27 @@ class RequestAnalyzer:
             acceptance_criteria=acceptance_criteria,
             confidence_score=0.7,  # Heuristic confidence
             is_scheduling_request=False,  # Heuristic doesn't detect scheduling
+            is_scheduler_query_request=is_scheduler_query,
             is_explicit_approval_request=False,  # Heuristic doesn't detect approval requests
             topics=[],  # No heuristic topics - LLM only
             is_security_threat=False,  # Heuristic doesn't detect security threats
             threat_type=None,
         )
+
+    @staticmethod
+    def _heuristic_detect_scheduler_query(message_lower: str) -> bool:
+        """Detect scheduler query intent via keyword patterns."""
+        import re
+
+        scheduler_query_patterns = [
+            r"\b(?:show|list|view|check|display|see)\b.*\b(?:scheduled|scheduler)\b",
+            r"\b(?:scheduled|scheduler)\b.*\b(?:jobs?|tasks?|items?|reminders?)\b",
+            r"\bmy\s+(?:scheduled|recurring)\s+(?:jobs?|tasks?|reminders?)\b",
+            r"\bwhat(?:'s|\s+is)\s+(?:on\s+)?my\s+schedule\b",
+            r"\bdo\s+i\s+have\s+(?:any\s+)?scheduled\b",
+            r"\bany\s+scheduled\s+(?:jobs?|tasks?|reminders?)\b",
+        ]
+        return any(re.search(p, message_lower) for p in scheduler_query_patterns)
 
     async def _llm_analyze_request(
         self, user_message: str, context: Optional[Dict[str, Any]] = None
@@ -328,7 +348,14 @@ class RequestAnalyzer:
             if context and context.get("request_tracker"):
                 await check_cancellation_from_context(context["request_tracker"])
 
-            return self._parse_llm_analysis(response)
+            analysis = self._parse_llm_analysis(response)
+
+            # Heuristic fallback: if LLM didn't detect scheduler query, check patterns
+            if not analysis.is_scheduler_query_request:
+                if self._heuristic_detect_scheduler_query(user_message.lower()):
+                    analysis.is_scheduler_query_request = True
+
+            return analysis
 
         except Exception as e:
             # Log error and fall back to heuristic
@@ -425,6 +452,7 @@ class RequestAnalyzer:
                     acceptance_criteria=data.get("acceptance_criteria", []),
                     confidence_score=float(data.get("confidence_score", 0.8)),
                     is_scheduling_request=data.get("is_scheduling_request", False),
+                    is_scheduler_query_request=data.get("is_scheduler_query_request", False),
                     is_explicit_approval_request=data.get("is_explicit_approval_request", False),
                     explicit_sop_request=explicit_sop,
                     topics=topics,
@@ -455,6 +483,7 @@ class RequestAnalyzer:
                 acceptance_criteria=[],
                 confidence_score=0.3,
                 is_scheduling_request=False,
+                is_scheduler_query_request=False,
                 is_explicit_approval_request=False,
                 topics=[],
                 is_security_threat=False,

@@ -373,7 +373,7 @@ async def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSO
 
         job_id = await scheduler.job_manager.create_job(
             user_id=user_id,
-            title=job.message[:80],
+            title=job.message[:500],
             original_prompt=job.message,
             execution_prompt=job.message,
             cron_expression=job.schedule if job.type == "recurring" else None,

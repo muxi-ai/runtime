@@ -1154,6 +1154,20 @@ class Agent:
                                         param_properties = full_param_schema.get("properties", {})
 
                                         if required_params:
+                                            # Build context including previous step results
+                                            # so the LLM can extract IDs/values from prior tool outputs
+                                            inference_context = user_message
+                                            if my_results:
+                                                prev_results_text = "\n".join(
+                                                    f"Previous tool result ({k}): {str(v)[:2000]}"
+                                                    for k, v in my_results.items()
+                                                )
+                                                inference_context = (
+                                                    f"{user_message}\n\n"
+                                                    f"=== PREVIOUS TOOL RESULTS ===\n"
+                                                    f"{prev_results_text}"
+                                                )
+
                                             # Try to infer parameters based on tool name, request context, and schema
                                             parameters = await self._infer_tool_parameters(
                                                 tool_name=actual_tool_name,
@@ -1161,7 +1175,7 @@ class Agent:
                                                 param_properties=param_properties,
                                                 full_schema=full_param_schema,
                                                 action_description=step.get("action", ""),
-                                                user_request=user_message,
+                                                user_request=inference_context,
                                             )
 
                                             if parameters:

@@ -75,6 +75,7 @@ _TERMINAL_STATUSES = frozenset(
 )
 
 DEFAULT_COMPLETED_TTL_SECONDS = 300  # 5 minutes
+DEFAULT_STALE_REQUEST_TIMEOUT = 600  # 10 minutes -- matches StreamingManager.SUBSCRIBE_TIMEOUT
 
 
 class RequestTracker:
@@ -85,11 +86,16 @@ class RequestTracker:
     A background cleanup task purges expired terminal requests automatically.
     """
 
-    def __init__(self, completed_ttl: float = DEFAULT_COMPLETED_TTL_SECONDS):
+    def __init__(
+        self,
+        completed_ttl: float = DEFAULT_COMPLETED_TTL_SECONDS,
+        stale_timeout: float = DEFAULT_STALE_REQUEST_TIMEOUT,
+    ):
         self._requests: Dict[str, RequestState] = {}
         self._cancelled: Set[str] = set()  # For cooperative cancellation
         self._lock = asyncio.Lock()
         self.completed_ttl = completed_ttl
+        self.stale_timeout = stale_timeout
         self._cleanup_task: Optional[asyncio.Task] = None
 
     async def track_request(self, request_id: str, initial_state: RequestState) -> None:
@@ -233,14 +239,16 @@ class RequestTracker:
 
     async def cleanup_expired(self) -> int:
         """
-        Remove terminal requests whose TTL has expired.
+        Remove terminal requests whose TTL has expired and force-fail
+        requests stuck in PROCESSING longer than ``stale_timeout``.
 
         Returns:
-            Number of requests purged
+            Number of requests purged or reaped
         """
         now = time.time()
         purged = 0
         async with self._lock:
+            # Purge terminal requests past their TTL
             expired_ids = [
                 req_id
                 for req_id, state in self._requests.items()
@@ -252,6 +260,27 @@ class RequestTracker:
                 del self._requests[req_id]
                 self._cancelled.discard(req_id)
                 purged += 1
+
+            # Reap stale processing requests (e.g. broken-pipe orphans)
+            _active = frozenset({RequestStatus.PROCESSING, RequestStatus.RUNNING})
+            stale_ids = [
+                req_id
+                for req_id, state in self._requests.items()
+                if state.status in _active and (now - state.start_time) > self.stale_timeout
+            ]
+            for req_id in stale_ids:
+                state = self._requests[req_id]
+                state.status = RequestStatus.FAILED
+                state.error = "Request timed out (stale request reaper)"
+                state.end_time = now
+                purged += 1
+                logging.getLogger(__name__).warning(
+                    "Reaped stale request %s (stuck in %s for %.0fs)",
+                    req_id,
+                    "PROCESSING",
+                    now - state.start_time,
+                )
+
         return purged
 
     def start_cleanup_loop(self, interval: float = 60.0) -> None:

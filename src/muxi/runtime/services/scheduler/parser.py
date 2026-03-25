@@ -625,7 +625,27 @@ Return only valid JSON, no explanation.
 
                 return base_cron
 
-        # Check for specific day + time patterns
+        # Check for multi-day + time patterns (e.g. "every Tuesday and Thursday at 3pm")
+        # Must be checked BEFORE the single-day pattern to avoid partial matches.
+        _day_names = "monday|tuesday|wednesday|thursday|friday|saturday|sunday"
+        multi_day_pattern = (
+            rf"every\s+((?:(?:{_day_names})(?:\s*(?:,|and)\s*)?)+)" rf"\s+(?:at\s+)?(.+)"
+        )
+        match = re.search(multi_day_pattern, schedule_text)
+        if match:
+            days_text = match.group(1)
+            time_text = match.group(2)
+            # Extract all day names from the matched group
+            found_days = re.findall(_day_names, days_text)
+            if len(found_days) > 1:
+                day_specs = [self.day_patterns[d] for d in found_days if d in self.day_patterns]
+                if day_specs:
+                    time_spec = self._extract_time_from_text(time_text)
+                    if time_spec:
+                        hour, minute = time_spec
+                        return f"{minute} {hour} * * {','.join(day_specs)}"
+
+        # Check for specific day + time patterns (single day)
         day_time_pattern = (
             r"every\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekdays?|weekends?)"
             r"\s+(?:at\s+)?(.+)"

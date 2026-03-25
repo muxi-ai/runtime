@@ -63,6 +63,10 @@ class StreamingManager:
             # Just append to events list (fast in-memory operation)
             stream_data["events"].append(event)
 
+    # Absolute ceiling (seconds) for a subscribe loop.  Prevents zombie
+    # streams when a terminal event is never emitted (e.g. broken pipe).
+    SUBSCRIBE_TIMEOUT = 600  # 10 minutes
+
     async def subscribe(self, request_id: str, user_id: str, session_id: str):
         """
         Generator that yields NEW events only.
@@ -80,8 +84,16 @@ class StreamingManager:
             # Start watching from NOW (ignore existing events)
             last_seen = len(stream_data["events"])
 
+        start_time = time.time()
+
         # Yield only NEW events as they arrive
         while True:
+            # Safety timeout -- prevent infinite polling when terminal event
+            # is never emitted (e.g. broken pipe dropped the producer)
+            if time.time() - start_time > self.SUBSCRIBE_TIMEOUT:
+                self.disable_streaming(request_id)
+                return
+
             # Copy new events to local list under lock
             new_events_to_yield = []
             terminal_event_seen = False

@@ -7054,7 +7054,102 @@ Agent response: {raw_response}"""
                         description=f"Extracted {len(analysis.topics)} topic tags from request",
                     )
 
-                # FIRST: Check for explicit SOP request - highest priority
+                # FIRST: Check for scheduler intent - highest priority after security
+                # This must run BEFORE SOP matching to prevent SOPs with generic
+                # tags (e.g., "tasks") from intercepting scheduler requests.
+                if getattr(analysis, "is_scheduling_request", False) and self.scheduler_service:
+                    try:
+                        job_id = await self.scheduler_service.create_job(
+                            user_id=str(user_id),
+                            title=f"Scheduled: {actual_message[:490]}",
+                            original_prompt=actual_message,
+                            schedule=actual_message,
+                            exclusions=[],
+                        )
+
+                        response_msg = (
+                            f"I've created a scheduled job for you. Your request "
+                            f"'{actual_message[:100]}' has been scheduled successfully. "
+                            f"(Job ID: {job_id})"
+                        )
+
+                        streaming.stream(
+                            "completed",
+                            response_msg,
+                            status="success",
+                            processing_time_ms=int((time.time() - start_time) * 1000),
+                        )
+
+                        return MuxiResponse(
+                            role="assistant",
+                            content=response_msg,
+                            metadata={"job_id": job_id, "handled_by": "scheduler_service"},
+                        )
+
+                    except Exception as e:
+                        observability.observe(
+                            event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
+                            level=observability.EventLevel.ERROR,
+                            data={
+                                "service": "scheduler",
+                                "error": str(e),
+                                "user_id": str(user_id),
+                            },
+                            description=f"Scheduler service failed to create scheduled job: {str(e)}",
+                        )
+                        # Fall through to SOP / agent handling
+
+                # Check for scheduler query (list/view scheduled jobs)
+                if (
+                    getattr(analysis, "is_scheduler_query_request", False)
+                    and self.scheduler_service
+                ):
+                    try:
+                        jobs = await self.scheduler_service.list_user_jobs(str(user_id))
+
+                        if not jobs:
+                            response_msg = "You don't have any scheduled jobs."
+                        else:
+                            job_lines = []
+                            for j in jobs:
+                                status = j.get("status", "active")
+                                cron = j.get("cron_expression", "one-time")
+                                title = j.get("title", "Untitled")
+                                job_id = j.get("id", "?")
+                                job_lines.append(
+                                    f"- {title} (schedule: {cron}) [{status}] (ID: {job_id})"
+                                )
+                            response_msg = f"You have {len(jobs)} scheduled job(s):\n" + "\n".join(
+                                job_lines
+                            )
+
+                        streaming.stream(
+                            "completed",
+                            response_msg,
+                            status="success",
+                            processing_time_ms=int((time.time() - start_time) * 1000),
+                        )
+
+                        return MuxiResponse(
+                            role="assistant",
+                            content=response_msg,
+                            metadata={"handled_by": "scheduler_service", "job_count": len(jobs)},
+                        )
+
+                    except Exception as e:
+                        observability.observe(
+                            event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
+                            level=observability.EventLevel.ERROR,
+                            data={
+                                "service": "scheduler",
+                                "error": str(e),
+                                "user_id": str(user_id),
+                            },
+                            description=f"Scheduler service failed to list jobs: {str(e)}",
+                        )
+                        # Fall through to SOP / agent handling
+
+                # Check for explicit SOP request
                 if analysis.explicit_sop_request:
                     # User explicitly requested a specific SOP
                     sop_id = analysis.explicit_sop_request
@@ -7195,58 +7290,6 @@ Agent response: {raw_response}"""
                     description=f"Failed to analyze request for workflow: {type(e).__name__}: {str(e)}",
                 )
                 # Fall through to normal agent selection
-
-        # Check for scheduler integration and route if needed
-        if (
-            analysis
-            and getattr(analysis, "is_scheduling_request", False)
-            and self.scheduler_service
-        ):
-            # Route to scheduler service
-            try:
-                # Extract the actual user message for scheduler
-                actual_message = message
-                if "=== CURRENT REQUEST ===" in message and "User:" in message:
-                    lines = message.split("\n")
-                    for i, line in enumerate(lines):
-                        if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                            next_line = lines[i + 1].strip()
-                            if next_line.startswith("User:"):
-                                actual_message = next_line[5:].strip()
-                                break
-
-                # Create the scheduled job
-                job_id = await self.scheduler_service.create_job(
-                    user_id=str(user_id),
-                    title=f"Scheduled: {actual_message[:50]}",
-                    original_prompt=actual_message,
-                    schedule=actual_message,
-                    exclusions=[],
-                )
-
-                response_msg = (
-                    f"I've created a scheduled job for you. Your request '{actual_message[:100]}' "
-                    f"has been scheduled successfully. (Job ID: {job_id})"
-                )
-
-                return MuxiResponse(
-                    role="assistant",
-                    content=response_msg,
-                    metadata={"job_id": job_id, "handled_by": "scheduler_service"},
-                )
-
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "service": "scheduler",
-                        "error": str(e),
-                        "user_id": str(user_id),
-                    },
-                    description=f"Scheduler service failed to create scheduled job: {str(e)}",
-                )
-                # Fall through to normal agent handling
 
         # Use existing agent selection logic if no specific agent requested
         if agent_name is None:
@@ -7901,6 +7944,11 @@ Agent response: {raw_response}"""
                     requires_approval=needs_approval if not bypass_approval else False,
                 )
 
+                # Propagate SOP synthesis preference to the workflow so
+                # _synthesize_workflow_results can respect it later.
+                if workflow and not relevant_sop.get("synthesis", True):
+                    workflow.skip_synthesis = True
+
                 # Log SOP execution
                 observability.observe(
                     event_type=observability.ConversationEvents.SOP_EXECUTED,
@@ -7911,6 +7959,7 @@ Agent response: {raw_response}"""
                         "workflow_id": workflow.id if workflow else None,
                         "mode": mode,
                         "bypass_approval": bypass_approval,
+                        "synthesis": relevant_sop.get("synthesis", True),
                     },
                     description=f"Passed SOP '{relevant_sop['name']}' to decomposer in {mode} mode",
                 )
@@ -8643,15 +8692,22 @@ Agent response: {raw_response}"""
                 "original_message": message,
             }
 
-            # Check if this is an SOP workflow (has sequential dependencies)
-            # and force sequential execution for proper data passing
+            # Check if this is a STRICTLY LINEAR SOP workflow (each task depends
+            # on exactly the previous one, forming a chain).  Fan-in patterns
+            # (e.g., 3 independent tasks feeding 1 synthesis task) should NOT be
+            # forced sequential -- the executor already respects the DAG via
+            # build_execution_phases().
             is_sop_workflow = False
             if workflow.tasks:
-                # Check if tasks have sequential dependencies (characteristic of SOP workflows)
-                tasks_with_deps = [t for t in workflow.tasks.values() if t.dependencies]
-                if tasks_with_deps:
-                    # If most tasks have dependencies, it's likely an SOP workflow
-                    is_sop_workflow = len(tasks_with_deps) >= len(workflow.tasks) - 1
+                task_list = list(workflow.tasks.values())
+                tasks_with_deps = [t for t in task_list if t.dependencies]
+                if tasks_with_deps and len(tasks_with_deps) >= len(task_list) - 1:
+                    # Most tasks have deps -- but is it a strict linear chain?
+                    # Linear chain: every task with deps depends on exactly one
+                    # predecessor, and that predecessor also depends on its
+                    # predecessor (no fan-in or fan-out).
+                    is_linear_chain = all(len(t.dependencies) == 1 for t in tasks_with_deps)
+                    is_sop_workflow = is_linear_chain
 
             if is_sop_workflow:
                 # Temporarily disable parallel execution for SOP workflows
@@ -9121,6 +9177,21 @@ Agent response: {raw_response}"""
         try:
             # Check if we have any successful results
             successful_results = [r for r in task_results if r.get("status") == "completed"]
+
+            # When the SOP sets synthesis: false, return the last successful
+            # task's raw output directly instead of re-processing through LLM.
+            if workflow.skip_synthesis and successful_results:
+                last_result = successful_results[-1]
+                raw_output = last_result.get("outputs", {})
+                if isinstance(raw_output, dict):
+                    content = raw_output.get("content", str(raw_output))
+                else:
+                    content = str(raw_output)
+                return MuxiResponse(
+                    role="assistant",
+                    content=content,
+                    metadata={"synthesis_method": "skipped_per_sop"},
+                )
 
             if not successful_results:
                 # All tasks failed

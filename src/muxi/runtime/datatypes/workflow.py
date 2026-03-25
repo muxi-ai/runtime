@@ -147,6 +147,10 @@ class RequestAnalysis(BaseModel):
     is_scheduling_request: bool = Field(
         default=False, description="Whether this is a scheduling request"
     )
+    is_scheduler_query_request: bool = Field(
+        default=False,
+        description="Whether the user is asking to view/list/check their scheduled jobs",
+    )
     is_explicit_approval_request: bool = Field(
         default=False,
         description="Whether user explicitly wants to see the plan/approach before execution",
@@ -271,6 +275,10 @@ class Workflow(BaseModel):
     total_phases: int = Field(default=0, ge=0, description="Total number of phases")
     execution_phases: List[List[str]] = Field(
         default_factory=list, description="Parallel execution groups"
+    )
+    skip_synthesis: bool = Field(
+        default=False,
+        description="When True, return last task output as-is instead of LLM synthesis",
     )
 
     @field_validator("tasks")
