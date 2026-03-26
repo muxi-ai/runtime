@@ -1097,6 +1097,47 @@ class Agent:
                     description=f"Execution plan ready for {self.agent_id}",
                 )
 
+                # Reconcile my_steps with steps: the LLM sometimes produces
+                # a steps array with correct tool chaining but a my_steps array
+                # that skips prerequisite tools (e.g. omitting list-todo-task-lists
+                # before list-todo-tasks). When steps exists and has more
+                # can_i_do_this=true entries than my_steps, rebuild my_steps
+                # from steps to preserve the correct ordering.
+                if execution_plan and execution_plan.get("steps"):
+                    canonical_steps = [
+                        s for s in execution_plan["steps"] if s.get("can_i_do_this", True) is True
+                    ]
+                    my_steps = execution_plan.get("my_steps", [])
+                    if len(canonical_steps) > len(my_steps):
+                        rebuilt = []
+                        for s in canonical_steps:
+                            rebuilt.append(
+                                {
+                                    "action": s.get("action", ""),
+                                    "tool_name": s.get("tool_name", ""),
+                                    "parameters": s.get("parameters", {}),
+                                    "output_placeholder": s.get(
+                                        "output_placeholder",
+                                        f"{{{s.get('tool_name', 'TOOL').upper()}_OUTPUT}}",
+                                    ),
+                                }
+                            )
+                        execution_plan["my_steps"] = rebuilt
+                        observability.observe(
+                            event_type=observability.ConversationEvents.AGENT_PLANNING,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "agent_id": self.agent_id,
+                                "original_my_steps": len(my_steps),
+                                "canonical_steps": len(canonical_steps),
+                                "rebuilt_tools": [s.get("tool_name") for s in rebuilt],
+                            },
+                            description=(
+                                "Rebuilt my_steps from steps array "
+                                "to preserve tool chain ordering"
+                            ),
+                        )
+
                 # EXECUTION PHASE: Execute my_steps first
                 if execution_plan and execution_plan.get("my_steps"):
                     observability.observe(
@@ -3661,7 +3702,6 @@ class Agent:
             plan_response = await self.model.chat(
                 planning_messages,
                 temperature=0.1,  # Low temperature for structured output
-                max_tokens=1000,
             )
 
             # Check cancellation after LLM call returns
