@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.20260326.0 - Planning Truncation & Tool Chain Reconciliation
+
+### Bug Fixes
+
+- **Planning response truncated, dropping prerequisite tools** - The `_plan_before_execution()` LLM call used `max_tokens=1000`, which was too small for multi-step plans when many MCP tools are registered (e.g., 83 MS365 tools). The LLM compressed 3-step plans into 2 steps to fit, dropping prerequisite lookup tools (`list-todo-task-lists` before `list-todo-tasks`). Parameter inference then guessed display names (e.g., "Завдання") instead of actual IDs, causing `ErrorInvalidIdMalformed` from the Microsoft Graph API. Fix: removed the `max_tokens` cap entirely -- the LLM naturally stops when the JSON is complete.
+- **my_steps diverges from steps array** - When the LLM produced a `steps` array with correct tool chaining but a `my_steps` array with missing prerequisite steps, the execution engine used the incomplete `my_steps`. Fix: added a reconciliation step that rebuilds `my_steps` from the canonical `steps` array when `steps` contains more `can_i_do_this=true` entries than `my_steps`.
+
 ## 0.20260325.1 - MCP Tool Chaining Reliability
 
 ### Bug Fixes
