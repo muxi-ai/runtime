@@ -291,9 +291,13 @@ class TestBuiltinSkills:
         manager = SkillManager()
         loaded = manager.load_builtin_skills()
         assert "file-generation" in loaded
+        assert "generative-ui" in loaded
         assert "file-generation" in manager.skills
+        assert "generative-ui" in manager.skills
         assert "file-generation" in manager.public_skills
+        assert "generative-ui" in manager.public_skills
         assert "file-generation" in manager._builtin_skills
+        assert "generative-ui" in manager._builtin_skills
 
     def test_builtin_skills_are_public(self):
         manager = SkillManager()
@@ -357,6 +361,29 @@ class TestBuiltinSkills:
         catalog = manager.build_catalog_xml("agent-1")
         assert catalog is not None
         assert "file-generation" in catalog
+        assert "generative-ui" in catalog
+
+    def test_generative_ui_builtin_metadata(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        skill = manager.skills["generative-ui"]
+        assert skill.name == "generative-ui"
+        assert "interactive" in skill.description.lower() or "visual" in skill.description.lower()
+        assert skill.allowed_tools == ["generate_file"]
+        assert skill.base_dir.is_dir()
+
+    def test_generative_ui_builtin_activation(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        content = manager.activate("generative-ui", "session-1")
+        assert "skill_content" in content
+        assert "generate_file" in content
+        assert "self-contained HTML" in content
+
+    def test_generative_ui_builtin_has_no_scripts(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        assert manager.has_scripts("generative-ui") is False
 
     def test_manager_no_skills_dir(self):
         manager = SkillManager()

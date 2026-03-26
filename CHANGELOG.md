@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.20260326.3 - Generative UI Skill
+
+### New Features
+
+- **Built-in `generative-ui` skill** - Added a new built-in skill that teaches agents when and how to create self-contained interactive HTML widgets, dashboards, diagrams, and visual explainers. The skill is designed to work with the existing `generate_file` tool and steers agents toward single-file `.html` artifacts with inline CSS/JS, responsive layouts, and dark-mode-friendly visuals.
+
+### Tests
+
+- **Unit coverage for `generative-ui`** - Added built-in skill loading, catalog, activation, metadata, and no-scripts assertions to `tests/unit/skills/test_skills.py`.
+- **E2E test for RCE-backed HTML widget generation** - Added `e2e/tests/21_skills/test_21c2_generative_ui_rce.py` to verify that the skill activates correctly and produces an interactive `.html` artifact through the RCE-backed `generate_file` path.
+
 ## 0.20260326.1 - MCP Error Handling & Session-Aware Routing
 
 ### Bug Fixes
