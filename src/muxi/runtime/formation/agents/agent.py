@@ -4844,6 +4844,26 @@ If you cannot determine a value from context:
             except json.JSONDecodeError:
                 pass
 
+        # Extract individual <parameter name="key">value</parameter> tags
+        param_pairs = re.findall(
+            r'<parameter\s+name="([^"]+)">([^<]*)</parameter>',
+            text,
+        )
+        if param_pairs:
+            result = {}
+            for key, val in param_pairs:
+                if key in ("arguments",):
+                    continue
+                val = val.strip()
+                # Try parsing as JSON value (for nested objects / arrays)
+                try:
+                    val = json.loads(val)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+                result[key] = val
+            if result:
+                return result
+
         # Find any JSON object containing at least one required param
         brace_starts = [i for i, c in enumerate(text) if c == "{"]
         for start in brace_starts:
