@@ -3783,7 +3783,12 @@ Agent response: {raw_response}"""
         # Run the agent
         return await agent.run(input_text, use_memory=use_memory)
 
-    async def select_agent_for_message(self, message: str, request_id: Optional[str] = None) -> str:
+    async def select_agent_for_message(
+        self,
+        message: str,
+        request_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> str:
         """
         Select the most appropriate agent for a given message using intelligent routing.
 
@@ -3795,6 +3800,7 @@ Agent response: {raw_response}"""
             message: The message to route. This is the user's message or query
                 that needs to be directed to an appropriate agent.
             request_id: Optional request ID for request-scoped agent exclusion
+            session_id: Optional session ID for follow-up routing context
 
         Returns:
             The ID of the selected agent. This will always be a valid agent ID
@@ -3803,7 +3809,9 @@ Agent response: {raw_response}"""
         Raises:
             ValueError: If no agents are available in the overlord.
         """
-        return await self.agent_router.select_agent_for_message(message, request_id)
+        return await self.agent_router.select_agent_for_message(
+            message, request_id, session_id=session_id
+        )
 
     async def list_agents(self) -> Dict[str, Dict[str, Any]]:
         """
@@ -7324,7 +7332,7 @@ Agent response: {raw_response}"""
 
             try:
                 agent_name = await self.select_agent_for_message(
-                    routing_message, request_id=request_id
+                    routing_message, request_id=request_id, session_id=session_id
                 )
             except SecurityViolation as e:
                 # Security threat detected - but skip if this is a credential/workflow response
@@ -7371,6 +7379,10 @@ Agent response: {raw_response}"""
                 data={"selected_agent": agent_name},
                 description=f"Agent selection completed: {agent_name}",
             )
+
+            # Record agent for session follow-up routing
+            if session_id and agent_name:
+                self.agent_router.record_session_agent(session_id, agent_name)
 
             # Emit streaming event for agent selection completion (user-friendly)
             if agent_name and agent_name != "None":

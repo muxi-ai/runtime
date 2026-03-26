@@ -35,8 +35,16 @@ class AgentRouter:
         """
         self.overlord = overlord
         self._routing_cache: Dict[str, Any] = {}
+        self._session_last_agent: Dict[str, str] = {}
 
-    async def select_agent_for_message(self, message: str, request_id: Optional[str] = None) -> str:
+    def record_session_agent(self, session_id: str, agent_id: str) -> None:
+        """Record which agent handled the last request in a session."""
+        if session_id:
+            self._session_last_agent[session_id] = agent_id
+
+    async def select_agent_for_message(
+        self, message: str, request_id: Optional[str] = None, session_id: Optional[str] = None
+    ) -> str:
         """
         Select the most appropriate agent for a given message using intelligent routing.
 
@@ -138,7 +146,7 @@ class AgentRouter:
 
         try:
             # Create messages for the routing model (system/user separated for proper caching)
-            messages = self._create_routing_messages(message)
+            messages = self._create_routing_messages(message, session_id=session_id)
 
             # Query the routing model
             response = await routing_model.chat(messages)
@@ -192,7 +200,7 @@ class AgentRouter:
             )
             return await self._select_best_available_agent(message, request_id)
 
-    def _create_routing_messages(self, message: str) -> list:
+    def _create_routing_messages(self, message: str, session_id: Optional[str] = None) -> list:
         """
         Create messages for the routing model with built-in security awareness.
 
@@ -242,8 +250,18 @@ For safe messages, analyze and select the best agent considering:
 - The subject matter and topic of the message
 - The specific capabilities each agent offers
 - Which agent would be most helpful for this type of request
+- If there is a previous agent for this session, prefer it for follow-up messages that lack explicit topic keywords (e.g., short replies, pronouns, continuation of a task)
 
 Your response: [agent-id] or SECURITY_BLOCK"""
+
+        # Add session context hint if available
+        last_agent = self._session_last_agent.get(session_id) if session_id else None
+        if last_agent and last_agent in self.overlord.agents:
+            system_prompt += (
+                f"\n\nSession context: The previous request in this session was handled by "
+                f"[{last_agent}]. If the new message looks like a follow-up or continuation, "
+                f"prefer routing to the same agent."
+            )
 
         return [
             {"role": "system", "content": system_prompt},

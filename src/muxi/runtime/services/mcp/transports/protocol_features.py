@@ -73,6 +73,27 @@ class ModernProtocolFeatures:
         Returns:
             Standardized structured output format
         """
+        # Handle dict results (e.g., from streamable HTTP transport)
+        if isinstance(result, dict) and "content" in result:
+            content = result.get("content")
+            if not content:
+                content_text = str(content) if content is not None else ""
+            elif isinstance(content, list) and len(content) > 0:
+                first = content[0]
+                if isinstance(first, dict):
+                    content_text = first.get("text", str(first))
+                else:
+                    content_text = getattr(first, "text", str(first))
+            else:
+                content_text = str(content)
+            return {
+                "content": content_text,
+                "isError": result.get("isError", False),
+                "links": result.get("links", []),
+                "_meta": result.get("meta") or {},
+                "type": "structured",
+            }
+
         if hasattr(result, "content") and hasattr(result, "isError"):
             # Handle _meta attribute carefully to avoid mock objects
             meta_attr = getattr(result, "_meta", None)

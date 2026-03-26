@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.20260326.1 - MCP Error Handling & Session-Aware Routing
+
+### Bug Fixes
+
+- **MCP tool completion events report success for errors** - When an MCP server returned `isError: true` in a structured response (e.g., 404 from Microsoft Graph API), the `process_structured_output` method fell through to the legacy code path because it only handled object-style results (with `hasattr`), not dict-style results from streamable HTTP transport. The completion event logged `success: true` and `is_error: false` despite the actual error. Fix: added dict result handling before the object-style path, correctly propagating the `isError` flag.
+- **Follow-up messages routed to wrong agent** - When a user said "mark Make dinner as not important" (routed correctly to ms365-assistant), then followed up with "change Make dinner to normal", the routing LLM had no session context and routed to muxi-generalist instead. The generalist created a plan that delegated back to ms365-assistant but lost the conversation context. Fix: added session-aware routing -- the agent router tracks the last agent per session and includes a session context hint in the routing prompt, biasing follow-up messages toward the same agent.
+
 ## 0.20260326.0 - Planning Truncation & Tool Chain Reconciliation
 
 ### Bug Fixes
