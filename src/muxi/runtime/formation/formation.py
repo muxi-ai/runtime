@@ -2382,7 +2382,33 @@ class Formation:
                     registration_params["transport_type"] = server_config["transport_type"]
 
                 # Register the server via MCP service
-                await self._mcp_service.register_mcp_server(**registration_params)
+                # Retry HTTP servers up to 3 times with backoff -- the external MCP
+                # process may still be starting when the formation initialises.
+                is_http = "url" in registration_params or "endpoint" in server_config
+                max_attempts = 2 if is_http else 1
+                for attempt in range(1, max_attempts + 1):
+                    try:
+                        await self._mcp_service.register_mcp_server(**registration_params)
+                        break
+                    except (MCPConnectionError, MCPTimeoutError):
+                        if attempt < max_attempts:
+                            wait = 3
+                            observability.observe(
+                                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
+                                level=observability.EventLevel.DEBUG,
+                                data={
+                                    "server_id": server_id,
+                                    "attempt": attempt,
+                                    "retry_in": wait,
+                                },
+                                description=(
+                                    f"MCP server '{server_id}' not ready, "
+                                    f"retrying in {wait}s (attempt {attempt}/{max_attempts})"
+                                ),
+                            )
+                            await asyncio.sleep(wait)
+                        else:
+                            raise  # Let the outer except handler deal with it
 
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTERED,
