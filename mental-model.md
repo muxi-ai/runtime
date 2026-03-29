@@ -1200,6 +1200,33 @@ class TransportDetector:
         return "streamable_http"
 ```
 
+### Known Issue: HTTP Transport 90%+ Idle CPU (sdk#1805 workaround)
+
+**Affected transports:** `StreamableHTTPTransport`, `HTTPSSETransport`
+
+**Symptom:** After the first MCP tool call over an HTTP transport (streamable or SSE), the process pins a CPU core at 90%+ indefinitely with no active requests.
+
+**Root cause:** Upstream bug in `modelcontextprotocol/python-sdk` ([#1805](https://github.com/modelcontextprotocol/python-sdk/issues/1805)). The SDK's memory object streams use a zero-buffer size (capacity 0). When the transport context exits with tasks still blocked on `send()`, AnyIO cannot cancel them cooperatively — `_deliver_cancellation()` reschedules itself via `call_soon()` every event loop tick, producing a permanent busy-loop.
+
+**Upstream fix:** [python-sdk PR #2147](https://github.com/modelcontextprotocol/python-sdk/pull/2147) — closes streams before cancelling the task group and bumps buffer size from 0 to 1. Confirmed working but not yet merged as of 2026-03-29.
+
+**MUXI-side workaround** (applied in `_cleanup()` for both transports):
+```python
+# Close streams BEFORE calling session/__aexit__ so SDK-internal tasks
+# blocked on send() receive ClosedResourceError and exit cooperatively.
+for stream in (self.read_stream, self.write_stream):
+    if stream is not None:
+        try:
+            await stream.aclose()
+        except Exception:
+            pass
+# Only then exit session and client contexts
+```
+
+MUXI holds references to the same stream objects the SDK passes to `ClientSession`. Closing them early causes the SDK's internal receive loop to get `ClosedResourceError` and exit on its own, so `tg.cancel_scope.cancel()` has no blocked tasks left to spin on. Once the upstream PR ships, this early-close becomes a harmless no-op.
+
+**Remove this workaround when:** `mcp` package ships a version that includes the fix from PR #2147.
+
 ### Tool Execution
 
 **Path:** `overlord/mcp_coordinator.py` → `MCPService.call_tool()`
