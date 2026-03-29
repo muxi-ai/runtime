@@ -232,11 +232,28 @@ class StreamableHTTPTransport(BaseTransport):
         Uses a timeout because the MCP SDK's streamablehttp_client async
         generator can hang indefinitely during teardown when the connection
         was interrupted by an auth error (401) or network failure.
+
+        Workaround for modelcontextprotocol/python-sdk#1805:
+        Close read/write streams BEFORE exiting the SDK contexts so that
+        internal tasks blocked on zero-buffer stream send() receive
+        ClosedResourceError and exit cooperatively, preventing the AnyIO
+        _deliver_cancellation busy-loop that causes 90%+ idle CPU.
         """
         import asyncio
 
         try:
-            # Close session first
+            # Close streams first to unblock SDK-internal tasks (sdk#1805 workaround).
+            # This must happen before session/context __aexit__ which calls
+            # tg.cancel_scope.cancel() -- otherwise blocked send() calls
+            # cause AnyIO to spin in _deliver_cancellation.
+            for stream in (self.read_stream, self.write_stream):
+                if stream is not None:
+                    try:
+                        await stream.aclose()
+                    except Exception:
+                        pass
+
+            # Close session
             if self.session:
                 try:
                     await asyncio.wait_for(self.session.__aexit__(None, None, None), timeout=5.0)

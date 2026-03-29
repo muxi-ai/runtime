@@ -153,9 +153,24 @@ class HTTPSSETransport(BaseTransport):
             raise MCPRequestError(f"Request failed: {e}") from e
 
     async def _cleanup(self):
-        """Proper cleanup in same async context."""
+        """Proper cleanup in same async context.
+
+        Workaround for modelcontextprotocol/python-sdk#1805:
+        Close read/write streams BEFORE exiting the SDK contexts so that
+        internal tasks blocked on zero-buffer stream send() receive
+        ClosedResourceError and exit cooperatively, preventing the AnyIO
+        _deliver_cancellation busy-loop that causes 90%+ idle CPU.
+        """
         try:
-            # Close session first
+            # Close streams first to unblock SDK-internal tasks (sdk#1805 workaround).
+            for stream in (self.read_stream, self.write_stream):
+                if stream is not None:
+                    try:
+                        await stream.aclose()
+                    except Exception:
+                        pass
+
+            # Close session
             if self.session:
                 try:
                     await self.session.__aexit__(None, None, None)

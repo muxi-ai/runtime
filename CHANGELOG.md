@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.20260329.0 - MCP HTTP Transport CPU Busy-Loop Workaround
+
+### Bug Fixes
+
+- **MCP `type: http` servers cause 90%+ idle CPU** — After the first tool call via an HTTP MCP server (streamable or SSE transport), the runtime process pinned a CPU core permanently with no active requests. Root cause is an upstream bug in `modelcontextprotocol/python-sdk` ([#1805](https://github.com/modelcontextprotocol/python-sdk/issues/1805)): the SDK's memory object streams use a zero-buffer capacity, so tasks blocked on `send()` during context teardown cannot be cooperatively cancelled. AnyIO's `_deliver_cancellation()` reschedules itself via `call_soon()` every event loop tick, producing an infinite busy-loop. Workaround: `StreamableHTTPTransport._cleanup()` and `HTTPSSETransport._cleanup()` now close `read_stream` and `write_stream` via `aclose()` before calling the SDK's `__aexit__()` methods. Since MUXI holds references to the same stream objects passed to `ClientSession`, closing them early causes internal tasks to receive `ClosedResourceError` and exit cooperatively, leaving no blocked tasks for AnyIO to spin on. The upstream fix (PR [#2147](https://github.com/modelcontextprotocol/python-sdk/pull/2147)) is confirmed working but not yet merged; this workaround will become a harmless no-op once it ships.
+
 ## 0.20260326.3 - Generative UI Skill
 
 ### New Features
