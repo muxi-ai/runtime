@@ -505,6 +505,14 @@ class FormationValidator:
             self.result.add_error("MCP configuration must be a dictionary")
             return
 
+        # Validate global connection_ttl
+        if "connection_ttl" in mcp_config:
+            ttl = mcp_config["connection_ttl"]
+            if not isinstance(ttl, (int, float)) or ttl < 0:
+                self.result.add_error(
+                    "MCP 'connection_ttl' must be a non-negative number (seconds)"
+                )
+
         # Validate servers
         if "servers" in mcp_config:
             servers = mcp_config["servers"]
@@ -647,6 +655,14 @@ class FormationValidator:
                     "must be a non-negative integer"
                 )
 
+        if "connection_ttl" in server_config:
+            ttl = server_config["connection_ttl"]
+            if not isinstance(ttl, (int, float)) or ttl < 0:
+                self.result.add_error(
+                    f"HTTP MCP server {server_identifier} 'connection_ttl' "
+                    "must be a non-negative number"
+                )
+
     def _validate_command_mcp_server(
         self, server_config: Dict[str, Any], server_identifier: Union[str, int]
     ) -> None:
@@ -706,6 +722,14 @@ class FormationValidator:
                 self.result.add_error(
                     f"Command MCP server {server_identifier} 'max_retries' "
                     "must be a non-negative integer"
+                )
+
+        if "connection_ttl" in server_config:
+            ttl = server_config["connection_ttl"]
+            if not isinstance(ttl, (int, float)) or ttl < 0:
+                self.result.add_error(
+                    f"Command MCP server {server_identifier} 'connection_ttl' "
+                    "must be a non-negative number"
                 )
 
         # Validate environment variables

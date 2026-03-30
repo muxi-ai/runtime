@@ -31,7 +31,11 @@
 # =============================================================================
 
 import asyncio
+import hashlib
+import json
 import re
+import time
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from ...datatypes.observability import InitEventFormatter
@@ -49,6 +53,32 @@ from .resources.discovery import MCPResourceDiscovery
 from .sampling.creator import MCPSamplingCreator
 from .templates.discovery import MCPTemplateDiscovery
 from .transports import ModernProtocolFeatures, TransportDetector
+
+DEFAULT_CONNECTION_TTL = 300.0  # 5 minutes
+
+
+@dataclass
+class LiveConnection:
+    """A live MCP connection kept alive for reuse between tool calls."""
+
+    handler: Any  # MCPHandler
+    server_name: str
+    last_used: float = field(default_factory=time.monotonic)
+    credentials_hash: str = ""
+
+    def touch(self) -> None:
+        self.last_used = time.monotonic()
+
+    def idle_seconds(self) -> float:
+        return time.monotonic() - self.last_used
+
+
+def _hash_credentials(credentials: Optional[Dict[str, Any]]) -> str:
+    """Produce a stable hash of credentials for connection-pool keying."""
+    if not credentials:
+        return "no_creds"
+    raw = json.dumps(credentials, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 class CredentialSelectionNeededError(Exception):
@@ -176,6 +206,13 @@ class MCPService:
         # Maps server_id to resolved transport type: "command", "streamable_http", or "http_sse"
         self.transport_cache = {}
 
+        # --- Connection TTL / keep-alive pool ---
+        # Key: "server_id" (formation creds) or "server_id:cred_hash" (user creds)
+        self._live_connections: Dict[str, LiveConnection] = {}
+        self._connection_ttl: float = DEFAULT_CONNECTION_TTL  # global default
+        self._per_server_ttl: Dict[str, float] = {}  # per-server overrides
+        self._reaper_task: Optional[asyncio.Task] = None
+
         # Initialize MCP specification feature handlers
         self.resource_discovery = MCPResourceDiscovery()
         self.prompt_discovery = MCPPromptDiscovery()
@@ -183,6 +220,75 @@ class MCPService:
         self.template_discovery = MCPTemplateDiscovery()
         self.health_monitor = MCPHealthMonitor()
         self.capabilities_negotiator = MCPCapabilitiesNegotiator()
+
+    # ------------------------------------------------------------------
+    # Connection TTL configuration
+    # ------------------------------------------------------------------
+
+    def configure_connection_ttl(
+        self,
+        global_ttl: Optional[float] = None,
+        per_server: Optional[Dict[str, float]] = None,
+    ) -> None:
+        """Set connection keep-alive TTL (seconds). 0 = ephemeral (legacy)."""
+        if global_ttl is not None:
+            self._connection_ttl = float(global_ttl)
+        if per_server:
+            for server_id, ttl in per_server.items():
+                self._per_server_ttl[server_id] = float(ttl)
+
+    def _effective_ttl(self, server_id: str) -> float:
+        return self._per_server_ttl.get(server_id, self._connection_ttl)
+
+    # ------------------------------------------------------------------
+    # Background reaper
+    # ------------------------------------------------------------------
+
+    def _ensure_reaper_running(self) -> None:
+        if self._reaper_task is None or self._reaper_task.done():
+            self._reaper_task = asyncio.create_task(self._reap_idle_connections())
+
+    async def _reap_idle_connections(self) -> None:
+        """Periodically close connections that have been idle longer than their TTL."""
+        try:
+            while True:
+                await asyncio.sleep(60)
+                expired_keys = [
+                    key
+                    for key, conn in self._live_connections.items()
+                    if conn.idle_seconds() > self._effective_ttl(key.split(":")[0])
+                ]
+                for key in expired_keys:
+                    await self._close_live_connection(key)
+        except asyncio.CancelledError:
+            pass
+
+    async def _close_live_connection(self, key: str) -> None:
+        conn = self._live_connections.pop(key, None)
+        if conn is None:
+            return
+        try:
+            await conn.handler.disconnect_server(conn.server_name)
+        except Exception:
+            pass
+        observability.observe(
+            event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
+            level=observability.EventLevel.DEBUG,
+            data={"connection_key": key, "idle_seconds": conn.idle_seconds()},
+            description=f"Closed idle MCP connection: {key}",
+        )
+
+    async def _close_all_live_connections(self) -> None:
+        """Close every live connection (used during shutdown)."""
+        for key in list(self._live_connections):
+            await self._close_live_connection(key)
+        if self._reaper_task and not self._reaper_task.done():
+            self._reaper_task.cancel()
+            try:
+                await self._reaper_task
+            except asyncio.CancelledError:
+                pass
+            self._reaper_task = None
 
     def get_tool_registry(self, agent_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         """
@@ -952,10 +1058,15 @@ class MCPService:
         request_timeout: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        Execute a tool using ephemeral connection.
+        Execute a tool, reusing a kept-alive connection when possible.
 
-        Creates a fresh connection with user credentials, executes the tool,
-        then immediately disconnects.
+        Connection lifecycle:
+        - If a live connection exists for this (server, credentials) pair
+          and is still connected, reuse it and reset the idle TTL.
+        - Otherwise create a fresh connection and keep it alive for reuse.
+        - If connection_ttl is 0 for this server, fall back to ephemeral
+          connect/execute/disconnect per call.
+        - A background reaper closes connections idle longer than their TTL.
 
         Args:
             server_id: The ID of the server
@@ -970,21 +1081,92 @@ class MCPService:
         if server_id not in self.server_configs:
             raise ValueError(f"Unknown MCP server: {server_id}")
 
-        # Get server configuration
         config = self.server_configs[server_id]
         server_name = server_id.replace("-", "_").lower()
+        ttl = self._effective_ttl(server_id)
 
-        # Ensure lock exists for ephemeral connections
+        # Ensure lock exists
         if server_id not in self.locks:
             self.locks[server_id] = asyncio.Lock()
 
-        # Serialize connect/execute/disconnect sequence per server
+        # Build a pool key that incorporates credentials so different users
+        # never share the same connection.
+        cred_hash = _hash_credentials(user_credentials)
+        conn_key = f"{server_id}:{cred_hash}"
+
+        # TTL == 0 means ephemeral (legacy behaviour)
+        if ttl <= 0:
+            return await self._execute_tool_ephemeral_legacy(
+                server_id, server_name, config, tool_name, params,
+                user_credentials, request_timeout,
+            )
+
         async with self.locks[server_id]:
-            # Create fresh MCPHandler instance
+            # Try to reuse an existing live connection
+            conn = self._live_connections.get(conn_key)
+            if conn and conn.handler.is_server_connected(server_name):
+                conn.touch()
+                try:
+                    return await conn.handler.execute_tool(
+                        server_name=server_name,
+                        tool_name=tool_name,
+                        params=params,
+                        cancellation_token=None,
+                    )
+                except Exception:
+                    # Connection may have gone stale; close and fall through to reconnect
+                    await self._close_live_connection(conn_key)
+
+            # No usable connection -- create a new one
             handler = MCPHandler(model=None, tool_registry=self.tool_registry)
+            await handler.connect_server(
+                name=server_name,
+                url=config.get("url"),
+                command=config.get("command"),
+                args=config.get("args"),
+                credentials=user_credentials,
+                request_timeout=request_timeout or config.get("request_timeout", 60),
+                server_id=server_id,
+            )
 
             try:
-                # Connect with user credentials using stored configuration
+                result = await handler.execute_tool(
+                    server_name=server_name,
+                    tool_name=tool_name,
+                    params=params,
+                    cancellation_token=None,
+                )
+            except Exception:
+                # On failure, don't keep a broken connection alive
+                try:
+                    await handler.disconnect_server(server_name)
+                except Exception:
+                    pass
+                raise
+
+            # Store for reuse
+            self._live_connections[conn_key] = LiveConnection(
+                handler=handler,
+                server_name=server_name,
+                credentials_hash=cred_hash,
+            )
+            self._ensure_reaper_running()
+            return result
+
+    async def _execute_tool_ephemeral_legacy(
+        self,
+        server_id: str,
+        server_name: str,
+        config: Dict[str, Any],
+        tool_name: str,
+        params: Dict[str, Any],
+        user_credentials: Optional[Dict[str, Any]] = None,
+        request_timeout: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Ephemeral connect/execute/disconnect (TTL=0 fallback)."""
+        async with self.locks[server_id]:
+            handler = MCPHandler(model=None, tool_registry=self.tool_registry)
+            try:
                 await handler.connect_server(
                     name=server_name,
                     url=config.get("url"),
@@ -994,23 +1176,17 @@ class MCPService:
                     request_timeout=request_timeout or config.get("request_timeout", 60),
                     server_id=server_id,
                 )
-
-                # Execute the tool
-                result = await handler.execute_tool(
+                return await handler.execute_tool(
                     server_name=server_name,
                     tool_name=tool_name,
                     params=params,
                     cancellation_token=None,
                 )
-
-                return result
-
             finally:
-                # Always disconnect, even if tool execution failed
                 try:
                     await handler.disconnect_server(server_name)
                 except Exception:
-                    pass  # Ignore disconnect errors
+                    pass
 
     async def disconnect_server(self, server_id: str) -> bool:
         """
@@ -1527,6 +1703,9 @@ class MCPService:
                     data={"server_id": server_id, "error": str(e)},
                     description=f"Failed to disconnect MCP server during shutdown: {server_id}",
                 )
+
+        # Close all kept-alive connections and stop the reaper
+        await self._close_all_live_connections()
 
         # Clear all registries
         self.handlers.clear()
