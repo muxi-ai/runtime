@@ -9,6 +9,11 @@ set -e  # Exit on error
 if [ -n "$SINGULARITY_CONTAINER" ] || [ "$MUXI_SIF_MODE" = "1" ]; then
     export HF_HUB_OFFLINE=1
     export TRANSFORMERS_OFFLINE=1
+
+    # Apptainer sets LD_LIBRARY_PATH to only /.singularity.d/libs, which hides
+    # system libraries installed via apt-get in the Docker image (e.g. libpoppler,
+    # libtesseract). Append the standard system paths so they remain discoverable.
+    export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/lib:/usr/lib64:/usr/local/lib:/usr/lib/x86_64-linux-gnu:/usr/lib/aarch64-linux-gnu"
 fi
 
 echo "======================================"
