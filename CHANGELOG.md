@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.20260330.0 - Synthesis Timeout & User Resolution Cache
+## 0.20260330.0 - Response Latency Fixes & SIF Library Discovery
 
 ### Bug Fixes
 
