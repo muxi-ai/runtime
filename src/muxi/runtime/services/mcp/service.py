@@ -1097,8 +1097,13 @@ class MCPService:
         # TTL == 0 means ephemeral (legacy behaviour)
         if ttl <= 0:
             return await self._execute_tool_ephemeral_legacy(
-                server_id, server_name, config, tool_name, params,
-                user_credentials, request_timeout,
+                server_id,
+                server_name,
+                config,
+                tool_name,
+                params,
+                user_credentials,
+                request_timeout,
             )
 
         async with self.locks[server_id]:
