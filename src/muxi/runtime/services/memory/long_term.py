@@ -347,7 +347,9 @@ class LongTermMemory:
         Resolve user identifier to internal user ID.
 
         Prefers RequestContext.internal_user_id if available (normal path after Phase 3).
-        Falls back to resolving external_user_id for direct API calls and tests.
+        Falls back to resolving external_user_id for direct API calls and tests,
+        with an in-process cache to avoid repeated database lookups within the
+        same formation lifetime (the identifier-to-ID mapping is immutable).
 
         Returns:
             int: Internal user ID for database operations
@@ -361,33 +363,37 @@ class LongTermMemory:
             return ctx.internal_user_id
         else:
             # Fallback for non-context calls (tests, direct API usage, etc.)
+            # Determine the identifier to resolve
             if not self.is_multi_user:
-                # Single-user mode: Always use identifier "0"
-                from ...utils.user_resolution import resolve_user_identifier
-
-                internal_user_id, _ = await resolve_user_identifier(
-                    identifier="0",
-                    formation_id=self.formation_id,
-                    db_manager=self.db_manager,
-                    kv_cache=None,
-                )
-                return internal_user_id
+                identifier = "0"
             elif external_user_id:
-                # Multi-user mode: Resolve provided external_user_id
-                from ...utils.user_resolution import resolve_user_identifier
-
-                internal_user_id, _ = await resolve_user_identifier(
-                    identifier=external_user_id,
-                    formation_id=self.formation_id,
-                    db_manager=self.db_manager,
-                    kv_cache=None,
-                )
-                return internal_user_id
+                identifier = external_user_id
             else:
                 raise ValueError(
                     "RequestContext not available and no external_user_id provided. "
                     "This should not happen in normal operation."
                 )
+
+            # Check in-process cache (formation-lifetime, identifier is immutable)
+            cache = getattr(self, "_user_id_cache", None)
+            if cache is None:
+                self._user_id_cache: dict = {}
+                cache = self._user_id_cache
+
+            cache_key = f"{self.formation_id}:{identifier}"
+            if cache_key in cache:
+                return cache[cache_key]
+
+            from ...utils.user_resolution import resolve_user_identifier
+
+            internal_user_id, _ = await resolve_user_identifier(
+                identifier=identifier,
+                formation_id=self.formation_id,
+                db_manager=self.db_manager,
+                kv_cache=None,
+            )
+            cache[cache_key] = internal_user_id
+            return internal_user_id
 
     def _resolve_user_id_sync(self, external_user_id: Optional[str] = None) -> int:
         """

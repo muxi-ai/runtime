@@ -9250,6 +9250,7 @@ Agent response: {raw_response}"""
                         model=model_name,
                         temperature=0.7,
                         max_tokens=2000,
+                        timeout=120.0,
                     )
 
                     # Use LLM to synthesize results
