@@ -1,0 +1,12 @@
+schema: "1.0.0"
+id: "agent"
+name: "System Agent"
+description: "Agent for testing MCP connection keep-alive"
+
+system_message: |
+  You are an AI assistant with access to system tools via MCP.
+  When asked about system information, use the available tools.
+  Keep responses very brief.
+
+role: "general"
+mcp_enabled: true
