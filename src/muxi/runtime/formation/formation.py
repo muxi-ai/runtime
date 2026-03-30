@@ -2244,6 +2244,18 @@ class Formation:
 
         pass  # REMOVED: init-phase observe() call
 
+        # Configure connection TTL from formation config
+        global_ttl = self._mcp_config.get("connection_ttl")
+        per_server_ttl: dict = {}
+        for sc in self._mcp_servers:
+            sid = sc.get("id", "unknown")
+            if "connection_ttl" in sc:
+                per_server_ttl[sid] = sc["connection_ttl"]
+        self._mcp_service.configure_connection_ttl(
+            global_ttl=global_ttl,
+            per_server=per_server_ttl if per_server_ttl else None,
+        )
+
         # Track failed registrations
         failed_servers = []
         successful_servers = []

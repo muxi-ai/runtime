@@ -614,6 +614,11 @@ class MCPHandler:
         self.server_id_to_name: Dict[str, str] = {}
         self.server_name_to_id: Dict[str, str] = {}
 
+    def is_server_connected(self, server_name: str) -> bool:
+        """Check whether a server is registered and its transport is connected."""
+        server = self.servers.get(server_name)
+        return server is not None and server.connected
+
     async def connect_server(
         self,
         name: str,

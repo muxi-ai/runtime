@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.20260330.1 - MCP Connection Keep-Alive (connection_ttl)
+
+### New Features
+
+- **MCP connection keep-alive with TTL** -- MCP tool calls no longer reconnect/disconnect for every invocation. After tool discovery (which still disconnects), the first tool call establishes a connection that is kept alive and reused for subsequent calls. Each call resets the idle timer. A background reaper closes connections that have been idle longer than `connection_ttl` (default: 300 seconds / 5 minutes). Frequently-used servers stay connected indefinitely; idle servers close automatically. Set `connection_ttl: 0` for legacy ephemeral behavior (connect/execute/disconnect per call). Configurable globally under `mcp.connection_ttl` and per-server via `connection_ttl` in individual MCP server files. Connections are keyed by `(server_id, credentials_hash)` so different users never share a connection. All live connections are closed on formation shutdown.
+
 ## 0.20260330.0 - Response Latency Fixes & SIF Library Discovery
 
 ### Bug Fixes
