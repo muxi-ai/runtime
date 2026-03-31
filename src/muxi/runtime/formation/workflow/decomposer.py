@@ -743,6 +743,20 @@ Analysis Results:
             lines = block.split("\n")
             task_data = {}
 
+            # When the outer split regex consumes the "**Task_ID**: " separator, the
+            # remaining block starts with the bare task_id value (e.g. "task_1") on a
+            # line with no colon, which the key-value loop below would skip.  Detect
+            # this first-line task_id pattern and pre-seed task_data so the ID is
+            # preserved instead of replaced by a random UUID.
+            first_content = next(
+                (ln.strip().lstrip("-").replace("**", "").strip() for ln in lines if ln.strip()),
+                "",
+            )
+            if first_content and ":" not in first_content and re.match(
+                r"^task_\d+$", first_content, re.IGNORECASE
+            ):
+                task_data["task_id"] = first_content.lower()
+
             for line in lines:
                 # Skip empty lines
                 if not line.strip():
@@ -1120,132 +1134,56 @@ Would you like me to proceed with this plan?
             )
             return workflow
 
-    # Compiled regexes for the deterministic SOP parser (module-level singletons via class attrs)
-    _SOP_HEADING_RE = re.compile(
-        r'^(#{1,4})\s+(.+?)\s*$',
-        re.MULTILINE,
+    # Compiled regexes for the deterministic SOP parser.
+    _SOP_AGENT_RE = re.compile(r"\[agent:([^\]]+)\]", re.IGNORECASE)
+    _SOP_MCP_RE = re.compile(r"\[mcp:([^\]]+)\]", re.IGNORECASE)
+    _SOP_PARALLEL_RE = re.compile(r"\[parallel\]", re.IGNORECASE)
+    _SOP_DIRECTIVE_RE = re.compile(r"\[[^\]]+\]")
+    # Numbered list item: "N. rest of line"
+    _SOP_NUMBERED_ITEM_RE = re.compile(r"^(\d+)\.\s+(.+?)$", re.MULTILINE)
+    # Steps section heading: "## Steps", "## Procedure", etc.
+    _SOP_STEPS_SECTION_RE = re.compile(
+        r"^(#{1,4})\s+(?:Steps?|Procedure|Process|Workflow)\b.*$",
+        re.MULTILINE | re.IGNORECASE,
     )
-    _SOP_STEP_TITLE_RE = re.compile(
-        r'^(?:Step\s+)?(\d+)(?:\s*[:\.]\s*(.+))?$',
-        re.IGNORECASE,
+    # Any heading (to detect section boundaries)
+    _SOP_ANY_HEADING_RE = re.compile(r"^#{1,4}\s+", re.MULTILINE)
+    # Heading-format step: "## Step N: Title" or "### Step N"
+    _SOP_HEADING_STEP_RE = re.compile(
+        r"^(#{1,4})\s+(?:Step\s+)?(\d+)(?:\s*[:\.]\s*(.+))?\s*$",
+        re.MULTILINE | re.IGNORECASE,
     )
-    _SOP_AGENT_RE = re.compile(r'\[agent:([^\]]+)\]', re.IGNORECASE)
-    _SOP_MCP_RE = re.compile(r'\[mcp:([^\]]+)\]', re.IGNORECASE)
-    _SOP_PARALLEL_RE = re.compile(r'\[parallel\]', re.IGNORECASE)
-    _SOP_DIRECTIVE_RE = re.compile(r'\[[^\]]+\]')
 
     def _parse_template_sop_deterministic(
         self, sop_content: str, user_request: str, sop_id: str = ""
     ) -> Optional[Workflow]:
         """
-        Parse a template-mode SOP markdown directly into a Workflow without LLM involvement.
+        Parse a template-mode SOP markdown into a Workflow without LLM involvement.
 
-        Handles:
-        - ## Step N / ### Step N headings (with optional `: Title`)
-        - [agent:name] -> assigned_agent_id
-        - [mcp:tool]   -> required_capabilities hint
-        - [parallel]   -> step has no prior dependencies (parallel group)
-        - Section headings containing "parallel" -> all step children are parallel
+        Primary format (used by all real SOPs):
+            ## Steps
+            1. **Title** [agent:name]
+               Body text with [mcp:tool] references
 
-        Steps default to sequential (step N depends on N-1).  A step with [parallel] or
-        under a "parallel" section header has no dependencies; the first non-parallel step
-        after such a group depends on all members of that group (fan-in).
+        Fallback format:
+            ## Step 1: Title
+            [agent:name] body...
 
-        Returns None when fewer than 2 steps are detected (caller falls back to LLM).
+        [parallel] directive on any step removes its sequential dependency.
+        Returns None if fewer than 2 steps are found (caller falls back to LLM).
         """
-        # Strip YAML frontmatter if present
         content = sop_content
         if content.startswith("---"):
             parts = content.split("---", 2)
             if len(parts) >= 3:
                 content = parts[2].strip()
 
-        # Collect all headings with position, level, title, step metadata
-        all_headings: List[Dict] = []
-        for m in self._SOP_HEADING_RE.finditer(content):
-            level = len(m.group(1))
-            title = m.group(2).strip()
-            step_m = self._SOP_STEP_TITLE_RE.match(title)
-            is_step = bool(step_m)
-            all_headings.append(
-                {
-                    "pos": m.start(),
-                    "end": m.end(),
-                    "level": level,
-                    "title": title,
-                    "is_step": is_step,
-                    "step_num": int(step_m.group(1)) if step_m else None,
-                    "step_title": (
-                        (step_m.group(2) or "").strip() if step_m else ""
-                    ),
-                    "is_parallel_section": (
-                        "parallel" in title.lower() and not is_step
-                    ),
-                }
-            )
-
-        step_headings = [h for h in all_headings if h["is_step"]]
-        if len(step_headings) < 2:
+        steps = self._sop_extract_numbered_steps(content)
+        if not steps or len(steps) < 2:
+            steps = self._sop_extract_heading_steps(content)
+        if not steps or len(steps) < 2:
             return None
 
-        # Determine which step numbers fall under a "parallel" section heading.
-        # A parallel section spans from its heading to the next same-or-higher-level heading.
-        parallel_from_section: set = set()
-        for h in all_headings:
-            if not h["is_parallel_section"]:
-                continue
-            section_end = len(content)
-            for other in all_headings:
-                if other["pos"] > h["pos"] and other["level"] <= h["level"] and not other["is_step"]:
-                    section_end = other["pos"]
-                    break
-            for sh in step_headings:
-                if h["end"] <= sh["pos"] < section_end:
-                    parallel_from_section.add(sh["step_num"])
-
-        # Extract body text and directives for each step
-        steps: List[Dict] = []
-        for i, sh in enumerate(step_headings):
-            body_start = sh["end"]
-            # Body ends at the next heading (step or otherwise)
-            next_pos = len(content)
-            for other in all_headings:
-                if other["pos"] > sh["pos"] and other["pos"] < next_pos:
-                    next_pos = other["pos"]
-            body = content[body_start:next_pos].strip()
-
-            agent_m = self._SOP_AGENT_RE.search(body)
-            assigned_agent = agent_m.group(1).strip() if agent_m else None
-            mcp_tools = [m.group(1).strip() for m in self._SOP_MCP_RE.finditer(body)]
-            is_parallel = (
-                bool(self._SOP_PARALLEL_RE.search(body))
-                or sh["step_num"] in parallel_from_section
-            )
-
-            # Clean description: strip directive tags, collapse excessive blank lines
-            description = self._SOP_DIRECTIVE_RE.sub("", body).strip()
-            description = re.sub(r"\n{3,}", "\n\n", description)
-            if not description:
-                description = sh["step_title"] or f"Step {sh['step_num']}"
-            if len(description) > 500:
-                description = description[:500].rsplit(" ", 1)[0] + "..."
-            if sh["step_title"]:
-                description = f"{sh['step_title']}: {description}"
-
-            steps.append(
-                {
-                    "num": sh["step_num"],
-                    "description": description,
-                    "assigned_agent": assigned_agent,
-                    "mcp_tools": mcp_tools,
-                    "is_parallel": is_parallel,
-                }
-            )
-
-        if len(steps) < 2:
-            return None
-
-        # Build SubTask objects with dependency logic
         workflow_id = generate_workflow_id()
         tasks: Dict[str, SubTask] = {}
         task_id_list: List[str] = []
@@ -1291,12 +1229,8 @@ Would you like me to proceed with this plan?
                 "task_count": len(tasks),
                 "method": "deterministic_sop_template",
                 "sop_id": sop_id,
-                "parallel_steps": len(parallel_from_section),
             },
-            description=(
-                f"Parsed SOP template deterministically: {len(tasks)} tasks, "
-                f"{len(parallel_from_section)} parallel"
-            ),
+            description=f"Parsed SOP template deterministically: {len(tasks)} tasks",
         )
 
         return Workflow(
@@ -1305,6 +1239,142 @@ Would you like me to proceed with this plan?
             tasks=tasks,
             status=WorkflowStatus.PENDING,
         )
+
+    def _sop_extract_numbered_steps(self, content: str) -> List[Dict]:
+        """
+        Extract steps from numbered-list format under a ## Steps section.
+
+        Expected format:
+            ## Steps
+            1. **Title** [agent:name]
+               Body text, [mcp:tool/action] references, [parallel] etc.
+            2. **Next step** [agent:other]
+               ...
+        """
+        # Scope search to the Steps section when present (avoids false positives
+        # from numbered lists in ## Notes, ## Expected Outcome, etc.)
+        section_m = self._SOP_STEPS_SECTION_RE.search(content)
+        if section_m:
+            level = len(re.match(r"^(#+)", section_m.group(0)).group(1))
+            section_start = section_m.end()
+            end_m = re.search(
+                r"^#{1," + str(level) + r"}\s",
+                content[section_start:],
+                re.MULTILINE,
+            )
+            search_text = content[section_start : section_start + end_m.start() if end_m else len(content)]
+        else:
+            search_text = content
+
+        matches = list(self._SOP_NUMBERED_ITEM_RE.finditer(search_text))
+        if len(matches) < 2:
+            return []
+
+        # Boundary pattern: next numbered item or any heading
+        boundary_re = re.compile(r"^(?:\d+\.\s+|#+\s)", re.MULTILINE)
+
+        steps = []
+        for m in matches:
+            num = int(m.group(1))
+            title_raw = m.group(2).strip()
+
+            # Body: from end of title line to next numbered item or heading
+            rest = search_text[m.end() :]
+            next_b = boundary_re.search(rest)
+            body = rest[: next_b.start()].strip() if next_b else rest.strip()
+            combined = title_raw + "\n" + body
+
+            # Agent: check title line first, then body
+            agent_m = self._SOP_AGENT_RE.search(title_raw) or self._SOP_AGENT_RE.search(body)
+            assigned_agent = agent_m.group(1).strip() if agent_m else None
+
+            # MCP tools: server name before '/' (deduplicated)
+            mcp_tools = list(
+                {m2.group(1).split("/")[0].strip() for m2 in self._SOP_MCP_RE.finditer(body)}
+            )
+
+            is_parallel = bool(self._SOP_PARALLEL_RE.search(combined))
+
+            # Clean title: strip ** bold markers and all [directive] tags
+            clean_title = self._SOP_DIRECTIVE_RE.sub("", title_raw).replace("**", "").strip()
+
+            # Clean body description
+            description = self._SOP_DIRECTIVE_RE.sub("", body).strip()
+            description = re.sub(r"\n{3,}", "\n\n", description)
+            if not description:
+                description = clean_title
+            if len(description) > 500:
+                description = description[:500].rsplit(" ", 1)[0] + "..."
+            full_desc = f"{clean_title}: {description}" if clean_title else description
+
+            steps.append(
+                {
+                    "num": num,
+                    "description": full_desc,
+                    "assigned_agent": assigned_agent,
+                    "mcp_tools": mcp_tools,
+                    "is_parallel": is_parallel,
+                }
+            )
+
+        return steps
+
+    def _sop_extract_heading_steps(self, content: str) -> List[Dict]:
+        """
+        Extract steps from ## Step N heading format (fallback for non-standard SOPs).
+
+        Expected format:
+            ## Step 1: Title
+            [agent:name]
+            Body text...
+        """
+        heading_matches = list(self._SOP_HEADING_STEP_RE.finditer(content))
+        if len(heading_matches) < 2:
+            return []
+
+        steps = []
+        for i, m in enumerate(heading_matches):
+            num = int(m.group(2))
+            step_title = (m.group(3) or "").strip()
+
+            body_start = m.end()
+            next_pos = heading_matches[i + 1].start() if i + 1 < len(heading_matches) else len(content)
+            # Also stop at any non-step heading at same or higher level
+            level = len(m.group(1))
+            for hm in self._SOP_ANY_HEADING_RE.finditer(content[body_start:next_pos]):
+                h_level = len(re.match(r"^(#+)", content[body_start + hm.start():]).group(1))
+                if h_level <= level:
+                    next_pos = body_start + hm.start()
+                    break
+            body = content[body_start:next_pos].strip()
+            combined = step_title + "\n" + body
+
+            agent_m = self._SOP_AGENT_RE.search(combined)
+            assigned_agent = agent_m.group(1).strip() if agent_m else None
+            mcp_tools = list(
+                {m2.group(1).split("/")[0].strip() for m2 in self._SOP_MCP_RE.finditer(body)}
+            )
+            is_parallel = bool(self._SOP_PARALLEL_RE.search(combined))
+
+            description = self._SOP_DIRECTIVE_RE.sub("", body).strip()
+            description = re.sub(r"\n{3,}", "\n\n", description)
+            if not description:
+                description = step_title or f"Step {num}"
+            if len(description) > 500:
+                description = description[:500].rsplit(" ", 1)[0] + "..."
+            full_desc = f"{step_title}: {description}" if step_title else description
+
+            steps.append(
+                {
+                    "num": num,
+                    "description": full_desc,
+                    "assigned_agent": assigned_agent,
+                    "mcp_tools": mcp_tools,
+                    "is_parallel": is_parallel,
+                }
+            )
+
+        return steps
 
     def _fix_workflow_cycles(self, workflow: Workflow) -> Workflow:
         """
