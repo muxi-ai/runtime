@@ -6,7 +6,7 @@ set -e  # Exit on error
 
 # In SIF (Singularity) containers the filesystem is read-only.
 # Prevent HuggingFace from writing cache files; models are pre-downloaded at build time.
-if [ -n "$SINGULARITY_CONTAINER" ] || [ "$MUXI_SIF_MODE" = "1" ]; then
+if [ -n "$APPTAINER_CONTAINER" ] || [ -n "$SINGULARITY_CONTAINER" ] || [ "$MUXI_SIF_MODE" = "1" ]; then
     export HF_HUB_OFFLINE=1
     export TRANSFORMERS_OFFLINE=1
 

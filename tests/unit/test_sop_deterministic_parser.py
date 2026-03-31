@@ -576,24 +576,25 @@ class TestPhantomDependencyStripping:
 
 class TestSIFEnvSetup:
 
-    def test_sif_env_applied_when_singularity_container_set(self, monkeypatch):
-        """LD_LIBRARY_PATH must be extended when SINGULARITY_CONTAINER is set."""
+    def _reimport(self, sys_mod):
+        mod_path = "muxi.runtime.utils.run_formation"
+        if mod_path in sys_mod.modules:
+            del sys_mod.modules[mod_path]
+        import muxi.runtime.utils.run_formation  # noqa: F401
+
+    def test_sif_env_applied_when_apptainer_container_set(self, monkeypatch):
+        """LD_LIBRARY_PATH must be extended when APPTAINER_CONTAINER is set (Apptainer 1.0+)."""
         import os
         import sys
 
-        monkeypatch.setenv("SINGULARITY_CONTAINER", "/path/to/runtime.sif")
+        monkeypatch.setenv("APPTAINER_CONTAINER", "/path/to/runtime.sif")
+        monkeypatch.delenv("SINGULARITY_CONTAINER", raising=False)
         monkeypatch.delenv("MUXI_SIF_MODE", raising=False)
         monkeypatch.setenv("LD_LIBRARY_PATH", "/existing/path")
-        # HF_HUB_OFFLINE must not block the setdefault call
         monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
         monkeypatch.delenv("TRANSFORMERS_OFFLINE", raising=False)
 
-        # Re-execute the module-level code by reimporting
-        mod_path = "muxi.runtime.utils.run_formation"
-        if mod_path in sys.modules:
-            del sys.modules[mod_path]
-
-        import muxi.runtime.utils.run_formation  # noqa: F401
+        self._reimport(sys)
 
         ldpath = os.environ.get("LD_LIBRARY_PATH", "")
         assert "/usr/lib" in ldpath
@@ -601,22 +602,38 @@ class TestSIFEnvSetup:
         assert os.environ.get("HF_HUB_OFFLINE") == "1"
         assert os.environ.get("TRANSFORMERS_OFFLINE") == "1"
 
+    def test_sif_env_applied_when_singularity_container_set(self, monkeypatch):
+        """LD_LIBRARY_PATH must be extended when SINGULARITY_CONTAINER is set (legacy)."""
+        import os
+        import sys
+
+        monkeypatch.setenv("SINGULARITY_CONTAINER", "/path/to/runtime.sif")
+        monkeypatch.delenv("APPTAINER_CONTAINER", raising=False)
+        monkeypatch.delenv("MUXI_SIF_MODE", raising=False)
+        monkeypatch.setenv("LD_LIBRARY_PATH", "/existing/path")
+        monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
+        monkeypatch.delenv("TRANSFORMERS_OFFLINE", raising=False)
+
+        self._reimport(sys)
+
+        ldpath = os.environ.get("LD_LIBRARY_PATH", "")
+        assert "/usr/lib" in ldpath
+        assert "/existing/path" in ldpath
+        assert os.environ.get("HF_HUB_OFFLINE") == "1"
+
     def test_sif_env_applied_when_muxi_sif_mode_set(self, monkeypatch):
         """LD_LIBRARY_PATH must be extended when MUXI_SIF_MODE=1 is set."""
         import os
         import sys
 
         monkeypatch.setenv("MUXI_SIF_MODE", "1")
+        monkeypatch.delenv("APPTAINER_CONTAINER", raising=False)
         monkeypatch.delenv("SINGULARITY_CONTAINER", raising=False)
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
         monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
         monkeypatch.delenv("TRANSFORMERS_OFFLINE", raising=False)
 
-        mod_path = "muxi.runtime.utils.run_formation"
-        if mod_path in sys.modules:
-            del sys.modules[mod_path]
-
-        import muxi.runtime.utils.run_formation  # noqa: F401
+        self._reimport(sys)
 
         ldpath = os.environ.get("LD_LIBRARY_PATH", "")
         assert "/usr/lib" in ldpath
@@ -626,16 +643,13 @@ class TestSIFEnvSetup:
         import os
         import sys
 
+        monkeypatch.delenv("APPTAINER_CONTAINER", raising=False)
         monkeypatch.delenv("SINGULARITY_CONTAINER", raising=False)
         monkeypatch.delenv("MUXI_SIF_MODE", raising=False)
         monkeypatch.setenv("LD_LIBRARY_PATH", "/original/path")
         monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
 
-        mod_path = "muxi.runtime.utils.run_formation"
-        if mod_path in sys.modules:
-            del sys.modules[mod_path]
-
-        import muxi.runtime.utils.run_formation  # noqa: F401
+        self._reimport(sys)
 
         assert os.environ.get("LD_LIBRARY_PATH") == "/original/path"
         assert os.environ.get("HF_HUB_OFFLINE") is None

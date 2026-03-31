@@ -15,7 +15,11 @@ import sys
 # SIF/Singularity containers bypass docker-entrypoint.sh (the server spawns them via
 # `singularity exec ... python -m muxi.runtime.utils.run_formation`), so we replicate
 # the env setup here to guarantee it runs regardless of launch method.
-if os.environ.get("SINGULARITY_CONTAINER") or os.environ.get("MUXI_SIF_MODE") == "1":
+if (
+    os.environ.get("APPTAINER_CONTAINER")  # Apptainer 1.0+ (new name)
+    or os.environ.get("SINGULARITY_CONTAINER")  # SingularityCE / legacy Apptainer
+    or os.environ.get("MUXI_SIF_MODE") == "1"  # explicit override
+):
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
     # Apptainer resets LD_LIBRARY_PATH to only /.singularity.d/libs, hiding system
