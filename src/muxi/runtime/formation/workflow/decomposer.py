@@ -752,8 +752,10 @@ Analysis Results:
                 (ln.strip().lstrip("-").replace("**", "").strip() for ln in lines if ln.strip()),
                 "",
             )
-            if first_content and ":" not in first_content and re.match(
-                r"^task_\d+$", first_content, re.IGNORECASE
+            if (
+                first_content
+                and ":" not in first_content
+                and re.match(r"^task_\d+$", first_content, re.IGNORECASE)
             ):
                 task_data["task_id"] = first_content.lower()
 
@@ -1262,7 +1264,9 @@ Would you like me to proceed with this plan?
                 content[section_start:],
                 re.MULTILINE,
             )
-            search_text = content[section_start : section_start + end_m.start() if end_m else len(content)]
+            search_text = content[
+                section_start : section_start + end_m.start() if end_m else len(content)
+            ]
         else:
             search_text = content
 
@@ -1338,11 +1342,13 @@ Would you like me to proceed with this plan?
             step_title = (m.group(3) or "").strip()
 
             body_start = m.end()
-            next_pos = heading_matches[i + 1].start() if i + 1 < len(heading_matches) else len(content)
+            next_pos = (
+                heading_matches[i + 1].start() if i + 1 < len(heading_matches) else len(content)
+            )
             # Also stop at any non-step heading at same or higher level
             level = len(m.group(1))
             for hm in self._SOP_ANY_HEADING_RE.finditer(content[body_start:next_pos]):
-                h_level = len(re.match(r"^(#+)", content[body_start + hm.start():]).group(1))
+                h_level = len(re.match(r"^(#+)", content[body_start + hm.start() :]).group(1))
                 if h_level <= level:
                     next_pos = body_start + hm.start()
                     break

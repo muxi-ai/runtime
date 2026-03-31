@@ -26,8 +26,7 @@ if (
     # libraries (libpoppler, libtesseract) installed via apt-get. Append standard paths.
     _existing_ldpath = os.environ.get("LD_LIBRARY_PATH", "")
     _extra_ldpath = (
-        "/usr/lib:/usr/lib64:/usr/local/lib"
-        ":/usr/lib/x86_64-linux-gnu:/usr/lib/aarch64-linux-gnu"
+        "/usr/lib:/usr/lib64:/usr/local/lib" ":/usr/lib/x86_64-linux-gnu:/usr/lib/aarch64-linux-gnu"
     )
     os.environ["LD_LIBRARY_PATH"] = (
         f"{_existing_ldpath}:{_extra_ldpath}" if _existing_ldpath else _extra_ldpath
