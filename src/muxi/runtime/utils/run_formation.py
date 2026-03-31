@@ -9,7 +9,25 @@ For auto-reload with nodemon:
     nodemon --exec "python -m src.muxi.utils.run_formation formation.afs" --ext py,yaml
 """
 
+import os
 import sys
+
+# SIF/Singularity containers bypass docker-entrypoint.sh (the server spawns them via
+# `singularity exec ... python -m muxi.runtime.utils.run_formation`), so we replicate
+# the env setup here to guarantee it runs regardless of launch method.
+if os.environ.get("SINGULARITY_CONTAINER") or os.environ.get("MUXI_SIF_MODE") == "1":
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+    # Apptainer resets LD_LIBRARY_PATH to only /.singularity.d/libs, hiding system
+    # libraries (libpoppler, libtesseract) installed via apt-get. Append standard paths.
+    _existing_ldpath = os.environ.get("LD_LIBRARY_PATH", "")
+    _extra_ldpath = (
+        "/usr/lib:/usr/lib64:/usr/local/lib"
+        ":/usr/lib/x86_64-linux-gnu:/usr/lib/aarch64-linux-gnu"
+    )
+    os.environ["LD_LIBRARY_PATH"] = (
+        f"{_existing_ldpath}:{_extra_ldpath}" if _existing_ldpath else _extra_ldpath
+    )
 
 
 # Print banner immediately before heavy imports

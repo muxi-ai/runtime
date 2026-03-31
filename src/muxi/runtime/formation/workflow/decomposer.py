@@ -1,5 +1,5 @@
 import re
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ...datatypes.workflow import (
     ApprovalStatus,
@@ -70,14 +70,33 @@ class TaskDecomposer:
         try:
             workflow_id = generate_workflow_id()
 
-            if self.llm:
-                # Use LLM for sophisticated decomposition
-                workflow = await self._llm_decompose_request(
-                    workflow_id, request, context, analysis
+            # For template-mode SOPs, attempt deterministic parsing first.
+            # The enhanced_message from overlord wraps the SOP in <sop>...</sop> and the
+            # original request in <user_request>...</user_request>.
+            workflow = None
+            if context and context.get("sop_mode") == "template":
+                sop_match = re.search(r"<sop>\s*(.*?)\s*</sop>", request, re.DOTALL)
+                user_req_match = re.search(
+                    r"<user_request>\s*(.*?)\s*</user_request>", request, re.DOTALL
                 )
-            else:
-                # Fall back to heuristic decomposition
-                workflow = self._heuristic_decompose_request(workflow_id, request, analysis)
+                if sop_match:
+                    sop_content = sop_match.group(1)
+                    user_request_text = user_req_match.group(1) if user_req_match else request
+                    workflow = self._parse_template_sop_deterministic(
+                        sop_content=sop_content,
+                        user_request=user_request_text,
+                        sop_id=context.get("sop_id", ""),
+                    )
+
+            if workflow is None:
+                if self.llm:
+                    # Use LLM for sophisticated decomposition
+                    workflow = await self._llm_decompose_request(
+                        workflow_id, request, context, analysis
+                    )
+                else:
+                    # Fall back to heuristic decomposition
+                    workflow = self._heuristic_decompose_request(workflow_id, request, analysis)
 
             # Generate plan preview if user approval required
             if requires_approval:
@@ -640,7 +659,19 @@ Analysis Results:
                 try:
                     task = self._parse_task_block(block.strip())
                     if task:
-                        tasks[task.id] = task
+                        if task.id in tasks:
+                            # Duplicate task IDs indicate malformed LLM output; keep first occurrence.
+                            observability.observe(
+                                event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                                level=observability.EventLevel.WARNING,
+                                data={
+                                    "task_id": task.id,
+                                    "operation": "parse_task_block",
+                                },
+                                description=f"Duplicate task ID '{task.id}' in LLM output; keeping first",
+                            )
+                        else:
+                            tasks[task.id] = task
                 except Exception as e:
                     observability.observe(
                         event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
@@ -655,12 +686,29 @@ Analysis Results:
                     continue
 
             if not tasks:
-                # If no tasks parsed, create fallback
-                # print(f"⚠️  WARNING: No tasks parsed from LLM response")
-                # print(f"Task blocks found: {len(task_blocks)}")
-                # if task_blocks:
-                #     print(f"First block preview: {task_blocks[0][:200]}...")
                 return self._heuristic_decompose_request(workflow_id, request)
+
+            # Strip dependency references that point to non-existent tasks.
+            # These arise when the LLM hallucinates task IDs or when the parser
+            # drops a block, turning valid deps into phantom refs that
+            # validate_workflow_dag() mistakes for cycles.
+            valid_ids = set(tasks.keys())
+            phantom_deps_found = False
+            for task in tasks.values():
+                filtered = [d for d in task.dependencies if d in valid_ids]
+                if len(filtered) != len(task.dependencies):
+                    phantom_deps_found = True
+                    task.dependencies = filtered
+            if phantom_deps_found:
+                observability.observe(
+                    event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "workflow_id": workflow_id,
+                        "operation": "strip_phantom_deps",
+                    },
+                    description="Stripped dependency references to non-existent tasks from LLM output",
+                )
 
             workflow = Workflow(
                 id=workflow_id, user_request=request, tasks=tasks, status=WorkflowStatus.PENDING
@@ -1071,6 +1119,192 @@ Would you like me to proceed with this plan?
                 description="Workflow validation failed, returning unvalidated workflow",
             )
             return workflow
+
+    # Compiled regexes for the deterministic SOP parser (module-level singletons via class attrs)
+    _SOP_HEADING_RE = re.compile(
+        r'^(#{1,4})\s+(.+?)\s*$',
+        re.MULTILINE,
+    )
+    _SOP_STEP_TITLE_RE = re.compile(
+        r'^(?:Step\s+)?(\d+)(?:\s*[:\.]\s*(.+))?$',
+        re.IGNORECASE,
+    )
+    _SOP_AGENT_RE = re.compile(r'\[agent:([^\]]+)\]', re.IGNORECASE)
+    _SOP_MCP_RE = re.compile(r'\[mcp:([^\]]+)\]', re.IGNORECASE)
+    _SOP_PARALLEL_RE = re.compile(r'\[parallel\]', re.IGNORECASE)
+    _SOP_DIRECTIVE_RE = re.compile(r'\[[^\]]+\]')
+
+    def _parse_template_sop_deterministic(
+        self, sop_content: str, user_request: str, sop_id: str = ""
+    ) -> Optional[Workflow]:
+        """
+        Parse a template-mode SOP markdown directly into a Workflow without LLM involvement.
+
+        Handles:
+        - ## Step N / ### Step N headings (with optional `: Title`)
+        - [agent:name] -> assigned_agent_id
+        - [mcp:tool]   -> required_capabilities hint
+        - [parallel]   -> step has no prior dependencies (parallel group)
+        - Section headings containing "parallel" -> all step children are parallel
+
+        Steps default to sequential (step N depends on N-1).  A step with [parallel] or
+        under a "parallel" section header has no dependencies; the first non-parallel step
+        after such a group depends on all members of that group (fan-in).
+
+        Returns None when fewer than 2 steps are detected (caller falls back to LLM).
+        """
+        # Strip YAML frontmatter if present
+        content = sop_content
+        if content.startswith("---"):
+            parts = content.split("---", 2)
+            if len(parts) >= 3:
+                content = parts[2].strip()
+
+        # Collect all headings with position, level, title, step metadata
+        all_headings: List[Dict] = []
+        for m in self._SOP_HEADING_RE.finditer(content):
+            level = len(m.group(1))
+            title = m.group(2).strip()
+            step_m = self._SOP_STEP_TITLE_RE.match(title)
+            is_step = bool(step_m)
+            all_headings.append(
+                {
+                    "pos": m.start(),
+                    "end": m.end(),
+                    "level": level,
+                    "title": title,
+                    "is_step": is_step,
+                    "step_num": int(step_m.group(1)) if step_m else None,
+                    "step_title": (
+                        (step_m.group(2) or "").strip() if step_m else ""
+                    ),
+                    "is_parallel_section": (
+                        "parallel" in title.lower() and not is_step
+                    ),
+                }
+            )
+
+        step_headings = [h for h in all_headings if h["is_step"]]
+        if len(step_headings) < 2:
+            return None
+
+        # Determine which step numbers fall under a "parallel" section heading.
+        # A parallel section spans from its heading to the next same-or-higher-level heading.
+        parallel_from_section: set = set()
+        for h in all_headings:
+            if not h["is_parallel_section"]:
+                continue
+            section_end = len(content)
+            for other in all_headings:
+                if other["pos"] > h["pos"] and other["level"] <= h["level"] and not other["is_step"]:
+                    section_end = other["pos"]
+                    break
+            for sh in step_headings:
+                if h["end"] <= sh["pos"] < section_end:
+                    parallel_from_section.add(sh["step_num"])
+
+        # Extract body text and directives for each step
+        steps: List[Dict] = []
+        for i, sh in enumerate(step_headings):
+            body_start = sh["end"]
+            # Body ends at the next heading (step or otherwise)
+            next_pos = len(content)
+            for other in all_headings:
+                if other["pos"] > sh["pos"] and other["pos"] < next_pos:
+                    next_pos = other["pos"]
+            body = content[body_start:next_pos].strip()
+
+            agent_m = self._SOP_AGENT_RE.search(body)
+            assigned_agent = agent_m.group(1).strip() if agent_m else None
+            mcp_tools = [m.group(1).strip() for m in self._SOP_MCP_RE.finditer(body)]
+            is_parallel = (
+                bool(self._SOP_PARALLEL_RE.search(body))
+                or sh["step_num"] in parallel_from_section
+            )
+
+            # Clean description: strip directive tags, collapse excessive blank lines
+            description = self._SOP_DIRECTIVE_RE.sub("", body).strip()
+            description = re.sub(r"\n{3,}", "\n\n", description)
+            if not description:
+                description = sh["step_title"] or f"Step {sh['step_num']}"
+            if len(description) > 500:
+                description = description[:500].rsplit(" ", 1)[0] + "..."
+            if sh["step_title"]:
+                description = f"{sh['step_title']}: {description}"
+
+            steps.append(
+                {
+                    "num": sh["step_num"],
+                    "description": description,
+                    "assigned_agent": assigned_agent,
+                    "mcp_tools": mcp_tools,
+                    "is_parallel": is_parallel,
+                }
+            )
+
+        if len(steps) < 2:
+            return None
+
+        # Build SubTask objects with dependency logic
+        workflow_id = generate_workflow_id()
+        tasks: Dict[str, SubTask] = {}
+        task_id_list: List[str] = []
+        parallel_group: List[str] = []
+
+        for step in steps:
+            task_id = f"task_{step['num']}"
+
+            caps: List[str] = list(step["mcp_tools"])
+            if not caps and step["assigned_agent"]:
+                caps = [step["assigned_agent"]]
+            if not caps:
+                caps = ["general"]
+
+            if step["is_parallel"]:
+                deps: List[str] = []
+                parallel_group.append(task_id)
+            else:
+                if parallel_group:
+                    deps = list(parallel_group)
+                    parallel_group = []
+                elif task_id_list:
+                    deps = [task_id_list[-1]]
+                else:
+                    deps = []
+
+            tasks[task_id] = SubTask(
+                id=task_id,
+                description=step["description"],
+                required_capabilities=caps,
+                dependencies=deps,
+                estimated_complexity=3.0,
+                status=TaskStatus.PENDING,
+                assigned_agent_id=step["assigned_agent"],
+            )
+            task_id_list.append(task_id)
+
+        observability.observe(
+            event_type=observability.ConversationEvents.WORKFLOW_DECOMPOSITION_COMPLETED,
+            level=observability.EventLevel.INFO,
+            data={
+                "workflow_id": workflow_id,
+                "task_count": len(tasks),
+                "method": "deterministic_sop_template",
+                "sop_id": sop_id,
+                "parallel_steps": len(parallel_from_section),
+            },
+            description=(
+                f"Parsed SOP template deterministically: {len(tasks)} tasks, "
+                f"{len(parallel_from_section)} parallel"
+            ),
+        )
+
+        return Workflow(
+            id=workflow_id,
+            user_request=user_request,
+            tasks=tasks,
+            status=WorkflowStatus.PENDING,
+        )
 
     def _fix_workflow_cycles(self, workflow: Workflow) -> Workflow:
         """

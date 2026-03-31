@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.20260331.0 - SOP Reliability & Workflow Hardening
+
+### Bug Fixes
+
+- **Template-mode SOP steps silently dropped** -- When a SOP with `mode: template` was executed, its steps were fed through the generic LLM decomposer, which could hallucinate backward dependencies, produce duplicate task IDs, or drop steps entirely during regex parsing. Any malformed output caused `validate_workflow_dag()` to fire a false "contains cycles" warning, after which `_fix_workflow_cycles()` would rewrite the entire task list into an arbitrary sequential chain—silently destroying the original step structure. Fix: `TaskDecomposer` now attempts a deterministic markdown parser for template-mode SOPs before calling the LLM. The parser extracts `## Step N` / `### Step N` headings directly, respects `[agent:name]`, `[mcp:tool]`, and `[parallel]` directives, detects parallel-section headings (e.g. `## Parallel Data Fetch`), and builds a valid DAG with fan-in dependencies. The LLM path is used only when fewer than 2 step headings are found.
+- **LLM-decomposed workflows drop steps via duplicate task IDs** -- When the LLM emitted two task blocks with the same `Task_ID` (e.g. `task_2`), the second silently overwrote the first in the task dict, losing one step. Fix: `_parse_llm_decomposition()` now detects duplicate IDs, logs a warning, and keeps the first occurrence.
+- **LLM-decomposed workflows trigger false cycle detection** -- When the LLM referenced a task ID that was dropped during parsing (e.g. because its block failed to parse), `validate_workflow_dag()` treated the unresolved dependency as a cycle and called `_fix_workflow_cycles()`, which linearised the entire workflow. Fix: after parsing all task blocks, dependency lists are filtered to remove references to non-existent task IDs before the workflow is constructed, so the DAG validator only sees genuine cycles.
+- **SOP workflows incorrectly flip to async mode** -- The async heuristic (`total_complexity * 0.5 minutes` vs a 30-second default threshold) was applied to all workflows including SOP-driven ones. A 4-task SOP with average complexity 3 estimated 6 minutes of execution, flipping to async and returning a job ID to the user instead of a result. SOPs with `bypass_approval: true` are pre-approved synchronous workflows where the user is waiting for an answer. Fix: SOPs with `bypass_approval: true` now force `use_async=False` before the complexity heuristic runs.
+- **libpoppler not discoverable in SIF containers (take 2)** -- The previous fix (v0.20260330.0) appended system library paths to `LD_LIBRARY_PATH` in `docker-entrypoint.sh`. However, the server spawns SIF containers via `singularity exec ... python -m muxi.runtime.utils.run_formation`, which bypasses the Docker entrypoint entirely. Fix: the same `LD_LIBRARY_PATH` setup (plus `HF_HUB_OFFLINE` and `TRANSFORMERS_OFFLINE`) is now applied at the top of `run_formation.py` before any library imports, guaranteeing it runs regardless of launch method.
+
 ## 0.20260330.1 - MCP Connection Keep-Alive (connection_ttl)
 
 ### New Features

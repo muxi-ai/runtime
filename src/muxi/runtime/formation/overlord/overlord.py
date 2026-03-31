@@ -8032,6 +8032,13 @@ Agent response: {raw_response}"""
 
             # NEW: Make async decision based on workflow time estimate
             if use_async is None and workflow and workflow.tasks:
+                # SOPs with bypass_approval are pre-planned workflows where the user
+                # is waiting synchronously for the result -- async mode would return a
+                # job ID instead of the answer, which is never the right behaviour.
+                if relevant_sop and relevant_sop.get("bypass_approval", True):
+                    use_async = False
+
+            if use_async is None and workflow and workflow.tasks:
                 # Calculate estimated time based on task complexity
                 total_complexity = sum(
                     task.estimated_complexity for task in workflow.tasks.values()
