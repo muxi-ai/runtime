@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20260401.1 - SOP Workflow: Synthesis Bypass Fix & Hallucination Guard
+
+### Bug Fixes
+
+- **`synthesis: false` returns raw metadata dict instead of response text** -- When a SOP declares `synthesis: false`, the overlord skips the LLM synthesis pass and returns the last successful task's output directly. The extraction path called `raw_output.get("content", str(raw_output))`, but `_parse_task_response` wraps agent output under `{"main": {"result": "...", ...}}`. The fallback `str(raw_output)` serialised the entire nested dict, producing a JSON blob instead of the actual response. Fix: the extraction now checks `raw_output["main"]["result"]` first, then `raw_output.get("content")`, then falls back to `str(raw_output)`.
+- **Directive tags leak into task description for heading-format SOPs** -- The deterministic SOP parser correctly stripped `[agent:name]`, `[mcp:tool]`, `[parallel]` etc. from step body text, but not from the heading title (e.g. `### Step 1: Fetch calendar events [agent:ms365-assistant] [parallel]`). The full heading text — including all directive brackets — was included verbatim in the task description passed to the agent. Fix: the heading extractor now strips directive tags from `step_title` before constructing `full_desc`, matching the behaviour of the numbered-list extractor.
+- **Workflow task agents generate pseudo-XML tool calls instead of real calls** -- When executing a workflow task, some models recognise the task description as mapping to known MCP/tool patterns and generate `<use_mcp_tool>` XML output in the response text rather than issuing a structured API tool call. The MUXI tool loop only handles structured function calls from the LLM API; XML in the response text is treated as the task result and passed to downstream steps as data, causing downstream agents to receive fabricated XML as "prior step results". Fix: `_create_task_prompt` now appends an explicit instruction to use available tools directly and not simulate, fabricate, or generate pseudo-tool-call XML.
+
 ## 0.20260401.0 - Skill Secrets, SOP Synthesis Fix & Workflow Data Flow
 
 ### New Features

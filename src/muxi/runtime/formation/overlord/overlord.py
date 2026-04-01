@@ -9203,7 +9203,12 @@ Agent response: {raw_response}"""
                 last_result = successful_results[-1]
                 raw_output = last_result.get("outputs", {})
                 if isinstance(raw_output, dict):
-                    content = raw_output.get("content", str(raw_output))
+                    # _parse_task_response wraps content under {"main": {"result": "..."}}
+                    content = (
+                        raw_output.get("main", {}).get("result")
+                        or raw_output.get("content")
+                        or str(raw_output)
+                    )
                 else:
                     content = str(raw_output)
                 return MuxiResponse(

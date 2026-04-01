@@ -1337,7 +1337,7 @@ Would you like me to proceed with this plan?
         steps = []
         for i, m in enumerate(heading_matches):
             num = int(m.group(2))
-            step_title = (m.group(3) or "").strip()
+            step_title_raw = (m.group(3) or "").strip()
 
             body_start = m.end()
             next_pos = (
@@ -1351,7 +1351,7 @@ Would you like me to proceed with this plan?
                     next_pos = body_start + hm.start()
                     break
             body = content[body_start:next_pos].strip()
-            combined = step_title + "\n" + body
+            combined = step_title_raw + "\n" + body
 
             agent_m = self._SOP_AGENT_RE.search(combined)
             assigned_agent = agent_m.group(1).strip() if agent_m else None
@@ -1359,6 +1359,9 @@ Would you like me to proceed with this plan?
                 {m2.group(1).split("/")[0].strip() for m2 in self._SOP_MCP_RE.finditer(body)}
             )
             is_parallel = bool(self._SOP_PARALLEL_RE.search(combined))
+
+            # Strip directives from title too — they are routing metadata, not task instructions
+            step_title = self._SOP_DIRECTIVE_RE.sub("", step_title_raw).strip()
 
             # Preserve full description — SOP steps are task instructions, not summaries
             description = self._SOP_DIRECTIVE_RE.sub("", body).strip()

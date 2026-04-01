@@ -1493,6 +1493,9 @@ class WorkflowExecutor:
                 "Please complete THIS SPECIFIC TASK ONLY. Do not attempt to complete other parts of the workflow.",
                 "Focus on delivering exactly what's described in the task above.",
                 "Your output will be used by other agents to complete the overall workflow.",
+                "IMPORTANT: Use the tools available to you to retrieve real data. "
+                "Do NOT simulate, fabricate, or write pseudo-tool-call XML. "
+                "If a tool is unavailable, say so explicitly rather than generating fake results.",
             ]
         )
 
