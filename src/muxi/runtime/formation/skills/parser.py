@@ -5,6 +5,9 @@ from typing import Dict, List, Optional
 
 import yaml
 
+# Matches ${{ secrets.SECRET_NAME }} with flexible whitespace
+_SECRETS_REF_PATTERN = re.compile(r"\$\{\{\s*secrets\.([A-Z0-9_]+)\s*\}\}", re.IGNORECASE)
+
 
 @dataclass
 class SkillMetadata:
@@ -18,6 +21,7 @@ class SkillMetadata:
     compatibility: Optional[str] = None
     metadata: Dict[str, str] = field(default_factory=dict)
     allowed_tools: List[str] = field(default_factory=list)
+    required_secrets: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -103,6 +107,8 @@ def parse_skill_md(path: Path) -> tuple[SkillMetadata, str, list]:
     allowed_tools_raw = fm.get("allowed-tools", "")
     allowed_tools = allowed_tools_raw.split() if isinstance(allowed_tools_raw, str) else []
 
+    required_secrets = scan_secret_refs(path.parent)
+
     metadata = SkillMetadata(
         name=name,
         description=description,
@@ -112,6 +118,7 @@ def parse_skill_md(path: Path) -> tuple[SkillMetadata, str, list]:
         compatibility=fm.get("compatibility"),
         metadata=fm.get("metadata", {}),
         allowed_tools=allowed_tools,
+        required_secrets=required_secrets,
     )
 
     return metadata, body, warnings
@@ -126,6 +133,36 @@ def load_skill_content(metadata: SkillMetadata) -> SkillContent:
     resources = _enumerate_resources(metadata.base_dir)
 
     return SkillContent(metadata=metadata, body=body, resources=resources)
+
+
+def scan_secret_refs(base_dir: Path) -> List[str]:
+    """Scan a skill directory for ${{ secrets.X }} references.
+
+    Scans SKILL.md plus all files under scripts/, references/, and assets/.
+    Returns a deduplicated, sorted list of secret names (uppercased).
+    """
+    found: set[str] = set()
+
+    def _scan_file(path: Path) -> None:
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            for match in _SECRETS_REF_PATTERN.finditer(text):
+                found.add(match.group(1).upper())
+        except OSError:
+            pass
+
+    skill_md = base_dir / "SKILL.md"
+    if skill_md.is_file():
+        _scan_file(skill_md)
+
+    for subdir in ("scripts", "references", "assets"):
+        d = base_dir / subdir
+        if d.is_dir():
+            for f in d.rglob("*"):
+                if f.is_file():
+                    _scan_file(f)
+
+    return sorted(found)
 
 
 def _enumerate_resources(base_dir: Path) -> List[str]:

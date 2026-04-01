@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from ...datatypes import observability
+from ...services import observability as svc_observability
 from .parser import SkillMetadata, load_skill_content, parse_skill_md
 
 BUILTIN_SKILLS_DIR = Path(__file__).parent / "builtin"
@@ -19,7 +20,7 @@ class SkillManager:
     - Tier 3 (resources): scripts/references/assets listed on activation
     """
 
-    def __init__(self, skills_dir: Optional[Path] = None):
+    def __init__(self, skills_dir: Optional[Path] = None, secrets_manager=None):
         self.skills_dir = skills_dir
         self.skills: Dict[str, SkillMetadata] = {}
         self.public_skills: List[str] = []
@@ -28,6 +29,7 @@ class SkillManager:
         self._activated: OrderedDict[str, Set[str]] = OrderedDict()
         self._activated_max = 10_000
         self._builtin_skills: List[str] = []
+        self._secrets_manager = secrets_manager
 
     def load_builtin_skills(self, disabled: Optional[List[str]] = None) -> List[str]:
         """Load built-in skills shipped with the runtime.
@@ -250,8 +252,12 @@ class SkillManager:
         """Check if a skill is already activated in a session."""
         return skill_name in self._activated.get(session_id, set())
 
+    def set_secrets_manager(self, secrets_manager) -> None:
+        """Attach a SecretsManager instance for secret interpolation."""
+        self._secrets_manager = secrets_manager
+
     def activate(self, skill_name: str, session_id: str) -> str:
-        """Load full SKILL.md, mark as activated, return wrapped content."""
+        """Load full SKILL.md, mark as activated, return wrapped content (sync, no interpolation)."""
         if skill_name not in self.skills:
             return f"Error: Skill '{skill_name}' not found."
 
@@ -275,10 +281,108 @@ class SkillManager:
 
         return wrapped
 
+    async def activate_async(self, skill_name: str, session_id: str) -> str:
+        """Load full SKILL.md, interpolate ${{ secrets.X }} in body, mark as activated."""
+        if skill_name not in self.skills:
+            return f"Error: Skill '{skill_name}' not found."
+
+        if self.is_activated(skill_name, session_id):
+            return (
+                f"Skill '{skill_name}' is already active. "
+                "Refer to the instructions already in your context."
+            )
+
+        metadata = self.skills[skill_name]
+
+        if skill_name not in self._content_cache:
+            self._content_cache[skill_name] = load_skill_content(metadata)
+
+        content = self._content_cache[skill_name]
+        body = content.body
+
+        if self._secrets_manager and metadata.required_secrets:
+            try:
+                body = await self._secrets_manager.interpolate_secrets(body)
+            except Exception as e:
+                svc_observability.observe(
+                    event_type=svc_observability.ErrorEvents.CONFIGURATION_ERROR,
+                    level=svc_observability.EventLevel.WARNING,
+                    data={"skill_name": skill_name, "error": str(e)},
+                    description=f"Skill '{skill_name}': secret interpolation failed: {e}",
+                )
+
+        wrapped = self._wrap_skill_content_body(content, body)
+
+        self._activated.setdefault(session_id, set()).add(skill_name)
+        if len(self._activated) > self._activated_max:
+            self._activated.popitem(last=False)
+
+        return wrapped
+
+    async def validate_secrets(self, skill_name: str) -> List[str]:
+        """Return names of secrets referenced by a skill that are missing from the store.
+
+        Called during formation init to surface configuration problems early.
+        Does not block startup — returns an empty list if no secrets manager is set.
+        """
+        if not self._secrets_manager:
+            return []
+        metadata = self.skills.get(skill_name)
+        if not metadata or not metadata.required_secrets:
+            return []
+        missing = []
+        for name in metadata.required_secrets:
+            try:
+                value = await self._secrets_manager.get_secret(name)
+                if value is None:
+                    missing.append(name)
+            except Exception:
+                missing.append(name)
+        return missing
+
+    async def resolve_skill_env(self, skill_name: str) -> Dict[str, str]:
+        """Resolve all secrets referenced by a skill into an env map for subprocess injection.
+
+        Keys are secret names as-is (e.g. NOTION_KEY), values are plaintext.
+        Missing secrets are omitted; a warning is logged for each.
+        """
+        env: Dict[str, str] = {}
+        if not self._secrets_manager:
+            return env
+        metadata = self.skills.get(skill_name)
+        if not metadata or not metadata.required_secrets:
+            return env
+        for name in metadata.required_secrets:
+            try:
+                value = await self._secrets_manager.get_secret(name)
+                if value is not None:
+                    env[name] = value
+                else:
+                    svc_observability.observe(
+                        event_type=svc_observability.ErrorEvents.CONFIGURATION_ERROR,
+                        level=svc_observability.EventLevel.WARNING,
+                        data={"skill_name": skill_name, "secret_name": name},
+                        description=(
+                            f"Skill '{skill_name}': secret '{name}' not found in secrets store"
+                        ),
+                    )
+            except Exception as e:
+                svc_observability.observe(
+                    event_type=svc_observability.ErrorEvents.CONFIGURATION_ERROR,
+                    level=svc_observability.EventLevel.WARNING,
+                    data={"skill_name": skill_name, "secret_name": name, "error": str(e)},
+                    description=f"Skill '{skill_name}': failed to resolve secret '{name}': {e}",
+                )
+        return env
+
     def _wrap_skill_content(self, content: Any) -> str:
         """Wrap skill content in structured XML tags."""
+        return self._wrap_skill_content_body(content, content.body)
+
+    def _wrap_skill_content_body(self, content: Any, body: str) -> str:
+        """Wrap skill content with a pre-supplied body string."""
         parts = [f'<skill_content name="{content.metadata.name}">']
-        parts.append(content.body)
+        parts.append(body)
 
         if content.resources:
             parts.append("\n<skill_resources>")

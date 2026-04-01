@@ -42,7 +42,7 @@ async def handle_activate_skill(
             ),
         }
 
-    content = manager.activate(skill_name, session_id)
+    content = await manager.activate_async(skill_name, session_id)
 
     if messages and messages[0]["role"] == "system":
         messages[0]["content"] += f"\n\n{content}"
@@ -96,7 +96,8 @@ async def handle_run_skill(
     try:
         await rce.ensure_cached(skill_name, metadata.base_dir, content_hash)
 
-        result = await rce.run_skill(skill_name, command, timeout=60)
+        skill_env = await manager.resolve_skill_env(skill_name)
+        result = await rce.run_skill(skill_name, command, timeout=60, env=skill_env or None)
 
         observability.observe(
             event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,

@@ -1274,7 +1274,11 @@ def initialize_skills(formation, config: Dict[str, Any]) -> None:
             [f"Skills declared but skills/ directory not found at {skills_dir}"]
         )
 
-    manager = SkillManager(skills_dir if has_formation_skills else None)
+    secrets_manager = getattr(formation, "secrets_manager", None)
+    manager = SkillManager(
+        skills_dir if has_formation_skills else None,
+        secrets_manager=secrets_manager,
+    )
 
     # Always load built-in skills first
     builtin_loaded = manager.load_builtin_skills(disabled=disable_builtin)
@@ -1319,6 +1323,26 @@ def initialize_skills(formation, config: Dict[str, Any]) -> None:
         },
         description=f"Skills loaded: {', '.join(all_names)}",
     )
+
+    # Warn about skills that reference secrets not present in the secrets store
+    if secrets_manager:
+        import asyncio
+
+        async def _warn_missing_secrets():
+            for name in all_names:
+                missing = await manager.validate_secrets(name)
+                if missing:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={"skill_name": name, "missing_secrets": missing},
+                        description=(
+                            f"Skill '{name}' references secret(s) not found in store: "
+                            + ", ".join(missing)
+                        ),
+                    )
+
+        asyncio.ensure_future(_warn_missing_secrets())
 
 
 async def initialize_rce(formation, config: Dict[str, Any]) -> None:
