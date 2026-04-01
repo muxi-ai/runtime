@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.20260401.0 - Skill Secrets & Secret Injection for RCE Scripts
+
+### New Features
+
+- **`${{ secrets.X }}` interpolation in skill instructions** -- Skills can now reference formation secrets directly in their `SKILL.md` body using the same syntax used everywhere else in MUXI. The runtime scans all skill files (`SKILL.md`, `scripts/`, `references/`, `assets/`) for secret references at load time, stores the list in `SkillMetadata.required_secrets`, and interpolates them before injecting the skill body into the agent's context on activation. Missing secrets are logged as warnings at startup without blocking formation load.
+- **Secret env injection for bundled skill scripts** -- Scripts inside a skill's `scripts/` directory cannot use `${{ }}` syntax directly (they are executed as regular programs). Instead, the runtime resolves the skill's required secrets and passes them as environment variables to the RCE subprocess via the existing `env` field on `POST /skill/{id}/run`. Keys map directly from secret name to env var name (`${{ secrets.NOTION_KEY }}` → `NOTION_KEY`). Secrets are passed only to the subprocess environment -- they are never written to disk, never cached by the RCE service, and are gone when the process exits.
+
+### Security
+
+- **Skills RCE must not be publicly exposed** -- Because the `env` field on execution requests carries plaintext secret values, the HTTP channel between the runtime and skills-rce is only safe within a trusted network boundary (same host, Docker network, or private network). This restriction is now documented in the skills-rce README and in the skills concept docs.
+
+### Tests
+
+- **29 new unit tests for skill secrets** -- Added `tests/unit/skills/test_skill_secrets.py` covering: `scan_secret_refs()` (various patterns, nested directories, deduplication, whitespace tolerance, uppercase normalization), `required_secrets` populated on `SkillMetadata` after parse, `activate_async()` with and without a secrets manager, `validate_secrets()` (all present / some missing / no manager), `resolve_skill_env()` (full resolution / missing secrets omitted / no manager), and `set_secrets_manager()` late binding.
+- **E2E test for secret injection via RCE** -- Added `e2e/tests/21_skills/test_21c3_skill_secrets_env.py`. Verifies: `required_secrets` is populated at parse time; `activate_async()` resolves `${{ secrets.SKILL_TEST_GREETING }}` to its actual value in the injected content; `resolve_skill_env()` builds the correct env map; the RCE subprocess receives the secret as an environment variable and the script outputs the expected value; the script fails without the env injection (proving injection is the mechanism).
+
 ## 0.20260331.0 - SOP Reliability & Workflow Hardening
 
 ### Bug Fixes
