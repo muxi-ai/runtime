@@ -1,0 +1,35 @@
+schema: "1.0.0"
+id: skills-secrets-test-formation
+description: "Formation for testing skill secret injection via RCE"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+
+runtime:
+  built_in_mcps: false
+
+memory:
+  buffer:
+    size: 10
+    vector_search: false
+
+skills:
+  - secret-printer
+
+rce:
+  url: "http://localhost:7891"
+
+agents:
+  - general-agent
+
+overlord:
+  clarification:
+    style: "brief"
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"
