@@ -1464,27 +1464,28 @@ class WorkflowExecutor:
             f"- Estimated Complexity: {task.estimated_complexity}/10",
         ]
 
-        # Add inputs if available
+        # Add dependency outputs — extract the actual content from each prior step's result
         if context.get("inputs"):
-            prompt_parts.extend(["", "Available Inputs:", json.dumps(context["inputs"], indent=2)])
-
-        # Add topic/subject context if the task description is generic
-        if "write" in task.description.lower() or "create" in task.description.lower():
-            # Try to extract topic from original request or previous task outputs
-            topic = None
-            if context.get("inputs"):
-                # Look for research findings or topic in inputs
-                for input_key, input_val in context.get("inputs", {}).items():
-                    if isinstance(input_val, dict) and "topic" in input_val:
-                        topic = input_val["topic"]
-                        break
-                    elif isinstance(input_val, str) and len(input_val) > 50:
-                        # Use first substantial input as context
-                        topic = input_val[:200] + "..."
-                        break
-
-            if topic:
-                prompt_parts.extend(["", f"Context/Topic: {topic}"])
+            prompt_parts.append("")
+            prompt_parts.append("## Results from prior steps")
+            for key, val in context["inputs"].items():
+                # key is "from_task_N" — derive a human label
+                step_label = key.replace("from_", "").replace("_", " ").title()
+                prompt_parts.append(f"\n### {step_label}")
+                if isinstance(val, dict):
+                    # _parse_task_response wraps content under {"main": {"result": "...", ...}}
+                    content = val.get("main", {}).get("result") if "main" in val else None
+                    if content is None:
+                        # Fallback: look for any string "result" value at top level
+                        for v in val.values():
+                            if isinstance(v, dict) and isinstance(v.get("result"), str):
+                                content = v["result"]
+                                break
+                    if content is None:
+                        content = json.dumps(val, indent=2)
+                    prompt_parts.append(content)
+                else:
+                    prompt_parts.append(str(val))
 
         prompt_parts.extend(
             [

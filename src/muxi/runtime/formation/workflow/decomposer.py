@@ -1302,13 +1302,11 @@ Would you like me to proceed with this plan?
             # Clean title: strip ** bold markers and all [directive] tags
             clean_title = self._SOP_DIRECTIVE_RE.sub("", title_raw).replace("**", "").strip()
 
-            # Clean body description
+            # Clean body description — preserve full text, SOP steps are task instructions
             description = self._SOP_DIRECTIVE_RE.sub("", body).strip()
             description = re.sub(r"\n{3,}", "\n\n", description)
             if not description:
                 description = clean_title
-            if len(description) > 500:
-                description = description[:500].rsplit(" ", 1)[0] + "..."
             full_desc = f"{clean_title}: {description}" if clean_title else description
 
             steps.append(
@@ -1362,12 +1360,11 @@ Would you like me to proceed with this plan?
             )
             is_parallel = bool(self._SOP_PARALLEL_RE.search(combined))
 
+            # Preserve full description — SOP steps are task instructions, not summaries
             description = self._SOP_DIRECTIVE_RE.sub("", body).strip()
             description = re.sub(r"\n{3,}", "\n\n", description)
             if not description:
                 description = step_title or f"Step {num}"
-            if len(description) > 500:
-                description = description[:500].rsplit(" ", 1)[0] + "..."
             full_desc = f"{step_title}: {description}" if step_title else description
 
             steps.append(
