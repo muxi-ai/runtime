@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20260402.0 - Workflow Tool-Call Reliability & Date Awareness
+
+### Bug Fixes
+
+- **Workflow tasks inherit full conversation history, causing tool call simulation** -- Agents are long-lived and accumulate conversation history across direct-chat and workflow executions. When a workflow task was dispatched, the agent called `chat_with_tools` with the entire accumulated `self._messages` history — including prior sessions where MCP tools had been called. The LLM, seeing that history, would reproduce prior tool call shapes as XML text content (e.g. `<ms365_list_todo_tasks>`) rather than issuing fresh structured API function calls against the registered tool schemas. The MUXI tool loop only handles structured API tool calls; XML in text content is treated as the response and passed to downstream steps as data. Fix: when `is_workflow_task` is True, the initial `chat_with_tools` call uses an isolated context of [system message(s) + current task prompt only]. Subsequent calls within the tool loop still receive the full working context so real tool results flow correctly between iterations.
+- **LLM uses training-data date instead of system date** -- The model consistently computed "today" as an incorrect historical date regardless of the actual system date, because no temporal context was present in the agent's context. Fix: the system message is now prepended with `It is now <weekday, Month DD, YYYY HH:MM (TZ)>.` on every `process_message` call. The prefix is replaced fresh each request so long-running agents never serve a stale date. Applies to direct chat, workflow tasks, and A2A calls alike.
+- **Tool name observability missing for workflow task LLM calls** -- When tools were passed to `chat_with_tools`, no log entry confirmed which tool names actually reached the LLM. Fix: a DEBUG-level observability event now logs `tool_count` and `tool_names` immediately before each `chat_with_tools` call, visible in server logs when `log_level: debug` is set.
+
 ## 0.20260401.1 - SOP Workflow: Synthesis Bypass Fix & Hallucination Guard
 
 ### Bug Fixes
