@@ -1456,12 +1456,14 @@ class WorkflowExecutor:
         Returns:
             Task execution prompt
         """
+        now = datetime.now()
         prompt_parts = [
             f"## Task: {task.description}",
             "",
             "Task Details:",
             f"- Required Capabilities: {', '.join(task.required_capabilities)}",
             f"- Estimated Complexity: {task.estimated_complexity}/10",
+            f"- Current date/time: {now.strftime('%A, %B %d, %Y %H:%M')} (system time, use this as today)",
         ]
 
         # Add dependency outputs — extract the actual content from each prior step's result

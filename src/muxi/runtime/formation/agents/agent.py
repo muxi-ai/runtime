@@ -1690,7 +1690,32 @@ class Agent:
                 # Check for cancellation before LLM call
                 await self._check_cancellation(request_id)
 
-                raw_response = await self.model.chat_with_tools(self._messages, tools=tools)
+                # Log tool names available to the agent for this call (aids debugging hallucinated tool names)
+                if tools:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
+                        level=observability.EventLevel.DEBUG,
+                        data={
+                            "agent_id": self.agent_id,
+                            "tool_count": len(tools),
+                            "tool_names": [t.get("function", {}).get("name") for t in tools],
+                        },
+                        description=f"Agent {self.agent_id} calling LLM with {len(tools)} tools",
+                    )
+
+                # Workflow tasks run with an isolated context: system message + task prompt only.
+                # Using the full conversation history causes the model to simulate prior tool
+                # call patterns (generating XML pseudo-calls) instead of invoking registered tools.
+                if is_workflow_task:
+                    system_msgs = [m for m in self._messages if m.get("role") == "system"]
+                    last_user = next(
+                        (m for m in reversed(self._messages) if m.get("role") == "user"), None
+                    )
+                    llm_messages = system_msgs + ([last_user] if last_user else [])
+                else:
+                    llm_messages = self._messages
+
+                raw_response = await self.model.chat_with_tools(llm_messages, tools=tools)
             except Exception as e:
                 # Log error and fallback to no tools
                 observability.observe(
