@@ -830,6 +830,18 @@ class Agent:
         # Memory storage is handled by chat orchestrator - agent should not store messages
         # This prevents duplicate storage of enhanced messages
 
+        # Keep the system message current date/time fresh on every request.
+        # Agents are long-lived; without this the model falls back to its training-data date.
+        if self._messages and self._messages[0].get("role") == "system":
+            from datetime import datetime as _dt
+
+            now_str = _dt.now().strftime("%A, %B %d, %Y %H:%M")
+            base = self._messages[0]["content"]
+            # Strip any previously injected date prefix before prepending a fresh one
+            if base.startswith("It is now ") and ".\n" in base:
+                base = base[base.index(".\n") + 2 :]
+            self._messages[0]["content"] = f"It is now {now_str}.\n{base}"
+
         # Add message to conversation context
         self._messages.append({"role": "user", "content": message_obj.content})
 
