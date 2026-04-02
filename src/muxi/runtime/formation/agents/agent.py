@@ -833,9 +833,12 @@ class Agent:
         # Keep the system message current date/time fresh on every request.
         # Agents are long-lived; without this the model falls back to its training-data date.
         if self._messages and self._messages[0].get("role") == "system":
+            import time as _time
             from datetime import datetime as _dt
 
-            now_str = _dt.now().strftime("%A, %B %d, %Y %H:%M")
+            now = _dt.now()
+            tz_name = _dt.now().astimezone().tzname() or _time.tzname[0]
+            now_str = f"{now.strftime('%A, %B %d, %Y %H:%M')} ({tz_name})"
             base = self._messages[0]["content"]
             # Strip any previously injected date prefix before prepending a fresh one
             if base.startswith("It is now ") and ".\n" in base:
