@@ -322,7 +322,11 @@ class TransportDetector:
 
                 # Build headers with authentication if provided
                 headers = TransportDetector._build_auth_headers(
-                    credentials, base_headers={"Content-Type": "application/json"}
+                    credentials,
+                    base_headers={
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/event-stream, */*",
+                    },
                 )
 
                 async with session.post(test_url, json=test_request, headers=headers) as response:
