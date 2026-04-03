@@ -2,6 +2,10 @@
 
 ## 0.20260403.0 - MCP Accept Header & Agent Context Fixes
 
+### Dependencies
+
+- **Bump faissx to >= 0.20260403.0** -- This version includes improved data persistence between restarts, ensuring vector store state survives formation restarts without data loss.
+
 ### Bug Fixes
 
 - **Strict MCP servers reject transport detection with 406 Not Acceptable** -- FastMCP and other strict HTTP MCP servers enforce content negotiation and reject requests with the default `Accept: */*` header, returning a `406 Not Acceptable` with `"Client must accept application/json"`. The transport detector's ping request used aiohttp's default headers, so these servers were never recognised as reachable endpoints. Fix: the detector now sends `Accept: application/json, text/event-stream, */*` explicitly, satisfying both strict JSON-only servers and streaming SSE servers. Credit: community contribution (PR #139).
