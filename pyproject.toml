@@ -93,7 +93,7 @@ dependencies = [
 
     # Vector search
     "faiss-cpu>=1.13.0",  # 1.13+ fixes numpy deprecation warning
-    "faissx>=0.20260403.0",  # Distributed FAISS for remote vector operations
+    "faissx>=0.0.3",  # Distributed FAISS for remote vector operations
     "pgvector>=0.3.6",
     "numpy>=1.24.0",
     "sqlite-vec>=0.1.6",  # SQLite vector extension for similarity search
