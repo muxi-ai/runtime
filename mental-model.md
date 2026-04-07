@@ -1,6 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
+**Last Updated:** 2026-04-07
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -293,9 +294,9 @@ Main entry point for all user interactions. Handles both simple agent routing an
 3. Check for workflow override (user_id in pending_approval)
    - If approval pending → delegate to ApprovalManager
 4. Agent selection (via AgentRouter.select_agent_for_message())
-   - Uses LLM routing model to select best agent
+   - Uses LLM routing model + normalized specialist metadata to select best agent
    - Falls back to intelligent heuristics if LLM fails
-   - Caches routing decisions (TTL configurable)
+   - Caches routing decisions with a session-scoped key (TTL configurable)
 5. Execute request:
    - If auto_decomposition enabled + complexity > threshold:
      → Analyze with RequestAnalyzer → Decompose with TaskDecomposer → Execute workflow
@@ -367,14 +368,16 @@ Handles intelligent agent selection with multi-layer approach:
 ```python
 class AgentRouter:
     async def select_agent_for_message(self, message: str) -> str:
-        # 1. Check routing cache (TTL: 3600s default)
-        if caching_enabled and message in cache:
+        # 1. Check routing cache (session_id + normalized message, TTL: 3600s default)
+        cache_key = f"{session_id}:{normalized_message}"
+        if caching_enabled and cache_key in cache:
             return cached_agent
         
         # 2. LLM-based routing with security awareness
         messages = self._create_routing_messages(message)
         # System prompt includes:
         #   - Agent descriptions
+        #   - Agent role / specialties / specialization domain / specialization keywords
         #   - Security checks (prompt injection, credential fishing, jailbreak)
         #   - Routing instructions
         response = await routing_model.chat(messages)
@@ -386,7 +389,7 @@ class AgentRouter:
         # 4. Validate agent exists
         if agent_id in overlord.agents:
             # Cache the result
-            routing_cache[message] = {"agent_id": agent_id, "timestamp": time.time()}
+            routing_cache[cache_key] = {"agent_id": agent_id, "timestamp": time.time()}
             return agent_id
         
         # 5. Fallback to intelligent heuristics
@@ -397,9 +400,15 @@ class AgentRouter:
 - Routing model is the **same as the text capability model** (no separate routing model config)
 - Security checks happen *during* routing (no separate security layer)
 - Pattern-based security filters were removed (caused false positives on technical discussions)
-- Caching is per-message (exact string match), not semantic similarity
+- Cache keys are now **session-scoped**, so follow-up replies like `"yes"` do not leak across sessions
+- Routing only works reliably when agent metadata is normalized; `specialization.domain` and
+  `specialization.keywords` are folded into routing metadata alongside `role` and `specialties`
+- The fallback heuristic deliberately penalizes the default generalist when a specialist has
+  concrete metadata overlap with the request
 - **File analysis requests must be explicitly allowed** - without explicit allowlist in the security prompt,
   innocuous requests like "Analyze this file and provide insights" get blocked as "information extraction"
+- When the enhanced request contains `=== CURRENT REQUEST ===`, the router now extracts the
+  whole current-request block (including multiline follow-up details), not just the first `User:` line
 
 **Security Router Safe Patterns:**
 
@@ -1108,6 +1117,8 @@ class MCPService:
         }
         self.user_credentials = {}       # server_id → user_id → credentials
         self.transport_cache = {}        # server_id → transport_type (for retry)
+        self._live_connections = {}      # connection pool keyed by server_id:credential_hash
+        self._connection_ttl = 300.0     # keep-alive TTL (seconds)
 ```
 
 ### Server Registration Flow
@@ -1226,6 +1237,30 @@ for stream in (self.read_stream, self.write_stream):
 MUXI holds references to the same stream objects the SDK passes to `ClientSession`. Closing them early causes the SDK's internal receive loop to get `ClosedResourceError` and exit on its own, so `tg.cancel_scope.cancel()` has no blocked tasks left to spin on. Once the upstream PR ships, this early-close becomes a harmless no-op.
 
 **Remove this workaround when:** `mcp` package ships a version that includes the fix from PR #2147.
+
+### HTTP Request Lifecycle Hardening (2026-04-07)
+
+**Problem cluster:** HTTP MCP calls could ignore per-call timeouts, reconnect through the wrong
+transport, and leave a poisoned pooled connection behind after a chat stream disconnected.
+
+**What changed:**
+- `StreamableHTTPTransport.send_request()` and `HTTPSSETransport.send_request()` now wrap
+  `list_tools()`, `call_tool()`, `list_resources()`, and `list_prompts()` in
+  `asyncio.wait_for(timeout or self.request_timeout)` so HTTP MCP requests honor the configured timeout
+- `HTTPSSETransport.connect()` now uses the configured request timeout for connect/init instead of a
+  hardcoded `timeout=60, sse_read_timeout=300` pair
+- `MCPServerClient` now preserves explicit `transport_type` on live reconnects instead of always
+  falling back through transport auto-detection
+- MCP requests now carry the overlord `request_id` and a `CancellationToken` through
+  `Agent.invoke_tool()` → `MCPService.invoke_tool()` → `MCPHandler.execute_tool()`
+- `MCPService.cancel_requests_for_request(request_id)` cancels matching live MCP requests and closes
+  their pooled connections so a broken pipe / disconnect cannot wedge later requests behind a stale session
+- `chat_orchestrator._create_stream_generator()` now calls this cancellation path before giving up on a
+  disconnected stream and also disables leftover streaming state immediately
+
+**Why this matters:** direct MCP server calls might return in <2s while the formation path was previously
+able to stall for minutes if HTTP transport fallback or stale pooled sessions got involved. The runtime
+now fails fast on timeout, preserves the intended transport, and tears down bad live connections on cancel.
 
 ### Tool Execution
 
@@ -2373,9 +2408,9 @@ e2e/evidence/muxi-runtime/<YYYYMMDD>/<area>/
      - If done: Extract final request, clear state, continue
    
    → Agent selection (AgentRouter.select_agent_for_message)
-     - Check routing cache (message → agent_id, TTL 3600s)
+     - Check routing cache (session_id + normalized message → agent_id, TTL 3600s)
      - If not cached: LLM routing with security checks
-     - System prompt includes agent descriptions + security validation
+     - System prompt includes agent descriptions + role/specialties/specialization metadata + security validation
      - Parse response: "SECURITY_BLOCK" → raise SecurityViolation
      - Validate agent exists, cache result
    
@@ -3916,6 +3951,38 @@ after selection, type mismatches.
 - `src/muxi/runtime/formation/overlord/overlord.py` -- sync KV helpers, `_cache_selected_credential`, string/dict handling
 - `src/muxi/runtime/formation/overlord/clarification.py` -- credential cache check in `_analyze_request`
 - `e2e/tests/4_mcp/credential_seeder.py` -- seeds dual GitHub credentials via direct SQL
+
+### 2026-04-07: Routing Specialization & HTTP MCP Disconnect Recovery
+
+**Problem:** specialist agents lost routing decisions to the generalist unless the user phrased the
+request with explicit domain keywords, and long-running HTTP MCP requests could leave pooled live
+connections wedged after client disconnects.
+
+**Root causes:**
+- `AgentRouter` only surfaced `agent_id` and `description` to the routing LLM; `role`,
+  `specialties`, and nested `specialization.*` were loaded by the overlord but ignored by routing
+- Routing cache keys were raw message strings, so short follow-ups like `"yes"` could reuse a
+  decision from a different session
+- HTTP transports only timeout-wrapped connect/init, not `call_tool()` / `list_tools()`
+- Live MCP reconnects ignored stored `transport_type` and always re-entered auto/fallback detection
+- Chat-stream cancellation never cancelled the underlying MCP request or closed the pooled live connection
+
+**Fixes:**
+- Normalize agent specialization metadata into routing metadata at load time and expose it to both
+  the routing prompt and the heuristic fallback
+- Scope routing cache entries by `(session_id, normalized message)` and preserve multiline
+  `=== CURRENT REQUEST ===` content for routing
+- Enforce per-request timeouts in both HTTP transports and preserve explicit transport type on live reconnect
+- Thread `request_id` and `CancellationToken` through the MCP service/handler path
+- Close poisoned live connections immediately when a request is cancelled or disconnects
+
+**Files:**
+- `src/muxi/runtime/formation/overlord/agent_router.py`
+- `src/muxi/runtime/formation/overlord/overlord.py`
+- `src/muxi/runtime/formation/overlord/chat_orchestrator.py`
+- `src/muxi/runtime/services/mcp/service.py`
+- `src/muxi/runtime/services/mcp/handler.py`
+- `src/muxi/runtime/services/mcp/transports/{streamable.py,http_sse.py,factory.py,base.py}`
 
 ### 2026-03-20: Scheduler Routes, Memobase Init & Dimension Propagation
 

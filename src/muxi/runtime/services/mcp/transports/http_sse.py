@@ -8,6 +8,7 @@
 # Author:       Muxi Framework Team
 # =============================================================================
 
+import asyncio
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -21,8 +22,10 @@ from ..protocol.message_handler import MCPMessageHandler
 from .auth import create_httpx_auth
 from .base import (
     BaseTransport,
+    CancellationToken,
     MCPConnectionError,
     MCPRequestError,
+    MCPTimeoutError,
 )
 
 
@@ -33,10 +36,10 @@ class HTTPSSETransport(BaseTransport):
         """Initialize MCP SDK HTTP+SSE transport."""
         super().__init__(url, request_timeout, auth)
         self.message_handler = MCPMessageHandler()
-        self.session = None
-        self.client_context = None
-        self.read_stream = None
-        self.write_stream = None
+        self.session: Any = None
+        self.client_context: Any = None
+        self.read_stream: Any = None
+        self.write_stream: Any = None
         pass  # REMOVED: init-phase observe() call
         # Log auth config safely without exposing sensitive data
         if auth:
@@ -55,19 +58,21 @@ class HTTPSSETransport(BaseTransport):
             self.client_context = sse_client(
                 url=self.url,
                 auth=httpx_auth,
-                timeout=60,  # Increase connection timeout
-                sse_read_timeout=300,  # 5 minutes for SSE
+                timeout=self.request_timeout,
+                sse_read_timeout=max(self.request_timeout, 60),
             )
 
             # Enter context and get streams
-            self.read_stream, self.write_stream = await self.client_context.__aenter__()
+            self.read_stream, self.write_stream = await asyncio.wait_for(
+                self.client_context.__aenter__(), timeout=self.request_timeout
+            )
 
             # Create session for high-level operations
             self.session = ClientSession(self.read_stream, self.write_stream)
-            await self.session.__aenter__()
+            await asyncio.wait_for(self.session.__aenter__(), timeout=self.request_timeout)
 
             # Initialize the connection
-            await self.session.initialize()
+            await asyncio.wait_for(self.session.initialize(), timeout=self.request_timeout)
 
             self.connected = True
             self.connect_time = datetime.now()
@@ -76,6 +81,23 @@ class HTTPSSETransport(BaseTransport):
             pass  # REMOVED: init-phase observe() call
             return True
 
+        except asyncio.TimeoutError as e:
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_CONNECTION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "service": "mcp",
+                    "transport": "http_sse",
+                    "action": "connect_timeout",
+                    "url": self.url,
+                    "timeout": self.request_timeout,
+                },
+                description=f"Connection timed out after {self.request_timeout}s: {self.url}",
+            )
+            await self._cleanup()
+            raise MCPConnectionError(
+                f"Connection to {self.url} timed out after {self.request_timeout}s"
+            ) from e
         except Exception as e:
             observability.observe(
                 event_type=observability.SystemEvents.MCP_SERVER_CONNECTION_FAILED,
@@ -93,19 +115,39 @@ class HTTPSSETransport(BaseTransport):
             await self._cleanup()
             raise MCPConnectionError(f"Failed to connect to {self.url}: {e}") from e
 
-    async def send_request(self, request_obj: Any, timeout: Optional[int] = None) -> Dict[str, Any]:
+    def _update_success_stats(self) -> None:
+        """Update request/response statistics after a successful call."""
+        self.last_activity = datetime.now()
+        self.connection_stats["requests_sent"] += 1
+        self.connection_stats["responses_received"] += 1
+
+    async def send_request(
+        self,
+        request_obj: Any,
+        timeout: Optional[int] = None,
+        cancellation_token: Optional[CancellationToken] = None,
+    ) -> Dict[str, Any]:
         """Send request using MCP SDK session."""
         if not self.connected or not self.session:
             raise MCPConnectionError("Not connected to MCP server")
 
-        method = request_obj.get("method")
-        params = request_obj.get("params", {})
+        if cancellation_token:
+            cancellation_token.throw_if_cancelled()
 
         try:
+            if isinstance(request_obj, dict):
+                method = request_obj.get("method")
+                params = request_obj.get("params", {})
+            else:
+                raise MCPRequestError("Invalid request format")
+
+            request_timeout = timeout or self.request_timeout
+
             # Use SDK's high-level methods
             if method == "tools/list":
-                result = await self.session.list_tools()
+                result = await asyncio.wait_for(self.session.list_tools(), timeout=request_timeout)
                 # Convert to expected format
+                self._update_success_stats()
                 return {
                     "status": "success",
                     "result": {"tools": [tool.model_dump() for tool in result.tools]},
@@ -113,22 +155,33 @@ class HTTPSSETransport(BaseTransport):
             elif method == "tools/call":
                 tool_name = params.get("name")
                 arguments = params.get("arguments", {})
-                result = await self.session.call_tool(tool_name, arguments)
+                result = await asyncio.wait_for(
+                    self.session.call_tool(tool_name, arguments), timeout=request_timeout
+                )
                 # Convert to expected format
+                self._update_success_stats()
                 return {"status": "success", "result": result.model_dump()}
             elif method == "resources/list":
-                result = await self.session.list_resources()
+                result = await asyncio.wait_for(
+                    self.session.list_resources(), timeout=request_timeout
+                )
+                self._update_success_stats()
                 return {
                     "status": "success",
                     "result": {"resources": [res.model_dump() for res in result.resources]},
                 }
             elif method == "prompts/list":
-                result = await self.session.list_prompts()
+                result = await asyncio.wait_for(
+                    self.session.list_prompts(), timeout=request_timeout
+                )
+                self._update_success_stats()
                 return {
                     "status": "success",
                     "result": {"prompts": [prompt.model_dump() for prompt in result.prompts]},
                 }
             else:
+                if not isinstance(method, str):
+                    raise MCPRequestError("Invalid request method")
                 # For other methods, use generic approach
                 # Create proper MCP message
                 request_message = self.message_handler.create_request(method, params)
@@ -137,17 +190,22 @@ class HTTPSSETransport(BaseTransport):
                 await self.write_stream.send(request_message)
 
                 # Read response
-                response_message = await self.read_stream.receive()
+                response_message = await asyncio.wait_for(
+                    self.read_stream.receive(), timeout=request_timeout
+                )
 
                 # Parse response
                 parsed = self.message_handler.parse_response(response_message)
 
-                self.last_activity = datetime.now()
-                self.connection_stats["requests_sent"] += 1
-                self.connection_stats["responses_received"] += 1
-
+                self._update_success_stats()
                 return parsed
 
+        except asyncio.TimeoutError as e:
+            self.connection_stats["errors_encountered"] += 1
+            raise MCPTimeoutError(
+                "Request timed out",
+                {"timeout": request_timeout, "timestamp": datetime.now().isoformat()},
+            ) from e
         except Exception as e:
             self.connection_stats["errors_encountered"] += 1
             raise MCPRequestError(f"Request failed: {e}") from e

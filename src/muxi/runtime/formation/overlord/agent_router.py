@@ -5,6 +5,7 @@ This module handles intelligent agent selection and routing based on message
 content, agent capabilities, and availability.
 """
 
+import re
 import time
 from typing import Any, Dict, Optional
 
@@ -41,6 +42,77 @@ class AgentRouter:
         """Record which agent handled the last request in a session."""
         if session_id:
             self._session_last_agent[session_id] = agent_id
+
+    def _get_cache_key(self, message: str, session_id: Optional[str] = None) -> str:
+        """Build a routing cache key that preserves session context."""
+        normalized_message = " ".join(message.strip().split())
+        if session_id:
+            return f"session:{session_id}:{normalized_message}"
+        return normalized_message
+
+    def _normalize_text_list(self, value: Any) -> list[str]:
+        """Normalize routing metadata fields into a list of strings."""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            normalized = value.strip()
+            return [normalized] if normalized else []
+        if isinstance(value, (list, tuple, set)):
+            items = []
+            for item in value:
+                if item is None:
+                    continue
+                normalized = str(item).strip()
+                if normalized:
+                    items.append(normalized)
+            return items
+        normalized = str(value).strip()
+        return [normalized] if normalized else []
+
+    def _get_agent_routing_metadata(self, agent_id: str) -> Dict[str, Any]:
+        """Get normalized routing metadata for an agent."""
+        metadata = self.overlord.agent_metadata.get(agent_id, {})
+        return {
+            "name": metadata.get("name", agent_id),
+            "description": metadata.get(
+                "description", self.overlord.agent_descriptions.get(agent_id, "")
+            ),
+            "role": metadata.get("role", "general"),
+            "specialties": self._normalize_text_list(metadata.get("specialties", [])),
+            "specialization_domain": metadata.get("specialization_domain", ""),
+            "specialization_keywords": self._normalize_text_list(
+                metadata.get("specialization_keywords", [])
+            ),
+        }
+
+    def _tokenize(self, text: str) -> list[str]:
+        """Extract normalized tokens for lightweight routing heuristics."""
+        return re.findall(r"[a-z0-9][a-z0-9_-]*", text.lower())
+
+    def _looks_like_follow_up(self, message: str, tokens: set[str]) -> bool:
+        """Detect short follow-up turns that should stay with the previous agent."""
+        follow_up_terms = {
+            "yes",
+            "no",
+            "continue",
+            "again",
+            "more",
+            "same",
+            "that",
+            "this",
+            "those",
+            "these",
+            "it",
+            "them",
+            "there",
+            "here",
+            "next",
+            "okay",
+            "ok",
+        }
+        if len(tokens) <= 3 and len(message.strip()) <= 25:
+            return True
+        return any(token in follow_up_terms for token in tokens) and len(message.strip()) <= 40
 
     async def select_agent_for_message(
         self, message: str, request_id: Optional[str] = None, session_id: Optional[str] = None
@@ -95,8 +167,9 @@ class AgentRouter:
         cache_ttl = caching_config.get("ttl", 3600)  # Default: 3600 seconds (1 hour)
 
         # Check if we've seen this message before (use cached routing decision)
-        if caching_enabled and message in self._routing_cache:
-            cached_entry = self._routing_cache[message]
+        cache_key = self._get_cache_key(message, session_id=session_id)
+        if caching_enabled and cache_key in self._routing_cache:
+            cached_entry = self._routing_cache[cache_key]
 
             # Cache entries must be in dict format with timestamp
             if isinstance(cached_entry, dict):
@@ -106,17 +179,17 @@ class AgentRouter:
                 # Check if cache entry is still valid (within TTL)
                 if time.time() - cached_time < cache_ttl:
                     # Verify the cached agent is still available
-                    if cached_agent in self.overlord.agents:
-                        return cached_agent
+                    if cached_agent in available_agents:
+                        return str(cached_agent)
                     else:
                         # Cached agent no longer available, remove from cache
-                        del self._routing_cache[message]
+                        del self._routing_cache[cache_key]
                 else:
                     # Cache entry expired, remove it
-                    del self._routing_cache[message]
+                    del self._routing_cache[cache_key]
             else:
                 # Invalid cache entry format, remove it
-                del self._routing_cache[message]
+                del self._routing_cache[cache_key]
 
         # Get routing model if not available
         routing_model = getattr(self.overlord, "routing_model", None)
@@ -142,11 +215,15 @@ class AgentRouter:
                     },
                     description="Routing model creation failed, falling back to intelligent selection",
                 )
-                return await self._select_best_available_agent(message, request_id)
+                return await self._select_best_available_agent(
+                    message, request_id, session_id=session_id
+                )
 
         try:
             # Create messages for the routing model (system/user separated for proper caching)
-            messages = self._create_routing_messages(message, session_id=session_id)
+            messages = self._create_routing_messages(
+                message, session_id=session_id, available_agents=available_agents
+            )
 
             # Query the routing model
             response = await routing_model.chat(messages)
@@ -155,8 +232,10 @@ class AgentRouter:
             selected_agent_id = self._parse_routing_response(response)
 
             # If parsing failed or the agent doesn't exist, use intelligent fallback
-            if selected_agent_id is None or selected_agent_id not in self.overlord.agents:
-                selected_agent_id = await self._select_best_available_agent(message, request_id)
+            if selected_agent_id is None or selected_agent_id not in available_agents:
+                selected_agent_id = await self._select_best_available_agent(
+                    message, request_id, session_id=session_id
+                )
                 observability.observe(
                     event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
                     level=observability.EventLevel.WARNING,
@@ -176,7 +255,7 @@ class AgentRouter:
 
             # Cache the result for future identical messages (if caching is enabled)
             if caching_enabled:
-                self._routing_cache[message] = {
+                self._routing_cache[cache_key] = {
                     "agent_id": selected_agent_id,
                     "timestamp": time.time(),
                 }
@@ -198,9 +277,16 @@ class AgentRouter:
                 },
                 description="Agent routing failed, falling back to intelligent selection",
             )
-            return await self._select_best_available_agent(message, request_id)
+            return await self._select_best_available_agent(
+                message, request_id, session_id=session_id
+            )
 
-    def _create_routing_messages(self, message: str, session_id: Optional[str] = None) -> list:
+    def _create_routing_messages(
+        self,
+        message: str,
+        session_id: Optional[str] = None,
+        available_agents: Optional[list[str]] = None,
+    ) -> list:
         """
         Create messages for the routing model with built-in security awareness.
 
@@ -215,13 +301,31 @@ class AgentRouter:
         Returns:
             A list of messages with system prompt and user message separated
         """
-        # Build agent descriptions for the prompt
-        agent_descriptions = []
-        for agent_id in self.overlord.agents.keys():
-            description = self.overlord.agent_descriptions.get(agent_id, "General purpose agent")
-            agent_descriptions.append(f"- {agent_id}: {description}")
+        agent_cards = []
+        candidate_agents = available_agents or list(self.overlord.agents.keys())
+        default_agent = getattr(self.overlord, "default_agent_id", None)
+        for agent_id in candidate_agents:
+            metadata = self._get_agent_routing_metadata(agent_id)
+            specialties = ", ".join(metadata["specialties"]) or "none listed"
+            specialization_keywords = ", ".join(metadata["specialization_keywords"]) or "none listed"
+            specialization_domain = metadata["specialization_domain"] or "none listed"
+            description = metadata["description"] or "General purpose agent"
+            agent_cards.append(
+                "\n".join(
+                    [
+                        f"- {agent_id}",
+                        f"  name: {metadata['name']}",
+                        f"  role: {metadata['role']}",
+                        f"  description: {description}",
+                        f"  specialties: {specialties}",
+                        f"  specialization domain: {specialization_domain}",
+                        f"  specialization keywords: {specialization_keywords}",
+                        f"  default agent: {'yes' if agent_id == default_agent else 'no'}",
+                    ]
+                )
+            )
 
-        agents_info = "\n".join(agent_descriptions)
+        agents_info = "\n".join(agent_cards)
 
         system_prompt = f"""You are an intelligent agent routing system with built-in security awareness.
 
@@ -248,8 +352,9 @@ Otherwise, select the best agent from these options:
 
 For safe messages, analyze and select the best agent considering:
 - The subject matter and topic of the message
-- The specific capabilities each agent offers
+- The specific capabilities, role, specialties, specialization domain, and specialization keywords each agent offers
 - Which agent would be most helpful for this type of request
+- When a specialist agent clearly matches the request, prefer it over the default/generalist agent
 - If there is a previous agent for this session, prefer it for follow-up messages that lack explicit topic keywords (e.g., short replies, pronouns, continuation of a task)
 
 Your response: [agent-id] or SECURITY_BLOCK"""
@@ -269,7 +374,10 @@ Your response: [agent-id] or SECURITY_BLOCK"""
         ]
 
     async def _select_best_available_agent(
-        self, message: str, request_id: Optional[str] = None
+        self,
+        message: str,
+        request_id: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> str:
         """
         Select the best available agent using intelligent analysis.
@@ -295,44 +403,70 @@ Your response: [agent-id] or SECURITY_BLOCK"""
         if len(available_agents) == 1:
             return available_agents[0]
 
-        # Simple keyword matching approach
         message_lower = message.lower()
+        message_tokens = {token for token in self._tokenize(message_lower) if len(token) > 2}
+        last_agent = self._session_last_agent.get(session_id) if session_id else None
+        if last_agent in available_agents and self._looks_like_follow_up(message_lower, message_tokens):
+            return str(last_agent)
 
-        # Define keyword categories and their corresponding priorities
-        keyword_priorities = {
-            "code": ["code", "programming", "debug", "function", "script", "software"],
-            "data": ["data", "analysis", "statistics", "csv", "database", "chart"],
-            "research": ["research", "study", "academic", "paper", "literature"],
-            "creative": ["write", "creative", "story", "content", "blog", "article"],
-            "support": ["help", "support", "question", "assistance", "problem"],
-        }
-
-        # Score agents based on their descriptions and keyword matches
         agent_scores = {}
+        specialist_scores = {}
+        default_agent = getattr(self.overlord, "default_agent_id", None)
         for agent_id in available_agents:
+            metadata = self._get_agent_routing_metadata(agent_id)
             score = 0
-            description = self.overlord.agent_descriptions.get(agent_id, "").lower()
+            metadata_texts = [
+                metadata["name"],
+                metadata["description"],
+                metadata["role"],
+                metadata["specialization_domain"],
+                *metadata["specialties"],
+                *metadata["specialization_keywords"],
+            ]
 
-            # Check for keyword matches between message and agent description
-            for category, keywords in keyword_priorities.items():
-                for keyword in keywords:
-                    if keyword in message_lower and keyword in description:
-                        score += 2  # Higher score for direct matches
-                    elif keyword in message_lower or keyword in description:
-                        score += 1  # Lower score for partial matches
+            for phrase in metadata["specialties"]:
+                if phrase.lower() in message_lower:
+                    score += 5
+
+            for keyword in metadata["specialization_keywords"]:
+                if keyword.lower() in message_lower:
+                    score += 4
+
+            specialization_domain = metadata["specialization_domain"].lower()
+            if specialization_domain and specialization_domain in message_lower:
+                score += 5
+
+            metadata_tokens = {
+                token
+                for text in metadata_texts
+                for token in self._tokenize(text)
+                if len(token) > 2
+            }
+            overlap = message_tokens & metadata_tokens
+            score += len(overlap)
+
+            if metadata["role"] == "specialist" and score > 0:
+                score += 3
+                specialist_scores[agent_id] = score
+
+            if agent_id == last_agent and score > 0:
+                score += 2
 
             agent_scores[agent_id] = score
 
-        # Select agent with highest score, or use default/first available if tied
+        if specialist_scores and default_agent in agent_scores:
+            best_specialist_score = max(specialist_scores.values())
+            if agent_scores[default_agent] <= best_specialist_score:
+                agent_scores[default_agent] = min(agent_scores[default_agent], 0)
+
         if agent_scores:
             best_agent = max(agent_scores.keys(), key=lambda x: agent_scores[x])
             if agent_scores[best_agent] > 0:
                 return best_agent
 
         # Fallback to default agent or first available agent
-        default_agent = getattr(self.overlord, "default_agent_id", None)
         if default_agent and default_agent in available_agents:
-            return default_agent
+            return str(default_agent)
 
         return available_agents[0]
 

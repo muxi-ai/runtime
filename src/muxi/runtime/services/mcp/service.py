@@ -52,7 +52,7 @@ from .prompts.discovery import MCPPromptDiscovery
 from .resources.discovery import MCPResourceDiscovery
 from .sampling.creator import MCPSamplingCreator
 from .templates.discovery import MCPTemplateDiscovery
-from .transports import ModernProtocolFeatures, TransportDetector
+from .transports import CancellationToken, ModernProtocolFeatures, TransportDetector
 
 DEFAULT_CONNECTION_TTL = 300.0  # 5 minutes
 
@@ -89,7 +89,7 @@ class CredentialSelectionNeededError(Exception):
         service: str,
         user_id: str,
         available_credentials: list,
-        ordered_credentials: list = None,
+        ordered_credentials: Optional[list] = None,
     ):
         self.service = service
         self.user_id = user_id
@@ -277,6 +277,38 @@ class MCPService:
             data={"connection_key": key, "idle_seconds": conn.idle_seconds()},
             description=f"Closed idle MCP connection: {key}",
         )
+
+    async def cancel_requests_for_request(
+        self, request_id: str, close_live_connections: bool = True
+    ) -> int:
+        """Cancel active MCP requests for a specific overlord request ID."""
+        if not request_id:
+            return 0
+
+        cancelled_total = 0
+        keys_to_close = []
+
+        for key, conn in list(self._live_connections.items()):
+            try:
+                cancelled = conn.handler.cancel_requests_by_overlord_id(request_id)
+            except Exception:
+                cancelled = 0
+
+            if cancelled:
+                cancelled_total += cancelled
+                if close_live_connections:
+                    keys_to_close.append(key)
+
+        for handler in list(self.handlers.values()):
+            try:
+                cancelled_total += handler.cancel_requests_by_overlord_id(request_id)
+            except Exception:
+                continue
+
+        for key in keys_to_close:
+            await self._close_live_connection(key)
+
+        return cancelled_total
 
     async def _close_all_live_connections(self) -> None:
         """Close every live connection (used during shutdown)."""
@@ -522,6 +554,7 @@ class MCPService:
         parameters: Dict[str, Any],
         request_timeout: Optional[int] = None,
         user_id: Optional[str] = None,
+        request_id: Optional[str] = None,
         credential_resolver: Optional[Any] = None,
         conversation_context: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
@@ -538,6 +571,7 @@ class MCPService:
             parameters: The parameters to pass to the tool
             request_timeout: Optional timeout override for this specific request
             user_id: Optional user ID for credential resolution
+            request_id: Optional overlord request ID for cancellation tracking
             credential_resolver: Optional credential resolver for user-specific auth
 
         Returns:
@@ -702,6 +736,8 @@ class MCPService:
             description=f"Executing MCP tool '{tool_name}' on server '{server_id}' with user credentials",
         )
 
+        cancellation_token = CancellationToken() if request_id else None
+
         try:
             # Emit streaming event for tool execution (abstract tool names)
             # Extract service name from server_id
@@ -723,6 +759,8 @@ class MCPService:
                 params=parameters,
                 user_credentials=resolved_auth,
                 request_timeout=request_timeout,
+                request_id=request_id,
+                cancellation_token=cancellation_token,
             )
 
             # First check if we have a parsed response from the message handler
@@ -889,7 +927,7 @@ class MCPService:
         url: Optional[str],
         command: Optional[str],
         args: Optional[List[str]],
-        transport_type: str,
+        transport_type: Optional[str],
         credentials: Optional[Dict[str, Any]] = None,
         model: Optional[LLM] = None,
         request_timeout: int = 60,
@@ -917,6 +955,7 @@ class MCPService:
                     credentials=credentials,
                     request_timeout=request_timeout,
                     server_id=server_id,
+                    transport_type=transport_type,
                 )
 
                 # Store the handler
@@ -1056,6 +1095,8 @@ class MCPService:
         params: Dict[str, Any],
         user_credentials: Optional[Dict[str, Any]] = None,
         request_timeout: Optional[int] = None,
+        request_id: Optional[str] = None,
+        cancellation_token: Optional[CancellationToken] = None,
     ) -> Dict[str, Any]:
         """
         Execute a tool, reusing a kept-alive connection when possible.
@@ -1104,6 +1145,8 @@ class MCPService:
                 params,
                 user_credentials,
                 request_timeout,
+                request_id,
+                cancellation_token,
             )
 
         async with self.locks[server_id]:
@@ -1116,11 +1159,18 @@ class MCPService:
                         server_name=server_name,
                         tool_name=tool_name,
                         params=params,
-                        cancellation_token=None,
+                        request_id=request_id,
+                        timeout=request_timeout or config.get("request_timeout", 60),
+                        cancellation_token=cancellation_token,
                     )
+                except asyncio.CancelledError:
+                    await self._close_live_connection(conn_key)
+                    raise
                 except Exception:
                     # Connection may have gone stale; close and fall through to reconnect
                     await self._close_live_connection(conn_key)
+            elif conn:
+                await self._close_live_connection(conn_key)
 
             # No usable connection -- create a new one
             handler = MCPHandler(model=None, tool_registry=self.tool_registry)
@@ -1132,6 +1182,7 @@ class MCPService:
                 credentials=user_credentials,
                 request_timeout=request_timeout or config.get("request_timeout", 60),
                 server_id=server_id,
+                transport_type=config.get("transport_type") or self.transport_cache.get(server_id),
             )
 
             try:
@@ -1139,8 +1190,16 @@ class MCPService:
                     server_name=server_name,
                     tool_name=tool_name,
                     params=params,
-                    cancellation_token=None,
+                    request_id=request_id,
+                    timeout=request_timeout or config.get("request_timeout", 60),
+                    cancellation_token=cancellation_token,
                 )
+            except asyncio.CancelledError:
+                try:
+                    await handler.disconnect_server(server_name)
+                except Exception:
+                    pass
+                raise
             except Exception:
                 # On failure, don't keep a broken connection alive
                 try:
@@ -1167,6 +1226,8 @@ class MCPService:
         params: Dict[str, Any],
         user_credentials: Optional[Dict[str, Any]] = None,
         request_timeout: Optional[int] = None,
+        request_id: Optional[str] = None,
+        cancellation_token: Optional[CancellationToken] = None,
     ) -> Dict[str, Any]:
         """Ephemeral connect/execute/disconnect (TTL=0 fallback)."""
         async with self.locks[server_id]:
@@ -1180,12 +1241,15 @@ class MCPService:
                     credentials=user_credentials,
                     request_timeout=request_timeout or config.get("request_timeout", 60),
                     server_id=server_id,
+                    transport_type=config.get("transport_type") or self.transport_cache.get(server_id),
                 )
                 return await handler.execute_tool(
                     server_name=server_name,
                     tool_name=tool_name,
                     params=params,
-                    cancellation_token=None,
+                    request_id=request_id,
+                    timeout=request_timeout or config.get("request_timeout", 60),
+                    cancellation_token=cancellation_token,
                 )
             finally:
                 try:

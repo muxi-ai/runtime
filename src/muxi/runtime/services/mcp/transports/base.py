@@ -164,8 +164,8 @@ class BaseTransport:
         self.request_timeout = request_timeout
         self.auth = auth
         self.connected = False
-        self.connect_time = None
-        self.last_activity = None
+        self.connect_time: Optional[datetime] = None
+        self.last_activity: Optional[datetime] = None
 
         # Connection statistics
         self.connection_stats = {
@@ -188,13 +188,19 @@ class BaseTransport:
         """
         raise NotImplementedError("Subclasses must implement connect()")
 
-    async def send_request(self, request_obj: Any, timeout: Optional[int] = None) -> Dict[str, Any]:
+    async def send_request(
+        self,
+        request_obj: Any,
+        timeout: Optional[int] = None,
+        cancellation_token: Optional[CancellationToken] = None,
+    ) -> Dict[str, Any]:
         """
         Send a request to the MCP server.
 
         Args:
             request_obj: The request object to send
             timeout: Optional timeout in seconds (overrides default)
+            cancellation_token: Optional token for cooperative cancellation
 
         Returns:
             Dict: The response from the server

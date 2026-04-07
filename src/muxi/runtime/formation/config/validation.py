@@ -287,7 +287,7 @@ class FormationValidator:
 
             # Check for agent-specific fields that are NOT also formation fields
             # Note: 'system_message' can be used in both formations and agents
-            agent_fields = ["name", "llm_models", "role", "specialties"]
+            agent_fields = ["name", "llm_models", "role", "specialties", "specialization"]
             has_agent_specific_fields = any(field in config for field in agent_fields)
 
             # Must have agent-specific fields to be considered an agent file

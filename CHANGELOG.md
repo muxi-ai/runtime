@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.20260407.0 - Specialist Routing & HTTP MCP Request Lifecycle Hardening
+
+### Bug Fixes
+
+- **Specialist agent metadata was ignored during Overlord routing** -- The routing prompt and fallback heuristic only considered `agent_id` and `description`, even though the overlord had already loaded richer metadata such as `role`, `specialties`, and nested `specialization.*`. This caused specialist agents (for example MS365-focused agents) to lose ambiguous domain requests to the default generalist unless the user's wording was extremely explicit. Fix: normalize `specialization.domain` and `specialization.keywords` into routing metadata at load time, surface `role`, `specialties`, specialization domain, and specialization keywords in the routing prompt, and teach the heuristic fallback to prefer specialists when metadata overlaps the request.
+- **Routing cache leaked agent choices across sessions** -- `AgentRouter` cached decisions by raw message string only. Short follow-up turns like `"yes"` or `"continue"` could reuse a routing decision from a different session, overriding the intended session context. Fix: cache keys are now built from `(session_id, normalized_message)` and follow-up routing uses the last agent only within the same session.
+- **Current-request extraction dropped multiline context before routing** -- When the enhanced prompt contained `=== CURRENT REQUEST ===`, the overlord only extracted the first `User:` line for routing. Additional lines that clarified the domain could be silently discarded before agent selection. Fix: the router now preserves the full current-request block until the next section marker.
+- **HTTP MCP tool calls ignored per-request timeouts** -- `StreamableHTTPTransport` and `HTTPSSETransport` enforced timeouts during connect/init, but raw `session.call_tool()`, `list_tools()`, `list_resources()`, and `list_prompts()` calls were not wrapped with `asyncio.wait_for()`. HTTP requests could therefore outlive the configured timeout and stall for minutes. Fix: both HTTP transports now enforce `timeout or self.request_timeout` around every MCP SDK operation.
+- **HTTP SSE transport hardcoded multi-minute read timeouts** -- The SSE transport used `timeout=60` and `sse_read_timeout=300` regardless of the configured request timeout, creating a large mismatch between formation config and actual behavior. Fix: connect/init now use the configured timeout and the SSE read timeout is derived from that request timeout instead of a fixed 5-minute value.
+- **Live MCP reconnects ignored explicit transport type** -- MCP registration stored the resolved/configured `transport_type`, but live reconnects always went back through auto/fallback transport selection. This could re-enter streamable-vs-SSE detection on every reconnect even when the formation had already chosen a transport. Fix: `MCPServerClient` now preserves explicit transport type during reconnects and the factory respects explicit `streamable_http` / `http_sse` requests directly.
+- **Client disconnects left poisoned pooled HTTP MCP connections behind** -- When a streaming chat disconnected, the outer SSE response was cancelled but the underlying MCP request was not tied to the overlord request lifecycle. A long-running HTTP MCP call could remain alive on a pooled connection and wedge later requests behind the same stale session or per-server lock. Fix: thread `request_id` and `CancellationToken` through the MCP service/handler path, add `MCPService.cancel_requests_for_request()`, close bad pooled live connections on cancellation, and invoke that cleanup from the chat stream generator's disconnect path.
+
+### Tests
+
+- **Focused routing and HTTP MCP lifecycle unit coverage** -- Added `tests/unit/test_agent_router.py` to cover specialist metadata in routing prompts, session-scoped cache behavior, and specialist fallback preference. Added `tests/unit/test_mcp_http_request_lifecycle.py` to cover HTTP transport timeout enforcement, explicit transport-type reconnects, request tracking propagation, and pooled-connection cancellation cleanup.
+
 ## 0.20260403.0 - MCP Accept Header & Agent Context Fixes
 
 ### Dependencies

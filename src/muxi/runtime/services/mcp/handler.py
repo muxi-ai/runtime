@@ -61,7 +61,7 @@ from ...utils.id_generator import generate_nanoid
 from .. import observability
 
 # Import all transport classes from the new modular structure
-from .transports import CancellationToken, MCPConnectionError, MCPTransportFactory
+from .transports import BaseTransport, CancellationToken, MCPConnectionError, MCPTransportFactory
 
 
 class MCPServerClient:
@@ -80,6 +80,7 @@ class MCPServerClient:
         args: Optional[List[str]] = None,
         credentials: Optional[Dict[str, Any]] = None,
         request_timeout: int = 60,
+        transport_type: Optional[str] = None,
     ):
         """
         Initialize the MCP server client.
@@ -98,9 +99,10 @@ class MCPServerClient:
         self.args = args
         self.credentials = credentials
         self.request_timeout = request_timeout
-        self.transport = None
+        self.transport_type = transport_type
+        self.transport: Optional[BaseTransport] = None
         self.connected = False
-        self.last_activity = None
+        self.last_activity: Optional[datetime] = None
 
         # Request tracking using overlord request_id as primary key
         # Maps request_id -> {json_rpc_id, task, start_time, cancellation_token}
@@ -126,11 +128,23 @@ class MCPServerClient:
             # Create transport using factory with automatic type selection
             # For HTTP servers, use the fallback method to auto-detect SSE
             if self.url:
-                self.transport = await MCPTransportFactory.create_transport_with_fallback(
-                    url=self.url,
-                    auth=self.credentials,
-                    request_timeout=self.request_timeout,
-                )
+                if self.transport_type in (
+                    MCPTransportFactory.TRANSPORT_STREAMABLE_HTTP,
+                    MCPTransportFactory.TRANSPORT_HTTP_SSE,
+                ):
+                    self.transport = MCPTransportFactory.create_transport(
+                        url=self.url,
+                        auth=self.credentials,
+                        request_timeout=self.request_timeout,
+                        transport_type=self.transport_type,
+                    )
+                    await self.transport.connect()
+                else:
+                    self.transport = await MCPTransportFactory.create_transport_with_fallback(
+                        url=self.url,
+                        auth=self.credentials,
+                        request_timeout=self.request_timeout,
+                    )
             else:
                 self.transport = MCPTransportFactory.create_transport(
                     command=self.command,
@@ -217,6 +231,7 @@ class MCPServerClient:
         method: str,
         params: Dict[str, Any],
         request_id: Optional[str] = None,
+        timeout: Optional[int] = None,
         cancellation_token: Optional[CancellationToken] = None,
     ) -> Dict[str, Any]:
         """
@@ -290,12 +305,18 @@ class MCPServerClient:
         try:
             # Create task for the actual request
             task = asyncio.create_task(
-                self.transport.send_request(request_data, cancellation_token)
+                self.transport.send_request(
+                    request_data,
+                    timeout=timeout,
+                    cancellation_token=cancellation_token,
+                )
             )
 
             # Store task for cancellation purposes
             self.request_tasks[tracking_id] = task
             request_info["task"] = task
+            if cancellation_token:
+                cancellation_token.register(task)
 
             # Wait for completion
             response = await task
@@ -372,6 +393,8 @@ class MCPServerClient:
             raise
         finally:
             # Clean up tracking
+            if cancellation_token:
+                cancellation_token.unregister(request_info.get("task"))
             self.active_requests.pop(tracking_id, None)
             self.request_tasks.pop(tracking_id, None)
 
@@ -380,6 +403,7 @@ class MCPServerClient:
         tool_name: str,
         params: Dict[str, Any],
         request_id: Optional[str] = None,
+        timeout: Optional[int] = None,
         cancellation_token: Optional[CancellationToken] = None,
     ) -> Dict[str, Any]:
         """
@@ -398,6 +422,7 @@ class MCPServerClient:
             "tools/call",
             {"name": tool_name, "arguments": params},
             request_id=request_id,
+            timeout=timeout,
             cancellation_token=cancellation_token,
         )
 
@@ -408,7 +433,7 @@ class MCPServerClient:
         Returns:
             Dict with connection statistics and transport details
         """
-        stats = {
+        stats: Dict[str, Any] = {
             "server_name": self.name,
             "url": self.url,
             "command": self.command,
@@ -628,6 +653,7 @@ class MCPHandler:
         credentials: Optional[Dict[str, Any]] = None,
         request_timeout: int = 60,
         server_id: Optional[str] = None,
+        transport_type: Optional[str] = None,
     ) -> bool:
         """
         Connect to an MCP server.
@@ -669,6 +695,7 @@ class MCPHandler:
             args=args,
             credentials=credentials,
             request_timeout=request_timeout,
+            transport_type=transport_type,
         )
 
         try:
@@ -794,7 +821,12 @@ class MCPHandler:
                     continue
 
                 # Execute the tool
-                result = await self.execute_tool(server_name, tool_name, params, cancellation_token)
+                result = await self.execute_tool(
+                    server_name,
+                    tool_name,
+                    params,
+                    cancellation_token=cancellation_token,
+                )
                 results.append({"tool": tool_name, "result": result})
 
             except Exception as e:
@@ -808,6 +840,7 @@ class MCPHandler:
         tool_name: str,
         params: Dict[str, Any],
         request_id: Optional[str] = None,
+        timeout: Optional[int] = None,
         cancellation_token: Optional[CancellationToken] = None,
     ) -> Dict[str, Any]:
         """
@@ -831,7 +864,13 @@ class MCPHandler:
             raise ValueError(f"Server '{server_name}' not found")
 
         server = self.servers[server_name]
-        return await server.execute_tool(tool_name, params, request_id, cancellation_token)
+        return await server.execute_tool(
+            tool_name,
+            params,
+            request_id=request_id,
+            timeout=timeout,
+            cancellation_token=cancellation_token,
+        )
 
     async def list_tools(self, server_name: str) -> List[Dict[str, Any]]:
         """
@@ -982,7 +1021,7 @@ class MCPHandler:
         Returns:
             Dict with overall connection statistics
         """
-        stats = {
+        stats: Dict[str, Any] = {
             "total_servers": len(self.servers),
             "connected_servers": sum(1 for s in self.servers.values() if s.connected),
             "servers": {},

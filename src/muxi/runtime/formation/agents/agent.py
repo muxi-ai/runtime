@@ -3039,6 +3039,14 @@ class Agent:
             if self.overlord and hasattr(self.overlord, "credential_resolver"):
                 credential_resolver = self.overlord.credential_resolver
 
+            current_request_id = None
+            if self.overlord:
+                from ...services.observability.context import get_current_request_context
+
+                request_context = get_current_request_context()
+                if request_context:
+                    current_request_id = request_context.id
+
             # Get recent conversation context for credential selection
             conversation_context = []
             if user_id:
@@ -3091,6 +3099,7 @@ class Agent:
                     parameters,
                     request_timeout=self.request_timeout,
                     user_id=user_id,
+                    request_id=current_request_id,
                     credential_resolver=credential_resolver,
                     conversation_context=conversation_context,
                 )
@@ -3111,6 +3120,7 @@ class Agent:
                             parameters,
                             request_timeout=self.request_timeout,
                             user_id=user_id,
+                            request_id=current_request_id,
                             credential_resolver=credential_resolver,
                             conversation_context=conversation_context,
                         )

@@ -82,6 +82,11 @@ class MCPTransportFactory:
         # Extract common parameters
         request_timeout = kwargs.get("request_timeout", 60)
 
+        if transport_type == MCPTransportFactory.TRANSPORT_COMMAND and command is not None:
+            return CommandLineTransport(
+                command, args=args, auth=auth, request_timeout=request_timeout
+            )
+
         # Handle command-line transport
         if command is not None:
             return CommandLineTransport(
@@ -90,6 +95,12 @@ class MCPTransportFactory:
 
         # Handle HTTP-based transports
         if url is not None:
+            if transport_type == MCPTransportFactory.TRANSPORT_HTTP_SSE:
+                return HTTPSSETransport(url, request_timeout=request_timeout, auth=auth)
+
+            if transport_type == MCPTransportFactory.TRANSPORT_STREAMABLE_HTTP:
+                return StreamableHTTPTransport(url, request_timeout=request_timeout, auth=auth)
+
             # Check if we already know this server uses SSE
             with _sse_cache_lock:
                 if url in _sse_server_cache:

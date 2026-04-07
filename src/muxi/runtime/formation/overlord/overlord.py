@@ -1532,13 +1532,7 @@ class Overlord:
                     self.pending_external_registrations.add(agent_id)
 
                 # Store agent metadata for routing
-                self.agent_descriptions[agent_id] = agent_config.get("description", "")
-                self.agent_metadata[agent_id] = {
-                    "name": agent_config.get("name", agent_id),
-                    "role": agent_config.get("role", "general"),
-                    "specialties": agent_config.get("specialties", []),
-                    "system_message": agent_config.get("system_message", ""),
-                }
+                self._store_agent_routing_metadata(agent_id, agent_config, agent=agent)
 
                 loaded_count += 1
 
@@ -1584,6 +1578,77 @@ class Overlord:
 
         # Set default agent if not already configured
         await self._set_default_agent_if_needed()
+
+    def _normalize_agent_specialization(self, agent_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize agent specialization metadata into routing-friendly fields."""
+        specialization = agent_config.get("specialization", {})
+        domain = ""
+        keywords = []
+
+        if isinstance(specialization, dict):
+            domain = str(specialization.get("domain", "")).strip()
+            raw_keywords = specialization.get("keywords", [])
+            if isinstance(raw_keywords, str):
+                raw_keywords = [raw_keywords]
+            keywords = [str(keyword).strip() for keyword in raw_keywords if str(keyword).strip()]
+        elif isinstance(specialization, str):
+            domain = specialization.strip()
+        elif isinstance(specialization, (list, tuple, set)):
+            keywords = [str(keyword).strip() for keyword in specialization if str(keyword).strip()]
+
+        capabilities = []
+        if domain:
+            capabilities.append(domain)
+        capabilities.extend(keywords)
+
+        return {
+            "domain": domain,
+            "keywords": list(dict.fromkeys(keywords)),
+            "capabilities": list(dict.fromkeys(capabilities)),
+        }
+
+    def _build_agent_routing_metadata(
+        self, agent_id: str, agent_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Build normalized routing metadata for an agent configuration."""
+        specialization = self._normalize_agent_specialization(agent_config)
+
+        raw_specialties = agent_config.get("specialties", [])
+        if isinstance(raw_specialties, str):
+            raw_specialties = [raw_specialties]
+        specialties = [str(item).strip() for item in raw_specialties if str(item).strip()]
+        specialties.extend(
+            capability
+            for capability in specialization["capabilities"]
+            if capability and capability not in specialties
+        )
+
+        role = agent_config.get("role")
+        if not role and specialization["capabilities"]:
+            role = "specialist"
+
+        return {
+            "name": agent_config.get("name", agent_id),
+            "description": agent_config.get("description", ""),
+            "role": role or "general",
+            "specialties": specialties,
+            "specialization_domain": specialization["domain"],
+            "specialization_keywords": specialization["keywords"],
+            "specialization_capabilities": specialization["capabilities"],
+            "system_message": agent_config.get("system_message", ""),
+        }
+
+    def _store_agent_routing_metadata(
+        self, agent_id: str, agent_config: Dict[str, Any], agent: Optional[Any] = None
+    ) -> None:
+        """Store normalized routing metadata for an agent."""
+        metadata = self._build_agent_routing_metadata(agent_id, agent_config)
+        if agent is not None and getattr(agent, "specialties", None):
+            metadata["specialties"] = list(
+                dict.fromkeys(metadata["specialties"] + list(agent.specialties))
+            )
+        self.agent_descriptions[agent_id] = metadata["description"]
+        self.agent_metadata[agent_id] = metadata
 
     def _inject_skill_catalog(self, agent: Any, agent_id: str) -> None:
         """Inject skill catalog and specialty descriptions into an agent."""
@@ -1644,13 +1709,7 @@ class Overlord:
                 self._inject_skill_catalog(agent, agent_id)
 
                 # Store agent metadata
-                self.agent_descriptions[agent_id] = agent_config.get("description", "")
-                self.agent_metadata[agent_id] = {
-                    "name": agent_config.get("name", agent_id),
-                    "role": agent_config.get("role", "general"),
-                    "specialties": agent_config.get("specialties", []),
-                    "system_message": agent_config.get("system_message", ""),
-                }
+                self._store_agent_routing_metadata(agent_id, agent_config, agent=agent)
 
                 pass  # REMOVED: init-phase observe() call
 
@@ -1764,9 +1823,14 @@ class Overlord:
             knowledge_config=agent_config.get("knowledge"),
         )
 
-        # Set agent role and specialties from config
-        agent.role = agent_config.get("role", "general")
-        agent.specialties = agent_config.get("specialties", [])
+        # Set agent routing metadata from config
+        routing_metadata = self._build_agent_routing_metadata(
+            agent_config.get("id") or agent_config.get("name") or "unknown", agent_config
+        )
+        agent.role = routing_metadata["role"]
+        agent.specialties = list(routing_metadata["specialties"])
+        agent.specialization = list(routing_metadata["specialization_capabilities"])
+        agent.description = routing_metadata["description"]
 
         # Register agent-specific MCP servers if configured
         # This will fail fast if any MCP server cannot be initialized
@@ -3383,13 +3447,7 @@ Agent response: {raw_response}"""
                 agent_created = True
 
                 # Store agent metadata for routing
-                self.agent_descriptions[agent_id] = processed_config.get("description", "")
-                self.agent_metadata[agent_id] = {
-                    "name": processed_config.get("name", agent_id),
-                    "role": processed_config.get("role", "general"),
-                    "specialties": processed_config.get("specialties", []),
-                    "system_message": processed_config.get("system_message", ""),
-                }
+                self._store_agent_routing_metadata(agent_id, processed_config, agent=agent)
                 metadata_added = True
 
                 # Update workflow components only after all critical operations succeed
@@ -7324,10 +7382,19 @@ Agent response: {raw_response}"""
             if "=== CURRENT REQUEST ===" in message and "User:" in message:
                 lines = message.split("\n")
                 for i, line in enumerate(lines):
-                    if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                        next_line = lines[i + 1].strip()
-                        if next_line.startswith("User:"):
-                            routing_message = next_line[5:].strip()
+                    if line.strip() == "=== CURRENT REQUEST ===":
+                        request_lines = []
+                        for request_line in lines[i + 1 :]:
+                            stripped_line = request_line.strip()
+                            if stripped_line.startswith("===") and stripped_line.endswith("==="):
+                                break
+                            if request_line.startswith("User:"):
+                                request_lines.append(request_line[5:].strip())
+                            elif request_lines:
+                                request_lines.append(request_line)
+                        candidate_message = "\n".join(request_lines).strip()
+                        if candidate_message:
+                            routing_message = candidate_message
                             break
 
             try:

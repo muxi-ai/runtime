@@ -167,6 +167,12 @@ class ChatOrchestrator:
             # Client disconnected or stream ended -- cancel if still running
             if processing_task and not processing_task.done():
                 processing_task.cancel()
+                mcp_service = getattr(self.overlord, "mcp_service", None)
+                if mcp_service and request_id:
+                    with suppress(Exception):
+                        await mcp_service.cancel_requests_for_request(
+                            request_id, close_live_connections=True
+                        )
                 # Wait briefly for the task to acknowledge cancellation.
                 # Don't wait forever -- the task may be stuck in a blocking
                 # MCP/DB call that doesn't respond to cancellation.
@@ -176,6 +182,7 @@ class ChatOrchestrator:
                 await self.overlord.request_tracker.update_request(
                     request_id, RequestStatus.CANCELLED
                 )
+            streaming.disable_streaming(request_id)
 
     async def chat(
         self,
