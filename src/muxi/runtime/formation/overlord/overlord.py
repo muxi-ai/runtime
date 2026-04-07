@@ -9337,11 +9337,7 @@ Agent response: {raw_response}"""
                         messages=[
                             {
                                 "role": "system",
-                                "content": (
-                                    "You are a helpful assistant that synthesizes multiple task results "
-                                    "into a coherent, comprehensive response. Focus on addressing the user's "
-                                    "original request while incorporating all relevant information from the tasks."
-                                ),
+                                "content": self._get_workflow_synthesis_system_prompt(),
                             },
                             {"role": "user", "content": synthesis_prompt},
                         ],
@@ -9433,6 +9429,10 @@ Agent response: {raw_response}"""
             [
                 "Based on the original user request and the task results above, provide an appropriate response:",
                 "",
+                "- Preserve explicit dates, weekdays, times, and time ranges exactly as they appear in the task results.",
+                "- Do not rewrite absolute dates/times into relative labels like 'today', 'tomorrow', or 'yesterday'",
+                "  unless the task results already use those exact relative words.",
+                "",
                 "- If this appears to be a conversational request (greeting, casual inquiry, social interaction, etc.),",  # noqa: E501
                 "  provide a natural, conversational response. Respond directly as if having a conversation,",
                 "  not describing what tasks were completed.",
@@ -9448,6 +9448,17 @@ Agent response: {raw_response}"""
         )
 
         return "\n".join(prompt_parts)
+
+    def _get_workflow_synthesis_system_prompt(self) -> str:
+        """Return the system prompt used for final workflow synthesis."""
+        return (
+            "You are a helpful assistant that synthesizes multiple task results into a coherent, "
+            "comprehensive response. Focus on addressing the user's original request while "
+            "incorporating all relevant information from the tasks. Preserve explicit dates, "
+            "weekdays, times, and time ranges exactly as they appear in the task results. Do not "
+            "convert absolute dates or times into relative wording like 'today', 'tomorrow', or "
+            "'yesterday' unless the task results already use those exact relative terms."
+        )
 
     def _extract_key_outcomes(self, outputs: Dict[str, Any], task_description: str) -> str:
         """

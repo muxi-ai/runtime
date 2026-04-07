@@ -6,11 +6,13 @@
 
 - **`muxi-generalist` could still win despite a clearly better domain match** -- Even after the earlier routing metadata improvements, the LLM router could still return `muxi-generalist` for requests that strongly matched a developer-supplied agent such as an MS365/profile assistant. Fix: keep normal LLM routing, but when the LLM selects `muxi-generalist`, run a lightweight deterministic overlap check across the other available agents and override the result only when a non-`muxi-generalist` agent is a clearly stronger match.
 - **Routing heuristic was harder to audit than necessary** -- The fallback scoring logic mixed several weighting rules without explaining why each existed, which made future tuning riskier. Fix: factor the scoring into `_score_available_agents()`, document the scoring rules, add inline comments for each signal, and update the routing prompt to explicitly state that `muxi-generalist` should be used only as a fallback when no other available agent is a strong match.
+- **Workflow synthesis could rewrite exact email/calendar dates into relative labels** -- Final workflow synthesis and synthesis-task prompts told the LLM to be coherent and concise, but gave no instruction to preserve absolute dates and times from prior task results. This allowed models to rewrite concrete values like `Tuesday, April 7, 2026` into relative language such as `today`, which is especially dangerous for briefings, emails, and calendar summaries. Fix: add explicit date-preservation guardrails to both the workflow synthesis prompt and workflow task prompt so absolute dates, weekdays, times, and ranges are kept exactly as written unless the source data already uses relative wording.
 
 ### Tests
 
 - **Focused unit coverage for `muxi-generalist` override behavior** -- Extended `tests/unit/test_agent_router.py` to verify that `muxi-generalist` is overridden for a strong MS365/profile request but retained for broad requests like "Tell me a joke".
-- **Random e2e regression sniff tests** -- Ran 10 random standalone e2e tests across routing-adjacent and unrelated areas (`topic_tagging`, `api`, `skills`, `mcp`, `knowledge`, `memory`, `clarification`, `async`, and `formatting`) with all tests passing.
+- **Focused unit coverage for date-preservation prompt guardrails** -- Added `tests/unit/test_workflow_date_preservation_prompts.py` to verify that workflow synthesis and synthesis-task prompts explicitly preserve absolute dates/times and keep prior-step date strings intact.
+- **Random e2e regression sniff tests** -- Ran 15 random standalone e2e tests across routing-adjacent and unrelated areas (`topic_tagging`, `api`, `skills`, `mcp`, `knowledge`, `memory`, `clarification`, `async`, `formatting`, `streaming`, `multimodal`, `triggers`, and `artifacts`) with all tests passing.
 
 ## 0.20260407.0 - Specialist Routing & HTTP MCP Request Lifecycle Hardening
 
