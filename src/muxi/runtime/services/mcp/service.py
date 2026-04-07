@@ -1241,7 +1241,8 @@ class MCPService:
                     credentials=user_credentials,
                     request_timeout=request_timeout or config.get("request_timeout", 60),
                     server_id=server_id,
-                    transport_type=config.get("transport_type") or self.transport_cache.get(server_id),
+                    transport_type=config.get("transport_type")
+                    or self.transport_cache.get(server_id),
                 )
                 return await handler.execute_tool(
                     server_name=server_name,

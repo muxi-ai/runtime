@@ -307,7 +307,9 @@ class AgentRouter:
         for agent_id in candidate_agents:
             metadata = self._get_agent_routing_metadata(agent_id)
             specialties = ", ".join(metadata["specialties"]) or "none listed"
-            specialization_keywords = ", ".join(metadata["specialization_keywords"]) or "none listed"
+            specialization_keywords = (
+                ", ".join(metadata["specialization_keywords"]) or "none listed"
+            )
             specialization_domain = metadata["specialization_domain"] or "none listed"
             description = metadata["description"] or "General purpose agent"
             agent_cards.append(
@@ -406,7 +408,9 @@ Your response: [agent-id] or SECURITY_BLOCK"""
         message_lower = message.lower()
         message_tokens = {token for token in self._tokenize(message_lower) if len(token) > 2}
         last_agent = self._session_last_agent.get(session_id) if session_id else None
-        if last_agent in available_agents and self._looks_like_follow_up(message_lower, message_tokens):
+        if last_agent in available_agents and self._looks_like_follow_up(
+            message_lower, message_tokens
+        ):
             return str(last_agent)
 
         agent_scores = {}
@@ -437,10 +441,7 @@ Your response: [agent-id] or SECURITY_BLOCK"""
                 score += 5
 
             metadata_tokens = {
-                token
-                for text in metadata_texts
-                for token in self._tokenize(text)
-                if len(token) > 2
+                token for text in metadata_texts for token in self._tokenize(text) if len(token) > 2
             }
             overlap = message_tokens & metadata_tokens
             score += len(overlap)
