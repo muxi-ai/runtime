@@ -26,6 +26,9 @@ class AgentRouter:
     # Security is now handled by RequestAnalyzer and Agent Router LLM which provide
     # context-aware, multilingual, intent-based threat detection without the false
     # positives that regex patterns caused on technical discussions.
+    MUXI_GENERALIST_AGENT_ID = "muxi-generalist"
+    STRONG_NON_MUXI_MATCH_THRESHOLD = 7
+    STRONG_NON_MUXI_MATCH_MARGIN = 3
 
     def __init__(self, overlord):
         """
@@ -113,6 +116,122 @@ class AgentRouter:
         if len(tokens) <= 3 and len(message.strip()) <= 25:
             return True
         return any(token in follow_up_terms for token in tokens) and len(message.strip()) <= 40
+
+    def _score_available_agents(
+        self, message: str, available_agents: list[str], session_id: Optional[str] = None
+    ) -> Dict[str, int]:
+        """
+        Score each available agent using the same lightweight metadata heuristic as fallback routing.
+
+        The score intentionally stays simple and deterministic:
+        - exact specialty phrase matches get the biggest boost
+        - specialization keywords/domains add medium boosts
+        - token overlap with metadata adds smaller incremental boosts
+        - specialists get a bonus once they have any positive evidence
+        - the previous session agent gets a small continuity bonus
+
+        If any specialist scores meaningfully above the default agent, the default agent is
+        dampened to keep it from winning on generic wording alone.
+        """
+        message_lower = message.lower()
+        message_tokens = {token for token in self._tokenize(message_lower) if len(token) > 2}
+        last_agent = self._session_last_agent.get(session_id) if session_id else None
+
+        agent_scores = {}
+        specialist_scores = {}
+        default_agent = getattr(self.overlord, "default_agent_id", None)
+
+        for agent_id in available_agents:
+            metadata = self._get_agent_routing_metadata(agent_id)
+            score = 0
+            # Build a token pool from all routing-facing metadata so broad semantic overlap
+            # still counts even when we do not have an exact phrase match.
+            metadata_texts = [
+                metadata["name"],
+                metadata["description"],
+                metadata["role"],
+                metadata["specialization_domain"],
+                *metadata["specialties"],
+                *metadata["specialization_keywords"],
+            ]
+
+            # Direct specialty phrases are the strongest signal because they usually
+            # represent explicit developer intent about what the agent should handle.
+            for phrase in metadata["specialties"]:
+                if phrase.lower() in message_lower:
+                    score += 5
+
+            # Keywords are narrower hints than specialties, so they get a slightly
+            # smaller boost but still outweigh generic token overlap.
+            for keyword in metadata["specialization_keywords"]:
+                if keyword.lower() in message_lower:
+                    score += 4
+
+            # A matching specialization domain is another strong indicator that the
+            # request belongs with this agent.
+            specialization_domain = metadata["specialization_domain"].lower()
+            if specialization_domain and specialization_domain in message_lower:
+                score += 5
+
+            # Token overlap is the catch-all heuristic for requests that are semantically
+            # close to an agent's metadata without reusing the exact phrases verbatim.
+            metadata_tokens = {
+                token for text in metadata_texts for token in self._tokenize(text) if len(token) > 2
+            }
+            overlap = message_tokens & metadata_tokens
+            score += len(overlap)
+
+            # Once a specialist has any positive signal, give it a bonus so narrowly
+            # scoped agents beat broad defaults more consistently.
+            if metadata["role"] == "specialist" and score > 0:
+                score += 3
+                specialist_scores[agent_id] = score
+
+            # Keep conversational continuity when the same agent still has evidence for
+            # the next turn, but avoid forcing a carry-over on zero-match requests.
+            if agent_id == last_agent and score > 0:
+                score += 2
+
+            agent_scores[agent_id] = score
+
+        # If a specialist clearly has evidence, suppress the default agent's score so
+        # a generic description does not edge out the better-matched specialist.
+        if specialist_scores and default_agent in agent_scores:
+            best_specialist_score = max(specialist_scores.values())
+            if agent_scores[default_agent] <= best_specialist_score:
+                agent_scores[default_agent] = min(agent_scores[default_agent], 0)
+
+        return agent_scores
+
+    def _find_strong_non_muxi_generalist_match(
+        self, message: str, available_agents: list[str], session_id: Optional[str] = None
+    ) -> Optional[str]:
+        """Return a strong non-muxi match when muxi-generalist should be treated as fallback."""
+        if self.MUXI_GENERALIST_AGENT_ID not in available_agents:
+            return None
+
+        non_muxi_agents = [
+            agent_id for agent_id in available_agents if agent_id != self.MUXI_GENERALIST_AGENT_ID
+        ]
+        if not non_muxi_agents:
+            return None
+
+        agent_scores = self._score_available_agents(
+            message, available_agents, session_id=session_id
+        )
+        muxi_score = agent_scores.get(self.MUXI_GENERALIST_AGENT_ID, 0)
+        best_non_muxi_agent = max(
+            non_muxi_agents, key=lambda agent_id: agent_scores.get(agent_id, 0)
+        )
+        best_non_muxi_score = agent_scores.get(best_non_muxi_agent, 0)
+
+        if (
+            best_non_muxi_score >= self.STRONG_NON_MUXI_MATCH_THRESHOLD
+            and best_non_muxi_score >= muxi_score + self.STRONG_NON_MUXI_MATCH_MARGIN
+        ):
+            return best_non_muxi_agent
+
+        return None
 
     async def select_agent_for_message(
         self, message: str, request_id: Optional[str] = None, session_id: Optional[str] = None
@@ -246,12 +365,37 @@ class AgentRouter:
                     description="Routing model returned invalid agent, used intelligent selection",
                 )
             else:
-                observability.observe(
-                    event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
-                    level=observability.EventLevel.INFO,
-                    data={"selected_agent": selected_agent_id, "method": "llm_routing"},
-                    description="Agent selected via LLM routing model",
-                )
+                if selected_agent_id == self.MUXI_GENERALIST_AGENT_ID:
+                    override_agent_id = self._find_strong_non_muxi_generalist_match(
+                        message, available_agents, session_id=session_id
+                    )
+                    if override_agent_id:
+                        observability.observe(
+                            event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "selected_agent": override_agent_id,
+                                "original_selected_agent": selected_agent_id,
+                                "method": "llm_routing_override",
+                                "reason": "strong_non_muxi_match",
+                            },
+                            description="Overrode muxi-generalist with stronger non-muxi match",
+                        )
+                        selected_agent_id = override_agent_id
+                    else:
+                        observability.observe(
+                            event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
+                            level=observability.EventLevel.INFO,
+                            data={"selected_agent": selected_agent_id, "method": "llm_routing"},
+                            description="Agent selected via LLM routing model",
+                        )
+                else:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
+                        level=observability.EventLevel.INFO,
+                        data={"selected_agent": selected_agent_id, "method": "llm_routing"},
+                        description="Agent selected via LLM routing model",
+                    )
 
             # Cache the result for future identical messages (if caching is enabled)
             if caching_enabled:
@@ -356,6 +500,7 @@ For safe messages, analyze and select the best agent considering:
 - The subject matter and topic of the message
 - The specific capabilities, role, specialties, specialization domain, and specialization keywords each agent offers
 - Which agent would be most helpful for this type of request
+- Use the "muxi-generalist" agent only as a fallback when no other available agent is a strong match for the request
 - When a specialist agent clearly matches the request, prefer it over the default/generalist agent
 - If there is a previous agent for this session, prefer it for follow-up messages that lack explicit topic keywords (e.g., short replies, pronouns, continuation of a task)
 
@@ -408,57 +553,15 @@ Your response: [agent-id] or SECURITY_BLOCK"""
         message_lower = message.lower()
         message_tokens = {token for token in self._tokenize(message_lower) if len(token) > 2}
         last_agent = self._session_last_agent.get(session_id) if session_id else None
+        default_agent = getattr(self.overlord, "default_agent_id", None)
         if last_agent in available_agents and self._looks_like_follow_up(
             message_lower, message_tokens
         ):
             return str(last_agent)
 
-        agent_scores = {}
-        specialist_scores = {}
-        default_agent = getattr(self.overlord, "default_agent_id", None)
-        for agent_id in available_agents:
-            metadata = self._get_agent_routing_metadata(agent_id)
-            score = 0
-            metadata_texts = [
-                metadata["name"],
-                metadata["description"],
-                metadata["role"],
-                metadata["specialization_domain"],
-                *metadata["specialties"],
-                *metadata["specialization_keywords"],
-            ]
-
-            for phrase in metadata["specialties"]:
-                if phrase.lower() in message_lower:
-                    score += 5
-
-            for keyword in metadata["specialization_keywords"]:
-                if keyword.lower() in message_lower:
-                    score += 4
-
-            specialization_domain = metadata["specialization_domain"].lower()
-            if specialization_domain and specialization_domain in message_lower:
-                score += 5
-
-            metadata_tokens = {
-                token for text in metadata_texts for token in self._tokenize(text) if len(token) > 2
-            }
-            overlap = message_tokens & metadata_tokens
-            score += len(overlap)
-
-            if metadata["role"] == "specialist" and score > 0:
-                score += 3
-                specialist_scores[agent_id] = score
-
-            if agent_id == last_agent and score > 0:
-                score += 2
-
-            agent_scores[agent_id] = score
-
-        if specialist_scores and default_agent in agent_scores:
-            best_specialist_score = max(specialist_scores.values())
-            if agent_scores[default_agent] <= best_specialist_score:
-                agent_scores[default_agent] = min(agent_scores[default_agent], 0)
+        agent_scores = self._score_available_agents(
+            message, available_agents, session_id=session_id
+        )
 
         if agent_scores:
             best_agent = max(agent_scores.keys(), key=lambda x: agent_scores[x])

@@ -21,7 +21,7 @@ class FakeRoutingModel:
 
 
 class FakeOverlord:
-    def __init__(self, routing_model):
+    def __init__(self, routing_model, include_muxi_generalist=False):
         self.routing_model = routing_model
         self.agents = {
             "assistant": SimpleNamespace(),
@@ -49,9 +49,22 @@ class FakeOverlord:
                 "specialization_keywords": ["profile", "current user profile", "email"],
             },
         }
+        if include_muxi_generalist:
+            self.agents["muxi-generalist"] = SimpleNamespace()
+            self.agent_descriptions["muxi-generalist"] = (
+                "Built-in fallback assistant for general tasks."
+            )
+            self.agent_metadata["muxi-generalist"] = {
+                "name": "MUXI Generalist",
+                "description": self.agent_descriptions["muxi-generalist"],
+                "role": "general",
+                "specialties": ["general help", "broad questions"],
+                "specialization_domain": "",
+                "specialization_keywords": ["general", "help", "questions"],
+            }
         self.active_agent_tracker = FakeActiveAgentTracker()
         self.formation_config = {"overlord": {"caching": {"enabled": True, "ttl": 3600}}}
-        self.default_agent_id = "assistant"
+        self.default_agent_id = "muxi-generalist" if include_muxi_generalist else "assistant"
 
     async def get_model_for_capability(self, capability):
         return self.routing_model
@@ -97,3 +110,23 @@ class TestAgentRouter:
         )
 
         assert selected == "ms365-assistant"
+
+    @pytest.mark.asyncio
+    async def test_llm_muxi_generalist_selection_is_overridden_by_strong_non_muxi_match(self):
+        overlord = FakeOverlord(FakeRoutingModel(["muxi-generalist"]), include_muxi_generalist=True)
+        router = AgentRouter(overlord)
+
+        selected = await router.select_agent_for_message(
+            "What is my current user profile?", session_id="session-1"
+        )
+
+        assert selected == "ms365-assistant"
+
+    @pytest.mark.asyncio
+    async def test_llm_muxi_generalist_selection_is_kept_without_strong_non_muxi_match(self):
+        overlord = FakeOverlord(FakeRoutingModel(["muxi-generalist"]), include_muxi_generalist=True)
+        router = AgentRouter(overlord)
+
+        selected = await router.select_agent_for_message("Tell me a joke", session_id="session-1")
+
+        assert selected == "muxi-generalist"
