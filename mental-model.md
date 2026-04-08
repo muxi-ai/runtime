@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-07
+**Last Updated:** 2026-04-08
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -3983,6 +3983,33 @@ connections wedged after client disconnects.
 - `src/muxi/runtime/services/mcp/service.py`
 - `src/muxi/runtime/services/mcp/handler.py`
 - `src/muxi/runtime/services/mcp/transports/{streamable.py,http_sse.py,factory.py,base.py}`
+
+### 2026-04-08: Chat SSE Idle Timeout During Slow Setup
+
+**Problem:** `/v1/chat` could successfully route to a specialist, complete the MCP work, and still
+look like a timeout in the chat client because no SSE bytes were sent while the route waited for
+the streaming generator to be prepared. The same silence existed for `/v1/audiochat`, and long
+gaps between streamed items could trigger the same idle-timeout behavior.
+
+**Root cause:** `server/routes/client/chat.py` awaited `overlord.chat(..., stream=True)` /
+`overlord.audiochat(..., stream=True)` before yielding anything to the HTTP response. That
+pre-stream phase still includes user resolution, memory/context enhancement, embedding warm-up,
+routing, and tool setup inside `chat_orchestrator`, so a healthy request could appear idle from
+the outside. Once streaming began, long pauses between `__anext__()` calls had the same symptom.
+
+**Fix:** Added `_stream_with_keepalive()` in `server/routes/client/chat.py`. The wrapper emits an
+immediate `: keepalive` SSE comment, then continues emitting keepalive comments every second while
+waiting for the async generator and between token gaps. The existing payload contract is preserved:
+real data still arrives as `data: {"token": ...}` and completion still arrives as `event: done`.
+
+**Important nuance:** This fixes delivery/observability, not the underlying latency. If a request
+is still slow before the first real token, the likely hotspot is pre-stream work in
+`chat_orchestrator._enhance_message_with_context()` (user synopsis, long-term memory search,
+buffer search, embedding model warm-up).
+
+**Files:**
+- `src/muxi/runtime/formation/server/routes/client/chat.py`
+- `tests/unit/test_chat_sse_keepalive.py`
 
 ### 2026-03-20: Scheduler Routes, Memobase Init & Dimension Propagation
 

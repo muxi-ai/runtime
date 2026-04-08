@@ -6,7 +6,8 @@ requiring client API key authentication.
 """
 
 import asyncio
-from typing import Any, Dict, List, Optional, Union
+from contextlib import suppress
+from typing import Any, AsyncGenerator, Coroutine, Dict, List, Optional, Union
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -17,6 +18,65 @@ from .....utils.fastjson import json
 from ...utils import get_header_case_insensitive
 
 router = APIRouter(tags=["Chat"])
+
+SSE_KEEPALIVE_INTERVAL_SECONDS = 1.0
+SSE_KEEPALIVE_COMMENT = ": keepalive\n\n"
+
+
+async def _stream_with_keepalive(
+    response_awaitable: Coroutine[Any, Any, Any],
+) -> AsyncGenerator[str, None]:
+    """
+    Stream SSE chunks while emitting keepalive comments during slow setup
+    and long gaps between streamed items.
+    """
+    response_task: asyncio.Task[Any] = asyncio.create_task(response_awaitable)
+    current_task: Optional[asyncio.Task[Any]] = response_task
+
+    try:
+        yield SSE_KEEPALIVE_COMMENT
+
+        response = None
+        while response is None:
+            try:
+                response = await asyncio.wait_for(
+                    asyncio.shield(response_task),
+                    timeout=SSE_KEEPALIVE_INTERVAL_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                yield SSE_KEEPALIVE_COMMENT
+
+        iterator = response.__aiter__()
+
+        while True:
+            current_task = asyncio.create_task(iterator.__anext__())
+            try:
+                token = None
+                while token is None:
+                    try:
+                        token = await asyncio.wait_for(
+                            asyncio.shield(current_task),
+                            timeout=SSE_KEEPALIVE_INTERVAL_SECONDS,
+                        )
+                    except asyncio.TimeoutError:
+                        yield SSE_KEEPALIVE_COMMENT
+            except StopAsyncIteration:
+                break
+
+            data = json.dumps({"token": token})
+            yield f"data: {data}\n\n"
+
+        yield f"event: done\ndata: {json.dumps({'finished': True})}\n\n"
+    finally:
+        if current_task and not current_task.done():
+            current_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await current_task
+
+        if response_task is not current_task and not response_task.done():
+            response_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await response_task
 
 
 class ChatRequest(BaseModel):
@@ -180,28 +240,20 @@ async def chat(
     async def generate_stream():
         """Generate SSE stream from overlord response."""
         try:
-            # Get streaming response from overlord
-            # Note: overlord.chat() is async and returns AsyncGenerator when stream=True
-            response = await overlord.chat(
-                message=chat_request.message,
-                user_id=effective_user_id,
-                session_id=chat_request.session_id,
-                request_id=chat_request.request_id,
-                agent_name=chat_request.agent_id,
-                files=chat_request.files,
-                stream=True,  # Enable streaming
-                webhook_url=chat_request.webhook_url,
-                threshold_seconds=chat_request.threshold_seconds,
-            )
-
-            # Stream the tokens
-            async for token in response:
-                # Format as SSE (removed "role" to save bandwidth as requested)
-                data = json.dumps({"token": token})
-                yield f"data: {data}\n\n"
-
-            # Send completion event
-            yield f"event: done\ndata: {json.dumps({'finished': True})}\n\n"
+            async for chunk in _stream_with_keepalive(
+                overlord.chat(
+                    message=chat_request.message,
+                    user_id=effective_user_id,
+                    session_id=chat_request.session_id,
+                    request_id=chat_request.request_id,
+                    agent_name=chat_request.agent_id,
+                    files=chat_request.files,
+                    stream=True,  # Enable streaming
+                    webhook_url=chat_request.webhook_url,
+                    threshold_seconds=chat_request.threshold_seconds,
+                )
+            ):
+                yield chunk
 
         except asyncio.CancelledError:
             # Client disconnected - clean shutdown, no error message
@@ -281,8 +333,8 @@ async def audiochat(
         response = create_error_response(
             "VALIDATION_ERROR",
             "files parameter is required for audiochat()",
-            {"field": "files"},
-            audiochat_request.request_id,
+            request_id=audiochat_request.request_id,
+            error_data={"field": "files"},
         )
         return JSONResponse(content=response.model_dump(), status_code=400)
 
@@ -295,8 +347,8 @@ async def audiochat(
             response = create_error_response(
                 "VALIDATION_ERROR",
                 "Only audio files (audio/*) are accepted. For video or other files, use /chat with the files parameter.",
-                {"field": "files", "invalid_content_type": content_type},
-                audiochat_request.request_id,
+                request_id=audiochat_request.request_id,
+                error_data={"field": "files", "invalid_content_type": content_type},
             )
             return JSONResponse(content=response.model_dump(), status_code=400)
 
@@ -377,19 +429,16 @@ async def audiochat(
     async def generate_stream():
         """Generate SSE stream from overlord response."""
         try:
-            response = await overlord.audiochat(
-                files=audiochat_request.files,
-                user_id=effective_user_id,
-                session_id=audiochat_request.session_id,
-                agent_name=audiochat_request.agent_id,
-                stream=True,
-            )
-
-            async for token in response:
-                data = json.dumps({"token": token})
-                yield f"data: {data}\n\n"
-
-            yield f"event: done\ndata: {json.dumps({'finished': True})}\n\n"
+            async for chunk in _stream_with_keepalive(
+                overlord.audiochat(
+                    files=audiochat_request.files,
+                    user_id=effective_user_id,
+                    session_id=audiochat_request.session_id,
+                    agent_name=audiochat_request.agent_id,
+                    stream=True,
+                )
+            ):
+                yield chunk
 
         except asyncio.CancelledError:
             pass

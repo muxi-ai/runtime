@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.20260408.2 - Chat SSE Keepalive During Slow Setup
+
+### Bug Fixes
+
+- **Successful chat requests could still time out at the client before any response bytes arrived** -- `/v1/chat` and `/v1/audiochat` awaited `overlord.chat()` / `overlord.audiochat()` before yielding the first SSE chunk. Slow pre-stream work (user resolution, memory/context enhancement, embedding warm-up, routing, and tool setup) and long gaps between streamed items could leave the HTTP connection idle long enough for clients or proxies to time out even though the backend request eventually succeeded. Fix: wrap streaming responses in a keepalive generator that emits immediate and periodic SSE comment frames during stream setup and between token gaps, while preserving the existing `token` and `done` event contract.
+
+### Tests
+
+- **Focused keepalive coverage for streaming chat endpoints** -- Added `tests/unit/test_chat_sse_keepalive.py` to verify keepalive emission during slow stream setup and delayed token gaps, and reran `e2e/tests/19_api/test_19e1_chat_streaming.py` to confirm `/v1/chat` still streams correctly end-to-end.
+
 ## 0.20260408.1 - Specialist Routing Follow-through & Direct Response Date Preservation
 
 ### Bug Fixes
