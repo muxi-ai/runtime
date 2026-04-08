@@ -39,6 +39,8 @@ class FakeOverlord:
                 "specialties": [],
                 "specialization_domain": "",
                 "specialization_keywords": [],
+                "tool_names": [],
+                "tool_descriptions": [],
             },
             "ms365-assistant": {
                 "name": "MS365 Assistant",
@@ -47,6 +49,11 @@ class FakeOverlord:
                 "specialties": ["microsoft 365", "user profile"],
                 "specialization_domain": "microsoft-365",
                 "specialization_keywords": ["profile", "current user profile", "email"],
+                "tool_names": ["get current user", "list mail messages"],
+                "tool_descriptions": [
+                    "Get the current user's profile from Microsoft 365.",
+                    "List the user's recent email messages from Outlook.",
+                ],
             },
         }
         if include_muxi_generalist:
@@ -130,3 +137,14 @@ class TestAgentRouter:
         selected = await router.select_agent_for_message("Tell me a joke", session_id="session-1")
 
         assert selected == "muxi-generalist"
+
+    @pytest.mark.asyncio
+    async def test_llm_general_agent_selection_is_overridden_by_strong_specialist_tool_match(self):
+        overlord = FakeOverlord(FakeRoutingModel(["assistant"]))
+        router = AgentRouter(overlord)
+
+        selected = await router.select_agent_for_message(
+            "What is my current user profile?", session_id="session-1"
+        )
+
+        assert selected == "ms365-assistant"

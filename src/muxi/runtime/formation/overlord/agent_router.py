@@ -86,6 +86,8 @@ class AgentRouter:
             "specialization_keywords": self._normalize_text_list(
                 metadata.get("specialization_keywords", [])
             ),
+            "tool_names": self._normalize_text_list(metadata.get("tool_names", [])),
+            "tool_descriptions": self._normalize_text_list(metadata.get("tool_descriptions", [])),
         }
 
     def _tokenize(self, text: str) -> list[str]:
@@ -153,6 +155,7 @@ class AgentRouter:
                 metadata["specialization_domain"],
                 *metadata["specialties"],
                 *metadata["specialization_keywords"],
+                *metadata["tool_descriptions"],
             ]
 
             # Direct specialty phrases are the strongest signal because they usually
@@ -172,6 +175,22 @@ class AgentRouter:
             specialization_domain = metadata["specialization_domain"].lower()
             if specialization_domain and specialization_domain in message_lower:
                 score += 5
+
+            # Tool names provide service-specific intent signals even when the user
+            # does not explicitly mention the service (for example "current user profile"
+            # matching a get-current-user tool on a specialist agent).
+            tool_signal_score = 0
+            for tool_name in metadata["tool_names"]:
+                tool_phrase = tool_name.lower().replace("_", " ").replace("-", " ")
+                if tool_phrase and tool_phrase in message_lower:
+                    tool_signal_score += 4
+
+                tool_tokens = {token for token in self._tokenize(tool_phrase) if len(token) > 2}
+                tool_overlap = message_tokens & tool_tokens
+                tool_signal_score += len(tool_overlap)
+                if len(tool_overlap) >= 2:
+                    tool_signal_score += 2
+            score += min(tool_signal_score, 10)
 
             # Token overlap is the catch-all heuristic for requests that are semantically
             # close to an agent's metadata without reusing the exact phrases verbatim.
@@ -203,33 +222,41 @@ class AgentRouter:
 
         return agent_scores
 
-    def _find_strong_non_muxi_generalist_match(
-        self, message: str, available_agents: list[str], session_id: Optional[str] = None
+    def _find_strong_specialist_override(
+        self,
+        selected_agent_id: str,
+        message: str,
+        available_agents: list[str],
+        session_id: Optional[str] = None,
     ) -> Optional[str]:
-        """Return a strong non-muxi match when muxi-generalist should be treated as fallback."""
-        if self.MUXI_GENERALIST_AGENT_ID not in available_agents:
+        """Override a broad/general selection when a specialist is a clearly stronger match."""
+        selected_metadata = self._get_agent_routing_metadata(selected_agent_id)
+        if selected_metadata["role"] == "specialist":
             return None
 
-        non_muxi_agents = [
-            agent_id for agent_id in available_agents if agent_id != self.MUXI_GENERALIST_AGENT_ID
+        specialist_agents = [
+            agent_id
+            for agent_id in available_agents
+            if agent_id != selected_agent_id
+            and self._get_agent_routing_metadata(agent_id)["role"] == "specialist"
         ]
-        if not non_muxi_agents:
+        if not specialist_agents:
             return None
 
         agent_scores = self._score_available_agents(
             message, available_agents, session_id=session_id
         )
-        muxi_score = agent_scores.get(self.MUXI_GENERALIST_AGENT_ID, 0)
-        best_non_muxi_agent = max(
-            non_muxi_agents, key=lambda agent_id: agent_scores.get(agent_id, 0)
+        selected_score = agent_scores.get(selected_agent_id, 0)
+        best_specialist_agent = max(
+            specialist_agents, key=lambda agent_id: agent_scores.get(agent_id, 0)
         )
-        best_non_muxi_score = agent_scores.get(best_non_muxi_agent, 0)
+        best_specialist_score = agent_scores.get(best_specialist_agent, 0)
 
         if (
-            best_non_muxi_score >= self.STRONG_NON_MUXI_MATCH_THRESHOLD
-            and best_non_muxi_score >= muxi_score + self.STRONG_NON_MUXI_MATCH_MARGIN
+            best_specialist_score >= self.STRONG_NON_MUXI_MATCH_THRESHOLD
+            and best_specialist_score >= selected_score + self.STRONG_NON_MUXI_MATCH_MARGIN
         ):
-            return best_non_muxi_agent
+            return best_specialist_agent
 
         return None
 
@@ -365,30 +392,22 @@ class AgentRouter:
                     description="Routing model returned invalid agent, used intelligent selection",
                 )
             else:
-                if selected_agent_id == self.MUXI_GENERALIST_AGENT_ID:
-                    override_agent_id = self._find_strong_non_muxi_generalist_match(
-                        message, available_agents, session_id=session_id
+                override_agent_id = self._find_strong_specialist_override(
+                    selected_agent_id, message, available_agents, session_id=session_id
+                )
+                if override_agent_id:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "selected_agent": override_agent_id,
+                            "original_selected_agent": selected_agent_id,
+                            "method": "llm_routing_override",
+                            "reason": "strong_specialist_match",
+                        },
+                        description="Overrode broad agent selection with stronger specialist match",
                     )
-                    if override_agent_id:
-                        observability.observe(
-                            event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
-                            level=observability.EventLevel.INFO,
-                            data={
-                                "selected_agent": override_agent_id,
-                                "original_selected_agent": selected_agent_id,
-                                "method": "llm_routing_override",
-                                "reason": "strong_non_muxi_match",
-                            },
-                            description="Overrode muxi-generalist with stronger non-muxi match",
-                        )
-                        selected_agent_id = override_agent_id
-                    else:
-                        observability.observe(
-                            event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
-                            level=observability.EventLevel.INFO,
-                            data={"selected_agent": selected_agent_id, "method": "llm_routing"},
-                            description="Agent selected via LLM routing model",
-                        )
+                    selected_agent_id = override_agent_id
                 else:
                     observability.observe(
                         event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
@@ -501,6 +520,7 @@ For safe messages, analyze and select the best agent considering:
 - The specific capabilities, role, specialties, specialization domain, and specialization keywords each agent offers
 - Which agent would be most helpful for this type of request
 - Use the "muxi-generalist" agent only as a fallback when no other available agent is a strong match for the request
+- More generally, if a broad/general assistant is available but a specialist has the clearer match for live service data or service-specific actions, prefer the specialist
 - When a specialist agent clearly matches the request, prefer it over the default/generalist agent
 - If there is a previous agent for this session, prefer it for follow-up messages that lack explicit topic keywords (e.g., short replies, pronouns, continuation of a task)
 

@@ -761,6 +761,117 @@ class Agent:
         except (ValueError, TypeError, AttributeError):
             return 0.0
 
+    def _should_bypass_planning(
+        self, is_a2a_task: bool, tools: Optional[List[Dict[str, Any]]]
+    ) -> bool:
+        """Only bypass planning for delegated A2A tasks when no tools are available."""
+        return is_a2a_task and not tools
+
+    def _serialize_planning_result_for_synthesis(self, result: Any) -> str:
+        """Serialize planning/tool results into a stable text block for synthesis."""
+        if isinstance(result, dict):
+            serializable_result = dict(result)
+            serializable_result.pop("_artifact", None)
+            try:
+                return json.dumps(serializable_result, indent=2)
+            except TypeError:
+                return str(serializable_result)
+        return str(result)
+
+    def _get_planning_response_synthesis_system_prompt(self) -> str:
+        """Return the system prompt for agent-side planning response synthesis."""
+        return (
+            "You are a helpful assistant preparing the final user-facing response from tool and "
+            "delegated task results. Base your answer only on the provided results. Preserve "
+            "explicit dates, weekdays, times, and time ranges exactly as they appear in the "
+            "results. Do not rewrite absolute dates/times into relative labels like 'today', "
+            "'tomorrow', or 'yesterday' unless the source results already use those exact words. "
+            "If information is missing or unavailable, say so explicitly instead of guessing."
+        )
+
+    def _build_planning_response_synthesis_prompt(
+        self, user_request: str, my_results: Dict[str, Any], planning_response_parts: List[str]
+    ) -> str:
+        """Build the user prompt for synthesizing planning execution results."""
+        prompt_parts = [
+            f"Original user request: {user_request}",
+            "",
+            "Available execution results:",
+            "",
+        ]
+
+        for placeholder, result in my_results.items():
+            prompt_parts.append(f"### {placeholder}")
+            prompt_parts.append(self._serialize_planning_result_for_synthesis(result))
+            prompt_parts.append("")
+
+        if planning_response_parts:
+            prompt_parts.append("Delegated agent responses:")
+            for i, response_part in enumerate(planning_response_parts, 1):
+                prompt_parts.append(f"### Response {i}")
+                prompt_parts.append(str(response_part))
+                prompt_parts.append("")
+
+        prompt_parts.extend(
+            [
+                "Write the final response to the user.",
+                "- Keep the tone natural and helpful.",
+                "- Preserve explicit dates, weekdays, times, and time ranges exactly as given.",
+                "- Do not turn absolute dates into relative words like 'today' or 'recently' unless the result already says that.",
+                "- Mention any missing or failed data plainly instead of filling gaps with assumptions.",
+            ]
+        )
+
+        return "\n".join(prompt_parts)
+
+    async def _synthesize_planning_execution_response(
+        self, user_request: str, my_results: Dict[str, Any], planning_response_parts: List[str]
+    ) -> Optional[str]:
+        """Synthesize a final response from planning execution results."""
+        observability.observe(
+            event_type=observability.ConversationEvents.AGENT_PLANNING,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": self.agent_id,
+                "phase": "planning_response_synthesis_start",
+                "tool_result_count": len(my_results),
+                "delegated_response_count": len(planning_response_parts),
+            },
+            description=f"Agent {self.agent_id} starting planning response synthesis",
+        )
+
+        synthesis_messages = [
+            {
+                "role": "system",
+                "content": self._get_planning_response_synthesis_system_prompt(),
+            },
+            {
+                "role": "user",
+                "content": self._build_planning_response_synthesis_prompt(
+                    user_request, my_results, planning_response_parts
+                ),
+            },
+        ]
+
+        response_obj = await self.model.chat(synthesis_messages)
+        response_text = (
+            response_obj.content if hasattr(response_obj, "content") else str(response_obj)
+        )
+        response_text = response_text.strip()
+
+        observability.observe(
+            event_type=observability.ConversationEvents.AGENT_PLANNING,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": self.agent_id,
+                "phase": "planning_response_synthesis_completed",
+                "response_length": len(response_text),
+            },
+            description=f"Agent {self.agent_id} completed planning response synthesis",
+        )
+
+        return response_text or None
+
     async def process_message(
         self,
         message: Union[str, MuxiResponse],
@@ -1062,10 +1173,10 @@ class Agent:
                         actual_user_request = next_line[5:].strip()  # Remove "User: " prefix
                         break
 
-        # Skip planning for A2A tasks only (to prevent loops)
-        # Workflow tasks should go through normal planning so agents can use their MCP tools.
-        # The workflow decomposer creates high-level tasks (WHAT); agents plan the HOW.
-        if is_a2a_task:
+        # Delegated A2A tasks should still plan when they have tools available, but they
+        # must not delegate again or they can loop between agents.
+        bypass_planning = self._should_bypass_planning(is_a2a_task, tools)
+        if bypass_planning:
             observability.observe(
                 event_type=observability.ConversationEvents.AGENT_PLANNING,
                 level=observability.EventLevel.INFO,
@@ -1086,10 +1197,19 @@ class Agent:
         planning_response_parts = []  # Collect response parts during planning
 
         # Only plan for user messages that might need multiple steps (skip for A2A tasks only)
-        if self._messages and self._messages[-1]["role"] == "user" and tools and not is_a2a_task:
+        if (
+            self._messages
+            and self._messages[-1]["role"] == "user"
+            and tools
+            and not bypass_planning
+        ):
             try:
                 # Use the extracted actual request for planning, not the full enhanced message
-                execution_plan = await self._plan_before_execution(actual_user_request, tools)
+                execution_plan = await self._plan_before_execution(
+                    actual_user_request,
+                    tools,
+                    allow_delegation=not is_a2a_task,
+                )
 
                 # Log the execution plan
                 observability.observe(
@@ -1498,8 +1618,32 @@ class Agent:
                     )
 
                     # If we have successful delegation responses, prioritize those
-                    if has_successful_delegation:
-                        # Show the delegation responses as the primary result
+                    synthesized_planning_response = None
+                    if my_results and not has_successful_delegation:
+                        try:
+                            synthesized_planning_response = (
+                                await self._synthesize_planning_execution_response(
+                                    actual_user_request, my_results, planning_response_parts
+                                )
+                            )
+                        except Exception as e:
+                            observability.observe(
+                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                level=observability.EventLevel.WARNING,
+                                data={
+                                    "agent_id": self.agent_id,
+                                    "error": str(e),
+                                    "phase": "planning_response_synthesis",
+                                },
+                                description=(
+                                    "Planning response synthesis failed; using raw planning results"
+                                ),
+                            )
+
+                    if synthesized_planning_response:
+                        response_content = synthesized_planning_response
+                    # If we have successful delegation responses, prioritize those
+                    elif has_successful_delegation:
                         response_content = "\n\n".join(planning_response_parts)
 
                         # Include local tool execution results only if we have any successful local executions
@@ -3544,7 +3688,10 @@ class Agent:
             return None
 
     async def _plan_before_execution(
-        self, user_message: str, available_tools: List[Dict] = None
+        self,
+        user_message: str,
+        available_tools: List[Dict] = None,
+        allow_delegation: bool = True,
     ) -> Dict[str, Any]:
         """
         Force agent to plan before executing any tools.
@@ -3596,75 +3743,80 @@ class Agent:
             f"{', '.join([t.get('function', {}).get('name', '') for t in (available_tools or [])])}"
         )
 
-        # Get all available agents (internal and external)
-        try:
-            available_agents = await self.overlord.a2a_coordinator.get_all_available_agents(
-                self.agent_id, include_external=True
-            )
-        except Exception as e:
-            # Log but don't fail planning
-            observability.observe(
-                event_type=observability.ErrorEvents.A2A_MESSAGE_HANDLING_FAILED,
-                level=observability.EventLevel.WARNING,
-                data={
-                    "agent_id": self.agent_id,
-                    "error": str(e),
-                    "phase": "planning_agent_discovery",
-                },
-                description=f"Failed to get available agents for planning: {str(e)}",
-            )
-            available_agents = {}
-
         # Section 2: Built-in agents (internal agents in same formation)
         internal_agents = []
         external_agents = []
+        if allow_delegation:
+            try:
+                available_agents = await self.overlord.a2a_coordinator.get_all_available_agents(
+                    self.agent_id, include_external=True
+                )
+            except Exception as e:
+                # Log but don't fail planning
+                observability.observe(
+                    event_type=observability.ErrorEvents.A2A_MESSAGE_HANDLING_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "agent_id": self.agent_id,
+                        "error": str(e),
+                        "phase": "planning_agent_discovery",
+                    },
+                    description=f"Failed to get available agents for planning: {str(e)}",
+                )
+                available_agents = {}
 
-        for agent_id, agent_info in available_agents.items():
-            if agent_info.get("type", "internal") == "internal":
-                internal_agents.append((agent_id, agent_info))
-            else:
-                external_agents.append((agent_id, agent_info))
-
-        if internal_agents:
-            planning_prompt += "\n\n---\n\n## Built-in agents:\n"
-            for agent_id, agent_info in internal_agents:
-                planning_prompt += f"\n### {agent_id}\n"
-                planning_prompt += f"{agent_info.get('description', 'No description')}\n\n"
-
-                capabilities = agent_info.get("capabilities", [])
-                if capabilities:
-                    planning_prompt += "Capabilities:\n"
-                    for cap in capabilities:
-                        planning_prompt += f"- {cap}\n"
+            for agent_id, agent_info in available_agents.items():
+                if agent_info.get("type", "internal") == "internal":
+                    internal_agents.append((agent_id, agent_info))
                 else:
-                    planning_prompt += "Capabilities: None specified\n"
-                planning_prompt += "\n"
+                    external_agents.append((agent_id, agent_info))
 
-        # Section 3: Remote agents (only if external agents exist)
-        if external_agents:
-            planning_prompt += "---\n\n## Remote agents:\n"
+            if internal_agents:
+                planning_prompt += "\n\n---\n\n## Built-in agents:\n"
+                for agent_id, agent_info in internal_agents:
+                    planning_prompt += f"\n### {agent_id}\n"
+                    planning_prompt += f"{agent_info.get('description', 'No description')}\n\n"
 
-            for agent_id, agent_info in external_agents:
-                planning_prompt += f"\n### {agent_id}\n"
-                planning_prompt += f"{agent_info.get('description', 'No description')}\n"
-                planning_prompt += f"Formation: {agent_info.get('formation', 'unknown')}\n\n"
+                    capabilities = agent_info.get("capabilities", [])
+                    if capabilities:
+                        planning_prompt += "Capabilities:\n"
+                        for cap in capabilities:
+                            planning_prompt += f"- {cap}\n"
+                    else:
+                        planning_prompt += "Capabilities: None specified\n"
+                    planning_prompt += "\n"
 
-                capabilities = agent_info.get("capabilities", [])
-                if capabilities:
-                    planning_prompt += "Capabilities:\n"
-                    for cap in capabilities:
-                        planning_prompt += f"- {cap}\n"
-                else:
-                    planning_prompt += "Capabilities: None specified\n"
-                planning_prompt += "\n"
+            # Section 3: Remote agents (only if external agents exist)
+            if external_agents:
+                planning_prompt += "---\n\n## Remote agents:\n"
 
-            planning_prompt += "---\n"
+                for agent_id, agent_info in external_agents:
+                    planning_prompt += f"\n### {agent_id}\n"
+                    planning_prompt += f"{agent_info.get('description', 'No description')}\n"
+                    planning_prompt += f"Formation: {agent_info.get('formation', 'unknown')}\n\n"
 
-        # Add explicit warning when no other agents are available for delegation
-        if not internal_agents and not external_agents:
-            planning_prompt += "\n⚠️ CRITICAL: You are the ONLY agent in this formation!\n"
-            planning_prompt += "You MUST handle all requests yourself without delegation.\n"
-            planning_prompt += "Even if you lack specific tools or capabilities, provide your best effort response.\n\n"
+                    capabilities = agent_info.get("capabilities", [])
+                    if capabilities:
+                        planning_prompt += "Capabilities:\n"
+                        for cap in capabilities:
+                            planning_prompt += f"- {cap}\n"
+                    else:
+                        planning_prompt += "Capabilities: None specified\n"
+                    planning_prompt += "\n"
+
+                planning_prompt += "---\n"
+
+            # Add explicit warning when no other agents are available for delegation
+            if not internal_agents and not external_agents:
+                planning_prompt += "\n⚠️ CRITICAL: You are the ONLY agent in this formation!\n"
+                planning_prompt += "You MUST handle all requests yourself without delegation.\n"
+                planning_prompt += "Even if you lack specific tools or capabilities, provide your best effort response.\n\n"
+        else:
+            planning_prompt += "\n\n## Delegation policy:\n"
+            planning_prompt += (
+                "Delegation is disabled for this request. Use your own tools if needed, "
+                "but do NOT ask another agent to handle any part of it.\n"
+            )
 
         # Section 4: Available skills (injected into planning context)
         if (
@@ -3790,42 +3942,12 @@ class Agent:
                     plan_content = plan_content[4:]
             plan = json.loads(plan_content.strip())
 
-            # Validate and fix the plan - ensure agents don't claim tools they don't have
-            available_tool_names = set(
+            available_tool_names = {
                 t.get("function", {}).get("name", "") for t in (available_tools or [])
+            }
+            plan = self._finalize_execution_plan(
+                plan, available_tool_names, allow_delegation=allow_delegation
             )
-
-            # Fix any incorrect tool claims
-            for step in plan.get("steps", []):
-                tool_name = step.get("tool_name", "")
-                if tool_name and tool_name not in available_tool_names:
-                    # Tool not available - must delegate
-                    step["can_i_do_this"] = False
-
-            # Rebuild my_steps based on corrected can_i_do_this values
-            plan["my_steps"] = [
-                {
-                    "action": step["action"],
-                    "tool_name": step["tool_name"],
-                    "output_placeholder": step.get(
-                        "output_placeholder", f"{{{step['tool_name'].upper()}_OUTPUT}}"
-                    ),
-                }
-                for step in plan.get("steps", [])
-                if step.get("can_i_do_this") and step.get("tool_name") in available_tool_names
-            ]
-
-            # Rebuild delegate_steps
-            plan["delegate_steps"] = [
-                {
-                    "action": step["action"],
-                    "capability_needed": step.get("capability_needed", ""),
-                    "delegation_prompt": step.get("delegation_prompt", step["action"]),
-                }
-                for step in plan.get("steps", [])
-                if not step.get("can_i_do_this")
-                or step.get("tool_name") not in available_tool_names
-            ]
 
             # Log the plan
             observability.observe(
@@ -3855,18 +3977,66 @@ class Agent:
             )
 
             # Return a default plan that attempts direct execution
+            if allow_delegation:
+                return {
+                    "steps": [{"action": user_message, "can_i_do_this": False}],
+                    "my_steps": [],
+                    "delegate_steps": [
+                        {
+                            "action": user_message,
+                            "capability_needed": "unknown",
+                            "delegation_prompt": user_message,
+                        }
+                    ],
+                    "data_flow": "Direct delegation due to planning failure",
+                }
+
             return {
                 "steps": [{"action": user_message, "can_i_do_this": False}],
                 "my_steps": [],
-                "delegate_steps": [
-                    {
-                        "action": user_message,
-                        "capability_needed": "unknown",
-                        "delegation_prompt": user_message,
-                    }
-                ],
-                "data_flow": "Direct delegation due to planning failure",
+                "delegate_steps": [],
+                "data_flow": "Planning failed; continue with normal tool flow",
             }
+
+    def _finalize_execution_plan(
+        self, plan: Dict[str, Any], available_tool_names: set[str], allow_delegation: bool = True
+    ) -> Dict[str, Any]:
+        """Normalize plan ownership between local tool steps and delegated steps."""
+        # Fix any incorrect tool claims.
+        for step in plan.get("steps", []):
+            tool_name = step.get("tool_name", "")
+            if tool_name and tool_name in available_tool_names and not allow_delegation:
+                step["can_i_do_this"] = True
+            elif tool_name and tool_name not in available_tool_names:
+                step["can_i_do_this"] = False
+
+        plan["my_steps"] = [
+            {
+                "action": step["action"],
+                "tool_name": step["tool_name"],
+                "output_placeholder": step.get(
+                    "output_placeholder", f"{{{step['tool_name'].upper()}_OUTPUT}}"
+                ),
+            }
+            for step in plan.get("steps", [])
+            if step.get("can_i_do_this") and step.get("tool_name") in available_tool_names
+        ]
+
+        if allow_delegation:
+            plan["delegate_steps"] = [
+                {
+                    "action": step["action"],
+                    "capability_needed": step.get("capability_needed", ""),
+                    "delegation_prompt": step.get("delegation_prompt", step["action"]),
+                }
+                for step in plan.get("steps", [])
+                if not step.get("can_i_do_this")
+                or step.get("tool_name") not in available_tool_names
+            ]
+        else:
+            plan["delegate_steps"] = []
+
+        return plan
 
     async def send_a2a_message(
         self,

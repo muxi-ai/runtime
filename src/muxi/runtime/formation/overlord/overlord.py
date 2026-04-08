@@ -1638,6 +1638,37 @@ class Overlord:
             "system_message": agent_config.get("system_message", ""),
         }
 
+    def _collect_agent_tool_routing_hints(self, agent_id: str) -> Dict[str, List[str]]:
+        """Collect agent-specific MCP tool names/descriptions for routing heuristics."""
+        tool_names: List[str] = []
+        tool_descriptions: List[str] = []
+
+        mcp_service = getattr(self, "mcp_service", None)
+        agent_tool_registry = getattr(mcp_service, "agent_tool_registry", {}) if mcp_service else {}
+
+        for server_tools in agent_tool_registry.get(agent_id, {}).values():
+            if not isinstance(server_tools, dict):
+                continue
+
+            for tool_name, tool_info in server_tools.items():
+                normalized_name = (
+                    str(tool_name).replace("__", " ").replace("_", " ").replace("-", " ").strip()
+                )
+                if normalized_name and normalized_name not in tool_names:
+                    tool_names.append(normalized_name)
+
+                if isinstance(tool_info, dict):
+                    description = str(
+                        tool_info.get("description") or tool_info.get("display_name") or ""
+                    ).strip()
+                    if description and description not in tool_descriptions:
+                        tool_descriptions.append(description)
+
+        return {
+            "tool_names": tool_names,
+            "tool_descriptions": tool_descriptions,
+        }
+
     def _store_agent_routing_metadata(
         self, agent_id: str, agent_config: Dict[str, Any], agent: Optional[Any] = None
     ) -> None:
@@ -1647,6 +1678,7 @@ class Overlord:
             metadata["specialties"] = list(
                 dict.fromkeys(metadata["specialties"] + list(agent.specialties))
             )
+        metadata.update(self._collect_agent_tool_routing_hints(agent_id))
         self.agent_descriptions[agent_id] = metadata["description"]
         self.agent_metadata[agent_id] = metadata
 

@@ -73,24 +73,41 @@ class ModernProtocolFeatures:
         Returns:
             Standardized structured output format
         """
+
+        def _extract_content_text(content: Any) -> str:
+            """Extract joined text content from modern MCP content blocks."""
+            if not content:
+                return str(content) if content is not None else ""
+
+            if isinstance(content, list):
+                content_parts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        text_value = item.get("text")
+                        content_parts.append(
+                            str(text_value) if text_value is not None else str(item)
+                        )
+                    else:
+                        text_value = getattr(item, "text", None)
+                        content_parts.append(
+                            str(text_value) if text_value is not None else str(item)
+                        )
+                return "\n".join(part for part in content_parts if part)
+
+            return str(content)
+
         # Handle dict results (e.g., from streamable HTTP transport)
         if isinstance(result, dict) and "content" in result:
             content = result.get("content")
-            if not content:
-                content_text = str(content) if content is not None else ""
-            elif isinstance(content, list) and len(content) > 0:
-                first = content[0]
-                if isinstance(first, dict):
-                    content_text = first.get("text", str(first))
-                else:
-                    content_text = getattr(first, "text", str(first))
-            else:
-                content_text = str(content)
+            content_text = _extract_content_text(content)
             return {
                 "content": content_text,
                 "isError": result.get("isError", False),
                 "links": result.get("links", []),
                 "_meta": result.get("meta") or {},
+                "structured_content": (
+                    result.get("structuredContent") or result.get("structured_content") or {}
+                ),
                 "type": "structured",
             }
 
@@ -103,55 +120,31 @@ class ModernProtocolFeatures:
             else:
                 meta_value = meta_attr
 
-            # Extract content text if it's a structured content object
             content = getattr(result, "content", None)
-
-            # Default to string representation if content is None or empty
-            if not content:
-                content_text = str(content) if content is not None else ""
-            elif isinstance(content, list):
-                # Check if list is not empty before accessing elements
-                if len(content) > 0:
-                    # Handle TextContent objects with type and text fields
-                    first_content = content[0]
-
-                    # Try different methods to extract text content
-                    # Method 1: Direct text attribute
-                    content_text = getattr(first_content, "text", None)
-
-                    # Method 2: If no text attribute, try get method if it exists
-                    if content_text is None:
-                        get_method = getattr(first_content, "get", None)
-                        if get_method and callable(get_method):
-                            try:
-                                content_text = get_method("text")
-                            except (TypeError, KeyError):
-                                content_text = None
-
-                    # Method 3: Try dictionary-style access if it's dict-like
-                    if content_text is None and isinstance(first_content, dict):
-                        content_text = first_content.get("text")
-
-                    # Fallback: Convert to string if all else fails
-                    if content_text is None:
-                        content_text = str(first_content)
-                else:
-                    # Empty list
-                    content_text = ""
-            else:
-                # Non-list content, convert to string
-                content_text = str(content)
+            content_text = _extract_content_text(content)
 
             return {
                 "content": content_text,
                 "isError": getattr(result, "isError", False),
                 "links": getattr(result, "links", []),
                 "_meta": meta_value,
+                "structured_content": (
+                    getattr(result, "structuredContent", None)
+                    or getattr(result, "structured_content", None)
+                    or {}
+                ),
                 "type": "structured",
             }
 
         # Legacy format
-        return {"content": result, "isError": False, "links": [], "_meta": {}, "type": "legacy"}
+        return {
+            "content": result,
+            "isError": False,
+            "links": [],
+            "_meta": {},
+            "structured_content": {},
+            "type": "legacy",
+        }
 
     @staticmethod
     def handle_elicitation_request(elicitation_data: Dict[str, Any]) -> Dict[str, Any]:
