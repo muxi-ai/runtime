@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.20260408.1 - Specialist Routing Follow-through & Direct Response Date Preservation
+
+### Bug Fixes
+
+- **Broad user-defined assistants could still absorb specialist service requests** -- The first routing guardrail only corrected LLM selections when the chosen agent was literally `muxi-generalist`. Formations that used a developer-defined broad agent such as `assistant` could still route ambiguous MS365 requests like "What is my current user profile?" away from the specialist. Fix: generalize the post-LLM override to any non-specialist agent and score specialist agents using agent-specific MCP tool names and descriptions in addition to their routing metadata.
+- **Delegated A2A specialists could still skip MCP planning** -- When a broad agent delegated work to a specialist, the specialist received `is_a2a_task=True` and bypassed planning entirely, which meant it could answer from model prior instead of invoking the specialist MCP tools. Fix: only bypass planning for A2A tasks when no tools are available; when tools exist, plan normally but disable any further delegation and strip `delegate_steps` deterministically.
+- **Direct planning responses could still rewrite exact service dates** -- The previous date-preservation fix covered workflow synthesis, but direct planning-based agent responses still assembled tool results without a final guardrailed synthesis step. Fix: add an agent-side planning-response synthesis prompt that preserves exact dates, weekdays, times, and ranges from tool results.
+- **Modern MCP structured output could lose canonical timestamp fields** -- `process_structured_output()` flattened modern MCP responses into plain text and could discard `structuredContent`, removing machine-readable fields such as exact received timestamps before final response synthesis. Fix: preserve `structured_content` in processed MCP results and join all text blocks instead of keeping only the first one.
+
+### Tests
+
+- **Focused unit coverage for routing, delegated A2A planning, and MCP structured output preservation** -- Added `tests/unit/test_agent_planning_helpers.py` and `tests/unit/test_mcp_protocol_features.py`, and extended `tests/unit/test_agent_router.py` to verify tool-aware specialist overrides, deterministic delegate-step stripping when delegation is disabled, planning-response date guardrails, and preservation of structured MCP content.
+- **Random e2e regression sniff tests** -- Ran 5 random standalone e2e tests before release confidence checking, with all 5 passing.
+
 ## 0.20260408.0 - Routing Follow-through & Date-Preservation Hardening
 
 ### Bug Fixes
