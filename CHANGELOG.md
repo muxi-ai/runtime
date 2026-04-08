@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.20260407.1 - muxi-generalist Fallback Guardrail
+## 0.20260408.0 - muxi-generalist Fallback Guardrail
 
 ### Bug Fixes
 
