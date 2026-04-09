@@ -66,6 +66,29 @@ def test_finalize_execution_plan_strips_delegate_steps_when_delegation_is_disabl
     assert finalized["my_steps"][0]["tool_name"] == "ms365__get-current-user"
 
 
+def test_finalize_execution_plan_prefers_local_tools_over_delegation():
+    agent = object.__new__(Agent)
+    plan = {
+        "steps": [
+            {
+                "action": "List all worksheets in Book.xlsx",
+                "tool_name": "ms365-mcp__list-excel-worksheets",
+                "can_i_do_this": False,
+                "capability_needed": "Excel worksheet listing",
+                "delegation_prompt": "Find and list all worksheets in Book.xlsx",
+            }
+        ]
+    }
+
+    finalized = agent._finalize_execution_plan(
+        plan, {"ms365-mcp__list-excel-worksheets"}, allow_delegation=True
+    )
+
+    assert finalized["steps"][0]["can_i_do_this"] is True
+    assert finalized["delegate_steps"] == []
+    assert finalized["my_steps"][0]["tool_name"] == "ms365-mcp__list-excel-worksheets"
+
+
 def test_finalize_execution_plan_preserves_step_parameters():
     agent = object.__new__(Agent)
     plan = {

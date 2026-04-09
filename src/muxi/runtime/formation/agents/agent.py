@@ -4234,7 +4234,7 @@ class Agent:
         # Fix any incorrect tool claims.
         for step in plan.get("steps", []):
             tool_name = step.get("tool_name", "")
-            if tool_name and tool_name in available_tool_names and not allow_delegation:
+            if tool_name and tool_name in available_tool_names:
                 step["can_i_do_this"] = True
             elif tool_name and tool_name not in available_tool_names:
                 step["can_i_do_this"] = False

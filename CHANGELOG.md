@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.20260409.3 - Prefer Local Tools Over Self-Delegation
+
+### Bug Fixes
+
+- **Agents could delegate a tool step back to themselves instead of executing it locally** -- In some multi-step MS365/Excel workflows, the planner marked a step like `list-excel-worksheets` as `can_i_do_this: false` even though that tool was already in the current agent's own toolset. The runtime trusted that flag, converted the step into a delegated handoff, and triggered the A2A loop detector instead of letting the local repair-planning path build the required discovery chain. Fix: normalize any step whose tool is already present in the current agent's available tool list to `can_i_do_this: true`, keep it in `my_steps`, and prevent self-delegation.
+
+### Tests
+
+- **Focused planning helper coverage** -- Extended `tests/unit/test_agent_planning_helpers.py` to verify that locally available tools are always kept as local execution steps even when the planner initially marks them as non-executable.
+
 ## 0.20260409.2 - Repair Planning for Missing Tool Identifiers
 
 ### Bug Fixes
