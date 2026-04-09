@@ -151,6 +151,63 @@ def get_memory_model(dimension: int):
     return model
 
 
+def ensure_memory_table_indexes(db_manager: DatabaseManager, dimension: int) -> None:
+    """Create best-effort indexes for a dimension-specific memories table."""
+    if db_manager.database_type != "postgresql":
+        return
+
+    from sqlalchemy import text
+
+    table_name = f"memories_{dimension}"
+    user_collection_index = f"idx_{table_name}_user_collection"
+    embedding_index = f"idx_{table_name}_embedding_ivfflat"
+
+    try:
+        with db_manager.engine.connect() as conn:
+            conn.execute(
+                text(
+                    f"CREATE INDEX IF NOT EXISTS {user_collection_index} "
+                    f"ON {table_name} (user_id, collection)"
+                )
+            )
+            conn.commit()
+    except Exception as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={
+                "table": table_name,
+                "index": user_collection_index,
+                "error": str(e),
+                "database_type": db_manager.database_type,
+            },
+            description=f"Failed to create memory lookup index on {table_name}: {e}",
+        )
+
+    try:
+        with db_manager.engine.connect() as conn:
+            conn.execute(
+                text(
+                    f"CREATE INDEX IF NOT EXISTS {embedding_index} "
+                    f"ON {table_name} USING ivfflat (embedding vector_l2_ops) "
+                    f"WITH (lists = 100)"
+                )
+            )
+            conn.commit()
+    except Exception as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={
+                "table": table_name,
+                "index": embedding_index,
+                "error": str(e),
+                "database_type": db_manager.database_type,
+            },
+            description=f"Failed to create pgvector ANN index on {table_name}: {e}",
+        )
+
+
 # Backwards-compat alias used by initialization.py for table registration.
 # Defaults to 1536 (OpenAI) — callers should prefer get_memory_model(dim).
 Memory = get_memory_model(1536)
@@ -194,6 +251,7 @@ class LongTermMemory:
         # Model can be either an LLM instance or a model name string (lazy loading)
         self._embedding_model = None
         self._embedding_model_name = None
+        self._local_model_name: Optional[str] = None
         self._use_local_embeddings = False
         self._local_embedding_logged = False
 
@@ -386,12 +444,15 @@ class LongTermMemory:
 
             from ...utils.user_resolution import resolve_user_identifier
 
-            internal_user_id, _ = await resolve_user_identifier(
+            resolved_user = await resolve_user_identifier(
                 identifier=identifier,
                 formation_id=self.formation_id,
                 db_manager=self.db_manager,
                 kv_cache=None,
             )
+            if resolved_user is None:
+                raise ValueError(f"Failed to resolve user identifier: {identifier}")
+            internal_user_id, _ = resolved_user
             cache[cache_key] = internal_user_id
             return internal_user_id
 
@@ -432,7 +493,7 @@ class LongTermMemory:
                 user_id = result.scalar_one_or_none()
 
                 if user_id:
-                    return user_id
+                    return int(user_id)
 
                 # Create new user if not found
                 new_user = User(
@@ -451,7 +512,7 @@ class LongTermMemory:
                 session.add(new_identifier)
                 session.commit()
 
-                return new_user.id
+                return int(new_user.id)
 
     async def get_user_id(self, external_user_id: str) -> Optional[int]:
         """
@@ -534,7 +595,7 @@ class LongTermMemory:
     async def add(
         self,
         content: str,
-        metadata: Dict[str, Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         embedding: Optional[Union[List[float], np.ndarray]] = None,
         user_id: Optional[str] = None,
         collection: Optional[str] = None,
@@ -606,7 +667,7 @@ class LongTermMemory:
         self,
         text: str,
         embedding: Union[List[float], np.ndarray],
-        metadata: Dict[str, Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         collection: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> str:
@@ -658,7 +719,7 @@ class LongTermMemory:
         self,
         text: str,
         embedding: Union[List[float], np.ndarray],
-        metadata: Dict[str, Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         collection: Optional[str] = None,
         external_user_id: Optional[str] = None,
     ) -> str:
@@ -716,6 +777,7 @@ class LongTermMemory:
         limit: int = 5,
         query_embedding: Optional[Union[List[float], np.ndarray]] = None,
         collection: Optional[str] = None,
+        collections: Optional[List[str]] = None,
         filter_metadata: Optional[Dict[str, Any]] = None,
         external_user_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
@@ -731,6 +793,7 @@ class LongTermMemory:
             limit (int): Maximum number of results to return.
             query_embedding (Optional[Union[List[float], np.ndarray]]): Opt. pre-computed embedding vector for query.
             collection (Optional[str]): The collection to search in. Defaults to the default collection.
+            collections (Optional[List[str]]): Optional list of collections to search in one query.
             filter_metadata (Optional[Dict[str, Any]]): Optional metadata filters to apply.
             external_user_id (Optional[str]): The external user ID for multi-user environments.
 
@@ -738,6 +801,14 @@ class LongTermMemory:
             List[Dict[str, Any]]: A list of dictionaries containing memory IDs, text, metadata, and similarity scores,
                                   ordered by relevance.
         """
+        normalized_collections = list(
+            dict.fromkeys(
+                collection_name
+                for collection_name in (collections or [collection or self.default_collection])
+                if collection_name
+            )
+        )
+
         # Emit memory search started event
         observability.observe(
             event_type=observability.ConversationEvents.REQUEST_PROCESSING,
@@ -746,7 +817,13 @@ class LongTermMemory:
                 "query_length": len(query),
                 "limit": limit,
                 "has_query_embedding": query_embedding is not None,
-                "collection": collection or self.default_collection,
+                "collection": (
+                    normalized_collections[0]
+                    if len(normalized_collections) == 1
+                    else "__multiple__"
+                ),
+                "collections": normalized_collections,
+                "collections_count": len(normalized_collections),
                 "has_metadata_filter": filter_metadata is not None,
             },
             description="Long-term memory search started",
@@ -760,13 +837,13 @@ class LongTermMemory:
             # Extract the actual embedding vector from the response
             query_embedding = self._extract_embedding_from_response(embedding_response)
 
-        # Use default collection if not specified
-        if collection is None:
-            collection = self.default_collection
-
         # Search in database using async method
         results = await self._search_internal_async(
-            query_embedding, limit, collection, filter_metadata, external_user_id
+            query_embedding,
+            limit,
+            normalized_collections,
+            filter_metadata,
+            external_user_id,
         )
 
         # Format results
@@ -777,6 +854,7 @@ class LongTermMemory:
                     "id": memory["id"],
                     "text": memory["text"],
                     "metadata": memory["meta_data"],
+                    "collection": memory.get("collection"),
                     "score": score,
                 }
             )
@@ -796,7 +874,13 @@ class LongTermMemory:
                 "query_length": len(query),
                 "results_count": len(formatted_results),
                 "results_quality_score": results_quality_score,
-                "collection": collection,
+                "collection": (
+                    normalized_collections[0]
+                    if len(normalized_collections) == 1
+                    else "__multiple__"
+                ),
+                "collections": normalized_collections,
+                "collections_count": len(normalized_collections),
                 "limit": limit,
             },
             description="Long-term memory search completed",
@@ -811,6 +895,8 @@ class LongTermMemory:
         user_id: Optional[str] = None,
         full_filter: Optional[Dict[str, Any]] = None,
         collection: Optional[str] = None,
+        collections: Optional[List[str]] = None,
+        query_embedding: Optional[Union[List[float], np.ndarray]] = None,
     ) -> Dict[str, Any]:
         """
         Build search parameters for the LongTermMemory search method.
@@ -821,6 +907,8 @@ class LongTermMemory:
             user_id: Optional user ID for filtering
             full_filter: Optional metadata filter
             collection: Optional collection name
+            collections: Optional collection names
+            query_embedding: Optional precomputed query embedding
 
         Returns:
             Dictionary of parameters for the search method
@@ -831,10 +919,15 @@ class LongTermMemory:
             "filter_metadata": full_filter,
         }
 
+        if query_embedding is not None:
+            search_params["query_embedding"] = query_embedding
+
         if user_id is not None:
             search_params["external_user_id"] = user_id
 
-        if collection:
+        if collections:
+            search_params["collections"] = collections
+        elif collection:
             search_params["collection"] = collection
 
         return search_params
@@ -843,7 +936,7 @@ class LongTermMemory:
         self,
         query_embedding: Union[List[float], np.ndarray],
         k: int = 5,
-        collection: Optional[str] = None,
+        collections: Optional[List[str]] = None,
         filter_metadata: Optional[Dict[str, Any]] = None,
         external_user_id: Optional[str] = None,
     ) -> List[Tuple[float, Dict[str, Any]]]:
@@ -857,7 +950,7 @@ class LongTermMemory:
         Args:
             query_embedding: The vector embedding to search for.
             k: Maximum number of results to return.
-            collection: The collection to search in. If None, uses the default collection.
+            collections: The collections to search in. If None, uses the default collection.
             filter_metadata: Optional metadata filters to apply.
 
         Returns:
@@ -867,9 +960,13 @@ class LongTermMemory:
         if isinstance(query_embedding, np.ndarray):
             query_embedding = query_embedding.tolist()
 
-        # Use default collection if not specified
-        if collection is None:
-            collection = self.default_collection
+        normalized_collections = list(
+            dict.fromkeys(
+                collection_name
+                for collection_name in (collections or [self.default_collection])
+                if collection_name
+            )
+        )
 
         # Resolve user identifier to internal user ID (multi-identity support)
         internal_user_id = self._resolve_user_id_sync(external_user_id)
@@ -877,28 +974,28 @@ class LongTermMemory:
         with self.Session() as session:
             # For PostgreSQL with pgvector, we need to cast the query embedding
             if self.db_manager.database_type == "postgresql":
-                from pgvector.sqlalchemy import Vector
-                from sqlalchemy import cast
-
-                query_embedding_vector = cast(query_embedding, Vector(self.dimension))
+                distance_expr = self.MemoryModel.embedding.l2_distance(query_embedding).label(
+                    "distance"
+                )
             else:
-                query_embedding_vector = query_embedding
+                distance_expr = func.l2_distance(self.MemoryModel.embedding, query_embedding).label(
+                    "distance"
+                )
 
             # Build query
             query = (
-                select(
-                    self.MemoryModel,
-                    func.l2_distance(self.MemoryModel.embedding, query_embedding_vector).label(
-                        "distance"
-                    ),
-                )
+                select(self.MemoryModel, distance_expr)
                 .filter(
                     self.MemoryModel.user_id == internal_user_id,
-                    self.MemoryModel.collection == collection,
                 )
                 .order_by("distance")
                 .limit(k)
             )
+
+            if len(normalized_collections) == 1:
+                query = query.filter(self.MemoryModel.collection == normalized_collections[0])
+            else:
+                query = query.filter(self.MemoryModel.collection.in_(normalized_collections))
 
             # Add metadata filters if provided
             if filter_metadata:
@@ -917,6 +1014,7 @@ class LongTermMemory:
                         "id": result[0].id,
                         "text": result[0].text,
                         "meta_data": result[0].meta_data,
+                        "collection": result[0].collection,
                         "created_at": (
                             result[0].created_at.isoformat() if result[0].created_at else None
                         ),
@@ -1135,7 +1233,7 @@ class LongTermMemory:
             # Get distinct collections from memories table (no JOIN needed)
             from sqlalchemy import distinct
 
-            collections = (
+            collections: List[Any] = (
                 session.query(distinct(self.MemoryModel.collection))
                 .filter(
                     self.MemoryModel.user_id == internal_user_id,
@@ -1341,7 +1439,7 @@ class LongTermMemory:
         self,
         query_embedding: Union[List[float], np.ndarray],
         k: int = 5,
-        collection: Optional[str] = None,
+        collections: Optional[List[str]] = None,
         filter_metadata: Optional[Dict[str, Any]] = None,
         external_user_id: Optional[str] = None,
     ) -> List[Tuple[float, Dict[str, Any]]]:
@@ -1354,7 +1452,7 @@ class LongTermMemory:
         Parameters:
             query_embedding: The embedding vector to search against.
             k: Maximum number of results to return.
-            collection: Name of the collection to search in; defaults to the default collection if not specified.
+            collections: Collections to search in; defaults to the default collection if not specified.
             filter_metadata: Optional dictionary of metadata key-value pairs to filter results.
             external_user_id: External user identifier to scope the search.
 
@@ -1365,9 +1463,13 @@ class LongTermMemory:
         if isinstance(query_embedding, np.ndarray):
             query_embedding = query_embedding.tolist()
 
-        # Use default collection if not specified
-        if collection is None:
-            collection = self.default_collection
+        normalized_collections = list(
+            dict.fromkeys(
+                collection_name
+                for collection_name in (collections or [self.default_collection])
+                if collection_name
+            )
+        )
 
         # Resolve user identifier to internal user ID (multi-identity support)
         internal_user_id = await self._resolve_user_id_async(external_user_id)
@@ -1375,28 +1477,28 @@ class LongTermMemory:
         async with self.db_manager.get_async_session() as session:
             # For PostgreSQL with pgvector, we need to cast the query embedding
             if self.db_manager.database_type == "postgresql":
-                from pgvector.sqlalchemy import Vector
-                from sqlalchemy import cast
-
-                query_embedding_vector = cast(query_embedding, Vector(self.dimension))
+                distance_expr = self.MemoryModel.embedding.l2_distance(query_embedding).label(
+                    "distance"
+                )
             else:
-                query_embedding_vector = query_embedding
+                distance_expr = func.l2_distance(self.MemoryModel.embedding, query_embedding).label(
+                    "distance"
+                )
 
             # Build query
             query = (
-                select(
-                    self.MemoryModel,
-                    func.l2_distance(self.MemoryModel.embedding, query_embedding_vector).label(
-                        "distance"
-                    ),
-                )
+                select(self.MemoryModel, distance_expr)
                 .filter(
                     self.MemoryModel.user_id == internal_user_id,
-                    self.MemoryModel.collection == collection,
                 )
                 .order_by("distance")
                 .limit(k)
             )
+
+            if len(normalized_collections) == 1:
+                query = query.filter(self.MemoryModel.collection == normalized_collections[0])
+            else:
+                query = query.filter(self.MemoryModel.collection.in_(normalized_collections))
 
             # Add metadata filters if provided
             if filter_metadata:
@@ -1416,6 +1518,7 @@ class LongTermMemory:
                         "id": result[0].id,
                         "text": result[0].text,
                         "meta_data": result[0].meta_data,
+                        "collection": result[0].collection,
                         "created_at": (
                             result[0].created_at.isoformat() if result[0].created_at else None
                         ),

@@ -373,6 +373,8 @@ class Memobase:
         user_id: Optional[str] = None,
         full_filter: Optional[Dict[str, Any]] = None,
         collection: Optional[str] = None,
+        collections: Optional[List[str]] = None,
+        query_embedding: Optional[List[float]] = None,
     ) -> Dict[str, Any]:
         """
         Build search parameters for the Memobase search method.
@@ -383,6 +385,8 @@ class Memobase:
             user_id: Optional user ID for filtering
             full_filter: Optional metadata filter
             collection: Optional collection name
+            collections: Optional collection names (only a single collection is supported here)
+            query_embedding: Optional pre-computed embedding
 
         Returns:
             Dictionary of parameters for the search method
@@ -393,8 +397,14 @@ class Memobase:
             "additional_filter": full_filter,
         }
 
+        if query_embedding is not None:
+            search_params["query_embedding"] = query_embedding
+
         if user_id is not None:
             search_params["external_user_id"] = user_id
+
+        if not collection and collections and len(collections) == 1:
+            collection = collections[0]
 
         if collection:
             search_params["collection"] = collection

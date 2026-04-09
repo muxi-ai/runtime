@@ -143,8 +143,8 @@ class UserContextManager:
 
             for collection in identity_collections:
                 try:
-                    # Get ALL recent memories from collection (no semantic search/embeddings needed)
-                    results = self.overlord.long_term_memory.get_recent_memories(
+                    # Get recent memories from the user's collection without semantic search.
+                    results = await self.overlord.long_term_memory.list_memories(
                         limit=10, collection=collection, external_user_id=external_user_id
                     )
                     if results:
@@ -243,8 +243,8 @@ class UserContextManager:
 
             for collection in context_collections:
                 try:
-                    # Get ALL recent memories from collection (no semantic search/embeddings needed)
-                    results = self.overlord.long_term_memory.get_recent_memories(
+                    # Get recent memories from the user's collection without semantic search.
+                    results = await self.overlord.long_term_memory.list_memories(
                         limit=10, collection=collection, external_user_id=external_user_id
                     )
                     if results:

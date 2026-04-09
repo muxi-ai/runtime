@@ -354,7 +354,7 @@ class SQLiteMemory(BaseMemory):
             return embedding_response
         return embedding_response
 
-    async def add(
+    async def add(  # type: ignore[override]
         self,
         content: str,
         metadata: Optional[Dict[str, Any]] = None,
@@ -431,7 +431,7 @@ class SQLiteMemory(BaseMemory):
         self,
         text: str,
         embedding: Union[List[float], np.ndarray],
-        metadata: Dict[str, Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         collection: Optional[str] = None,
         user_id: Optional[int] = None,
     ) -> str:
@@ -452,9 +452,9 @@ class SQLiteMemory(BaseMemory):
         """
         # Convert numpy array to bytes for SQLite storage
         if isinstance(embedding, np.ndarray):
-            embedding = embedding.astype(np.float32).tobytes()
-        elif isinstance(embedding, list):
-            embedding = np.array(embedding, dtype=np.float32).tobytes()
+            embedding_bytes = embedding.astype(np.float32).tobytes()
+        else:
+            embedding_bytes = np.array(embedding, dtype=np.float32).tobytes()
 
         # Use default collection and user if none specified
         collection = collection or self.default_collection
@@ -475,7 +475,7 @@ class SQLiteMemory(BaseMemory):
                 user_id,
                 collection,
                 text,
-                embedding,
+                embedding_bytes,
                 metadata and json.dumps(metadata),
             ),
         )
@@ -487,8 +487,10 @@ class SQLiteMemory(BaseMemory):
         self,
         query: str,
         limit: int = 5,
+        query_embedding: Optional[Union[List[float], np.ndarray]] = None,
         user_id: Optional[str] = None,
         collection: Optional[str] = None,
+        collections: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search for similar content in memory.
@@ -499,19 +501,22 @@ class SQLiteMemory(BaseMemory):
         Args:
             query: The text query to search for
             limit: Maximum number of results to return
+            query_embedding: Optional pre-computed embedding for the query
             user_id: Optional user ID for filtering
             collection: Optional collection name to filter results
+            collections: Optional collection names to search in one query
 
         Returns:
             List of dictionaries containing the search results with content and metadata
         """
-        # Generate embedding for query if provider is set
-        if not self.embedding_provider:
-            return []
+        if query_embedding is None:
+            # Generate embedding for query if provider is set
+            if not self.embedding_provider:
+                return []
 
-        # Generate embedding for query using embed() method
-        embedding_response = await self.embedding_provider.embed(query)
-        query_embedding = self._extract_embedding_from_response(embedding_response)
+            # Generate embedding for query using embed() method
+            embedding_response = await self.embedding_provider.embed(query)
+            query_embedding = self._extract_embedding_from_response(embedding_response)
 
         # Get or create user if provided
         internal_user_id = None
@@ -520,7 +525,11 @@ class SQLiteMemory(BaseMemory):
 
         # Search with embedding (filter by collection if specified)
         results = self._search_internal(
-            query_embedding, limit, collection=collection, user_id=internal_user_id
+            query_embedding,
+            limit,
+            collection=collection,
+            collections=collections,
+            user_id=internal_user_id,
         )
 
         # Format results
@@ -543,6 +552,8 @@ class SQLiteMemory(BaseMemory):
         user_id: Optional[str] = None,
         full_filter: Optional[Dict[str, Any]] = None,
         collection: Optional[str] = None,
+        collections: Optional[List[str]] = None,
+        query_embedding: Optional[Union[List[float], np.ndarray]] = None,
     ) -> Dict[str, Any]:
         """
         Build search parameters for the SQLiteMemory search method.
@@ -553,6 +564,8 @@ class SQLiteMemory(BaseMemory):
             user_id: Optional user ID for filtering
             full_filter: Optional metadata filter (not used in SQLiteMemory)
             collection: Optional collection name (not used in SQLiteMemory public API)
+            collections: Optional collection names
+            query_embedding: Optional precomputed query embedding
 
         Returns:
             Dictionary of parameters for the search method
@@ -562,10 +575,15 @@ class SQLiteMemory(BaseMemory):
             "limit": k,
         }
 
+        if query_embedding is not None:
+            search_params["query_embedding"] = query_embedding
+
         if user_id is not None:
             search_params["user_id"] = user_id
 
-        if collection is not None:
+        if collections:
+            search_params["collections"] = collections
+        elif collection is not None:
             search_params["collection"] = collection
 
         return search_params
@@ -575,6 +593,7 @@ class SQLiteMemory(BaseMemory):
         query_embedding: Union[List[float], np.ndarray],
         k: int = 5,
         collection: Optional[str] = None,
+        collections: Optional[List[str]] = None,
         user_id: Optional[int] = None,
     ) -> List[Tuple[float, Dict[str, Any]]]:
         """
@@ -587,19 +606,29 @@ class SQLiteMemory(BaseMemory):
             query_embedding: The query embedding vector
             k: Maximum number of results to return
             collection: Optional collection to search in
+            collections: Optional collections to search in one query
 
         Returns:
             List of tuples containing (similarity_score, memory_dict)
         """
         # Convert numpy array to bytes for SQLite search
         if isinstance(query_embedding, np.ndarray):
-            query_embedding = query_embedding.astype(np.float32).tobytes()
-        elif isinstance(query_embedding, list):
-            query_embedding = np.array(query_embedding, dtype=np.float32).tobytes()
+            query_embedding_bytes = query_embedding.astype(np.float32).tobytes()
+        else:
+            query_embedding_bytes = np.array(query_embedding, dtype=np.float32).tobytes()
+
+        normalized_collections = list(
+            dict.fromkeys(
+                collection_name
+                for collection_name in (collections or ([collection] if collection else []))
+                if collection_name
+            )
+        )
 
         # Build query with JOIN to ensure formation isolation
         # Search across ALL collections if collection is None
-        if collection and user_id:
+        if normalized_collections and user_id:
+            placeholders = ", ".join("?" for _ in normalized_collections)
             query = f"""
                 SELECT
                     m.id,
@@ -609,14 +638,21 @@ class SQLiteMemory(BaseMemory):
                     vec_distance_cosine(m.embedding, ?) as score
                 FROM {self.memories_table} m
                 JOIN users u ON m.user_id = u.id
-                WHERE m.collection = ?
+                WHERE m.collection IN ({placeholders})
                     AND m.user_id = ?
                     AND u.formation_id = ?
                 ORDER BY score ASC
                 LIMIT ?
             """
-            params = (query_embedding, collection, user_id, self.formation_id, k)
-        elif collection:
+            params = (
+                query_embedding_bytes,
+                *normalized_collections,
+                user_id,
+                self.formation_id,
+                k,
+            )
+        elif normalized_collections:
+            placeholders = ", ".join("?" for _ in normalized_collections)
             # No user_id — single-user mode: search the given collection
             # across all users in this formation (only one user exists in
             # single-user deployments).
@@ -629,12 +665,12 @@ class SQLiteMemory(BaseMemory):
                     vec_distance_cosine(m.embedding, ?) as score
                 FROM {self.memories_table} m
                 JOIN users u ON m.user_id = u.id
-                WHERE m.collection = ?
+                WHERE m.collection IN ({placeholders})
                     AND u.formation_id = ?
                 ORDER BY score ASC
                 LIMIT ?
             """
-            params = (query_embedding, collection, self.formation_id, k)
+            params = (query_embedding_bytes, *normalized_collections, self.formation_id, k)
         elif user_id:
             query = f"""
                 SELECT
@@ -650,7 +686,7 @@ class SQLiteMemory(BaseMemory):
                 ORDER BY score ASC
                 LIMIT ?
             """
-            params = (query_embedding, user_id, self.formation_id, k)
+            params = (query_embedding_bytes, user_id, self.formation_id, k)
         else:
             # No user_id and no collection — single-user mode: search all
             # memories in this formation regardless of user or collection.
@@ -667,7 +703,7 @@ class SQLiteMemory(BaseMemory):
                 ORDER BY score ASC
                 LIMIT ?
             """
-            params = (query_embedding, self.formation_id, k)
+            params = (query_embedding_bytes, self.formation_id, k)
 
         # Execute search
         cursor = self.conn.execute(query, params)

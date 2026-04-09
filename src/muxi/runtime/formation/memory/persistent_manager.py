@@ -5,6 +5,7 @@ This module handles all long-term memory operations including adding content,
 searching, and clearing persistent memory.
 """
 
+import inspect
 from typing import Any, Dict, List, Optional
 
 from ...services import observability
@@ -189,74 +190,141 @@ class PersistentMemoryManager:
                 description="Starting long-term memory search",
             )
 
-            # Helper function to call the appropriate search method with correct parameters
-            async def search_collection(collection=None):
-                memory_backend = self.overlord.long_term_memory
+            memory_backend = self.overlord.long_term_memory
 
+            def _supports_parameter(callable_obj, parameter_name: str) -> bool:
+                try:
+                    return parameter_name in inspect.signature(callable_obj).parameters
+                except (TypeError, ValueError):
+                    return False
+
+            async def _generate_query_embedding():
+                model = None
+                if hasattr(memory_backend, "embedding_model"):
+                    try:
+                        model = memory_backend.embedding_model
+                    except Exception:
+                        model = None
+
+                if model is None and hasattr(memory_backend, "embedding_provider"):
+                    model = getattr(memory_backend, "embedding_provider", None)
+
+                if (
+                    model is None
+                    or not hasattr(model, "embed")
+                    or not hasattr(memory_backend, "_extract_embedding_from_response")
+                ):
+                    return None
+
+                embedding_response = await model.embed(query)
+                return memory_backend._extract_embedding_from_response(embedding_response)
+
+            # Helper function to call the appropriate search method with correct parameters
+            async def search_collection(
+                collection=None,
+                collections_list=None,
+                query_embedding=None,
+            ):
                 # Use the backend's build_search_parameters method if available
                 if hasattr(memory_backend, "build_search_parameters"):
-                    search_params = memory_backend.build_search_parameters(
-                        query=query,
-                        k=k,
-                        user_id=user_id if self.overlord.is_multi_user else None,
-                        full_filter=full_filter,
-                        collection=collection,
-                    )
+                    build_kwargs = {
+                        "query": query,
+                        "k": k,
+                        "user_id": user_id if self.overlord.is_multi_user else None,
+                        "full_filter": full_filter,
+                    }
+                    if collection is not None and _supports_parameter(
+                        memory_backend.build_search_parameters, "collection"
+                    ):
+                        build_kwargs["collection"] = collection
+                    if collections_list is not None and _supports_parameter(
+                        memory_backend.build_search_parameters, "collections"
+                    ):
+                        build_kwargs["collections"] = collections_list
+                    if query_embedding is not None and _supports_parameter(
+                        memory_backend.build_search_parameters, "query_embedding"
+                    ):
+                        build_kwargs["query_embedding"] = query_embedding
+                    search_params = memory_backend.build_search_parameters(**build_kwargs)
                 else:
                     # Fallback for backends without the new method
                     search_params = {
                         "query": query,
-                        "k": k,
+                        "limit": k,
                     }
                     if full_filter:
                         search_params["filter_metadata"] = full_filter
                     if collection:
                         search_params["collection"] = collection
+                    if query_embedding is not None:
+                        search_params["query_embedding"] = query_embedding
+
+                if query_embedding is not None and _supports_parameter(
+                    memory_backend.search, "query_embedding"
+                ):
+                    search_params.setdefault("query_embedding", query_embedding)
+
+                if collections_list is not None:
+                    if _supports_parameter(memory_backend.search, "collections"):
+                        search_params["collections"] = collections_list
+                    elif len(collections_list) > 1:
+                        raise TypeError("Backend does not support multi-collection search")
 
                 return await memory_backend.search(**search_params)
 
+            def get_sort_key(item):
+                if isinstance(item, dict):
+                    score = item.get("score", 0.0)
+                    try:
+                        return float(score)
+                    except (ValueError, TypeError):
+                        raise TypeError(
+                            f"Score value not numeric for dict result: type={type(score).__name__}"
+                        )
+                elif isinstance(item, (tuple, list)):
+                    if len(item) < 1:
+                        raise TypeError(
+                            f"Tuple/list result must have at least one element for score: "
+                            f"type={type(item).__name__}, length={len(item)}"
+                        )
+                    try:
+                        return float(item[0])
+                    except (ValueError, TypeError):
+                        raise TypeError(
+                            f"Score value not numeric for {type(item).__name__} result: "
+                            f"type={type(item[0]).__name__}"
+                        )
+                else:
+                    raise TypeError(
+                        f"Unexpected result type in memory search: type={type(item).__name__}"
+                    )
+
             # If collections are specified, search each one and merge results
             if collections:
-                all_results = []
-
-                for collection in collections:
-                    collection_results = await search_collection(collection)
-                    all_results.extend(collection_results)
-
-                # Sort merged results by relevance score (distance) and take top k
-                # Handle both dict and tuple formats with defensive type checking
-                def get_sort_key(item):
-                    if isinstance(item, dict):
-                        score = item.get("score", 0.0)
+                if _supports_parameter(memory_backend.search, "collections"):
+                    lt_results = await search_collection(collections_list=collections)
+                else:
+                    all_results = []
+                    query_embedding = None
+                    if _supports_parameter(memory_backend.search, "query_embedding"):
                         try:
-                            return float(score)
-                        except (ValueError, TypeError):
-                            raise TypeError(
-                                f"Score value not numeric for dict result: type={type(score).__name__}"
-                            )
-                    elif isinstance(item, (tuple, list)):
-                        if len(item) < 1:
-                            raise TypeError(
-                                f"Tuple/list result must have at least one element for score: "
-                                f"type={type(item).__name__}, length={len(item)}"
-                            )
-                        try:
-                            return float(item[0])
-                        except (ValueError, TypeError):
-                            raise TypeError(
-                                f"Score value not numeric for {type(item).__name__} result: "
-                                f"type={type(item[0]).__name__}"
-                            )
-                    else:
-                        raise TypeError(
-                            f"Unexpected result type in memory search: type={type(item).__name__}"
+                            query_embedding = await _generate_query_embedding()
+                        except Exception:
+                            query_embedding = None
+
+                    for collection in collections:
+                        collection_results = await search_collection(
+                            collection=collection,
+                            query_embedding=query_embedding,
                         )
-
-                all_results.sort(key=get_sort_key, reverse=True)  # Higher similarity = better
-                lt_results = all_results[:k]
+                        all_results.extend(collection_results)
+                    lt_results = all_results
             else:
                 # No collections specified, search all collections
                 lt_results = await search_collection()
+
+            if lt_results:
+                lt_results = sorted(lt_results, key=get_sort_key, reverse=True)[:k]
 
             # Calculate quality metrics from results
             results_quality_score = 0.0

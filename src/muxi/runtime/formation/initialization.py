@@ -28,7 +28,9 @@ from .documents.storage.chunk_manager import DocumentChunkManager
 MAX_CLARIFICATION_ROUNDS = 32  # Maximum rounds allowed for any clarification mode
 
 
-def _resolve_embedding_model_name(explicit_model: str = None, formation: Any = None) -> str:
+def _resolve_embedding_model_name(
+    explicit_model: Optional[str] = None, formation: Any = None
+) -> Optional[str]:
     """
     Resolve the embedding model name from configuration.
 
@@ -46,7 +48,9 @@ def _resolve_embedding_model_name(explicit_model: str = None, formation: Any = N
     # Otherwise, check formation capability models
     if formation and hasattr(formation, "_capability_models"):
         embedding_config = formation._capability_models.get("embedding", {})
-        return embedding_config.get("model")
+        if isinstance(embedding_config, dict):
+            model_name = embedding_config.get("model")
+            return model_name if isinstance(model_name, str) else None
 
     return None
 
@@ -456,7 +460,11 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
     Persistent memory initialization errors are logged but do not interrupt execution.
     """
     try:
-        connection_string = persistent_config.get("connection_string")
+        raw_connection_string = persistent_config.get("connection_string")
+        if not isinstance(raw_connection_string, str) or not raw_connection_string:
+            raise ValueError("Persistent memory connection_string must be a non-empty string")
+
+        connection_string = raw_connection_string
         formation_id = getattr(formation, "formation_id", "default-formation")
 
         # Check if connection string still contains uninterpolated secrets
@@ -468,8 +476,12 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             )
 
         # Get embedding model configuration
+        explicit_embedding_model = persistent_config.get("embedding_model")
         embedding_model_name = _resolve_embedding_model_name(
-            explicit_model=persistent_config.get("embedding_model"), formation=formation
+            explicit_model=(
+                explicit_embedding_model if isinstance(explicit_embedding_model, str) else None
+            ),
+            formation=formation,
         )
 
         # For now, we'll pass the model name and let the memory systems handle model creation
@@ -615,7 +627,11 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
 
         # Get Base from db module
         from ..services.db import Base
-        from ..services.memory.long_term import User, get_memory_model  # noqa: F401
+        from ..services.memory.long_term import (  # noqa: F401
+            User,
+            ensure_memory_table_indexes,
+            get_memory_model,
+        )
 
         # Ensure the correct dimension-specific memory model is registered
         get_memory_model(embedding_dimension)
@@ -630,6 +646,7 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
         # (CREATE TABLE IF NOT EXISTS won't add columns to existing tables)
         memories_table = f"memories_{embedding_dimension}"
         _migrate_add_meta_data_column(db_manager, memories_table)
+        ensure_memory_table_indexes(db_manager, embedding_dimension)
         table_names = [
             "users",
             "user_identifiers",
@@ -969,7 +986,7 @@ def load_agents_from_configuration(formation) -> None:
                 agent_config.get("id", "unknown") if isinstance(agent_config, dict) else "unknown"
             )
             observability.observe(
-                event_type=observability.ErrorEvents.CONFIG_AGENT_VALIDATION_FAILED,
+                event_type=observability.ErrorEvents.VALIDATION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "agent_id": agent_id,
@@ -1117,11 +1134,15 @@ async def initialize_persistent_memory(
 ) -> None:
     """Initialize persistent memory from configuration."""
     try:
-        connection_string = persistent_config.get("connection_string")
-        embedding_model_name = persistent_config.get("embedding_model")
-
-        if not connection_string:
+        raw_connection_string = persistent_config.get("connection_string")
+        if not isinstance(raw_connection_string, str) or not raw_connection_string:
             return
+        connection_string = raw_connection_string
+
+        raw_embedding_model_name = persistent_config.get("embedding_model")
+        embedding_model_name = (
+            raw_embedding_model_name if isinstance(raw_embedding_model_name, str) else None
+        )
 
         # Interpolate secrets in connection string if needed
         if "${{ secrets." in connection_string:
@@ -1129,7 +1150,15 @@ async def initialize_persistent_memory(
                 interpolated = await overlord.interpolate_secrets(
                     {"connection_string": connection_string}
                 )
-                connection_string = interpolated.get("connection_string", connection_string)
+                interpolated_connection_string = interpolated.get(
+                    "connection_string", connection_string
+                )
+                if (
+                    not isinstance(interpolated_connection_string, str)
+                    or not interpolated_connection_string
+                ):
+                    return
+                connection_string = interpolated_connection_string
             except Exception as e:
                 observability.observe(
                     event_type=observability.ErrorEvents.MEMORY_OPERATION_FAILED,
@@ -1220,7 +1249,7 @@ async def initialize_persistent_memory(
 
             # Set the embedding provider after initialization
             if embedding_model:
-                sqlite_memory.embedding_provider = embedding_model
+                sqlite_memory._embedding_provider = embedding_model
 
             # Initialize required collections
             await overlord._initialize_collections()

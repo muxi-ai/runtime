@@ -197,7 +197,7 @@ class ChatOrchestrator:
         stream: Optional[bool] = None,
         files: Optional[List[Dict[str, Any]]] = None,
         bypass_workflow_approval: bool = False,
-    ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
+    ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None], MuxiResponse]:
         """
         Enhanced chat with async support for long-running agentic tasks and file attachments.
 
@@ -316,12 +316,14 @@ class ChatOrchestrator:
 
             # Only resolve if db_manager is available
             if db_mgr is not None:
-                internal_user_id, muxi_user_id = await resolve_user_identifier(
+                resolved_user = await resolve_user_identifier(
                     identifier=user_id,
                     formation_id=self.overlord.formation_id,
                     db_manager=db_mgr,
                     kv_cache=None,  # KV cache not yet implemented
                 )
+                if resolved_user is not None:
+                    internal_user_id, muxi_user_id = resolved_user
             else:
                 # No database available - skip resolution
                 # user_id will be used directly by downstream code
@@ -599,7 +601,7 @@ class ChatOrchestrator:
                 self.overlord.observability_manager.mark_request_async(request_id)
 
                 # Execute async request
-                result = await self._execute_async_request(
+                async_result = await self._execute_async_request(
                     message=enhanced_message,
                     agent_name=agent_name,
                     user_id=user_id,
@@ -616,16 +618,19 @@ class ChatOrchestrator:
                         latency_ms = (time.time() - _framework_start_time) * 1000
                         telemetry.record_request(True, latency_ms, "framework")
 
-                return result
+                return async_result
 
             # Determine streaming behavior
             use_streaming = (
                 stream if stream is not None else getattr(self.overlord, "streaming", False)
             )
+            stream_user_id = user_id or "0"
+            stream_session_id = session_id or request_id
+            chat_result: Union[str, Dict[str, Any], MuxiResponse]
 
             # Only enable streaming if actually needed
             if use_streaming:
-                streaming.enable_streaming(request_id, user_id, session_id)
+                streaming.enable_streaming(request_id, stream_user_id, stream_session_id)
 
             # Execute sync request
             if use_streaming:
@@ -641,8 +646,8 @@ class ChatOrchestrator:
                     enhanced_message=enhanced_message,
                     original_message=message,
                     agent_name=agent_name,
-                    user_id=user_id,
-                    session_id=session_id,
+                    user_id=stream_user_id,
+                    session_id=stream_session_id,
                     request_id=request_id,
                     use_async=use_async,
                     webhook_url=webhook_url,
@@ -654,7 +659,7 @@ class ChatOrchestrator:
             # Sync processing
             success = False  # Initialize before try block to prevent UnboundLocalError in finally
             try:
-                result = await self._process_sync_chat(
+                chat_result = await self._process_sync_chat(
                     message=enhanced_message,
                     agent_name=agent_name,
                     user_id=user_id,
@@ -677,7 +682,7 @@ class ChatOrchestrator:
                         latency_ms = (time.time() - _framework_start_time) * 1000
                         telemetry.record_request(success, latency_ms, "framework")
 
-            return result
+            return chat_result
 
     async def _determine_async_mode(
         self,
@@ -811,7 +816,7 @@ class ChatOrchestrator:
         use_async: Optional[bool] = None,
         webhook_url: Optional[str] = None,
         bypass_workflow_approval: bool = False,
-    ) -> Union[str, MuxiResponse]:
+    ) -> Union[str, Dict[str, Any], MuxiResponse]:
         """
         Process a chat request synchronously.
 
@@ -1049,10 +1054,29 @@ class ChatOrchestrator:
             # Message is already enhanced, return as-is
             return message
 
+        def _is_profile_recall_request(current_message: str) -> bool:
+            normalized = current_message.strip().lower()
+            profile_patterns = [
+                "what is my current user profile",
+                "what's my current user profile",
+                "what is my user profile",
+                "what's my user profile",
+                "what is my current profile",
+                "what's my current profile",
+                "what is my profile",
+                "what's my profile",
+                "what do you know about me",
+                "tell me about me",
+                "summarize my profile",
+                "summarise my profile",
+            ]
+            return any(pattern in normalized for pattern in profile_patterns)
+
         # Get configuration from formation
         buffer_config = self.overlord.formation_config.get("memory", {}).get("buffer", {})
         buffer_size = buffer_config.get("size", 10)
         vector_search = buffer_config.get("vector_search", True)
+        is_profile_recall_request = _is_profile_recall_request(message)
 
         # Run all three context sources concurrently
         async def _fetch_user_synopsis():
@@ -1114,6 +1138,45 @@ class ChatOrchestrator:
                     )
             return ""
 
+        async def _fetch_profile_memory_facts():
+            if not self.overlord.long_term_memory or not user_id:
+                return ""
+
+            if not hasattr(self.overlord.long_term_memory, "list_memories"):
+                return ""
+
+            try:
+                profile_collections = [
+                    "user_identity",
+                    "relationships",
+                    "work_projects",
+                    "preferences",
+                    "activities",
+                ]
+                seen_contents = set()
+                memory_parts = []
+
+                for collection in profile_collections:
+                    memories = await self.overlord.long_term_memory.list_memories(
+                        limit=2,
+                        collection=collection,
+                        external_user_id=user_id,
+                    )
+                    for mem in memories:
+                        content = (mem.get("text") or mem.get("content") or "").strip()
+                        if not content or content in seen_contents:
+                            continue
+                        seen_contents.add(content)
+                        if len(content) > 200:
+                            content = content[:197] + "..."
+                        memory_parts.append(f"- {content}")
+                        if len(memory_parts) >= 6:
+                            return "\n".join(memory_parts)
+
+                return "\n".join(memory_parts)
+            except Exception:
+                return ""
+
         async def _fetch_buffer_context():
             if self.overlord.buffer_memory_manager:
                 try:
@@ -1142,11 +1205,21 @@ class ChatOrchestrator:
                     pass
             return None
 
-        user_profile_text, long_term_memories, context_messages_list = await asyncio.gather(
-            _fetch_user_synopsis(),
-            _fetch_long_term_memories(),
-            _fetch_buffer_context(),
-        )
+        if is_profile_recall_request:
+            user_profile_text, profile_memory_facts, context_messages_list = await asyncio.gather(
+                _fetch_user_synopsis(),
+                _fetch_profile_memory_facts(),
+                _fetch_buffer_context(),
+            )
+            long_term_memories = profile_memory_facts
+            if not user_profile_text and not long_term_memories:
+                long_term_memories = await _fetch_long_term_memories()
+        else:
+            user_profile_text, long_term_memories, context_messages_list = await asyncio.gather(
+                _fetch_user_synopsis(),
+                _fetch_long_term_memories(),
+                _fetch_buffer_context(),
+            )
 
         # Format buffer context results
         context_text = ""
@@ -1262,7 +1335,7 @@ class ChatOrchestrator:
         agent_response: str,
         user_id: Any,
         agent_id: str,
-        enhanced_message: str = None,
+        enhanced_message: Optional[str] = None,
     ) -> None:
         """Extract user information from conversation without blocking."""
         try:

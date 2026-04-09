@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.20260409.0 - Faster Persistent Memory Recall & Profile Lookups
+
+### Bug Fixes
+
+- **Profile and memory recall could be slower than necessary** -- Requests that searched across multiple memory collections could recompute the same embedding and fan out into extra lookups, adding avoidable latency before context was assembled. Fix: persistent memory search now uses a single multi-collection query where supported and otherwise reuses one query embedding across fallback searches.
+- **Broad profile questions could miss the fastest available path** -- Requests like “what do you know about me?” could jump into heavier semantic recall even when recent profile facts or cached synopsis data were already enough. Fix: restore lightweight user-scoped reads for synopsis/profile data and surface recent profile facts before broader semantic search.
+- **Large PostgreSQL-backed memory stores could degrade more than necessary** -- Persistent memory tables were missing cheap lookup and vector index paths as data grew. Fix: add best-effort PostgreSQL indexes for user/collection filtering and semantic search, while keeping index creation failures non-fatal and warning-only.
+
+### Tests
+
+- **Focused memory performance coverage** -- Added unit coverage for multi-collection ranking and top-k stability, profile fast-path behavior, and non-fatal PostgreSQL index creation handling.
+- **Live validation** -- Full unit suite and targeted memory end-to-end tests passed, and a 5,000-row benchmark user confirmed faster unified semantic recall and cheap profile lookups.
+- **Random e2e regression sniff tests** -- Ran 10 random standalone e2e tests before release confidence checking, with all 10 passing across `foundation`, `memory`, `multimodal`, `orchestration`, `clarification`, `scheduling`, `api`, and `skills`.
+
 ## 0.20260408.2 - Chat SSE Keepalive During Slow Setup
 
 ### Bug Fixes
