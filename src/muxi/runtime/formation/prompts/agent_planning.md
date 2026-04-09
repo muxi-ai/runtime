@@ -48,6 +48,9 @@ TOOL CHAINING RULE: Many tools require IDs or references from other tools. If a 
 - Act on a specific resource → first get/list to discover the resource identifier
 - The output_placeholder from the lookup step flows into the parameters of the subsequent step
 Never assume you know an ID — always fetch it from the source system first.
+- If the user names a file, message, record, workbook, task, folder, or site but you only have its human-readable name, plan discovery steps first to obtain the system identifier the final tool requires.
+- Never satisfy a required identifier by guessing, using an empty string, or inventing a user-facing field name that is not part of the real tool call.
+- If you cannot obtain the required identifier with the available tools, do not include the final action tool in your executable steps.
 
 IMPORTANT: For each step you can do yourself, you MUST include appropriate parameters:
 - Look at the tool name and the user's request to determine what parameters are needed
