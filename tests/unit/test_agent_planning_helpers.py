@@ -66,6 +66,75 @@ def test_finalize_execution_plan_strips_delegate_steps_when_delegation_is_disabl
     assert finalized["my_steps"][0]["tool_name"] == "ms365__get-current-user"
 
 
+def test_finalize_execution_plan_preserves_step_parameters():
+    agent = object.__new__(Agent)
+    plan = {
+        "steps": [
+            {
+                "action": "Find workbook in folder",
+                "tool_name": "ms365__list-folder-files",
+                "can_i_do_this": True,
+                "parameters": {"driveId": "drive-123", "searchQuery": "Book.xlsx"},
+                "output_placeholder": "{{FILE_LOOKUP}}",
+            }
+        ]
+    }
+
+    finalized = agent._finalize_execution_plan(
+        plan, {"ms365__list-folder-files"}, allow_delegation=False
+    )
+
+    assert finalized["my_steps"][0]["parameters"] == {
+        "driveId": "drive-123",
+        "searchQuery": "Book.xlsx",
+    }
+
+
+@pytest.mark.asyncio
+async def test_plan_before_execution_includes_required_params_in_prompt():
+    agent = object.__new__(Agent)
+    agent.name = "Test Agent"
+    agent.agent_id = "test-agent"
+    agent.overlord = None
+    agent.model = SimpleNamespace(
+        chat=AsyncMock(
+            return_value='{"steps":[],"my_steps":[],"delegate_steps":[],"data_flow":"Direct response - no tools needed"}'
+        )
+    )
+
+    available_tools = [
+        {
+            "function": {
+                "name": "ms365-mcp__list-excel-worksheets",
+                "description": "List all worksheets in an Excel workbook.",
+                "parameters": {
+                    "type": "object",
+                    "required": ["driveId", "driveItemId"],
+                    "properties": {
+                        "driveId": {"type": "string"},
+                        "driveItemId": {"type": "string"},
+                    },
+                },
+            }
+        }
+    ]
+
+    with (
+        patch("muxi.runtime.formation.agents.agent.streaming.stream"),
+        patch("muxi.runtime.formation.agents.agent.observability.observe"),
+        patch("muxi.runtime.formation.prompts.loader.PromptLoader.get", return_value=""),
+    ):
+        await agent._plan_before_execution(
+            "What sheets do I have in Book.xlsx?",
+            available_tools=available_tools,
+            allow_delegation=False,
+        )
+
+    planning_messages = agent.model.chat.call_args.args[0]
+    planning_prompt = planning_messages[1]["content"]
+    assert "Required params: driveId, driveItemId." in planning_prompt
+
+
 @pytest.mark.asyncio
 async def test_infer_tool_parameters_rejects_blank_required_string_values():
     agent = object.__new__(Agent)
@@ -153,3 +222,63 @@ async def test_invoke_tool_logs_success_false_for_mcp_error_result():
     ]
     assert completion_events
     assert completion_events[-1]["data"]["success"] is False
+
+
+@pytest.mark.asyncio
+async def test_repair_execution_plan_replans_with_missing_parameter_feedback():
+    agent = object.__new__(Agent)
+    agent.agent_id = "test-agent"
+    repaired_plan = {
+        "steps": [
+            {
+                "action": "Find Book.xlsx in the drive",
+                "tool_name": "ms365-mcp__list-folder-files",
+                "can_i_do_this": True,
+            },
+            {
+                "action": "List worksheets in Book.xlsx",
+                "tool_name": "ms365-mcp__list-excel-worksheets",
+                "can_i_do_this": True,
+            },
+        ],
+        "my_steps": [
+            {
+                "action": "Find Book.xlsx in the drive",
+                "tool_name": "ms365-mcp__list-folder-files",
+            },
+            {
+                "action": "List worksheets in Book.xlsx",
+                "tool_name": "ms365-mcp__list-excel-worksheets",
+            },
+        ],
+        "delegate_steps": [],
+        "data_flow": "Lookup workbook, then list worksheets",
+    }
+    agent._plan_before_execution = AsyncMock(return_value=repaired_plan)
+
+    with patch("muxi.runtime.formation.agents.agent.observability.observe"):
+        result = await agent._repair_execution_plan_for_missing_parameters(
+            user_message="What sheets do I have in Book.xlsx?",
+            available_tools=[],
+            allow_delegation=False,
+            failed_step={
+                "action": "List worksheets in Book.xlsx",
+                "tool_name": "ms365-mcp__list-excel-worksheets",
+            },
+            tool_name="ms365-mcp__list-excel-worksheets",
+            unresolved_params=["driveItemId"],
+            current_plan={
+                "my_steps": [
+                    {
+                        "action": "List worksheets in Book.xlsx",
+                        "tool_name": "ms365-mcp__list-excel-worksheets",
+                    }
+                ]
+            },
+            my_results={},
+        )
+
+    assert result == repaired_plan
+    call_kwargs = agent._plan_before_execution.call_args.kwargs
+    assert "driveItemId" in call_kwargs["replanning_feedback"]
+    assert "Revise the plan" in call_kwargs["replanning_feedback"]

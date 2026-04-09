@@ -1195,6 +1195,7 @@ class Agent:
         execution_plan = None
         my_results = {}
         planning_response_parts = []  # Collect response parts during planning
+        replan_attempted = False
 
         # Only plan for user messages that might need multiple steps (skip for A2A tasks only)
         if (
@@ -1285,7 +1286,20 @@ class Agent:
                         },
                         description=f"Starting execution of {len(execution_plan.get('my_steps', []))} my_steps",
                     )
-                    for step in execution_plan.get("my_steps", []):
+                    step_index = 0
+                    while step_index < len(execution_plan.get("my_steps", [])):
+                        step = execution_plan.get("my_steps", [])[step_index]
+                        placeholder = step.get(
+                            "output_placeholder",
+                            f"{{{step.get('tool_name', 'TOOL').upper()}_OUTPUT}}",
+                        )
+
+                        if placeholder in my_results and not self._is_tool_execution_error(
+                            my_results[placeholder]
+                        ):
+                            step_index += 1
+                            continue
+
                         observability.observe(
                             event_type=observability.ConversationEvents.AGENT_PLANNING,
                             level=observability.EventLevel.DEBUG,
@@ -1319,16 +1333,14 @@ class Agent:
                                         actual_tool_name = tool_name
 
                                     # Extract parameters from step configuration or use LLM to generate them
-                                    parameters = step.get("parameters", {})
+                                    parameters = dict(step.get("parameters", {}) or {})
+                                    tool_schema = tool_def.get("function", {})
+                                    full_param_schema = tool_schema.get("parameters", {})
+                                    required_params = full_param_schema.get("required", [])
+                                    param_properties = full_param_schema.get("properties", {})
 
                                     # If no parameters provided, try to infer them from context
                                     if not parameters:
-                                        # Get tool schema to understand required parameters
-                                        tool_schema = tool_def.get("function", {})
-                                        full_param_schema = tool_schema.get("parameters", {})
-                                        required_params = full_param_schema.get("required", [])
-                                        param_properties = full_param_schema.get("properties", {})
-
                                         if required_params:
                                             # Build context including previous step results
                                             # so the LLM can extract IDs/values from prior tool outputs
@@ -1366,40 +1378,65 @@ class Agent:
                                                     description=f"Inferred parameters for {tool_name}",
                                                 )
 
-                                        # If still no parameters and required params exist, store
-                                        # an explicit error result instead of silently continuing
-                                        if not parameters and required_params:
-                                            placeholder = step.get(
-                                                "output_placeholder",
-                                                f"{{{tool_name.upper()}_OUTPUT}}",
+                                    unresolved_required_params = []
+                                    if required_params:
+                                        unresolved_required_params = (
+                                            self._get_unresolved_required_parameters(
+                                                parameters,
+                                                required_params,
+                                                param_properties,
+                                                full_param_schema,
                                             )
-                                            unresolved_params = ", ".join(required_params)
-                                            my_results[placeholder] = {
-                                                "status": "error",
-                                                "error": (
-                                                    "Could not infer required parameters for "
-                                                    f"{tool_name}: {unresolved_params}. "
-                                                    "A discovery or lookup step may be required first."
-                                                ),
-                                                "tool_name": tool_name,
-                                                "step_action": step.get("action", ""),
-                                                "required_params": required_params,
-                                            }
-                                            observability.observe(
-                                                event_type=observability.ConversationEvents.AGENT_PLANNING,
-                                                level=observability.EventLevel.WARNING,
-                                                data={
-                                                    "agent_id": self.agent_id,
-                                                    "tool_name": tool_name,
-                                                    "required_params": required_params,
-                                                    "reason": "cannot_infer_parameters",
-                                                },
-                                                description=(
-                                                    f"Skipping planned step {tool_name} - "
-                                                    "cannot infer required parameters"
-                                                ),
+                                        )
+
+                                    if unresolved_required_params:
+                                        repaired_plan = None
+                                        if not replan_attempted:
+                                            replan_attempted = True
+                                            repaired_plan = await self._repair_execution_plan_for_missing_parameters(
+                                                user_message=actual_user_request,
+                                                available_tools=tools,
+                                                allow_delegation=not is_a2a_task,
+                                                failed_step=step,
+                                                tool_name=tool_name,
+                                                unresolved_params=unresolved_required_params,
+                                                current_plan=execution_plan,
+                                                my_results=my_results,
                                             )
+
+                                        if repaired_plan:
+                                            execution_plan = repaired_plan
+                                            step_index = 0
                                             continue
+
+                                        unresolved_params = ", ".join(unresolved_required_params)
+                                        my_results[placeholder] = {
+                                            "status": "error",
+                                            "error": (
+                                                "Could not infer required parameters for "
+                                                f"{tool_name}: {unresolved_params}. "
+                                                "A discovery or lookup step may be required first."
+                                            ),
+                                            "tool_name": tool_name,
+                                            "step_action": step.get("action", ""),
+                                            "required_params": unresolved_required_params,
+                                        }
+                                        observability.observe(
+                                            event_type=observability.ConversationEvents.AGENT_PLANNING,
+                                            level=observability.EventLevel.WARNING,
+                                            data={
+                                                "agent_id": self.agent_id,
+                                                "tool_name": tool_name,
+                                                "required_params": unresolved_required_params,
+                                                "reason": "cannot_infer_parameters",
+                                            },
+                                            description=(
+                                                f"Skipping planned step {tool_name} - "
+                                                "cannot infer required parameters"
+                                            ),
+                                        )
+                                        step_index += 1
+                                        continue
 
                                     # Validate parameters against tool schema before execution
                                     is_valid, validation_error = self._validate_tool_parameters(
@@ -1426,15 +1463,13 @@ class Agent:
                                         )
 
                                         # Store error result instead of executing
-                                        placeholder = step.get(
-                                            "output_placeholder", f"{{{tool_name.upper()}_OUTPUT}}"
-                                        )
                                         my_results[placeholder] = {
                                             "status": "error",
                                             "error": f"Parameter validation failed: {validation_error}",
                                             "tool_name": tool_name,
                                             "step_action": step.get("action", ""),
                                         }
+                                        step_index += 1
                                         continue
 
                                     # Check for cancellation before tool execution
@@ -1459,9 +1494,6 @@ class Agent:
                                     )
 
                                     # Store result with placeholder key
-                                    placeholder = step.get(
-                                        "output_placeholder", f"{{{tool_name.upper()}_OUTPUT}}"
-                                    )
                                     my_results[placeholder] = tool_result
 
                                     if self._is_tool_execution_error(tool_result):
@@ -1480,6 +1512,7 @@ class Agent:
                                                 "not treated as a successful execution"
                                             ),
                                         )
+                                        step_index += 1
                                         continue
 
                                     # Log successful execution
@@ -1515,9 +1548,6 @@ class Agent:
                                 raise
 
                             # Store error result for placeholder replacement
-                            placeholder = step.get(
-                                "output_placeholder", f"{{{tool_name.upper()}_OUTPUT}}"
-                            )
                             error_result = {
                                 "status": "error",
                                 "error": str(e),
@@ -1537,6 +1567,7 @@ class Agent:
                                 },
                                 description=f"Failed to execute planned step: {str(e)}",
                             )
+                        step_index += 1
 
                 # DELEGATION PHASE: Handle delegate_steps
                 if execution_plan and execution_plan.get("delegate_steps"):
@@ -3729,11 +3760,135 @@ class Agent:
             )
             return None
 
+    @staticmethod
+    def _summarize_planning_result(result: Any, limit: int = 500) -> str:
+        """Summarize a prior tool result for planning/replanning context."""
+        if isinstance(result, dict):
+            candidate = result.get("result", result.get("output", result.get("error", result)))
+        else:
+            candidate = result
+
+        text = str(candidate).strip()
+        if len(text) > limit:
+            return text[: limit - 3].rstrip() + "..."
+        return text
+
+    def _build_missing_parameter_replanning_feedback(
+        self,
+        failed_step: Dict[str, Any],
+        tool_name: str,
+        unresolved_params: List[str],
+        current_plan: Dict[str, Any],
+        my_results: Dict[str, Any],
+    ) -> str:
+        """Explain why the current plan failed and what the replan must fix."""
+        current_tools = [
+            step.get("tool_name", "")
+            for step in current_plan.get("my_steps", [])
+            if step.get("tool_name")
+        ]
+        feedback_lines = [
+            "Previous execution plan could not complete because a tool step was missing",
+            "required identifiers that must be discovered before the final action.",
+            f"Failed step: {failed_step.get('action', '')}",
+            f"Tool: {tool_name}",
+            f"Missing required parameters: {', '.join(unresolved_params)}",
+        ]
+        if current_tools:
+            feedback_lines.append(f"Current tool chain: {', '.join(current_tools)}")
+        feedback_lines.extend(
+            [
+                "Revise the plan so prerequisite lookup/discovery steps happen before the",
+                "failed tool call.",
+                "Do not guess missing identifiers or use placeholder values.",
+            ]
+        )
+        if my_results:
+            feedback_lines.append(
+                "Reuse any existing tool results already gathered instead of repeating completed steps."
+            )
+        return "\n".join(feedback_lines)
+
+    async def _repair_execution_plan_for_missing_parameters(
+        self,
+        user_message: str,
+        available_tools: List[Dict[str, Any]],
+        allow_delegation: bool,
+        failed_step: Dict[str, Any],
+        tool_name: str,
+        unresolved_params: List[str],
+        current_plan: Dict[str, Any],
+        my_results: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Attempt one repair-planning pass when execution discovers missing IDs."""
+        observability.observe(
+            event_type=observability.ConversationEvents.AGENT_PLANNING,
+            level=observability.EventLevel.WARNING,
+            data={
+                "agent_id": self.agent_id,
+                "phase": "repair_plan_start",
+                "tool_name": tool_name,
+                "unresolved_params": unresolved_params,
+            },
+            description=(
+                f"Attempting repair plan for {tool_name} due to unresolved params "
+                f"{unresolved_params}"
+            ),
+        )
+
+        repaired_plan = await self._plan_before_execution(
+            user_message,
+            available_tools,
+            allow_delegation=allow_delegation,
+            replanning_feedback=self._build_missing_parameter_replanning_feedback(
+                failed_step=failed_step,
+                tool_name=tool_name,
+                unresolved_params=unresolved_params,
+                current_plan=current_plan,
+                my_results=my_results,
+            ),
+            completed_results=my_results,
+        )
+
+        current_tools = [step.get("tool_name", "") for step in current_plan.get("my_steps", [])]
+        repaired_tools = [step.get("tool_name", "") for step in repaired_plan.get("my_steps", [])]
+
+        if repaired_tools == current_tools:
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_PLANNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": self.agent_id,
+                    "phase": "repair_plan_no_change",
+                    "tool_name": tool_name,
+                    "unresolved_params": unresolved_params,
+                    "current_tools": current_tools,
+                },
+                description="Repair planning produced no meaningful tool-chain change",
+            )
+            return None
+
+        observability.observe(
+            event_type=observability.ConversationEvents.AGENT_PLANNING,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": self.agent_id,
+                "phase": "repair_plan_completed",
+                "tool_name": tool_name,
+                "unresolved_params": unresolved_params,
+                "repaired_tools": repaired_tools,
+            },
+            description=f"Repair planning updated tool chain for {tool_name}",
+        )
+        return repaired_plan
+
     async def _plan_before_execution(
         self,
         user_message: str,
         available_tools: List[Dict] = None,
         allow_delegation: bool = True,
+        replanning_feedback: Optional[str] = None,
+        completed_results: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Force agent to plan before executing any tools.
@@ -3786,16 +3941,36 @@ class Agent:
             tool_fn = tool.get("function", {})
             tool_name = tool_fn.get("name", "")
             tool_description = " ".join((tool_fn.get("description") or "").split())
+            tool_parameters = tool_fn.get("parameters", {})
+            required_params = tool_parameters.get("required", [])
             if "." in tool_description:
                 tool_description = tool_description.split(".", 1)[0].strip() + "."
             if len(tool_description) > 120:
                 tool_description = tool_description[:117].rstrip() + "..."
+            if required_params:
+                required_summary = ", ".join(required_params[:4])
+                if len(required_params) > 4:
+                    required_summary += ", ..."
+                tool_description = (
+                    f"{tool_description} Required params: {required_summary}."
+                    if tool_description
+                    else f"Required params: {required_summary}."
+                )
 
             if tool_description:
                 tool_lines.append(f"- {tool_name}: {tool_description}")
             else:
                 tool_lines.append(f"- {tool_name}")
         planning_prompt += "\n".join(tool_lines)
+
+        if completed_results:
+            planning_prompt += "\n\n## Existing tool results:\n"
+            for placeholder, result in completed_results.items():
+                planning_prompt += f"- {placeholder}: {self._summarize_planning_result(result)}\n"
+
+        if replanning_feedback:
+            planning_prompt += "\n\n## Replanning feedback:\n"
+            planning_prompt += replanning_feedback.strip() + "\n"
 
         # Section 2: Built-in agents (internal agents in same formation)
         internal_agents = []
@@ -4068,6 +4243,7 @@ class Agent:
             {
                 "action": step["action"],
                 "tool_name": step["tool_name"],
+                "parameters": step.get("parameters", {}),
                 "output_placeholder": step.get(
                     "output_placeholder", f"{{{step['tool_name'].upper()}_OUTPUT}}"
                 ),

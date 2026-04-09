@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.20260409.2 - Repair Planning for Missing Tool Identifiers
+
+### Bug Fixes
+
+- **Sequential MCP workflows could still stop after the first missing identifier** -- The earlier guardrail correctly refused to call tools with unresolved required parameters such as `driveItemId`, but execution still stopped at that point because the runtime had no way to repair a bad one-step plan into the required discovery chain. Fix: add a single repair-planning pass that feeds the failed tool, missing parameters, current tool chain, and any prior tool results back into the planner so it can insert prerequisite lookup steps before retrying the workflow.
+- **The planner did not get enough schema signal to choose discovery chains reliably** -- Planning context mostly exposed tool names and short descriptions, which made it too easy for the LLM to choose tools like `list-excel-worksheets` without realizing they require identifiers from earlier lookup steps. Fix: include each tool's required parameter names in the planning prompt so the planner can better infer when a prerequisite discovery step is needed.
+- **Planner-supplied parameters could be dropped before execution** -- `_finalize_execution_plan()` rebuilt `my_steps` from `steps` but discarded explicit parameters from the plan, forcing later inference even when the planner had already provided useful arguments such as `driveId` or `searchQuery`. Fix: preserve planner-supplied parameters when normalizing `my_steps`.
+
+### Tests
+
+- **Focused planning helper coverage** -- Extended `tests/unit/test_agent_planning_helpers.py` to verify planner-supplied parameters are preserved, required params are surfaced in the planning prompt, and repair-planning is triggered when execution discovers a missing identifier.
+- **Random e2e regression sniff tests** -- Ran 5 random standalone e2e tests before release confidence checking, with all 5 passing.
+
 ## 0.20260409.1 - Planner Guardrails for Identifier Discovery & Tool Error Reporting
 
 ### Bug Fixes
