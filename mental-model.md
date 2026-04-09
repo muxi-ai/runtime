@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-08
+**Last Updated:** 2026-04-09
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -3139,6 +3139,9 @@ https://github.com/muxi-ai/runtime/releases/download/v{version}/muxi-runtime-{ve
 - Use CPU-only PyTorch for container images unless GPU required
 - SIF compression ratio is roughly 3:1 (2.8GB Docker → 800MB SIF)
 - GitHub release assets have 2GB limit
+- Before pushing release commits, inspect `origin/<branch>..HEAD` for sensitive files:
+  deleting a private document in a later commit does not stop it from becoming public if an
+  earlier unpushed commit already contains it
 
 ### 2026-03-01: Dynamic Embedding Dimensions
 
@@ -4010,6 +4013,37 @@ buffer search, embedding model warm-up).
 **Files:**
 - `src/muxi/runtime/formation/server/routes/client/chat.py`
 - `tests/unit/test_chat_sse_keepalive.py`
+
+### 2026-04-09: Planner Identifier Guardrails & Tool-Error Observability
+
+**Problem:** The planning path could still move forward with unresolved required tool identifiers
+and could treat structured MCP/tool error payloads as successful execution in observability.
+
+**Root causes:**
+- `_infer_tool_parameters()` explicitly told the model to fall back to placeholders like empty
+  strings, `0`, or `false` when it could not determine a required value
+- The planner only checked whether required parameter keys existed, not whether the inferred values
+  were meaningfully resolved
+- Planned tool steps always emitted a success-shaped completion event after `invoke_tool()`, even
+  when the returned payload was a handled error dict rather than an exception
+- `invoke_tool()` itself logged success for any returned dict, including MCP responses shaped like
+  `{"status": "error"}` or `{"result": {"isError": true, ...}}`
+
+**Fixes:**
+- Strengthened the planning prompt to require identifier-discovery steps before action steps and to
+  forbid guessed placeholder identifiers
+- Added `_get_unresolved_required_parameters()` /
+  `_has_resolved_required_parameter_value()` so blank required strings are rejected after parameter
+  inference
+- When inference still cannot resolve required inputs, planning now stores an explicit error result
+  instead of silently skipping ahead
+- Added `_is_tool_execution_error()` and used it in both planning execution and `invoke_tool()` so
+  handled tool-error payloads are logged as failures rather than successes
+
+**Files:**
+- `src/muxi/runtime/formation/agents/agent.py`
+- `src/muxi/runtime/formation/prompts/agent_planning.md`
+- `tests/unit/test_agent_planning_helpers.py`
 
 ### 2026-03-20: Scheduler Routes, Memobase Init & Dimension Propagation
 
