@@ -1366,11 +1366,28 @@ class Agent:
                                                     description=f"Inferred parameters for {tool_name}",
                                                 )
 
-                                        # If still no parameters and required params exist, skip
+                                        # If still no parameters and required params exist, store
+                                        # an explicit error result instead of silently continuing
                                         if not parameters and required_params:
+                                            placeholder = step.get(
+                                                "output_placeholder",
+                                                f"{{{tool_name.upper()}_OUTPUT}}",
+                                            )
+                                            unresolved_params = ", ".join(required_params)
+                                            my_results[placeholder] = {
+                                                "status": "error",
+                                                "error": (
+                                                    "Could not infer required parameters for "
+                                                    f"{tool_name}: {unresolved_params}. "
+                                                    "A discovery or lookup step may be required first."
+                                                ),
+                                                "tool_name": tool_name,
+                                                "step_action": step.get("action", ""),
+                                                "required_params": required_params,
+                                            }
                                             observability.observe(
                                                 event_type=observability.ConversationEvents.AGENT_PLANNING,
-                                                level=observability.EventLevel.DEBUG,
+                                                level=observability.EventLevel.WARNING,
                                                 data={
                                                     "agent_id": self.agent_id,
                                                     "tool_name": tool_name,
@@ -1447,6 +1464,24 @@ class Agent:
                                     )
                                     my_results[placeholder] = tool_result
 
+                                    if self._is_tool_execution_error(tool_result):
+                                        observability.observe(
+                                            event_type=observability.ErrorEvents.TOOL_CALL_ERROR,
+                                            level=observability.EventLevel.WARNING,
+                                            data={
+                                                "agent_id": self.agent_id,
+                                                "tool_name": tool_name,
+                                                "step": step.get("action"),
+                                                "phase": "planning_execution",
+                                                "result": tool_result,
+                                            },
+                                            description=(
+                                                "Planned step returned a tool error and was "
+                                                "not treated as a successful execution"
+                                            ),
+                                        )
+                                        continue
+
                                     # Log successful execution
                                     observability.observe(
                                         event_type=observability.ConversationEvents.MCP_TOOL_CALL_COMPLETED,
@@ -1456,6 +1491,7 @@ class Agent:
                                             "tool_name": tool_name,
                                             "step_action": step.get("action"),
                                             "phase": "planning_execution",
+                                            "success": True,
                                         },
                                         description=f"Executed planned step: {step.get('action')}",
                                     )
@@ -3281,6 +3317,8 @@ class Agent:
                 if self.overlord and hasattr(self.overlord, "request_tracker"):
                     await check_cancellation_from_context(self.overlord.request_tracker)
 
+            tool_success = not self._is_tool_execution_error(result)
+
             observability.observe(
                 event_type=observability.ConversationEvents.MCP_TOOL_CALL_COMPLETED,
                 level=observability.EventLevel.INFO,
@@ -3288,9 +3326,13 @@ class Agent:
                     "agent_id": self.agent_id,
                     "tool_name": tool_name,
                     "server_id": server_id,
-                    "success": True,
+                    "success": tool_success,
                 },
-                description=f"Agent {self.agent_id} completed tool call {tool_name}",
+                description=(
+                    f"Agent {self.agent_id} completed tool call {tool_name}"
+                    if tool_success
+                    else f"Agent {self.agent_id} received tool error from {tool_name}"
+                ),
             )
 
             return result
@@ -3739,9 +3781,21 @@ class Agent:
 
         # Section 1: Available tools (agent's own MCP tools)
         planning_prompt += "\n\n## Available tools:\n"
-        planning_prompt += (
-            f"{', '.join([t.get('function', {}).get('name', '') for t in (available_tools or [])])}"
-        )
+        tool_lines = []
+        for tool in available_tools or []:
+            tool_fn = tool.get("function", {})
+            tool_name = tool_fn.get("name", "")
+            tool_description = " ".join((tool_fn.get("description") or "").split())
+            if "." in tool_description:
+                tool_description = tool_description.split(".", 1)[0].strip() + "."
+            if len(tool_description) > 120:
+                tool_description = tool_description[:117].rstrip() + "..."
+
+            if tool_description:
+                tool_lines.append(f"- {tool_name}: {tool_description}")
+            else:
+                tool_lines.append(f"- {tool_name}")
+        planning_prompt += "\n".join(tool_lines)
 
         # Section 2: Built-in agents (internal agents in same formation)
         internal_agents = []
@@ -4799,6 +4853,58 @@ class Agent:
             # This prevents blocking legitimate use cases with incomplete schemas
             return True, None
 
+    def _has_resolved_required_parameter_value(
+        self, param_value: Any, param_def: Dict[str, Any]
+    ) -> bool:
+        """Return True when a required parameter value looks meaningfully resolved."""
+        if param_value is None:
+            return False
+
+        param_type = param_def.get("type")
+        if param_type == "string" or isinstance(param_value, str):
+            return bool(str(param_value).strip())
+
+        return True
+
+    def _get_unresolved_required_parameters(
+        self,
+        parameters: Dict[str, Any],
+        required_params: List[str],
+        param_properties: Dict[str, Any],
+        full_schema: Dict[str, Any],
+    ) -> List[str]:
+        """Identify required parameters that are missing or still unresolved."""
+        unresolved: List[str] = []
+
+        for req_param in required_params:
+            if req_param not in parameters:
+                unresolved.append(req_param)
+                continue
+
+            param_def = self._resolve_schema_ref(param_properties.get(req_param, {}), full_schema)
+            if not self._has_resolved_required_parameter_value(
+                parameters.get(req_param), param_def
+            ):
+                unresolved.append(req_param)
+
+        return unresolved
+
+    @staticmethod
+    def _is_tool_execution_error(result: Any) -> bool:
+        """Return True when a tool result represents a handled error response."""
+        if not isinstance(result, dict):
+            return False
+
+        if result.get("status") == "error" or result.get("isError") is True or "error" in result:
+            return True
+
+        nested_result = result.get("result")
+        if isinstance(nested_result, dict):
+            if nested_result.get("status") == "error" or nested_result.get("isError") is True:
+                return True
+
+        return False
+
     def _resolve_schema_ref(
         self, param_def: Dict[str, Any], full_schema: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -4924,10 +5030,10 @@ Respond with ONLY a valid JSON object containing the parameter values.
 Example: {{"param1": "value1", "param2": 123}}
 
 If you cannot determine a value from context:
-- For enums: use the first available option
-- For booleans: use false (safer default)
-- For strings: use an empty string
-- For numbers: use 0"""
+- Do NOT invent placeholder/default values
+- Do NOT use empty strings, 0, false, or empty objects/lists to satisfy required parameters
+- Omit unresolved parameters from the JSON object entirely
+- If a required identifier must come from a prior tool call, leave it unresolved rather than guessing"""
 
             # Use LLM to infer parameters
             messages = [
@@ -4989,6 +5095,29 @@ If you cannot determine a value from context:
                         "response": response_text[:500],
                     },
                     description="Failed to parse LLM parameter inference as JSON after retry",
+                )
+                return {}
+
+            unresolved_required_params = self._get_unresolved_required_parameters(
+                parameters,
+                required_params,
+                param_properties,
+                full_schema,
+            )
+
+            if unresolved_required_params:
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_PLANNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "tool_name": tool_name,
+                        "unresolved_params": unresolved_required_params,
+                        "inferred": parameters,
+                    },
+                    description=(
+                        f"LLM inference left required params unresolved: "
+                        f"{unresolved_required_params}"
+                    ),
                 )
                 return {}
 

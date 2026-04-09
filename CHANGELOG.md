@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.20260409.1 - Planner Guardrails for Identifier Discovery & Tool Error Reporting
+
+### Bug Fixes
+
+- **Planning could still invent or accept unresolved required identifiers** -- When a tool required a concrete ID such as a drive item, the planner could still accept blank/default values from LLM parameter inference or skip directly to the action step without a real lookup. Fix: teach planning prompts to require identifier-discovery steps, reject unresolved required parameter values during inference, and surface an explicit planning error when required tool inputs cannot be determined.
+- **Handled MCP/tool failures could still look like successful execution in observability** -- Some tool calls returned structured error payloads instead of raising exceptions, but the agent still emitted success-shaped completion events for those results. Fix: detect error-shaped tool payloads consistently in both direct tool invocation and planning execution, record them as failures in observability, and avoid treating those planned steps as successful completions.
+
+### Tests
+
+- **Focused planning helper regression coverage** -- Extended `tests/unit/test_agent_planning_helpers.py` to verify blank required string parameters are rejected, MCP error payloads are detected correctly, and tool-call completion events report `success=False` when the underlying tool returns an error result.
+- **Random e2e regression sniff tests** -- Ran 5 random standalone e2e tests before release confidence checking, with all 5 passing across `memory`, `mcp`, `artifacts`, `knowledge`, and `clarification`.
+
 ## 0.20260409.0 - Faster Persistent Memory Recall & Profile Lookups
 
 ### Bug Fixes
