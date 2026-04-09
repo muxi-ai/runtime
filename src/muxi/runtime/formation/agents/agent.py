@@ -40,14 +40,15 @@
 # for external tool integration.
 # =============================================================================
 
+import copy
 import datetime
 import re
 import time
 import traceback
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Deque, Dict, List, Optional, Union, cast
 
 from ...datatypes.intent import IntentDetectionContext, IntentType
-from ...datatypes.response import MuxiResponse
+from ...datatypes.response import MuxiMessageContent, MuxiResponse
 from ...services import observability, streaming
 from ...services.intent import IntentDetectionService
 from ...services.llm import LLM
@@ -112,8 +113,8 @@ class Agent:
         self.name = name or f"Agent-{self.agent_id}"
 
         # Initialize role and specialties for enhanced routing
-        self.role = None  # Will be set from config during agent creation
-        self.specialties = []  # Will be set from config during agent creation
+        self.role: Optional[str] = None  # Will be set from config during agent creation
+        self.specialties: List[str] = []  # Will be set from config during agent creation
 
         # Set up system message
         self.system_message = system_message or (
@@ -142,14 +143,14 @@ class Agent:
         self._knowledge_initialized = False
 
         # Initialize the context with system message
-        self._messages = []
+        self._messages: List[Dict[str, Any]] = []
 
         # Initialize A2A history for loop detection and attempt limiting
         # Using collections.deque for efficient bounded history
         from collections import deque
 
         self._max_a2a_history_size = 20  # Keep last 20 delegation attempts
-        self._a2a_history = deque(maxlen=self._max_a2a_history_size)
+        self._a2a_history: Deque[str] = deque(maxlen=self._max_a2a_history_size)
         self._a2a_attempt_count = 0
         self._max_a2a_attempts = 3  # Prevent cascading failures
 
@@ -240,7 +241,7 @@ class Agent:
 
             # Get embedding function from model for semantic search
             # Knowledge handler needs a function that handles multiple texts
-            embedding_fn = None
+            embedding_fn: Optional[Callable[..., Any]] = None
             if hasattr(self.model, "generate_embeddings"):
                 # Prefer batch embedding function for efficiency
                 embedding_fn = self.model.generate_embeddings
@@ -433,15 +434,24 @@ class Agent:
 
             # Detect query type using LLM
             # Add recent conversation context if available
+            recent_messages = (
+                [
+                    {
+                        "role": str(msg.get("role", "")),
+                        "content": self._content_to_text(
+                            cast(Union[str, List[MuxiMessageContent], None], msg.get("content"))
+                        )[:200],
+                    }
+                    for msg in self._messages[-5:]
+                ]
+                if self._messages
+                else None
+            )
             context = IntentDetectionContext(
-                recent_messages=(
-                    [
-                        {"role": msg.role, "content": msg.content[:200]}
-                        for msg in self._messages[-5:]  # Last 5 messages
-                    ]
-                    if hasattr(self, "_messages") and self._messages
-                    else None
-                )
+                options=None,
+                recent_messages=recent_messages,
+                user_language=None,
+                user_timezone=None,
             )
 
             result = await self._intent_detector.detect_intent(
@@ -872,6 +882,22 @@ class Agent:
 
         return response_text or None
 
+    @staticmethod
+    def _content_to_text(content: Union[str, List[MuxiMessageContent], None]) -> str:
+        """Extract plain text from mixed internal message content."""
+        if content is None:
+            return ""
+        if isinstance(content, str):
+            return content
+
+        text_parts: List[str] = []
+        for item in content:
+            text_value = item.text if isinstance(item, MuxiMessageContent) else None
+            if text_value:
+                text_parts.append(text_value)
+
+        return " ".join(text_parts)
+
     async def process_message(
         self,
         message: Union[str, MuxiResponse],
@@ -905,11 +931,13 @@ class Agent:
         """
         # Convert string message to MuxiResponse if needed
         if isinstance(message, str):
-            content = message
-            message_obj = MuxiResponse(role="user", content=content)
+            user_message = message
+            message_obj = MuxiResponse(role="user", content=user_message)
         else:
-            content = message.content
             message_obj = message
+            user_message = self._content_to_text(message.content)
+
+        content = user_message
 
         # Store message metadata for use in other methods (like A2A routing)
         self._current_message_metadata = (
@@ -930,7 +958,7 @@ class Agent:
             data={
                 "agent_id": self.agent_id,
                 "agent_name": self.name,
-                "message_length": len(content),
+                "message_length": len(user_message),
                 "has_tools": tool_count > 0,
                 "tool_count": tool_count,
                 "model_used": self.model if hasattr(self, "model") and self.model else None,
@@ -957,10 +985,10 @@ class Agent:
             self._messages[0]["content"] = f"It is now {now_str}.\n{base}"
 
         # Add message to conversation context
-        self._messages.append({"role": "user", "content": message_obj.content})
+        self._messages.append({"role": "user", "content": user_message})
 
         # Store current user message for credential selection context
-        self._current_user_message = message_obj.content
+        self._current_user_message = user_message
 
         # Search knowledge and memory if handler is available
         context_enhancement = ""
@@ -974,8 +1002,15 @@ class Agent:
         if self._knowledge_config:  # Check if knowledge config exists
             try:
                 # Use unified search to get both knowledge and memory context
-                search_results = await self.search_knowledge(
-                    query=content, limit=5, include_memory=True, unified=True, session_id=session_id
+                search_results = cast(
+                    Dict[str, List[Dict[str, Any]]],
+                    await self.search_knowledge(
+                        query=user_message,
+                        limit=5,
+                        include_memory=True,
+                        unified=True,
+                        session_id=session_id,
+                    ),
                 )
 
                 # Build enhanced context from unified results
@@ -985,7 +1020,7 @@ class Agent:
                 if knowledge_results or memory_results or recent_docs:
                     # Add enhanced context to the conversation
                     enhanced_message = self._enhance_message_with_context(
-                        content, recent_docs, knowledge_results, memory_results
+                        user_message, recent_docs, knowledge_results, memory_results
                     )
                     self._messages[-1]["content"] = enhanced_message
 
@@ -998,7 +1033,7 @@ class Agent:
                             "knowledge_results_count": len(knowledge_results),
                             "memory_results_count": len(memory_results),
                             "recent_docs_count": len(recent_docs),
-                            "query": content[:100],
+                            "query": user_message[:100],
                             "unified_search": True,
                         },
                         description=(
@@ -1027,11 +1062,11 @@ class Agent:
 
             if recent_docs:
                 # Add enhanced context to the conversation
-                enhanced_message = self._enhance_message_with_context(content, recent_docs)
+                enhanced_message = self._enhance_message_with_context(user_message, recent_docs)
                 self._messages[-1]["content"] = enhanced_message
 
         # Check if we should include MCP tools
-        tools = None
+        tools: Optional[List[Dict[str, Any]]] = None
         if self.overlord and hasattr(self.overlord, "mcp_service"):
             try:
                 mcp_service = self.overlord.mcp_service
@@ -1149,9 +1184,6 @@ class Agent:
 
         # Fallback to string matching only if metadata not available (for backward compatibility)
         if not is_workflow_task and not (hasattr(message_obj, "metadata") and message_obj.metadata):
-            user_message = (
-                message_obj.content if hasattr(message_obj, "content") else str(message_obj)
-            )
             is_workflow_task = (
                 # Check for workflow context indicators
                 ("## Task:" in user_message)  # Workflow task prompt format
@@ -1193,8 +1225,8 @@ class Agent:
 
         # Variables to store planning results
         execution_plan = None
-        my_results = {}
-        planning_response_parts = []  # Collect response parts during planning
+        my_results: Dict[str, Any] = {}
+        planning_response_parts: List[str] = []  # Collect response parts during planning
         replan_attempted = False
 
         # Only plan for user messages that might need multiple steps (skip for A2A tasks only)
@@ -1315,7 +1347,7 @@ class Agent:
                             tool_name = step.get("tool_name")
                             if tool_name:
                                 # Find the tool in available tools
-                                tool_def = next(
+                                selected_tool_def: Optional[Dict[str, Any]] = next(
                                     (
                                         t
                                         for t in tools
@@ -1324,7 +1356,7 @@ class Agent:
                                     None,
                                 )
 
-                                if tool_def:
+                                if selected_tool_def:
                                     # Extract server_id and actual tool name if present
                                     if "__" in tool_name:
                                         server_id, actual_tool_name = tool_name.split("__", 1)
@@ -1334,52 +1366,44 @@ class Agent:
 
                                     # Extract parameters from step configuration or use LLM to generate them
                                     parameters = dict(step.get("parameters", {}) or {})
-                                    tool_schema = tool_def.get("function", {})
-                                    full_param_schema = tool_schema.get("parameters", {})
+                                    tool_schema_raw = selected_tool_def.get("function", {})
+                                    if not isinstance(tool_schema_raw, dict):
+                                        step_index += 1
+                                        continue
+                                    tool_schema: Dict[str, Any] = tool_schema_raw
+                                    full_param_schema_raw = tool_schema.get("parameters", {})
+                                    if not isinstance(full_param_schema_raw, dict):
+                                        step_index += 1
+                                        continue
+                                    full_param_schema: Dict[str, Any] = full_param_schema_raw
                                     required_params = full_param_schema.get("required", [])
                                     param_properties = full_param_schema.get("properties", {})
 
-                                    # If no parameters provided, try to infer them from context
-                                    if not parameters:
-                                        if required_params:
-                                            # Build context including previous step results
-                                            # so the LLM can extract IDs/values from prior tool outputs
-                                            inference_context = user_message
-                                            if my_results:
-                                                prev_results_text = "\n".join(
-                                                    f"Previous tool result ({k}): {str(v)[:2000]}"
-                                                    for k, v in my_results.items()
-                                                )
-                                                inference_context = (
-                                                    f"{user_message}\n\n"
-                                                    f"=== PREVIOUS TOOL RESULTS ===\n"
-                                                    f"{prev_results_text}"
-                                                )
-
-                                            # Try to infer parameters based on tool name, request context, and schema
-                                            parameters = await self._infer_tool_parameters(
-                                                tool_name=actual_tool_name,
-                                                required_params=required_params,
-                                                param_properties=param_properties,
-                                                full_schema=full_param_schema,
-                                                action_description=step.get("action", ""),
-                                                user_request=inference_context,
+                                    if required_params:
+                                        context_parameters = self._resolve_parameters_from_context(
+                                            required_params=required_params,
+                                            param_properties=param_properties,
+                                            full_schema=full_param_schema,
+                                            action_description=step.get("action", ""),
+                                            user_request=user_message,
+                                            my_results=my_results,
+                                        )
+                                        if context_parameters:
+                                            parameters = {**context_parameters, **parameters}
+                                            observability.observe(
+                                                event_type=observability.ConversationEvents.AGENT_PLANNING,
+                                                level=observability.EventLevel.DEBUG,
+                                                data={
+                                                    "agent_id": self.agent_id,
+                                                    "tool_name": tool_name,
+                                                    "context_params": context_parameters,
+                                                },
+                                                description=(
+                                                    f"Resolved parameters from request/results for "
+                                                    f"{tool_name}"
+                                                ),
                                             )
 
-                                            if parameters:
-                                                observability.observe(
-                                                    event_type=observability.ConversationEvents.AGENT_PLANNING,
-                                                    level=observability.EventLevel.DEBUG,
-                                                    data={
-                                                        "agent_id": self.agent_id,
-                                                        "tool_name": tool_name,
-                                                        "inferred_params": parameters,
-                                                    },
-                                                    description=f"Inferred parameters for {tool_name}",
-                                                )
-
-                                    unresolved_required_params = []
-                                    if required_params:
                                         unresolved_required_params = (
                                             self._get_unresolved_required_parameters(
                                                 parameters,
@@ -1388,6 +1412,49 @@ class Agent:
                                                 full_param_schema,
                                             )
                                         )
+
+                                        if unresolved_required_params:
+                                            inference_context = (
+                                                self._build_parameter_inference_context(
+                                                    user_request=user_message,
+                                                    action_description=step.get("action", ""),
+                                                    my_results=my_results,
+                                                    required_params=required_params,
+                                                )
+                                            )
+
+                                            inferred_parameters = await self._infer_tool_parameters(
+                                                tool_name=actual_tool_name,
+                                                required_params=required_params,
+                                                param_properties=param_properties,
+                                                full_schema=full_param_schema,
+                                                action_description=step.get("action", ""),
+                                                user_request=inference_context,
+                                            )
+
+                                            if inferred_parameters:
+                                                parameters = {**inferred_parameters, **parameters}
+                                                observability.observe(
+                                                    event_type=observability.ConversationEvents.AGENT_PLANNING,
+                                                    level=observability.EventLevel.DEBUG,
+                                                    data={
+                                                        "agent_id": self.agent_id,
+                                                        "tool_name": tool_name,
+                                                        "inferred_params": inferred_parameters,
+                                                    },
+                                                    description=f"Inferred parameters for {tool_name}",
+                                                )
+
+                                            unresolved_required_params = (
+                                                self._get_unresolved_required_parameters(
+                                                    parameters,
+                                                    required_params,
+                                                    param_properties,
+                                                    full_param_schema,
+                                                )
+                                            )
+                                    else:
+                                        unresolved_required_params = []
 
                                     if unresolved_required_params:
                                         repaired_plan = None
@@ -1583,12 +1650,15 @@ class Agent:
                                 result_text = str(result)
                                 if isinstance(result, dict):
                                     # Try to extract the most relevant info
-                                    result_text = result.get(
+                                    raw_result_text = result.get(
                                         "result", result.get("output", str(result))
                                     )
                                     # Ensure result_text is a string
-                                    if not isinstance(result_text, str):
-                                        result_text = str(result_text)
+                                    result_text = (
+                                        raw_result_text
+                                        if isinstance(raw_result_text, str)
+                                        else str(raw_result_text)
+                                    )
                                 delegation_prompt = delegation_prompt.replace(
                                     placeholder, result_text
                                 )
@@ -1639,7 +1709,7 @@ class Agent:
                         )
                         simple_messages = [
                             {"role": "system", "content": system_content},
-                            {"role": "user", "content": message},
+                            {"role": "user", "content": actual_user_request},
                         ]
 
                         response_obj = await self.model.chat(simple_messages)
@@ -1662,7 +1732,12 @@ class Agent:
                             description=f"Agent {self.agent_id} provided direct response for simple request",
                         )
 
-                        self._messages.append({"role": "assistant", "content": response.content})
+                        self._messages.append(
+                            {
+                                "role": "assistant",
+                                "content": self._content_to_text(response.content),
+                            }
+                        )
                         return response
 
                 # If we handled everything through planning, skip the regular flow
@@ -1719,8 +1794,13 @@ class Agent:
                             response_content += "\n\n---\n\nAdditional information gathered:\n"
                             for placeholder, result in my_results.items():
                                 if isinstance(result, dict):
-                                    result_text = result.get(
+                                    raw_result_text = result.get(
                                         "result", result.get("output", str(result))
+                                    )
+                                    result_text = (
+                                        raw_result_text
+                                        if isinstance(raw_result_text, str)
+                                        else str(raw_result_text)
                                     )
                                 else:
                                     result_text = str(result)
@@ -1730,8 +1810,13 @@ class Agent:
                         if my_results:
                             for placeholder, result in my_results.items():
                                 if isinstance(result, dict):
-                                    result_text = result.get(
+                                    raw_result_text = result.get(
                                         "result", result.get("output", str(result))
+                                    )
+                                    result_text = (
+                                        raw_result_text
+                                        if isinstance(raw_result_text, str)
+                                        else str(raw_result_text)
                                     )
                                 else:
                                     result_text = str(result)
@@ -1798,7 +1883,12 @@ class Agent:
                                 )
 
                     # Add response to conversation context
-                    self._messages.append({"role": "assistant", "content": response.content})
+                    self._messages.append(
+                        {
+                            "role": "assistant",
+                            "content": self._content_to_text(response.content),
+                        }
+                    )
 
                     # Log completion
                     observability.observe(
@@ -1849,6 +1939,7 @@ class Agent:
                 )
 
         # Process the message with the model, including tools if available
+        raw_response: Any
         if tools:
             try:
                 # Get MCP configuration for message enhancement
@@ -1941,7 +2032,9 @@ class Agent:
                 else:
                     llm_messages = self._messages
 
-                raw_response = await self.model.chat_with_tools(llm_messages, tools=tools)
+                raw_response = await self.model.chat_with_tools(
+                    cast(List[Dict[str, str]], llm_messages), tools=tools
+                )
             except Exception as e:
                 # Log error and fallback to no tools
                 observability.observe(
@@ -1957,7 +2050,7 @@ class Agent:
                 # Check for cancellation before fallback LLM call
                 await self._check_cancellation(request_id)
                 # Fallback to no tools
-                raw_response = await self.model.chat(self._messages)
+                raw_response = await self.model.chat(cast(List[Dict[str, str]], self._messages))
         else:
             # No tools available - try A2A for non-workflow tasks
             if not is_workflow_task and self._a2a_attempt_count < self._max_a2a_attempts:
@@ -1987,7 +2080,7 @@ class Agent:
                     # Check for cancellation before LLM call
                     await self._check_cancellation(request_id)
                     # Normal chat without tools
-                    raw_response = await self.model.chat(self._messages)
+                    raw_response = await self.model.chat(cast(List[Dict[str, str]], self._messages))
             else:
                 # Either workflow task or A2A attempts exhausted - respond normally
                 if not is_workflow_task and self._a2a_attempt_count >= self._max_a2a_attempts:
@@ -2003,7 +2096,7 @@ class Agent:
                     )
                 # Check for cancellation before LLM call
                 await self._check_cancellation(request_id)
-                raw_response = await self.model.chat(self._messages)
+                raw_response = await self.model.chat(cast(List[Dict[str, str]], self._messages))
 
         # Extract the actual content string from the response
         if isinstance(raw_response, str):
@@ -2073,9 +2166,7 @@ class Agent:
         content = self._clean_response_content(content)
 
         # Check if agent needs clarification from user
-        clarification_request = await self._check_agent_clarification_needs(
-            content, message_obj.content
-        )
+        clarification_request = await self._check_agent_clarification_needs(content, user_message)
 
         # Create response message
         response = MuxiResponse(role="assistant", content=content)
@@ -2083,7 +2174,9 @@ class Agent:
         # Note: clarification_request is tracked in observability but not stored in response
 
         # Add response to conversation context
-        self._messages.append({"role": "assistant", "content": response.content})
+        self._messages.append(
+            {"role": "assistant", "content": self._content_to_text(response.content)}
+        )
 
         # Emit agent response generated event
         observability.observe(
@@ -2092,7 +2185,7 @@ class Agent:
             data={
                 "agent_id": self.agent_id,
                 "agent_name": self.name,
-                "response_length": len(response.content),
+                "response_length": len(self._content_to_text(response.content)),
                 "has_clarification_request": bool(clarification_request),
             },
             description=f"Agent {self.agent_id} generated response",
@@ -2118,10 +2211,10 @@ class Agent:
         # Initialize loop variables
         iteration = 0
         total_tool_calls = 0
-        error_history = []
-        current_raw_response = raw_response
+        error_history: List[Dict[str, Any]] = []
+        current_raw_response: Any = raw_response
         current_content = content
-        all_tool_execution_results = []  # Store all tool results for artifact extraction
+        all_tool_execution_results: List[Any] = []  # Store all tool results for artifact extraction
 
         # Tool execution loop
         while iteration < max_iterations:
@@ -2137,9 +2230,11 @@ class Agent:
                     if hasattr(message, "tool_calls") and message.tool_calls:
                         tool_calls = message.tool_calls
             elif isinstance(current_raw_response, dict) and "choices" in current_raw_response:
-                message = current_raw_response["choices"][0]["message"]
-                if "tool_calls" in message and message["tool_calls"]:
-                    tool_calls = message["tool_calls"]
+                response_message = cast(
+                    Dict[str, Any], current_raw_response["choices"][0]["message"]
+                )
+                if "tool_calls" in response_message and response_message["tool_calls"]:
+                    tool_calls = response_message["tool_calls"]
 
             # If no tool calls, break the loop
             if not tool_calls:
@@ -2410,7 +2505,7 @@ class Agent:
 
                 # Get next response from model
                 next_response = await self.model.chat_with_tools(
-                    self._messages, tools=tools if tools else None
+                    cast(List[Dict[str, str]], self._messages), tools=tools if tools else None
                 )
 
                 # Extract content from response
@@ -2452,7 +2547,7 @@ class Agent:
                         }
                     )
                     reconsider_response = await self.model.chat_with_tools(
-                        self._messages, tools=tools if tools else None
+                        cast(List[Dict[str, str]], self._messages), tools=tools if tools else None
                     )
 
                     # Update with reconsidered response
@@ -2618,9 +2713,9 @@ class Agent:
     def _enhance_message_with_context(
         self,
         content: str,
-        recent_docs: List[Dict[str, Any]] = None,
-        knowledge_results: List[Dict[str, Any]] = None,
-        memory_results: List[Dict[str, Any]] = None,
+        recent_docs: Optional[List[Dict[str, Any]]] = None,
+        knowledge_results: Optional[List[Dict[str, Any]]] = None,
+        memory_results: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """
         Enhance message content with context from recent documents, knowledge, and memory.
@@ -2677,7 +2772,7 @@ class Agent:
             return False
 
         # Group errors by pattern (ignoring tool name for similarity)
-        error_counts = {}
+        error_counts: Dict[str, int] = {}
         lookback_window = max_repeated_errors * 2  # Check recent errors
         for error in error_history[-lookback_window:]:
             # Use error message pattern as key (first 50 chars)
@@ -2924,10 +3019,13 @@ class Agent:
 
             # Use intent detection for clarification categories
             context = IntentDetectionContext(
+                options=None,
                 recent_messages=[
                     {"role": "user", "content": user_message},
                     {"role": "assistant", "content": agent_response},
-                ]
+                ],
+                user_language=None,
+                user_timezone=None,
             )
 
             result = await self._intent_detector.detect_intent(
@@ -3116,7 +3214,7 @@ class Agent:
             The agent's response as a string.
         """
         response = await self.process_message(input_text)
-        return response.content
+        return self._content_to_text(response.content)
 
     async def get_relevant_memories(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """
@@ -3761,14 +3859,239 @@ class Agent:
             return None
 
     @staticmethod
-    def _summarize_planning_result(result: Any, limit: int = 500) -> str:
-        """Summarize a prior tool result for planning/replanning context."""
-        if isinstance(result, dict):
-            candidate = result.get("result", result.get("output", result.get("error", result)))
-        else:
-            candidate = result
+    def _parse_json_like_text(text: str) -> Any:
+        """Parse a JSON-looking text blob, otherwise return the original string."""
+        if not isinstance(text, str):
+            return text
 
-        text = str(candidate).strip()
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            parts = cleaned.split("```")
+            if len(parts) >= 3:
+                cleaned = parts[1]
+                if cleaned.startswith("json"):
+                    cleaned = cleaned[4:]
+                cleaned = cleaned.strip()
+
+        if not cleaned or cleaned[0] not in "[{":
+            return text
+
+        try:
+            return json.loads(cleaned)
+        except Exception:
+            return text
+
+    def _extract_structured_planning_result_payload(self, result: Any) -> Any:
+        """Best-effort extraction of structured content from a tool result."""
+        candidate = result
+        if isinstance(candidate, dict):
+            candidate = candidate.get("result", candidate.get("output", candidate))
+
+        if not isinstance(candidate, dict):
+            return candidate
+
+        structured_content = candidate.get("structuredContent")
+        if structured_content not in (None, "", [], {}):
+            return structured_content
+
+        content = candidate.get("content")
+        if isinstance(content, list):
+            parsed_items: List[Any] = []
+            text_chunks: List[str] = []
+            for item in content:
+                text_value: Optional[str] = None
+                if isinstance(item, dict):
+                    if item.get("structuredContent") not in (None, "", [], {}):
+                        parsed_items.append(item.get("structuredContent"))
+                        continue
+                    if item.get("type") == "text" and isinstance(item.get("text"), str):
+                        text_value = item.get("text")
+                elif isinstance(item, str):
+                    text_value = item
+
+                if not text_value:
+                    continue
+
+                parsed = self._parse_json_like_text(text_value)
+                if isinstance(parsed, (dict, list)):
+                    parsed_items.append(parsed)
+                else:
+                    text_chunks.append(text_value)
+
+            if parsed_items:
+                return parsed_items[0] if len(parsed_items) == 1 else parsed_items
+            if text_chunks:
+                return "\n".join(text_chunks)
+
+        return candidate
+
+    @staticmethod
+    def _iter_result_records(value: Any):
+        """Yield every nested mapping inside a structured tool result."""
+        if isinstance(value, dict):
+            yield value
+            for nested_value in value.values():
+                yield from Agent._iter_result_records(nested_value)
+        elif isinstance(value, list):
+            for item in value:
+                yield from Agent._iter_result_records(item)
+
+    @staticmethod
+    def _extract_context_hints(*texts: str, limit: int = 12) -> List[str]:
+        """Extract salient file/resource hints from the request and step descriptions."""
+        hints: List[str] = []
+        seen: set[str] = set()
+        keyword_hints = {
+            "root",
+            "folder",
+            "file",
+            "files",
+            "workbook",
+            "worksheet",
+            "document",
+            "message",
+            "task",
+            "site",
+            "record",
+            "calendar",
+            "mailbox",
+            "thread",
+            "chat",
+        }
+
+        def add_hint(raw_hint: str) -> None:
+            hint = raw_hint.strip(" \t\r\n.,:;()[]{}<>`'\"")
+            if not hint:
+                return
+            normalized = hint.lower()
+            if normalized in seen:
+                return
+            seen.add(normalized)
+            hints.append(hint)
+
+        filename_pattern = re.compile(
+            r"(?<![\w/])([A-Za-z0-9][A-Za-z0-9 _.\-]{0,120}\.[A-Za-z0-9]{1,8})(?![\w/])"
+        )
+        quoted_pattern = re.compile(r"['\"]([^'\"]{2,120})['\"]")
+
+        for text in texts:
+            if not isinstance(text, str) or not text.strip():
+                continue
+            for match in filename_pattern.findall(text):
+                add_hint(match)
+            for match in quoted_pattern.findall(text):
+                add_hint(match)
+            lowered = text.lower()
+            for keyword in keyword_hints:
+                if re.search(rf"\b{re.escape(keyword)}\b", lowered):
+                    add_hint(keyword)
+            if len(hints) >= limit:
+                break
+
+        return hints[:limit]
+
+    @staticmethod
+    def _record_matches_context_hints(record: Dict[str, Any], hints: List[str]) -> bool:
+        """Return True when a record appears to describe one of the requested resources."""
+        if not isinstance(record, dict) or not hints:
+            return False
+
+        candidate_fields = [
+            record.get("name"),
+            record.get("title"),
+            record.get("subject"),
+            record.get("displayName"),
+            record.get("fileName"),
+            record.get("path"),
+            record.get("webUrl"),
+        ]
+        normalized_fields = [
+            str(field).lower() for field in candidate_fields if field not in (None, "")
+        ]
+        if not normalized_fields:
+            return False
+
+        for hint in hints:
+            normalized_hint = hint.lower()
+            for field in normalized_fields:
+                if normalized_hint == field or normalized_hint in field or field in normalized_hint:
+                    return True
+        return False
+
+    @staticmethod
+    def _compact_planning_record(value: Any, depth: int = 0) -> Any:
+        """Reduce large tool results to the fields most useful for follow-up planning."""
+        if depth > 2:
+            return "[truncated]"
+
+        if isinstance(value, dict):
+            preferred_keys = [
+                "id",
+                "name",
+                "title",
+                "subject",
+                "displayName",
+                "driveId",
+                "driveItemId",
+                "parentReference",
+                "path",
+                "webUrl",
+                "file",
+                "folder",
+                "root",
+                "siteId",
+                "createdDateTime",
+                "lastModifiedDateTime",
+            ]
+            compact: Dict[str, Any] = {}
+            for key in preferred_keys:
+                if key in value:
+                    compact[key] = Agent._compact_planning_record(value[key], depth + 1)
+            if not compact:
+                for key, nested_value in list(value.items())[:8]:
+                    compact[key] = Agent._compact_planning_record(nested_value, depth + 1)
+            return compact
+
+        if isinstance(value, list):
+            return [Agent._compact_planning_record(item, depth + 1) for item in value[:3]]
+
+        if isinstance(value, str) and len(value) > 200:
+            return value[:197].rstrip() + "..."
+
+        return value
+
+    def _summarize_planning_result(
+        self, result: Any, context_hint: str = "", limit: int = 500
+    ) -> str:
+        """Summarize a prior tool result for planning/replanning context."""
+        payload = self._extract_structured_planning_result_payload(result)
+        context_hints = self._extract_context_hints(context_hint)
+
+        matching_records: List[Dict[str, Any]] = []
+        if context_hints:
+            for record in self._iter_result_records(payload):
+                if not isinstance(record, dict):
+                    continue
+                if self._record_matches_context_hints(record, context_hints):
+                    compact_record = self._compact_planning_record(record)
+                    if compact_record not in matching_records:
+                        matching_records.append(compact_record)
+                if len(matching_records) >= 3:
+                    break
+
+        if matching_records:
+            try:
+                text = json.dumps({"matching_records": matching_records}, ensure_ascii=False)
+            except TypeError:
+                text = str({"matching_records": matching_records})
+        else:
+            compact_payload = self._compact_planning_record(payload)
+            try:
+                text = json.dumps(compact_payload, ensure_ascii=False)
+            except TypeError:
+                text = str(compact_payload)
+
+        text = text.strip()
         if len(text) > limit:
             return text[: limit - 3].rstrip() + "..."
         return text
@@ -3800,6 +4123,9 @@ class Agent:
             [
                 "Revise the plan so prerequisite lookup/discovery steps happen before the",
                 "failed tool call.",
+                "A parent/root/container ID is not the same as the target resource ID.",
+                "If the user named a specific resource, add the list/search step that returns",
+                "that named resource itself before the final action.",
                 "Do not guess missing identifiers or use placeholder values.",
             ]
         )
@@ -3808,6 +4134,208 @@ class Agent:
                 "Reuse any existing tool results already gathered instead of repeating completed steps."
             )
         return "\n".join(feedback_lines)
+
+    @staticmethod
+    def _normalize_repair_plan_signature(plan: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize the meaningful parts of a plan for repair/no-change checks."""
+        return {
+            "my_steps": [
+                {
+                    "action": step.get("action", ""),
+                    "tool_name": step.get("tool_name", ""),
+                    "parameters": step.get("parameters", {}),
+                    "output_placeholder": step.get("output_placeholder", ""),
+                }
+                for step in plan.get("my_steps", [])
+            ],
+            "delegate_steps": [
+                {
+                    "action": step.get("action", ""),
+                    "capability_needed": step.get("capability_needed", ""),
+                    "delegation_prompt": step.get("delegation_prompt", ""),
+                }
+                for step in plan.get("delegate_steps", [])
+            ],
+            "data_flow": plan.get("data_flow", ""),
+        }
+
+    @staticmethod
+    def _extract_discovery_keywords(
+        user_message: str, failed_step: Dict[str, Any], unresolved_params: List[str]
+    ) -> set[str]:
+        """Infer broad resource keywords for selecting a missing lookup/discovery tool."""
+        text = f"{user_message}\n{failed_step.get('action', '')}".lower()
+        keywords = {"item", "resource"}
+
+        if re.search(r"\.[a-z0-9]{1,8}\b", text):
+            keywords.update({"file", "files", "folder", "document", "workbook", "excel"})
+
+        for token in (
+            "file",
+            "files",
+            "folder",
+            "drive",
+            "item",
+            "workbook",
+            "excel",
+            "message",
+            "mail",
+            "chat",
+            "thread",
+            "task",
+            "record",
+            "site",
+            "calendar",
+            "contact",
+            "document",
+        ):
+            if token in text:
+                keywords.add(token)
+
+        for unresolved_param in unresolved_params:
+            lowered_param = unresolved_param.lower()
+            if "driveitem" in lowered_param or "file" in lowered_param:
+                keywords.update({"file", "files", "folder", "item"})
+            elif "message" in lowered_param:
+                keywords.update({"message", "mail", "chat", "thread"})
+            elif "task" in lowered_param:
+                keywords.update({"task", "tasks"})
+            elif "site" in lowered_param:
+                keywords.update({"site", "sites"})
+            elif lowered_param.endswith("id"):
+                keywords.add("item")
+
+        return keywords
+
+    def _build_auto_discovery_repair_plan(
+        self,
+        *,
+        user_message: str,
+        available_tools: List[Dict[str, Any]],
+        failed_step: Dict[str, Any],
+        unresolved_params: List[str],
+        current_plan: Dict[str, Any],
+        my_results: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Inject a deterministic lookup step when re-planning keeps missing a discovery hop."""
+        current_tools = [step.get("tool_name", "") for step in current_plan.get("my_steps", [])]
+        keywords = self._extract_discovery_keywords(user_message, failed_step, unresolved_params)
+        best_candidate: Optional[Dict[str, Any]] = None
+
+        for tool in available_tools or []:
+            tool_fn = tool.get("function", {})
+            candidate_name = tool_fn.get("name", "")
+            if not candidate_name or candidate_name == failed_step.get("tool_name"):
+                continue
+            if candidate_name in current_tools:
+                continue
+
+            name_lower = candidate_name.lower()
+            description_lower = (tool_fn.get("description") or "").lower()
+            score = 0
+            if any(token in name_lower for token in ("search", "find", "lookup")):
+                score += 5
+            if "list" in name_lower:
+                score += 4
+            if "get" in name_lower:
+                score += 1
+            if "root" in name_lower:
+                score -= 2
+            if any(keyword in name_lower or keyword in description_lower for keyword in keywords):
+                score += 3
+
+            if score <= 0:
+                continue
+
+            tool_schema = tool_fn.get("parameters", {}) or {}
+            required_params = tool_schema.get("required", [])
+            param_properties = tool_schema.get("properties", {})
+            candidate_params = self._resolve_parameters_from_context(
+                required_params=required_params,
+                param_properties=param_properties,
+                full_schema=tool_schema,
+                action_description=tool_fn.get("description", ""),
+                user_request=user_message,
+                my_results=my_results,
+            )
+            unresolved_candidate_params = self._get_unresolved_required_parameters(
+                candidate_params,
+                required_params,
+                param_properties,
+                tool_schema,
+            )
+            if unresolved_candidate_params:
+                continue
+
+            if best_candidate is None or score > best_candidate["score"]:
+                best_candidate = {
+                    "score": score,
+                    "tool_name": candidate_name,
+                    "parameters": candidate_params,
+                }
+
+        if not best_candidate:
+            return None
+
+        tool_name = best_candidate["tool_name"]
+        tool_placeholder = tool_name.upper().replace("-", "_").replace(".", "_")
+        inserted_step = {
+            "action": (
+                f"Discover {', '.join(unresolved_params)} needed for "
+                f"{failed_step.get('action', failed_step.get('tool_name', 'the final action'))}"
+            ),
+            "tool_name": tool_name,
+            "parameters": best_candidate["parameters"],
+            "output_placeholder": f"{{{{AUTO_DISCOVERY_{tool_placeholder}}}}}",
+        }
+
+        repaired_plan = copy.deepcopy(current_plan)
+        my_steps = repaired_plan.setdefault("my_steps", [])
+        failed_index = next(
+            (
+                index
+                for index, step in enumerate(my_steps)
+                if step.get("tool_name") == failed_step.get("tool_name")
+                and step.get("action") == failed_step.get("action")
+            ),
+            len(my_steps),
+        )
+        my_steps.insert(failed_index, inserted_step)
+
+        if repaired_plan.get("steps"):
+            repaired_plan["steps"].insert(
+                failed_index,
+                {
+                    "action": inserted_step["action"],
+                    "capability_needed": "lookup/discovery",
+                    "tool_name": tool_name,
+                    "can_i_do_this": True,
+                    "data_needed": "existing tool results",
+                    "output_placeholder": inserted_step["output_placeholder"],
+                },
+            )
+
+        existing_flow = repaired_plan.get("data_flow", "").strip()
+        repaired_plan["data_flow"] = (
+            f"{existing_flow} Added {tool_name} to discover missing parameters."
+            if existing_flow
+            else f"Added {tool_name} to discover missing parameters before the final action."
+        )
+
+        observability.observe(
+            event_type=observability.ConversationEvents.AGENT_PLANNING,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": self.agent_id,
+                "phase": "repair_plan_auto_discovery_added",
+                "tool_name": failed_step.get("tool_name"),
+                "inserted_tool": tool_name,
+                "inserted_parameters": best_candidate["parameters"],
+                "unresolved_params": unresolved_params,
+            },
+            description=f"Added deterministic discovery step {tool_name} during repair planning",
+        )
+        return repaired_plan
 
     async def _repair_execution_plan_for_missing_parameters(
         self,
@@ -3852,8 +4380,21 @@ class Agent:
 
         current_tools = [step.get("tool_name", "") for step in current_plan.get("my_steps", [])]
         repaired_tools = [step.get("tool_name", "") for step in repaired_plan.get("my_steps", [])]
+        current_signature = self._normalize_repair_plan_signature(current_plan)
+        repaired_signature = self._normalize_repair_plan_signature(repaired_plan)
 
-        if repaired_tools == current_tools:
+        if repaired_signature == current_signature:
+            auto_repaired_plan = self._build_auto_discovery_repair_plan(
+                user_message=user_message,
+                available_tools=available_tools,
+                failed_step=failed_step,
+                unresolved_params=unresolved_params,
+                current_plan=current_plan,
+                my_results=my_results,
+            )
+            if auto_repaired_plan is not None:
+                return auto_repaired_plan
+
             observability.observe(
                 event_type=observability.ConversationEvents.AGENT_PLANNING,
                 level=observability.EventLevel.WARNING,
@@ -3885,7 +4426,7 @@ class Agent:
     async def _plan_before_execution(
         self,
         user_message: str,
-        available_tools: List[Dict] = None,
+        available_tools: Optional[List[Dict[str, Any]]] = None,
         allow_delegation: bool = True,
         replanning_feedback: Optional[str] = None,
         completed_results: Optional[Dict[str, Any]] = None,
@@ -3966,7 +4507,9 @@ class Agent:
         if completed_results:
             planning_prompt += "\n\n## Existing tool results:\n"
             for placeholder, result in completed_results.items():
-                planning_prompt += f"- {placeholder}: {self._summarize_planning_result(result)}\n"
+                planning_prompt += (
+                    f"- {placeholder}: {self._summarize_planning_result(result, user_message)}\n"
+                )
 
         if replanning_feedback:
             planning_prompt += "\n\n## Replanning feedback:\n"
@@ -4660,11 +5203,7 @@ class Agent:
                 )
 
                 # Extract the response content
-                response_content = response
-                if isinstance(response, dict):
-                    response_content = response.get(
-                        "content", response.get("response", str(response))
-                    )
+                response_content = self._content_to_text(response.content)
 
                 return {
                     "status": "success",
@@ -4687,10 +5226,12 @@ class Agent:
                     message_content = " ".join(text_parts).strip()
                     # Fallback if no text parts found
                     if not message_content:
-                        message_content = message.get("task", message.get("content", str(message)))
+                        message_content = str(
+                            message.get("task", message.get("content", str(message)))
+                        )
                 else:
                     # Simple message without parts structure
-                    message_content = message.get("task", message.get("content", str(message)))
+                    message_content = str(message.get("task", message.get("content", str(message))))
             else:
                 message_content = str(message)
 
@@ -4715,18 +5256,19 @@ class Agent:
             model_response = await self.model.chat(response_messages)
 
             # Extract content
+            acknowledgment_response: str
             if isinstance(model_response, str):
-                response_content = model_response
+                acknowledgment_response = model_response
             elif hasattr(model_response, "choices") and model_response.choices:
-                response_content = model_response.choices[0].message.content
+                acknowledgment_response = str(model_response.choices[0].message.content or "")
             else:
-                response_content = str(model_response)
+                acknowledgment_response = str(model_response)
 
             # Return response for request-type messages
             if message_type in ["request", "query", "consultation"]:
                 return {
                     "status": "success",
-                    "response": response_content,
+                    "response": acknowledgment_response,
                     "execution_completed": False,  # Not a task execution
                     "responder_id": self.agent_id,
                     "message_id": message_id,
@@ -4909,6 +5451,246 @@ class Agent:
             wait_for_response=True,
             timeout=timeout,
         )
+
+    @staticmethod
+    def _is_nonempty_parameter_candidate(value: Any) -> bool:
+        """Return True when a value is plausibly usable as a resolved parameter."""
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return bool(value.strip())
+        if isinstance(value, (list, dict)):
+            return bool(value)
+        return True
+
+    @staticmethod
+    def _extract_explicit_parameter_values_from_text(
+        text: str, required_params: List[str]
+    ) -> Dict[str, Any]:
+        """Extract explicit `param = value` mentions from user/context text."""
+        if not isinstance(text, str) or not text.strip():
+            return {}
+
+        resolved: Dict[str, Any] = {}
+        for required_param in required_params:
+            patterns = [
+                rf"\b{re.escape(required_param)}\b\s*(?:=|:)\s*([^\s,\]\);]+)",
+                rf"\b{re.escape(required_param)}\b\s+is\s+([^\s,\]\);]+)",
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, text, flags=re.IGNORECASE)
+                if not match:
+                    continue
+                value = match.group(1).strip("`'\".,:;()[]{}<>")
+                if value:
+                    resolved[required_param] = value
+                    break
+
+        return resolved
+
+    def _collect_values_for_key(self, payloads: List[Any], key_name: str) -> List[Any]:
+        """Collect non-empty values for a key across structured payloads."""
+        values: List[Any] = []
+        seen: set[str] = set()
+        for payload in payloads:
+            for record in self._iter_result_records(payload):
+                if not isinstance(record, dict):
+                    continue
+                for record_key, record_value in record.items():
+                    if record_key.lower() != key_name.lower():
+                        continue
+                    if not self._is_nonempty_parameter_candidate(record_value):
+                        continue
+                    marker = str(record_value)
+                    if marker in seen:
+                        continue
+                    seen.add(marker)
+                    values.append(record_value)
+        return values
+
+    def _extract_alias_value_from_record(self, param_name: str, record: Dict[str, Any]) -> Any:
+        """Map common identifier-style params to the most likely value in a record."""
+        if not isinstance(record, dict):
+            return None
+
+        lowered_param = param_name.lower()
+        parent_reference = record.get("parentReference")
+        if not isinstance(parent_reference, dict):
+            parent_reference = {}
+
+        if lowered_param.endswith("driveid"):
+            for candidate in (
+                record.get("driveId"),
+                parent_reference.get("driveId"),
+            ):
+                if self._is_nonempty_parameter_candidate(candidate):
+                    return candidate
+            if self._is_nonempty_parameter_candidate(record.get("id")) and (
+                "driveType" in record or "quota" in record or record.get("name") == "OneDrive"
+            ):
+                return record.get("id")
+
+        if lowered_param.endswith(
+            (
+                "itemid",
+                "fileid",
+                "folderid",
+                "messageid",
+                "taskid",
+                "recordid",
+                "siteid",
+                "documentid",
+                "workbookid",
+            )
+        ):
+            if self._is_nonempty_parameter_candidate(record.get("id")):
+                return record.get("id")
+
+        return None
+
+    def _resolve_parameter_from_records(
+        self,
+        param_name: str,
+        candidate_records: List[Dict[str, Any]],
+        all_records: List[Dict[str, Any]],
+    ) -> Any:
+        """Resolve one parameter from matching records first, then broader result context."""
+        search_spaces = [candidate_records, all_records]
+
+        for records in search_spaces:
+            if not records:
+                continue
+
+            exact_values: List[Any] = []
+            seen_exact: set[str] = set()
+            for record in records:
+                for key, value in record.items():
+                    if key.lower() != param_name.lower():
+                        continue
+                    if not self._is_nonempty_parameter_candidate(value):
+                        continue
+                    marker = str(value)
+                    if marker in seen_exact:
+                        continue
+                    seen_exact.add(marker)
+                    exact_values.append(value)
+
+            if len(exact_values) == 1:
+                return exact_values[0]
+            if exact_values:
+                return exact_values[0]
+
+            alias_values: List[Any] = []
+            seen_alias: set[str] = set()
+            for record in records:
+                alias_value = self._extract_alias_value_from_record(param_name, record)
+                if not self._is_nonempty_parameter_candidate(alias_value):
+                    continue
+                marker = str(alias_value)
+                if marker in seen_alias:
+                    continue
+                seen_alias.add(marker)
+                alias_values.append(alias_value)
+
+            if len(alias_values) == 1:
+                return alias_values[0]
+            if candidate_records and records is candidate_records and alias_values:
+                return alias_values[0]
+
+        return None
+
+    def _resolve_parameters_from_context(
+        self,
+        required_params: List[str],
+        param_properties: Dict[str, Any],
+        full_schema: Dict[str, Any],
+        action_description: str,
+        user_request: str,
+        my_results: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Resolve as many required parameters as possible from explicit context and prior results."""
+        if not required_params:
+            return {}
+
+        resolved = self._extract_explicit_parameter_values_from_text(user_request, required_params)
+        structured_payloads = [
+            self._extract_structured_planning_result_payload(result)
+            for result in my_results.values()
+            if result is not None
+        ]
+        all_records = [
+            record
+            for payload in structured_payloads
+            for record in self._iter_result_records(payload)
+            if isinstance(record, dict)
+        ]
+        context_hints = self._extract_context_hints(user_request, action_description)
+        candidate_records = [
+            record
+            for record in all_records
+            if self._record_matches_context_hints(record, context_hints)
+        ]
+
+        for required_param in required_params:
+            if required_param in resolved:
+                continue
+
+            param_def = self._resolve_schema_ref(
+                param_properties.get(required_param, {}), full_schema
+            )
+            resolved_value = self._resolve_parameter_from_records(
+                required_param,
+                candidate_records,
+                all_records,
+            )
+            if self._has_resolved_required_parameter_value(resolved_value, param_def):
+                resolved[required_param] = resolved_value
+                continue
+
+            if required_param.lower().endswith("driveid"):
+                drive_values = self._collect_values_for_key(structured_payloads, "driveId")
+                if len(drive_values) == 1 and self._has_resolved_required_parameter_value(
+                    drive_values[0], param_def
+                ):
+                    resolved[required_param] = drive_values[0]
+
+        return resolved
+
+    def _build_parameter_inference_context(
+        self,
+        user_request: str,
+        action_description: str,
+        my_results: Dict[str, Any],
+        required_params: List[str],
+    ) -> str:
+        """Build a compact but information-dense context block for parameter inference."""
+        prompt_parts = [user_request]
+        if action_description:
+            prompt_parts.extend(["", f"Step action: {action_description}"])
+
+        explicit_values = self._extract_explicit_parameter_values_from_text(
+            user_request, required_params
+        )
+        if explicit_values:
+            prompt_parts.extend(
+                [
+                    "",
+                    "Explicit parameter hints from the request/context:",
+                    json.dumps(explicit_values, ensure_ascii=False),
+                ]
+            )
+
+        if my_results:
+            prompt_parts.append("")
+            prompt_parts.append("=== PREVIOUS TOOL RESULTS ===")
+            context_hint = f"{user_request}\n{action_description}"
+            for placeholder, result in my_results.items():
+                prompt_parts.append(f"Previous tool result ({placeholder}):")
+                prompt_parts.append(
+                    self._summarize_planning_result(result, context_hint=context_hint, limit=2000)
+                )
+
+        return "\n".join(prompt_parts)
 
     def _validate_tool_parameters(
         self, parameters: Dict[str, Any], tool_schema: Dict[str, Any], tool_name: str

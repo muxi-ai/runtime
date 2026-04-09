@@ -1,5 +1,6 @@
 """Focused tests for agent planning helper guardrails."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -305,3 +306,260 @@ async def test_repair_execution_plan_replans_with_missing_parameter_feedback():
     call_kwargs = agent._plan_before_execution.call_args.kwargs
     assert "driveItemId" in call_kwargs["replanning_feedback"]
     assert "Revise the plan" in call_kwargs["replanning_feedback"]
+
+
+def test_summarize_planning_result_preserves_matching_record_from_large_payload():
+    agent = object.__new__(Agent)
+    large_payload = {
+        "value": [
+            {
+                "id": f"attachment-{idx}",
+                "name": f"Attachment-{idx}",
+                "description": "x" * 200,
+            }
+            for idx in range(20)
+        ]
+        + [
+            {
+                "id": "book-item-123",
+                "name": "Book.xlsx",
+                "parentReference": {"driveId": "drive-123", "id": "root-456"},
+                "webUrl": "https://example.com/Book.xlsx",
+            }
+        ]
+    }
+    result = {
+        "status": "success",
+        "result": {
+            "content": [{"type": "text", "text": json.dumps(large_payload)}],
+            "structuredContent": None,
+            "isError": False,
+        },
+    }
+
+    summary = agent._summarize_planning_result(
+        result,
+        context_hint="What sheets do I have in Book.xlsx?",
+        limit=220,
+    )
+
+    assert "Book.xlsx" in summary
+    assert "book-item-123" in summary
+
+
+def test_resolve_parameters_from_context_uses_matching_record_ids():
+    agent = object.__new__(Agent)
+    file_lookup_result = {
+        "status": "success",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "value": [
+                                {
+                                    "id": "attachment-1",
+                                    "name": "Attachments",
+                                    "parentReference": {
+                                        "driveId": "drive-123",
+                                        "id": "root-456",
+                                    },
+                                },
+                                {
+                                    "id": "book-item-123",
+                                    "name": "Book.xlsx",
+                                    "parentReference": {
+                                        "driveId": "drive-123",
+                                        "id": "root-456",
+                                    },
+                                },
+                            ]
+                        }
+                    ),
+                }
+            ],
+            "structuredContent": None,
+            "isError": False,
+        },
+    }
+
+    parameters = agent._resolve_parameters_from_context(
+        required_params=["driveId", "driveItemId"],
+        param_properties={
+            "driveId": {"type": "string"},
+            "driveItemId": {"type": "string"},
+        },
+        full_schema={
+            "type": "object",
+            "properties": {
+                "driveId": {"type": "string"},
+                "driveItemId": {"type": "string"},
+            },
+            "required": ["driveId", "driveItemId"],
+        },
+        action_description="List all worksheets in Book.xlsx",
+        user_request="What sheets do I have in Book.xlsx?\n[Context: driveId = drive-123]",
+        my_results={"{{FILES_LIST}}": file_lookup_result},
+    )
+
+    assert parameters == {"driveId": "drive-123", "driveItemId": "book-item-123"}
+
+
+@pytest.mark.asyncio
+async def test_repair_execution_plan_accepts_meaningful_same_tool_chain_changes():
+    agent = object.__new__(Agent)
+    agent.agent_id = "test-agent"
+    current_plan = {
+        "my_steps": [
+            {
+                "action": "List worksheets in Book.xlsx",
+                "tool_name": "ms365-mcp__list-excel-worksheets",
+                "parameters": {},
+                "output_placeholder": "{{WORKSHEETS}}",
+            }
+        ],
+        "delegate_steps": [],
+        "data_flow": "Old flow",
+    }
+    repaired_plan = {
+        "my_steps": [
+            {
+                "action": "List worksheets in Book.xlsx after confirming the workbook lookup",
+                "tool_name": "ms365-mcp__list-excel-worksheets",
+                "parameters": {},
+                "output_placeholder": "{{WORKSHEETS}}",
+            }
+        ],
+        "delegate_steps": [],
+        "data_flow": "New flow with explicit identifier sourcing",
+    }
+    agent._plan_before_execution = AsyncMock(return_value=repaired_plan)
+
+    with patch("muxi.runtime.formation.agents.agent.observability.observe"):
+        result = await agent._repair_execution_plan_for_missing_parameters(
+            user_message="What sheets do I have in Book.xlsx?",
+            available_tools=[],
+            allow_delegation=False,
+            failed_step=current_plan["my_steps"][0],
+            tool_name="ms365-mcp__list-excel-worksheets",
+            unresolved_params=["driveItemId"],
+            current_plan=current_plan,
+            my_results={},
+        )
+
+    assert result == repaired_plan
+
+
+@pytest.mark.asyncio
+async def test_repair_execution_plan_adds_auto_discovery_step_when_replan_has_no_change():
+    agent = object.__new__(Agent)
+    agent.agent_id = "test-agent"
+    current_plan = {
+        "steps": [
+            {
+                "action": "Find the drive",
+                "tool_name": "ms365-mcp__list-drives",
+                "can_i_do_this": True,
+                "output_placeholder": "{{DRIVES}}",
+            },
+            {
+                "action": "Get the root folder for the drive",
+                "tool_name": "ms365-mcp__get-drive-root-item",
+                "can_i_do_this": True,
+                "output_placeholder": "{{ROOT_ITEM}}",
+            },
+            {
+                "action": "List all worksheets (sheets) in Book.xlsx",
+                "tool_name": "ms365-mcp__list-excel-worksheets",
+                "can_i_do_this": True,
+                "output_placeholder": "{{WORKSHEETS}}",
+            },
+        ],
+        "my_steps": [
+            {
+                "action": "Find the drive",
+                "tool_name": "ms365-mcp__list-drives",
+                "parameters": {},
+                "output_placeholder": "{{DRIVES}}",
+            },
+            {
+                "action": "Get the root folder for the drive",
+                "tool_name": "ms365-mcp__get-drive-root-item",
+                "parameters": {},
+                "output_placeholder": "{{ROOT_ITEM}}",
+            },
+            {
+                "action": "List all worksheets (sheets) in Book.xlsx",
+                "tool_name": "ms365-mcp__list-excel-worksheets",
+                "parameters": {},
+                "output_placeholder": "{{WORKSHEETS}}",
+            },
+        ],
+        "delegate_steps": [],
+        "data_flow": "Get the drive, then the root folder, then list worksheets.",
+    }
+    agent._plan_before_execution = AsyncMock(return_value=current_plan)
+
+    available_tools = [
+        {
+            "function": {
+                "name": "ms365-mcp__list-folder-files",
+                "description": "List files in a folder.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "driveId": {"type": "string"},
+                        "driveItemId": {"type": "string"},
+                    },
+                    "required": ["driveId", "driveItemId"],
+                },
+            }
+        }
+    ]
+    root_item_result = {
+        "status": "success",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "id": "root-456",
+                            "name": "root",
+                            "folder": {"childCount": 2},
+                            "root": {},
+                            "parentReference": {"driveId": "drive-123"},
+                        }
+                    ),
+                }
+            ],
+            "structuredContent": None,
+            "isError": False,
+        },
+    }
+
+    with patch("muxi.runtime.formation.agents.agent.observability.observe"):
+        result = await agent._repair_execution_plan_for_missing_parameters(
+            user_message="What sheets do I have in Book.xlsx?\n[Context: driveId = drive-123]",
+            available_tools=available_tools,
+            allow_delegation=False,
+            failed_step=current_plan["my_steps"][-1],
+            tool_name="ms365-mcp__list-excel-worksheets",
+            unresolved_params=["driveItemId"],
+            current_plan=current_plan,
+            my_results={"{{ROOT_ITEM}}": root_item_result},
+        )
+
+    assert result is not None
+    tool_names = [step["tool_name"] for step in result["my_steps"]]
+    assert tool_names == [
+        "ms365-mcp__list-drives",
+        "ms365-mcp__get-drive-root-item",
+        "ms365-mcp__list-folder-files",
+        "ms365-mcp__list-excel-worksheets",
+    ]
+    assert result["my_steps"][2]["parameters"] == {
+        "driveId": "drive-123",
+        "driveItemId": "root-456",
+    }

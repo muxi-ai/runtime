@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
 
 
 class IntentType(Enum):
@@ -36,6 +37,13 @@ class IntentType(Enum):
     MESSAGE_TYPE = "message_type"  # request, query, consultation, etc.
 
 
+class IntentAlternative(TypedDict):
+    """Alternative intent candidate with confidence score."""
+
+    intent: str
+    confidence: float
+
+
 class IntentResult(BaseModel):
     """Result of intent detection."""
 
@@ -49,7 +57,7 @@ class IntentResult(BaseModel):
     extracted_question: Optional[str] = Field(None, description="Extracted question if applicable")
 
     # For multi-option intents
-    alternatives: List[Dict[str, float]] = Field(
+    alternatives: List[IntentAlternative] = Field(
         default_factory=list, description="Alternative intents with confidence scores"
     )
 

@@ -49,6 +49,8 @@ TOOL CHAINING RULE: Many tools require IDs or references from other tools. If a 
 - The output_placeholder from the lookup step flows into the parameters of the subsequent step
 Never assume you know an ID — always fetch it from the source system first.
 - If the user names a file, message, record, workbook, task, folder, or site but you only have its human-readable name, plan discovery steps first to obtain the system identifier the final tool requires.
+- A parent/root/container identifier is NOT the same as the named resource identifier unless the tool explicitly returns that named resource.
+- If the final action needs an opaque identifier like `itemId`, `driveItemId`, `messageId`, `taskId`, or `recordId`, include the list/search step that returns the named resource itself before the final action.
 - Never satisfy a required identifier by guessing, using an empty string, or inventing a user-facing field name that is not part of the real tool call.
 - If you cannot obtain the required identifier with the available tools, do not include the final action tool in your executable steps.
 

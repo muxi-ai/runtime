@@ -1546,7 +1546,7 @@ class Overlord:
                     else "unknown"
                 )
                 observability.observe(
-                    event_type=observability.ErrorEvents.AGENT_INITIALIZATION_FAILED,
+                    event_type=observability.ErrorEvents.AGENT_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
                         "agent_id": agent_id,
