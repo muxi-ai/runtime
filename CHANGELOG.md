@@ -1,18 +1,26 @@
 # Changelog
 
-## 0.20260409.3 - Prefer Local Tools Over Self-Delegation
+## 0.20260409.4 - Recover Workbook Identifiers from Prior MCP Results
 
 ### Bug Fixes
 
-- **Agents could delegate a tool step back to themselves instead of executing it locally** -- In some multi-step MS365/Excel workflows, the planner marked a step like `list-excel-worksheets` as `can_i_do_this: false` even though that tool was already in the current agent's own toolset. The runtime trusted that flag, converted the step into a delegated handoff, and triggered the A2A loop detector instead of letting the local repair-planning path build the required discovery chain. Fix: normalize any step whose tool is already present in the current agent's available tool list to `can_i_do_this: true`, keep it in `my_steps`, and prevent self-delegation.
 - **Multi-step MS365/Excel workflows could still lose the named workbook identifier after earlier lookup steps** -- When prior MCP calls returned large payloads, repair planning could latch onto a parent/root record or an overly broad summary instead of the workbook itself. Fix: extract matching structured records from prior results, preserve the relevant workbook entry in planning context, and deterministically reuse identifiers such as `driveItemId` for downstream Excel calls.
 - **Repair planning could still reject the right fix when it stayed on the same tool chain** -- If the best recovery was to keep the same final tool but add a missing discovery step first, the runtime could treat the repaired plan as unchanged and stop. Fix: compare repaired plans more carefully, accept meaningful same-tool-chain repairs, and auto-insert a missing lookup step when replanning still skips it.
 
 ### Tests
 
-- **Focused planning helper coverage** -- Extended `tests/unit/test_agent_planning_helpers.py` to verify that locally available tools are always kept as local execution steps even when the planner initially marks them as non-executable.
 - **Expanded planning helper regression coverage** -- Extended `tests/unit/test_agent_planning_helpers.py` to verify workbook identifier recovery from large prior MCP payloads, acceptance of meaningful same-tool-chain repairs, and automatic discovery-step insertion for missing Excel/MS365 identifiers.
 - **Random e2e regression sniff tests** -- Ran 5 random standalone e2e tests before release confidence checking, with all 5 passing across `multimodal`, `knowledge`, `orchestration`, and `clarification`.
+
+## 0.20260409.3 - Prefer Local Tools Over Self-Delegation
+
+### Bug Fixes
+
+- **Agents could delegate a tool step back to themselves instead of executing it locally** -- In some multi-step MS365/Excel workflows, the planner marked a step like `list-excel-worksheets` as `can_i_do_this: false` even though that tool was already in the current agent's own toolset. The runtime trusted that flag, converted the step into a delegated handoff, and triggered the A2A loop detector instead of letting the local repair-planning path build the required discovery chain. Fix: normalize any step whose tool is already present in the current agent's available tool list to `can_i_do_this: true`, keep it in `my_steps`, and prevent self-delegation.
+
+### Tests
+
+- **Focused planning helper coverage** -- Extended `tests/unit/test_agent_planning_helpers.py` to verify that locally available tools are always kept as local execution steps even when the planner initially marks them as non-executable.
 
 ## 0.20260409.2 - Repair Planning for Missing Tool Identifiers
 
