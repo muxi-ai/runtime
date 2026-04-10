@@ -576,6 +576,26 @@ class FormationValidator:
                 "Valid types are: 'http', 'command'"
             )
 
+        # Validate default parameters
+        if "parameters" in server_config:
+            params = server_config["parameters"]
+            if not isinstance(params, dict):
+                self.result.add_error(
+                    f"MCP server {server_id or index} 'parameters' must be a key-value map"
+                )
+            else:
+                for key, value in params.items():
+                    if not isinstance(key, str):
+                        self.result.add_error(
+                            f"MCP server {server_id or index} parameter key must be a string, "
+                            f"got {type(key).__name__}"
+                        )
+                    if not isinstance(value, (str, int, float, bool)):
+                        self.result.add_error(
+                            f"MCP server {server_id or index} parameter '{key}' must be a "
+                            f"scalar value (string, number, or boolean)"
+                        )
+
         # Validate authentication configuration
         if "auth" in server_config:
             self._validate_mcp_auth_config(server_config["auth"], server_id or index)

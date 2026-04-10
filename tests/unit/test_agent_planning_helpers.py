@@ -847,6 +847,7 @@ async def test_repair_execution_plan_accepts_meaningful_same_tool_chain_changes(
 async def test_repair_execution_plan_adds_auto_discovery_step_when_replan_has_no_change():
     agent = object.__new__(Agent)
     agent.agent_id = "test-agent"
+    agent._mcp_service = None
     current_plan = {
         "steps": [
             {
@@ -987,3 +988,222 @@ async def test_repair_execution_plan_adds_auto_discovery_step_when_replan_has_no
         "driveItemId": "root-456",
         "searchQuery": "Book.xlsx",
     }
+
+
+# ---------------------------------------------------------------------------
+# _validate_inferred_parameters_against_results
+# ---------------------------------------------------------------------------
+
+
+def test_validate_inferred_drops_folder_id_used_as_file_param():
+    """When results contain only folders, an inferred driveItemId that matches
+    a folder record must be dropped for a file-expecting tool."""
+    agent = object.__new__(Agent)
+    root_result = {
+        "status": "success",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "id": "root-folder-001",
+                            "name": "root",
+                            "folder": {"childCount": 3},
+                            "root": {},
+                            "parentReference": {
+                                "driveId": "b!drive-xyz",
+                            },
+                        }
+                    ),
+                }
+            ],
+            "structuredContent": None,
+            "isError": False,
+        },
+    }
+    folder_listing_result = {
+        "status": "success",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "value": [
+                                {
+                                    "id": "folder-meetings",
+                                    "name": "Meetings",
+                                    "folder": {"childCount": 0},
+                                },
+                                {
+                                    "id": "folder-recordings",
+                                    "name": "Recordings",
+                                    "folder": {"childCount": 0},
+                                },
+                            ]
+                        }
+                    ),
+                }
+            ],
+            "structuredContent": None,
+            "isError": False,
+        },
+    }
+
+    with patch("muxi.runtime.formation.agents.agent.observability.observe"):
+        validated = agent._validate_inferred_parameters_against_results(
+            inferred_parameters={
+                "driveId": "b!drive-xyz",
+                "driveItemId": "root-folder-001",
+            },
+            my_results={
+                "{{ROOT}}": root_result,
+                "{{FILES}}": folder_listing_result,
+            },
+            param_properties={
+                "driveId": {"type": "string"},
+                "driveItemId": {"type": "string"},
+            },
+            full_schema={
+                "type": "object",
+                "properties": {
+                    "driveId": {"type": "string"},
+                    "driveItemId": {"type": "string"},
+                },
+                "required": ["driveId", "driveItemId"],
+            },
+            tool_name="ms365-mcp__list-excel-worksheets",
+            action_description="List all worksheets in Book.xlsx",
+        )
+
+    assert "driveId" in validated, "driveId is generic and should be kept"
+    assert "driveItemId" not in validated, (
+        "driveItemId should be dropped — root-folder-001 only appears in folder/root records"
+    )
+
+
+def test_validate_inferred_keeps_file_id_when_file_record_exists():
+    """When results contain a file record matching the inferred ID, it should be kept."""
+    agent = object.__new__(Agent)
+    file_listing_result = {
+        "status": "success",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "value": [
+                                {
+                                    "id": "book-item-123",
+                                    "name": "Book.xlsx",
+                                    "file": {"mimeType": "application/vnd.openxmlformats"},
+                                    "parentReference": {"driveId": "drive-abc"},
+                                },
+                                {
+                                    "id": "folder-meetings",
+                                    "name": "Meetings",
+                                    "folder": {"childCount": 0},
+                                },
+                            ]
+                        }
+                    ),
+                }
+            ],
+            "structuredContent": None,
+            "isError": False,
+        },
+    }
+
+    with patch("muxi.runtime.formation.agents.agent.observability.observe"):
+        validated = agent._validate_inferred_parameters_against_results(
+            inferred_parameters={
+                "driveId": "drive-abc",
+                "driveItemId": "book-item-123",
+            },
+            my_results={"{{FILES}}": file_listing_result},
+            param_properties={
+                "driveId": {"type": "string"},
+                "driveItemId": {"type": "string"},
+            },
+            full_schema={
+                "type": "object",
+                "properties": {
+                    "driveId": {"type": "string"},
+                    "driveItemId": {"type": "string"},
+                },
+                "required": ["driveId", "driveItemId"],
+            },
+            tool_name="ms365-mcp__list-excel-worksheets",
+            action_description="List all worksheets in Book.xlsx",
+        )
+
+    assert validated == {"driveId": "drive-abc", "driveItemId": "book-item-123"}
+
+
+def test_validate_inferred_ignores_failed_results():
+    """Failed results should not be considered when validating inferred params."""
+    agent = object.__new__(Agent)
+    failed_result = {
+        "status": "error",
+        "error": "401 Unauthorized",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "id": "ghost-item-999",
+                            "name": "Book.xlsx",
+                            "file": {"mimeType": "application/vnd.openxmlformats"},
+                        }
+                    ),
+                }
+            ],
+            "structuredContent": None,
+            "isError": True,
+        },
+    }
+
+    with patch("muxi.runtime.formation.agents.agent.observability.observe"):
+        validated = agent._validate_inferred_parameters_against_results(
+            inferred_parameters={"driveItemId": "ghost-item-999"},
+            my_results={"{{FAILED}}": failed_result},
+            param_properties={"driveItemId": {"type": "string"}},
+            full_schema={
+                "type": "object",
+                "properties": {"driveItemId": {"type": "string"}},
+                "required": ["driveItemId"],
+            },
+            tool_name="ms365-mcp__list-excel-worksheets",
+            action_description="List worksheets in Book.xlsx",
+        )
+
+    assert "driveItemId" not in validated
+
+
+def test_validate_inferred_passes_through_generic_params():
+    """Params with generic expected_kind (e.g. searchQuery) should not be filtered."""
+    agent = object.__new__(Agent)
+
+    with patch("muxi.runtime.formation.agents.agent.observability.observe"):
+        validated = agent._validate_inferred_parameters_against_results(
+            inferred_parameters={"searchQuery": "Book.xlsx", "top": "10"},
+            my_results={},
+            param_properties={
+                "searchQuery": {"type": "string"},
+                "top": {"type": "string"},
+            },
+            full_schema={
+                "type": "object",
+                "properties": {
+                    "searchQuery": {"type": "string"},
+                    "top": {"type": "string"},
+                },
+            },
+            tool_name="ms365-mcp__list-folder-files",
+            action_description="List files in root folder",
+        )
+
+    assert validated == {"searchQuery": "Book.xlsx", "top": "10"}

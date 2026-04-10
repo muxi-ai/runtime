@@ -1450,6 +1450,21 @@ class Agent:
                                                 ),
                                             )
 
+                                        # Inject MCP server default parameters
+                                        if server_id and self._mcp_service:
+                                            mcp_defaults = (
+                                                self._mcp_service.server_configs.get(
+                                                    server_id, {}
+                                                ).get("parameters", {})
+                                            )
+                                            if mcp_defaults:
+                                                parameters = self._merge_parameter_candidates(
+                                                    current_parameters=parameters,
+                                                    candidate_parameters=mcp_defaults,
+                                                    param_properties=param_properties,
+                                                    full_schema=full_param_schema,
+                                                )
+
                                         unresolved_required_params = (
                                             self._get_unresolved_required_parameters(
                                                 parameters,
@@ -1477,6 +1492,18 @@ class Agent:
                                                 action_description=step.get("action", ""),
                                                 user_request=inference_context,
                                             )
+
+                                            if inferred_parameters:
+                                                inferred_parameters = (
+                                                    self._validate_inferred_parameters_against_results(
+                                                        inferred_parameters=inferred_parameters,
+                                                        my_results=my_results,
+                                                        param_properties=param_properties,
+                                                        full_schema=full_param_schema,
+                                                        tool_name=tool_name,
+                                                        action_description=step.get("action", ""),
+                                                    )
+                                                )
 
                                             if inferred_parameters:
                                                 parameters = self._merge_parameter_candidates(
@@ -3966,7 +3993,16 @@ class Agent:
         if structured_content not in (None, "", [], {}):
             return structured_content
 
+        # Also check for structured_content (underscore variant from ModernProtocolFeatures)
+        structured_content_alt = candidate.get("structured_content")
+        if structured_content_alt not in (None, "", [], {}):
+            return structured_content_alt
+
         content = candidate.get("content")
+        if isinstance(content, str):
+            parsed = self._parse_json_like_text(content)
+            if isinstance(parsed, (dict, list)):
+                return parsed
         if isinstance(content, list):
             parsed_items: List[Any] = []
             text_chunks: List[str] = []
@@ -4427,6 +4463,19 @@ class Agent:
                 my_results=my_results,
                 runtime_context=self._get_active_skill_execution_context(),
             )
+            # Inject MCP server default parameters for discovery candidates
+            if "__" in candidate_name and self._mcp_service:
+                disc_server_id = candidate_name.split("__", 1)[0]
+                disc_mcp_defaults = self._mcp_service.server_configs.get(
+                    disc_server_id, {}
+                ).get("parameters", {})
+                if disc_mcp_defaults:
+                    candidate_params = self._merge_parameter_candidates(
+                        current_parameters=candidate_params,
+                        candidate_parameters=disc_mcp_defaults,
+                        param_properties=param_properties,
+                        full_schema=tool_schema,
+                    )
             filename_hint = self._extract_primary_filename_hint(
                 user_message, failed_step.get("action", "")
             )
@@ -6043,6 +6092,86 @@ class Agent:
                 substituted[param_name] = resolved_value
 
         return substituted
+
+    def _validate_inferred_parameters_against_results(
+        self,
+        inferred_parameters: Dict[str, Any],
+        my_results: Dict[str, Any],
+        param_properties: Dict[str, Any],
+        full_schema: Dict[str, Any],
+        tool_name: str = "",
+        action_description: str = "",
+    ) -> Dict[str, Any]:
+        """Drop inferred ID-typed params whose value doesn't appear in a
+        successful result record of the expected kind.
+
+        This prevents the LLM from hallucinating file/workbook IDs from
+        folder or root records when the actual target was never discovered.
+        """
+        if not inferred_parameters or not my_results:
+            return dict(inferred_parameters)
+
+        successful_results = self._get_successful_planning_results(my_results)
+
+        if successful_results:
+            structured_payloads = [
+                self._extract_structured_planning_result_payload(result)
+                for result in successful_results.values()
+            ]
+            all_records = [
+                record
+                for payload in structured_payloads
+                for record in self._iter_result_records(payload)
+                if isinstance(record, dict)
+            ]
+        else:
+            all_records = []
+
+        validated = dict(inferred_parameters)
+        for param_name, param_value in list(validated.items()):
+            if not self._is_nonempty_parameter_candidate(param_value):
+                continue
+
+            param_def = self._resolve_schema_ref(
+                param_properties.get(param_name, {}), full_schema
+            )
+            expected_kind = self._infer_parameter_record_kind(
+                param_name,
+                tool_name=tool_name,
+                action_description=action_description,
+                param_definition=param_def,
+            )
+            if expected_kind == "generic":
+                continue
+
+            value_str = str(param_value)
+            found_in_matching_record = False
+            for record in all_records:
+                if not self._record_matches_expected_kind(record, expected_kind):
+                    continue
+                record_id = record.get("id")
+                if record_id is not None and str(record_id) == value_str:
+                    found_in_matching_record = True
+                    break
+
+            if not found_in_matching_record:
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_PLANNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "param_name": param_name,
+                        "inferred_value": value_str[:120],
+                        "expected_kind": expected_kind,
+                        "tool_name": tool_name,
+                    },
+                    description=(
+                        f"Dropping inferred '{param_name}' — value not found in any "
+                        f"'{expected_kind}' record from successful results"
+                    ),
+                )
+                del validated[param_name]
+
+        return validated
 
     def _merge_parameter_candidates(
         self,

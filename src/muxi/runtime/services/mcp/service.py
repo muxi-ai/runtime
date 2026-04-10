@@ -416,6 +416,7 @@ class MCPService:
         request_timeout: int = 60,
         original_credentials: Optional[Dict[str, Any]] = None,
         agent_id: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Register an MCP server with the service.
@@ -435,6 +436,7 @@ class MCPService:
             request_timeout: Request timeout in seconds
             original_credentials: Original credentials with user placeholders (if any)
             agent_id: Optional agent ID for agent-specific MCP servers
+            parameters: Optional default parameters injected into every tool call
 
         Returns:
             The server_id of the registered server
@@ -458,6 +460,7 @@ class MCPService:
                 request_timeout,
                 original_credentials,
                 agent_id,
+                parameters,
             )
 
         # Enhanced auto-detection with caching for HTTP-based servers
@@ -488,6 +491,7 @@ class MCPService:
                     request_timeout,
                     original_credentials,
                     agent_id,
+                    parameters,
                 )
 
             except MCPConnectionError as e:
@@ -531,6 +535,7 @@ class MCPService:
                 request_timeout,
                 original_credentials,
                 agent_id,
+                parameters,
             )
 
         # Proceed with explicitly specified transport type
@@ -545,6 +550,7 @@ class MCPService:
             request_timeout,
             original_credentials,
             agent_id,
+            parameters,
         )
 
     async def invoke_tool(
@@ -736,6 +742,31 @@ class MCPService:
             description=f"Executing MCP tool '{tool_name}' on server '{server_id}' with user credentials",
         )
 
+        # Inject default parameters from server config.
+        # Caller-provided values always take precedence.
+        default_params = config.get("parameters", {})
+        if default_params:
+            resolved_defaults = dict(default_params)
+            # Resolve ${{ user.credentials.X }} placeholders in default params
+            for key, value in list(resolved_defaults.items()):
+                if isinstance(value, str) and USER_CREDENTIAL_PATTERN.search(value):
+                    if resolved_auth and isinstance(resolved_auth, dict):
+                        match = USER_CREDENTIAL_PATTERN.match(value)
+                        if match:
+                            cred_key = match.group(1)
+                            cred_value = resolved_auth.get(cred_key) or resolved_auth.get(
+                                "token"
+                            )
+                            if cred_value:
+                                resolved_defaults[key] = cred_value
+                            else:
+                                del resolved_defaults[key]
+                    else:
+                        del resolved_defaults[key]
+            for key, value in resolved_defaults.items():
+                if key not in parameters:
+                    parameters[key] = value
+
         cancellation_token = CancellationToken() if request_id else None
 
         try:
@@ -853,6 +884,7 @@ class MCPService:
         request_timeout: int = 60,
         original_credentials: Optional[Dict[str, Any]] = None,
         agent_id: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Attempt connection with automatic fallback between transports.
@@ -872,7 +904,8 @@ class MCPService:
                     model,
                     request_timeout,
                     original_credentials,
-                    agent_id,  # Pass through agent_id for proper tool isolation
+                    agent_id,
+                    parameters,
                 )
 
                 # Success - the transport type is already stored in cache by _connect_single_transport
@@ -933,6 +966,7 @@ class MCPService:
         request_timeout: int = 60,
         original_credentials: Optional[Dict[str, Any]] = None,
         agent_id: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Connect using a specific transport type.
@@ -1047,6 +1081,8 @@ class MCPService:
                     ),
                     # Flag to indicate if this server uses user-specific credentials
                     "uses_user_credentials": bool(original_credentials),
+                    # Default parameters injected into every tool call
+                    "parameters": parameters or {},
                 }
 
                 # Store the resolved transport type in cache

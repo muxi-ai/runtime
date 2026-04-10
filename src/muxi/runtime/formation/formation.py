@@ -2393,6 +2393,16 @@ class Formation:
                 if "transport_type" in server_config:
                     registration_params["transport_type"] = server_config["transport_type"]
 
+                # Pass default parameters for tool calls.
+                # ${{ secrets.X }} placeholders are already resolved by the loader.
+                # ${{ user.credentials.X }} placeholders are kept as-is for
+                # per-request resolution inside invoke_tool.
+                if "parameters" in server_config and isinstance(
+                    server_config["parameters"], dict
+                ):
+                    registration_params["parameters"] = server_config["parameters"]
+
+
                 # Register the server via MCP service
                 # Retry HTTP servers up to 3 times with backoff -- the external MCP
                 # process may still be starting when the formation initialises.

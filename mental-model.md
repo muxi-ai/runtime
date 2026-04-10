@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-09
+**Last Updated:** 2026-04-10
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -1119,11 +1119,16 @@ class MCPService:
         self.transport_cache = {}        # server_id → transport_type (for retry)
         self._live_connections = {}      # connection pool keyed by server_id:credential_hash
         self._connection_ttl = 300.0     # keep-alive TTL (seconds)
+        # server_configs stores per-server metadata including "parameters" (default tool args)
 ```
 
 ### Server Registration Flow
 
 **Path:** `formation._register_mcp_servers()` → `MCPService.register_mcp_server()`
+
+Registration sources: formation-level (`mcp.servers` in formation.afs) and agent-level
+(`mcp_servers` in agent .afs files, registered via `overlord._register_agent_mcp_servers()`).
+Both paths pass `parameters` through to the service.
 
 ```python
 async def register_mcp_server(
@@ -1132,7 +1137,8 @@ async def register_mcp_server(
     command: Optional[str] = None,
     transport_type: str = "auto",
     credentials: Optional[Dict] = None,
-    agent_id: Optional[str] = None  # For agent-specific MCP servers
+    agent_id: Optional[str] = None,  # For agent-specific MCP servers
+    parameters: Optional[Dict] = None  # Default tool arguments (injected pre-LLM)
 ):
     # 1. Transport detection
     if transport_type == "auto":
@@ -1293,6 +1299,49 @@ async def call_tool(
     
     return result
 ```
+
+### MCP Server Default Parameters (2026-04-10)
+
+**AFS field:** `parameters` on MCP server declarations (formation-level or agent-level)
+
+**Purpose:** Inject fixed infrastructure constants (org-level IDs, API versions, tenant IDs) into
+every tool call for a given MCP server without the LLM planner ever needing to discover or infer them.
+
+**AFS example:**
+```yaml
+mcp_servers:
+  - id: ms365-mcp
+    url: http://localhost:3001/mcp
+    type: http
+    parameters:
+      driveId: "b!abc123..."
+      siteId: "contoso.sharepoint.com,guid1,guid2"
+```
+
+**Runtime flow:**
+1. `formation._register_mcp_servers()` or `overlord._register_agent_mcp_servers()` reads
+   `parameters` from AFS and passes it to `MCPService.register_mcp_server(parameters=...)`
+2. Service stores parameters in `server_configs[server_id]["parameters"]`
+3. At tool execution time, `invoke_tool()` looks up the server for the tool, retrieves its
+   parameters dict, resolves any `${{ user.credentials.X }}` placeholders, and injects them
+   as defaults into the tool arguments (tool-call-supplied args take precedence)
+4. The LLM planner never sees these values -- they bypass planning/inference entirely
+
+**Validation:** `validate_mcp_parameters()` in `formation/config/validation.py` enforces flat
+dict with string keys and scalar values (str, int, float, bool). Nested objects are rejected.
+
+**Key design decisions:**
+- Parameters are **defaults**, not overrides: if the planner or a prior step already resolved
+  a value for the same key, the explicit value wins
+- `${{ user.credentials.X }}` placeholders are resolved at call time (not registration time)
+  so per-user credential resolution still works
+- The field name is `parameters` (not `parameter_defaults`) to match AFS conventions
+
+**Files:**
+- `src/muxi/runtime/formation/formation.py` -- passes parameters from AFS to register call
+- `src/muxi/runtime/formation/overlord/overlord.py` -- agent-level MCP registration path
+- `src/muxi/runtime/services/mcp/service.py` -- stores and injects parameters at tool execution
+- `src/muxi/runtime/formation/config/validation.py` -- validates parameters shape
 
 ### User Credential Resolution
 
@@ -4298,3 +4347,59 @@ then fell into `else` branches that wrote to in-memory Python dicts. Jobs vanish
 - `src/muxi/runtime/services/scheduler/service.py` -- formation LLM injection into parser/rewriter
 - `src/muxi/runtime/services/scheduler/manager.py` -- `_resolve_external_user_id()`,
   `_enrich_job_dict()`, delete audit fix
+
+### 2026-04-10: MCP Default Parameters, Post-Inference Validation & Structured Result Extraction (v0.20260410.0)
+
+**Problem cluster:** Multi-step MCP workflows (e.g., MS365 Excel: find user -> get drive root ->
+list files -> list worksheets) failed because: (1) infrastructure constants like `driveId` had to be
+LLM-discovered on every request, (2) the LLM could fabricate ID-typed parameters not found in any
+prior result, and (3) modern MCP protocol returned tool results as JSON strings that the structured
+extraction path couldn't parse.
+
+**Fix 1: MCP server `parameters` field (AFS + runtime)**
+- New `parameters` field on MCP server declarations (formation-level and agent-level)
+- Runtime auto-injects these as defaults into every tool call before the LLM planner runs
+- Supports `${{ user.credentials.X }}` placeholder resolution at call time
+- Validated as flat dict with scalar values
+- Both registration paths (formation `_register_mcp_servers` and overlord `_register_agent_mcp_servers`)
+  pass parameters through to `MCPService`
+
+**Fix 2: Post-inference validation guard**
+- `_validate_inferred_parameters_against_results()` checks LLM-inferred ID-typed params against
+  successful prior result records using `_record_matches_expected_kind()`
+- If the LLM fabricated an ID not found in any discovered record, the parameter is rejected and
+  treated as unresolved (blocking the step safely) rather than sent to the MCP server
+- Generic: works for any MCP server, not just MS365
+
+**Fix 3: String content parsing in `_extract_structured_planning_result_payload()`**
+- `ModernProtocolFeatures.process_structured_output()` flattens MCP content blocks into a single
+  string. The extraction helper checked `isinstance(content, list)` which always failed for string
+  content, returning a wrapper dict with no useful records
+- Fix: when content is a string, attempt `json.loads()` before returning; if it's valid JSON, use
+  the parsed structure for record extraction
+- This was the root cause of `driveItemId` not propagating from step 1 (get-drive-root-item) to
+  step 2 (list-folder-files) -- the root folder `id` was in the JSON string but never extracted
+
+**Fix 4: Execution-time clean context binding (from earlier in session)**
+- Planned-step execution resolves parameters from clean current request + context lines,
+  successful prior results, and active runtime skill context -- not the full enhanced prompt
+- Placeholder-shaped values (`{{X}}`, `<<X>>`, `{X}`) treated as unresolved
+- Only successful prior results (not error payloads) used for parameter chaining
+
+**Model independence:** All fixes are deterministic -- validated with both Claude Opus 4 and
+Claude Sonnet 4.5 producing identical behavior on the same MS365 Excel workflow.
+
+**Gotcha: agent-level MCP registration path**
+- The overlord's `_register_agent_mcp_servers()` is a separate code path from the formation-level
+  `_register_mcp_servers()`. When adding new registration kwargs (like `parameters`), both paths
+  must be updated. This was missed initially and required a follow-up fix.
+
+**Key files:**
+- `src/muxi/runtime/formation/formation.py` -- formation-level parameters pass-through
+- `src/muxi/runtime/formation/overlord/overlord.py` -- agent-level parameters pass-through
+- `src/muxi/runtime/services/mcp/service.py` -- parameter storage and injection in `invoke_tool()`
+- `src/muxi/runtime/formation/config/validation.py` -- `validate_mcp_parameters()`
+- `src/muxi/runtime/formation/agents/agent.py` -- post-inference validation, string content parsing,
+  clean context binding, placeholder rejection, successful-results-only filtering
+- `tests/unit/test_agent_planning_helpers.py` -- 20+ new tests for planning execution fixes
+- `tests/unit/test_mcp_default_parameters.py` -- 10 tests for MCP parameters feature

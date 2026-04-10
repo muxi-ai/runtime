@@ -1974,6 +1974,11 @@ class Overlord:
                 if "type" in server_config:
                     registration_params["transport_type"] = server_config["type"]
 
+                if "parameters" in server_config and isinstance(
+                    server_config["parameters"], dict
+                ):
+                    registration_params["parameters"] = server_config["parameters"]
+
                 # Register the MCP server with process-level timeout
                 # This may raise MCPConnectionError if connection fails
                 # Note: MCP library v1.12.3 has issues with 401 errors causing hangs
