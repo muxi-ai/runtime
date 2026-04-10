@@ -754,9 +754,7 @@ class MCPService:
                         match = USER_CREDENTIAL_PATTERN.match(value)
                         if match:
                             cred_key = match.group(1)
-                            cred_value = resolved_auth.get(cred_key) or resolved_auth.get(
-                                "token"
-                            )
+                            cred_value = resolved_auth.get(cred_key) or resolved_auth.get("token")
                             if cred_value:
                                 resolved_defaults[key] = cred_value
                             else:

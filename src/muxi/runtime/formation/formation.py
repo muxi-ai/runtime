@@ -2397,11 +2397,8 @@ class Formation:
                 # ${{ secrets.X }} placeholders are already resolved by the loader.
                 # ${{ user.credentials.X }} placeholders are kept as-is for
                 # per-request resolution inside invoke_tool.
-                if "parameters" in server_config and isinstance(
-                    server_config["parameters"], dict
-                ):
+                if "parameters" in server_config and isinstance(server_config["parameters"], dict):
                     registration_params["parameters"] = server_config["parameters"]
-
 
                 # Register the server via MCP service
                 # Retry HTTP servers up to 3 times with backoff -- the external MCP

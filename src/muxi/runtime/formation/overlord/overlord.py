@@ -1974,9 +1974,7 @@ class Overlord:
                 if "type" in server_config:
                     registration_params["transport_type"] = server_config["type"]
 
-                if "parameters" in server_config and isinstance(
-                    server_config["parameters"], dict
-                ):
+                if "parameters" in server_config and isinstance(server_config["parameters"], dict):
                     registration_params["parameters"] = server_config["parameters"]
 
                 # Register the MCP server with process-level timeout

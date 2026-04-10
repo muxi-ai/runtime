@@ -1452,11 +1452,9 @@ class Agent:
 
                                         # Inject MCP server default parameters
                                         if server_id and self._mcp_service:
-                                            mcp_defaults = (
-                                                self._mcp_service.server_configs.get(
-                                                    server_id, {}
-                                                ).get("parameters", {})
-                                            )
+                                            mcp_defaults = self._mcp_service.server_configs.get(
+                                                server_id, {}
+                                            ).get("parameters", {})
                                             if mcp_defaults:
                                                 parameters = self._merge_parameter_candidates(
                                                     current_parameters=parameters,
@@ -1494,15 +1492,13 @@ class Agent:
                                             )
 
                                             if inferred_parameters:
-                                                inferred_parameters = (
-                                                    self._validate_inferred_parameters_against_results(
-                                                        inferred_parameters=inferred_parameters,
-                                                        my_results=my_results,
-                                                        param_properties=param_properties,
-                                                        full_schema=full_param_schema,
-                                                        tool_name=tool_name,
-                                                        action_description=step.get("action", ""),
-                                                    )
+                                                inferred_parameters = self._validate_inferred_parameters_against_results(
+                                                    inferred_parameters=inferred_parameters,
+                                                    my_results=my_results,
+                                                    param_properties=param_properties,
+                                                    full_schema=full_param_schema,
+                                                    tool_name=tool_name,
+                                                    action_description=step.get("action", ""),
                                                 )
 
                                             if inferred_parameters:
@@ -4466,9 +4462,9 @@ class Agent:
             # Inject MCP server default parameters for discovery candidates
             if "__" in candidate_name and self._mcp_service:
                 disc_server_id = candidate_name.split("__", 1)[0]
-                disc_mcp_defaults = self._mcp_service.server_configs.get(
-                    disc_server_id, {}
-                ).get("parameters", {})
+                disc_mcp_defaults = self._mcp_service.server_configs.get(disc_server_id, {}).get(
+                    "parameters", {}
+                )
                 if disc_mcp_defaults:
                     candidate_params = self._merge_parameter_candidates(
                         current_parameters=candidate_params,
@@ -6132,9 +6128,7 @@ class Agent:
             if not self._is_nonempty_parameter_candidate(param_value):
                 continue
 
-            param_def = self._resolve_schema_ref(
-                param_properties.get(param_name, {}), full_schema
-            )
+            param_def = self._resolve_schema_ref(param_properties.get(param_name, {}), full_schema)
             expected_kind = self._infer_parameter_record_kind(
                 param_name,
                 tool_name=tool_name,
