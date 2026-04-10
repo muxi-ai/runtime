@@ -72,9 +72,7 @@ class TestParser:
     def test_parse_name_fallback_to_directory(self, tmp_path):
         skill_dir = tmp_path / "my-skill"
         skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text(
-            "---\ndescription: A skill\n---\n\nBody.\n"
-        )
+        (skill_dir / "SKILL.md").write_text("---\ndescription: A skill\n---\n\nBody.\n")
         metadata, body, warnings = parse_skill_md(skill_dir / "SKILL.md")
         assert metadata.name == "my-skill"
 
@@ -106,6 +104,25 @@ class TestParser:
         metadata, body, warnings = parse_skill_md(skill_dir / "SKILL.md")
         assert metadata.allowed_tools == ["read_file", "write_file"]
 
+    def test_parse_execution_context(self, tmp_path):
+        skill_dir = tmp_path / "context-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\n"
+            "name: context-skill\n"
+            "description: Context-aware skill\n"
+            "execution_context:\n"
+            '  driveId: "${{ secrets.MS365_DRIVE_ID }}"\n'
+            "  mode: readonly\n"
+            "---\n\n"
+            "Body.\n"
+        )
+        metadata, body, warnings = parse_skill_md(skill_dir / "SKILL.md")
+        assert metadata.execution_context == {
+            "driveId": "${{ secrets.MS365_DRIVE_ID }}",
+            "mode": "readonly",
+        }
+
     def test_enumerate_resources(self, tmp_skills_dir):
         resources = _enumerate_resources(tmp_skills_dir / "pdf-processing")
         assert "scripts/extract.py" in resources
@@ -116,9 +133,7 @@ class TestParser:
         assert resources == []
 
     def test_load_skill_content(self, tmp_skills_dir):
-        metadata, body, _ = parse_skill_md(
-            tmp_skills_dir / "pdf-processing" / "SKILL.md"
-        )
+        metadata, body, _ = parse_skill_md(tmp_skills_dir / "pdf-processing" / "SKILL.md")
         content = load_skill_content(metadata)
         assert content.metadata == metadata
         assert "PDF Processing" in content.body

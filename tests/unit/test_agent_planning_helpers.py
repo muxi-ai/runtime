@@ -114,6 +114,30 @@ def test_finalize_execution_plan_preserves_step_parameters():
     }
 
 
+def test_extract_current_request_text_preserves_context_lines_when_requested():
+    message = (
+        "=== CURRENT REQUEST ===\n"
+        "User: What sheets do I have in Book.xlsx?\n"
+        "[Context: driveId = drive-123. Use this directly.]\n\n"
+        "=== RECENT CONVERSATION ===\n"
+        "User: Hi"
+    )
+
+    assert Agent._extract_current_request_text(message) == "What sheets do I have in Book.xlsx?"
+    assert Agent._extract_current_request_text(message, include_context_lines=True) == (
+        "What sheets do I have in Book.xlsx?\n" "[Context: driveId = drive-123. Use this directly.]"
+    )
+
+
+def test_extract_explicit_parameter_values_from_text_ignores_placeholder_values():
+    resolved = Agent._extract_explicit_parameter_values_from_text(
+        "[Context: driveId = {{DRIVE_ID}}. Use this directly.]",
+        ["driveId"],
+    )
+
+    assert resolved == {}
+
+
 @pytest.mark.asyncio
 async def test_plan_before_execution_includes_required_params_in_prompt():
     agent = object.__new__(Agent)
@@ -157,6 +181,36 @@ async def test_plan_before_execution_includes_required_params_in_prompt():
     planning_messages = agent.model.chat.call_args.args[0]
     planning_prompt = planning_messages[1]["content"]
     assert "Required params: driveId, driveItemId." in planning_prompt
+
+
+@pytest.mark.asyncio
+async def test_plan_before_execution_includes_agent_instructions_and_context():
+    agent = object.__new__(Agent)
+    agent.name = "Test Agent"
+    agent.agent_id = "test-agent"
+    agent.system_message = "driveId is known. NEVER call list-drives."
+    agent.overlord = None
+    agent.model = SimpleNamespace(
+        chat=AsyncMock(
+            return_value='{"steps":[],"my_steps":[],"delegate_steps":[],"data_flow":"Direct response - no tools needed"}'
+        )
+    )
+
+    with (
+        patch("muxi.runtime.formation.agents.agent.streaming.stream"),
+        patch("muxi.runtime.formation.agents.agent.observability.observe"),
+        patch("muxi.runtime.formation.prompts.loader.PromptLoader.get", return_value=""),
+    ):
+        await agent._plan_before_execution(
+            "What sheets do I have in Book.xlsx?\n[Context: driveId = drive-123]",
+            available_tools=[],
+            allow_delegation=False,
+        )
+
+    planning_messages = agent.model.chat.call_args.args[0]
+    planning_prompt = planning_messages[1]["content"]
+    assert "NEVER call list-drives" in planning_prompt
+    assert "[Context: driveId = drive-123]" in planning_prompt
 
 
 @pytest.mark.asyncio
@@ -206,6 +260,16 @@ def test_is_tool_execution_error_detects_mcp_error_shapes():
         )
         is False
     )
+
+
+def test_has_resolved_required_parameter_value_rejects_placeholder_strings():
+    agent = object.__new__(Agent)
+    param_def = {"type": "string"}
+
+    assert agent._has_resolved_required_parameter_value("{{ROOT_FOLDER_ID}}", param_def) is False
+    assert agent._has_resolved_required_parameter_value("<<ROOT_FOLDER_ID>>", param_def) is False
+    assert agent._has_resolved_required_parameter_value("{ROOT_FOLDER_ID}", param_def) is False
+    assert agent._has_resolved_required_parameter_value("drive-123", param_def) is True
 
 
 @pytest.mark.asyncio
@@ -347,6 +411,20 @@ def test_summarize_planning_result_preserves_matching_record_from_large_payload(
     assert "book-item-123" in summary
 
 
+def test_extract_structured_planning_result_payload_prefers_top_level_structured_content():
+    agent = object.__new__(Agent)
+
+    payload = agent._extract_structured_planning_result_payload(
+        {
+            "status": "success",
+            "output": '{"driveId":"wrong-drive"}',
+            "structuredContent": {"driveId": "drive-123"},
+        }
+    )
+
+    assert payload == {"driveId": "drive-123"}
+
+
 def test_resolve_parameters_from_context_uses_matching_record_ids():
     agent = object.__new__(Agent)
     file_lookup_result = {
@@ -404,6 +482,320 @@ def test_resolve_parameters_from_context_uses_matching_record_ids():
     )
 
     assert parameters == {"driveId": "drive-123", "driveItemId": "book-item-123"}
+
+
+def test_resolve_parameters_from_context_does_not_use_root_folder_id_for_workbook_step():
+    agent = object.__new__(Agent)
+    drive_result = {
+        "status": "success",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "value": [
+                                {
+                                    "id": "drive-123",
+                                    "name": "OneDrive",
+                                    "driveType": "business",
+                                }
+                            ]
+                        }
+                    ),
+                }
+            ],
+            "structuredContent": None,
+            "isError": False,
+        },
+    }
+    root_item_result = {
+        "status": "success",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "id": "root-456",
+                            "name": "root",
+                            "folder": {"childCount": 2},
+                            "root": {},
+                            "parentReference": {"driveId": "drive-123"},
+                        }
+                    ),
+                }
+            ],
+            "structuredContent": None,
+            "isError": False,
+        },
+    }
+
+    parameters = agent._resolve_parameters_from_context(
+        required_params=["driveId", "driveItemId"],
+        param_properties={
+            "driveId": {"type": "string"},
+            "driveItemId": {"type": "string"},
+        },
+        full_schema={
+            "type": "object",
+            "properties": {
+                "driveId": {"type": "string"},
+                "driveItemId": {"type": "string"},
+            },
+            "required": ["driveId", "driveItemId"],
+        },
+        tool_name="ms365-mcp__list-excel-worksheets",
+        action_description="List all worksheets in Book.xlsx",
+        user_request="What sheets do I have in Book.xlsx?",
+        my_results={"{{DRIVES}}": drive_result, "{{ROOT_ITEM}}": root_item_result},
+    )
+
+    assert parameters == {"driveId": "drive-123"}
+
+
+def test_resolve_parameters_from_context_prefers_runtime_context_over_request_text():
+    agent = object.__new__(Agent)
+
+    parameters = agent._resolve_parameters_from_context(
+        required_params=["driveId"],
+        param_properties={"driveId": {"type": "string"}},
+        full_schema={
+            "type": "object",
+            "properties": {"driveId": {"type": "string"}},
+            "required": ["driveId"],
+        },
+        tool_name="ms365-mcp__list-excel-worksheets",
+        action_description="List all worksheets in Book.xlsx",
+        user_request="What sheets do I have in Book.xlsx?\n[Context: driveId = stale-drive]",
+        my_results={},
+        runtime_context={"driveId": "drive-123"},
+    )
+
+    assert parameters == {"driveId": "drive-123"}
+
+
+def test_resolve_parameters_from_context_ignores_failed_results():
+    agent = object.__new__(Agent)
+    failed_lookup_result = {
+        "status": "error",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "value": [
+                                {
+                                    "id": "wrong-item-999",
+                                    "name": "Book.xlsx",
+                                    "parentReference": {"driveId": "wrong-drive-999"},
+                                }
+                            ]
+                        }
+                    ),
+                }
+            ],
+            "structuredContent": None,
+            "isError": True,
+        },
+    }
+    success_lookup_result = {
+        "status": "success",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "value": [
+                                {
+                                    "id": "book-item-123",
+                                    "name": "Book.xlsx",
+                                    "parentReference": {"driveId": "drive-123"},
+                                }
+                            ]
+                        }
+                    ),
+                }
+            ],
+            "structuredContent": None,
+            "isError": False,
+        },
+    }
+
+    parameters = agent._resolve_parameters_from_context(
+        required_params=["driveId", "driveItemId"],
+        param_properties={
+            "driveId": {"type": "string"},
+            "driveItemId": {"type": "string"},
+        },
+        full_schema={
+            "type": "object",
+            "properties": {
+                "driveId": {"type": "string"},
+                "driveItemId": {"type": "string"},
+            },
+            "required": ["driveId", "driveItemId"],
+        },
+        tool_name="ms365-mcp__list-excel-worksheets",
+        action_description="List all worksheets in Book.xlsx",
+        user_request="What sheets do I have in Book.xlsx?",
+        my_results={
+            "{{FAILED_LOOKUP}}": failed_lookup_result,
+            "{{SUCCESS_LOOKUP}}": success_lookup_result,
+        },
+    )
+
+    assert parameters == {"driveId": "drive-123", "driveItemId": "book-item-123"}
+
+
+def test_build_parameter_inference_context_includes_only_successful_results():
+    agent = object.__new__(Agent)
+    success_result = {
+        "status": "success",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps({"value": [{"id": "book-item-123", "name": "Book.xlsx"}]}),
+                }
+            ],
+            "structuredContent": None,
+            "isError": False,
+        },
+    }
+    failed_result = {
+        "status": "error",
+        "error": "lookup failed",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps({"value": [{"id": "wrong-item-999", "name": "Book.xlsx"}]}),
+                }
+            ],
+            "structuredContent": None,
+            "isError": True,
+        },
+    }
+
+    context = agent._build_parameter_inference_context(
+        user_request="What sheets do I have in Book.xlsx?",
+        action_description="List all worksheets in Book.xlsx",
+        my_results={"{{FAILED}}": failed_result, "{{SUCCESS}}": success_result},
+        required_params=["driveId", "driveItemId"],
+    )
+
+    assert "Previous tool result ({{SUCCESS}}):" in context
+    assert "Previous tool result ({{FAILED}}):" not in context
+    assert "wrong-item-999" not in context
+
+
+def test_substitute_step_parameter_placeholders_resolves_successful_results():
+    agent = object.__new__(Agent)
+    drives_result = {
+        "status": "success",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "value": [
+                                {
+                                    "id": "drive-123",
+                                    "name": "OneDrive",
+                                    "driveType": "business",
+                                }
+                            ]
+                        }
+                    ),
+                }
+            ],
+            "structuredContent": None,
+            "isError": False,
+        },
+    }
+    file_lookup_result = {
+        "status": "success",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "value": [
+                                {
+                                    "id": "book-item-123",
+                                    "name": "Book.xlsx",
+                                    "parentReference": {"driveId": "drive-123"},
+                                }
+                            ]
+                        }
+                    ),
+                }
+            ],
+            "structuredContent": None,
+            "isError": False,
+        },
+    }
+
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters={"driveId": "{{DRIVES}}", "driveItemId": "{{FILES_LIST}}"},
+        param_properties={
+            "driveId": {"type": "string"},
+            "driveItemId": {"type": "string"},
+        },
+        full_schema={
+            "type": "object",
+            "properties": {
+                "driveId": {"type": "string"},
+                "driveItemId": {"type": "string"},
+            },
+        },
+        action_description="List all worksheets in Book.xlsx",
+        my_results={"{{DRIVES}}": drives_result, "{{FILES_LIST}}": file_lookup_result},
+        tool_name="ms365-mcp__list-excel-worksheets",
+    )
+
+    assert substituted == {"driveId": "drive-123", "driveItemId": "book-item-123"}
+
+
+def test_merge_parameter_candidates_overrides_unresolved_placeholder_values_only():
+    agent = object.__new__(Agent)
+
+    merged = agent._merge_parameter_candidates(
+        current_parameters={
+            "driveId": "{{DRIVES}}",
+            "driveItemId": "{{ROOT_ITEM}}",
+            "sheetName": "Summary",
+        },
+        candidate_parameters={
+            "driveId": "drive-123",
+            "driveItemId": "book-item-123",
+            "sheetName": "Sheet1",
+        },
+        param_properties={
+            "driveId": {"type": "string"},
+            "driveItemId": {"type": "string"},
+            "sheetName": {"type": "string"},
+        },
+        full_schema={
+            "type": "object",
+            "properties": {
+                "driveId": {"type": "string"},
+                "driveItemId": {"type": "string"},
+                "sheetName": {"type": "string"},
+            },
+        },
+    )
+
+    assert merged == {
+        "driveId": "drive-123",
+        "driveItemId": "book-item-123",
+        "sheetName": "Summary",
+    }
 
 
 @pytest.mark.asyncio
@@ -511,12 +903,43 @@ async def test_repair_execution_plan_adds_auto_discovery_step_when_replan_has_no
                     "properties": {
                         "driveId": {"type": "string"},
                         "driveItemId": {"type": "string"},
+                        "searchQuery": {"type": "string"},
                     },
                     "required": ["driveId", "driveItemId"],
                 },
             }
-        }
+        },
+        {
+            "function": {
+                "name": "ms365-mcp__search-sharepoint-sites",
+                "description": "Search SharePoint sites.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }
+        },
     ]
+    drives_result = {
+        "status": "success",
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "value": [
+                                {
+                                    "id": "drive-123",
+                                    "name": "OneDrive",
+                                    "driveType": "business",
+                                }
+                            ]
+                        }
+                    ),
+                }
+            ],
+            "structuredContent": None,
+            "isError": False,
+        },
+    }
     root_item_result = {
         "status": "success",
         "result": {
@@ -548,7 +971,7 @@ async def test_repair_execution_plan_adds_auto_discovery_step_when_replan_has_no
             tool_name="ms365-mcp__list-excel-worksheets",
             unresolved_params=["driveItemId"],
             current_plan=current_plan,
-            my_results={"{{ROOT_ITEM}}": root_item_result},
+            my_results={"{{DRIVES}}": drives_result, "{{ROOT_ITEM}}": root_item_result},
         )
 
     assert result is not None
@@ -562,4 +985,5 @@ async def test_repair_execution_plan_adds_auto_discovery_step_when_replan_has_no
     assert result["my_steps"][2]["parameters"] == {
         "driveId": "drive-123",
         "driveItemId": "root-456",
+        "searchQuery": "Book.xlsx",
     }

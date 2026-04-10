@@ -5,10 +5,26 @@ on core message processing.
 """
 
 import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional, cast
 
 from ...datatypes.artifacts import ArtifactMetadata, MuxiArtifact
 from ...services import observability, streaming
+from ...utils.fastjson import json
+
+
+def _parse_structured_stdout(stdout: str) -> Optional[Any]:
+    """Parse skill stdout when it is a standalone JSON object or array."""
+    if not isinstance(stdout, str):
+        return None
+
+    cleaned = stdout.strip()
+    if not cleaned or cleaned[0] not in "[{":
+        return None
+
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        return None
 
 
 async def handle_activate_skill(
@@ -23,6 +39,7 @@ async def handle_activate_skill(
     manager = overlord.skill_manager
 
     if manager.is_activated(skill_name, session_id):
+        await manager.activate_execution_context(skill_name, agent_id, session_id)
         observability.observe(
             event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
             level=observability.EventLevel.DEBUG,
@@ -42,7 +59,7 @@ async def handle_activate_skill(
             ),
         }
 
-    content = await manager.activate_async(skill_name, session_id)
+    content = await manager.activate_async(skill_name, session_id, agent_id=agent_id)
 
     if messages and messages[0]["role"] == "system":
         messages[0]["content"] += f"\n\n{content}"
@@ -118,8 +135,14 @@ async def handle_run_skill(
             "status": result.status,
             "exit_code": result.exit_code,
             "stdout": result.stdout,
+            "output": result.stdout,
             "duration_ms": result.duration_ms,
         }
+        structured_stdout = (
+            _parse_structured_stdout(result.stdout) if result.status == "success" else None
+        )
+        if structured_stdout not in (None, "", [], {}):
+            response["structuredContent"] = structured_stdout
         if result.stderr:
             response["stderr"] = result.stderr
         if result.artifacts:
@@ -154,6 +177,7 @@ def _rce_artifact_to_muxi(
     artifact_size = rce_artifact.get("size", 0)
 
     ext = artifact_name.rsplit(".", 1)[-1] if "." in artifact_name else ""
+    artifact_type: Literal["text", "document", "image", "data"]
     if artifact_mime.startswith("image/"):
         artifact_type = "image"
     elif artifact_mime.startswith("text/"):
@@ -164,7 +188,7 @@ def _rce_artifact_to_muxi(
         artifact_type = "document"
 
     return MuxiArtifact(
-        type=artifact_type,
+        type=cast(Literal["text", "document", "image", "data"], artifact_type),
         format=ext,
         filename=artifact_name,
         data_url=f"data:{artifact_mime};base64,{artifact_content}",

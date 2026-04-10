@@ -1,10 +1,11 @@
 """Unit tests for skill secret scanning, interpolation, and env injection."""
+
 import re
+
 import pytest
 
-from muxi.runtime.formation.skills.parser import scan_secret_refs, parse_skill_md
+from muxi.runtime.formation.skills.parser import parse_skill_md, scan_secret_refs
 from muxi.runtime.formation.skills.skill_manager import SkillManager
-
 
 # ---------------------------------------------------------------------------
 # Minimal async secrets manager stub (no real encryption needed for unit tests)
@@ -24,6 +25,7 @@ class FakeSecretsManager:
 
     async def interpolate_secrets(self, value):
         if isinstance(value, str):
+
             def _replace(m):
                 key = m.group(1).upper()
                 val = self._secrets.get(key)
@@ -90,13 +92,29 @@ def skill_with_assets_secrets(tmp_path):
     )
     assets_dir = skill_dir / "assets"
     assets_dir.mkdir()
-    (assets_dir / "config.json").write_text(
-        '{"api_key": "${{ secrets.ASSET_API_KEY }}"}\n'
-    )
+    (assets_dir / "config.json").write_text('{"api_key": "${{ secrets.ASSET_API_KEY }}"}\n')
     refs_dir = skill_dir / "references"
     refs_dir.mkdir()
-    (refs_dir / "notes.md").write_text(
-        "Remember to set ${{ secrets.REF_TOKEN }} before running.\n"
+    (refs_dir / "notes.md").write_text("Remember to set ${{ secrets.REF_TOKEN }} before running.\n")
+    return skill_dir
+
+
+@pytest.fixture
+def skill_with_execution_context(tmp_path):
+    """Skill with runtime-only execution context in frontmatter."""
+    skill_dir = tmp_path / "drive-helper"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: drive-helper\n"
+        "description: Drive helper skill\n"
+        "execution_context:\n"
+        '  driveId: "${{ secrets.MS365_DRIVE_ID }}"\n'
+        "  mode: readonly\n"
+        "  nested:\n"
+        '    siteId: "${{ secrets.SITE_ID }}"\n'
+        "---\n\n"
+        "# Drive Helper\n\nUse this skill for drive workflows.\n"
     )
     return skill_dir
 
@@ -174,9 +192,7 @@ class TestScanSecretRefs:
         scripts_dir = skill_dir / "scripts"
         sub_dir = scripts_dir / "sub"
         sub_dir.mkdir(parents=True)
-        (sub_dir / "helper.py").write_text(
-            "token = os.environ['${{ secrets.NESTED_TOKEN }}']\n"
-        )
+        (sub_dir / "helper.py").write_text("token = os.environ['${{ secrets.NESTED_TOKEN }}']\n")
         refs = scan_secret_refs(skill_dir)
         assert "NESTED_TOKEN" in refs
 
@@ -196,6 +212,14 @@ class TestRequiredSecretsOnMetadata:
         metadata, _, _ = parse_skill_md(skill_no_secrets / "SKILL.md")
         assert metadata.required_secrets == []
 
+    def test_execution_context_populated(self, skill_with_execution_context):
+        metadata, _, _ = parse_skill_md(skill_with_execution_context / "SKILL.md")
+        assert metadata.execution_context == {
+            "driveId": "${{ secrets.MS365_DRIVE_ID }}",
+            "mode": "readonly",
+            "nested": {"siteId": "${{ secrets.SITE_ID }}"},
+        }
+
 
 # ---------------------------------------------------------------------------
 # SkillManager.activate_async
@@ -209,6 +233,7 @@ class TestActivateAsync:
         skills_dir.mkdir()
         # Copy skill into skills dir
         import shutil
+
         shutil.copytree(skill_with_secrets, skills_dir / "notion-sync")
 
         secrets = FakeSecretsManager({"NOTION_KEY": "secret-abc", "SLACK_TOKEN": "xoxb-123"})
@@ -225,6 +250,7 @@ class TestActivateAsync:
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
         import shutil
+
         shutil.copytree(skill_with_secrets, skills_dir / "notion-sync")
 
         manager = SkillManager(skills_dir)  # no secrets manager
@@ -239,6 +265,7 @@ class TestActivateAsync:
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
         import shutil
+
         shutil.copytree(skill_with_secrets, skills_dir / "notion-sync")
 
         secrets = FakeSecretsManager({"NOTION_KEY": "k", "SLACK_TOKEN": "s"})
@@ -260,6 +287,7 @@ class TestActivateAsync:
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
         import shutil
+
         shutil.copytree(skill_no_secrets, skills_dir / "simple-skill")
 
         secrets = FakeSecretsManager({})
@@ -269,6 +297,25 @@ class TestActivateAsync:
         content = await manager.activate_async("simple-skill", "s1")
         assert "simple-skill" in content
         assert "Do stuff" in content
+
+    @pytest.mark.asyncio
+    async def test_execution_context_does_not_leak_into_activated_prompt(
+        self, skill_with_execution_context, tmp_path
+    ):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        import shutil
+
+        shutil.copytree(skill_with_execution_context, skills_dir / "drive-helper")
+
+        secrets = FakeSecretsManager({"MS365_DRIVE_ID": "drive-123", "SITE_ID": "site-456"})
+        manager = SkillManager(skills_dir, secrets_manager=secrets)
+        manager.load_public_skills(["drive-helper"])
+
+        content = await manager.activate_async("drive-helper", "session-1", agent_id="agent-a")
+        assert "drive-123" not in content
+        assert "site-456" not in content
+        assert "execution_context" not in content
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +329,7 @@ class TestValidateSecrets:
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
         import shutil
+
         shutil.copytree(skill_with_secrets, skills_dir / "notion-sync")
 
         secrets = FakeSecretsManager({"NOTION_KEY": "k", "SLACK_TOKEN": "s"})
@@ -296,6 +344,7 @@ class TestValidateSecrets:
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
         import shutil
+
         shutil.copytree(skill_with_secrets, skills_dir / "notion-sync")
 
         secrets = FakeSecretsManager({"NOTION_KEY": "k"})  # SLACK_TOKEN missing
@@ -311,6 +360,7 @@ class TestValidateSecrets:
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
         import shutil
+
         shutil.copytree(skill_with_secrets, skills_dir / "notion-sync")
 
         manager = SkillManager(skills_dir)
@@ -324,6 +374,7 @@ class TestValidateSecrets:
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
         import shutil
+
         shutil.copytree(skill_no_secrets, skills_dir / "simple-skill")
 
         secrets = FakeSecretsManager({})
@@ -351,6 +402,7 @@ class TestResolveSkillEnv:
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
         import shutil
+
         shutil.copytree(skill_with_secrets, skills_dir / "notion-sync")
 
         secrets = FakeSecretsManager({"NOTION_KEY": "abc", "SLACK_TOKEN": "xyz"})
@@ -365,6 +417,7 @@ class TestResolveSkillEnv:
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
         import shutil
+
         shutil.copytree(skill_with_secrets, skills_dir / "notion-sync")
 
         secrets = FakeSecretsManager({"NOTION_KEY": "abc"})
@@ -380,6 +433,7 @@ class TestResolveSkillEnv:
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
         import shutil
+
         shutil.copytree(skill_with_secrets, skills_dir / "notion-sync")
 
         manager = SkillManager(skills_dir)
@@ -393,6 +447,7 @@ class TestResolveSkillEnv:
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
         import shutil
+
         shutil.copytree(skill_no_secrets, skills_dir / "simple-skill")
 
         secrets = FakeSecretsManager({"UNRELATED": "val"})
@@ -409,6 +464,75 @@ class TestResolveSkillEnv:
         assert env == {}
 
 
+class TestResolveSkillExecutionContext:
+    @pytest.mark.asyncio
+    async def test_resolves_execution_context_secrets(self, skill_with_execution_context, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        import shutil
+
+        shutil.copytree(skill_with_execution_context, skills_dir / "drive-helper")
+
+        secrets = FakeSecretsManager({"MS365_DRIVE_ID": "drive-123", "SITE_ID": "site-456"})
+        manager = SkillManager(skills_dir, secrets_manager=secrets)
+        manager.load_public_skills(["drive-helper"])
+
+        resolved = await manager.resolve_skill_execution_context("drive-helper")
+        assert resolved == {
+            "driveId": "drive-123",
+            "mode": "readonly",
+            "nested": {"siteId": "site-456"},
+        }
+
+    @pytest.mark.asyncio
+    async def test_activate_async_stores_context_per_agent_session(
+        self, skill_with_execution_context, tmp_path
+    ):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        import shutil
+
+        shutil.copytree(skill_with_execution_context, skills_dir / "drive-helper")
+
+        secrets = FakeSecretsManager({"MS365_DRIVE_ID": "drive-123", "SITE_ID": "site-456"})
+        manager = SkillManager(skills_dir, secrets_manager=secrets)
+        manager.load_public_skills(["drive-helper"])
+
+        await manager.activate_async("drive-helper", "session-1", agent_id="agent-a")
+
+        assert manager.get_active_execution_context("agent-a", "session-1") == {
+            "driveId": "drive-123",
+            "mode": "readonly",
+            "nested": {"siteId": "site-456"},
+        }
+        assert manager.get_active_execution_context("agent-a", "session-2") == {}
+
+    @pytest.mark.asyncio
+    async def test_deduped_activation_still_registers_context_for_second_agent(
+        self, skill_with_execution_context, tmp_path
+    ):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        import shutil
+
+        shutil.copytree(skill_with_execution_context, skills_dir / "drive-helper")
+
+        secrets = FakeSecretsManager({"MS365_DRIVE_ID": "drive-123", "SITE_ID": "site-456"})
+        manager = SkillManager(skills_dir, secrets_manager=secrets)
+        manager.load_public_skills(["drive-helper"])
+
+        await manager.activate_async("drive-helper", "session-1", agent_id="agent-a")
+        result = await manager.activate_async("drive-helper", "session-1", agent_id="agent-b")
+
+        assert "already active" in result
+        assert (
+            manager.get_active_execution_context("agent-a", "session-1")["driveId"] == "drive-123"
+        )
+        assert (
+            manager.get_active_execution_context("agent-b", "session-1")["driveId"] == "drive-123"
+        )
+
+
 # ---------------------------------------------------------------------------
 # set_secrets_manager
 # ---------------------------------------------------------------------------
@@ -420,6 +544,7 @@ class TestSetSecretsManager:
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
         import shutil
+
         shutil.copytree(skill_with_secrets, skills_dir / "notion-sync")
 
         manager = SkillManager(skills_dir)  # no secrets initially

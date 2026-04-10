@@ -1,9 +1,9 @@
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 # Matches ${{ secrets.SECRET_NAME }} with flexible whitespace
 _SECRETS_REF_PATTERN = re.compile(r"\$\{\{\s*secrets\.([A-Z0-9_]+)\s*\}\}", re.IGNORECASE)
@@ -22,6 +22,7 @@ class SkillMetadata:
     metadata: Dict[str, str] = field(default_factory=dict)
     allowed_tools: List[str] = field(default_factory=list)
     required_secrets: List[str] = field(default_factory=list)
+    execution_context: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -107,6 +108,15 @@ def parse_skill_md(path: Path) -> tuple[SkillMetadata, str, list]:
     allowed_tools_raw = fm.get("allowed-tools", "")
     allowed_tools = allowed_tools_raw.split() if isinstance(allowed_tools_raw, str) else []
 
+    execution_context_raw = fm.get("execution_context", fm.get("execution-context", {}))
+    if execution_context_raw in (None, ""):
+        execution_context = {}
+    elif isinstance(execution_context_raw, dict):
+        execution_context = execution_context_raw
+    else:
+        warnings.append(f"Skill '{name}' has non-mapping execution_context; ignoring invalid value")
+        execution_context = {}
+
     required_secrets = scan_secret_refs(path.parent)
 
     metadata = SkillMetadata(
@@ -119,6 +129,7 @@ def parse_skill_md(path: Path) -> tuple[SkillMetadata, str, list]:
         metadata=fm.get("metadata", {}),
         allowed_tools=allowed_tools,
         required_secrets=required_secrets,
+        execution_context=execution_context,
     )
 
     return metadata, body, warnings

@@ -898,6 +898,39 @@ class Agent:
 
         return " ".join(text_parts)
 
+    @staticmethod
+    def _extract_current_request_text(
+        user_message: str, *, include_context_lines: bool = False
+    ) -> str:
+        """Extract the current request section from enhanced chat prompts."""
+        if not isinstance(user_message, str) or not user_message.strip():
+            return ""
+        if "=== CURRENT REQUEST ===" not in user_message:
+            return user_message
+
+        lines = user_message.splitlines()
+        in_current_request = False
+        captured_lines: List[str] = []
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped == "=== CURRENT REQUEST ===":
+                in_current_request = True
+                continue
+            if not in_current_request:
+                continue
+            if stripped.startswith("==="):
+                break
+            if stripped.startswith("User:"):
+                captured_lines.append(stripped[5:].strip())
+                continue
+            if not include_context_lines and stripped.startswith("[Context:"):
+                continue
+            captured_lines.append(line.rstrip())
+
+        extracted = "\n".join(captured_lines).strip()
+        return extracted or user_message
+
     async def process_message(
         self,
         message: Union[str, MuxiResponse],
@@ -1192,18 +1225,12 @@ class Agent:
                 or ("THIS SPECIFIC TASK ONLY" in user_message)  # Workflow instruction
             )
 
-        # Extract actual user request from enhanced message for planning
+        # Extract current request from enhanced message for planning
         # The enhanced message contains conversation context which confuses the planning LLM
-        actual_user_request = user_message
-        if "=== CURRENT REQUEST ===" in user_message and "User:" in user_message:
-            # Extract just the current request from the enhanced message
-            lines = user_message.split("\n")
-            for i, line in enumerate(lines):
-                if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                    next_line = lines[i + 1].strip()
-                    if next_line.startswith("User:"):
-                        actual_user_request = next_line[5:].strip()  # Remove "User: " prefix
-                        break
+        actual_user_request = self._extract_current_request_text(user_message)
+        planning_user_request = self._extract_current_request_text(
+            user_message, include_context_lines=True
+        )
 
         # Delegated A2A tasks should still plan when they have tools available, but they
         # must not delegate again or they can loop between agents.
@@ -1239,7 +1266,7 @@ class Agent:
             try:
                 # Use the extracted actual request for planning, not the full enhanced message
                 execution_plan = await self._plan_before_execution(
-                    actual_user_request,
+                    planning_user_request,
                     tools,
                     allow_delegation=not is_a2a_task,
                 )
@@ -1380,16 +1407,35 @@ class Agent:
                                     param_properties = full_param_schema.get("properties", {})
 
                                     if required_params:
+                                        active_skill_context = (
+                                            self._get_active_skill_execution_context()
+                                        )
+                                        parameters = self._substitute_step_parameter_placeholders(
+                                            parameters=parameters,
+                                            param_properties=param_properties,
+                                            full_schema=full_param_schema,
+                                            action_description=step.get("action", ""),
+                                            my_results=my_results,
+                                            tool_name=tool_name,
+                                        )
+
                                         context_parameters = self._resolve_parameters_from_context(
                                             required_params=required_params,
                                             param_properties=param_properties,
                                             full_schema=full_param_schema,
+                                            tool_name=tool_name,
                                             action_description=step.get("action", ""),
-                                            user_request=user_message,
+                                            user_request=planning_user_request,
                                             my_results=my_results,
+                                            runtime_context=active_skill_context,
                                         )
                                         if context_parameters:
-                                            parameters = {**context_parameters, **parameters}
+                                            parameters = self._merge_parameter_candidates(
+                                                current_parameters=parameters,
+                                                candidate_parameters=context_parameters,
+                                                param_properties=param_properties,
+                                                full_schema=full_param_schema,
+                                            )
                                             observability.observe(
                                                 event_type=observability.ConversationEvents.AGENT_PLANNING,
                                                 level=observability.EventLevel.DEBUG,
@@ -1416,7 +1462,7 @@ class Agent:
                                         if unresolved_required_params:
                                             inference_context = (
                                                 self._build_parameter_inference_context(
-                                                    user_request=user_message,
+                                                    user_request=planning_user_request,
                                                     action_description=step.get("action", ""),
                                                     my_results=my_results,
                                                     required_params=required_params,
@@ -1433,7 +1479,12 @@ class Agent:
                                             )
 
                                             if inferred_parameters:
-                                                parameters = {**inferred_parameters, **parameters}
+                                                parameters = self._merge_parameter_candidates(
+                                                    current_parameters=parameters,
+                                                    candidate_parameters=inferred_parameters,
+                                                    param_properties=param_properties,
+                                                    full_schema=full_param_schema,
+                                                )
                                                 observability.observe(
                                                     event_type=observability.ConversationEvents.AGENT_PLANNING,
                                                     level=observability.EventLevel.DEBUG,
@@ -1457,11 +1508,18 @@ class Agent:
                                         unresolved_required_params = []
 
                                     if unresolved_required_params:
+                                        unresolved_placeholder_params = [
+                                            param_name
+                                            for param_name in unresolved_required_params
+                                            if self._is_placeholder_like_value(
+                                                parameters.get(param_name)
+                                            )
+                                        ]
                                         repaired_plan = None
                                         if not replan_attempted:
                                             replan_attempted = True
                                             repaired_plan = await self._repair_execution_plan_for_missing_parameters(
-                                                user_message=actual_user_request,
+                                                user_message=planning_user_request,
                                                 available_tools=tools,
                                                 allow_delegation=not is_a2a_task,
                                                 failed_step=step,
@@ -1496,6 +1554,17 @@ class Agent:
                                                 "tool_name": tool_name,
                                                 "required_params": unresolved_required_params,
                                                 "reason": "cannot_infer_parameters",
+                                                "unresolved_placeholder_params": (
+                                                    unresolved_placeholder_params
+                                                ),
+                                                "active_skill_context_keys": sorted(
+                                                    active_skill_context.keys()
+                                                ),
+                                                "successful_result_count": len(
+                                                    self._get_successful_planning_results(
+                                                        my_results
+                                                    )
+                                                ),
                                             },
                                             description=(
                                                 f"Skipping planned step {tool_name} - "
@@ -3885,6 +3954,9 @@ class Agent:
         """Best-effort extraction of structured content from a tool result."""
         candidate = result
         if isinstance(candidate, dict):
+            top_level_structured = candidate.get("structuredContent")
+            if top_level_structured not in (None, "", [], {}):
+                return top_level_structured
             candidate = candidate.get("result", candidate.get("output", candidate))
 
         if not isinstance(candidate, dict):
@@ -3991,6 +4063,38 @@ class Agent:
         return hints[:limit]
 
     @staticmethod
+    def _extract_primary_filename_hint(*texts: str) -> Optional[str]:
+        """Return the first concrete filename-like hint from the provided texts."""
+        bare_filename_pattern = re.compile(r"([A-Za-z0-9][A-Za-z0-9_.\-]{0,120}\.[A-Za-z0-9]{1,8})")
+        spaced_filename_pattern = re.compile(
+            r"([A-Za-z0-9][A-Za-z0-9 _.\-]{0,120}\.[A-Za-z0-9]{1,8})"
+        )
+
+        candidates: List[str] = []
+        seen: set[str] = set()
+        for text in texts:
+            if not isinstance(text, str) or not text.strip():
+                continue
+
+            for pattern in (bare_filename_pattern, spaced_filename_pattern):
+                for match in pattern.findall(text):
+                    candidate = match.strip(" \t\r\n.,:;()[]{}<>`'\"")
+                    if not candidate:
+                        continue
+                    marker = candidate.lower()
+                    if marker in seen:
+                        continue
+                    seen.add(marker)
+                    candidates.append(candidate)
+
+        candidates.sort(key=lambda value: (value.count(" "), len(value)))
+        for candidate in candidates:
+            if candidate.count(" ") > 2:
+                continue
+            return candidate
+        return None
+
+    @staticmethod
     def _record_matches_context_hints(record: Dict[str, Any], hints: List[str]) -> bool:
         """Return True when a record appears to describe one of the requested resources."""
         if not isinstance(record, dict) or not hints:
@@ -4017,6 +4121,69 @@ class Agent:
                 if normalized_hint == field or normalized_hint in field or field in normalized_hint:
                     return True
         return False
+
+    @staticmethod
+    def _infer_parameter_record_kind(
+        param_name: str,
+        *,
+        tool_name: str = "",
+        action_description: str = "",
+        param_definition: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Infer whether an identifier should resolve from a file-like or folder-like record."""
+        lowered_param = param_name.lower()
+        if not lowered_param.endswith(("itemid", "fileid", "folderid", "documentid", "workbookid")):
+            return "generic"
+
+        if lowered_param.endswith("folderid"):
+            return "folder"
+        if lowered_param.endswith(("fileid", "documentid", "workbookid")):
+            return "file"
+
+        description = ""
+        if isinstance(param_definition, dict):
+            description = str(param_definition.get("description", ""))
+        context_text = " ".join(
+            part
+            for part in (tool_name, action_description, description)
+            if isinstance(part, str) and part.strip()
+        ).lower()
+
+        if any(
+            token in context_text
+            for token in ("folder", "root item", "root folder", "directory", "children")
+        ):
+            return "folder"
+        if any(
+            token in context_text
+            for token in ("worksheet", "workbook", "excel", "attachment", "download", "upload")
+        ):
+            return "file"
+        if re.search(r"\.[a-z0-9]{1,8}\b", context_text):
+            return "file"
+
+        return "generic"
+
+    @staticmethod
+    def _record_matches_expected_kind(record: Dict[str, Any], expected_kind: str) -> bool:
+        """Return True when a record matches the kind expected by the target parameter."""
+        if expected_kind == "generic":
+            return True
+        if not isinstance(record, dict):
+            return False
+
+        name_value = record.get("name") or record.get("fileName") or ""
+        name_text = str(name_value).lower()
+        looks_like_folder = "folder" in record or "root" in record
+        looks_like_file = "file" in record or bool(
+            re.search(r"\.[a-z0-9]{1,8}\b$", name_text, flags=re.IGNORECASE)
+        )
+
+        if expected_kind == "folder":
+            return looks_like_folder and not looks_like_file
+        if expected_kind == "file":
+            return looks_like_file and not looks_like_folder
+        return True
 
     @staticmethod
     def _compact_planning_record(value: Any, depth: int = 0) -> Any:
@@ -4254,10 +4421,28 @@ class Agent:
                 required_params=required_params,
                 param_properties=param_properties,
                 full_schema=tool_schema,
+                tool_name=candidate_name,
                 action_description=tool_fn.get("description", ""),
                 user_request=user_message,
                 my_results=my_results,
+                runtime_context=self._get_active_skill_execution_context(),
             )
+            filename_hint = self._extract_primary_filename_hint(
+                user_message, failed_step.get("action", "")
+            )
+            if (
+                filename_hint
+                and isinstance(param_properties, dict)
+                and "searchQuery" in param_properties
+                and not candidate_params.get("searchQuery")
+                and any(token in name_lower for token in ("list", "search", "find"))
+            ):
+                candidate_params["searchQuery"] = filename_hint
+                score += 2
+
+            lowered_unresolved_params = {param.lower() for param in unresolved_params}
+            if "driveitemid" in lowered_unresolved_params and "folder" in name_lower:
+                score += 6
             unresolved_candidate_params = self._get_unresolved_required_parameters(
                 candidate_params,
                 required_params,
@@ -4475,6 +4660,11 @@ class Agent:
         # NOTE: Instructions go in system message, user content stays here
         planning_prompt = f"Request: {user_message}"
 
+        agent_system_message = getattr(self, "system_message", None)
+        if isinstance(agent_system_message, str) and agent_system_message.strip():
+            planning_prompt += "\n\n## Agent operating instructions:\n"
+            planning_prompt += agent_system_message.strip() + "\n"
+
         # Section 1: Available tools (agent's own MCP tools)
         planning_prompt += "\n\n## Available tools:\n"
         tool_lines = []
@@ -4666,6 +4856,8 @@ class Agent:
                     "content": (
                         "You are a planning assistant. Analyze the user's request and "
                         "create a structured execution plan using the available tools and agents. "
+                        "Treat explicit [Context: ...] values and agent operating instructions as "
+                        "already-resolved facts that should shape the plan. "
                         "Always respond with valid JSON only."
                     ),
                 },
@@ -5453,12 +5645,31 @@ class Agent:
         )
 
     @staticmethod
+    def _is_placeholder_like_value(value: Any) -> bool:
+        """Return True when a value looks like an unresolved placeholder token."""
+        if not isinstance(value, str):
+            return False
+
+        stripped = value.strip()
+        if not stripped:
+            return False
+
+        placeholder_patterns = (
+            r"^\{\{[^{}]+\}\}$",
+            r"^\$\{\{[^{}]+\}\}$",
+            r"^<<[^<>]+>>$",
+            r"^\{[A-Z0-9][A-Z0-9_.:\-]*\}$",
+        )
+        return any(re.match(pattern, stripped) for pattern in placeholder_patterns)
+
+    @staticmethod
     def _is_nonempty_parameter_candidate(value: Any) -> bool:
         """Return True when a value is plausibly usable as a resolved parameter."""
         if value is None:
             return False
         if isinstance(value, str):
-            return bool(value.strip())
+            stripped = value.strip()
+            return bool(stripped) and not Agent._is_placeholder_like_value(stripped)
         if isinstance(value, (list, dict)):
             return bool(value)
         return True
@@ -5481,12 +5692,20 @@ class Agent:
                 match = re.search(pattern, text, flags=re.IGNORECASE)
                 if not match:
                     continue
-                value = match.group(1).strip("`'\".,:;()[]{}<>")
-                if value:
+                value = match.group(1).strip("`'\".,:;()[]<>")
+                if Agent._is_nonempty_parameter_candidate(value):
                     resolved[required_param] = value
                     break
 
         return resolved
+
+    def _get_successful_planning_results(self, my_results: Dict[str, Any]) -> Dict[str, Any]:
+        """Return only successful tool/skill results for downstream parameter binding."""
+        return {
+            placeholder: result
+            for placeholder, result in my_results.items()
+            if result is not None and not self._is_tool_execution_error(result)
+        }
 
     def _collect_values_for_key(self, payloads: List[Any], key_name: str) -> List[Any]:
         """Collect non-empty values for a key across structured payloads."""
@@ -5508,7 +5727,9 @@ class Agent:
                     values.append(record_value)
         return values
 
-    def _extract_alias_value_from_record(self, param_name: str, record: Dict[str, Any]) -> Any:
+    def _extract_alias_value_from_record(
+        self, param_name: str, record: Dict[str, Any], expected_kind: str = "generic"
+    ) -> Any:
         """Map common identifier-style params to the most likely value in a record."""
         if not isinstance(record, dict):
             return None
@@ -5543,6 +5764,8 @@ class Agent:
                 "workbookid",
             )
         ):
+            if not self._record_matches_expected_kind(record, expected_kind):
+                return None
             if self._is_nonempty_parameter_candidate(record.get("id")):
                 return record.get("id")
 
@@ -5553,6 +5776,7 @@ class Agent:
         param_name: str,
         candidate_records: List[Dict[str, Any]],
         all_records: List[Dict[str, Any]],
+        expected_kind: str = "generic",
     ) -> Any:
         """Resolve one parameter from matching records first, then broader result context."""
         search_spaces = [candidate_records, all_records]
@@ -5564,6 +5788,8 @@ class Agent:
             exact_values: List[Any] = []
             seen_exact: set[str] = set()
             for record in records:
+                if not self._record_matches_expected_kind(record, expected_kind):
+                    continue
                 for key, value in record.items():
                     if key.lower() != param_name.lower():
                         continue
@@ -5583,7 +5809,9 @@ class Agent:
             alias_values: List[Any] = []
             seen_alias: set[str] = set()
             for record in records:
-                alias_value = self._extract_alias_value_from_record(param_name, record)
+                alias_value = self._extract_alias_value_from_record(
+                    param_name, record, expected_kind
+                )
                 if not self._is_nonempty_parameter_candidate(alias_value):
                     continue
                 marker = str(alias_value)
@@ -5607,15 +5835,34 @@ class Agent:
         action_description: str,
         user_request: str,
         my_results: Dict[str, Any],
+        runtime_context: Optional[Dict[str, Any]] = None,
+        tool_name: str = "",
     ) -> Dict[str, Any]:
         """Resolve as many required parameters as possible from explicit context and prior results."""
         if not required_params:
             return {}
 
-        resolved = self._extract_explicit_parameter_values_from_text(user_request, required_params)
+        runtime_context_params = {
+            key: value for key, value in (runtime_context or {}).items() if key in required_params
+        }
+        resolved = self._merge_parameter_candidates(
+            current_parameters={},
+            candidate_parameters=runtime_context_params,
+            param_properties=param_properties,
+            full_schema=full_schema,
+        )
+        resolved = self._merge_parameter_candidates(
+            current_parameters=resolved,
+            candidate_parameters=self._extract_explicit_parameter_values_from_text(
+                user_request, required_params
+            ),
+            param_properties=param_properties,
+            full_schema=full_schema,
+        )
+        successful_results = self._get_successful_planning_results(my_results)
         structured_payloads = [
             self._extract_structured_planning_result_payload(result)
-            for result in my_results.values()
+            for result in successful_results.values()
             if result is not None
         ]
         all_records = [
@@ -5638,10 +5885,17 @@ class Agent:
             param_def = self._resolve_schema_ref(
                 param_properties.get(required_param, {}), full_schema
             )
+            expected_kind = self._infer_parameter_record_kind(
+                required_param,
+                tool_name=tool_name,
+                action_description=action_description,
+                param_definition=param_def,
+            )
             resolved_value = self._resolve_parameter_from_records(
                 required_param,
                 candidate_records,
                 all_records,
+                expected_kind=expected_kind,
             )
             if self._has_resolved_required_parameter_value(resolved_value, param_def):
                 resolved[required_param] = resolved_value
@@ -5655,6 +5909,21 @@ class Agent:
                     resolved[required_param] = drive_values[0]
 
         return resolved
+
+    def _get_active_skill_execution_context(self) -> Dict[str, Any]:
+        """Return the active runtime-only skill context for this agent/session."""
+        overlord = getattr(self, "overlord", None)
+        if not overlord or not hasattr(overlord, "skill_manager"):
+            return {}
+
+        skill_manager = getattr(overlord, "skill_manager", None)
+        if not skill_manager:
+            return {}
+
+        return skill_manager.get_active_execution_context(
+            self.agent_id,
+            getattr(self, "_current_session_id", "default"),
+        )
 
     def _build_parameter_inference_context(
         self,
@@ -5680,17 +5949,122 @@ class Agent:
                 ]
             )
 
-        if my_results:
+        successful_results = self._get_successful_planning_results(my_results)
+        if successful_results:
             prompt_parts.append("")
             prompt_parts.append("=== PREVIOUS TOOL RESULTS ===")
             context_hint = f"{user_request}\n{action_description}"
-            for placeholder, result in my_results.items():
+            for placeholder, result in successful_results.items():
                 prompt_parts.append(f"Previous tool result ({placeholder}):")
                 prompt_parts.append(
                     self._summarize_planning_result(result, context_hint=context_hint, limit=2000)
                 )
 
         return "\n".join(prompt_parts)
+
+    def _resolve_parameter_from_result_payload(
+        self,
+        param_name: str,
+        payload: Any,
+        param_properties: Dict[str, Any],
+        full_schema: Dict[str, Any],
+        action_description: str,
+        tool_name: str = "",
+    ) -> Any:
+        """Resolve one parameter value from a single successful result payload."""
+        param_def = self._resolve_schema_ref(param_properties.get(param_name, {}), full_schema)
+        expected_kind = self._infer_parameter_record_kind(
+            param_name,
+            tool_name=tool_name,
+            action_description=action_description,
+            param_definition=param_def,
+        )
+        records = [
+            record for record in self._iter_result_records(payload) if isinstance(record, dict)
+        ]
+        resolved_value = self._resolve_parameter_from_records(
+            param_name,
+            records,
+            records,
+            expected_kind=expected_kind,
+        )
+        if self._has_resolved_required_parameter_value(resolved_value, param_def):
+            return resolved_value
+
+        if param_name.lower().endswith("driveid"):
+            drive_values = self._collect_values_for_key([payload], "driveId")
+            if len(drive_values) == 1 and self._has_resolved_required_parameter_value(
+                drive_values[0], param_def
+            ):
+                return drive_values[0]
+
+        if self._has_resolved_required_parameter_value(payload, param_def):
+            return payload
+
+        return None
+
+    def _substitute_step_parameter_placeholders(
+        self,
+        parameters: Dict[str, Any],
+        param_properties: Dict[str, Any],
+        full_schema: Dict[str, Any],
+        action_description: str,
+        my_results: Dict[str, Any],
+        tool_name: str = "",
+    ) -> Dict[str, Any]:
+        """Replace placeholder-valued step params with values from prior successful results."""
+        if not parameters or not my_results:
+            return dict(parameters)
+
+        successful_results = self._get_successful_planning_results(my_results)
+        if not successful_results:
+            return dict(parameters)
+
+        substituted = dict(parameters)
+        for param_name, param_value in substituted.items():
+            if not self._is_placeholder_like_value(param_value):
+                continue
+
+            placeholder_key = str(param_value).strip()
+            referenced_result = successful_results.get(placeholder_key)
+            if referenced_result is None:
+                continue
+
+            payload = self._extract_structured_planning_result_payload(referenced_result)
+            resolved_value = self._resolve_parameter_from_result_payload(
+                param_name=param_name,
+                payload=payload,
+                param_properties=param_properties,
+                full_schema=full_schema,
+                action_description=action_description,
+                tool_name=tool_name,
+            )
+            if resolved_value is not None:
+                substituted[param_name] = resolved_value
+
+        return substituted
+
+    def _merge_parameter_candidates(
+        self,
+        current_parameters: Dict[str, Any],
+        candidate_parameters: Dict[str, Any],
+        param_properties: Dict[str, Any],
+        full_schema: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Merge candidate params without letting unresolved values override resolved ones."""
+        if not candidate_parameters:
+            return dict(current_parameters)
+
+        merged = dict(current_parameters)
+        for param_name, candidate_value in candidate_parameters.items():
+            param_def = self._resolve_schema_ref(param_properties.get(param_name, {}), full_schema)
+            current_value = merged.get(param_name)
+            if self._has_resolved_required_parameter_value(current_value, param_def):
+                continue
+            if self._has_resolved_required_parameter_value(candidate_value, param_def):
+                merged[param_name] = candidate_value
+
+        return merged
 
     def _validate_tool_parameters(
         self, parameters: Dict[str, Any], tool_schema: Dict[str, Any], tool_name: str
@@ -5820,7 +6194,7 @@ class Agent:
 
         param_type = param_def.get("type")
         if param_type == "string" or isinstance(param_value, str):
-            return bool(str(param_value).strip())
+            return self._is_nonempty_parameter_candidate(param_value)
 
         return True
 

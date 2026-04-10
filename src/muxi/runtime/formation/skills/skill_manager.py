@@ -1,7 +1,7 @@
 import hashlib
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ...datatypes import observability
 from ...services import observability as svc_observability
@@ -28,6 +28,8 @@ class SkillManager:
         self._content_cache: Dict[str, Any] = {}
         self._activated: OrderedDict[str, Set[str]] = OrderedDict()
         self._activated_max = 10_000
+        self._active_execution_context: OrderedDict[Tuple[str, str], Dict[str, Any]] = OrderedDict()
+        self._active_execution_context_max = 10_000
         self._builtin_skills: List[str] = []
         self._secrets_manager = secrets_manager
 
@@ -43,7 +45,7 @@ class SkillManager:
             List of loaded built-in skill names.
         """
         disabled = disabled or []
-        loaded = []
+        loaded: List[str] = []
         if not BUILTIN_SKILLS_DIR.is_dir():
             return loaded
 
@@ -59,7 +61,7 @@ class SkillManager:
             try:
                 metadata, _body, warnings = parse_skill_md(skill_md)
                 for warning in warnings:
-                    observability.observe(
+                    svc_observability.observe(
                         event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                         level=observability.EventLevel.WARNING,
                         data={"skill_name": name, "warning": warning},
@@ -71,7 +73,7 @@ class SkillManager:
                     self.public_skills.append(name)
                 loaded.append(name)
             except Exception as e:
-                observability.observe(
+                svc_observability.observe(
                     event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"skill_name": name, "error": str(e)},
@@ -109,7 +111,7 @@ class SkillManager:
         metadata, _body, warnings = parse_skill_md(skill_md)
 
         for warning in warnings:
-            observability.observe(
+            svc_observability.observe(
                 event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"skill_name": name, "warning": warning},
@@ -281,12 +283,16 @@ class SkillManager:
 
         return wrapped
 
-    async def activate_async(self, skill_name: str, session_id: str) -> str:
+    async def activate_async(
+        self, skill_name: str, session_id: str, agent_id: Optional[str] = None
+    ) -> str:
         """Load full SKILL.md, interpolate ${{ secrets.X }} in body, mark as activated."""
         if skill_name not in self.skills:
             return f"Error: Skill '{skill_name}' not found."
 
         if self.is_activated(skill_name, session_id):
+            if agent_id:
+                await self.activate_execution_context(skill_name, agent_id, session_id)
             return (
                 f"Skill '{skill_name}' is already active. "
                 "Refer to the instructions already in your context."
@@ -316,6 +322,9 @@ class SkillManager:
         self._activated.setdefault(session_id, set()).add(skill_name)
         if len(self._activated) > self._activated_max:
             self._activated.popitem(last=False)
+
+        if agent_id:
+            await self.activate_execution_context(skill_name, agent_id, session_id)
 
         return wrapped
 
@@ -375,6 +384,73 @@ class SkillManager:
                 )
         return env
 
+    async def _interpolate_execution_context_value(self, value: Any) -> Any:
+        """Recursively interpolate secret references inside execution context values."""
+        if isinstance(value, dict):
+            return {
+                key: await self._interpolate_execution_context_value(nested_value)
+                for key, nested_value in value.items()
+            }
+        if isinstance(value, list):
+            return [await self._interpolate_execution_context_value(item) for item in value]
+        if isinstance(value, str) and self._secrets_manager:
+            return await self._secrets_manager.interpolate_secrets(value)
+        return value
+
+    async def resolve_skill_execution_context(self, skill_name: str) -> Dict[str, Any]:
+        """Resolve a skill's runtime-only execution context."""
+        metadata = self.skills.get(skill_name)
+        if not metadata or not metadata.execution_context:
+            return {}
+
+        try:
+            resolved = await self._interpolate_execution_context_value(metadata.execution_context)
+            return resolved if isinstance(resolved, dict) else {}
+        except Exception as e:
+            svc_observability.observe(
+                event_type=svc_observability.ErrorEvents.CONFIGURATION_ERROR,
+                level=svc_observability.EventLevel.WARNING,
+                data={"skill_name": skill_name, "error": str(e)},
+                description=(f"Skill '{skill_name}': execution context interpolation failed: {e}"),
+            )
+            return dict(metadata.execution_context)
+
+    @staticmethod
+    def _execution_context_key(agent_id: str, session_id: str) -> Tuple[str, str]:
+        """Build the storage key for active execution context."""
+        return (agent_id or "", session_id or "default")
+
+    def get_active_execution_context(self, agent_id: str, session_id: str) -> Dict[str, Any]:
+        """Return the merged active execution context for an agent/session."""
+        key = self._execution_context_key(agent_id, session_id)
+        return dict(self._active_execution_context.get(key, {}))
+
+    async def activate_execution_context(
+        self,
+        skill_name: str,
+        agent_id: str,
+        session_id: str,
+    ) -> Dict[str, Any]:
+        """Resolve and store a skill's execution context for one agent/session."""
+        if not agent_id:
+            return {}
+
+        resolved_context = await self.resolve_skill_execution_context(skill_name)
+        if not resolved_context:
+            return self.get_active_execution_context(agent_id, session_id)
+
+        key = self._execution_context_key(agent_id, session_id)
+        merged_context = {
+            **self._active_execution_context.get(key, {}),
+            **resolved_context,
+        }
+        self._active_execution_context[key] = merged_context
+        self._active_execution_context.move_to_end(key)
+        if len(self._active_execution_context) > self._active_execution_context_max:
+            self._active_execution_context.popitem(last=False)
+
+        return dict(merged_context)
+
     def _wrap_skill_content(self, content: Any) -> str:
         """Wrap skill content in structured XML tags."""
         return self._wrap_skill_content_body(content, content.body)
@@ -425,6 +501,7 @@ class SkillManager:
                     "scope": scope,
                     "has_scripts": any(r.startswith("scripts/") for r in self._get_resources(name)),
                     "resource_count": len(self._get_resources(name)),
+                    "has_execution_context": bool(skill.execution_context),
                 }
             )
         return result

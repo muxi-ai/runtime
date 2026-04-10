@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.20260410.0 - Deterministic Planned-Step Binding & Skill Execution Context
+
+### Bug Fixes
+
+- **Planned tool execution could bind required parameters from polluted enhanced prompts instead of the current request** -- Planning already used the extracted current request plus explicit `[Context: ...]` lines, but execution-time parameter resolution still scanned the broader enhanced prompt and could pick up stale values from memory/profile/conversation sections. Fix: planned-step execution now resolves parameters from the clean current request/context, successful prior results, and active runtime skill context instead of the full enhanced prompt blob.
+- **Placeholder values could still leak into local planned tool calls** -- Local `my_steps` did not have a deterministic placeholder substitution pass, and strings like `{{ROOT_FOLDER_ID}}` or `<<ID>>` could still be treated as resolved required values. Fix: placeholder-shaped values are now considered unresolved, local planned steps substitute placeholder params from prior successful results before execution, and unresolved placeholders block tool calls safely.
+- **Failed prior steps could contaminate downstream parameter reuse and inference** -- Parameter extraction and compact inference context considered all prior results, including handled error payloads. Fix: only successful prior tool/skill results are now eligible for placeholder substitution, structured record extraction, and inference context construction.
+- **Activated skills could guide planning but not contribute machine-usable runtime context** -- Skill activation only appended prompt instructions, so formations had no generic way to register runtime-only structured facts for later tool execution. Fix: skills now support `execution_context` in frontmatter, the runtime resolves secret-backed values without injecting them into the prompt body, and active skill execution context is stored per `(agent_id, session_id)` for deterministic parameter binding.
+- **`run_skill` results were not first-class structured inputs for later planned steps** -- Skill execution returned stdout text only, forcing downstream chaining to rely on prompt reconstruction. Fix: when skill stdout is valid JSON, `run_skill` now exposes it as `structuredContent`, and planning/execution result extraction consumes that structured payload like any other successful tool result.
+
+### Tests
+
+- **Expanded planned-step and skills regression coverage** -- Extended `tests/unit/test_agent_planning_helpers.py`, `tests/unit/skills/test_skills.py`, and `tests/unit/skills/test_skill_secrets.py`, and added `tests/unit/skills/test_skill_dispatch.py` to cover clean execution binding, placeholder rejection/substitution, failed-result exclusion, runtime skill execution context, and structured `run_skill` stdout chaining.
+- **Validation sweep** -- Full unit suite passed (`418 passed, 27 skipped`) along with focused mypy, Ruff, and Black checks on the touched runtime and skills files.
+- **Random e2e regression sniff tests** -- Ran 10 random standalone e2e tests before release confidence checking, with all 10 passing across `foundation`, `multimodal`, `mcp`, `artifacts`, `observability`, and `skills`.
+
 ## 0.20260409.4 - Recover Workbook Identifiers from Prior MCP Results
 
 ### Bug Fixes
