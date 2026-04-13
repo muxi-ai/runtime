@@ -1397,3 +1397,68 @@ def test_resolve_parameters_from_context_binds_worksheetid():
         )
 
     assert resolved.get("workbookWorksheetId") == "{4C35B2DD-58DF-4BDB-B806-E0421A3D5456}"
+
+
+# ---------------------------------------------------------------------------
+# Placeholder detection: GUID exemption
+# ---------------------------------------------------------------------------
+
+
+def test_guid_in_braces_is_not_placeholder():
+    """Real GUIDs in braces must not be treated as placeholders."""
+    assert not Agent._is_placeholder_like_value("{4C35B2DD-58DF-4BDB-B806-E0421A3D5456}")
+    assert not Agent._is_placeholder_like_value("{00000000-0001-0000-0000-000000000000}")
+    assert not Agent._is_placeholder_like_value("{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}")
+
+
+def test_placeholder_patterns_still_detected():
+    """Planning placeholders must still be detected after the GUID exemption."""
+    assert Agent._is_placeholder_like_value("{{ROOT_FOLDER_ID}}")
+    assert Agent._is_placeholder_like_value("${{secrets.KEY}}")
+    assert Agent._is_placeholder_like_value("<<DRIVE_ITEM_ID>>")
+    assert Agent._is_placeholder_like_value("{ROOT_FOLDER_ID}")
+    assert Agent._is_placeholder_like_value("{WORKSHEET_ID}")
+
+
+def test_guid_passes_nonempty_candidate_check():
+    """A GUID-in-braces must be accepted as a nonempty parameter candidate."""
+    assert Agent._is_nonempty_parameter_candidate("{4C35B2DD-58DF-4BDB-B806-E0421A3D5456}")
+    assert not Agent._is_nonempty_parameter_candidate("{ROOT_FOLDER_ID}")
+
+
+# ---------------------------------------------------------------------------
+# Result payload extraction: string 'result' field parsing
+# ---------------------------------------------------------------------------
+
+
+def test_extract_structured_payload_parses_string_result_field():
+    """When result dict has a JSON string in 'result', it must be parsed."""
+    agent = object.__new__(Agent)
+    raw_result = {
+        "result": json.dumps({"value": [{"id": "abc-123", "name": "Sheet1"}]}),
+        "status": "success",
+    }
+    payload = agent._extract_structured_planning_result_payload(raw_result)
+    assert isinstance(payload, dict)
+    assert "value" in payload
+    assert payload["value"][0]["id"] == "abc-123"
+
+
+def test_extract_structured_payload_parses_string_result_array():
+    """When result dict has a JSON array string in 'result', it must be parsed."""
+    agent = object.__new__(Agent)
+    raw_result = {
+        "result": json.dumps([{"id": "item-1"}, {"id": "item-2"}]),
+        "status": "success",
+    }
+    payload = agent._extract_structured_planning_result_payload(raw_result)
+    assert isinstance(payload, list)
+    assert len(payload) == 2
+
+
+def test_extract_structured_payload_returns_plain_string_result():
+    """When result dict has a non-JSON string in 'result', return it as-is."""
+    agent = object.__new__(Agent)
+    raw_result = {"result": "Operation completed successfully", "status": "success"}
+    payload = agent._extract_structured_planning_result_payload(raw_result)
+    assert payload == "Operation completed successfully"
