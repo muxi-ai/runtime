@@ -4909,10 +4909,12 @@ class Agent:
                 {"role": "user", "content": planning_prompt},
             ]
 
-            # Get plan from LLM
+            # Get plan from LLM — use explicit max_tokens so multi-step plans
+            # with many tools are not truncated by the provider's default cap.
             plan_response = await self.model.chat(
                 planning_messages,
                 temperature=0.1,  # Low temperature for structured output
+                max_tokens=16384,
             )
 
             # Check cancellation after LLM call returns
@@ -4944,12 +4946,55 @@ class Agent:
                 description="Raw planning response from LLM",
             )
 
-            # Remove markdown code blocks if present
-            if plan_content.strip().startswith("```"):
-                plan_content = plan_content.strip().split("```")[1]
-                if plan_content.startswith("json"):
-                    plan_content = plan_content[4:]
-            plan = json.loads(plan_content.strip())
+            # Extract JSON from planning response — models may wrap the JSON
+            # in markdown code fences or precede it with prose explanation.
+            stripped = plan_content.strip()
+
+            # Try 1: direct JSON parse
+            plan = None
+            try:
+                plan = json.loads(stripped)
+            except json.JSONDecodeError:
+                pass
+
+            # Try 2: extract from ```json ... ``` code fence (anywhere in response)
+            if plan is None and "```" in stripped:
+                import re
+
+                fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", stripped, re.DOTALL)
+                if fence_match:
+                    try:
+                        plan = json.loads(fence_match.group(1))
+                    except json.JSONDecodeError:
+                        pass
+
+            # Try 3: find the outermost { ... } containing "steps"
+            if plan is None:
+                brace_starts = [i for i, c in enumerate(stripped) if c == "{"]
+                for start in brace_starts:
+                    depth = 0
+                    for i in range(start, len(stripped)):
+                        if stripped[i] == "{":
+                            depth += 1
+                        elif stripped[i] == "}":
+                            depth -= 1
+                            if depth == 0:
+                                candidate = stripped[start : i + 1]
+                                try:
+                                    obj = json.loads(candidate)
+                                    if isinstance(obj, dict) and "steps" in obj:
+                                        plan = obj
+                                except json.JSONDecodeError:
+                                    pass
+                                break
+                    if plan is not None:
+                        break
+
+            if plan is None:
+                raise ValueError(
+                    f"Could not extract valid JSON plan from LLM response "
+                    f"({len(stripped)} chars)"
+                )
 
             available_tool_names = {
                 t.get("function", {}).get("name", "") for t in (available_tools or [])

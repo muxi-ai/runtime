@@ -1078,9 +1078,9 @@ def test_validate_inferred_drops_folder_id_used_as_file_param():
         )
 
     assert "driveId" in validated, "driveId is generic and should be kept"
-    assert "driveItemId" not in validated, (
-        "driveItemId should be dropped — root-folder-001 only appears in folder/root records"
-    )
+    assert (
+        "driveItemId" not in validated
+    ), "driveItemId should be dropped — root-folder-001 only appears in folder/root records"
 
 
 def test_validate_inferred_keeps_file_id_when_file_record_exists():
@@ -1207,3 +1207,100 @@ def test_validate_inferred_passes_through_generic_params():
         )
 
     assert validated == {"searchQuery": "Book.xlsx", "top": "10"}
+
+
+# ---------------------------------------------------------------------------
+# Planning JSON extraction robustness
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_plan_before_execution_extracts_json_from_prose_preamble():
+    """Sonnet 4 (old) wraps the JSON plan in prose. The parser must still extract it."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "test-agent"
+    agent.name = "Test Agent"
+    agent.system_message = ""
+    agent.overlord = None
+
+    raw_response = (
+        "Looking at your request, I need to find the file.\n\n```json\n"
+        '{\n  "steps": [{"step_number": 1, "action": "Get root folder", '
+        '"tool_name": "ms365-mcp__get-drive-root-item", "can_i_do_this": true}],\n'
+        '  "data_flow": "step-by-step"\n}\n```'
+    )
+
+    mock_response = SimpleNamespace(content=raw_response)
+    agent.model = AsyncMock()
+    agent.model.chat = AsyncMock(return_value=mock_response)
+
+    tools = [{"function": {"name": "ms365-mcp__get-drive-root-item", "description": "Get root"}}]
+
+    with (
+        patch("muxi.runtime.formation.agents.agent.streaming.stream"),
+        patch("muxi.runtime.formation.agents.agent.observability.observe"),
+        patch("muxi.runtime.formation.prompts.loader.PromptLoader.get", return_value=""),
+    ):
+        plan = await agent._plan_before_execution("What sheets?", tools)
+
+    assert len(plan.get("my_steps", [])) >= 1
+    assert plan["my_steps"][0]["tool_name"] == "ms365-mcp__get-drive-root-item"
+
+
+@pytest.mark.asyncio
+async def test_plan_before_execution_extracts_json_without_code_fence():
+    """Model returns prose then bare JSON (no code fence). Parser must find the { ... }."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "test-agent"
+    agent.name = "Test Agent"
+    agent.system_message = ""
+    agent.overlord = None
+
+    raw_response = (
+        "Here is my plan:\n\n"
+        '{"steps": [{"step_number": 1, "action": "List files", '
+        '"tool_name": "ms365-mcp__list-folder-files", "can_i_do_this": true}], '
+        '"data_flow": "direct"}'
+    )
+
+    mock_response = SimpleNamespace(content=raw_response)
+    agent.model = AsyncMock()
+    agent.model.chat = AsyncMock(return_value=mock_response)
+
+    tools = [{"function": {"name": "ms365-mcp__list-folder-files", "description": "List files"}}]
+
+    with (
+        patch("muxi.runtime.formation.agents.agent.streaming.stream"),
+        patch("muxi.runtime.formation.agents.agent.observability.observe"),
+        patch("muxi.runtime.formation.prompts.loader.PromptLoader.get", return_value=""),
+    ):
+        plan = await agent._plan_before_execution("Find Book.xlsx", tools)
+
+    assert len(plan.get("my_steps", [])) >= 1
+
+
+@pytest.mark.asyncio
+async def test_plan_before_execution_sets_max_tokens():
+    """Planning LLM call must set explicit max_tokens to avoid truncation."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "test-agent"
+    agent.name = "Test Agent"
+    agent.system_message = ""
+    agent.overlord = None
+
+    plan_json = '{"steps": [{"action": "test", "can_i_do_this": true, "tool_name": "t"}]}'
+    mock_response = SimpleNamespace(content=plan_json)
+    agent.model = AsyncMock()
+    agent.model.chat = AsyncMock(return_value=mock_response)
+
+    tools = [{"function": {"name": "t", "description": "test"}}]
+
+    with (
+        patch("muxi.runtime.formation.agents.agent.streaming.stream"),
+        patch("muxi.runtime.formation.agents.agent.observability.observe"),
+        patch("muxi.runtime.formation.prompts.loader.PromptLoader.get", return_value=""),
+    ):
+        await agent._plan_before_execution("test", tools)
+
+    call_kwargs = agent.model.chat.call_args
+    assert call_kwargs.kwargs.get("max_tokens") == 16384
