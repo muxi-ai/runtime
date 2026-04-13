@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.20260413.1 - Worksheet & Entity ID Binding from Prior Tool Results
+
+### Bug Fixes
+
+- **`workbookWorksheetId` and other entity GUIDs could not be extracted from prior tool results** -- The alias extraction helper that maps a record's `id` field to downstream parameters only recognized 9 entity suffixes (`itemid`, `fileid`, `folderid`, etc). Parameters ending in `worksheetid`, `channelid`, `planid`, `teamid`, and other common MS365 Graph entity patterns were not covered. This caused the 4-step Excel read chain (get-drive-root-item, list-folder-files, list-excel-worksheets, get-excel-range) to succeed through step 3 but fail at step 4 because `workbookWorksheetId` was never bound. Fix: added `worksheetid`, `sheetid`, `notebookid`, `sectionid`, `pageid`, `channelid`, `teamid`, `planid`, `listid`, `eventid`, and `contactid` to the alias suffix list.
+- **Real GUIDs in braces were rejected as unresolved placeholders** -- The placeholder detection pattern `^\{[A-Z0-9...]*\}$` matched real worksheet GUIDs like `{4C35B2DD-58DF-4BDB-B806-E0421A3D5456}` because they are uppercase hex in braces. The value was discarded by `_is_nonempty_parameter_candidate`, preventing it from being used as a resolved parameter even after correct extraction. Fix: added an early exemption for GUID-format strings (`{8-4-4-4-12}` hex pattern) before the placeholder patterns are checked.
+- **JSON string values in the `result` field were not parsed for record extraction** -- When a tool result arrived as `{"result": "{\"value\": [...]}", "status": "success"}`, the extraction function returned the raw JSON string without parsing. `_iter_result_records` cannot iterate strings, so zero records were found and no identifiers were extracted for downstream steps. This is the same class of bug fixed in v0.20260410.0 for the `content` field (modern MCP protocol), now also fixed for the `result` field path. Fix: added `_parse_json_like_text()` call for string-typed `result` values.
+
+### Tests
+
+- **Entity ID alias extraction coverage** -- Added tests for `workbookWorksheetId`, `planId`, and `channelId` alias extraction from records, plus a full `_resolve_parameters_from_context` integration test that feeds a `list-excel-worksheets` JSON string result and verifies `workbookWorksheetId` is bound correctly.
+- **GUID placeholder exemption coverage** -- Added tests verifying real GUIDs in braces are not treated as placeholders, planning placeholder patterns are still detected, and `_is_nonempty_parameter_candidate` accepts GUIDs but rejects placeholders.
+- **Result-field string parsing coverage** -- Added tests for `_extract_structured_planning_result_payload` handling JSON object strings, JSON array strings, and plain text strings in the `result` field.
+- **Validation sweep** -- Full unit suite passed (`445 passed, 27 skipped`). 10 random e2e regression tests passed across triggers, multi-identity, API, skills, memory, multimodal, orchestration, and clarification.
+
 ## 0.20260413.0 - Planning JSON Robustness & Truncation Fix
 
 ### Bug Fixes
