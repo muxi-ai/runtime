@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.20260413.0 - Planning JSON Robustness & Truncation Fix
+
+### Bug Fixes
+
+- **Planning JSON parser failed when the LLM returned prose before the JSON block** -- Some models (notably `claude-sonnet-4-20250514`) emit a natural-language preamble before the JSON execution plan, sometimes wrapped in a markdown code fence that does not start at character 0. The parser only handled the case where the response began with `` ``` ``, so the full prose+JSON string was passed to `json.loads()`, which failed at char 0. The entire planning phase was abandoned and the request fell through to A2A delegation, where an agent without the right tools fabricated responses from training data. Fix: planning JSON extraction now uses a three-stage approach -- direct parse, regex extraction of code-fenced JSON anywhere in the response, then brace-matched search for the outermost `{...}` containing `"steps"`.
+- **Multi-step plans were silently truncated on formations with many tools** -- The planning LLM call did not set `max_tokens`, inheriting the Anthropic API default (4096). Formations with 100+ MCP tools produce planning prompts where a 4-step plan (e.g., get-drive-root-item, list-folder-files, list-excel-worksheets, get-excel-range) exceeds that cap. The model stopped generating mid-JSON, producing an unterminated string error at ~3000 characters. The agent fell back to delegation, which could not fulfill the request. Fix: the planning call now sets `max_tokens=16384` explicitly, which is the maximum output supported by current Anthropic models and 4-5x larger than any realistic multi-step plan.
+
+### Tests
+
+- **Planning JSON extraction coverage** -- Added 3 tests to `tests/unit/test_agent_planning_helpers.py` covering: prose preamble with code-fenced JSON, bare JSON preceded by prose text, and verification that `max_tokens=16384` is passed to the planning LLM call.
+- **Validation sweep** -- Full unit suite passed (`435 passed, 27 skipped`) along with Black and mypy checks on touched files.
+
 ## 0.20260410.0 - MCP Default Parameters, Deterministic Planned-Step Binding & Result Extraction
 
 ### New Features
