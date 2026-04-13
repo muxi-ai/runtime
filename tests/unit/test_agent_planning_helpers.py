@@ -1304,3 +1304,96 @@ async def test_plan_before_execution_sets_max_tokens():
 
     call_kwargs = agent.model.chat.call_args
     assert call_kwargs.kwargs.get("max_tokens") == 16384
+
+
+# ---------------------------------------------------------------------------
+# Alias extraction for worksheet / section / channel / plan IDs
+# ---------------------------------------------------------------------------
+
+
+def test_alias_extraction_resolves_worksheetid_from_record():
+    """workbookWorksheetId must be extracted from a worksheet record's 'id' field."""
+    agent = object.__new__(Agent)
+    worksheet_record = {
+        "id": "{4C35B2DD-58DF-4BDB-B806-E0421A3D5456}",
+        "name": "Sheet1",
+        "position": 0,
+        "visibility": "Visible",
+    }
+    value = agent._extract_alias_value_from_record(
+        "workbookWorksheetId", worksheet_record, "generic"
+    )
+    assert value == "{4C35B2DD-58DF-4BDB-B806-E0421A3D5456}"
+
+
+def test_alias_extraction_resolves_planid_from_record():
+    """planId must be extracted from a planner record's 'id' field."""
+    agent = object.__new__(Agent)
+    plan_record = {"id": "plan-abc-123", "title": "Sprint 42"}
+    value = agent._extract_alias_value_from_record("planId", plan_record, "generic")
+    assert value == "plan-abc-123"
+
+
+def test_alias_extraction_resolves_channelid_from_record():
+    """channelId must be extracted from a Teams channel record's 'id' field."""
+    agent = object.__new__(Agent)
+    channel_record = {"id": "19:abc@thread.tacv2", "displayName": "General"}
+    value = agent._extract_alias_value_from_record("channelId", channel_record, "generic")
+    assert value == "19:abc@thread.tacv2"
+
+
+def test_resolve_parameters_from_context_binds_worksheetid():
+    """Full context resolution must bind workbookWorksheetId from list-excel-worksheets result."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "test"
+    agent.overlord = None
+
+    worksheet_result = {
+        "result": json.dumps(
+            {
+                "value": [
+                    {
+                        "id": "{4C35B2DD-58DF-4BDB-B806-E0421A3D5456}",
+                        "name": "Sheet1",
+                        "position": 0,
+                        "visibility": "Visible",
+                    },
+                    {
+                        "id": "{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}",
+                        "name": "Table 2",
+                        "position": 1,
+                        "visibility": "Visible",
+                    },
+                ]
+            }
+        ),
+        "status": "success",
+    }
+
+    with patch.object(observability, "observe"):
+        resolved = agent._resolve_parameters_from_context(
+            required_params=["driveId", "driveItemId", "workbookWorksheetId", "address"],
+            param_properties={
+                "driveId": {"type": "string"},
+                "driveItemId": {"type": "string"},
+                "workbookWorksheetId": {"type": "string"},
+                "address": {"type": "string"},
+            },
+            full_schema={
+                "type": "object",
+                "properties": {
+                    "driveId": {"type": "string"},
+                    "driveItemId": {"type": "string"},
+                    "workbookWorksheetId": {"type": "string"},
+                    "address": {"type": "string"},
+                },
+            },
+            tool_name="ms365-mcp__get-excel-range",
+            action_description="Read cell A1 from Sheet1",
+            user_request="What's in cell A1 of Sheet1 in Book.xlsx?",
+            my_results={
+                "step_3_list_worksheets": worksheet_result,
+            },
+        )
+
+    assert resolved.get("workbookWorksheetId") == "{4C35B2DD-58DF-4BDB-B806-E0421A3D5456}"

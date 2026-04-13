@@ -3982,6 +3982,12 @@ class Agent:
                 return top_level_structured
             candidate = candidate.get("result", candidate.get("output", candidate))
 
+        if isinstance(candidate, str):
+            parsed = self._parse_json_like_text(candidate)
+            if isinstance(parsed, (dict, list)):
+                return parsed
+            return candidate
+
         if not isinstance(candidate, dict):
             return candidate
 
@@ -5744,6 +5750,14 @@ class Agent:
         if not stripped:
             return False
 
+        # GUIDs in braces ({8-4-4-4-12} hex) are real values, not placeholders.
+        if re.match(
+            r"^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
+            r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$",
+            stripped,
+        ):
+            return False
+
         placeholder_patterns = (
             r"^\{\{[^{}]+\}\}$",
             r"^\$\{\{[^{}]+\}\}$",
@@ -5852,6 +5866,17 @@ class Agent:
                 "siteid",
                 "documentid",
                 "workbookid",
+                "worksheetid",
+                "sheetid",
+                "notebookid",
+                "sectionid",
+                "pageid",
+                "channelid",
+                "teamid",
+                "planid",
+                "listid",
+                "eventid",
+                "contactid",
             )
         ):
             if not self._record_matches_expected_kind(record, expected_kind):
