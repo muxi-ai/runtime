@@ -1519,3 +1519,139 @@ def test_extract_structured_payload_returns_plain_string_result():
     raw_result = {"result": "Operation completed successfully", "status": "success"}
     payload = agent._extract_structured_planning_result_payload(raw_result)
     assert payload == "Operation completed successfully"
+
+
+# ---------------------------------------------------------------------------
+# Preventive: exact-key match normalizes camelCase <-> snake_case
+# ---------------------------------------------------------------------------
+
+
+def test_exact_key_match_normalizes_snake_case():
+    """A record with snake_case key 'channel_id' must match param 'channelId' exactly."""
+    agent = object.__new__(Agent)
+    record = {"channel_id": "C08SZKB16UF", "name": "social"}
+    val = agent._resolve_parameter_from_records("channelId", [], [record])
+    assert val == "C08SZKB16UF"
+
+
+def test_exact_key_match_normalizes_camel_to_snake():
+    """A record with camelCase key 'channelId' must match param 'channel_id' exactly."""
+    agent = object.__new__(Agent)
+    record = {"channelId": "C08SZKB16UF", "name": "social"}
+    val = agent._resolve_parameter_from_records("channel_id", [], [record])
+    assert val == "C08SZKB16UF"
+
+
+def test_exact_key_match_normalizes_drive_item_id():
+    """Record 'drive_item_id' must match param 'driveItemId'."""
+    agent = object.__new__(Agent)
+    record = {"drive_item_id": "01SA7QZQ...", "name": "file.txt"}
+    val = agent._resolve_parameter_from_records("driveItemId", [], [record])
+    assert val == "01SA7QZQ..."
+
+
+# ---------------------------------------------------------------------------
+# Preventive: explicit text extraction matches both casings
+# ---------------------------------------------------------------------------
+
+
+def test_explicit_text_extracts_snake_case_param():
+    """'channel_id = C123' in text should resolve param 'channelId'."""
+    resolved = Agent._extract_explicit_parameter_values_from_text(
+        "[Context: channel_id = C08SZKB16UF]", ["channelId"]
+    )
+    assert resolved.get("channelId") == "C08SZKB16UF"
+
+
+def test_explicit_text_extracts_camel_case_param():
+    """'channelId = C123' in text should resolve param 'channel_id'."""
+    resolved = Agent._extract_explicit_parameter_values_from_text(
+        "[Context: channelId = C08SZKB16UF]", ["channel_id"]
+    )
+    assert resolved.get("channel_id") == "C08SZKB16UF"
+
+
+# ---------------------------------------------------------------------------
+# Preventive: context hints match snake_case fields
+# ---------------------------------------------------------------------------
+
+
+def test_context_hints_match_display_name_field():
+    """Record with 'display_name' field should match context hints."""
+    record = {"id": "123", "display_name": "General"}
+    assert Agent._record_matches_context_hints(record, ["General"])
+
+
+def test_context_hints_match_channel_name_field():
+    """Record with 'channel_name' field should match context hints."""
+    record = {"id": "C123", "channel_name": "social"}
+    assert Agent._record_matches_context_hints(record, ["social"])
+
+
+# ---------------------------------------------------------------------------
+# Preventive: compact record preserves snake_case keys
+# ---------------------------------------------------------------------------
+
+
+def test_compact_record_preserves_snake_case_keys():
+    """_compact_planning_record must retain snake_case variants of common fields."""
+    record = {
+        "id": "abc",
+        "display_name": "My Channel",
+        "channel_id": "C123",
+        "channel_name": "general",
+        "position": 0,
+        "visibility": "Visible",
+        "description": "Team channel",
+        "type": "standard",
+        "status": "active",
+        "irrelevant_field": "should_be_dropped",
+    }
+    compact = Agent._compact_planning_record(record)
+    assert compact["id"] == "abc"
+    assert compact["display_name"] == "My Channel"
+    assert compact["channel_id"] == "C123"
+    assert compact["channel_name"] == "general"
+    assert compact["position"] == 0
+    assert compact["visibility"] == "Visible"
+    assert compact["description"] == "Team channel"
+    assert compact["type"] == "standard"
+    assert compact["status"] == "active"
+    assert "irrelevant_field" not in compact
+
+
+# ---------------------------------------------------------------------------
+# Preventive: multi-step resolution with mixed casing MCPs
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_context_with_snake_case_mcp_records():
+    """Full context resolution must work when MCP returns snake_case keys."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "test"
+    agent.overlord = None
+
+    channels_result = {
+        "result": json.dumps(
+            {
+                "channels": [
+                    {"id": "C08SZKB16UF", "name": "social", "num_members": 4},
+                    {"id": "C08TABCDEF", "name": "general", "num_members": 12},
+                ]
+            }
+        ),
+        "status": "success",
+    }
+
+    with patch.object(observability, "observe"):
+        resolved = agent._resolve_parameters_from_context(
+            required_params=["channel_id"],
+            param_properties={"channel_id": {"type": "string"}},
+            full_schema={"type": "object", "properties": {"channel_id": {"type": "string"}}},
+            tool_name="slack-mcp__slack_get_channel_history",
+            action_description="Get history for #social channel",
+            user_request="Show me the last 10 messages in #social",
+            my_results={"step_1_list_channels": channels_result},
+        )
+
+    assert resolved.get("channel_id") == "C08SZKB16UF"

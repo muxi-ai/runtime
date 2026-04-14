@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.20260414.0 - Result Recency Bias, Snake_case Normalization & Preventive Hardening
+
+### Bug Fixes
+
+- **Alias extraction copied `driveItemId` into `workbookWorksheetId` instead of the worksheet GUID** -- When multiple prior steps' results all contain records with an `id` field, the alias extraction iterated results in chronological order and returned the first match. In the 4-step Excel chain, the `list-folder-files` result (step 2) appeared before `list-excel-worksheets` (step 3), so the file's `driveItemId` was extracted instead of the worksheet GUID. Fix: reversed result iteration order so the most recent step's records are searched first, and relaxed the alias resolution guard to return the first (most-recent) match when multiple alias values exist.
+- **Snake_case parameter names (`channel_id`, `drive_id`) were not matched by the alias suffix list** -- The Slack MCP uses `channel_id` (snake_case), but the suffix list only matched `channelid` (camelCase lowered). The underscore prevented suffix matching, so `channel_id` was never bound from `slack_list_channels` results. Fix: normalize parameter names by stripping underscores before suffix matching (both in alias extraction, kind inference, and driveId fallback).
+
+### Preventive Hardening
+
+- **Exact-key matching in `_resolve_parameter_from_records` now normalizes underscores** -- When a record has `channel_id` as a literal key and the required param is `channelId` (or vice versa), the exact-match phase now strips underscores before comparing. Previously only the alias path was normalized, so the exact-match short-circuit was missed for cross-casing keys.
+- **`_extract_explicit_parameter_values_from_text` now matches both camelCase and snake_case forms** -- When context text contains `channel_id = C08SZKB16UF` but the schema param is `channelId`, the regex now tries both forms. Previously only the literal param name was searched, so cross-casing context lines were invisible.
+- **`_record_matches_context_hints` now checks snake_case field variants** -- Added `display_name`, `file_name`, `web_url`, `channel_name`, and `topic` to the candidate fields list. MCP servers using snake_case conventions (Slack, Jira, etc.) could have records that matched context hints but were missed because only camelCase fields were checked.
+- **`_compact_planning_record` preferred_keys expanded for snake_case MCPs** -- Added snake_case variants (`display_name`, `drive_id`, `drive_item_id`, `parent_reference`, `web_url`, `site_id`, `channel_id`, `channel_name`, `created_at`, `updated_at`) plus commonly useful fields (`position`, `visibility`, `type`, `status`, `description`, `topic`). Records from snake_case MCPs were being stripped to empty dicts during compaction, losing data needed by downstream steps.
+
+### Tests
+
+- **Most-recent-step preference** -- Test confirming that when both a file record (step 2) and a worksheet record (step 3) have `id` fields, the worksheet GUID from the more recent step is extracted for `workbookWorksheetId`.
+- **Snake_case alias matching** -- Test confirming `channel_id` (snake_case) extracts the channel ID from a Slack channel record.
+- **Exact-key normalization** -- 3 tests: `channel_id` record key matches `channelId` param, `channelId` record key matches `channel_id` param, `drive_item_id` record key matches `driveItemId` param.
+- **Explicit text cross-casing** -- 2 tests: `channel_id = X` in text resolves `channelId` param, and `channelId = X` in text resolves `channel_id` param.
+- **Context hints snake_case fields** -- 2 tests: records with `display_name` and `channel_name` fields are matched by context hints.
+- **Compact record preservation** -- Test confirming snake_case keys (`display_name`, `channel_id`, `channel_name`, `position`, `visibility`, `type`, `status`, `description`) are retained while unknown keys are dropped.
+- **Full snake_case MCP resolution** -- Integration test feeding a Slack `channels` result with snake_case keys and verifying `channel_id` is correctly bound.
+
+### Validation
+
+- Full unit suite: **456 passed**, 27 skipped.
+- mypy/Black clean.
+- 5 random e2e regression tests passed (API streaming, foundation loading, artifacts, knowledge isolation, orchestration SOP).
+
 ## 0.20260413.1 - Worksheet & Entity ID Binding from Prior Tool Results
 
 ### Bug Fixes
@@ -7,17 +37,13 @@
 - **`workbookWorksheetId` and other entity GUIDs could not be extracted from prior tool results** -- The alias extraction helper that maps a record's `id` field to downstream parameters only recognized 9 entity suffixes (`itemid`, `fileid`, `folderid`, etc). Parameters ending in `worksheetid`, `channelid`, `planid`, `teamid`, and other common MS365 Graph entity patterns were not covered. This caused the 4-step Excel read chain (get-drive-root-item, list-folder-files, list-excel-worksheets, get-excel-range) to succeed through step 3 but fail at step 4 because `workbookWorksheetId` was never bound. Fix: added `worksheetid`, `sheetid`, `notebookid`, `sectionid`, `pageid`, `channelid`, `teamid`, `planid`, `listid`, `eventid`, and `contactid` to the alias suffix list.
 - **Real GUIDs in braces were rejected as unresolved placeholders** -- The placeholder detection pattern `^\{[A-Z0-9...]*\}$` matched real worksheet GUIDs like `{4C35B2DD-58DF-4BDB-B806-E0421A3D5456}` because they are uppercase hex in braces. The value was discarded by `_is_nonempty_parameter_candidate`, preventing it from being used as a resolved parameter even after correct extraction. Fix: added an early exemption for GUID-format strings (`{8-4-4-4-12}` hex pattern) before the placeholder patterns are checked.
 - **JSON string values in the `result` field were not parsed for record extraction** -- When a tool result arrived as `{"result": "{\"value\": [...]}", "status": "success"}`, the extraction function returned the raw JSON string without parsing. `_iter_result_records` cannot iterate strings, so zero records were found and no identifiers were extracted for downstream steps. This is the same class of bug fixed in v0.20260410.0 for the `content` field (modern MCP protocol), now also fixed for the `result` field path. Fix: added `_parse_json_like_text()` call for string-typed `result` values.
-- **Alias extraction copied `driveItemId` into `workbookWorksheetId` instead of the worksheet GUID** -- When multiple prior steps' results all contain records with an `id` field, the alias extraction iterated results in chronological order and returned the first match. In the 4-step Excel chain, the `list-folder-files` result (step 2) appeared before `list-excel-worksheets` (step 3), so the file's `driveItemId` was extracted instead of the worksheet GUID. Fix: reversed result iteration order so the most recent step's records are searched first, and relaxed the alias resolution guard to return the first (most-recent) match when multiple alias values exist.
-- **Snake_case parameter names (`channel_id`, `drive_id`) were not matched by the alias suffix list** -- The Slack MCP uses `channel_id` (snake_case), but the suffix list only matched `channelid` (camelCase lowered). The underscore prevented suffix matching, so `channel_id` was never bound from `slack_list_channels` results. Fix: normalize parameter names by stripping underscores before suffix matching (both in alias extraction, kind inference, and driveId fallback).
 
 ### Tests
 
 - **Entity ID alias extraction coverage** -- Added tests for `workbookWorksheetId`, `planId`, and `channelId` alias extraction from records, plus a full `_resolve_parameters_from_context` integration test that feeds a `list-excel-worksheets` JSON string result and verifies `workbookWorksheetId` is bound correctly.
 - **GUID placeholder exemption coverage** -- Added tests verifying real GUIDs in braces are not treated as placeholders, planning placeholder patterns are still detected, and `_is_nonempty_parameter_candidate` accepts GUIDs but rejects placeholders.
 - **Result-field string parsing coverage** -- Added tests for `_extract_structured_planning_result_payload` handling JSON object strings, JSON array strings, and plain text strings in the `result` field.
-- **Most-recent-step preference** -- Added test confirming that when both a file record (step 2) and a worksheet record (step 3) have `id` fields, the worksheet GUID from the more recent step is extracted for `workbookWorksheetId`.
-- **Snake_case alias matching** -- Added test confirming `channel_id` (snake_case) extracts the channel ID from a Slack channel record.
-- **Validation sweep** -- Full unit suite passed (`447 passed, 27 skipped`). 5 random e2e regression tests passed across API streaming, foundation loading, artifacts, knowledge isolation, and orchestration SOP.
+- **Validation sweep** -- Full unit suite passed (`445 passed, 27 skipped`). 10 random e2e regression tests passed across triggers, multi-identity, API, skills, memory, multimodal, orchestration, and clarification.
 
 ## 0.20260413.0 - Planning JSON Robustness & Truncation Fix
 

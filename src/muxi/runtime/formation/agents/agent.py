@@ -4143,9 +4143,14 @@ class Agent:
             record.get("title"),
             record.get("subject"),
             record.get("displayName"),
+            record.get("display_name"),
             record.get("fileName"),
+            record.get("file_name"),
             record.get("path"),
             record.get("webUrl"),
+            record.get("web_url"),
+            record.get("channel_name"),
+            record.get("topic"),
         ]
         normalized_fields = [
             str(field).lower() for field in candidate_fields if field not in (None, "")
@@ -4236,17 +4241,33 @@ class Agent:
                 "title",
                 "subject",
                 "displayName",
+                "display_name",
                 "driveId",
+                "drive_id",
                 "driveItemId",
+                "drive_item_id",
                 "parentReference",
+                "parent_reference",
                 "path",
                 "webUrl",
+                "web_url",
                 "file",
                 "folder",
                 "root",
                 "siteId",
+                "site_id",
                 "createdDateTime",
+                "created_at",
                 "lastModifiedDateTime",
+                "updated_at",
+                "channel_id",
+                "channel_name",
+                "topic",
+                "position",
+                "visibility",
+                "type",
+                "status",
+                "description",
             ]
             compact: Dict[str, Any] = {}
             for key in preferred_keys:
@@ -5788,18 +5809,32 @@ class Agent:
 
         resolved: Dict[str, Any] = {}
         for required_param in required_params:
-            patterns = [
-                rf"\b{re.escape(required_param)}\b\s*(?:=|:)\s*([^\s,\]\);]+)",
-                rf"\b{re.escape(required_param)}\b\s+is\s+([^\s,\]\);]+)",
-            ]
-            for pattern in patterns:
-                match = re.search(pattern, text, flags=re.IGNORECASE)
-                if not match:
-                    continue
-                value = match.group(1).strip("`'\".,:;()[]<>")
-                if Agent._is_nonempty_parameter_candidate(value):
-                    resolved[required_param] = value
+            # Build alternative forms: camelCase <-> snake_case
+            param_forms = {required_param}
+            # camelCase -> snake_case: "channelId" -> "channel_id"
+            snake = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", required_param).lower()
+            param_forms.add(snake)
+            # snake_case -> camelCase: "channel_id" -> "channelId"
+            camel = re.sub(r"_([a-z])", lambda m: m.group(1).upper(), required_param)
+            param_forms.add(camel)
+
+            found = False
+            for form in param_forms:
+                if found:
                     break
+                patterns = [
+                    rf"\b{re.escape(form)}\b\s*(?:=|:)\s*([^\s,\]\);]+)",
+                    rf"\b{re.escape(form)}\b\s+is\s+([^\s,\]\);]+)",
+                ]
+                for pattern in patterns:
+                    match = re.search(pattern, text, flags=re.IGNORECASE)
+                    if not match:
+                        continue
+                    value = match.group(1).strip("`'\".,:;()[]<>")
+                    if Agent._is_nonempty_parameter_candidate(value):
+                        resolved[required_param] = value
+                        found = True
+                        break
 
         return resolved
 
@@ -5905,11 +5940,12 @@ class Agent:
 
             exact_values: List[Any] = []
             seen_exact: set[str] = set()
+            normalized_param = param_name.lower().replace("_", "")
             for record in records:
                 if not self._record_matches_expected_kind(record, expected_kind):
                     continue
                 for key, value in record.items():
-                    if key.lower() != param_name.lower():
+                    if key.lower().replace("_", "") != normalized_param:
                         continue
                     if not self._is_nonempty_parameter_candidate(value):
                         continue
