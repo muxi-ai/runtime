@@ -1342,6 +1342,63 @@ def test_alias_extraction_resolves_channelid_from_record():
     assert value == "19:abc@thread.tacv2"
 
 
+def test_alias_extraction_resolves_snake_case_channel_id():
+    """channel_id (snake_case) must also be extracted via underscore normalization."""
+    agent = object.__new__(Agent)
+    channel_record = {"id": "C08SZKB16UF", "name": "social"}
+    value = agent._extract_alias_value_from_record("channel_id", channel_record, "generic")
+    assert value == "C08SZKB16UF"
+
+
+def test_resolve_context_prefers_most_recent_step_result():
+    """When multiple prior steps have records with 'id', the most recent step's record wins."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "test"
+    agent.overlord = None
+
+    file_result = {
+        "result": json.dumps(
+            {"id": "01SA7QZQZWMLF7VGIIMNAILZA3424C3AL5", "name": "Book.xlsx", "file": {}}
+        ),
+        "status": "success",
+    }
+    worksheet_result = {
+        "result": json.dumps(
+            {
+                "value": [
+                    {
+                        "id": "{00000000-0001-0000-0000-000000000000}",
+                        "name": "Sheet1",
+                        "position": 0,
+                        "visibility": "Visible",
+                    }
+                ]
+            }
+        ),
+        "status": "success",
+    }
+
+    with patch.object(observability, "observe"):
+        resolved = agent._resolve_parameters_from_context(
+            required_params=["workbookWorksheetId"],
+            param_properties={"workbookWorksheetId": {"type": "string"}},
+            full_schema={
+                "type": "object",
+                "properties": {"workbookWorksheetId": {"type": "string"}},
+            },
+            tool_name="ms365-mcp__get-excel-range",
+            action_description="Read cell A1 from Sheet1",
+            user_request="What's in cell A1 of Sheet1?",
+            my_results={
+                "step_2_list_files": file_result,
+                "step_3_list_worksheets": worksheet_result,
+            },
+        )
+
+    # Must get worksheet GUID, NOT driveItemId
+    assert resolved.get("workbookWorksheetId") == "{00000000-0001-0000-0000-000000000000}"
+
+
 def test_resolve_parameters_from_context_binds_worksheetid():
     """Full context resolution must bind workbookWorksheetId from list-excel-worksheets result."""
     agent = object.__new__(Agent)

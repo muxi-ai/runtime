@@ -4169,7 +4169,7 @@ class Agent:
         param_definition: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Infer whether an identifier should resolve from a file-like or folder-like record."""
-        lowered_param = param_name.lower()
+        lowered_param = param_name.lower().replace("_", "")
         if not lowered_param.endswith(("itemid", "fileid", "folderid", "documentid", "workbookid")):
             return "generic"
 
@@ -5839,11 +5839,14 @@ class Agent:
             return None
 
         lowered_param = param_name.lower()
+        # Normalize snake_case → camelcase for suffix matching so both
+        # "channelId" and "channel_id" are handled uniformly.
+        normalized_param = lowered_param.replace("_", "")
         parent_reference = record.get("parentReference")
         if not isinstance(parent_reference, dict):
             parent_reference = {}
 
-        if lowered_param.endswith("driveid"):
+        if normalized_param.endswith("driveid"):
             for candidate in (
                 record.get("driveId"),
                 parent_reference.get("driveId"),
@@ -5855,7 +5858,7 @@ class Agent:
             ):
                 return record.get("id")
 
-        if lowered_param.endswith(
+        if normalized_param.endswith(
             (
                 "itemid",
                 "fileid",
@@ -5935,9 +5938,9 @@ class Agent:
                 seen_alias.add(marker)
                 alias_values.append(alias_value)
 
-            if len(alias_values) == 1:
-                return alias_values[0]
-            if candidate_records and records is candidate_records and alias_values:
+            if alias_values:
+                # With most-recent-first ordering the first alias is from the
+                # latest step, which is the most specific result.
                 return alias_values[0]
 
         return None
@@ -5980,9 +5983,13 @@ class Agent:
             for result in successful_results.values()
             if result is not None
         ]
+        # Reverse so the most recent step's records are searched first —
+        # later steps produce more specific results (e.g. worksheet IDs
+        # from list-excel-worksheets should win over file IDs from
+        # list-folder-files).
         all_records = [
             record
-            for payload in structured_payloads
+            for payload in reversed(structured_payloads)
             for record in self._iter_result_records(payload)
             if isinstance(record, dict)
         ]
@@ -6016,7 +6023,7 @@ class Agent:
                 resolved[required_param] = resolved_value
                 continue
 
-            if required_param.lower().endswith("driveid"):
+            if required_param.lower().replace("_", "").endswith("driveid"):
                 drive_values = self._collect_values_for_key(structured_payloads, "driveId")
                 if len(drive_values) == 1 and self._has_resolved_required_parameter_value(
                     drive_values[0], param_def
