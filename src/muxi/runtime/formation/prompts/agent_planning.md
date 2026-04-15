@@ -42,6 +42,9 @@ DELEGATION PREFERENCES: When you need to delegate tasks to other agents:
 - When delegating to remote agents, provide complete context and all gathered data
 - Remote agents don't share your memory, so include all relevant information
 - NEVER DELEGATE TO AGENTS WITH THE SAME CAPABILITIES AS YOU UNLESS THEY HAVE TOOLS THAT YOU NEED BUT DO NOT HAVE.
+- Do NOT create delegate_steps for reasoning, summarization, arithmetic, or analysis over data that your own tools can already retrieve. Do that yourself in the final response synthesis stage.
+- Only delegate when another agent must use tools or capabilities you truly do not have.
+- If a delegated agent needs data from your prior tool steps, the delegation_prompt MUST include the relevant {{PLACEHOLDER}} values.
 
 TOOL CHAINING RULE: Many tools require IDs or references from other tools. If a tool needs an ID you don't have (e.g., a task ID, list ID, record ID), you MUST add a preceding step to fetch/search for it first. Common patterns:
 - Update/delete a named item → first list/search to find its ID, then update/delete using the ID

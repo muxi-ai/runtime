@@ -1588,6 +1588,13 @@ def test_context_hints_match_channel_name_field():
     assert Agent._record_matches_context_hints(record, ["social"])
 
 
+def test_extract_context_hints_captures_hashtag_resource_name():
+    """Hashtag-prefixed resource names should be extracted generically."""
+    hints = Agent._extract_context_hints("Show me the last 10 messages in #social")
+    assert "social" in hints
+    assert "#social" in hints
+
+
 # ---------------------------------------------------------------------------
 # Preventive: compact record preserves snake_case keys
 # ---------------------------------------------------------------------------
@@ -1635,6 +1642,7 @@ def test_resolve_context_with_snake_case_mcp_records():
         "result": json.dumps(
             {
                 "channels": [
+                    {"id": "C08SZKAV4KH", "name": "all-spark", "num_members": 4},
                     {"id": "C08SZKB16UF", "name": "social", "num_members": 4},
                     {"id": "C08TABCDEF", "name": "general", "num_members": 12},
                 ]
@@ -1649,9 +1657,81 @@ def test_resolve_context_with_snake_case_mcp_records():
             param_properties={"channel_id": {"type": "string"}},
             full_schema={"type": "object", "properties": {"channel_id": {"type": "string"}}},
             tool_name="slack-mcp__slack_get_channel_history",
-            action_description="Get history for #social channel",
+            action_description="Get history for #social",
             user_request="Show me the last 10 messages in #social",
             my_results={"step_1_list_channels": channels_result},
         )
 
     assert resolved.get("channel_id") == "C08SZKB16UF"
+
+
+def test_mcp_default_param_names_include_only_nonempty_defaults():
+    """Only non-empty MCP server defaults should count as default-backed params."""
+    agent = object.__new__(Agent)
+    agent._mcp_service = SimpleNamespace(
+        server_configs={
+            "ms365-mcp": {
+                "parameters": {
+                    "driveId": "${{ user.credentials.MS365_DRIVE_ID }}",
+                    "driveItemId": "",
+                    "siteId": None,
+                }
+            }
+        }
+    )
+
+    assert agent._get_mcp_default_param_names("ms365-mcp") == {"driveId"}
+
+
+def test_filter_unresolved_params_backed_by_server_defaults():
+    """MCP-backed defaults must not be treated as unresolved during planning."""
+    unresolved = Agent._filter_unresolved_params_backed_by_server_defaults(
+        ["driveId", "workbookWorksheetId"],
+        {"driveId"},
+    )
+
+    assert unresolved == ["workbookWorksheetId"]
+
+
+def test_validate_tool_parameters_allows_server_default_backed_required_params():
+    """Schema validation should allow required params that MCP defaults will inject."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "test-agent"
+
+    is_valid, error = agent._validate_tool_parameters(
+        parameters={},
+        tool_schema={
+            "parameters": {
+                "type": "object",
+                "required": ["driveId"],
+                "properties": {"driveId": {"type": "string"}},
+            }
+        },
+        tool_name="ms365-mcp__get-drive-root-item",
+        server_default_param_names={"driveId"},
+    )
+
+    assert is_valid is True
+    assert error is None
+
+
+def test_build_delegation_prompt_with_results_appends_prior_result_context():
+    """Delegation prompts should carry prior tool results even without placeholders."""
+    agent = object.__new__(Agent)
+    my_results = {
+        "{{COLUMN_A_DATA}}": {
+            "status": "success",
+            "result": json.dumps({"values": [[1], [2], [3]]}),
+        }
+    }
+
+    prompt = agent._build_delegation_prompt_with_results(
+        "Calculate the sum of the numbers in column A.",
+        my_results,
+        context_hint="sum column A",
+    )
+
+    assert "## Prior tool results" in prompt
+    assert "{{COLUMN_A_DATA}}" in prompt
+    assert "values" in prompt
+    assert "do not invent missing data" in prompt.lower()

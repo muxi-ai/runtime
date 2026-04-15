@@ -1450,8 +1450,13 @@ class Agent:
                                                 ),
                                             )
 
+                                        server_default_param_names: set[str] = set()
+
                                         # Inject MCP server default parameters
                                         if server_id and self._mcp_service:
+                                            server_default_param_names = (
+                                                self._get_mcp_default_param_names(server_id)
+                                            )
                                             mcp_defaults = self._mcp_service.server_configs.get(
                                                 server_id, {}
                                             ).get("parameters", {})
@@ -1463,13 +1468,14 @@ class Agent:
                                                     full_schema=full_param_schema,
                                                 )
 
-                                        unresolved_required_params = (
+                                        unresolved_required_params = self._filter_unresolved_params_backed_by_server_defaults(
                                             self._get_unresolved_required_parameters(
                                                 parameters,
                                                 required_params,
                                                 param_properties,
                                                 full_param_schema,
-                                            )
+                                            ),
+                                            server_default_param_names,
                                         )
 
                                         if unresolved_required_params:
@@ -1519,13 +1525,14 @@ class Agent:
                                                     description=f"Inferred parameters for {tool_name}",
                                                 )
 
-                                            unresolved_required_params = (
+                                            unresolved_required_params = self._filter_unresolved_params_backed_by_server_defaults(
                                                 self._get_unresolved_required_parameters(
                                                     parameters,
                                                     required_params,
                                                     param_properties,
                                                     full_param_schema,
-                                                )
+                                                ),
+                                                server_default_param_names,
                                             )
                                     else:
                                         unresolved_required_params = []
@@ -1602,6 +1609,7 @@ class Agent:
                                         parameters=parameters,
                                         tool_schema=tool_schema,
                                         tool_name=tool_name,
+                                        server_default_param_names=server_default_param_names,
                                     )
 
                                     if not is_valid:
@@ -1732,28 +1740,13 @@ class Agent:
                 if execution_plan and execution_plan.get("delegate_steps"):
                     # We have steps to delegate - process them after my_steps
                     for delegate_step in execution_plan.get("delegate_steps", []):
-                        # Get delegation prompt with placeholders replaced
-                        delegation_prompt = delegate_step.get("delegation_prompt", user_message)
-
-                        # Replace placeholders with actual results from my_steps
-                        for placeholder, result in my_results.items():
-                            if placeholder in delegation_prompt:
-                                # Extract useful information from result
-                                result_text = str(result)
-                                if isinstance(result, dict):
-                                    # Try to extract the most relevant info
-                                    raw_result_text = result.get(
-                                        "result", result.get("output", str(result))
-                                    )
-                                    # Ensure result_text is a string
-                                    result_text = (
-                                        raw_result_text
-                                        if isinstance(raw_result_text, str)
-                                        else str(raw_result_text)
-                                    )
-                                delegation_prompt = delegation_prompt.replace(
-                                    placeholder, result_text
-                                )
+                        # Get delegation prompt with placeholders replaced and
+                        # prior successful tool results appended as compact context.
+                        delegation_prompt = self._build_delegation_prompt_with_results(
+                            delegate_step.get("delegation_prompt", user_message),
+                            my_results,
+                            context_hint=f"{user_message}\n{delegate_step.get('action', '')}",
+                        )
 
                         # Request A2A assistance with enriched prompt
                         a2a_response = await self._request_a2a_assistance(
@@ -4083,6 +4076,8 @@ class Agent:
             r"(?<![\w/])([A-Za-z0-9][A-Za-z0-9 _.\-]{0,120}\.[A-Za-z0-9]{1,8})(?![\w/])"
         )
         quoted_pattern = re.compile(r"['\"]([^'\"]{2,120})['\"]")
+        hashtag_pattern = re.compile(r"(?<!\w)#([A-Za-z0-9][A-Za-z0-9_.\-]{0,80})")
+        mention_pattern = re.compile(r"(?<!\w)@([A-Za-z0-9][A-Za-z0-9_.\-]{0,80})")
 
         for text in texts:
             if not isinstance(text, str) or not text.strip():
@@ -4091,6 +4086,14 @@ class Agent:
                 add_hint(match)
             for match in quoted_pattern.findall(text):
                 add_hint(match)
+            for match in hashtag_pattern.findall(text):
+                if re.fullmatch(r"[0-9A-Fa-f]{3,8}", match):
+                    continue
+                add_hint(match)
+                add_hint(f"#{match}")
+            for match in mention_pattern.findall(text):
+                add_hint(match)
+                add_hint(f"@{match}")
             lowered = text.lower()
             for keyword in keyword_hints:
                 if re.search(rf"\b{re.escape(keyword)}\b", lowered):
@@ -4321,6 +4324,52 @@ class Agent:
         if len(text) > limit:
             return text[: limit - 3].rstrip() + "..."
         return text
+
+    def _build_delegation_prompt_with_results(
+        self,
+        delegation_prompt: str,
+        my_results: Dict[str, Any],
+        context_hint: str = "",
+    ) -> str:
+        """Enrich delegated prompts with prior successful tool results."""
+        enriched_prompt = delegation_prompt.strip() if isinstance(delegation_prompt, str) else ""
+
+        for placeholder, result in my_results.items():
+            if placeholder not in enriched_prompt:
+                continue
+            result_text = str(result)
+            if isinstance(result, dict):
+                raw_result_text = result.get("result", result.get("output", str(result)))
+                result_text = (
+                    raw_result_text if isinstance(raw_result_text, str) else str(raw_result_text)
+                )
+            enriched_prompt = enriched_prompt.replace(placeholder, result_text)
+
+        successful_results = self._get_successful_planning_results(my_results)
+        if not successful_results:
+            return enriched_prompt
+
+        summary_lines: List[str] = []
+        for placeholder, result in successful_results.items():
+            summary = self._summarize_planning_result(result, context_hint=context_hint, limit=800)
+            if summary:
+                summary_lines.append(f"- {placeholder}: {summary}")
+
+        if not summary_lines:
+            return enriched_prompt
+
+        results_block = (
+            "## Prior tool results\n"
+            + "\n".join(summary_lines)
+            + "\n\nUse the prior tool results above when answering. "
+            "If they are insufficient, say so explicitly and do not invent missing data."
+        )
+
+        if not enriched_prompt:
+            return results_block
+        if results_block in enriched_prompt:
+            return enriched_prompt
+        return f"{enriched_prompt.rstrip()}\n\n{results_block}"
 
     def _build_missing_parameter_replanning_feedback(
         self,
@@ -6303,7 +6352,11 @@ class Agent:
         return merged
 
     def _validate_tool_parameters(
-        self, parameters: Dict[str, Any], tool_schema: Dict[str, Any], tool_name: str
+        self,
+        parameters: Dict[str, Any],
+        tool_schema: Dict[str, Any],
+        tool_name: str,
+        server_default_param_names: Optional[set[str]] = None,
     ) -> tuple[bool, Optional[str]]:
         """
         Validate inferred or provided parameters against the tool schema.
@@ -6320,10 +6373,11 @@ class Agent:
             param_schema = tool_schema.get("parameters", {})
             required_params = param_schema.get("required", [])
             param_properties = param_schema.get("properties", {})
+            server_default_param_names = server_default_param_names or set()
 
             # Check all required parameters are present
             for req_param in required_params:
-                if req_param not in parameters:
+                if req_param not in parameters and req_param not in server_default_param_names:
                     return False, f"Missing required parameter: {req_param}"
 
             # Validate each provided parameter
@@ -6456,6 +6510,38 @@ class Agent:
                 unresolved.append(req_param)
 
         return unresolved
+
+    def _get_mcp_default_param_names(self, server_id: Optional[str]) -> set[str]:
+        """Return parameter names supplied by MCP server defaults."""
+        if not server_id or not getattr(self, "_mcp_service", None):
+            return set()
+
+        server_configs = getattr(self._mcp_service, "server_configs", {})
+        if not isinstance(server_configs, dict):
+            return set()
+
+        server_config = server_configs.get(server_id, {})
+        if not isinstance(server_config, dict):
+            return set()
+
+        default_params = server_config.get("parameters", {})
+        if not isinstance(default_params, dict):
+            return set()
+
+        return {str(key) for key, value in default_params.items() if value not in (None, "")}
+
+    @staticmethod
+    def _filter_unresolved_params_backed_by_server_defaults(
+        unresolved_params: List[str], server_default_param_names: set[str]
+    ) -> List[str]:
+        """Remove unresolved params that will be injected by the MCP server."""
+        if not unresolved_params or not server_default_param_names:
+            return list(unresolved_params)
+        return [
+            param_name
+            for param_name in unresolved_params
+            if param_name not in server_default_param_names
+        ]
 
     @staticmethod
     def _is_tool_execution_error(result: Any) -> bool:
