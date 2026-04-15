@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-10
+**Last Updated:** 2026-04-15
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -4093,6 +4093,53 @@ and could treat structured MCP/tool error payloads as successful execution in ob
 - `src/muxi/runtime/formation/agents/agent.py`
 - `src/muxi/runtime/formation/prompts/agent_planning.md`
 - `tests/unit/test_agent_planning_helpers.py`
+
+### 2026-04-15: Planner-Aware MCP Defaults, Stronger Delegation Context, and Better Resource Hinting
+
+**Problem:** The planner still treated some MCP steps as under-specified even when the target MCP
+server was configured to inject required default parameters at execution time. Delegated A2A steps
+also risked losing useful tool context unless the planner manually threaded placeholders through the
+delegation prompt, and resource hint extraction missed common `#channel` / `@mention` style names.
+
+**Root causes:**
+- Required-parameter validation only looked at the tool-call payload, not the MCP server's
+  configured default parameter set
+- Post-inference unresolved-parameter checks did not distinguish between truly missing values and
+  required values that would be injected by `MCPService.server_configs[server_id]["parameters"]`
+- Delegation relied too heavily on exact placeholder replacement, so downstream agents could lose
+  prior tool outputs unless the prompt was perfectly templated
+- Context-hint extraction covered filenames and quoted strings but not generic hashtag/mention-style
+  resource names used by tools like Slack
+
+**Fixes:**
+- `process_message()` now computes `server_default_param_names` per MCP server and removes those
+  params from unresolved-required checks
+- `_validate_tool_parameters()` now accepts required params that are backed by non-empty MCP server
+  defaults, so planner validation matches actual runtime injection behavior
+- Added `_build_delegation_prompt_with_results()` to replace explicit placeholders and append a
+  compact `## Prior tool results` block summarizing successful earlier tool steps
+- Tightened the planning prompt so delegation is reserved for capabilities/tools the current agent
+  truly lacks; summarization/analysis over already-fetched data should stay local
+- `_extract_context_hints()` now captures `#resource` and `@resource` forms (while avoiding
+  hex-color false positives), improving follow-up resolution for named channels/resources
+
+**Important nuance:** MCP server defaults remain **defaults**, not overrides. If the tool call
+already supplies a value, that explicit value still wins. The planner change only prevents false
+missing-parameter failures for values the server is guaranteed to inject later.
+
+**Operational implication:** When debugging a planner complaint about a "missing" required MCP
+parameter, check both the inferred tool args and the server's configured `parameters` block. A
+blank tool arg is acceptable if the same field is backed by a non-empty MCP default.
+
+**Dependency baseline updated the same day:** `fastmcp>=3.2.0`, `onellm[cache]>=0.20260415.0`,
+`pypdf>=6.10.0`, `Pillow>=12.2.0`, `aiohttp>=3.13.4`, `cryptography>=46.0.7`,
+`requests>=2.33.0`, `pytest>=9.0.3`, `black>=26.3.1`.
+
+**Files:**
+- `src/muxi/runtime/formation/agents/agent.py`
+- `src/muxi/runtime/formation/prompts/agent_planning.md`
+- `tests/unit/test_agent_planning_helpers.py`
+- `pyproject.toml`
 
 ### 2026-03-20: Scheduler Routes, Memobase Init & Dimension Propagation
 
