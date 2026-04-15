@@ -57,7 +57,7 @@ dependencies = [
 
     # MCP Package
     "mcp>=1.23.0",  # Required for Streamable HTTP transport support (security fix)
-    "fastmcp>=3.0.0",  # MCP server generation from FastAPI app
+    "fastmcp>=3.2.0",  # MCP server generation from FastAPI app
 
     # File processing and utilities
     "aiofiles>=23.2.0",
@@ -65,7 +65,7 @@ dependencies = [
 
     # Document processing dependencies
     "markitdown[all]>=0.1.0",  # Convert various file formats to Markdown
-    "pypdf>=6.9.1",  # PDF document processing (successor to PyPDF2); CVE-2026-33123 fixed in 6.9.1
+    "pypdf>=6.10.0",  # PDF document processing (successor to PyPDF2); CVE-2026-33123 fixed in 6.9.1
     "python-docx>=1.1.0",  # Word document processing
     "markdownify>=0.11.6",  # HTML to Markdown conversion
     "beautifulsoup4>=4.12.0",  # HTML parsing and validation
@@ -74,11 +74,11 @@ dependencies = [
     "sentence-transformers>=2.2.0",  # Embedding generation for semantic search
 
     # Image processing dependencies
-    "Pillow>=10.0.0",  # PIL/Pillow for image processing
+    "Pillow>=12.2.0",  # PIL/Pillow for image processing
     "pdf2image>=1.16.0",  # Convert PDF pages to images (requires Poppler)
 
     # LLM Package
-    "onellm[cache]>=0.20260130.0",
+    "onellm[cache]>=0.20260415.0",
     "boto3>=1.26.0",  # AWS SDK for OneLLM Bedrock provider
     "google-cloud-aiplatform>=1.25.0",  # Google Cloud for OneLLM Vertex AI provider
 
@@ -105,7 +105,7 @@ dependencies = [
     "aiosqlite>=0.19.0",  # Async SQLite driver for SQLAlchemy (required for default persistent memory)
 
     # Legacy dependencies (keeping for compatibility)
-    "aiohttp>=3.13.3",  # Security fixes for DoS vulnerabilities
+    "aiohttp>=3.13.4",  # Security fixes for DoS vulnerabilities
     "click>=8.1.0",
     "openai>=1.3.0",
 
@@ -145,14 +145,14 @@ dependencies = [
     # Additional dependencies found in codebase
     "cachetools>=5.3.0",  # Caching for credential resolution (TTL, LRU)
     "croniter>=1.3.0",  # Cron expression parsing for scheduler
-    "cryptography>=41.0.0",  # Encryption for secrets manager
+    "cryptography>=46.0.7",  # Encryption for secrets manager
     "PyJWT>=2.12.0",  # CVE-2026-32597: accepts unknown crit headers; fixed in 2.12.0
     "pyasn1>=0.6.3",  # CVE-2026-30922: unbounded recursion DoS; fixed in 0.6.3
     "msgpack>=1.0.0",  # Message pack format for observability
     "multitasking>=0.0.11",  # Multi-threading utilities
     "nanoid>=2.0.0",  # Nano ID generation
     "pytz>=2023.3",  # Timezone support for scheduler
-    "requests>=2.31.0",  # HTTP client (used in observability)
+    "requests>=2.33.0",  # HTTP client (used in observability)
     "typing-extensions>=4.8.0",  # Backport of typing features
     "pyzmq>=25.0.0",  # ZeroMQ for observability streaming
 ]
@@ -162,10 +162,10 @@ kafka = [
     "kafka-python>=2.0.0",  # Kafka streaming support for observability
 ]
 dev = [
-    "pytest>=7.0.0",
+    "pytest>=9.0.3",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
-    "black>=23.0.0",
+    "black>=26.3.1",
     "isort>=5.12.0",
     "mypy>=1.0.0",
     "ruff>=0.1.0",
