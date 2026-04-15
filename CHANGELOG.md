@@ -1,5 +1,25 @@
 # Changelog
 
+## [unreleased]
+
+### Runtime Fixes
+
+- **MCP default-backed required parameters no longer trigger fallback inference** -- Planning/execution now treats required params supplied by MCP server defaults as satisfiable, so runtime-injected values like `driveId` are not redundantly inferred and accidentally replaced with guessed values such as `"me"`.
+- **Named-resource hint extraction is now more general without service-specific heuristics** -- Context hint extraction now recognizes user-supplied resource references like `#social`, `@name`, quoted names, and filenames, allowing semantic record disambiguation without introducing Slack- or app-specific runtime rules.
+- **Delegated analysis prompts now carry prior tool results** -- When delegation is still necessary, the runtime appends compact summaries of successful prior tool results so downstream agents do not reason without the data already gathered and fabricate answers from missing context.
+- **Planning guidance now discourages delegating pure reasoning over locally retrieved data** -- Agents are instructed to keep arithmetic, summarization, and analysis with the current agent when its own tools can already fetch the needed data, reducing unnecessary A2A handoffs like Excel aggregation falling into the generic assistant.
+
+### Dependency Updates
+
+- **Raised `onellm[cache]` minimum version to `>=0.20260415.0`** -- Pulls in the latest OneLLM fixes required by current runtime work without changing the dependency shape.
+- **Kept `faissx` minimum version at `>=0.20260403.0`** -- Confirmed the current floor already matches the requested minimum, so no additional package change was needed.
+- **Aligned direct dependency floors with recently merged Dependabot PRs** -- Raised the minimum versions for dependencies that already had merged update PRs and are declared directly in `pyproject.toml`: `fastmcp>=3.2.0`, `pypdf>=6.10.0`, `Pillow>=12.2.0`, `aiohttp>=3.13.4`, `requests>=2.33.0`, `cryptography>=46.0.7`, `pytest>=9.0.3`, and `black>=26.3.1`.
+
+### Notes
+
+- Only direct dependencies declared in `pyproject.toml` were raised. CI-only GitHub Actions bumps and transitive-only lockfile bumps were intentionally left out.
+- Prepared as an unreleased entry so additional fixes from today can be appended before the next push/tag.
+
 ## 0.20260414.0 - Result Recency Bias, Snake_case Normalization & Preventive Hardening
 
 ### Bug Fixes
