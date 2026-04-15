@@ -2,6 +2,8 @@
 
 ## [unreleased]
 
+## v0.20260415.0
+
 ### Runtime Fixes
 
 - **MCP default-backed required parameters no longer trigger fallback inference** -- Planning/execution now treats required params supplied by MCP server defaults as satisfiable, so runtime-injected values like `driveId` are not redundantly inferred and accidentally replaced with guessed values such as `"me"`.
