@@ -4,12 +4,12 @@
 #   develop → rc (PR) → main (merge) → auto-release
 #
 # STEP ORDER:
-#   1. version job: calculate version, commit .version + CHANGELOG
+#   1. version job: calculate version, commit .version + rename CHANGELOG [unreleased] → v<version>
 #   2. docker-amd64, docker-arm64, pypi jobs: build + publish (parallel)
 #   3. docker-manifest job: create multi-arch manifest
 #   4. sif-amd64, sif-arm64 jobs: convert Docker images to SIF (parallel)
 #   5. github-release job: create GitHub Release + git tag + upload SIF files
-#   6. merge-back job: merge main → develop
+#   6. merge-back job: merge main → develop, then add fresh CHANGELOG [unreleased] on develop
 #
 # Tag is created by github-release (softprops/action-gh-release) AFTER
 # Docker/PyPI/SIF builds succeed, so a failed build won't leave a dangling tag.
@@ -70,17 +70,22 @@ jobs:
       - name: Update version and CHANGELOG
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          TODAY=$(date +%Y-%m-%d)
 
           echo "$VERSION" > src/muxi/runtime/.version
 
-          # Update CHANGELOG - handle both [Unreleased] and X.XXXXXXXX.X placeholders
-          if grep -q "## \[Unreleased\]" CHANGELOG.md; then
-            sed -i.bak "s/## \[Unreleased\]/## [$VERSION] - $TODAY/" CHANGELOG.md
+          # Finalize top changelog section for the release.
+          if grep -q "^## \[unreleased\]$" CHANGELOG.md; then
+            sed -i.bak "0,/^## \[unreleased\]$/s//## v$VERSION/" CHANGELOG.md
+            rm -f CHANGELOG.md.bak
+          elif grep -q "^## \[Unreleased\]$" CHANGELOG.md; then
+            sed -i.bak "0,/^## \[Unreleased\]$/s//## v$VERSION/" CHANGELOG.md
             rm -f CHANGELOG.md.bak
           elif grep -q "## X\.XXXXXXXX\.X" CHANGELOG.md; then
-            sed -i.bak "s/## X\.XXXXXXXX\.X/## $VERSION/" CHANGELOG.md
+            sed -i.bak "s/## X\.XXXXXXXX\.X/## v$VERSION/" CHANGELOG.md
             rm -f CHANGELOG.md.bak
+          else
+            echo "Expected top-level changelog placeholder not found"
+            exit 1
           fi
 
           git config user.name "github-actions[bot]"
@@ -372,9 +377,19 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin develop
+          git fetch origin main develop
           git checkout develop
-          git merge --no-ff main -m "chore: merge main back to develop (v${{ needs.version.outputs.version }}) [skip ci]"
+          git reset --hard origin/develop
+          git merge --no-ff origin/main -m "chore: merge main back to develop (v${{ needs.version.outputs.version }}) [skip ci]"
+
+          if ! grep -q "^## \[unreleased\]$" CHANGELOG.md; then
+            python3 -c 'from pathlib import Path; path = Path("CHANGELOG.md"); text = path.read_text(); header = "# Changelog\n\n"; unreleased = "## [unreleased]\n\n"; assert text.startswith(header), "CHANGELOG.md missing expected header"; path.write_text(header + unreleased + text[len(header):])'
+            git add CHANGELOG.md
+          fi
+
+          if ! git diff --cached --quiet || ! git diff --quiet; then
+            git commit --amend --no-edit
+          fi
           git push origin develop
 
   # NOTE: Git tag is created by github-release job (softprops/action-gh-release)
