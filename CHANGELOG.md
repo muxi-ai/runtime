@@ -2,6 +2,8 @@
 
 ## [unreleased]
 
+## v0.20260416.1
+
 ### Bug Fixes
 
 - **Planning mode no longer strips tool parameters (CRITICAL)** -- `_finalize_execution_plan` was rebuilding `my_steps` from the unified `steps` list, but the planning prompt template only instructs the LLM to emit `parameters` in its separate `my_steps` block. The rebuild silently replaced every parameter set with `{}`, so `manage_event` was called with only `{"action": "create"}` and `get_events` with `{}` -- missing all required fields. Fix: `_finalize_execution_plan` now preserves parameters from the LLM's original `my_steps` by matching on `tool_name`, using a FIFO queue so repeated tool uses keep their own params.
