@@ -165,6 +165,7 @@ class SchedulerService:
             self.prompt_rewriter.llm = formation_llm
 
         # State tracking
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None
         self._active_executions = set()
         self._performance_stats = {
             "cycles_completed": 0,
@@ -215,6 +216,11 @@ class SchedulerService:
             return {"status": "disabled", "service": "SchedulerService"}
 
         self._running = True
+
+        # Capture the main event loop so the worker thread can dispatch job
+        # execution back here.  overlord.chat() and all downstream I/O
+        # (asyncpg, httpx, MCP transports) are bound to this loop.
+        self._main_loop = asyncio.get_running_loop()
 
         # Start background worker in a daemon thread so it doesn't block the event loop
         import threading
@@ -673,6 +679,12 @@ class SchedulerService:
         """
         Execute due jobs respecting concurrency limits.
 
+        Job execution is dispatched to the main event loop because
+        overlord.chat() and its downstream I/O (asyncpg, httpx, MCP
+        transports) are bound to it.  The scheduler worker thread only
+        handles cron matching and DB reads; actual execution must run
+        where the formation's async resources live.
+
         Args:
             due_jobs: List of jobs to execute
         """
@@ -681,8 +693,12 @@ class SchedulerService:
             if len(self._active_executions) >= self.max_concurrent_jobs:
                 break
 
-            # Execute job asynchronously
-            asyncio.create_task(self._execute_single_job(job))
+            if self._main_loop is not None and self._main_loop.is_running():
+                # Dispatch to the main event loop (fire-and-forget)
+                asyncio.run_coroutine_threadsafe(self._execute_single_job(job), self._main_loop)
+            else:
+                # Fallback: create task on the current loop (original behaviour)
+                asyncio.create_task(self._execute_single_job(job))
 
     async def _execute_single_job(self, job: Dict[str, Any]):
         """

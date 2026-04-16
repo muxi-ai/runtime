@@ -16,10 +16,7 @@ class TestSchedulerRoutesFix:
     """Verify scheduler routes no longer reference formation._scheduler."""
 
     def _get_scheduler_route_source(self):
-        path = (
-            SRC_ROOT
-            / "muxi/runtime/formation/server/routes/admin/scheduler.py"
-        )
+        path = SRC_ROOT / "muxi/runtime/formation/server/routes/admin/scheduler.py"
         return path.read_text()
 
     def test_no_formation_scheduler_references(self):
@@ -43,6 +40,36 @@ class TestSchedulerRoutesFix:
         assert "scheduler.jobs =" not in source, "Routes must not use in-memory dicts"
         # Must use async service methods (job_manager or scheduler service)
         assert "scheduler.job_manager" in source or "scheduler.pause_job" in source
+
+
+class TestSchedulerMainLoopDispatch:
+    """Verify scheduler dispatches job execution to the main event loop."""
+
+    def _get_service_source(self):
+        path = SRC_ROOT / "muxi/runtime/services/scheduler/service.py"
+        return path.read_text()
+
+    def test_start_captures_main_loop(self):
+        """start() must store the running loop as _main_loop."""
+        source = self._get_service_source()
+        assert "self._main_loop = asyncio.get_running_loop()" in source
+
+    def test_execute_due_jobs_uses_run_coroutine_threadsafe(self):
+        """_execute_due_jobs must dispatch via run_coroutine_threadsafe."""
+        source = self._get_service_source()
+        assert "run_coroutine_threadsafe" in source
+
+    def test_no_create_task_for_job_execution(self):
+        """_execute_due_jobs must not use create_task as the primary dispatch path."""
+        source = self._get_service_source()
+        # The create_task call should only exist in the fallback branch
+        method_start = source.index("async def _execute_due_jobs")
+        method_end = source.index("async def _execute_single_job")
+        method_body = source[method_start:method_end]
+        # run_coroutine_threadsafe must appear before any create_task fallback
+        rcts_pos = method_body.index("run_coroutine_threadsafe")
+        ct_pos = method_body.index("create_task")
+        assert rcts_pos < ct_pos, "run_coroutine_threadsafe must be the primary path"
 
 
 class TestMemobaseDimensionFix:

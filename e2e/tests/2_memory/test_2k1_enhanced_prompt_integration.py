@@ -81,7 +81,7 @@ class Test2k1EnhancedPromptIntegration(BaseMemoryTest):
             # Verify memories were created
             cur.execute("""
                 SELECT COUNT(*)
-                FROM memories
+                FROM memories_1536
                 WHERE meta_data->>'user_id' = %s
             """, (test_user,))
             memory_count = cur.fetchone()[0]

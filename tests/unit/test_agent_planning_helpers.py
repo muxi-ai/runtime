@@ -313,6 +313,80 @@ async def test_invoke_tool_logs_success_false_for_mcp_error_result():
 
 
 @pytest.mark.asyncio
+async def test_process_message_executes_parameter_free_planned_tool_without_unbound_defaults():
+    """Parameter-free planned MCP steps should not crash before invoke_tool runs."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+    agent.name = "MS365 Assistant"
+    agent.model = SimpleNamespace()
+    agent.system_message = "You are a helpful assistant."
+    agent._messages = []
+    agent._knowledge_config = None
+    agent._mcp_service = SimpleNamespace(
+        server_configs={"ms365-mcp": {"parameters": {"userId": "me"}}}
+    )
+    agent.overlord = SimpleNamespace(
+        mcp_service=SimpleNamespace(
+            get_tool_registry=lambda _agent_id: {
+                "ms365-mcp": {
+                    "list-mail-messages": {
+                        "description": "List mail messages from the mailbox.",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                }
+            }
+        )
+    )
+    agent.invoke_tool = AsyncMock(return_value={"status": "success", "result": "[]"})
+    agent._plan_before_execution = AsyncMock(
+        return_value={
+            "steps": [
+                {
+                    "step_number": 1,
+                    "action": "List mail messages in the mailbox",
+                    "tool_name": "ms365-mcp__list-mail-messages",
+                    "can_i_do_this": True,
+                    "output_placeholder": "{{EMAIL_LIST}}",
+                }
+            ],
+            "my_steps": [
+                {
+                    "action": "List mail messages in the mailbox",
+                    "tool_name": "ms365-mcp__list-mail-messages",
+                    "parameters": {},
+                    "output_placeholder": "{{EMAIL_LIST}}",
+                }
+            ],
+            "delegate_steps": [],
+            "data_flow": "List mailbox contents and summarize the result.",
+        }
+    )
+    agent._synthesize_planning_execution_response = AsyncMock(
+        return_value="You have messages in your mailbox."
+    )
+    agent._check_cancellation = AsyncMock()
+
+    with (
+        patch("muxi.runtime.formation.agents.agent.streaming.stream"),
+        patch("muxi.runtime.formation.agents.agent.observability.observe"),
+    ):
+        response = await agent.process_message(
+            "Do I have any emails?",
+            user_id="tester",
+            session_id="sess_123",
+            request_id="req_123",
+        )
+
+    assert response.content == "You have messages in your mailbox."
+    agent.invoke_tool.assert_awaited_once_with(
+        tool_name="list-mail-messages",
+        parameters={},
+        server_id="ms365-mcp",
+        user_id="tester",
+    )
+
+
+@pytest.mark.asyncio
 async def test_repair_execution_plan_replans_with_missing_parameter_feedback():
     agent = object.__new__(Agent)
     agent.agent_id = "test-agent"
@@ -988,6 +1062,78 @@ async def test_repair_execution_plan_adds_auto_discovery_step_when_replan_has_no
         "driveItemId": "root-456",
         "searchQuery": "Book.xlsx",
     }
+
+
+# ---------------------------------------------------------------------------
+# Auto-discovery server affinity
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_auto_discovery_prefers_same_server_over_cross_server_candidate():
+    """A cross-server tool (todo-helper-mcp) must not be chosen as a discovery
+    step when a same-server candidate (ms365-mcp) is available."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+    agent._mcp_service = None
+
+    current_plan = {
+        "my_steps": [
+            {
+                "action": "List mail messages",
+                "tool_name": "ms365-mcp__list-mail-messages",
+                "parameters": {},
+                "output_placeholder": "{{EMAIL_LIST}}",
+            }
+        ],
+        "delegate_steps": [],
+        "data_flow": "List mailbox contents.",
+    }
+    # Simulate replan returning the same plan (triggers auto-discovery)
+    agent._plan_before_execution = AsyncMock(return_value=current_plan)
+
+    available_tools = [
+        {
+            "function": {
+                "name": "ms365-mcp__list-mail-messages",
+                "description": "List mail messages from the mailbox.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }
+        },
+        {
+            "function": {
+                "name": "ms365-mcp__list-mail-folders",
+                "description": "List mail folders in the user's mailbox.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }
+        },
+        {
+            "function": {
+                "name": "todo-helper-mcp__get-default-list-id",
+                "description": "Get the default task list ID for the user.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }
+        },
+    ]
+
+    with patch("muxi.runtime.formation.agents.agent.observability.observe"):
+        result = await agent._repair_execution_plan_for_missing_parameters(
+            user_message="Do I have any emails?",
+            available_tools=available_tools,
+            allow_delegation=False,
+            failed_step=current_plan["my_steps"][0],
+            tool_name="ms365-mcp__list-mail-messages",
+            unresolved_params=["folderId"],
+            current_plan=current_plan,
+            my_results={},
+        )
+
+    assert result is not None
+    inserted_tools = [step["tool_name"] for step in result["my_steps"]]
+    assert "todo-helper-mcp__get-default-list-id" not in inserted_tools
+    assert any(
+        t.startswith("ms365-mcp__") for t in inserted_tools if t != "ms365-mcp__list-mail-messages"
+    )
 
 
 # ---------------------------------------------------------------------------

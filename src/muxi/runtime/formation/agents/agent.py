@@ -1405,6 +1405,11 @@ class Agent:
                                     full_param_schema: Dict[str, Any] = full_param_schema_raw
                                     required_params = full_param_schema.get("required", [])
                                     param_properties = full_param_schema.get("properties", {})
+                                    server_default_param_names: set[str] = set()
+                                    if server_id and self._mcp_service:
+                                        server_default_param_names = (
+                                            self._get_mcp_default_param_names(server_id)
+                                        )
 
                                     if required_params:
                                         active_skill_context = (
@@ -1450,13 +1455,8 @@ class Agent:
                                                 ),
                                             )
 
-                                        server_default_param_names: set[str] = set()
-
                                         # Inject MCP server default parameters
                                         if server_id and self._mcp_service:
-                                            server_default_param_names = (
-                                                self._get_mcp_default_param_names(server_id)
-                                            )
                                             mcp_defaults = self._mcp_service.server_configs.get(
                                                 server_id, {}
                                             ).get("parameters", {})
@@ -4497,6 +4497,10 @@ class Agent:
         keywords = self._extract_discovery_keywords(user_message, failed_step, unresolved_params)
         best_candidate: Optional[Dict[str, Any]] = None
 
+        # Extract failed tool's MCP server for affinity scoring
+        failed_tool_name = failed_step.get("tool_name", "")
+        failed_server_id = failed_tool_name.split("__", 1)[0] if "__" in failed_tool_name else None
+
         for tool in available_tools or []:
             tool_fn = tool.get("function", {})
             candidate_name = tool_fn.get("name", "")
@@ -4518,6 +4522,16 @@ class Agent:
                 score -= 2
             if any(keyword in name_lower or keyword in description_lower for keyword in keywords):
                 score += 3
+
+            # Server affinity: strongly prefer tools from the same MCP server
+            # as the failed tool.  A todo-helper tool should not be chosen to
+            # discover IDs for a mail or calendar tool.
+            if failed_server_id and "__" in candidate_name:
+                candidate_server_id = candidate_name.split("__", 1)[0]
+                if candidate_server_id == failed_server_id:
+                    score += 4
+                else:
+                    score -= 3
 
             if score <= 0:
                 continue
