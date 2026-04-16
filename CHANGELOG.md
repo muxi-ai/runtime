@@ -1,6 +1,27 @@
 # Changelog
 
+## [unreleased]
+
 ## v0.20260416.0
+
+### Bug Fixes
+
+- **Parameter-free planned MCP steps no longer crash with UnboundLocalError** -- `server_default_param_names` was initialized inside the `if required_params:` branch but referenced unconditionally by validation and tool dispatch. Tools like `list-mail-messages`, `get_events`, and `search_gmail_messages` that require no user-supplied parameters crashed before reaching the MCP server. Fix: hoisted the variable initialization above the conditional gate.
+- **Scheduler job execution no longer crashes with "Future attached to a different loop"** -- The scheduler worker thread created its own event loop, but `overlord.chat()` and its downstream I/O (asyncpg, httpx, MCP transports) are bound to the main uvicorn loop. Fix: `start()` now captures the main loop, and `_execute_due_jobs()` dispatches via `asyncio.run_coroutine_threadsafe()` so job execution runs where the formation's async resources live.
+- **Repair-tool selection no longer picks tools from unrelated MCP servers** -- The auto-discovery fallback in `_build_auto_discovery_repair_plan` scored candidates purely on verb/keyword heuristics with no server affinity. A `todo-helper-mcp__get-default-list-id` could outscore same-server mail tools when repairing a failed `ms365-mcp__list-mail-messages`. Fix: added server affinity scoring (+4 same-server, -3 cross-server).
+- **Fixed legacy table name in e2e test `test_2k1_enhanced_prompt_integration`** -- Memory verification query referenced bare `memories` table instead of `memories_1536`, causing the test to fail on all dimension-aware databases.
+
+### Tests
+
+- Regression test exercising `process_message()` with a planned MCP step using `parameters: {}` (the exact crash path).
+- Regression test verifying cross-server tool (`todo-helper-mcp`) is rejected when a same-server candidate (`ms365-mcp`) is available during repair planning.
+- 3 source-level verification tests confirming scheduler dispatches job execution to the main event loop.
+
+### Validation
+
+- Full affected unit suite: **72 passed**.
+- Scheduler e2e test (`test_12a4_verify_execution`): passed.
+- 5 random e2e regression tests: 4/5 passed (1 pre-existing DB schema issue unrelated to this release).
 
 ## v0.20260415.0
 
