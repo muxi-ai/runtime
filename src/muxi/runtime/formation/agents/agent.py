@@ -4795,6 +4795,26 @@ class Agent:
         # NOTE: Instructions go in system message, user content stays here
         planning_prompt = f"Request: {user_message}"
 
+        # Inject current date/time so the planner can resolve relative references
+        # like "today", "tomorrow", "next week" into concrete dates. The live
+        # conversation system message gets this at line ~1005, but the planner
+        # runs a separate LLM call that never sees that injection.
+        try:
+            import time as _time
+            from datetime import datetime as _dt
+
+            _now = _dt.now()
+            _tz_name = _dt.now().astimezone().tzname() or _time.tzname[0]
+            _now_str = f"{_now.strftime('%A, %B %d, %Y %H:%M')} ({_tz_name})"
+            planning_prompt += (
+                f"\n\n## Current date/time:\nIt is now {_now_str}. "
+                "Resolve relative references like 'today', 'tomorrow', 'next week' "
+                "into concrete RFC3339 dates when building tool parameters."
+            )
+        except Exception:
+            # Never let clock/timezone lookup break planning.
+            pass
+
         agent_system_message = getattr(self, "system_message", None)
         if isinstance(agent_system_message, str) and agent_system_message.strip():
             planning_prompt += "\n\n## Agent operating instructions:\n"
@@ -5154,18 +5174,62 @@ class Agent:
             elif tool_name and tool_name not in available_tool_names:
                 step["can_i_do_this"] = False
 
-        plan["my_steps"] = [
-            {
-                "action": step["action"],
-                "tool_name": step["tool_name"],
-                "parameters": step.get("parameters", {}),
-                "output_placeholder": step.get(
-                    "output_placeholder", f"{{{step['tool_name'].upper()}_OUTPUT}}"
-                ),
-            }
-            for step in plan.get("steps", [])
-            if step.get("can_i_do_this") and step.get("tool_name") in available_tool_names
-        ]
+        # Preserve parameters from the LLM's original my_steps block by matching
+        # on tool_name.  The planning prompt only instructs the LLM to emit
+        # "parameters" inside my_steps, NOT inside steps — so rebuilding my_steps
+        # from steps alone would silently drop every parameter and send empty
+        # argument objects to downstream tools.  A FIFO queue keyed by tool_name
+        # handles plans where the same tool appears in multiple steps.
+        llm_my_steps = plan.get("my_steps", []) or []
+        params_by_tool: Dict[str, List[Dict[str, Any]]] = {}
+        placeholders_by_tool: Dict[str, List[str]] = {}
+        for llm_step in llm_my_steps:
+            if not isinstance(llm_step, dict):
+                continue
+            tool = llm_step.get("tool_name", "")
+            params = llm_step.get("parameters")
+            if tool and isinstance(params, dict):
+                params_by_tool.setdefault(tool, []).append(params)
+            placeholder = llm_step.get("output_placeholder")
+            if tool and isinstance(placeholder, str) and placeholder.strip():
+                placeholders_by_tool.setdefault(tool, []).append(placeholder)
+
+        def _pop_params(tool: str) -> Dict[str, Any]:
+            queue = params_by_tool.get(tool)
+            return queue.pop(0) if queue else {}
+
+        def _pop_placeholder(tool: str) -> Optional[str]:
+            queue = placeholders_by_tool.get(tool)
+            return queue.pop(0) if queue else None
+
+        rebuilt_my_steps: List[Dict[str, Any]] = []
+        for step in plan.get("steps", []):
+            if not step.get("can_i_do_this"):
+                continue
+            tool_name = step.get("tool_name", "")
+            if tool_name not in available_tool_names:
+                continue
+            # Prefer parameters already present on the unified step (rare), then
+            # fall back to the LLM's my_steps entry for this tool.
+            step_params = step.get("parameters")
+            parameters = (
+                step_params
+                if isinstance(step_params, dict) and step_params
+                else _pop_params(tool_name)
+            )
+            placeholder = step.get("output_placeholder") or _pop_placeholder(tool_name)
+            if not placeholder:
+                placeholder = f"{{{tool_name.upper()}_OUTPUT}}"
+            rebuilt_my_steps.append(
+                {
+                    "action": step["action"],
+                    "tool_name": tool_name,
+                    "parameters": parameters,
+                    "output_placeholder": placeholder,
+                }
+            )
+
+        plan["my_steps"] = rebuilt_my_steps
 
         if allow_delegation:
             plan["delegate_steps"] = [

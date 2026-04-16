@@ -4141,6 +4141,55 @@ blank tool arg is acceptable if the same field is backed by a non-empty MCP defa
 - `tests/unit/test_agent_planning_helpers.py`
 - `pyproject.toml`
 
+### 2026-04-16 (later): Planner Parameter Stripping and Missing Current-Date Context
+
+**Problem 1 (CRITICAL): `_finalize_execution_plan` wiped all tool parameters**
+
+The planning prompt template (`agent_planning.md`) instructs the LLM to emit a JSON object with
+two parallel blocks: a unified `steps` list with per-step metadata (no `parameters` field) and a
+separate `my_steps` list for locally-executable steps that DOES carry `parameters`.
+`_finalize_execution_plan` normalizes ownership by filtering `steps` and rebuilding `my_steps`
+from it — but the rebuild only copied `action`, `tool_name`, `parameters` (never present in
+`steps`), and `output_placeholder`.  The LLM's parameter-rich `my_steps` was silently discarded.
+
+Symptom: `manage_event` was called with only `{"action": "create"}` (missing `summary`,
+`start_time`, `end_time`, `timezone`); `get_events` was called with `{}` (ignoring all date
+filters and returning 25 events instead of the one-day window).  Log comparison made the bug
+obvious — the `raw_plan` event contained full parameters, but the `plan` event emitted one line
+later had `"parameters": {}`.
+
+- Fix: `_finalize_execution_plan` now builds a FIFO queue of `(tool_name -> [parameters])` from
+  the LLM's `my_steps`.  When rebuilding from `steps`, each qualifying step pops the next params
+  dict for its tool.  A tool that appears N times in `steps` keeps N distinct parameter sets.
+  A `steps`-level `parameters` dict (if any) still wins over the LLM's `my_steps` value.
+- Same-loop fix for `output_placeholder` so explicit placeholders in the LLM's `my_steps` are
+  also preserved.
+
+**Problem 2: Planner never sees the current date**
+
+`process_message` prefixes the live conversation system message (`self._messages[0]`) with
+`It is now <date>.` on every request (line ~1005) so the response-synthesis LLM can resolve
+relative references.  But `_plan_before_execution` builds its planning prompt from
+`self.system_message` (the original formation-config attribute), never from
+`self._messages[0]`.  The planner saw `tomorrow` as an opaque string and either asked the user
+for an explicit date or emitted `"time_min": "tomorrow at 00:00:00"` which Google Calendar
+rejects.
+
+- Fix: `_plan_before_execution` now injects its own `## Current date/time:` section at the top
+  of the planning prompt, with the same local time + timezone format used for the conversation
+  system message.  A short follow-up sentence instructs the planner to resolve relative
+  references into concrete RFC3339 dates when building tool parameters.
+- The injection is wrapped in `try/except` so a broken clock or timezone lookup never blocks
+  planning.
+
+**Operational implication:** Two different LLM calls (planner and response-synthesizer) now both
+receive the current date.  When debugging "agent doesn't know today", check both
+`self._messages[0]["content"]` (conversation) and the planning prompt (tool execution).
+
+**Files:**
+- `src/muxi/runtime/formation/agents/agent.py` -- `_finalize_execution_plan`, `_plan_before_execution`
+- `tests/unit/test_agent_planning_helpers.py` -- 3 new regression tests
+
 ### 2026-04-16: server_default_param_names Regression, Scheduler Cross-Loop Crash, and Repair-Tool Server Affinity
 
 **Problem 1: Parameter-free planned MCP steps crash with UnboundLocalError**

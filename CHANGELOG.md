@@ -2,6 +2,22 @@
 
 ## [unreleased]
 
+### Bug Fixes
+
+- **Planning mode no longer strips tool parameters (CRITICAL)** -- `_finalize_execution_plan` was rebuilding `my_steps` from the unified `steps` list, but the planning prompt template only instructs the LLM to emit `parameters` in its separate `my_steps` block. The rebuild silently replaced every parameter set with `{}`, so `manage_event` was called with only `{"action": "create"}` and `get_events` with `{}` -- missing all required fields. Fix: `_finalize_execution_plan` now preserves parameters from the LLM's original `my_steps` by matching on `tool_name`, using a FIFO queue so repeated tool uses keep their own params.
+- **Planner can now resolve relative date references like "today" and "tomorrow"** -- `_plan_before_execution` used `self.system_message` (the static formation-config attribute) and never saw the current-date injection that `process_message` applies to the live conversation system message. The planner therefore had no way to turn "tomorrow" into an RFC3339 date and emitted literal strings like `"time_min": "tomorrow at 00:00:00"`. Fix: the planning prompt now includes a `## Current date/time:` section with the current local date, time, and timezone, plus an explicit instruction to resolve relative references into concrete dates.
+
+### Tests
+
+- `test_finalize_execution_plan_preserves_parameters_from_llm_my_steps` -- exact shape from the bug report (`steps` without params, `my_steps` with full param set).
+- `test_finalize_execution_plan_preserves_parameters_across_repeated_tool_use` -- two `manage_event` calls in the same plan, ensuring params are matched positionally per tool.
+- `test_plan_before_execution_injects_current_date_into_planning_prompt` -- verifies the planning prompt carries a `## Current date/time:` block before the LLM call.
+
+### Validation
+
+- Full unit suite: **469 passed, 27 skipped**.
+- ruff, black, mypy: clean.
+
 ## v0.20260416.0
 
 ### Bug Fixes

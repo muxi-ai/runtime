@@ -114,6 +114,153 @@ def test_finalize_execution_plan_preserves_step_parameters():
     }
 
 
+def test_finalize_execution_plan_preserves_parameters_from_llm_my_steps():
+    """The LLM emits parameters in the separate my_steps block (per the planning
+    prompt template). _finalize_execution_plan rebuilds my_steps from steps and
+    must pull parameters out of the LLM's my_steps entry keyed by tool_name.
+    Regression for v0.20260416.0 Bug #1 (planning strips all tool parameters)."""
+    agent = object.__new__(Agent)
+    # This mirrors the exact shape produced by the planning LLM.  "steps" has
+    # no parameters field; "my_steps" has the full parameter set.
+    plan = {
+        "steps": [
+            {
+                "step_number": 1,
+                "action": "Retrieve tomorrow's events from Google Calendar",
+                "capability_needed": "Google Calendar access",
+                "tool_name": "google-mcp__get_events",
+                "can_i_do_this": True,
+                "data_needed": "none",
+                "output_placeholder": "{{TOMORROW_EVENTS}}",
+            }
+        ],
+        "my_steps": [
+            {
+                "action": "Get events from Google Calendar for tomorrow",
+                "tool_name": "google-mcp__get_events",
+                "parameters": {
+                    "calendar_id": "primary",
+                    "time_min": "2026-04-17T00:00:00+03:00",
+                    "time_max": "2026-04-17T23:59:59+03:00",
+                    "detailed": True,
+                },
+                "output_placeholder": "{{TOMORROW_EVENTS}}",
+            }
+        ],
+        "delegate_steps": [],
+        "data_flow": "Fetch tomorrow's calendar events.",
+    }
+
+    finalized = agent._finalize_execution_plan(
+        plan, {"google-mcp__get_events"}, allow_delegation=False
+    )
+
+    assert len(finalized["my_steps"]) == 1
+    assert finalized["my_steps"][0]["parameters"] == {
+        "calendar_id": "primary",
+        "time_min": "2026-04-17T00:00:00+03:00",
+        "time_max": "2026-04-17T23:59:59+03:00",
+        "detailed": True,
+    }
+
+
+def test_finalize_execution_plan_preserves_parameters_across_repeated_tool_use():
+    """When the same tool is used in multiple planned steps, parameters must be
+    matched by position within the tool's queue so each step keeps its own
+    params (not shared or swapped)."""
+    agent = object.__new__(Agent)
+    plan = {
+        "steps": [
+            {
+                "step_number": 1,
+                "action": "Create morning event",
+                "tool_name": "google-mcp__manage_event",
+                "can_i_do_this": True,
+                "output_placeholder": "{{EVENT_A}}",
+            },
+            {
+                "step_number": 2,
+                "action": "Create afternoon event",
+                "tool_name": "google-mcp__manage_event",
+                "can_i_do_this": True,
+                "output_placeholder": "{{EVENT_B}}",
+            },
+        ],
+        "my_steps": [
+            {
+                "action": "Create morning event",
+                "tool_name": "google-mcp__manage_event",
+                "parameters": {
+                    "action": "create",
+                    "summary": "Morning Standup",
+                    "start_time": "2026-04-17T09:00:00+03:00",
+                    "end_time": "2026-04-17T09:30:00+03:00",
+                },
+                "output_placeholder": "{{EVENT_A}}",
+            },
+            {
+                "action": "Create afternoon event",
+                "tool_name": "google-mcp__manage_event",
+                "parameters": {
+                    "action": "create",
+                    "summary": "Design Review",
+                    "start_time": "2026-04-17T14:00:00+03:00",
+                    "end_time": "2026-04-17T15:00:00+03:00",
+                },
+                "output_placeholder": "{{EVENT_B}}",
+            },
+        ],
+        "delegate_steps": [],
+        "data_flow": "Create two events back to back.",
+    }
+
+    finalized = agent._finalize_execution_plan(
+        plan, {"google-mcp__manage_event"}, allow_delegation=False
+    )
+
+    assert len(finalized["my_steps"]) == 2
+    assert finalized["my_steps"][0]["parameters"]["summary"] == "Morning Standup"
+    assert finalized["my_steps"][1]["parameters"]["summary"] == "Design Review"
+
+
+@pytest.mark.asyncio
+async def test_plan_before_execution_injects_current_date_into_planning_prompt():
+    """Regression for v0.20260416.0 Bug #2: the planning LLM never sees the
+    current date.  The planner must be able to resolve 'today' / 'tomorrow'
+    into concrete dates without the user manually providing them."""
+    agent = object.__new__(Agent)
+    agent.name = "Test Agent"
+    agent.agent_id = "test-agent"
+    agent.overlord = None
+    agent.system_message = None
+    agent.model = SimpleNamespace(
+        chat=AsyncMock(
+            return_value=(
+                '{"steps":[],"my_steps":[],"delegate_steps":[],'
+                '"data_flow":"Direct response - no tools needed"}'
+            )
+        )
+    )
+
+    with (
+        patch("muxi.runtime.formation.agents.agent.streaming.stream"),
+        patch("muxi.runtime.formation.agents.agent.observability.observe"),
+        patch("muxi.runtime.formation.prompts.loader.PromptLoader.get", return_value=""),
+    ):
+        await agent._plan_before_execution(
+            "what are my events for tomorrow?",
+            available_tools=[],
+            allow_delegation=False,
+        )
+
+    planning_messages = agent.model.chat.call_args.args[0]
+    planning_prompt = planning_messages[1]["content"]
+    assert "## Current date/time:" in planning_prompt
+    assert "It is now" in planning_prompt
+    # Must instruct the planner to resolve relative references.
+    assert "tomorrow" in planning_prompt.lower() or "relative" in planning_prompt.lower()
+
+
 def test_extract_current_request_text_preserves_context_lines_when_requested():
     message = (
         "=== CURRENT REQUEST ===\n"
