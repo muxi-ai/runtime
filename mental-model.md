@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-15
+**Last Updated:** 2026-04-16
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -4140,6 +4140,61 @@ blank tool arg is acceptable if the same field is backed by a non-empty MCP defa
 - `src/muxi/runtime/formation/prompts/agent_planning.md`
 - `tests/unit/test_agent_planning_helpers.py`
 - `pyproject.toml`
+
+### 2026-04-16: server_default_param_names Regression, Scheduler Cross-Loop Crash, and Repair-Tool Server Affinity
+
+**Problem 1: Parameter-free planned MCP steps crash with UnboundLocalError**
+
+The 2026-04-15 commit introduced `server_default_param_names` inside the `if required_params:`
+branch of `process_message()`, but three downstream consumers (`_filter_unresolved_params_backed_by_server_defaults`,
+`_validate_tool_parameters`, and the second unresolved-params check) reference the variable
+unconditionally. Tools with empty `required` lists (e.g. `list-mail-messages`, `get_events`,
+`search_gmail_messages`) skip the branch entirely, leaving the variable unbound.
+
+- Fix: Hoisted `server_default_param_names: set[str] = set()` and the `_get_mcp_default_param_names()`
+  call above the `if required_params:` gate. The MCP default value injection (`_merge_parameter_candidates`)
+  stays inside the branch since merging is only meaningful when there are required params to satisfy.
+- Confirmed that `_validate_tool_parameters()` already handles `server_default_param_names=None`
+  via `or set()`, so the fallback path is safe even if the variable is somehow unset.
+
+**Problem 2: Scheduler job execution crashes with "Future attached to a different loop"**
+
+The scheduler worker thread (spawned as a daemon thread in `start()`, see 2026-03-23 entry) creates
+its own event loop via `asyncio.new_event_loop()`. When `_execute_due_jobs()` called
+`asyncio.create_task(self._execute_single_job(job))`, the task ran on the thread's loop. But
+`_execute_single_job` calls `overlord.chat(use_async=True)`, which chains through
+`chat_orchestrator._execute_async_request()` -> `overlord._create_tracked_task()` ->
+`asyncio.create_task()`. The overlord's DB sessions (asyncpg), HTTP clients (httpx), and MCP
+transport connections were all created on the **main uvicorn loop** during formation initialization.
+Awaiting those futures from the scheduler's loop produces the cross-loop error.
+
+- Fix: `start()` now captures `self._main_loop = asyncio.get_running_loop()` before spawning the
+  thread. `_execute_due_jobs()` dispatches via `asyncio.run_coroutine_threadsafe(coro, self._main_loop)`
+  instead of `asyncio.create_task(coro)`. The worker thread still handles cron matching and sync DB
+  reads on its own loop; only job execution is dispatched to the main loop.
+- Fallback: if `_main_loop` is `None` or not running, falls back to `create_task` on the current loop
+  (original behavior) to avoid breaking tests that don't have a running main loop.
+
+**Problem 3: Auto-discovery repair picks tools from unrelated MCP servers**
+
+`_build_auto_discovery_repair_plan` scored candidate tools purely on verb heuristics (`list` +4,
+`search` +5, `get` +1) and keyword overlap, with no server affinity. When repairing a failed
+`ms365-mcp__list-mail-messages`, the `todo-helper-mcp__get-default-list-id` tool scored +4 ("list"
+in name) +1 ("get") +3 (keyword "task" from generic set) = 8, outscoring same-server candidates
+that had unsatisfied required params.
+
+- Fix: Extract the failed tool's server ID from the `server__tool` naming convention. Same-server
+  candidates get +4, cross-server candidates get -3. This ensures `ms365-mcp__list-mail-folders`
+  always outscores `todo-helper-mcp__get-default-list-id`.
+- The penalty is a bias, not a block: if the only viable candidate is cross-server, it can still
+  win if its verb/keyword score is high enough (net score > 0 required).
+
+**Files:**
+- `src/muxi/runtime/formation/agents/agent.py` -- all three fixes
+- `src/muxi/runtime/services/scheduler/service.py` -- cross-loop fix
+- `tests/unit/test_agent_planning_helpers.py` -- 3 new tests
+- `tests/unit/test_bugfix_verification.py` -- 3 new scheduler dispatch tests
+- `e2e/tests/2_memory/test_2k1_enhanced_prompt_integration.py` -- fixed `memories` -> `memories_1536`
 
 ### 2026-03-20: Scheduler Routes, Memobase Init & Dimension Propagation
 
