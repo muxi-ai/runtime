@@ -2,6 +2,26 @@
 
 ## [unreleased]
 
+## v0.20260417.0
+
+### Bug Fixes
+
+- **Repair-tool selection now respects resource domain** -- The auto-discovery repair scorer in `_build_auto_discovery_repair_plan` previously had no notion of resource domain, so a `list-mail-folders` or `search-sharepoint-sites` call could be chosen to repair a failed `get-drive-root-item` even though both live on the same `ms365-mcp` server. Fix: added `_DOMAIN_TOKENS` (an unambiguous-token taxonomy for mail, calendar, drive, sharepoint, chat, contact, task, and note domains) and `_get_tool_domain_tags()`. When both the failed tool and a candidate carry unambiguous domain tags, the scorer now adds +4 for overlapping domains and -15 for disjoint domains, which is enough to drop cross-domain candidates below the `score <= 0` cutoff when the only positive signal is a verb match on the same server. Generic tokens (`file`, `folder`, `item`, `message`, `page`, `list`, etc.) are deliberately excluded so legitimately ambiguous tools stay untagged and neither incur nor cause a penalty.
+
+### Tests
+
+- `test_get_tool_domain_tags_classifies_unambiguous_tokens` -- unit coverage for the new tagger (drive, mail, sharepoint, calendar, task domains).
+- `test_get_tool_domain_tags_returns_empty_for_ambiguous_names` -- ensures generic names stay untagged.
+- `test_auto_discovery_rejects_cross_domain_same_server_candidate` -- exact shape from the v0.20260416.2 Dev #1 Excel report; `list-mail-folders` and `search-sharepoint-sites` must be rejected and `list-drives` must win when repairing `get-drive-root-item`.
+- `test_auto_discovery_prefers_same_domain_same_server_candidate` -- calendar repair prefers `list-calendar-events` over `list-mail-folders`.
+
+### Validation
+
+- Full unit suite: **483 passed, 27 skipped**.
+- Targeted repair-tool tests: 74/74 pass.
+- Random e2e (5/5 pass): `14_user_synopsis/test_14a1_synopsis_enabled`, `19_api/test_19p1_scheduler_admin`, `4_mcp/test_4a2_system_info_mcp`, `4_mcp/test_4d3_clarification`, `5_artifacts/test_5_9`.
+- ruff, black, mypy: clean.
+
 ## v0.20260416.3
 
 ### Bug Fixes

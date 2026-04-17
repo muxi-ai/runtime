@@ -4141,6 +4141,69 @@ blank tool arg is acceptable if the same field is backed by a non-empty MCP defa
 - `tests/unit/test_agent_planning_helpers.py`
 - `pyproject.toml`
 
+### 2026-04-17 (later): Repair-Tool Domain Affinity
+
+Closing one of the three items deferred from the earlier 2026-04-17 release.
+
+**Problem:** The auto-discovery repair scorer in `_build_auto_discovery_repair_plan`
+already applied server affinity (+4 same-server, -3 cross-server) but had no
+notion of **resource domain**.  When `get-drive-root-item` failed on
+`ms365-mcp`, same-server candidates like `list-mail-folders` (mail) and
+`search-sharepoint-sites` (sharepoint) were picked because they scored high
+on verb similarity (`list`, `search`) and the +4 same-server bonus.  None of
+those tools could ever provide a valid `driveId`, so the repair attempt
+always failed with a second MCP error.
+
+**Fix:**
+
+- Added `_DOMAIN_TOKENS`, a taxonomy of **unambiguous** domain tokens:
+  `mail`/`email`/`gmail`/`inbox`/`mailbox` → mail;
+  `calendar`/`event`/`meeting`/`appointment` → calendar;
+  `drive`/`onedrive`/`workbook`/`worksheet`/`spreadsheet`/`excel` → drive;
+  `sharepoint` → sharepoint; `channel`/`slack`/`teams` → chat;
+  `contact` → contact; `task`/`todo` → task; `notebook`/`onenote` → note.
+  Generic tokens (`file`, `folder`, `item`, `message`, `page`, `list`,
+  `get`, etc.) are deliberately excluded because they appear in multiple
+  domains -- tagging them would produce false cross-domain penalties.
+- Added `_get_tool_domain_tags(tool_name)` which scans the full tool name
+  (both MCP prefix and bare name, so `todo-helper-mcp__get-default-list-id`
+  gets tagged `task` via the prefix and `ms365-mcp__list-mail-folders` gets
+  tagged `mail` via the bare name).  The literal `mcp` token is discarded
+  so it never contributes a signal.
+- Inside the scorer, when both the failed tool and the candidate have
+  non-empty domain tag sets:
+  - Overlapping sets → +4 (domain-match bonus).
+  - Disjoint sets → -15 (large enough to drop the candidate below the
+    `score <= 0` cutoff when its only other positive signal was the
+    same-server bonus).
+
+**Why the penalty is -15:** A worst-case wrong-domain candidate like
+`ms365-mcp__list-mail-folders` repairing `get-drive-root-item` scores
+`+4 (list)` + `+4 (same server)` + `+3 (keyword match)` = 11.  Subtracting
+15 takes it to -4, which is filtered out by the existing `score <= 0`
+check.  A same-domain candidate on the same server (`list-drives`) scores
+`+4 (list)` + `+4 (same server)` + `+4 (domain match)` = 12 and wins.
+
+**Operational implications:**
+
+- When debugging "repair picked the wrong tool", first check the failed
+  tool's and candidate's domain tags via `Agent._get_tool_domain_tags()`.
+  If they're both non-empty and disjoint, the -15 penalty should have
+  kicked in; if the penalty didn't fire, the tokens probably weren't in
+  `_DOMAIN_TOKENS` (expected for niche MCP servers).
+- If a legitimately ambiguous tool like `list-items` is rejected, extend
+  `_DOMAIN_TOKENS` with the unambiguous token that covers it (e.g. add
+  `"item"` under a new domain bucket only if it's genuinely unambiguous
+  in your fleet).
+
+**Files:**
+- `src/muxi/runtime/formation/agents/agent.py` -- `_DOMAIN_TOKENS`,
+  `_get_tool_domain_tags`, domain-affinity branch in
+  `_build_auto_discovery_repair_plan`.
+- `tests/unit/test_agent_planning_helpers.py` -- 4 new regression tests
+  covering tagger behavior, cross-domain rejection (Excel repro), and
+  same-domain preference (calendar repro).
+
 ### 2026-04-17: Sentinel Placeholder Values, Dotted Placeholder References, Unknown-Param Payload Leak, and Scheduler No-Webhook Completion
 
 Fourth critical planning-and-execution release following v0.20260416.2 field reports.

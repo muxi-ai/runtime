@@ -1450,6 +1450,175 @@ async def test_auto_discovery_prefers_same_server_over_cross_server_candidate():
 
 
 # ---------------------------------------------------------------------------
+# v0.20260416.4 -- domain affinity in repair-tool selection
+# ---------------------------------------------------------------------------
+
+
+def test_get_tool_domain_tags_classifies_unambiguous_tokens():
+    """Each unambiguous token must map to exactly one domain."""
+    assert Agent._get_tool_domain_tags("ms365-mcp__get-drive-root-item") == frozenset({"drive"})
+    assert Agent._get_tool_domain_tags("ms365-mcp__list-mail-folders") == frozenset({"mail"})
+    assert Agent._get_tool_domain_tags("ms365-mcp__search-sharepoint-sites") == frozenset(
+        {"sharepoint"}
+    )
+    assert Agent._get_tool_domain_tags("ms365-mcp__list-calendar-events") == frozenset({"calendar"})
+    assert Agent._get_tool_domain_tags("todo-helper-mcp__get-default-list-id") == frozenset(
+        {"task"}
+    )
+    assert Agent._get_tool_domain_tags("ms365-mcp__get-excel-workbook-worksheet-data") == frozenset(
+        {"drive"}
+    )
+
+
+def test_get_tool_domain_tags_returns_empty_for_ambiguous_names():
+    """Names that only contain ambiguous tokens must stay untagged so they
+    do not incur a cross-domain penalty."""
+    assert Agent._get_tool_domain_tags("generic-mcp__list-items") == frozenset()
+    assert Agent._get_tool_domain_tags("ms365-mcp__get-item") == frozenset()
+    assert Agent._get_tool_domain_tags("") == frozenset()
+
+
+@pytest.mark.asyncio
+async def test_auto_discovery_rejects_cross_domain_same_server_candidate():
+    """Regression for v0.20260416.2 Dev #1 Excel: a ``drive`` failure must
+    not pick ``list-mail-folders`` or ``search-sharepoint-sites`` as a
+    repair candidate, even though both live on the same ms365-mcp server."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+    agent._mcp_service = None
+
+    current_plan = {
+        "my_steps": [
+            {
+                "action": "Read the Excel workbook in OneDrive root",
+                "tool_name": "ms365-mcp__get-drive-root-item",
+                "parameters": {},
+                "output_placeholder": "{{ROOT_ITEM}}",
+            }
+        ],
+        "delegate_steps": [],
+        "data_flow": "Locate the workbook.",
+    }
+    agent._plan_before_execution = AsyncMock(return_value=current_plan)
+
+    available_tools = [
+        {
+            "function": {
+                "name": "ms365-mcp__get-drive-root-item",
+                "description": "Get the root item of a OneDrive.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }
+        },
+        {
+            "function": {
+                "name": "ms365-mcp__list-mail-folders",
+                "description": "List mail folders in the user's mailbox.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }
+        },
+        {
+            "function": {
+                "name": "ms365-mcp__search-sharepoint-sites",
+                "description": "Search SharePoint sites.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }
+        },
+        {
+            "function": {
+                "name": "ms365-mcp__list-drives",
+                "description": "List available OneDrive drives for the user.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }
+        },
+    ]
+
+    with patch("muxi.runtime.formation.agents.agent.observability.observe"):
+        result = await agent._repair_execution_plan_for_missing_parameters(
+            user_message="Open my Excel workbook in OneDrive",
+            available_tools=available_tools,
+            allow_delegation=False,
+            failed_step=current_plan["my_steps"][0],
+            tool_name="ms365-mcp__get-drive-root-item",
+            unresolved_params=["driveId"],
+            current_plan=current_plan,
+            my_results={},
+        )
+
+    assert result is not None
+    inserted_tools = [step["tool_name"] for step in result["my_steps"]]
+    # Cross-domain candidates must be excluded.
+    assert "ms365-mcp__list-mail-folders" not in inserted_tools
+    assert "ms365-mcp__search-sharepoint-sites" not in inserted_tools
+    # The drive-domain candidate must win.
+    assert "ms365-mcp__list-drives" in inserted_tools
+
+
+@pytest.mark.asyncio
+async def test_auto_discovery_prefers_same_domain_same_server_candidate():
+    """When multiple same-server candidates exist, the one that shares a
+    resource domain with the failed tool must win on score."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+    agent._mcp_service = None
+
+    current_plan = {
+        "my_steps": [
+            {
+                "action": "Update calendar event",
+                "tool_name": "ms365-mcp__update-calendar-event",
+                "parameters": {},
+                "output_placeholder": "{{EVENT_UPDATE}}",
+            }
+        ],
+        "delegate_steps": [],
+        "data_flow": "Edit event.",
+    }
+    agent._plan_before_execution = AsyncMock(return_value=current_plan)
+
+    available_tools = [
+        {
+            "function": {
+                "name": "ms365-mcp__update-calendar-event",
+                "description": "Update a calendar event.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }
+        },
+        {
+            "function": {
+                "name": "ms365-mcp__list-calendar-events",
+                "description": "List calendar events.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }
+        },
+        {
+            "function": {
+                "name": "ms365-mcp__list-mail-folders",
+                "description": "List mail folders.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }
+        },
+    ]
+
+    with patch("muxi.runtime.formation.agents.agent.observability.observe"):
+        result = await agent._repair_execution_plan_for_missing_parameters(
+            user_message="Move my 3pm meeting to 4pm",
+            available_tools=available_tools,
+            allow_delegation=False,
+            failed_step=current_plan["my_steps"][0],
+            tool_name="ms365-mcp__update-calendar-event",
+            unresolved_params=["eventId"],
+            current_plan=current_plan,
+            my_results={},
+        )
+
+    assert result is not None
+    inserted_tools = [step["tool_name"] for step in result["my_steps"]]
+    # The calendar-domain sibling wins; the mail sibling is rejected.
+    assert "ms365-mcp__list-calendar-events" in inserted_tools
+    assert "ms365-mcp__list-mail-folders" not in inserted_tools
+
+
+# ---------------------------------------------------------------------------
 # _validate_inferred_parameters_against_results
 # ---------------------------------------------------------------------------
 

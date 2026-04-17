@@ -4434,6 +4434,55 @@ class Agent:
             "data_flow": plan.get("data_flow", ""),
         }
 
+    # Unambiguous domain tokens used by the repair-tool scorer.  Generic
+    # tokens that appear in several domains (e.g. "file", "folder", "item",
+    # "message", "page", "list") are intentionally excluded -- a tool whose
+    # name only contains those tokens stays untagged so it does not incur a
+    # cross-domain penalty against another untagged or mismatched tool.
+    _DOMAIN_TOKENS: Dict[str, tuple[str, ...]] = {
+        "mail": ("mail", "email", "gmail", "inbox", "mailbox"),
+        "calendar": ("calendar", "event", "meeting", "appointment"),
+        "drive": (
+            "drive",
+            "onedrive",
+            "workbook",
+            "worksheet",
+            "spreadsheet",
+            "excel",
+        ),
+        "sharepoint": ("sharepoint",),
+        "chat": ("channel", "slack", "teams"),
+        "contact": ("contact",),
+        "task": ("task", "todo"),
+        "note": ("notebook", "onenote"),
+    }
+
+    @classmethod
+    def _get_tool_domain_tags(cls, tool_name: str) -> frozenset[str]:
+        """Return the set of unambiguous domain tags inferred from a tool name.
+
+        Matching treats ``_`` / ``-`` / ``.`` as separators and only counts
+        tokens from ``_DOMAIN_TOKENS``.  Both the server prefix and the
+        bare tool name are scanned -- ``todo-helper-mcp__get-default-list-id``
+        carries its domain in the prefix, while ``ms365-mcp__list-mail-folders``
+        carries it in the bare name.  Ambiguous tokens (file, folder, item,
+        message, page, list, get, etc.) are deliberately excluded so we
+        only flag confident cross-domain mismatches."""
+        if not tool_name:
+            return frozenset()
+        normalized = re.sub(r"[^a-z0-9]+", " ", tool_name.lower())
+        words = set(normalized.split())
+        # ``mcp`` is the literal MCP-server suffix and must never contribute
+        # a domain signal on its own.
+        words.discard("mcp")
+        tags: set[str] = set()
+        for domain, tokens in cls._DOMAIN_TOKENS.items():
+            for token in tokens:
+                if token in words:
+                    tags.add(domain)
+                    break
+        return frozenset(tags)
+
     @staticmethod
     def _extract_discovery_keywords(
         user_message: str, failed_step: Dict[str, Any], unresolved_params: List[str]
@@ -4532,6 +4581,23 @@ class Agent:
                     score += 4
                 else:
                     score -= 3
+
+            # Domain affinity: even within the same MCP server, a candidate
+            # operating on an unrelated resource domain (e.g. mail folders
+            # when repairing a drive call) must not be chosen.  This was the
+            # v0.20260416.2 Excel bug -- ``list-mail-folders`` and
+            # ``search-sharepoint-sites`` were picked to repair
+            # ``get-drive-root-item`` because the scorer had no notion of
+            # resource domain.  The penalty is large enough to drop the
+            # candidate below the ``score <= 0`` cutoff when the only
+            # positive signal is a verb match on the same server.
+            failed_domains = self._get_tool_domain_tags(failed_tool_name)
+            candidate_domains = self._get_tool_domain_tags(candidate_name)
+            if failed_domains and candidate_domains:
+                if failed_domains & candidate_domains:
+                    score += 4
+                else:
+                    score -= 15
 
             if score <= 0:
                 continue
