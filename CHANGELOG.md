@@ -4,6 +4,8 @@
 
 ## v0.20260417.1
 
+## v0.20260417.1
+
 ### Bug Fixes
 
 - **Placeholder substitution now extracts from free-text MCP results (CRITICAL, Gmail BUG-3)** -- When the LLM referenced `{{APRIL_10_MESSAGES.message_ids}}` and the Gmail search tool returned its results as a free-text blob (`"1. **Message ID:** aaa111\n2. **Message ID:** bbb222\n..."`), `_extract_field_from_result_payload` only walked structured records and returned `None`. The unresolved flag triggered parameter inference, which saw one real ID in context and hallucinated the other nine by incrementing the hex digits. Fix: added `_collect_text_chunks_from_payload` and `_extract_field_values_from_text` so the extractor also scans every text chunk for label-style (`Field: value`, `**Field:** value`) and JSON-style (`"field": "value"`) patterns, with case-insensitive matching across snake_case / camelCase / spaced / Title / ALL-CAPS variants. For array parameters (`message_ids`), extraction now collects every match, and singular / plural forms are probed automatically so `message_ids` still finds `Message ID: ...` labels.
