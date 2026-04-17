@@ -585,6 +585,89 @@ A2ARegistryClient(registry_url, api_key) → discovers agents
 - Registry URL is extracted from `a2a.inbound.registries[0]` or `a2a.outbound.registries[0]`
 - Registry health checks run periodically (configurable interval)
 
+#### Agent Planning Robustness (as of v0.20260417.2)
+
+**Why this section exists:** Five placeholder-related regressions shipped between
+v0.20260416.0 and v0.20260417.0 all traced to the same underlying tension — the
+LLM produces plans with sloppy or ambiguous references, and the runtime has to
+interpret them loosely.  This subsection is the consolidated reference for the
+two-layer contract we now enforce: the **planning prompt** defines valid form,
+the **runtime guards** absorb the residual.  When triaging a new
+placeholder-class bug, start here.
+
+##### The two layers of enforcement
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Planning prompt (agent_planning.md, PLACEHOLDER RULES block)   │
+│  "Compile-time" contract — tells LLM what a valid plan looks    │
+│  like before it emits one.                                      │
+│                                                                 │
+│  Honored at ~90–95% on GPT-4o-mini / Claude Sonnet-4.  Drops    │
+│  regression frequency but never eliminates it.                  │
+└─────────────────────────────────────────────────────────────────┘
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Runtime guards (agent.py, v0.20260417.1)                       │
+│  "Runtime" enforcement — absorbs the 5–10% of plans that        │
+│  violate the contract anyway.                                   │
+│                                                                 │
+│  Deterministic.  Source of truth.  Cannot be removed.           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+##### Failure-mode catalog
+
+Each row is a bug pattern we've observed in the field, the prompt rule that
+should prevent it, and the runtime guard that catches it if the prompt rule
+is violated.
+
+| Failure mode | Example (real bug) | Prompt rule (v0.20260417.2) | Runtime guard (v0.20260417.1 + prior) |
+| --- | --- | --- | --- |
+| **Sentinel values** | `"driveId": "auto-injected"` | "Never emit auto-injected / from_server / \<to-be-provided\> etc.  OMIT the key instead." | `_is_sentinel_placeholder_value()` treats these as unresolved so MCP server defaults win (`_merge_parameter_candidates`). |
+| **Invented placeholder names** | Step 1 assigns `{{EVENT_DETAILS}}`, step 2 references `{{EVENT_ID_FROM_SEARCH}}` | "You may reference a prior step's output ONLY by the EXACT name you assigned in its `output_placeholder`." | `_resolve_parameter_across_all_results` walks every successful prior result and binds when an unambiguous match exists; `_strip_leftover_placeholder_parameters` drops non-required literals before MCP. |
+| **Dotted reference against free-text payload** | `{{APRIL_10_MESSAGES.message_ids}}` against a Gmail text blob | "Use `{{NAME.field}}` for single-field extraction; runtime auto-collects for array parameters." | `_extract_field_from_result_payload` scans text chunks via `_collect_text_chunks_from_payload` and `_extract_field_values_from_text` (label + JSON patterns, snake/camel/spaced/Title variants, singular/plural pairing). |
+| **Array extrapolation** | One real message ID → nine incrementing-hex fabrications | "Include ONLY values you have literally observed.  Do NOT extrapolate from one example." | `_validate_inferred_parameters_against_results` verifies every inferred list item against prior record values + joined text; drops fabricated items; removes the parameter entirely if all are fake. |
+| **Syntax variation** | `<<NAME>>`, `${{NAME}}`, `{NAME}` | "Only `{{UPPERCASE_NAME}}` or `{{UPPERCASE_NAME.field}}` is valid." | `_is_placeholder_like_value` recognizes all variants defensively and routes them through unresolved-parameter handling. |
+
+##### Triage recipe for a new placeholder-class bug
+
+1. **Reproduce from the plan trace** — find the failed step in the observability
+   log, extract the LLM's raw plan (`agent.planning` event with `raw_response`),
+   and confirm whether the placeholder issue is in `my_steps.parameters` or in
+   a downstream `delegation_prompt`.
+2. **Check prompt compliance** — is the LLM's plan actually in violation of the
+   `PLACEHOLDER RULES` block in `agent_planning.md`?
+   - YES → this is a **model-compliance** issue.  Options: tighten the
+     example in the prompt, raise the model tier for planning
+     (`llm.models[].planning`), or lower the planning temperature.  Do
+     NOT add more runtime logic.
+   - NO → the prompt is missing a rule for this failure mode.  Extend the
+     prompt first; only add runtime logic if the prompt change alone can't
+     cover the shape.
+3. **Verify the runtime guard exists** — every prompt rule should have a
+   paired runtime guard.  If the rule exists but the guard is missing, the
+   guard is the gap; add it and add a regression test keyed to the observed
+   plan shape.
+4. **Regression test** — new tests go in `tests/unit/test_agent_planning_helpers.py`.
+   Name them after the bug shape (e.g. `test_substitute_step_parameter_placeholders_cross_placeholder_fallback`)
+   so the exact failure lineage is searchable from future bug reports.
+
+##### File index for this subsystem
+
+- `src/muxi/runtime/formation/prompts/agent_planning.md` — the planning-prompt
+  contract, including the `PLACEHOLDER RULES (strict)` block.
+- `src/muxi/runtime/formation/agents/agent.py` — runtime guards, primarily:
+  `_is_sentinel_placeholder_value`, `_is_placeholder_like_value`,
+  `_parse_placeholder_reference`, `_substitute_step_parameter_placeholders`,
+  `_resolve_parameter_across_all_results`, `_extract_field_from_result_payload`,
+  `_collect_text_chunks_from_payload`, `_extract_field_values_from_text`,
+  `_field_name_variants`, `_singularize_field_name`,
+  `_strip_leftover_placeholder_parameters`, `_resolve_parameter_from_result_payload`,
+  `_validate_inferred_parameters_against_results`, `_merge_parameter_candidates`.
+- `tests/unit/test_agent_planning_helpers.py` — regression tests; each past
+  failure mode has at least two tests (happy path + edge case).
+
 ---
 
 ## 3. Memory System
