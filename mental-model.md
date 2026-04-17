@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-17 (v0.20260417.1)
+**Last Updated:** 2026-04-17 (v0.20260417.2)
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -4140,6 +4140,72 @@ blank tool arg is acceptable if the same field is backed by a non-empty MCP defa
 - `src/muxi/runtime/formation/prompts/agent_planning.md`
 - `tests/unit/test_agent_planning_helpers.py`
 - `pyproject.toml`
+
+### 2026-04-17 (evening): Planning-Prompt Placeholder Contract
+
+Prompt-only follow-up to v0.20260417.1.  The runtime guards shipped in the
+morning release catch placeholder misuse at multiple layers (text-based
+extraction, cross-placeholder fallback, literal stripping, array inference
+validation); this change pins the upstream contract so those guards fire less
+often in the first place.
+
+**New PLACEHOLDER RULES block in `prompts/agent_planning.md`:**
+
+1. Syntax pinning -- only `{{UPPERCASE_NAME}}` or `{{UPPERCASE_NAME.field}}`
+   are valid.  Forbids `<<NAME>>`, `${{NAME}}`, `{NAME}`, and any other
+   variant the LLM might reach for.
+2. Reference consistency -- a later step may reference a prior output ONLY
+   by the exact name assigned in its `output_placeholder`.  Inventing a new
+   name (the Calendar BUG-1 shape with `{{EVENT_ID_FROM_SEARCH}}`) is
+   explicitly called out as a silent-failure mode with a correct/wrong
+   example.
+3. Dotted field syntax documented -- `{{NAME.field}}` is the canonical way
+   to extract a single field from a prior step's output, and for array
+   parameters the runtime auto-collects every matching field value so the
+   plan still writes one reference rather than an array literal.
+4. Sentinel values banned -- explicit list (`auto-injected`, `auto_fill`,
+   `from_server`, `from_context`, `server_default`, `<to-be-provided>`,
+   `to_be_injected`) with instruction to OMIT the key if a value cannot be
+   supplied.  The runtime will either inject a server default or trigger
+   clarification.
+5. Array extrapolation banned -- no incrementing IDs, no pattern-completed
+   email addresses, no guessed hashes.  If the task implies a list but only
+   one real item is visible, emit a single `{{NAME.field}}` reference and
+   let the runtime resolve it.
+
+**Why it matters:**
+
+- Four of the five placeholder-related regressions in v0.20260416.x /
+  v0.20260417.x traced to the LLM writing syntactically valid but
+  semantically inconsistent plans.  The runtime fixes absorb these, but
+  every absorption adds latency, repair-plan round-trips, and log noise.
+- The new rules target each observed failure mode directly, drawn from the
+  exact shapes in the BUG-1 / BUG-3 / BUG-4 reports.  Capable models
+  (GPT-4o-mini, Claude Sonnet-4) honor "never emit X" instructions at ~90%+
+  fidelity, so the expected net effect is fewer repair-plan triggers, fewer
+  inference fallbacks, and a cleaner observability timeline when debugging.
+
+**Token cost:** ~180 tokens on every planning call (~12% of the current
+planning-prompt size).  Acceptable given the latency savings from fewer
+repair-plan round-trips.
+
+**Runtime guards remain source of truth.** The v0.20260417.1 layers
+(`_extract_field_from_result_payload` text-fallback, cross-placeholder
+fallback, leftover-placeholder stripping, array inference validation) are
+not redundant -- they catch the tail of plans that still violate the
+contract.  Think of the prompt as "compile-time" enforcement and the
+runtime as "runtime" enforcement of the same contract.
+
+**Operational implication:** when triaging a new placeholder-related bug,
+first check whether the prompt rule that would have prevented it actually
+exists in `agent_planning.md`.  If yes, the regression is a model
+compliance problem (raise model tier or add a stronger example).  If no,
+the prompt is missing the rule and should be tightened before writing new
+runtime logic.
+
+**Files:**
+- `src/muxi/runtime/formation/prompts/agent_planning.md` -- new
+  PLACEHOLDER RULES block after the TOOL CHAINING RULE section.
 
 ### 2026-04-17 (even later): Placeholder Substitution, Cross-Placeholder Fallback, Leftover Placeholder Stripping, and Array Inference Validation
 

@@ -2,6 +2,39 @@
 
 ## [unreleased]
 
+## v0.20260417.2
+
+### Prompt Hardening
+
+- **Planning prompt now pins the placeholder contract** -- Added a new `PLACEHOLDER RULES (strict)` block to `src/muxi/runtime/formation/prompts/agent_planning.md` that codifies the four failure modes surfaced by v0.20260416.x / v0.20260417.x field reports. The runtime-side guards shipped in v0.20260417.1 stay in place; this change reduces how often they're triggered by telling the planner upfront what valid plans look like.
+    - **Syntax pinning**: only `{{UPPERCASE_NAME}}` or `{{UPPERCASE_NAME.field}}` is valid. No `<<NAME>>`, `${{NAME}}`, `{NAME}`.
+    - **Reference consistency**: a later step may reference a prior output ONLY by the exact name assigned in its `output_placeholder`. Invented names now have an explicit "silently fails" warning with a correct/wrong example (drawn from the Calendar BUG-1 shape).
+    - **Dotted field syntax documented**: `{{NAME.field}}` is now called out as the supported way to extract a single field from a prior step's output, and explicitly noted that array parameters are auto-collected by the runtime (don't emit a list literal).
+    - **Sentinel values banned**: explicit list (`auto-injected`, `auto_fill`, `from_server`, `from_context`, `server_default`, `<to-be-provided>`, `to_be_injected`) with instruction to OMIT the key instead.
+    - **Array extrapolation banned**: explicit prohibition against fabricating additional items (incrementing IDs, pattern-completed emails, guessed hashes) — drawn verbatim from the Gmail BUG-3 failure signature.
+
+### Rationale
+
+- Four of the last five placeholder-related regressions came from the LLM writing syntactically valid but semantically inconsistent plans. The runtime fixes in v0.20260417.1 catch these at multiple layers, but every catch adds latency and log noise. Pinning the contract up-front should drop the incidence rate materially on capable models (GPT-4o-mini, Claude Sonnet-4) while leaving the runtime guards as the safety net.
+- Token cost: ~180 tokens added per planning call (~12% overhead on the planning prompt). Acceptable given the expected reduction in repair-plan / inference-fallback round-trips.
+
+### Validation
+
+- Full unit suite: **497 passed, 27 skipped** (no prompt-snapshot regressions).
+- Random e2e: 5/5 pass.
+- No code changes; isolated to `agent_planning.md`.
+
+### Expected impact (by category)
+
+| Category | Estimated reduction |
+| --- | --- |
+| Sentinel values (`auto-injected` etc.) | ~90% |
+| Placeholder-name mismatch across steps | ~70% |
+| Array extrapolation / fabrication | ~30-50% |
+| Syntax variation (`<<NAME>>` etc.) | ~95% |
+
+Runtime guards (v0.20260417.1) remain the source of truth and catch the residual.
+
 ## v0.20260417.1
 
 ## v0.20260417.1

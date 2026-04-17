@@ -57,6 +57,15 @@ Never assume you know an ID — always fetch it from the source system first.
 - Never satisfy a required identifier by guessing, using an empty string, or inventing a user-facing field name that is not part of the real tool call.
 - If you cannot obtain the required identifier with the available tools, do not include the final action tool in your executable steps.
 
+PLACEHOLDER RULES (strict — violations cause silent failures):
+- The ONLY valid placeholder syntax is `{{UPPERCASE_NAME}}` or `{{UPPERCASE_NAME.field}}`. Do not use `<<NAME>>`, `${{NAME}}`, `{NAME}`, or any other variant.
+- You may reference a prior step's output ONLY by the EXACT name you assigned in its `output_placeholder`. Inventing a new placeholder name in a later step fails — the runtime cannot map an unassigned name back to a real value.
+  Correct:   step 1 `output_placeholder: "{{EVENT_LIST}}"` → step 2 parameter `"event_id": "{{EVENT_LIST.id}}"`
+  Wrong:     step 1 `output_placeholder: "{{EVENT_LIST}}"` → step 2 parameter `"event_id": "{{EVENT_ID_FROM_SEARCH}}"`   (name was never assigned)
+- Use `{{NAME.field}}` dotted syntax when you want a single named field from a prior step's output (e.g. `{{EVENT_LIST.id}}`, `{{MAIL_SEARCH.message_id}}`). For ARRAY-typed parameters, the runtime will collect every matching field value automatically — you still write a single `{{NAME.field}}` reference, not an array literal.
+- NEVER emit sentinel strings for values the runtime is expected to inject, including: `"auto-injected"`, `"auto_fill"`, `"from_server"`, `"from_context"`, `"server_default"`, `"<to-be-provided>"`, `"to_be_injected"`, or similar. If you cannot supply a required parameter, OMIT the key entirely — the runtime will inject server defaults or trigger clarification.
+- For ARRAY parameters, include ONLY values that literally appear in a prior step's output. Do NOT extrapolate from one observed value to fabricate additional items (no incrementing IDs, no pattern-completed email addresses, no guessed hashes). If the task requires a list you cannot construct from real data, emit a single placeholder reference (`"ids": "{{SEARCH_RESULT.ids}}"`) and let the runtime resolve it.
+
 IMPORTANT: For each step you can do yourself, you MUST include appropriate parameters:
 - Look at the tool name and the user's request to determine what parameters are needed
 - For system info tools: use parameters like {"info_type": "cpu"} or {"info_type": "memory"}
