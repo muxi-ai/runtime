@@ -2363,3 +2363,403 @@ def test_build_delegation_prompt_with_results_appends_prior_result_context():
     assert "{{COLUMN_A_DATA}}" in prompt
     assert "values" in prompt
     assert "do not invent missing data" in prompt.lower()
+
+
+# ---------------------------------------------------------------------------
+# v0.20260418.0 regression tests — text extraction, cross-placeholder
+# fallback, literal-placeholder stripping, array inference validation.
+# ---------------------------------------------------------------------------
+
+
+def test_field_name_variants_covers_snake_camel_space_and_all_caps():
+    """Variants must include snake_case, camelCase, spaced, Title, and
+    ID-suffix all-caps forms so free-text extraction catches every common
+    MCP serialization style."""
+    variants = Agent._field_name_variants("message_id")
+    assert "message_id" in variants
+    assert "messageId" in variants
+    assert "message id" in variants
+    assert "Message Id" in variants
+    assert "Message ID" in variants
+
+    variants = Agent._field_name_variants("eventId")
+    assert "eventId" in variants
+    assert "event_id" in variants
+    assert "event id" in variants
+    assert "Event ID" in variants
+
+
+def test_extract_field_values_from_text_handles_markdown_and_json_patterns():
+    """Label-style `Field: value`, bold markdown `**Field:** value`, and
+    embedded JSON `"field":"value"` must all be recognized."""
+    text = (
+        "1. From: ops@example.com\n"
+        "   Subject: You've joined the Spark Devs group\n"
+        "   **Message ID:** 19d78b1d775ca3e0\n"
+        "\n"
+        '   JSON snippet: {"event_id": "rl5p13b7jgd570rlph28stpaug"}\n'
+        "   Received: 2026-04-10 08:16 AM\n"
+    )
+    assert Agent._extract_field_values_from_text(text, "message_id") == ["19d78b1d775ca3e0"]
+    # JSON-embedded values are still discoverable.
+    assert "rl5p13b7jgd570rlph28stpaug" in Agent._extract_field_values_from_text(text, "event_id")
+
+
+def test_extract_field_values_from_text_collects_all_matches_for_arrays():
+    """Gmail BUG-3: the Gmail search tool returns the 10 real message IDs
+    inside a single text blob.  Extraction must collect all of them when
+    the caller asks for every match."""
+    text = (
+        "Found 10 messages matching 'after:2026/04/10 before:2026/04/11':\n"
+        "\n"
+        "1. From: alice@example.com\n"
+        "   **Message ID:** 19d78b1d775ca3e0\n"
+        "2. From: bob@example.com\n"
+        "   **Message ID:** 19d4e8c9d1f2a3b4\n"
+        "3. From: carol@example.com\n"
+        "   **Message ID:** 19d2a1e7b0d9c8f5\n"
+    )
+    values = Agent._extract_field_values_from_text(text, "message_id")
+    assert values == [
+        "19d78b1d775ca3e0",
+        "19d4e8c9d1f2a3b4",
+        "19d2a1e7b0d9c8f5",
+    ]
+
+
+def test_extract_field_from_result_payload_falls_back_to_text_patterns():
+    """When the structured payload exposes result content only as free text
+    (FastMCP default serialization), extraction must scan the text for
+    `Field: value` style matches."""
+    agent = object.__new__(Agent)
+    payload = {
+        "structuredContent": {
+            "result": (
+                "Event found in primary calendar:\n"
+                "Title: Spark Test Event\n"
+                "Time: 2026-04-18T12:00:00Z\n"
+                "ID: rl5p13b7jgd570rlph28stpaug\n"
+                "Link: https://calendar.google.com/event?id=rl5p13b7jgd570rlph28stpaug"
+            )
+        }
+    }
+    assert (
+        agent._extract_field_from_result_payload(payload, "event_id")
+        == "rl5p13b7jgd570rlph28stpaug"
+    )
+    assert agent._extract_field_from_result_payload(payload, "id") == "rl5p13b7jgd570rlph28stpaug"
+
+
+def test_extract_field_from_result_payload_collects_all_in_array_mode():
+    """Gmail BUG-3 root-cause check: with ``collect_all=True`` we return
+    every match found in any text chunk, deduplicated, preserving order."""
+    agent = object.__new__(Agent)
+    payload = {
+        "content": [
+            {
+                "type": "text",
+                "text": (
+                    "1. **Message ID:** aaa111\n"
+                    "2. **Message ID:** bbb222\n"
+                    "3. **Message ID:** ccc333\n"
+                    "4. **Message ID:** bbb222\n"  # duplicate — must dedupe
+                ),
+            }
+        ]
+    }
+    values = agent._extract_field_from_result_payload(payload, "message_id", collect_all=True)
+    assert values == ["aaa111", "bbb222", "ccc333"]
+
+
+def test_substitute_step_parameter_placeholders_resolves_dotted_array_param():
+    """Gmail BUG-3 end-to-end: `{{APRIL_10_MESSAGES.message_ids}}` against
+    a free-text result must resolve to the full list of IDs found in the
+    text, not just the first one, when the parameter schema is an array."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    search_result = {
+        "status": "success",
+        "result": {
+            "structuredContent": {
+                "result": (
+                    "Found 3 messages matching 'after:2026/04/10 before:2026/04/11':\n"
+                    "\n"
+                    "1. From: a@x.com\n"
+                    "   **Message ID:** aaa111\n"
+                    "2. From: b@x.com\n"
+                    "   **Message ID:** bbb222\n"
+                    "3. From: c@x.com\n"
+                    "   **Message ID:** ccc333\n"
+                )
+            }
+        },
+    }
+
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters={"message_ids": "{{APRIL_10_MESSAGES.message_ids}}"},
+        param_properties={"message_ids": {"type": "array", "items": {"type": "string"}}},
+        full_schema={
+            "type": "object",
+            "required": ["message_ids"],
+            "properties": {"message_ids": {"type": "array", "items": {"type": "string"}}},
+        },
+        action_description="Fetch full content for April 10 messages",
+        my_results={"{{APRIL_10_MESSAGES}}": search_result},
+        tool_name="google-mcp__get_gmail_messages_content_batch",
+    )
+
+    assert substituted["message_ids"] == ["aaa111", "bbb222", "ccc333"]
+
+
+def test_substitute_step_parameter_placeholders_cross_placeholder_fallback():
+    """Calendar BUG-1: the LLM references `{{EVENT_ID_FROM_SEARCH}}` but
+    only assigned `{{EVENT_DETAILS}}`.  Cross-placeholder fallback must
+    extract the event id from the single prior successful result."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    get_events_result = {
+        "status": "success",
+        "result": {
+            "structuredContent": {
+                "result": (
+                    "Event found in primary calendar:\n"
+                    "Title: Spark Test Event\n"
+                    "Time: 2026-04-18T12:00:00Z\n"
+                    "ID: rl5p13b7jgd570rlph28stpaug"
+                )
+            }
+        },
+    }
+
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters={
+            "action": "delete",
+            "calendar_id": "primary",
+            "event_id": "{{EVENT_ID_FROM_SEARCH}}",
+        },
+        param_properties={
+            "action": {"type": "string"},
+            "calendar_id": {"type": "string"},
+            "event_id": {"type": "string"},
+        },
+        full_schema={
+            "type": "object",
+            "required": ["action"],
+            "properties": {
+                "action": {"type": "string"},
+                "calendar_id": {"type": "string"},
+                "event_id": {"type": "string"},
+            },
+        },
+        action_description="Delete Spark Test event",
+        my_results={"{{EVENT_DETAILS}}": get_events_result},
+        tool_name="google-mcp__manage_event",
+    )
+
+    assert substituted["event_id"] == "rl5p13b7jgd570rlph28stpaug"
+    assert substituted["action"] == "delete"
+    assert substituted["calendar_id"] == "primary"
+
+
+def test_substitute_step_parameter_placeholders_cross_placeholder_declines_ambiguous():
+    """Cross-placeholder fallback must NOT guess when multiple distinct
+    candidates exist across prior results — inference / repair handles
+    the ambiguity more safely."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    first = {
+        "status": "success",
+        "result": {"structuredContent": {"result": "Event A\nID: event-aaa-111"}},
+    }
+    second = {
+        "status": "success",
+        "result": {"structuredContent": {"result": "Event B\nID: event-bbb-222"}},
+    }
+
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters={
+            "action": "delete",
+            "event_id": "{{UNKNOWN_PLACEHOLDER}}",
+        },
+        param_properties={
+            "action": {"type": "string"},
+            "event_id": {"type": "string"},
+        },
+        full_schema={
+            "type": "object",
+            "properties": {
+                "action": {"type": "string"},
+                "event_id": {"type": "string"},
+            },
+        },
+        action_description="Delete event",
+        my_results={"{{FIRST}}": first, "{{SECOND}}": second},
+        tool_name="google-mcp__manage_event",
+    )
+
+    # Ambiguous → leaves the literal placeholder for the strip step to
+    # drop and the repair-plan flow to re-plan against.
+    assert substituted["event_id"] == "{{UNKNOWN_PLACEHOLDER}}"
+
+
+def test_strip_leftover_placeholder_parameters_drops_unresolved_non_required():
+    """Defensive final pass: any non-required parameter still shaped like
+    a placeholder after substitution/inference must be dropped before
+    reaching MCP."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    cleaned = agent._strip_leftover_placeholder_parameters(
+        parameters={
+            "action": "delete",
+            "calendar_id": "primary",
+            "event_id": "{{EVENT_ID_FROM_SEARCH}}",
+            "notes": "<<NOTES>>",
+        },
+        required_params=["action"],
+        tool_name="google-mcp__manage_event",
+    )
+
+    assert "event_id" not in cleaned
+    assert "notes" not in cleaned
+    assert cleaned == {"action": "delete", "calendar_id": "primary"}
+
+
+def test_strip_leftover_placeholder_parameters_preserves_required_literals():
+    """Required parameters carrying literal placeholders are NOT silently
+    dropped — the upstream unresolved-required check must keep routing
+    them through the repair-plan flow."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    cleaned = agent._strip_leftover_placeholder_parameters(
+        parameters={
+            "event_id": "{{EVENT_ID}}",
+            "calendar_id": "primary",
+        },
+        required_params=["event_id", "calendar_id"],
+        tool_name="google-mcp__manage_event",
+    )
+
+    # Required placeholder survives — repair flow handles it.
+    assert cleaned["event_id"] == "{{EVENT_ID}}"
+    assert cleaned["calendar_id"] == "primary"
+
+
+def test_validate_inferred_parameters_drops_fabricated_array_items():
+    """Gmail BUG-3 defense-in-depth: the LLM hallucinates incrementing
+    message IDs based on a single real ID from prior context.  The array
+    validator must keep only items that literally appear in prior results
+    and drop the fabricated ones."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    my_results = {
+        "{{SEARCH}}": {
+            "status": "success",
+            "result": {
+                "structuredContent": {
+                    "result": ("Found 10 messages:\n" "1. **Message ID:** 19d78b1d775ca3e0\n")
+                }
+            },
+        }
+    }
+
+    validated = agent._validate_inferred_parameters_against_results(
+        inferred_parameters={
+            "message_ids": [
+                "19d78b1d775ca3e0",  # real ID from prior result
+                "19d4e8c9d1f2a3b4",  # hallucinated
+                "19d2a1e7b0d9c8f5",  # hallucinated
+            ]
+        },
+        my_results=my_results,
+        param_properties={"message_ids": {"type": "array", "items": {"type": "string"}}},
+        full_schema={"properties": {"message_ids": {"type": "array", "items": {"type": "string"}}}},
+        tool_name="google-mcp__get_gmail_messages_content_batch",
+    )
+
+    assert validated == {"message_ids": ["19d78b1d775ca3e0"]}
+
+
+def test_validate_inferred_parameters_removes_array_when_all_fabricated():
+    """When every array item is fabricated, drop the parameter entirely so
+    the unresolved-required flow can fire a repair-plan instead of sending
+    an empty or bogus list to MCP."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    my_results = {
+        "{{SEARCH}}": {
+            "status": "success",
+            "result": {"structuredContent": {"result": "Found 0 messages."}},
+        }
+    }
+
+    validated = agent._validate_inferred_parameters_against_results(
+        inferred_parameters={"message_ids": ["bogus-1", "bogus-2"]},
+        my_results=my_results,
+        param_properties={"message_ids": {"type": "array", "items": {"type": "string"}}},
+        full_schema={"properties": {"message_ids": {"type": "array", "items": {"type": "string"}}}},
+        tool_name="google-mcp__get_gmail_messages_content_batch",
+    )
+
+    assert "message_ids" not in validated
+
+
+def test_validate_inferred_parameters_keeps_real_ids_from_text_payload():
+    """The validator accepts items whose string value appears anywhere in
+    the joined text of prior results — even when the structure doesn't
+    expose them as discrete record fields."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    my_results = {
+        "{{SEARCH}}": {
+            "status": "success",
+            "result": {
+                "structuredContent": {
+                    "result": (
+                        "Found 3 messages:\n"
+                        "1. **Message ID:** aaa111\n"
+                        "2. **Message ID:** bbb222\n"
+                        "3. **Message ID:** ccc333\n"
+                    )
+                }
+            },
+        }
+    }
+
+    validated = agent._validate_inferred_parameters_against_results(
+        inferred_parameters={"message_ids": ["aaa111", "bbb222", "ccc333"]},
+        my_results=my_results,
+        param_properties={"message_ids": {"type": "array", "items": {"type": "string"}}},
+        full_schema={"properties": {"message_ids": {"type": "array", "items": {"type": "string"}}}},
+        tool_name="google-mcp__get_gmail_messages_content_batch",
+    )
+
+    assert validated == {"message_ids": ["aaa111", "bbb222", "ccc333"]}
+
+
+def test_collect_text_chunks_from_payload_walks_nested_structures():
+    """Every non-empty string inside a nested dict/list payload must be
+    visited so text-fallback extraction can see FastMCP's
+    `content[].text` serialization."""
+    payload = {
+        "structuredContent": {
+            "result": "ID: abc-123\nTitle: Spark",
+        },
+        "content": [
+            {"type": "text", "text": "Related: xyz-789"},
+            "Orphan string chunk",
+            42,  # non-string values are skipped
+        ],
+    }
+    chunks = Agent._collect_text_chunks_from_payload(payload)
+    combined = "\n".join(chunks)
+    assert "ID: abc-123" in combined
+    assert "Related: xyz-789" in combined
+    assert "Orphan string chunk" in combined

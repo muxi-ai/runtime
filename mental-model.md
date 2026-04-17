@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-17
+**Last Updated:** 2026-04-17 (v0.20260417.1)
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -4140,6 +4140,142 @@ blank tool arg is acceptable if the same field is backed by a non-empty MCP defa
 - `src/muxi/runtime/formation/prompts/agent_planning.md`
 - `tests/unit/test_agent_planning_helpers.py`
 - `pyproject.toml`
+
+### 2026-04-17 (even later): Placeholder Substitution, Cross-Placeholder Fallback, Leftover Placeholder Stripping, and Array Inference Validation
+
+Fifth critical planning-and-execution release following a new field report on
+v0.20260416.2 / v0.20260417.0 covering two distinct "literal-placeholder reaches MCP"
+bug patterns.
+
+**Problem 1 (CRITICAL, Gmail BUG-3): Placeholder substitution returned `None` for free-text MCP payloads**
+
+The Gmail search tool (`search_gmail_messages`) returns its results as a human-readable
+string inside `structuredContent.result`:
+
+```
+Found 10 messages matching 'after:2026/04/10 before:2026/04/11':
+
+1. From: alice@example.com
+   **Message ID:** 19d78b1d775ca3e0
+2. From: bob@example.com
+   **Message ID:** 19d4e8c9d1f2a3b4
+...
+```
+
+`_extract_field_from_result_payload` only walked dict records via `_iter_result_records`
+and never peeked inside string values.  So the dotted reference
+`{{APRIL_10_MESSAGES.message_ids}}` in the next step's `parameters` resolved to `None`,
+the unresolved-required check fired, and parameter inference hallucinated nine fake
+message IDs by incrementing the single ID the LLM had in chat context.
+
+**Fix:** added two helpers plus a text-based fallback to `_extract_field_from_result_payload`:
+
+- `_collect_text_chunks_from_payload(payload)` recursively walks every non-empty string
+  inside nested dict/list structures (handles FastMCP's `content: [{type: "text", text:
+  "..."}]` serialization).
+- `_extract_field_values_from_text(text, field_name)` matches three patterns per variant:
+  label-style (`Field: value` / `**Field:** value` / `field = value`), JSON-style with
+  quoted values (`"field": "value"`), and JSON-style with bare scalars
+  (`"field": value`).  Field-name variants cover snake_case, camelCase, spaced,
+  Title-Case, and ALL-CAPS-ID-suffix forms so `message_id` matches both `Message ID:`
+  and `"messageId": "..."`.
+- For plural-named parameters the extractor also probes the singular form via
+  `_singularize_field_name`, so `message_ids` still finds `Message ID:` labels.  For
+  entity-suffix parameters (`event_id`, `message_id`, `task_id`) that still miss,
+  the extractor falls back to the bare `id` label — FastMCP tools often serialize the
+  primary key as just `ID: xyz`.
+- `_extract_field_from_result_payload` gained a `collect_all=True` mode that returns a
+  deduplicated list of every match in discovery order; `_substitute_step_parameter_placeholders`
+  uses this whenever the target parameter schema is `array`, so `message_ids` resolves
+  to the complete `["aaa111", "bbb222", "ccc333"]` set rather than just the first match.
+
+**Problem 2 (CRITICAL, Calendar BUG-1): LLM-invented placeholder names left literal `{{...}}` in outbound MCP calls**
+
+The planner emits a plan like:
+
+```json
+{
+  "my_steps": [
+    {"tool_name": "get_events",  "output_placeholder": "{{EVENT_DETAILS}}", ...},
+    {"tool_name": "manage_event", "parameters": {
+        "action": "delete",
+        "event_id": "{{EVENT_ID_FROM_SEARCH}}"    // ← never assigned!
+    }}
+  ]
+}
+```
+
+Step 2 references `{{EVENT_ID_FROM_SEARCH}}` but only `{{EVENT_DETAILS}}` was produced.
+`_substitute_step_parameter_placeholders` missed the key lookup, found no dot-notation
+match either, and bailed out with `continue` — leaving the literal string in place.
+Because `event_id` is conditionally required on `manage_event` (only `action` is in
+`required`), the unresolved-required check never fired, inference never ran, and the
+literal placeholder string was sent to MCP as `event_id="{{EVENT_ID_FROM_SEARCH}}"`.
+
+**Fix (two layers):**
+
+1. `_resolve_parameter_across_all_results` walks every successful prior result and
+   tries to resolve the parameter from the union of structured records + text chunks.
+   Commits only when exactly one distinct candidate exists across all results, so it
+   won't silently pick the wrong value from a multi-record set.  Also falls back to the
+   bare `id` label for `*_id` parameters in text payloads.
+2. `_strip_leftover_placeholder_parameters` runs right before `_validate_tool_parameters`
+   and drops **non-required** parameters still shaped like placeholders.  Required
+   placeholder values are preserved so the existing repair-plan flow can handle them.
+
+**Problem 3 (CRITICAL, Gmail BUG-3 defense-in-depth): Inference fabricated array items**
+
+Even with text extraction in place, a first-step failure could still fall back to
+inference.  `_validate_inferred_parameters_against_results` previously only checked
+scalar values against record IDs; list values (the Gmail case) passed straight through.
+The LLM, seeing one real ID in its prompt context, routinely "extended" it by
+incrementing hex digits:
+
+```
+Real: 19d78b1d775ca3e0
+Fake: 19d4e8c9d1f2a3b4
+Fake: 19d2a1e7b0d9c8f5
+...
+```
+
+**Fix:** `_validate_inferred_parameters_against_results` now handles lists.  Every item
+must literally appear in a prior successful result (as a record value or in any text
+chunk).  Items that don't are dropped and an observability event captures the count.
+If every item is fabricated the parameter is removed entirely, so the
+unresolved-required / repair-plan flow fires instead of sending a bogus list to MCP.
+
+**Operational implications:**
+
+- When the LLM emits a dotted placeholder against a FastMCP tool that serializes
+  results as text (Gmail, Google Calendar event details, most MS365 list responses),
+  the text-extraction fallback is now the primary resolution path.  The
+  `_collect_text_chunks_from_payload` walker visits `structuredContent`, `content[].text`,
+  and any nested string so new tool shapes don't need bespoke glue code.
+- Unresolved `{{...}}` values will never reach MCP again on non-required parameters —
+  the final strip acts as a safety net independent of the resolution code path.
+- Array inference that produces fabricated items now leaves a warning trail:
+  `dropped_items` / `dropped_count` / `kept_count` in the
+  `AGENT_PLANNING` observability event.  If every item is hallucinated, the subsequent
+  `unresolved_required_params` iteration re-triggers the repair-plan flow.
+
+**Files:**
+- `src/muxi/runtime/formation/agents/agent.py` -- text-chunk walker, field-variant
+  generator, text-value extractor, plural→singular helper, cross-placeholder fallback,
+  leftover-placeholder stripper, array validation branch.
+- `tests/unit/test_agent_planning_helpers.py` -- 13 new regression tests covering the
+  Gmail BUG-3 and Calendar BUG-1 exact shapes, plus unit coverage for every new helper.
+
+**Deferred to next release:**
+
+- Gmail cross-request context loss (turn N references an ID the agent produced in
+  turn N-1; planner occasionally fabricates a new ID instead of reusing the real one
+  from buffer memory).  Requires structured tool-output memory visible to the planner;
+  outside the scope of this fix.
+- Calendar response-synthesis date drift (planner sees the correct current date since
+  v0.20260416.1, but the final user-facing response still occasionally mis-formats).
+  Needs a targeted trace through response synthesis.
+- Repair-tool domain mismatch for non-sentinel cases.
+- Scheduled-job response delivery without webhooks.
 
 ### 2026-04-17 (later): Repair-Tool Domain Affinity
 

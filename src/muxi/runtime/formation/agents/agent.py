@@ -1604,6 +1604,17 @@ class Agent:
                                         step_index += 1
                                         continue
 
+                                    # Final safety net: strip any placeholder-shaped values
+                                    # that survived substitution / context / inference.
+                                    # This prevents literal ``{{...}}`` strings from
+                                    # reaching MCP when a non-required parameter was never
+                                    # resolved (see Calendar BUG-1 in v0.20260416.2 report).
+                                    parameters = self._strip_leftover_placeholder_parameters(
+                                        parameters=parameters,
+                                        required_params=required_params,
+                                        tool_name=tool_name,
+                                    )
+
                                     # Validate parameters against tool schema before execution
                                     is_valid, validation_error = self._validate_tool_parameters(
                                         parameters=parameters,
@@ -6449,13 +6460,51 @@ class Agent:
                 base_key, field_hint = self._parse_placeholder_reference(placeholder_key)
                 if base_key != placeholder_key:
                     referenced_result = successful_results.get(base_key)
+
             if referenced_result is None:
+                # Cross-placeholder fallback: the LLM often invents a
+                # placeholder name (e.g. ``{{EVENT_ID_FROM_SEARCH}}``) that
+                # doesn't match any output_placeholder it actually assigned.
+                # As a last resort, try to resolve this parameter from the
+                # union of all successful result payloads, but only when the
+                # match is unambiguous across every prior result.
+                fallback_value = self._resolve_parameter_across_all_results(
+                    param_name=param_name,
+                    param_properties=param_properties,
+                    full_schema=full_schema,
+                    action_description=action_description,
+                    tool_name=tool_name,
+                    successful_results=successful_results,
+                )
+                if fallback_value is not None:
+                    substituted[param_name] = fallback_value
                 continue
 
             payload = self._extract_structured_planning_result_payload(referenced_result)
             resolved_value: Any = None
+            param_def = self._resolve_schema_ref(param_properties.get(param_name, {}), full_schema)
+            param_type = param_def.get("type") if isinstance(param_def, dict) else None
+
             if field_hint:
-                resolved_value = self._extract_field_from_result_payload(payload, field_hint)
+                if param_type == "array":
+                    all_matches = self._extract_field_from_result_payload(
+                        payload, field_hint, collect_all=True
+                    )
+                    if isinstance(all_matches, list) and all_matches:
+                        resolved_value = all_matches
+                else:
+                    resolved_value = self._extract_field_from_result_payload(payload, field_hint)
+
+            if resolved_value is None and param_type == "array":
+                # Try extracting by parameter name directly (for cases where
+                # the placeholder has no dot-notation but the schema wants
+                # an array).
+                name_matches = self._extract_field_from_result_payload(
+                    payload, param_name, collect_all=True
+                )
+                if isinstance(name_matches, list) and name_matches:
+                    resolved_value = name_matches
+
             if resolved_value is None:
                 resolved_value = self._resolve_parameter_from_result_payload(
                     param_name=param_name,
@@ -6470,15 +6519,155 @@ class Agent:
 
         return substituted
 
-    def _extract_field_from_result_payload(self, payload: Any, field_name: str) -> Any:
-        """Find the first occurrence of `field_name` in a structured payload.
+    def _strip_leftover_placeholder_parameters(
+        self,
+        parameters: Dict[str, Any],
+        required_params: List[str],
+        tool_name: str = "",
+    ) -> Dict[str, Any]:
+        """Drop non-required parameters still holding literal placeholder strings.
 
-        Walks records produced by `_iter_result_records`.  Matches are tried
-        exact, case-insensitive, and with underscores stripped so that
-        `eventId`, `event_id`, and `EventID` all resolve to the same field."""
-        if not field_name:
+        After substitution, context resolution, and inference, any remaining
+        ``{{...}}`` or ``<<...>>`` value is an unresolved reference the LLM
+        emitted but we could not bind to a real value.  Passing such literals
+        to MCP produces 404s and pydantic errors (see v0.20260416.2 Calendar
+        BUG-1 report).  Required params with literal placeholders are already
+        routed through the repair-plan flow; this pass catches the
+        non-required case where the unresolved-required check never fires
+        because the parameter isn't declared required on the tool schema.
+        """
+        if not parameters:
+            return dict(parameters) if isinstance(parameters, dict) else {}
+
+        required_set = set(required_params or [])
+        cleaned = dict(parameters)
+        dropped: List[str] = []
+        for param_name in list(cleaned.keys()):
+            if param_name in required_set:
+                continue
+            value = cleaned[param_name]
+            if self._is_placeholder_like_value(value):
+                dropped.append(param_name)
+                del cleaned[param_name]
+
+        if dropped:
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_PLANNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": self.agent_id,
+                    "tool_name": tool_name,
+                    "dropped_params": dropped,
+                },
+                description=(
+                    f"Dropped {len(dropped)} leftover placeholder parameter(s) from "
+                    f"{tool_name} before MCP call: {', '.join(dropped)}"
+                ),
+            )
+
+        return cleaned
+
+    def _resolve_parameter_across_all_results(
+        self,
+        param_name: str,
+        param_properties: Dict[str, Any],
+        full_schema: Dict[str, Any],
+        action_description: str,
+        tool_name: str,
+        successful_results: Dict[str, Any],
+    ) -> Any:
+        """Resolve one parameter from the union of successful result payloads.
+
+        Used when the LLM references a placeholder name that doesn't exist
+        in ``my_results`` (e.g. ``{{EVENT_ID_FROM_SEARCH}}`` when only
+        ``{{EVENT_DETAILS}}`` was produced).  Only returns a value when
+        there is exactly one candidate across every prior result, to avoid
+        silently picking the wrong one from a multi-record set.
+        """
+        if not successful_results:
             return None
+
+        found_values: List[Any] = []
+        seen_markers: set[str] = set()
+        for result in successful_results.values():
+            payload = self._extract_structured_planning_result_payload(result)
+            candidate = self._resolve_parameter_from_result_payload(
+                param_name=param_name,
+                payload=payload,
+                param_properties=param_properties,
+                full_schema=full_schema,
+                action_description=action_description,
+                tool_name=tool_name,
+            )
+            if candidate is None or not self._is_nonempty_parameter_candidate(candidate):
+                # Try text-based fallback on this payload's text chunks.
+                text_candidates: List[str] = []
+                for chunk in self._collect_text_chunks_from_payload(payload):
+                    text_candidates.extend(self._extract_field_values_from_text(chunk, param_name))
+                if not text_candidates:
+                    # Also try the bare "id" suffix (e.g. param_name="event_id"
+                    # often appears as "ID: abc" in result text).
+                    lowered = param_name.lower().replace("_", "").replace("-", "")
+                    if lowered.endswith("id") and lowered != "id":
+                        for chunk in self._collect_text_chunks_from_payload(payload):
+                            text_candidates.extend(
+                                self._extract_field_values_from_text(chunk, "id")
+                            )
+                if len(text_candidates) == 1:
+                    candidate = text_candidates[0]
+
+            if candidate is None:
+                continue
+            if not self._is_nonempty_parameter_candidate(candidate):
+                continue
+            marker = str(candidate)
+            if marker in seen_markers:
+                continue
+            seen_markers.add(marker)
+            found_values.append(candidate)
+
+        if len(found_values) == 1:
+            return found_values[0]
+        return None
+
+    def _extract_field_from_result_payload(
+        self,
+        payload: Any,
+        field_name: str,
+        *,
+        collect_all: bool = False,
+    ) -> Any:
+        """Find occurrences of ``field_name`` in a structured or text payload.
+
+        Walks records produced by :meth:`_iter_result_records` first, matching
+        keys case-insensitively with ``_``/``-`` stripped so ``eventId``,
+        ``event_id``, and ``EventID`` all resolve to the same field.  When
+        the payload contains free-text content (for example, FastMCP tools
+        that serialize results as ``"Message ID: abc..."`` strings), falls
+        back to regex-based extraction from every text chunk inside the
+        payload.
+
+        When ``collect_all`` is True, returns a deduplicated list of every
+        match; otherwise returns the first match or ``None``.
+        """
+        if not field_name:
+            return [] if collect_all else None
+
         target = field_name.lower().replace("_", "").replace("-", "")
+        collected: List[Any] = []
+
+        def _record_candidate(value: Any) -> bool:
+            """Return True if we should stop (collect_all=False) after this."""
+            if not self._is_nonempty_parameter_candidate(value):
+                return False
+            if collect_all:
+                marker = str(value)
+                if marker not in {str(v) for v in collected}:
+                    collected.append(value)
+                return False
+            collected.append(value)
+            return True
+
         for record in self._iter_result_records(payload):
             if not isinstance(record, dict):
                 continue
@@ -6486,9 +6675,209 @@ class Agent:
                 if not isinstance(key, str):
                     continue
                 normalized = key.lower().replace("_", "").replace("-", "")
-                if normalized == target and self._is_nonempty_parameter_candidate(value):
-                    return value
-        return None
+                if normalized != target:
+                    continue
+                if _record_candidate(value):
+                    return collected[0]
+
+        # Fallback: scan every text chunk in the payload for ``Field: value``
+        # or JSON-style patterns.  Required when FastMCP tools serialize
+        # their structured output as human-readable text.  For array-like
+        # lookups (plural names) we also probe the singular form because
+        # search tools typically label each item with the singular key
+        # (``Message ID: abc`` rather than ``Message IDs: abc``).
+        text_chunks = self._collect_text_chunks_from_payload(payload)
+        text_search_forms: List[str] = [field_name]
+        singular = self._singularize_field_name(field_name)
+        if singular and singular != field_name:
+            text_search_forms.append(singular)
+
+        for probe in text_search_forms:
+            for chunk in text_chunks:
+                for extracted in self._extract_field_values_from_text(chunk, probe):
+                    if _record_candidate(extracted):
+                        return collected[0]
+            if collected and not collect_all:
+                break
+
+        # Secondary fallback: for entity-suffixed identifiers like
+        # ``event_id`` / ``message_id`` / ``task_id``, look for the
+        # unadorned ``id`` / ``ID`` label as well.  FastMCP tools often
+        # serialize the primary key as just ``ID: xyz`` rather than
+        # ``Event ID: xyz`` in their text output.  Only applied when the
+        # first pass returned nothing, to avoid pulling unrelated IDs.
+        if not collected:
+            for probe in text_search_forms:
+                normalized = probe.lower().replace("_", "").replace("-", "")
+                if normalized.endswith("id") and normalized != "id":
+                    for chunk in text_chunks:
+                        for extracted in self._extract_field_values_from_text(chunk, "id"):
+                            if _record_candidate(extracted):
+                                return collected[0]
+                    break
+
+        if collect_all:
+            return collected
+        return collected[0] if collected else None
+
+    @staticmethod
+    def _singularize_field_name(field_name: str) -> Optional[str]:
+        """Return a best-effort singular form for a plural identifier name.
+
+        Supports the common patterns seen in MCP tool schemas:
+            ``message_ids`` → ``message_id``
+            ``messageIds``  → ``messageId``
+            ``events``      → ``event``
+            ``entries``     → ``entry`` (y-plural)
+            ``addresses``   → ``address`` (es-plural)
+        Returns ``None`` when no confident singularization is possible.
+        """
+        if not field_name or not isinstance(field_name, str):
+            return None
+        if len(field_name) < 2:
+            return None
+        if not field_name.endswith("s") and not field_name.endswith("S"):
+            return None
+
+        # ``ies`` → ``y`` (entries → entry)
+        if field_name.endswith("ies") and len(field_name) > 3:
+            return field_name[:-3] + "y"
+        if field_name.endswith("IES") and len(field_name) > 3:
+            return field_name[:-3] + "Y"
+
+        # ``es`` after sibilant → drop ``es`` (addresses → address)
+        if field_name.endswith(("sses", "shes", "ches", "xes", "zes")):
+            return field_name[:-2]
+        if field_name.endswith(("SSES", "SHES", "CHES", "XES", "ZES")):
+            return field_name[:-2]
+
+        # Simple trailing ``s``: drop it (message_ids → message_id).
+        return field_name[:-1]
+
+    @staticmethod
+    def _collect_text_chunks_from_payload(payload: Any) -> List[str]:
+        """Recursively collect every non-empty string embedded in a payload."""
+        chunks: List[str] = []
+
+        def _walk(value: Any) -> None:
+            if isinstance(value, str):
+                stripped = value.strip()
+                if stripped:
+                    chunks.append(value)
+            elif isinstance(value, dict):
+                for nested in value.values():
+                    _walk(nested)
+            elif isinstance(value, list):
+                for item in value:
+                    _walk(item)
+
+        _walk(payload)
+        return chunks
+
+    @staticmethod
+    def _field_name_variants(field_name: str) -> List[str]:
+        """Generate plausible surface forms of a field name for text matching.
+
+        Examples:
+            ``message_id`` → ``message_id``, ``messageId``, ``message id``,
+            ``Message Id``, ``Message ID``
+            ``eventId`` → ``eventId``, ``event_id``, ``event id``,
+            ``Event Id``, ``Event ID``
+        """
+        if not field_name:
+            return []
+
+        cleaned = field_name.strip()
+        if not cleaned:
+            return []
+
+        variants: List[str] = [cleaned]
+        # camelCase → snake_case
+        snake = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", cleaned).lower()
+        if snake and snake not in variants:
+            variants.append(snake)
+        # snake_case → camelCase
+        camel = re.sub(r"_([a-zA-Z])", lambda m: m.group(1).upper(), cleaned)
+        if camel and camel not in variants:
+            variants.append(camel)
+        # space-separated (lower + title)
+        words = re.sub(r"[_\-]+", " ", snake).strip()
+        if words and words not in variants:
+            variants.append(words)
+        titled = words.title() if words else ""
+        if titled and titled not in variants:
+            variants.append(titled)
+        # ALL-CAPS suffix for common identifier words (ID, URL, URI, GUID)
+        uppercase_suffixes = ("id", "url", "uri", "guid", "uuid")
+        for suffix in uppercase_suffixes:
+            if words.endswith(f" {suffix}"):
+                upper_variant = f"{words[: -len(suffix)].rstrip().title()} {suffix.upper()}"
+                if upper_variant not in variants:
+                    variants.append(upper_variant)
+                break
+            if words == suffix:
+                variants.append(suffix.upper())
+                break
+        return variants
+
+    @staticmethod
+    def _extract_field_values_from_text(text: str, field_name: str) -> List[str]:
+        """Extract values for ``field_name`` from free-form text.
+
+        Recognizes three patterns:
+
+        1. ``Field: value`` or ``**Field:** value`` (markdown-style labels)
+        2. ``"field": "value"`` (embedded JSON)
+        3. ``field = value`` (assignment-style)
+
+        Returns a deduplicated list in discovery order.
+        """
+        if not isinstance(text, str) or not text.strip() or not field_name:
+            return []
+
+        values: List[str] = []
+        seen: set[str] = set()
+
+        def _accept(raw: str) -> None:
+            # Strip markdown/code wrappers but keep internal punctuation so we
+            # do not corrupt IDs with dashes or underscores.
+            candidate = raw.strip().strip("`*_")
+            candidate = candidate.strip(" \t\r\n.,;:()[]{}<>'\"")
+            if not candidate:
+                return
+            if candidate in seen:
+                return
+            seen.add(candidate)
+            values.append(candidate)
+
+        for form in Agent._field_name_variants(field_name):
+            escaped = re.escape(form)
+            # Pattern 1: label-style with optional surrounding markdown.
+            # Accepts any combination of ``*``, whitespace, ``:`` or ``=`` as
+            # the separator so ``**Message ID:**`` (colon inside bold) and
+            # ``Message ID: `` (plain) both work.  At least one separator
+            # char is required to distinguish labels from inline prose.
+            label_pattern = (
+                rf"(?:^|[\s\*`\(>]|\|)\*{{0,2}}{escaped}[\*\s:=]+"
+                r"`?([A-Za-z0-9][A-Za-z0-9_\-./:+@]{1,256})`?"
+                r"(?=$|[\s,;\n\)\]\*`\|])"
+            )
+            for match in re.finditer(label_pattern, text, flags=re.IGNORECASE | re.MULTILINE):
+                _accept(match.group(1))
+
+            # Pattern 2: JSON-style quoted key → quoted string value
+            json_string_pattern = rf'"{escaped}"\s*:\s*"([^"]+)"'
+            for match in re.finditer(json_string_pattern, text, flags=re.IGNORECASE):
+                _accept(match.group(1))
+
+            # Pattern 3: JSON-style quoted key → bare scalar value
+            json_bare_pattern = (
+                rf'"{escaped}"\s*:\s*([A-Za-z0-9][A-Za-z0-9_\-./:+@]{{1,256}})(?=[\s,}}\]])'
+            )
+            for match in re.finditer(json_bare_pattern, text, flags=re.IGNORECASE):
+                _accept(match.group(1))
+
+        return values
 
     def _validate_inferred_parameters_against_results(
         self,
@@ -6521,11 +6910,75 @@ class Agent:
                 for record in self._iter_result_records(payload)
                 if isinstance(record, dict)
             ]
+            # Join every text chunk from every prior result so we can look
+            # up inferred values as substrings in free-form MCP responses
+            # (FastMCP tools routinely serialize results as text blobs).
+            all_result_text_chunks: List[str] = []
+            for payload in structured_payloads:
+                all_result_text_chunks.extend(self._collect_text_chunks_from_payload(payload))
+            combined_result_text = "\n".join(all_result_text_chunks)
         else:
             all_records = []
+            combined_result_text = ""
+
+        def _value_appears_in_prior_results(value: Any) -> bool:
+            """Return True when ``value`` literally appears in a prior record
+            or in the joined text of any prior result payload."""
+            value_str = str(value)
+            if not value_str:
+                return False
+            for record in all_records:
+                for v in record.values():
+                    if isinstance(v, (str, int, float)) and str(v) == value_str:
+                        return True
+            return value_str in combined_result_text
 
         validated = dict(inferred_parameters)
         for param_name, param_value in list(validated.items()):
+            # --- Array values: drop fabricated items, keep only those found
+            # in a prior successful result.  If every item is fabricated,
+            # remove the parameter entirely so the repair flow can fire.
+            if isinstance(param_value, list):
+                # Empty or all-empty lists aren't actionable.
+                nonempty_items = [
+                    item for item in param_value if self._is_nonempty_parameter_candidate(item)
+                ]
+                if not nonempty_items:
+                    del validated[param_name]
+                    continue
+
+                surviving: List[Any] = []
+                dropped_items: List[str] = []
+                for item in nonempty_items:
+                    if _value_appears_in_prior_results(item):
+                        surviving.append(item)
+                    else:
+                        dropped_items.append(str(item)[:80])
+
+                if dropped_items:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_PLANNING,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "param_name": param_name,
+                            "dropped_items": dropped_items[:10],
+                            "dropped_count": len(dropped_items),
+                            "kept_count": len(surviving),
+                            "tool_name": tool_name,
+                        },
+                        description=(
+                            f"Dropped {len(dropped_items)} fabricated item(s) from "
+                            f"inferred '{param_name}' array for {tool_name}; "
+                            f"{len(surviving)} verified against prior results"
+                        ),
+                    )
+
+                if not surviving:
+                    del validated[param_name]
+                else:
+                    validated[param_name] = surviving
+                continue
+
             if not self._is_nonempty_parameter_candidate(param_value):
                 continue
 

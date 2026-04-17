@@ -2,6 +2,45 @@
 
 ## [unreleased]
 
+## v0.20260417.1
+
+### Bug Fixes
+
+- **Placeholder substitution now extracts from free-text MCP results (CRITICAL, Gmail BUG-3)** -- When the LLM referenced `{{APRIL_10_MESSAGES.message_ids}}` and the Gmail search tool returned its results as a free-text blob (`"1. **Message ID:** aaa111\n2. **Message ID:** bbb222\n..."`), `_extract_field_from_result_payload` only walked structured records and returned `None`. The unresolved flag triggered parameter inference, which saw one real ID in context and hallucinated the other nine by incrementing the hex digits. Fix: added `_collect_text_chunks_from_payload` and `_extract_field_values_from_text` so the extractor also scans every text chunk for label-style (`Field: value`, `**Field:** value`) and JSON-style (`"field": "value"`) patterns, with case-insensitive matching across snake_case / camelCase / spaced / Title / ALL-CAPS variants. For array parameters (`message_ids`), extraction now collects every match, and singular / plural forms are probed automatically so `message_ids` still finds `Message ID: ...` labels.
+- **Cross-placeholder fallback for LLM-invented placeholder names (CRITICAL, Calendar BUG-1)** -- The planner occasionally emits a placeholder name in step 2 that it never assigned in step 1 (e.g. `{{EVENT_ID_FROM_SEARCH}}` after only producing `{{EVENT_DETAILS}}`). `_substitute_step_parameter_placeholders` used to bail out on a missed key lookup and left the literal `{{EVENT_ID_FROM_SEARCH}}` string in the parameter dict. Because `event_id` isn't in the tool's `required` list for `manage_event`, the unresolved-required gate never fired and the literal placeholder went straight to MCP (→ 404). Fix: added `_resolve_parameter_across_all_results` which tries to bind the parameter to a value from the union of all successful prior results (structured + text fallback, including unadorned `id:` labels for `*_id` params); only commits when exactly one candidate exists so it won't silently pick wrong values from ambiguous multi-record sets.
+- **Leftover literal placeholders are now stripped before the MCP call (CRITICAL, Calendar BUG-1 defense)** -- Added `_strip_leftover_placeholder_parameters`, called right before `_validate_tool_parameters`, which drops any non-required parameter still shaped like a placeholder (`{{...}}`, `<<...>>`, etc.) after all substitution / context / inference attempts have run. Required-parameter placeholders are preserved so the existing repair-plan flow can handle them.
+- **Array inference validation drops fabricated items (CRITICAL, Gmail BUG-3 defense-in-depth)** -- `_validate_inferred_parameters_against_results` now handles list-typed parameters. Every inferred item must literally appear in a prior successful result (as a record value or in any text chunk); items that don't are dropped. If the entire list is fabricated, the parameter is removed so the repair-plan flow runs instead of sending an invalid array to MCP. This kills the Gmail "incrementing hex" hallucination pattern at the inference gate even when text extraction already fills most of the array from the prior result.
+
+### Tests
+
+- `test_field_name_variants_covers_snake_camel_space_and_all_caps` -- verifies the variant generator produces every common surface form.
+- `test_extract_field_values_from_text_handles_markdown_and_json_patterns` -- `Field: value`, `**Field:** value`, and `"field": "value"` all resolved.
+- `test_extract_field_values_from_text_collects_all_matches_for_arrays` -- Gmail BUG-3 shape; returns all 3 message IDs from the text blob.
+- `test_extract_field_from_result_payload_falls_back_to_text_patterns` -- Calendar `ID: abc` line is found when looking for `event_id`.
+- `test_extract_field_from_result_payload_collects_all_in_array_mode` -- deduplicated, order-preserving array extraction from text.
+- `test_substitute_step_parameter_placeholders_resolves_dotted_array_param` -- Gmail BUG-3 end-to-end; `{{APRIL_10_MESSAGES.message_ids}}` resolves to `["aaa111", "bbb222", "ccc333"]`.
+- `test_substitute_step_parameter_placeholders_cross_placeholder_fallback` -- Calendar BUG-1 shape; `{{EVENT_ID_FROM_SEARCH}}` with only `{{EVENT_DETAILS}}` in `my_results` resolves correctly.
+- `test_substitute_step_parameter_placeholders_cross_placeholder_declines_ambiguous` -- ambiguous multi-result case leaves the literal placeholder for the strip step / repair flow.
+- `test_strip_leftover_placeholder_parameters_drops_unresolved_non_required` -- Calendar BUG-1 defense; literal `{{...}}` on non-required params is dropped before MCP.
+- `test_strip_leftover_placeholder_parameters_preserves_required_literals` -- required placeholders survive for the repair flow.
+- `test_validate_inferred_parameters_drops_fabricated_array_items` -- Gmail BUG-3 defense; fabricated IDs are removed and only the real ID survives.
+- `test_validate_inferred_parameters_removes_array_when_all_fabricated` -- the parameter is dropped entirely when no item is verified.
+- `test_validate_inferred_parameters_keeps_real_ids_from_text_payload` -- items verified against text chunks are preserved.
+- `test_collect_text_chunks_from_payload_walks_nested_structures` -- nested `structuredContent` / `content[].text` serializations are fully visited.
+
+### Validation
+
+- Full unit suite: **497 passed, 27 skipped**.
+- Targeted placeholder / inference tests: 88/88 pass.
+- ruff, black, mypy: clean.
+
+### Known issues deferred to next release
+
+- **Gmail cross-request context loss (Bug 2)** -- when a user asks follow-up questions that reference an ID the agent mentioned in a prior turn (e.g. "pull content from the draft I sent"), the planner occasionally fabricates a new ID instead of reusing the real one from buffer memory. Needs a structured tool-output memory layer visible to the planner; not a substitution / inference bug and outside the scope of this release.
+- **Calendar date drift in response synthesis (Bug 2)** -- planner sees the correct current date (`v0.20260416.1` fix confirmed via log), but occasional drift persists in the final user-facing response. Needs a separate trace against response synthesis; not reproduced in this pass.
+- **Repair-tool domain mismatch** -- still fires for non-`auto-injected` sentinel cases. Tracked.
+- **Scheduled-job response delivery** -- still requires webhooks; synchronous completion (`v0.20260416.3`) keeps DB state correct.
+
 ## v0.20260417.0
 
 ## v0.20260417.0
