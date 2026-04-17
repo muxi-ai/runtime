@@ -4,6 +4,8 @@
 
 ## v0.20260417.0
 
+## v0.20260417.0
+
 ### Bug Fixes
 
 - **Repair-tool selection now respects resource domain** -- The auto-discovery repair scorer in `_build_auto_discovery_repair_plan` previously had no notion of resource domain, so a `list-mail-folders` or `search-sharepoint-sites` call could be chosen to repair a failed `get-drive-root-item` even though both live on the same `ms365-mcp` server. Fix: added `_DOMAIN_TOKENS` (an unambiguous-token taxonomy for mail, calendar, drive, sharepoint, chat, contact, task, and note domains) and `_get_tool_domain_tags()`. When both the failed tool and a candidate carry unambiguous domain tags, the scorer now adds +4 for overlapping domains and -15 for disjoint domains, which is enough to drop cross-domain candidates below the `score <= 0` cutoff when the only positive signal is a verb match on the same server. Generic tokens (`file`, `folder`, `item`, `message`, `page`, `list`, etc.) are deliberately excluded so legitimately ambiguous tools stay untagged and neither incur nor cause a penalty.
