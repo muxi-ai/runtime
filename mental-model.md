@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-16
+**Last Updated:** 2026-04-17
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -4140,6 +4140,106 @@ blank tool arg is acceptable if the same field is backed by a non-empty MCP defa
 - `src/muxi/runtime/formation/prompts/agent_planning.md`
 - `tests/unit/test_agent_planning_helpers.py`
 - `pyproject.toml`
+
+### 2026-04-17: Sentinel Placeholder Values, Dotted Placeholder References, Unknown-Param Payload Leak, and Scheduler No-Webhook Completion
+
+Fourth critical planning-and-execution release following v0.20260416.2 field reports.
+
+**Problem 1 (CRITICAL): LLM sentinel placeholders ("auto-injected") blocked MCP server-default injection**
+
+The v0.20260416.1 parameter-preservation fix carried LLM-emitted parameters through unchanged.
+But the planner, when it knows a required field is provided by an MCP server default, often
+writes a literal sentinel like `"driveId": "auto-injected"` in its `my_steps` payload.
+`_is_nonempty_parameter_candidate` accepted that string as a resolved value, so
+`_merge_parameter_candidates` kept the sentinel and the real server default never got a chance
+to merge in.  The resulting call hit MCP with `driveId=auto-injected` and was rejected.
+
+- Fix: new `_SENTINEL_PLACEHOLDER_PATTERN` regex + `_is_sentinel_placeholder_value()` method.
+  `_is_nonempty_parameter_candidate()` now returns `False` for sentinel values, which in turn
+  flags them as unresolved inside `_has_resolved_required_parameter_value`,
+  `_merge_parameter_candidates`, and `_get_unresolved_required_parameters`.  Server-default
+  injection, context resolution, and parameter inference all get to overwrite the sentinel.
+- Matcher is case-insensitive and anchored to the full stripped value so it only hits obvious
+  "inject later" tokens (`auto-injected`, `auto_fill`, `from_server`, `from_context`,
+  `server_default`, `<to-be-injected>`, `to_be_provided`, `<...>`).  Real values with hyphens
+  or underscores (e.g. `b!actual-drive-id`, `primary`) are untouched.
+
+**Problem 2 (CRITICAL): Dotted placeholder references `{{FOO.field}}` resolved to the literal string**
+
+`_substitute_step_parameter_placeholders` looked up `my_results[placeholder_key]` using the
+entire `{{SPARK_EVENT.event_id}}` string.  The dict is keyed on `{{SPARK_EVENT}}` (bare
+placeholder), so the lookup always missed and the literal `{{SPARK_EVENT.event_id}}` was
+passed to MCP.  This was the root cause of BUG-3 in the v0.20260416.2 field report.
+
+- Fix: new `_parse_placeholder_reference()` splits `{{NAME.field}}` into
+  `("{{NAME}}", "field")`.  If the direct lookup misses and the placeholder is dotted,
+  `_substitute_step_parameter_placeholders` retries with the bare placeholder and records
+  the `.field` suffix as a field hint.
+- new `_extract_field_from_result_payload()` walks the structured records (via
+  `_iter_result_records`) and returns the first record field whose normalized name (lowercase,
+  no underscores or dashes) matches the hint.  Only scalar-like values are returned.
+
+**Problem 3 (CRITICAL): Whole result payload leaked as param value for unknown/hallucinated params**
+
+The final fallback in `_resolve_parameter_from_result_payload`:
+
+```python
+if self._has_resolved_required_parameter_value(payload, param_def):
+    return payload
+```
+
+returned the entire payload dict when field-level resolution failed.  For LLM-hallucinated
+parameters that weren't part of the tool schema (e.g. `user_google_email` on
+`manage_event`), `param_def` was `{}` and the fallback happily returned the whole result
+object, which MCP then rejected with a pydantic validation error.  This was BUG-4 in the
+v0.20260416.2 field report.
+
+- Fix: the fallback now only triggers when `param_def` is non-empty **and** the payload is a
+  scalar (`not isinstance(payload, (dict, list))`).  Hallucinated / schema-less parameters
+  resolve to `None` so they get dropped cleanly instead of polluting the MCP call.
+
+**Problem 4: Scheduler jobs succeeded but `total_runs` stayed 0**
+
+`_execute_single_job` called `overlord.chat(use_async=True, webhook_url=webhook_url)` and
+relied on `complete_job_from_webhook` to update counters.  When the formation had no
+`async.webhook_url`, the webhook never fired: jobs ran successfully (agent executed,
+response produced, memory updated) but the DB still showed `total_runs=0`,
+`last_run_status=''`, and one-time jobs never transitioned to `completed`.
+
+- Fix: added a `has_webhook = bool(webhook_url)` branch.  When webhook is absent, chat runs
+  synchronously (`use_async=False`) and `_execute_single_job` calls
+  `mark_job_execution_success` (and `complete_onetime_job` for one-time jobs) directly after
+  the await returns.  When webhook is present, existing async-webhook flow is preserved.
+- `SCHEDULED_JOB_COMPLETED` / `ONETIME_JOB_COMPLETED` observability events are now emitted
+  from the synchronous path too so dashboards reflect reality.
+
+**Operational implications:**
+
+- Debugging MCP parameter rejections now has three layers to check: (1) did the LLM emit a
+  sentinel like `auto-injected`?, (2) did a `{{FOO.field}}` placeholder survive in the
+  outbound call?, (3) did an unknown param carry the full result dict?  All three map to
+  distinct log fingerprints: unresolved-sentinel vs unresolved-placeholder vs
+  pydantic-validation error with large inline payload.
+- When debugging "scheduled job ran but counters didn't update", check
+  `async.webhook_url`.  The synchronous path is now the default when no webhook is configured;
+  `SCHEDULED_JOB_COMPLETED` is emitted on the same tick as execution ends.
+
+**Files:**
+- `src/muxi/runtime/formation/agents/agent.py` -- sentinel detection, dotted-placeholder
+  parsing, field extraction, tightened payload fallback.
+- `src/muxi/runtime/services/scheduler/service.py` -- `_execute_single_job` synchronous
+  branch, direct success marking.
+- `tests/unit/test_agent_planning_helpers.py` -- 7 new regression tests.
+- `tests/unit/test_bugfix_verification.py` -- `TestSchedulerMarksSuccessWhenNoWebhook`.
+
+**Deferred to next release:**
+
+- Repair-tool domain matching (picking `list-mail-folders` or `search-sharepoint-sites` for
+  Excel failures).  Fix 1 in this release removes the most common trigger so this path is
+  rarely reached in practice.
+- CLI microsecond timestamp parsing in `muxi scheduler list` (CLI-side, not runtime).
+- Scheduler response delivery when no webhook is configured -- synchronous completion now
+  records success, but output still only lives in agent memory / logs.
 
 ### 2026-04-16 (later): Planner Parameter Stripping and Missing Current-Date Context
 

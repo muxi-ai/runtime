@@ -72,6 +72,42 @@ class TestSchedulerMainLoopDispatch:
         assert rcts_pos < ct_pos, "run_coroutine_threadsafe must be the primary path"
 
 
+class TestSchedulerMarksSuccessWhenNoWebhook:
+    """Verify scheduler marks job success synchronously when no webhook is
+    configured.  Regression for v0.20260416.2 Dev #1 scheduler bug where
+    total_runs stayed 0 after a confirmed successful execution."""
+
+    def _get_service_source(self):
+        path = SRC_ROOT / "muxi/runtime/services/scheduler/service.py"
+        return path.read_text()
+
+    def test_execute_single_job_uses_use_async_equals_has_webhook(self):
+        """use_async must follow has_webhook so no-webhook formations run
+        synchronously and can be marked complete in-line."""
+        source = self._get_service_source()
+        method_start = source.index("async def _execute_single_job")
+        method_end = source.index("async def complete_job_from_webhook")
+        method_body = source[method_start:method_end]
+        assert "has_webhook = bool(webhook_url)" in method_body
+        assert "use_async=has_webhook" in method_body
+
+    def test_execute_single_job_calls_mark_success_for_no_webhook_path(self):
+        """The no-webhook branch must call mark_job_execution_success directly."""
+        source = self._get_service_source()
+        method_start = source.index("async def _execute_single_job")
+        method_end = source.index("async def complete_job_from_webhook")
+        method_body = source[method_start:method_end]
+        assert "mark_job_execution_success" in method_body
+
+    def test_execute_single_job_completes_one_time_job_without_webhook(self):
+        """One-time jobs must also be completed synchronously when no webhook."""
+        source = self._get_service_source()
+        method_start = source.index("async def _execute_single_job")
+        method_end = source.index("async def complete_job_from_webhook")
+        method_body = source[method_start:method_end]
+        assert "complete_onetime_job" in method_body
+
+
 class TestMemobaseDimensionFix:
     """Verify Memobase exposes .dimension from its inner LongTermMemory."""
 

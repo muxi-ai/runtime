@@ -18,6 +18,172 @@ def test_a2a_tasks_only_bypass_planning_when_no_tools_are_available():
     assert agent._should_bypass_planning(is_a2a_task=False, tools=[]) is False
 
 
+# ---------------------------------------------------------------------------
+# v0.20260416.3 regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_is_sentinel_placeholder_value_matches_llm_invented_tokens():
+    """Dev #1 Excel: the planner emits 'auto-injected' etc. when it expects
+    the runtime to inject a required parameter.  These values must be
+    treated as unresolved so MCP server defaults can overwrite them."""
+    assert Agent._is_sentinel_placeholder_value("auto-injected") is True
+    assert Agent._is_sentinel_placeholder_value("AUTO_INJECTED") is True
+    assert Agent._is_sentinel_placeholder_value("from_server") is True
+    assert Agent._is_sentinel_placeholder_value("from-context") is True
+    assert Agent._is_sentinel_placeholder_value("server_default") is True
+    assert Agent._is_sentinel_placeholder_value("<to-be-injected>") is True
+    assert Agent._is_sentinel_placeholder_value("to_be_provided") is True
+    # Real values must not trigger.
+    assert Agent._is_sentinel_placeholder_value("b!actual-drive-id-value") is False
+    assert Agent._is_sentinel_placeholder_value("primary") is False
+    assert Agent._is_sentinel_placeholder_value("") is False
+    assert Agent._is_sentinel_placeholder_value(None) is False
+
+
+def test_merge_parameter_candidates_overrides_sentinel_placeholder_values():
+    """Regression for v0.20260416.2 Dev #1 Excel driveId bug: when the LLM
+    emits `{"driveId": "auto-injected"}`, the real value from MCP server
+    defaults must win in _merge_parameter_candidates."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    merged = agent._merge_parameter_candidates(
+        current_parameters={"driveId": "auto-injected"},
+        candidate_parameters={"driveId": "b!real-drive-id"},
+        param_properties={"driveId": {"type": "string"}},
+        full_schema={
+            "type": "object",
+            "required": ["driveId"],
+            "properties": {"driveId": {"type": "string"}},
+        },
+    )
+
+    assert merged["driveId"] == "b!real-drive-id"
+
+
+def test_get_unresolved_required_parameters_flags_sentinel_placeholder_values():
+    """Sentinel values must count as unresolved so the inference / server
+    default pipeline gets a chance to replace them."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    unresolved = agent._get_unresolved_required_parameters(
+        parameters={"driveId": "auto-injected"},
+        required_params=["driveId"],
+        param_properties={"driveId": {"type": "string"}},
+        full_schema={
+            "required": ["driveId"],
+            "properties": {"driveId": {"type": "string"}},
+        },
+    )
+    assert unresolved == ["driveId"]
+
+
+def test_substitute_step_parameter_placeholders_strips_dot_field_suffix():
+    """Regression for BUG-3: `{{SPARK_EVENT.event_id}}` must be resolved by
+    stripping the `.event_id` suffix, looking up `{{SPARK_EVENT}}`, and
+    extracting the `event_id` field from that step's payload."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    my_results = {
+        "{{SPARK_EVENT}}": {
+            "status": "success",
+            "result": {
+                "structured_content": {
+                    "events": [
+                        {
+                            "event_id": "rl5p13b7jgd570rlph28stpaug",
+                            "summary": "Spark Test",
+                            "start_time": "2026-04-17T14:00:00+03:00",
+                        }
+                    ]
+                },
+            },
+        }
+    }
+
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters={
+            "action": "update",
+            "event_id": "{{SPARK_EVENT.event_id}}",
+            "start_time": "2026-04-17T15:00:00+03:00",
+        },
+        param_properties={
+            "event_id": {"type": "string"},
+            "action": {"type": "string"},
+            "start_time": {"type": "string"},
+        },
+        full_schema={},
+        action_description="Update Spark Test event",
+        my_results=my_results,
+        tool_name="google-mcp__manage_event",
+    )
+
+    assert substituted["event_id"] == "rl5p13b7jgd570rlph28stpaug"
+    assert substituted["action"] == "update"
+
+
+def test_parse_placeholder_reference_splits_dotted_forms():
+    """Unit coverage for the dotted placeholder parser."""
+    base, field = Agent._parse_placeholder_reference("{{SPARK_EVENT.event_id}}")
+    assert base == "{{SPARK_EVENT}}"
+    assert field == "event_id"
+
+    base, field = Agent._parse_placeholder_reference("{{SPARK_EVENT}}")
+    assert base == "{{SPARK_EVENT}}"
+    assert field is None
+
+    base, field = Agent._parse_placeholder_reference("{{FOO.bar.baz}}")
+    # Only a single-level field hint is supported.
+    assert base == "{{FOO.bar.baz}}"
+    assert field is None
+
+
+def test_resolve_parameter_from_result_payload_does_not_return_whole_payload():
+    """Regression for BUG-4: when a hallucinated param (not in the tool
+    schema) can't be resolved from any record field, we must return None
+    instead of the entire payload object — otherwise the whole result dict
+    gets passed to MCP and fails pydantic validation."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    payload = {
+        "result": "Successfully listed 2 calendars for oleksandra.bondaruk@automaze.io...",
+    }
+
+    # `user_google_email` is NOT in the manage_event schema, so param_def is {}.
+    resolved = agent._resolve_parameter_from_result_payload(
+        param_name="user_google_email",
+        payload=payload,
+        param_properties={},
+        full_schema={},
+        action_description="Create meeting with attendees",
+        tool_name="google-mcp__manage_event",
+    )
+
+    assert resolved is None
+
+
+def test_resolve_parameter_from_result_payload_still_returns_scalar_for_scalar_schema():
+    """The tightened fallback must still work for legitimate scalar params
+    whose schema is known."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    resolved = agent._resolve_parameter_from_result_payload(
+        param_name="channel_id",
+        payload="C0123456",  # scalar payload, string schema
+        param_properties={"channel_id": {"type": "string"}},
+        full_schema={"properties": {"channel_id": {"type": "string"}}},
+        action_description="Send message to channel",
+        tool_name="slack-mcp__send_message",
+    )
+
+    assert resolved == "C0123456"
+
+
 def test_planning_response_synthesis_prompt_preserves_exact_dates_from_results():
     agent = object.__new__(Agent)
     my_results = {

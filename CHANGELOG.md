@@ -2,6 +2,40 @@
 
 ## [unreleased]
 
+## v0.20260416.3
+
+### Bug Fixes
+
+- **LLM-emitted sentinel values no longer block MCP server-default injection (CRITICAL, Dev #1 Excel, BUG-4 context)** -- When the planner encountered a required parameter that a same-server MCP default would provide (e.g. `driveId` on `get-drive-root-item`), it often emitted a literal sentinel string like `"driveId": "auto-injected"`. The v0.20260416.1 parameter-preservation fix treated that sentinel as a resolved value, so the real server default was never merged in. MCP then rejected the call with `driveId=auto-injected`. Fix: added `_is_sentinel_placeholder_value()` that matches LLM-invented sentinels (`auto-injected`, `from_server`, `from_context`, `server_default`, `<to-be-injected>`, etc.) and the parameter candidate / unresolved-parameter pipelines now treat these values as unresolved so server defaults, context, and inference can overwrite them.
+- **Dotted placeholder references like `{{SPARK_EVENT.event_id}}` now resolve correctly (CRITICAL, BUG-3)** -- `_substitute_step_parameter_placeholders` used the full `{{FOO.field}}` string as a `my_results` lookup key, but the dict is keyed on the bare `{{FOO}}` placeholder. Lookup always missed and the literal `{{FOO.field}}` string was passed through to MCP. Fix: added `_parse_placeholder_reference()` that strips the `.field` suffix for lookup and records the suffix as a field hint; `_extract_field_from_result_payload()` then walks the referenced step's records (case-insensitive, ignoring underscores/dashes) to find the requested field.
+- **Whole-payload fallback no longer returns the entire result dict for unknown params (CRITICAL, BUG-4 root cause)** -- The final branch of `_resolve_parameter_from_result_payload` previously returned the entire payload whenever a field-level match failed. For LLM-hallucinated parameters that weren't in the tool schema (e.g. `user_google_email` on `manage_event`), this sent the whole result dict to MCP and produced pydantic validation errors. Fix: the fallback now only applies when the parameter has a known schema **and** the payload is a scalar; it never returns a dict or a list for a hallucinated or schema-less parameter.
+- **Scheduler now marks job success when no webhook is configured** -- `_execute_single_job` unconditionally called `overlord.chat(use_async=True, webhook_url=webhook_url)` and relied on `complete_job_from_webhook` to update counters. When the formation had no `async.webhook_url`, the webhook never fired: jobs ran successfully (LLM replied, memory updated) but `total_runs` stayed 0 and `last_run_status` stayed empty. Fix: when `webhook_url` is absent, the scheduler runs the chat synchronously and calls `mark_job_execution_success` (and `complete_onetime_job` for one-time jobs) directly after the await returns.
+
+### Tests
+
+- `test_is_sentinel_placeholder_value_matches_llm_invented_tokens` -- coverage for the new sentinel matcher (auto-injected, from_server, from_context, etc.).
+- `test_merge_parameter_candidates_overrides_sentinel_placeholder_values` -- ensures real values beat sentinels during merge.
+- `test_get_unresolved_required_parameters_flags_sentinel_placeholder_values` -- ensures sentinels count as unresolved so server-default injection runs.
+- `test_substitute_step_parameter_placeholders_strips_dot_field_suffix` -- exact bug shape from BUG-3 (`{{SPARK_EVENT.event_id}}` must resolve to the event's id).
+- `test_parse_placeholder_reference_splits_dotted_forms` -- unit coverage for the dotted reference parser.
+- `test_resolve_parameter_from_result_payload_does_not_return_whole_payload` -- regression for BUG-4 (`user_google_email` on `manage_event` with empty schema must resolve to `None`, not the whole result dict).
+- `test_resolve_parameter_from_result_payload_still_returns_scalar_for_scalar_schema` -- sanity check that legitimate scalar resolution still works.
+- 3 source-level verification tests in `TestSchedulerMarksSuccessWhenNoWebhook` confirming the synchronous no-webhook completion path.
+
+### Validation
+
+- Full unit suite: **479 passed, 27 skipped**.
+- Targeted fix tests: 85/85 pass.
+- Random e2e (5/5 pass): `19_api/test_19w1_logs_stream`, `3_multimodal/test_3d3`, `3_multimodal/test_3f1`, `5_artifacts/test_5_13_rce_error_paths`, `9_async/test_9c1_webhook_failure`.
+- ruff, black: clean.
+- mypy: 4 pre-existing errors in `scheduler/service.py` (unrelated to this release).
+
+### Known issues deferred to next release
+
+- **Repair-tool domain mismatch** -- auto-discovery still picks `list-mail-folders` / `search-sharepoint-sites` when `get-drive-root-item` fails because there's no keyword-domain scoring pass; Fix 1 in this release removes the trigger for the most common case (`auto-injected` driveId) so the repair path is rarely reached now.
+- **CLI-side timestamp parsing** -- scheduler list output crashes on microsecond timestamps (CLI issue, not runtime).
+- **Scheduled-job response delivery** -- no mechanism exists to deliver scheduler output back to the user without a webhook; synchronous completion (Fix 4) just keeps DB state correct.
+
 ## v0.20260416.2
 
 ## v0.20260416.1

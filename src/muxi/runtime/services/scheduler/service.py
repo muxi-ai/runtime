@@ -748,31 +748,81 @@ class SchedulerService:
                 if not webhook_url:
                     webhook_url = getattr(self.overlord, "async_webhook_url", None)
 
+                # When a webhook is configured, use async execution and let
+                # complete_job_from_webhook mark success after the webhook fires.
+                # When NO webhook is configured, fall back to synchronous
+                # execution and mark success ourselves — otherwise the job
+                # completes fully (agent runs, LLM responds, memory updates)
+                # but total_runs stays 0 and last_run_status stays empty
+                # because the webhook path never triggers.
+                has_webhook = bool(webhook_url)
+
                 response = await self.overlord.chat(
                     message=execution_prompt,
                     user_id=job["user_id"],
                     session_id=session_id,
-                    use_async=True,  # CRITICAL: Must be async since user is not waiting
-                    webhook_url=webhook_url,  # Required for async execution
+                    use_async=has_webhook,
+                    webhook_url=webhook_url,
                     stream=False,  # No streaming needed for scheduled jobs
                 )
 
-                # Log that async execution has been initiated
-                observability.observe(
-                    event_type=observability.ConversationEvents.SCHEDULED_JOB_ASYNC_INITIATED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "job_id": job_id,
-                        "session_id": session_id,
-                        "response_id": (
-                            response.id if hasattr(response, "id") else str(response)[:50]
-                        ),
-                    },
-                    description=f"Async execution initiated for job: {job['title']}",
-                )
+                if has_webhook:
+                    # Log that async execution has been initiated
+                    observability.observe(
+                        event_type=observability.ConversationEvents.SCHEDULED_JOB_ASYNC_INITIATED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "job_id": job_id,
+                            "session_id": session_id,
+                            "response_id": (
+                                response.id if hasattr(response, "id") else str(response)[:50]
+                            ),
+                        },
+                        description=f"Async execution initiated for job: {job['title']}",
+                    )
+                    # DO NOT mark as complete here - wait for webhook.
+                    # The completion will be handled by complete_job_from_webhook.
+                else:
+                    # Synchronous path: chat() has already returned the final
+                    # result, so we can record success and update job counters
+                    # directly here.
+                    result_text = ""
+                    content = getattr(response, "content", None)
+                    if isinstance(content, str):
+                        result_text = content
+                    elif content is not None:
+                        result_text = str(content)
+                    else:
+                        result_text = str(response)
 
-                # DO NOT mark as complete here - wait for webhook
-                # The completion will be handled by complete_job_from_webhook
+                    await self.job_manager.mark_job_execution_success(job_id, result_text[:1000])
+                    self._active_executions.discard(session_id)
+
+                    # For one-time jobs, also mark as completed so they aren't
+                    # rerun on the next tick.
+                    if not job.get("is_recurring", True):
+                        await self.job_manager.complete_onetime_job(job_id)
+                        observability.observe(
+                            event_type=observability.ConversationEvents.ONETIME_JOB_COMPLETED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "job_id": job_id,
+                                "session_id": session_id,
+                                "result_length": len(result_text),
+                            },
+                            description=(f"One-time job completed synchronously: {job['title']}"),
+                        )
+                    else:
+                        observability.observe(
+                            event_type=observability.ConversationEvents.SCHEDULED_JOB_COMPLETED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "job_id": job_id,
+                                "session_id": session_id,
+                                "result_length": len(result_text),
+                            },
+                            description=(f"Scheduled job completed synchronously: {job['title']}"),
+                        )
             else:
                 raise Exception("No overlord available for job execution")
 

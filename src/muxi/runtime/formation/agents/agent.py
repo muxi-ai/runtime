@@ -5914,6 +5914,35 @@ class Agent:
         )
         return any(re.match(pattern, stripped) for pattern in placeholder_patterns)
 
+    # LLM-invented sentinel strings indicating "the runtime should inject this
+    # value later" rather than an actual resolved value.  We must treat these
+    # as unresolved so that MCP server defaults, context resolution, or
+    # parameter inference can overwrite them.  Matching is case-insensitive
+    # and anchored to the entire stripped value.
+    _SENTINEL_PLACEHOLDER_PATTERN = re.compile(
+        r"^("
+        r"auto[-_]injected|auto[-_]fill(?:ed)?|auto[-_]resolve(?:d)?|"
+        r"from[-_]server|from[-_]context|from[-_]credentials?|"
+        r"server[-_]default|runtime[-_]injected|injected[-_]by[-_]server|"
+        r"to[-_]be[-_](injected|provided|resolved|filled)|"
+        r"will[-_]be[-_](injected|provided)|"
+        r"<[^<>]+>"
+        r")$",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _is_sentinel_placeholder_value(value: Any) -> bool:
+        """Return True when a value looks like an LLM-invented 'inject this later'
+        sentinel.  These strings must not override real values from server
+        defaults, context, or inference."""
+        if not isinstance(value, str):
+            return False
+        stripped = value.strip()
+        if not stripped:
+            return False
+        return bool(Agent._SENTINEL_PLACEHOLDER_PATTERN.match(stripped))
+
     @staticmethod
     def _is_nonempty_parameter_candidate(value: Any) -> bool:
         """Return True when a value is plausibly usable as a resolved parameter."""
@@ -5921,7 +5950,13 @@ class Agent:
             return False
         if isinstance(value, str):
             stripped = value.strip()
-            return bool(stripped) and not Agent._is_placeholder_like_value(stripped)
+            if not stripped:
+                return False
+            if Agent._is_placeholder_like_value(stripped):
+                return False
+            if Agent._is_sentinel_placeholder_value(stripped):
+                return False
+            return True
         if isinstance(value, (list, dict)):
             return bool(value)
         return True
@@ -6283,10 +6318,39 @@ class Agent:
             ):
                 return drive_values[0]
 
-        if self._has_resolved_required_parameter_value(payload, param_def):
-            return payload
+        # Last-resort fallback: return the whole payload only when the
+        # parameter schema is known AND the payload is a scalar-like value
+        # (not a dict or a list).  Without this guard, hallucinated params
+        # that are not in the tool schema (empty param_def) would swallow the
+        # entire result object and send it to MCP, producing pydantic errors
+        # like the v0.20260416.2 BUG-4 report.
+        if param_def and not isinstance(payload, (dict, list)):
+            if self._has_resolved_required_parameter_value(payload, param_def):
+                return payload
 
         return None
+
+    @staticmethod
+    def _parse_placeholder_reference(
+        placeholder_key: str,
+    ) -> tuple[str, Optional[str]]:
+        """Split `{{FOO.bar}}` into (`{{FOO}}`, `bar`).
+
+        The LLM often emits dotted references like ``{{SPARK_EVENT.event_id}}``
+        to indicate "use the event_id field from the SPARK_EVENT step output".
+        my_results is keyed on the bare placeholder (`{{SPARK_EVENT}}`), so we
+        must strip the `.field` suffix before lookup and pass the suffix down
+        as a field hint.
+        """
+        match = re.match(
+            r"^(\{\{\s*[A-Za-z0-9_\-]+)\.([A-Za-z0-9_\-]+)(\s*\}\})$",
+            placeholder_key,
+        )
+        if match:
+            base_key = match.group(1) + match.group(3)
+            field_hint = match.group(2)
+            return base_key, field_hint
+        return placeholder_key, None
 
     def _substitute_step_parameter_placeholders(
         self,
@@ -6312,22 +6376,53 @@ class Agent:
 
             placeholder_key = str(param_value).strip()
             referenced_result = successful_results.get(placeholder_key)
+            field_hint: Optional[str] = None
+            if referenced_result is None:
+                # Try dot-notation: `{{FOO.bar}}` -> look up `{{FOO}}` and
+                # remember `bar` as the field to prefer inside the payload.
+                base_key, field_hint = self._parse_placeholder_reference(placeholder_key)
+                if base_key != placeholder_key:
+                    referenced_result = successful_results.get(base_key)
             if referenced_result is None:
                 continue
 
             payload = self._extract_structured_planning_result_payload(referenced_result)
-            resolved_value = self._resolve_parameter_from_result_payload(
-                param_name=param_name,
-                payload=payload,
-                param_properties=param_properties,
-                full_schema=full_schema,
-                action_description=action_description,
-                tool_name=tool_name,
-            )
+            resolved_value: Any = None
+            if field_hint:
+                resolved_value = self._extract_field_from_result_payload(payload, field_hint)
+            if resolved_value is None:
+                resolved_value = self._resolve_parameter_from_result_payload(
+                    param_name=param_name,
+                    payload=payload,
+                    param_properties=param_properties,
+                    full_schema=full_schema,
+                    action_description=action_description,
+                    tool_name=tool_name,
+                )
             if resolved_value is not None:
                 substituted[param_name] = resolved_value
 
         return substituted
+
+    def _extract_field_from_result_payload(self, payload: Any, field_name: str) -> Any:
+        """Find the first occurrence of `field_name` in a structured payload.
+
+        Walks records produced by `_iter_result_records`.  Matches are tried
+        exact, case-insensitive, and with underscores stripped so that
+        `eventId`, `event_id`, and `EventID` all resolve to the same field."""
+        if not field_name:
+            return None
+        target = field_name.lower().replace("_", "").replace("-", "")
+        for record in self._iter_result_records(payload):
+            if not isinstance(record, dict):
+                continue
+            for key, value in record.items():
+                if not isinstance(key, str):
+                    continue
+                normalized = key.lower().replace("_", "").replace("-", "")
+                if normalized == target and self._is_nonempty_parameter_candidate(value):
+                    return value
+        return None
 
     def _validate_inferred_parameters_against_results(
         self,
