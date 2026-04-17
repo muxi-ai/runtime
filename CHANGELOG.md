@@ -4,6 +4,8 @@
 
 ## v0.20260417.2
 
+## v0.20260417.2
+
 ### Prompt Hardening
 
 - **Planning prompt now pins the placeholder contract** -- Added a new `PLACEHOLDER RULES (strict)` block to `src/muxi/runtime/formation/prompts/agent_planning.md` that codifies the four failure modes surfaced by v0.20260416.x / v0.20260417.x field reports. The runtime-side guards shipped in v0.20260417.1 stay in place; this change reduces how often they're triggered by telling the planner upfront what valid plans look like.
