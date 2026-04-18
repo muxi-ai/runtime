@@ -4,6 +4,8 @@
 
 ## v0.20260418.0
 
+## v0.20260418.0
+
 ### New Placeholder Contract — Collection Disambiguation
 
 - **New predicate syntax in placeholder references (Dev #1 Excel Failure Mode 1)** -- The dotted placeholder contract is extended from `{{NAME}}` / `{{NAME.field}}` to also accept `{{NAME[key=value]}}` and `{{NAME[key=value].field}}`. This gives the planner a deterministic way to say "the record named X" when a prior step returned a collection. Without this, `{{FILE_LIST.id}}` silently resolved to whichever record `_iter_result_records` encountered first — in the reported Excel case that was the alphabetically-first `Attachments` folder, not the user's `Book.xlsx`, and passing a folder id to `list-excel-worksheets` produced the misleading "WAC 403 / could not obtain access token" error. New runtime helpers:
