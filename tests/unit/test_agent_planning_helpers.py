@@ -127,18 +127,450 @@ def test_substitute_step_parameter_placeholders_strips_dot_field_suffix():
 
 def test_parse_placeholder_reference_splits_dotted_forms():
     """Unit coverage for the dotted placeholder parser."""
-    base, field = Agent._parse_placeholder_reference("{{SPARK_EVENT.event_id}}")
+    base, field, predicate = Agent._parse_placeholder_reference("{{SPARK_EVENT.event_id}}")
     assert base == "{{SPARK_EVENT}}"
     assert field == "event_id"
+    assert predicate is None
 
-    base, field = Agent._parse_placeholder_reference("{{SPARK_EVENT}}")
+    base, field, predicate = Agent._parse_placeholder_reference("{{SPARK_EVENT}}")
     assert base == "{{SPARK_EVENT}}"
     assert field is None
+    assert predicate is None
 
-    base, field = Agent._parse_placeholder_reference("{{FOO.bar.baz}}")
+    base, field, predicate = Agent._parse_placeholder_reference("{{FOO.bar.baz}}")
     # Only a single-level field hint is supported.
     assert base == "{{FOO.bar.baz}}"
     assert field is None
+    assert predicate is None
+
+
+# ---------------------------------------------------------------------------
+# v0.20260418.0 predicate-filter placeholder prototype
+# ---------------------------------------------------------------------------
+
+
+def test_parse_placeholder_reference_supports_quoted_string_predicate():
+    """{{FILE_LIST[name='Book.xlsx'].id}} must split into base/field/predicate.
+
+    This is the core shape that fixes the Excel "picks wrong record" bug:
+    the LLM now has a deterministic way to say "the Book.xlsx record" when
+    a prior step returned many records.
+    """
+    base, field, predicate = Agent._parse_placeholder_reference(
+        "{{FILE_LIST[name='Book.xlsx'].id}}"
+    )
+    assert base == "{{FILE_LIST}}"
+    assert field == "id"
+    assert predicate == {"name": "Book.xlsx"}
+
+    base, field, predicate = Agent._parse_placeholder_reference('{{FILE_LIST[name="Book.xlsx"]}}')
+    assert base == "{{FILE_LIST}}"
+    assert field is None
+    assert predicate == {"name": "Book.xlsx"}
+
+
+def test_parse_placeholder_predicate_accepts_all_scalar_value_types():
+    """Predicate values may be quoted strings, bools, numbers, or bare words."""
+    assert Agent._parse_placeholder_predicate("[name='Book.xlsx']") == {"name": "Book.xlsx"}
+    assert Agent._parse_placeholder_predicate('[name="Book.xlsx"]') == {"name": "Book.xlsx"}
+    assert Agent._parse_placeholder_predicate("[isFolder=true]") == {"isFolder": True}
+    assert Agent._parse_placeholder_predicate("[isFolder=false]") == {"isFolder": False}
+    assert Agent._parse_placeholder_predicate("[priority=1]") == {"priority": 1}
+    assert Agent._parse_placeholder_predicate("[score=1.5]") == {"score": 1.5}
+    assert Agent._parse_placeholder_predicate("[folder=null]") == {"folder": None}
+    # Bare identifier value (for enum-like tags).
+    assert Agent._parse_placeholder_predicate("[kind=file]") == {"kind": "file"}
+    # Malformed forms must return None so the runtime can refuse substitution.
+    assert Agent._parse_placeholder_predicate("[=missingkey]") is None
+    assert Agent._parse_placeholder_predicate("[nokey]") is None
+    assert Agent._parse_placeholder_predicate("[]") is None
+    assert Agent._parse_placeholder_predicate("[bad key=1]") is None
+
+
+def test_parse_placeholder_reference_rejects_malformed_predicate():
+    """Malformed predicate degrades to legacy behavior so we don't silently
+    pass a broken filter through to the record walker."""
+    placeholder = "{{FILE_LIST[==].id}}"
+    base, field, predicate = Agent._parse_placeholder_reference(placeholder)
+    assert base == placeholder
+    assert field is None
+    assert predicate is None
+
+
+def test_record_matches_predicate_normalizes_field_names_and_string_case():
+    """Key variations (display_name vs Name vs name) and case differences on
+    string values should not prevent a match — real Graph API payloads mix
+    all three on the same record set."""
+    record = {"Name": "Book.xlsx", "id": "abc123", "isFolder": False}
+    assert Agent._record_matches_predicate(record, {"name": "Book.xlsx"}) is True
+    assert Agent._record_matches_predicate(record, {"name": "book.xlsx"}) is True
+    assert Agent._record_matches_predicate(record, {"name": "Other.xlsx"}) is False
+
+    # Display-name style variant.
+    record_display = {"displayName": "Quarterly Report", "id": "def456"}
+    assert (
+        Agent._record_matches_predicate(record_display, {"display_name": "Quarterly Report"})
+        is True
+    )
+    assert (
+        Agent._record_matches_predicate(record_display, {"displayname": "Quarterly Report"}) is True
+    )
+
+    # Boolean and numeric predicates.
+    assert Agent._record_matches_predicate(record, {"isFolder": False}) is True
+    assert Agent._record_matches_predicate(record, {"isFolder": True}) is False
+
+    # Numeric coercion: integer predicate vs string value.
+    assert Agent._record_matches_predicate({"priority": "42"}, {"priority": 42}) is True
+
+    # None predicate matches absent/null fields.
+    assert Agent._record_matches_predicate({"folder": None}, {"folder": None}) is True
+    assert Agent._record_matches_predicate({"name": "x"}, {"folder": None}) is True
+    assert Agent._record_matches_predicate({"folder": {"childCount": 0}}, {"folder": None}) is False
+
+
+def test_extract_field_with_predicate_picks_correct_record_from_list():
+    """Excel scenario (Dev #1 Failure Mode 1): list-folder-files returns
+    [Attachments folder, Book.xlsx, ...]; without a predicate the extractor
+    resolves .id to the first record (Attachments). With a name predicate,
+    it must resolve to Book.xlsx."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    payload = {
+        "value": [
+            {
+                "id": "01SA7QZQ7HKJH6YEQPZNEY2JV3H7LXCTZU",
+                "name": "Attachments",
+                "folder": {"childCount": 3},
+            },
+            {
+                "id": "01SA7QZQZWMLF7VGIIMNAILZA3424C3AL5",
+                "name": "Book.xlsx",
+                "file": {
+                    "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                },
+            },
+            {
+                "id": "01SA7QZQZZZZZZZZZZZZZZZZZZZZZZZZ",
+                "name": "Notes.docx",
+                "file": {
+                    "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                },
+            },
+        ],
+    }
+
+    # No predicate — legacy behavior picks the first id (the folder).
+    assert agent._extract_field_from_result_payload(payload, "id") == (
+        "01SA7QZQ7HKJH6YEQPZNEY2JV3H7LXCTZU"
+    )
+
+    # With predicate — picks the Book.xlsx record's id.
+    assert (
+        agent._extract_field_from_result_payload(payload, "id", predicate={"name": "Book.xlsx"})
+        == "01SA7QZQZWMLF7VGIIMNAILZA3424C3AL5"
+    )
+
+    # Predicate matches nothing → None.
+    assert (
+        agent._extract_field_from_result_payload(payload, "id", predicate={"name": "Missing.xlsx"})
+        is None
+    )
+
+    # Predicate with no field requested → returns the matched record itself.
+    match = agent._extract_field_from_result_payload(payload, None, predicate={"name": "Book.xlsx"})
+    assert isinstance(match, dict)
+    assert match["id"] == "01SA7QZQZWMLF7VGIIMNAILZA3424C3AL5"
+
+
+def test_extract_field_with_predicate_skips_text_fallback():
+    """Predicate mode must not scan free-text chunks — text payloads can't
+    honor a structural predicate reliably (no per-record boundaries)."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    payload = "- Name: Book.xlsx\n  ID: text-only-id\n"
+    # Without predicate the text fallback locates the id.
+    assert agent._extract_field_from_result_payload(payload, "id") == "text-only-id"
+    # With predicate we must return None rather than guessing.
+    assert (
+        agent._extract_field_from_result_payload(payload, "id", predicate={"name": "Book.xlsx"})
+        is None
+    )
+
+
+def test_filter_records_by_predicate_collects_all_matches():
+    payload = {
+        "items": [
+            {"kind": "file", "name": "a.txt"},
+            {"kind": "folder", "name": "docs"},
+            {"kind": "file", "name": "b.txt"},
+        ]
+    }
+    matches = Agent._filter_records_by_predicate(payload, {"kind": "file"}, collect_all=True)
+    assert [record["name"] for record in matches] == ["a.txt", "b.txt"]
+
+
+def test_substitute_step_parameter_placeholders_uses_predicate():
+    """End-to-end: the placeholder substitution pipeline must honor the
+    predicate when resolving `{{FILE_LIST[name='Book.xlsx'].id}}` against
+    a prior step's payload."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    my_results = {
+        "{{FILE_LIST}}": {
+            "success": True,
+            "result": {
+                "value": [
+                    {"id": "folder-id", "name": "Attachments", "folder": {}},
+                    {"id": "workbook-id", "name": "Book.xlsx", "file": {}},
+                ]
+            },
+        },
+    }
+
+    parameters = {"driveItemId": "{{FILE_LIST[name='Book.xlsx'].id}}"}
+    param_properties = {"driveItemId": {"type": "string"}}
+    full_schema = {
+        "type": "object",
+        "required": ["driveItemId"],
+        "properties": {"driveItemId": {"type": "string"}},
+    }
+
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters=parameters,
+        param_properties=param_properties,
+        full_schema=full_schema,
+        action_description="List all worksheets in Book.xlsx",
+        my_results=my_results,
+        tool_name="list-excel-worksheets",
+    )
+    assert substituted["driveItemId"] == "workbook-id"
+
+
+# ---------------------------------------------------------------------------
+# v0.20260418.0 Option 2 — auto-inferred name predicate from action
+# ---------------------------------------------------------------------------
+
+
+def test_extract_named_resource_from_action_prefers_quoted_strings():
+    """Quoted/backticked references beat incidental filenames elsewhere."""
+    # Double-quote wins over a filename further in the text.
+    assert (
+        Agent._extract_named_resource_from_action(
+            'Open the "Quarterly Report" workbook, not Book.xlsx'
+        )
+        == "Quarterly Report"
+    )
+    # Single-quote resolves.
+    assert (
+        Agent._extract_named_resource_from_action("Find the event titled 'Team Standup'")
+        == "Team Standup"
+    )
+    # Backtick-wrapped markdown span.
+    assert (
+        Agent._extract_named_resource_from_action("Open `Book.xlsx` from the root folder")
+        == "Book.xlsx"
+    )
+
+
+def test_extract_named_resource_from_action_detects_unquoted_filenames():
+    """Unquoted filenames with a recognized extension qualify as named resources."""
+    assert (
+        Agent._extract_named_resource_from_action("List files in the root folder to find Book.xlsx")
+        == "Book.xlsx"
+    )
+    assert (
+        Agent._extract_named_resource_from_action("Open quarterly-report.pdf for review")
+        == "quarterly-report.pdf"
+    )
+
+
+def test_extract_named_resource_from_action_ignores_prose_without_markers():
+    """Bare capitalized words must NOT qualify — too many false positives."""
+    assert Agent._extract_named_resource_from_action("List all worksheets in the workbook") is None
+    assert Agent._extract_named_resource_from_action("Get the root folder ID") is None
+    assert Agent._extract_named_resource_from_action("") is None
+    assert Agent._extract_named_resource_from_action(None) is None
+
+
+def test_infer_auto_name_predicate_fires_for_ambiguous_multi_record_payload():
+    """Dev #1 Excel scenario: action mentions Book.xlsx and the payload has
+    multiple named records — auto-infer a ``{name: 'Book.xlsx'}`` predicate."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    payload = {
+        "value": [
+            {"id": "folder-id", "name": "Attachments", "folder": {}},
+            {"id": "workbook-id", "name": "Book.xlsx", "file": {}},
+            {"id": "doc-id", "name": "Notes.docx", "file": {}},
+        ]
+    }
+    inferred = agent._infer_auto_name_predicate(
+        payload=payload,
+        action_description="List files in the root folder to find Book.xlsx",
+    )
+    assert inferred == {"name": "Book.xlsx"}
+
+
+def test_infer_auto_name_predicate_returns_none_without_ambiguity():
+    """Single-record payloads don't need disambiguation."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    payload = {"id": "only-record", "name": "Book.xlsx", "file": {}}
+    assert (
+        agent._infer_auto_name_predicate(
+            payload=payload,
+            action_description="Fetch Book.xlsx metadata",
+        )
+        is None
+    )
+
+
+def test_infer_auto_name_predicate_returns_none_when_named_resource_not_in_payload():
+    """The guard prevents silently applying a predicate against a name the
+    prior step never actually returned."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    payload = {
+        "value": [
+            {"id": "f1", "name": "Attachments"},
+            {"id": "f2", "name": "Notes.docx"},
+        ]
+    }
+    assert (
+        agent._infer_auto_name_predicate(
+            payload=payload,
+            action_description="List files to find Book.xlsx",
+        )
+        is None
+    )
+
+
+def test_infer_auto_name_predicate_adapts_to_displayname_field():
+    """When records use ``displayName`` instead of ``name``, the synthesized
+    predicate must use the same variant so downstream matching succeeds."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    payload = {
+        "value": [
+            {"id": "a", "displayName": "Engineering"},
+            {"id": "b", "displayName": "Marketing"},
+        ]
+    }
+    inferred = agent._infer_auto_name_predicate(
+        payload=payload,
+        action_description="Open the 'Marketing' workspace",
+    )
+    assert inferred == {"displayName": "Marketing"}
+
+
+def test_substitute_placeholders_auto_applies_predicate_from_action():
+    """End-to-end: the Excel bug scenario without the LLM using the new
+    predicate syntax — the runtime should still resolve to Book.xlsx by
+    cross-referencing the action description."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    my_results = {
+        "{{FILE_LIST}}": {
+            "success": True,
+            "result": {
+                "value": [
+                    {"id": "folder-id", "name": "Attachments", "folder": {}},
+                    {"id": "workbook-id", "name": "Book.xlsx", "file": {}},
+                ]
+            },
+        },
+    }
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters={"driveItemId": "{{FILE_LIST.id}}"},
+        param_properties={"driveItemId": {"type": "string"}},
+        full_schema={
+            "type": "object",
+            "required": ["driveItemId"],
+            "properties": {"driveItemId": {"type": "string"}},
+        },
+        action_description="List all worksheet names in Book.xlsx",
+        my_results=my_results,
+        tool_name="list-excel-worksheets",
+    )
+    assert substituted["driveItemId"] == "workbook-id"
+
+
+def test_substitute_placeholders_respects_explicit_predicate_over_auto():
+    """When the LLM provides an explicit predicate, we must not override it
+    with an auto-inferred one (LLM intent wins, even if action_description
+    would synthesize something different)."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    my_results = {
+        "{{FILE_LIST}}": {
+            "success": True,
+            "result": {
+                "value": [
+                    {"id": "attach-id", "name": "Attachments", "folder": {}},
+                    {"id": "book-id", "name": "Book.xlsx", "file": {}},
+                    {"id": "notes-id", "name": "Notes.docx", "file": {}},
+                ]
+            },
+        },
+    }
+    # Action mentions Book.xlsx, but LLM explicitly asked for Notes.docx.
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters={"driveItemId": "{{FILE_LIST[name='Notes.docx'].id}}"},
+        param_properties={"driveItemId": {"type": "string"}},
+        full_schema={
+            "type": "object",
+            "required": ["driveItemId"],
+            "properties": {"driveItemId": {"type": "string"}},
+        },
+        action_description="Read sheets from Book.xlsx first",
+        my_results=my_results,
+        tool_name="open-document",
+    )
+    assert substituted["driveItemId"] == "notes-id"
+
+
+def test_substitute_placeholders_falls_back_to_legacy_without_named_resource():
+    """When action_description has no quoted/filename-extension token, the
+    auto-predicate must NOT fire — preserves legacy behavior for plans that
+    don't lean on named-resource context."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    my_results = {
+        "{{FILE_LIST}}": {
+            "success": True,
+            "result": {
+                "value": [
+                    {"id": "first-id", "name": "Alpha"},
+                    {"id": "second-id", "name": "Beta"},
+                ]
+            },
+        },
+    }
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters={"driveItemId": "{{FILE_LIST.id}}"},
+        param_properties={"driveItemId": {"type": "string"}},
+        full_schema={
+            "type": "object",
+            "required": ["driveItemId"],
+            "properties": {"driveItemId": {"type": "string"}},
+        },
+        action_description="Pass the first result id to the next step",
+        my_results=my_results,
+        tool_name="open-document",
+    )
+    # Falls back to the first record's id — legacy behavior preserved.
+    assert substituted["driveItemId"] == "first-id"
 
 
 def test_resolve_parameter_from_result_payload_does_not_return_whole_payload():

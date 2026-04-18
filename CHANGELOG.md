@@ -2,6 +2,72 @@
 
 ## [unreleased]
 
+## v0.20260418.0
+
+### New Placeholder Contract — Collection Disambiguation
+
+- **New predicate syntax in placeholder references (Dev #1 Excel Failure Mode 1)** -- The dotted placeholder contract is extended from `{{NAME}}` / `{{NAME.field}}` to also accept `{{NAME[key=value]}}` and `{{NAME[key=value].field}}`. This gives the planner a deterministic way to say "the record named X" when a prior step returned a collection. Without this, `{{FILE_LIST.id}}` silently resolved to whichever record `_iter_result_records` encountered first — in the reported Excel case that was the alphabetically-first `Attachments` folder, not the user's `Book.xlsx`, and passing a folder id to `list-excel-worksheets` produced the misleading "WAC 403 / could not obtain access token" error. New runtime helpers:
+    - `_parse_placeholder_reference` now returns a 3-tuple `(base_key, field_hint, predicate)`.
+    - `_parse_placeholder_predicate` parses the `[key=value]` body with typed values: single- or double-quoted strings, booleans, integers, floats, `null`/`none`, and bare identifiers.
+    - `_record_matches_predicate` applies the predicate with normalized field names (so `[name=X]` matches `Name`, `display_name`, or `DisplayName`) and case-insensitive string comparison.
+    - `_filter_records_by_predicate` walks `_iter_result_records` and returns matching records.
+    - `_extract_field_from_result_payload` accepts an optional `predicate=` kwarg that filters records before field extraction. Text-chunk fallback is disabled under predicate mode because free-text payloads cannot be reliably filtered by structural field value.
+    - Malformed predicate syntax (`[==]`, `[]`, etc.) degrades gracefully — the helper returns the untouched placeholder string so downstream resolution / repair-plan flows react normally.
+- **Auto-inferred name predicate from `action_description` (Dev #1 Excel Failure Mode 1, defense-in-depth)** -- Layered on top of the new syntax as a backward-compatibility bridge. When the planner emits the legacy `{{FOO.field}}` form (no predicate) and the step's `action_description` explicitly names a resource, the runtime synthesizes a `{name|displayName|title|subject: X}` predicate automatically and applies it. This closes the "LLM hasn't learned the new syntax yet" gap without waiting for prompt compliance.
+    - `_extract_named_resource_from_action` pulls a resource name from the description via three conservative matchers: double-quoted strings (`"Quarterly Report"`), single-quoted strings (`'Team Standup'`), backticked markdown code spans (`` `Book.xlsx` ``), and unquoted filenames with a recognized extension (`Book.xlsx`, `quarterly-report.pdf`). Bare capitalized words are deliberately excluded — they produce too many false positives in prose.
+    - `_infer_auto_name_predicate` synthesizes the predicate only when three guards all hold: (1) the description names a resource, (2) the payload contains ≥ 2 records carrying the same name-field variant (genuine ambiguity), (3) at least one record actually matches the extracted name (prevents silent rewrites against resources the prior step never returned).
+    - Synthesized predicates use the actual field variant present on matching records (`name`, `displayName`, `title`, or `subject`) so downstream matching — which is strict about key normalization — succeeds.
+    - Precedence is unambiguous: an explicit `[key=value]` from the LLM always wins over the auto-inferred predicate. The auto-path only runs when the LLM emitted no predicate at all.
+    - An `AGENT_PLANNING` INFO observability event is emitted every time auto-inference fires, carrying the inferred predicate, the original placeholder key, the field hint, and a truncated action description — so devs can see exactly when the runtime auto-corrected a plan.
+- **`agent_planning.md` PLACEHOLDER RULES block extended** -- The strict contract now documents the predicate syntax with correct/wrong examples using the exact Book.xlsx scenario, the value-type cheat sheet (quoted strings, bools, numbers, bare identifiers), and the single-pair-only v1 limitation. The LLM learns the structure from the prompt; the runtime catches residual non-compliance via the auto-inference fallback.
+
+### Architectural Notes
+
+- This closes the "collection disambiguation" gap identified during the Dev #1 Excel debug session: our previous plan-execute model assumed shape-deterministic data flow (each step produces a single definite scalar / record). The predicate extension makes the contract expressive enough for list-returning tools, and the auto-inference fallback bridges legacy plans that don't yet use the new syntax. The runtime now has three tiers of resolution for multi-record payloads, in precedence order:
+    1. **Explicit predicate** — `{{FILE_LIST[name='Book.xlsx'].id}}`, deterministic.
+    2. **Auto-inferred predicate** — `{{FILE_LIST.id}}` with action "... to find Book.xlsx", heuristic but guarded.
+    3. **Legacy first-match** — original behavior preserved when no named resource is available.
+- `_parse_placeholder_reference` is now a 3-tuple API. Callers and test assertions updated accordingly (one production call site, one unit test). Safe to extend further (comma-separated AND predicates, not-equals operators) without breaking today's shape.
+- The "collection disambiguation" work is purely runtime-side: zero LLM / MCP changes. The companion MS365 MCP tool-selection bug (Dev #1 Excel Failure Mode 2) — A2A-received agents getting 10 task-only tools instead of the 217 configured — is tracked separately and NOT addressed here.
+
+### Tests
+
+**New unit tests** (`tests/unit/test_agent_planning_helpers.py`, 515 total; 106 passed in the file):
+- `test_parse_placeholder_reference_supports_quoted_string_predicate` -- `{{FILE_LIST[name='Book.xlsx'].id}}` splits into (`{{FILE_LIST}}`, `id`, `{name: 'Book.xlsx'}`); double- and single-quote forms both parse.
+- `test_parse_placeholder_predicate_accepts_all_scalar_value_types` -- quoted strings, booleans, integers, floats, null, bare identifiers; malformed cases return None.
+- `test_parse_placeholder_reference_rejects_malformed_predicate` -- `[==]` degrades gracefully to the untouched string.
+- `test_record_matches_predicate_normalizes_field_names_and_string_case` -- `[name=X]` matches `Name`, `display_name`, `DisplayName`; string comparisons are case-insensitive; None matches missing/null.
+- `test_extract_field_with_predicate_picks_correct_record_from_list` -- Dev #1 Excel scenario; predicate resolves to Book.xlsx id, not Attachments.
+- `test_extract_field_with_predicate_skips_text_fallback` -- text payloads are not scanned when a predicate is active.
+- `test_filter_records_by_predicate_collects_all_matches` -- `collect_all=True` path returns every matching record in order.
+- `test_substitute_step_parameter_placeholders_uses_predicate` -- end-to-end substitution honors the predicate.
+- `test_extract_named_resource_from_action_prefers_quoted_strings` -- quoted/backticked wins over incidental filenames.
+- `test_extract_named_resource_from_action_detects_unquoted_filenames` -- filenames with recognized extensions qualify.
+- `test_extract_named_resource_from_action_ignores_prose_without_markers` -- bare capitalized words do NOT qualify.
+- `test_infer_auto_name_predicate_fires_for_ambiguous_multi_record_payload` -- Excel scenario; synthesizes `{name: 'Book.xlsx'}`.
+- `test_infer_auto_name_predicate_returns_none_without_ambiguity` -- single-record payloads skip inference.
+- `test_infer_auto_name_predicate_returns_none_when_named_resource_not_in_payload` -- guard prevents silent rewrite against absent resources.
+- `test_infer_auto_name_predicate_adapts_to_displayname_field` -- synthesized predicate uses the actual field variant present on records.
+- `test_substitute_placeholders_auto_applies_predicate_from_action` -- end-to-end Excel scenario without explicit predicate.
+- `test_substitute_placeholders_respects_explicit_predicate_over_auto` -- explicit `[name=X]` wins over auto-inference.
+- `test_substitute_placeholders_falls_back_to_legacy_without_named_resource` -- legacy first-match preserved for plans without named context.
+
+**New e2e test** (`e2e/tests/7_orchestration/test_7a5_placeholder_predicate_resolution.py`):
+- Seven scenarios exercising the full substitution pipeline against realistic MS365 Graph API response shapes (`list-folder-files`, `list-sharepoint-sites`) — explicit predicate path, auto-inference path, `displayName` variant adaptation, legacy fallback, explicit-beats-auto precedence, array-typed predicate filtering, and the guard that declines auto-inference when the named resource is not in the payload. Verifies both the resolved values and the emitted `AGENT_PLANNING` observability event.
+
+### Validation
+
+- Full unit suite: **515 passed, 27 skipped** (zero failures).
+- Targeted placeholder helper suite: 106/106 pass (89 baseline + 7 predicate syntax + 10 auto-inference).
+- New e2e test (`test_7a5_placeholder_predicate_resolution`): 7/7 scenarios pass.
+- Random e2e sample: 5/5 pass (multimodal, artifacts, knowledge, clarification x2).
+- ruff, black, mypy: clean on touched files.
+
+### Known issues deferred to next release
+
+- **MS365 tool selection collapse on A2A delegation (Dev #1 Excel Failure Mode 2)** -- when `ms365-assistant` is reached via A2A from another agent, semantic tool selection returns only 10 task/planner tools (out of 217 configured), excluding all drive and Excel tools. This is a runtime bug in the MCP tool-selection path, not a placeholder-resolution issue, and requires separate investigation. Tracked with the observability diagnostic proposal (log ranked-tools-before-cutoff for A2A-received planning).
+- **Cross-placeholder explicit-predicate miss semantics** -- when the LLM writes `{{FOO[name='Nonexistent'].id}}` and no record matches, the existing kind-aware `_resolve_parameter_from_result_payload` fallback can still return a value of the matching schema kind. This is pre-existing behavior (not a regression from today's changes); tightening it to respect explicit-predicate intent is deferred as a targeted follow-up.
+
 ## v0.20260417.2
 
 ## v0.20260417.2

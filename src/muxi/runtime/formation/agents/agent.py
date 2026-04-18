@@ -6410,24 +6410,397 @@ class Agent:
     @staticmethod
     def _parse_placeholder_reference(
         placeholder_key: str,
-    ) -> tuple[str, Optional[str]]:
-        """Split `{{FOO.bar}}` into (`{{FOO}}`, `bar`).
+    ) -> tuple[str, Optional[str], Optional[Dict[str, Any]]]:
+        """Split a placeholder reference into (base_key, field_hint, predicate).
+
+        Supported shapes:
+            ``{{FOO}}``                      → (``{{FOO}}``, None, None)
+            ``{{FOO.bar}}``                  → (``{{FOO}}``, ``bar``, None)
+            ``{{FOO[name='Book.xlsx']}}``    → (``{{FOO}}``, None, {"name": "Book.xlsx"})
+            ``{{FOO[name='x'].id}}``         → (``{{FOO}}``, ``id``, {"name": "x"})
 
         The LLM often emits dotted references like ``{{SPARK_EVENT.event_id}}``
         to indicate "use the event_id field from the SPARK_EVENT step output".
         my_results is keyed on the bare placeholder (`{{SPARK_EVENT}}`), so we
         must strip the `.field` suffix before lookup and pass the suffix down
         as a field hint.
+
+        The optional ``[key=value]`` predicate disambiguates extraction when the
+        referenced step returned a list of records (e.g. ``list-folder-files``
+        returning every file and folder at a OneDrive root).  Without a
+        predicate, ``{{FILE_LIST.id}}`` resolves to the first record's id,
+        which is rarely what the planner intended; ``{{FILE_LIST[name='Book.xlsx'].id}}``
+        filters to the record whose ``name`` field matches before extraction.
+
+        Invalid predicate syntax degrades gracefully: we return the original
+        string with no field/predicate so the caller falls back to the legacy
+        lookup path (which may still succeed via fuzzy matching).
         """
         match = re.match(
-            r"^(\{\{\s*[A-Za-z0-9_\-]+)\.([A-Za-z0-9_\-]+)(\s*\}\})$",
+            r"^(\{\{\s*[A-Za-z0-9_\-]+)"  # base
+            r"(\[[^\]]+\])?"  # optional predicate
+            r"(?:\.([A-Za-z0-9_\-]+))?"  # optional field
+            r"(\s*\}\})$",  # close
             placeholder_key,
         )
+        if not match:
+            return placeholder_key, None, None
+
+        base_key = match.group(1) + match.group(4)
+        predicate_raw = match.group(2)
+        field_hint = match.group(3)
+
+        predicate: Optional[Dict[str, Any]] = None
+        if predicate_raw:
+            predicate = Agent._parse_placeholder_predicate(predicate_raw)
+            if predicate is None:
+                # Predicate present but malformed — preserve original so
+                # callers fall back to best-effort lookup rather than
+                # silently trusting a broken filter.
+                return placeholder_key, None, None
+
+        return base_key, field_hint, predicate
+
+    @staticmethod
+    def _parse_placeholder_predicate(raw: str) -> Optional[Dict[str, Any]]:
+        """Parse ``[key=value]`` into ``{key: value}``.
+
+        Value types recognized in priority order:
+            1. Single- or double-quoted string: ``'Book.xlsx'``, ``"Book.xlsx"``
+            2. Boolean: ``true``/``false`` (case-insensitive)
+            3. Null: ``null``/``none`` (case-insensitive)
+            4. Integer: ``42``, ``-3``
+            5. Float: ``1.5``, ``-0.25``
+            6. Bare word (unquoted): ``file``, ``active-user`` — treated as string
+
+        Single-pair for v1; comma-separated AND predicates are reserved for
+        future extension.  Returns None on syntactic error so the caller can
+        refuse substitution rather than guess intent.
+        """
+        if not raw or not raw.startswith("[") or not raw.endswith("]"):
+            return None
+        inner = raw[1:-1].strip()
+        if not inner:
+            return None
+
+        eq_idx = inner.find("=")
+        if eq_idx <= 0 or eq_idx >= len(inner) - 1:
+            return None
+
+        key = inner[:eq_idx].strip()
+        value_str = inner[eq_idx + 1 :].strip()
+
+        if not re.match(r"^[A-Za-z0-9_\-]+$", key):
+            return None
+
+        # Quoted string
+        if len(value_str) >= 2 and value_str[0] == value_str[-1] and value_str[0] in ("'", '"'):
+            return {key: value_str[1:-1]}
+
+        lowered = value_str.lower()
+        if lowered == "true":
+            return {key: True}
+        if lowered == "false":
+            return {key: False}
+        if lowered in ("null", "none"):
+            return {key: None}
+
+        try:
+            if "." in value_str:
+                return {key: float(value_str)}
+            return {key: int(value_str)}
+        except ValueError:
+            pass
+
+        # Bare word (unquoted string) — allow alphanumerics plus a few safe
+        # separators seen in identifiers.  Reject anything with whitespace or
+        # symbols that suggest the LLM emitted malformed syntax.
+        if re.match(r"^[A-Za-z0-9._\-@]+$", value_str):
+            return {key: value_str}
+
+        return None
+
+    @staticmethod
+    def _record_matches_predicate(
+        record: Any,
+        predicate: Dict[str, Any],
+    ) -> bool:
+        """Return True if ``record`` satisfies every key=value pair in ``predicate``.
+
+        Field names are normalized (lowercase, underscores/dashes stripped) so a
+        predicate key of ``name`` matches record keys ``Name``, ``display_name``,
+        and ``DisplayName``.  String values compare case-insensitively; numeric
+        values tolerate string representations (e.g. record value ``"42"`` vs
+        predicate value ``42``); booleans require strict type match.  An
+        explicit ``None`` predicate value matches missing or null record fields.
+        """
+        if not isinstance(record, dict):
+            return False
+        if not predicate:
+            return True
+
+        normalized_record: Dict[str, Any] = {}
+        for key, value in record.items():
+            if not isinstance(key, str):
+                continue
+            normalized_record[key.lower().replace("_", "").replace("-", "")] = value
+
+        for raw_key, expected in predicate.items():
+            normalized_key = raw_key.lower().replace("_", "").replace("-", "")
+            present = normalized_key in normalized_record
+            actual = normalized_record.get(normalized_key)
+
+            if expected is None:
+                if not present or actual is None:
+                    continue
+                return False
+
+            if actual is None:
+                return False
+
+            if isinstance(expected, bool):
+                if not isinstance(actual, bool) or actual is not expected:
+                    return False
+            elif isinstance(expected, str) and isinstance(actual, str):
+                if expected.lower() != actual.lower():
+                    return False
+            elif isinstance(expected, (int, float)):
+                try:
+                    if float(actual) != float(expected):  # type: ignore[arg-type]
+                        return False
+                except (TypeError, ValueError):
+                    return False
+            else:
+                if expected != actual:
+                    return False
+
+        return True
+
+    @staticmethod
+    def _filter_records_by_predicate(
+        payload: Any,
+        predicate: Dict[str, Any],
+        *,
+        collect_all: bool = False,
+    ) -> Any:
+        """Walk every nested mapping in ``payload`` and return matching records.
+
+        Ordering is depth-first (outer dict first, then nested lists/dicts),
+        matching the traversal used elsewhere for field extraction.  With
+        ``collect_all=False`` returns the first matching record or ``None``;
+        with ``collect_all=True`` returns a list of every matching record.
+        """
+        matches: List[Dict[str, Any]] = []
+        for record in Agent._iter_result_records(payload):
+            if not isinstance(record, dict):
+                continue
+            if not Agent._record_matches_predicate(record, predicate):
+                continue
+            matches.append(record)
+            if not collect_all:
+                break
+        if collect_all:
+            return matches
+        return matches[0] if matches else None
+
+    def _extract_field_from_matched_records(
+        self,
+        records: List[Dict[str, Any]],
+        field_name: str,
+        *,
+        collect_all: bool = False,
+    ) -> Any:
+        """Extract ``field_name`` values from a pre-filtered list of records.
+
+        Used by the predicate path to scan only the records that matched the
+        predicate, skipping the broader tree walk and the text-chunk fallback
+        (which cannot reliably honor predicates against free-text payloads).
+        """
+        target = field_name.lower().replace("_", "").replace("-", "")
+        collected: List[Any] = []
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            for key, value in record.items():
+                if not isinstance(key, str):
+                    continue
+                if key.lower().replace("_", "").replace("-", "") != target:
+                    continue
+                if not self._is_nonempty_parameter_candidate(value):
+                    continue
+                if collect_all:
+                    marker = str(value)
+                    if marker not in {str(v) for v in collected}:
+                        collected.append(value)
+                else:
+                    return value
+        if collect_all:
+            return collected
+        return collected[0] if collected else None
+
+    # File extensions that strongly indicate the token is a real resource
+    # name rather than a bare noun in prose. Kept conservative to avoid
+    # auto-applying predicates for generic words that happen to contain a
+    # dot (e.g. version strings, URLs).
+    _NAMED_RESOURCE_EXTENSIONS = (
+        "xlsx",
+        "xls",
+        "xlsm",
+        "docx",
+        "doc",
+        "pdf",
+        "pptx",
+        "ppt",
+        "csv",
+        "tsv",
+        "txt",
+        "md",
+        "rtf",
+        "json",
+        "xml",
+        "yaml",
+        "yml",
+        "html",
+        "htm",
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "svg",
+        "bmp",
+        "zip",
+        "tar",
+        "gz",
+        "mp3",
+        "mp4",
+        "mov",
+        "wav",
+    )
+
+    @staticmethod
+    def _extract_named_resource_from_action(
+        action_description: Optional[str],
+    ) -> Optional[str]:
+        """Return the first deliberately-named resource mentioned in the action.
+
+        "Deliberate" means the LLM marked the name via quotes, backticks, or
+        used a recognizable file extension. Bare capitalized words are
+        intentionally excluded because they generate too many false positives
+        (proper nouns in prose, tool verbs, agent names, etc.) to safely
+        promote into an auto-applied predicate.
+
+        The helper searches in priority order so an explicitly-quoted
+        reference always beats an incidental filename elsewhere in the same
+        description.
+        """
+        if not action_description or not isinstance(action_description, str):
+            return None
+        text = action_description
+
+        # 1. Double-quoted string.
+        match = re.search(r'"([^"\n]{1,128})"', text)
         if match:
-            base_key = match.group(1) + match.group(3)
-            field_hint = match.group(2)
-            return base_key, field_hint
-        return placeholder_key, None
+            candidate = match.group(1).strip()
+            if candidate:
+                return candidate
+
+        # 2. Single-quoted string.
+        match = re.search(r"'([^'\n]{1,128})'", text)
+        if match:
+            candidate = match.group(1).strip()
+            if candidate:
+                return candidate
+
+        # 3. Backtick-wrapped (markdown code span).
+        match = re.search(r"`([^`\n]{1,128})`", text)
+        if match:
+            candidate = match.group(1).strip()
+            if candidate:
+                return candidate
+
+        # 4. Unquoted filename with a recognized extension. Filenames with
+        # spaces must be quoted/backticked by the LLM — the unquoted path
+        # deliberately disallows whitespace inside the candidate so we don't
+        # swallow preceding prose (``... to find Book.xlsx`` must capture
+        # only ``Book.xlsx``, not the whole sentence).
+        extensions = "|".join(Agent._NAMED_RESOURCE_EXTENSIONS)
+        filename_pattern = (
+            r"(?<![A-Za-z0-9_\-/])"  # left boundary: not mid-identifier or path
+            r"([A-Za-z0-9_][A-Za-z0-9_\-.]{0,63}\.(?:" + extensions + r"))"
+            r"(?![A-Za-z0-9_])"  # right boundary: not mid-identifier
+        )
+        match = re.search(filename_pattern, text, flags=re.IGNORECASE)
+        if match:
+            candidate = match.group(1).strip()
+            if candidate:
+                return candidate
+
+        return None
+
+    # Ordered list of record-field variants that represent "the human name of
+    # this thing". Order matters — the first variant with ambiguity + a match
+    # wins, so more-specific fields (``name``) take precedence over weaker
+    # ones (``subject``) when multiple are present.
+    _AUTO_PREDICATE_NAME_FIELDS = ("name", "displayName", "title", "subject")
+
+    def _infer_auto_name_predicate(
+        self,
+        payload: Any,
+        action_description: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        """Synthesize a name-predicate from the action description.
+
+        Runs only when all three conditions hold:
+            1. The action description explicitly names a resource (see
+               :meth:`_extract_named_resource_from_action` for what counts).
+            2. The payload contains AT LEAST TWO records that carry the same
+               name-field variant (so ``{{FOO.id}}`` resolution is genuinely
+               ambiguous). With 0-1 such records the resolution is
+               unambiguous and auto-inference would be pointless.
+            3. At least one of those records actually matches the extracted
+               resource name. Without this check we would silently rewrite
+               a placeholder against a resource the LLM referenced but the
+               prior step never returned, producing a harder-to-debug
+               "no matching record" failure instead of the legacy
+               first-match behavior.
+
+        The synthesized predicate uses the ACTUAL field variant present on
+        the matching records (``name``, ``displayName``, ``title``, or
+        ``subject``) so downstream matching — which is strict about key
+        normalization — finds the right record.
+
+        Returns ``None`` when any guard fails so callers fall back to the
+        existing extraction path without surprise.
+        """
+        named = Agent._extract_named_resource_from_action(action_description)
+        if not named:
+            return None
+
+        records = [
+            record for record in Agent._iter_result_records(payload) if isinstance(record, dict)
+        ]
+        if not records:
+            return None
+
+        expected_lower = named.lower()
+        for variant in Agent._AUTO_PREDICATE_NAME_FIELDS:
+            variant_normalized = variant.lower().replace("_", "").replace("-", "")
+            records_with_field = 0
+            matching_records = 0
+            for record in records:
+                for key, value in record.items():
+                    if not isinstance(key, str):
+                        continue
+                    if key.lower().replace("_", "").replace("-", "") != variant_normalized:
+                        continue
+                    records_with_field += 1
+                    if isinstance(value, str) and value.strip().lower() == expected_lower:
+                        matching_records += 1
+                    break
+            if records_with_field >= 2 and matching_records >= 1:
+                return {variant: named}
+
+        return None
 
     def _substitute_step_parameter_placeholders(
         self,
@@ -6454,10 +6827,13 @@ class Agent:
             placeholder_key = str(param_value).strip()
             referenced_result = successful_results.get(placeholder_key)
             field_hint: Optional[str] = None
+            predicate: Optional[Dict[str, Any]] = None
             if referenced_result is None:
-                # Try dot-notation: `{{FOO.bar}}` -> look up `{{FOO}}` and
-                # remember `bar` as the field to prefer inside the payload.
-                base_key, field_hint = self._parse_placeholder_reference(placeholder_key)
+                # Try dot-notation and/or predicate filter: `{{FOO.bar}}`,
+                # `{{FOO[k=v]}}`, `{{FOO[k=v].bar}}` all collapse to a lookup
+                # of `{{FOO}}` with a field hint and/or predicate applied to
+                # the payload prior to field extraction.
+                base_key, field_hint, predicate = self._parse_placeholder_reference(placeholder_key)
                 if base_key != placeholder_key:
                     referenced_result = successful_results.get(base_key)
 
@@ -6485,15 +6861,58 @@ class Agent:
             param_def = self._resolve_schema_ref(param_properties.get(param_name, {}), full_schema)
             param_type = param_def.get("type") if isinstance(param_def, dict) else None
 
-            if field_hint:
+            # Option 2: when the LLM referenced `{{FOO.field}}` without an
+            # explicit predicate, try to disambiguate multi-record payloads
+            # by cross-referencing the step's action_description for a
+            # deliberately-named resource. This prevents the "picks first
+            # record" silent failure (e.g. `{{FILE_LIST.id}}` returning the
+            # Attachments folder instead of the Book.xlsx the action said
+            # it was trying to locate). The auto-predicate only fires when
+            # the payload is genuinely ambiguous and the named resource
+            # actually exists in it; otherwise we fall back to the legacy
+            # first-match resolution.
+            effective_predicate = predicate
+            auto_applied = False
+            if effective_predicate is None and field_hint and action_description:
+                inferred = self._infer_auto_name_predicate(
+                    payload=payload,
+                    action_description=action_description,
+                )
+                if inferred is not None:
+                    effective_predicate = inferred
+                    auto_applied = True
+
+            if field_hint or effective_predicate:
                 if param_type == "array":
                     all_matches = self._extract_field_from_result_payload(
-                        payload, field_hint, collect_all=True
+                        payload, field_hint, predicate=effective_predicate, collect_all=True
                     )
                     if isinstance(all_matches, list) and all_matches:
                         resolved_value = all_matches
                 else:
-                    resolved_value = self._extract_field_from_result_payload(payload, field_hint)
+                    resolved_value = self._extract_field_from_result_payload(
+                        payload, field_hint, predicate=effective_predicate
+                    )
+
+            if auto_applied and resolved_value is not None:
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_PLANNING,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "agent_id": self.agent_id,
+                        "tool_name": tool_name,
+                        "param_name": param_name,
+                        "placeholder_key": placeholder_key,
+                        "field_hint": field_hint,
+                        "inferred_predicate": effective_predicate,
+                        "action_description": action_description[:200],
+                    },
+                    description=(
+                        f"Auto-applied name predicate {effective_predicate} to "
+                        f"disambiguate {param_name}='{placeholder_key}' against a "
+                        f"multi-record result on tool {tool_name or '(unknown)'}"
+                    ),
+                )
 
             if resolved_value is None and param_type == "array":
                 # Try extracting by parameter name directly (for cases where
@@ -6633,8 +7052,9 @@ class Agent:
     def _extract_field_from_result_payload(
         self,
         payload: Any,
-        field_name: str,
+        field_name: Optional[str],
         *,
+        predicate: Optional[Dict[str, Any]] = None,
         collect_all: bool = False,
     ) -> Any:
         """Find occurrences of ``field_name`` in a structured or text payload.
@@ -6647,9 +7067,27 @@ class Agent:
         back to regex-based extraction from every text chunk inside the
         payload.
 
+        When ``predicate`` is provided, only records matching the predicate
+        are considered before field extraction; the text-chunk fallback is
+        skipped in this mode because free-text payloads cannot be filtered
+        reliably by field value.  With no ``field_name`` and a ``predicate``,
+        returns the matched record(s) themselves.
+
         When ``collect_all`` is True, returns a deduplicated list of every
         match; otherwise returns the first match or ``None``.
         """
+        if predicate:
+            matched_records = Agent._filter_records_by_predicate(
+                payload, predicate, collect_all=True
+            )
+            if not matched_records:
+                return [] if collect_all else None
+            if not field_name:
+                return matched_records if collect_all else matched_records[0]
+            return self._extract_field_from_matched_records(
+                matched_records, field_name, collect_all=collect_all
+            )
+
         if not field_name:
             return [] if collect_all else None
 
