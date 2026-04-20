@@ -83,7 +83,10 @@ dependencies = [
     "google-cloud-aiplatform>=1.25.0",  # Google Cloud for OneLLM Vertex AI provider
 
     # A2A (Agent-to-Agent) Communication
-    "a2a-sdk>=0.3",  # Google's Agent-to-Agent SDK for inter-agent communication
+    # Pinned to <1.0 — a2a-sdk 1.0.0 (2026-04-20) is a breaking change (removed top-level
+    # A2AClient, SCREAMING_SNAKE_CASE enums, flattened Part types, AgentCard restructure).
+    # Full native migration tracked in engineering/prds/a2a-sdk-1.0-migration.md.
+    "a2a-sdk>=0.3,<1.0",  # Google's Agent-to-Agent SDK for inter-agent communication
 
 
     # Server components
