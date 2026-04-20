@@ -3195,3 +3195,352 @@ def test_collect_text_chunks_from_payload_walks_nested_structures():
     assert "ID: abc-123" in combined
     assert "Related: xyz-789" in combined
     assert "Orphan string chunk" in combined
+
+
+# ---------------------------------------------------------------------------
+# v0.20260419.0 regression tests — `[N]` integer index syntax + nested
+# dict/list placeholder substitution + recursive leftover stripping
+# ---------------------------------------------------------------------------
+
+
+def test_parse_placeholder_predicate_accepts_integer_index():
+    """Bare `[N]` and `[-N]` must parse to a positional selector marker."""
+    assert Agent._parse_placeholder_predicate("[0]") == {Agent.PLACEHOLDER_INDEX_KEY: 0}
+    assert Agent._parse_placeholder_predicate("[3]") == {Agent.PLACEHOLDER_INDEX_KEY: 3}
+    assert Agent._parse_placeholder_predicate("[-1]") == {Agent.PLACEHOLDER_INDEX_KEY: -1}
+    # Non-integer numerics still go through the value path (require key=).
+    assert Agent._parse_placeholder_predicate("[1.5]") is None
+    assert Agent._parse_placeholder_predicate("[abc]") is None
+
+
+def test_parse_placeholder_reference_supports_integer_index():
+    """`{{WORKSHEET_LIST[0].id}}` must split into the index marker."""
+    base, field, predicate = Agent._parse_placeholder_reference("{{WORKSHEET_LIST[0].id}}")
+    assert base == "{{WORKSHEET_LIST}}"
+    assert field == "id"
+    assert predicate == {Agent.PLACEHOLDER_INDEX_KEY: 0}
+
+    base, field, predicate = Agent._parse_placeholder_reference("{{LIST[-1]}}")
+    assert base == "{{LIST}}"
+    assert field is None
+    assert predicate == {Agent.PLACEHOLDER_INDEX_KEY: -1}
+
+
+def test_iter_indexable_records_prefers_top_level_value_wrapper():
+    """MS Graph wrap shape: `{value: [...]}` should be the indexable list."""
+    payload = {
+        "value": [
+            {"id": "{00000000-0001-0000-0000-000000000000}", "name": "Sheet1"},
+            {"id": "{00000000-0002-0000-0000-000000000000}", "name": "Sheet2"},
+        ]
+    }
+    records = Agent._iter_indexable_records(payload)
+    assert len(records) == 2
+    assert records[0]["name"] == "Sheet1"
+    assert records[1]["name"] == "Sheet2"
+
+
+def test_iter_indexable_records_handles_top_level_list():
+    payload = [{"id": "a"}, {"id": "b"}]
+    records = Agent._iter_indexable_records(payload)
+    assert [r["id"] for r in records] == ["a", "b"]
+
+
+def test_iter_indexable_records_walks_nested_when_no_wrapper_match():
+    """If no wrapper key carries a list, fall back to depth-first walk."""
+    payload = {
+        "metadata": {"timestamp": "now"},
+        "deep": {"layer": {"things": [{"name": "first"}, {"name": "second"}]}},
+    }
+    records = Agent._iter_indexable_records(payload)
+    assert [r["name"] for r in records] == ["first", "second"]
+
+
+def test_filter_records_by_predicate_dispatches_index_path():
+    payload = {
+        "value": [
+            {"id": "{00000000-0001-0000-0000-000000000000}", "name": "Sheet1"},
+            {"id": "{00000000-0002-0000-0000-000000000000}", "name": "Sheet2"},
+            {"id": "{00000000-0003-0000-0000-000000000000}", "name": "Sheet3"},
+        ]
+    }
+    first = Agent._filter_records_by_predicate(payload, {Agent.PLACEHOLDER_INDEX_KEY: 0})
+    assert first["name"] == "Sheet1"
+
+    last = Agent._filter_records_by_predicate(payload, {Agent.PLACEHOLDER_INDEX_KEY: -1})
+    assert last["name"] == "Sheet3"
+
+    out_of_range = Agent._filter_records_by_predicate(payload, {Agent.PLACEHOLDER_INDEX_KEY: 99})
+    assert out_of_range is None
+
+    collected = Agent._filter_records_by_predicate(
+        payload, {Agent.PLACEHOLDER_INDEX_KEY: 1}, collect_all=True
+    )
+    assert isinstance(collected, list)
+    assert len(collected) == 1
+    assert collected[0]["name"] == "Sheet2"
+
+
+def test_extract_field_with_index_predicate_picks_positional_record():
+    """End-to-end: `{{WORKSHEET_LIST[0].id}}` resolves to the first sheet's id."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    payload = {
+        "value": [
+            {"id": "{00000000-0001-0000-0000-000000000000}", "name": "Sheet1"},
+            {"id": "{00000000-0002-0000-0000-000000000000}", "name": "Sheet2"},
+        ]
+    }
+    assert (
+        agent._extract_field_from_result_payload(
+            payload, "id", predicate={Agent.PLACEHOLDER_INDEX_KEY: 0}
+        )
+        == "{00000000-0001-0000-0000-000000000000}"
+    )
+    assert (
+        agent._extract_field_from_result_payload(
+            payload, "id", predicate={Agent.PLACEHOLDER_INDEX_KEY: 1}
+        )
+        == "{00000000-0002-0000-0000-000000000000}"
+    )
+
+
+def test_substitute_step_parameter_placeholders_resolves_index_predicate():
+    """Dev #1 v0.20260418.0 Excel B2: `{{WORKSHEET_LIST[0].id}}` must
+    resolve to the first worksheet's GUID, not silently fall back to the
+    Book.xlsx driveItemId via the kind-aware fallback."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    my_results = {
+        "{{WORKSHEET_LIST}}": {
+            "success": True,
+            "result": {
+                "value": [
+                    {"id": "{00000000-0001-0000-0000-000000000000}", "name": "Sheet1"},
+                    {"id": "{00000000-0002-0000-0000-000000000000}", "name": "Sheet2"},
+                ]
+            },
+        }
+    }
+    parameters = {"workbookWorksheetId": "{{WORKSHEET_LIST[0].id}}"}
+    param_properties = {"workbookWorksheetId": {"type": "string"}}
+    full_schema = {
+        "type": "object",
+        "required": ["workbookWorksheetId"],
+        "properties": {"workbookWorksheetId": {"type": "string"}},
+    }
+
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters=parameters,
+        param_properties=param_properties,
+        full_schema=full_schema,
+        action_description="Get the first worksheet from Book.xlsx",
+        my_results=my_results,
+        tool_name="ms365-mcp__get-excel-worksheet",
+    )
+
+    assert substituted["workbookWorksheetId"] == "{00000000-0001-0000-0000-000000000000}"
+
+
+def test_substitute_step_parameter_placeholders_resolves_nested_dict_placeholder():
+    """Dev #1 v0.20260418.0 OneDrive: a placeholder nested inside
+    `parentReference: {id: "{{FOLDER[name='X'].id}}"}` must be substituted
+    by the recursive nested-substitution pass — without it the literal
+    placeholder string is sent to MS Graph."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    my_results = {
+        "{{SPARK_FOLDER_SEARCH}}": {
+            "success": True,
+            "result": {
+                "value": [
+                    {"id": "drive-item-attachments", "name": "Attachments"},
+                    {"id": "drive-item-spark-test", "name": "Spark Test"},
+                ]
+            },
+        }
+    }
+    parameters = {
+        "driveItemId": "01-source-file-id",
+        "parentReference": {"id": "{{SPARK_FOLDER_SEARCH[name='Spark Test'].id}}"},
+    }
+    param_properties = {
+        "driveItemId": {"type": "string"},
+        "parentReference": {"type": "object"},
+    }
+    full_schema = {
+        "type": "object",
+        "required": ["driveItemId", "parentReference"],
+        "properties": {
+            "driveItemId": {"type": "string"},
+            "parentReference": {"type": "object"},
+        },
+    }
+
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters=parameters,
+        param_properties=param_properties,
+        full_schema=full_schema,
+        action_description="Move file to the Spark Test folder",
+        my_results=my_results,
+        tool_name="ms365-mcp__move-rename-onedrive-item",
+    )
+
+    assert substituted["parentReference"] == {"id": "drive-item-spark-test"}
+    assert substituted["driveItemId"] == "01-source-file-id"
+
+
+def test_substitute_step_parameter_placeholders_resolves_nested_list_placeholder():
+    """Lists of dicts also recurse so positional / name predicates inside
+    an array element are honored."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    my_results = {
+        "{{ATTENDEE_SEARCH}}": {
+            "success": True,
+            "result": {
+                "value": [
+                    {"address": "alice@example.com", "name": "Alice"},
+                    {"address": "bob@example.com", "name": "Bob"},
+                ]
+            },
+        }
+    }
+    parameters = {
+        "attendees": [
+            {"emailAddress": {"address": "{{ATTENDEE_SEARCH[name='Alice'].address}}"}},
+        ]
+    }
+    param_properties = {"attendees": {"type": "array"}}
+    full_schema = {
+        "type": "object",
+        "properties": {"attendees": {"type": "array"}},
+    }
+
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters=parameters,
+        param_properties=param_properties,
+        full_schema=full_schema,
+        action_description="Add Alice as attendee",
+        my_results=my_results,
+        tool_name="ms365-mcp__update-calendar-event",
+    )
+
+    assert substituted["attendees"][0]["emailAddress"]["address"] == "alice@example.com"
+
+
+def test_substitute_step_parameter_placeholders_caps_recursion_depth():
+    """Pathological deeply-nested LLM payloads must not trigger uncontrolled recursion."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    deep_value: dict = {"placeholder": "{{FOO.id}}"}
+    for _ in range(20):
+        deep_value = {"nested": deep_value}
+
+    my_results = {"{{FOO}}": {"success": True, "result": {"id": "real-id"}}}
+    parameters = {"complex_param": deep_value}
+    param_properties = {"complex_param": {"type": "object"}}
+    full_schema = {"type": "object", "properties": {"complex_param": {"type": "object"}}}
+
+    # Should not raise RecursionError; placeholder beyond depth cap stays as literal.
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters=parameters,
+        param_properties=param_properties,
+        full_schema=full_schema,
+        action_description="",
+        my_results=my_results,
+        tool_name="dummy-tool",
+    )
+    assert substituted is not None
+
+
+def test_find_unresolved_placeholder_leaves_walks_nested_structures():
+    """The leaf finder must report dotted/indexed paths for nested literals."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    leaves = agent._find_unresolved_placeholder_leaves(
+        {
+            "parentReference": {"id": "{{FOO.id}}"},
+            "attendees": [
+                {"emailAddress": {"address": "{{ATTENDEE.email}}"}},
+                {"emailAddress": {"address": "real@example.com"}},
+            ],
+            "subject": "Resolved literal",
+        },
+        base_path="parameters",
+    )
+    paths = sorted(leaf["param_path"] for leaf in leaves)
+    assert paths == [
+        "parameters.attendees[0].emailAddress.address",
+        "parameters.parentReference.id",
+    ]
+
+
+def test_strip_leftover_placeholder_parameters_drops_top_level_with_nested_unresolved():
+    """A non-required top-level dict containing an unresolved nested
+    placeholder leaf must be dropped, not silently passed to MCP."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    parameters = {
+        "driveItemId": "real-id",
+        "parentReference": {"id": "{{MISSING.id}}"},  # nested unresolved
+        "subject": "OK",
+    }
+
+    cleaned = agent._strip_leftover_placeholder_parameters(
+        parameters=parameters,
+        required_params=["driveItemId"],
+        tool_name="ms365-mcp__move-rename-onedrive-item",
+    )
+
+    assert "parentReference" not in cleaned
+    assert cleaned["driveItemId"] == "real-id"
+    assert cleaned["subject"] == "OK"
+
+
+def test_strip_leftover_placeholder_parameters_keeps_required_with_nested_unresolved():
+    """Required dict params with nested unresolved placeholders are NOT
+    dropped (the repair-plan flow handles them) but the warning event
+    still fires."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    parameters = {"parentReference": {"id": "{{MISSING.id}}"}}
+
+    cleaned = agent._strip_leftover_placeholder_parameters(
+        parameters=parameters,
+        required_params=["parentReference"],
+        tool_name="ms365-mcp__move-rename-onedrive-item",
+    )
+
+    # Kept so the existing repair-plan path can react to the still-unresolved required param.
+    assert cleaned == {"parentReference": {"id": "{{MISSING.id}}"}}
+
+
+def test_has_resolved_required_parameter_value_rejects_nested_unresolved():
+    """Required dict/list params with any nested unresolved placeholder
+    must report as unresolved so the repair-plan flow fires (without this
+    the OneDrive parentReference bug never triggers a repair attempt)."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+
+    assert (
+        agent._has_resolved_required_parameter_value({"id": "real-id"}, {"type": "object"}) is True
+    )
+    assert (
+        agent._has_resolved_required_parameter_value({"id": "{{MISSING.id}}"}, {"type": "object"})
+        is False
+    )
+    assert (
+        agent._has_resolved_required_parameter_value(
+            [{"name": "{{MISSING.name}}"}], {"type": "array"}
+        )
+        is False
+    )

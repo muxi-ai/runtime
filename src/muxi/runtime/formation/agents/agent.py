@@ -6461,17 +6461,30 @@ class Agent:
 
         return base_key, field_hint, predicate
 
+    # Reserved key used internally to represent positional `[N]` selection
+    # inside the predicate dict. Callers must NOT use this as a real record
+    # field name; the parser guarantees it cannot appear via user syntax.
+    PLACEHOLDER_INDEX_KEY = "__index__"
+
     @staticmethod
     def _parse_placeholder_predicate(raw: str) -> Optional[Dict[str, Any]]:
-        """Parse ``[key=value]`` into ``{key: value}``.
+        """Parse ``[key=value]`` into ``{key: value}``, or ``[N]`` into
+        ``{__index__: N}`` for positional selection.
 
-        Value types recognized in priority order:
+        Value types recognized in priority order for ``[key=value]``:
             1. Single- or double-quoted string: ``'Book.xlsx'``, ``"Book.xlsx"``
             2. Boolean: ``true``/``false`` (case-insensitive)
             3. Null: ``null``/``none`` (case-insensitive)
             4. Integer: ``42``, ``-3``
             5. Float: ``1.5``, ``-0.25``
             6. Bare word (unquoted): ``file``, ``active-user`` — treated as string
+
+        Integer index ``[N]`` (and ``[-N]``) selects the Nth indexable record
+        from the payload, walking the most-relevant list-of-dicts found via
+        :meth:`_iter_indexable_records` (top-level list, common wrapper keys
+        like ``value``/``items``/``data``, then depth-first walk). Allows
+        the LLM to write ``{{WORKSHEET_LIST[0].id}}`` for "the first
+        worksheet's id" without inventing a name predicate.
 
         Single-pair for v1; comma-separated AND predicates are reserved for
         future extension.  Returns None on syntactic error so the caller can
@@ -6482,6 +6495,13 @@ class Agent:
         inner = raw[1:-1].strip()
         if not inner:
             return None
+
+        # Positional index: [N], [-N]
+        if re.match(r"^-?\d+$", inner):
+            try:
+                return {Agent.PLACEHOLDER_INDEX_KEY: int(inner)}
+            except ValueError:
+                return None
 
         eq_idx = inner.find("=")
         if eq_idx <= 0 or eq_idx >= len(inner) - 1:
@@ -6539,6 +6559,15 @@ class Agent:
         if not predicate:
             return True
 
+        # Defensive: positional index selectors are dispatched by
+        # _filter_records_by_predicate, never per-record matching. Strip the
+        # reserved key so downstream comparison stays sound if someone calls
+        # this directly with a mixed dict.
+        if Agent.PLACEHOLDER_INDEX_KEY in predicate:
+            predicate = {k: v for k, v in predicate.items() if k != Agent.PLACEHOLDER_INDEX_KEY}
+            if not predicate:
+                return True
+
         normalized_record: Dict[str, Any] = {}
         for key, value in record.items():
             if not isinstance(key, str):
@@ -6577,6 +6606,63 @@ class Agent:
         return True
 
     @staticmethod
+    def _iter_indexable_records(payload: Any) -> List[Dict[str, Any]]:
+        """Return the most relevant ordered list of record dicts for ``[N]`` indexing.
+
+        Unlike :meth:`_iter_result_records` (which yields EVERY nested mapping
+        including wrapper dicts), this helper resolves to the single list the
+        LLM most likely meant when it wrote ``[N]``. It tries, in order:
+
+            1. ``payload`` itself if it's a list of dicts.
+            2. The first wrapper key (``value``/``items``/``data``/``results``/
+               ``records``/``matches``/``files``/``messages``/``events``)
+               whose value is a non-empty list of dicts.
+            3. The first list of dicts encountered via depth-first walk.
+
+        Returns an empty list when no indexable record sequence exists, so
+        callers can treat "out of range" and "no list" identically (no match).
+        """
+        if isinstance(payload, list):
+            records = [item for item in payload if isinstance(item, dict)]
+            if records:
+                return records
+
+        if not isinstance(payload, dict):
+            return []
+
+        wrapper_keys = (
+            "value",
+            "items",
+            "data",
+            "results",
+            "records",
+            "matches",
+            "files",
+            "messages",
+            "events",
+        )
+        for key in wrapper_keys:
+            candidate = payload.get(key)
+            if isinstance(candidate, list):
+                records = [item for item in candidate if isinstance(item, dict)]
+                if records:
+                    return records
+
+        # Depth-first walk for nested list-of-dicts.
+        stack: List[Any] = list(payload.values())
+        while stack:
+            current = stack.pop(0)
+            if isinstance(current, list):
+                records = [item for item in current if isinstance(item, dict)]
+                if records:
+                    return records
+                stack.extend(current)
+            elif isinstance(current, dict):
+                stack.extend(current.values())
+
+        return []
+
+    @staticmethod
     def _filter_records_by_predicate(
         payload: Any,
         predicate: Dict[str, Any],
@@ -6585,11 +6671,41 @@ class Agent:
     ) -> Any:
         """Walk every nested mapping in ``payload`` and return matching records.
 
-        Ordering is depth-first (outer dict first, then nested lists/dicts),
-        matching the traversal used elsewhere for field extraction.  With
-        ``collect_all=False`` returns the first matching record or ``None``;
-        with ``collect_all=True`` returns a list of every matching record.
+        Two predicate shapes are dispatched:
+
+        - ``{__index__: N}``: positional selection from
+          :meth:`_iter_indexable_records`. Returns the Nth record (or empty
+          when out of range). ``collect_all=True`` returns a one-element list
+          for parity with the value-predicate path.
+        - ``{key: value, ...}``: value matching against every nested record
+          via :meth:`_record_matches_predicate`. Ordering is depth-first
+          (outer dict first, then nested lists/dicts), matching the
+          traversal used elsewhere for field extraction.
+
+        With ``collect_all=False`` returns the first matching record or
+        ``None``; with ``collect_all=True`` returns a list of every matching
+        record. Empty inputs return ``None`` / ``[]``.
         """
+        if predicate and Agent.PLACEHOLDER_INDEX_KEY in predicate:
+            # Index path is exclusive — we deliberately reject mixing index
+            # with value predicates at parse time, but defensively bail out
+            # if other keys somehow leaked in.
+            if len(predicate) != 1:
+                return [] if collect_all else None
+            idx = predicate[Agent.PLACEHOLDER_INDEX_KEY]
+            if not isinstance(idx, int):
+                return [] if collect_all else None
+            indexable = Agent._iter_indexable_records(payload)
+            if not indexable:
+                return [] if collect_all else None
+            try:
+                record = indexable[idx]
+            except IndexError:
+                return [] if collect_all else None
+            if collect_all:
+                return [record]
+            return record
+
         matches: List[Dict[str, Any]] = []
         for record in Agent._iter_result_records(payload):
             if not isinstance(record, dict):
@@ -6811,7 +6927,28 @@ class Agent:
         my_results: Dict[str, Any],
         tool_name: str = "",
     ) -> Dict[str, Any]:
-        """Replace placeholder-valued step params with values from prior successful results."""
+        """Replace placeholder-valued step params with values from prior successful results.
+
+        Two-pass design:
+
+        1. **Top-level pass** — uses the full schema-aware machinery
+           (auto-inferred predicates, kind-based fallback,
+           cross-placeholder resolution) for each top-level param whose
+           value is itself a placeholder string. This is the path
+           v0.20260418.0 already covered.
+        2. **Nested pass** — for top-level params whose value is a dict or
+           list (e.g. MS Graph's ``parentReference: {id: "{{FOO.id}}"}``),
+           recursively walks string leaves and substitutes any
+           placeholder using explicit predicate / field-hint resolution.
+           Schema-driven inference is intentionally skipped here because
+           we do not have a per-leaf schema; the LLM authored the
+           placeholder explicitly and we honor it literally.
+
+        Without the second pass, v0.20260418.0 silently shipped literal
+        ``"{{...}}"`` strings inside nested dict params to MCP, which
+        Microsoft Graph silently ignored — the OneDrive "move to folder"
+        bug from the v0.20260418.0 field report is the canonical case.
+        """
         if not parameters or not my_results:
             return dict(parameters)
 
@@ -6936,7 +7073,115 @@ class Agent:
             if resolved_value is not None:
                 substituted[param_name] = resolved_value
 
+        # Nested pass: recurse into dict/list top-level params for nested
+        # placeholder strings the top-level pass cannot see.
+        for param_name, param_value in list(substituted.items()):
+            if isinstance(param_value, (dict, list)):
+                substituted[param_name] = self._substitute_nested_placeholders(
+                    value=param_value,
+                    successful_results=successful_results,
+                    param_path=param_name,
+                    tool_name=tool_name,
+                    depth=0,
+                )
+
         return substituted
+
+    # Maximum nesting depth for the nested-placeholder substitution walk.
+    # MS Graph payload shapes rarely exceed 4 levels (e.g.
+    # ``parentReference.driveId.something``); 8 leaves comfortable headroom
+    # for unusual MCP tool schemas while bounding worst-case recursion in
+    # pathological LLM-emitted structures.
+    _NESTED_SUBSTITUTION_MAX_DEPTH = 8
+
+    def _substitute_nested_placeholders(
+        self,
+        value: Any,
+        *,
+        successful_results: Dict[str, Any],
+        param_path: str,
+        tool_name: str = "",
+        depth: int = 0,
+    ) -> Any:
+        """Recursively substitute placeholder string leaves inside dict/list values.
+
+        Designed for nested parameter shapes like
+        ``parentReference: {id: "{{FOO.id}}"}`` where the placeholder is not
+        a top-level string and therefore invisible to the schema-aware top
+        pass. Only resolves placeholders the LLM authored explicitly:
+        direct ``{{FOO}}`` lookup, ``{{FOO.field}}`` field hint, or
+        ``{{FOO[predicate]}}`` predicate filter. Auto-inferred name
+        predicates and kind-based fallback are deliberately omitted because
+        they need per-parameter schema metadata that does not exist for
+        nested leaves.
+
+        Returns the value unchanged when:
+          - depth exceeds :attr:`_NESTED_SUBSTITUTION_MAX_DEPTH`
+          - the leaf is not placeholder-like
+          - the referenced placeholder is not in ``successful_results``
+          - extraction returns ``None``
+
+        Unresolved leaves are left as literal placeholders so the
+        leftover-strip pass can drop them and emit the
+        ``placeholder.unresolved`` warning.
+        """
+        if depth > self._NESTED_SUBSTITUTION_MAX_DEPTH:
+            return value
+
+        if isinstance(value, dict):
+            return {
+                key: self._substitute_nested_placeholders(
+                    value=child,
+                    successful_results=successful_results,
+                    param_path=f"{param_path}.{key}" if param_path else str(key),
+                    tool_name=tool_name,
+                    depth=depth + 1,
+                )
+                for key, child in value.items()
+            }
+
+        if isinstance(value, list):
+            return [
+                self._substitute_nested_placeholders(
+                    value=child,
+                    successful_results=successful_results,
+                    param_path=f"{param_path}[{idx}]",
+                    tool_name=tool_name,
+                    depth=depth + 1,
+                )
+                for idx, child in enumerate(value)
+            ]
+
+        if not self._is_placeholder_like_value(value):
+            return value
+
+        placeholder_key = str(value).strip()
+        referenced_result = successful_results.get(placeholder_key)
+        field_hint: Optional[str] = None
+        predicate: Optional[Dict[str, Any]] = None
+
+        if referenced_result is None:
+            base_key, field_hint, predicate = self._parse_placeholder_reference(placeholder_key)
+            if base_key != placeholder_key:
+                referenced_result = successful_results.get(base_key)
+
+        if referenced_result is None:
+            return value
+
+        payload = self._extract_structured_planning_result_payload(referenced_result)
+
+        if not (field_hint or predicate):
+            # Bare ``{{FOO}}`` reference inside a nested leaf — return the
+            # whole payload only when it is a scalar; structured payloads
+            # are almost certainly not what the leaf wanted.
+            if isinstance(payload, (str, int, float, bool)):
+                return payload
+            return value
+
+        resolved = self._extract_field_from_result_payload(payload, field_hint, predicate=predicate)
+        if resolved is None:
+            return value
+        return resolved
 
     def _strip_leftover_placeholder_parameters(
         self,
@@ -6954,6 +7199,19 @@ class Agent:
         routed through the repair-plan flow; this pass catches the
         non-required case where the unresolved-required check never fires
         because the parameter isn't declared required on the tool schema.
+
+        The walk is recursive: an unresolved placeholder nested inside a
+        dict or list (e.g. ``parentReference: {id: "{{FOO.id}}"}``)
+        triggers the same drop-or-warn behavior the top-level case has.
+        Without this recursion v0.20260418.0 silently passed literal
+        placeholder strings inside nested dict params to MCP — Microsoft
+        Graph silently ignored the bogus parentReference and the OneDrive
+        move never executed.
+
+        Emits a ``placeholder.unresolved`` warning event whenever any
+        unresolved leaf is detected (regardless of whether it was dropped
+        or kept), enumerating the dotted/indexed param paths so devs can
+        trace silent failures back to the originating placeholder.
         """
         if not parameters:
             return dict(parameters) if isinstance(parameters, dict) else {}
@@ -6961,30 +7219,73 @@ class Agent:
         required_set = set(required_params or [])
         cleaned = dict(parameters)
         dropped: List[str] = []
+        unresolved_leaves: List[Dict[str, str]] = []
+
         for param_name in list(cleaned.keys()):
-            if param_name in required_set:
-                continue
             value = cleaned[param_name]
-            if self._is_placeholder_like_value(value):
+            leaves = self._find_unresolved_placeholder_leaves(value, base_path=param_name)
+            if not leaves:
+                continue
+            unresolved_leaves.extend(leaves)
+            if param_name not in required_set:
                 dropped.append(param_name)
                 del cleaned[param_name]
 
-        if dropped:
+        if unresolved_leaves:
             observability.observe(
                 event_type=observability.ConversationEvents.AGENT_PLANNING,
                 level=observability.EventLevel.WARNING,
                 data={
                     "agent_id": self.agent_id,
                     "tool_name": tool_name,
+                    "phase": "placeholder.unresolved",
                     "dropped_params": dropped,
+                    "unresolved": unresolved_leaves,
                 },
                 description=(
-                    f"Dropped {len(dropped)} leftover placeholder parameter(s) from "
-                    f"{tool_name} before MCP call: {', '.join(dropped)}"
+                    f"{len(unresolved_leaves)} unresolved placeholder leaf(s) "
+                    f"for {tool_name or '(unknown)'}: "
+                    f"{', '.join(leaf['param_path'] for leaf in unresolved_leaves)}; "
+                    f"dropped {len(dropped)} non-required top-level param(s): "
+                    f"{', '.join(dropped) if dropped else '(none)'}"
                 ),
             )
 
         return cleaned
+
+    def _find_unresolved_placeholder_leaves(
+        self,
+        value: Any,
+        *,
+        base_path: str = "",
+    ) -> List[Dict[str, str]]:
+        """Return every placeholder-like string leaf inside ``value``.
+
+        Each entry is ``{"param_path": "<dotted/indexed path>",
+        "placeholder": "<literal placeholder string>"}``.  Used by the
+        leftover-strip pass to identify nested unresolved placeholders that
+        the recursive substitution walker could not bind, and by
+        :meth:`_has_resolved_required_parameter_value` to decide whether a
+        required dict/list param needs the repair-plan flow.
+        """
+        if self._is_placeholder_like_value(value):
+            return [
+                {
+                    "param_path": base_path or "<root>",
+                    "placeholder": str(value).strip(),
+                }
+            ]
+
+        leaves: List[Dict[str, str]] = []
+        if isinstance(value, dict):
+            for key, child in value.items():
+                child_path = f"{base_path}.{key}" if base_path else str(key)
+                leaves.extend(self._find_unresolved_placeholder_leaves(child, base_path=child_path))
+        elif isinstance(value, list):
+            for idx, child in enumerate(value):
+                child_path = f"{base_path}[{idx}]" if base_path else f"[{idx}]"
+                leaves.extend(self._find_unresolved_placeholder_leaves(child, base_path=child_path))
+        return leaves
 
     def _resolve_parameter_across_all_results(
         self,
@@ -7608,13 +7909,24 @@ class Agent:
     def _has_resolved_required_parameter_value(
         self, param_value: Any, param_def: Dict[str, Any]
     ) -> bool:
-        """Return True when a required parameter value looks meaningfully resolved."""
+        """Return True when a required parameter value looks meaningfully resolved.
+
+        For dict/list-typed required params we also recursively check every
+        string leaf for unresolved placeholder literals — without this, the
+        repair-plan flow never fires when the LLM nests an unresolved
+        ``{{...}}`` inside ``parentReference: {id: ...}`` (the v0.20260418.0
+        OneDrive failure).
+        """
         if param_value is None:
             return False
 
         param_type = param_def.get("type")
         if param_type == "string" or isinstance(param_value, str):
             return self._is_nonempty_parameter_candidate(param_value)
+
+        if isinstance(param_value, (dict, list)):
+            if self._find_unresolved_placeholder_leaves(param_value):
+                return False
 
         return True
 

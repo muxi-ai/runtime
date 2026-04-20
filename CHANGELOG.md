@@ -2,6 +2,74 @@
 
 ## [unreleased]
 
+## v0.20260419.0
+
+### Silent-Failure Fixes on v0.20260418.0 Placeholder Pipeline
+
+- **`[N]` positional index now supported in placeholder predicates (Dev #1 v0.20260418.0 Excel B2)** -- The LLM emitted `{{WORKSHEET_LIST[0].id}}` to mean "first worksheet's id"; v0.20260418.0's parser accepted only `[key=value]` predicates and rejected bare integers, so the placeholder degraded to the legacy first-match path. The kind-aware cross-placeholder fallback then bound `workbookWorksheetId` to the Book.xlsx `driveItemId`, MS Graph returned 404 on `get-excel-worksheet`, and the failure surfaced as a confusing "could not obtain access token" message. New runtime helpers:
+    - `Agent.PLACEHOLDER_INDEX_KEY` (`"__index__"`) reserves an internal marker key for positional selectors; parser-generated so callers cannot use it as a real field name.
+    - `_parse_placeholder_predicate` now accepts `[N]` and `[-N]` → returns `{__index__: N}`. Non-integer numerics (`[1.5]`) and bare identifiers (`[abc]`) without `=` still fail as before.
+    - `_iter_indexable_records` resolves the "most relevant" list of records for positional selection. Prefers (1) payload as top-level list of dicts, (2) common wrapper keys (`value`/`items`/`data`/`results`/`records`/`matches`/`files`/`messages`/`events`) whose value is a list, (3) depth-first walk for the first list of dicts. Empty list on out-of-range or no-list payloads so callers treat both as "no match".
+    - `_filter_records_by_predicate` dispatches on `__index__` before value matching; index path is exclusive (rejects mixed with `key=value` at the parser level, defensive bail-out here). Returns `None` / `[]` on out-of-range indexes.
+    - `_record_matches_predicate` defensively strips `__index__` so direct callers with a mixed predicate don't crash.
+- **Recursive nested placeholder substitution (Dev #1 v0.20260418.0 OneDrive move)** -- The LLM correctly authored `parentReference: {id: "{{SPARK_FOLDER_SEARCH[name='Spark Test'].id}}"}`, the predicate syntax was already supported in v0.20260418.0, yet the runtime sent a literal `"{{SPARK_FOLDER_SEARCH[name='Spark Test'].id}}"` string to MS Graph because `_substitute_step_parameter_placeholders` iterated only top-level param values. MS Graph returned 200 and silently ignored the bogus parentReference; the file never moved. Fix: the substitution pipeline now runs a two-pass design.
+    - Top-level pass (unchanged) applies the full schema-aware machinery (auto-inferred predicates, kind-based fallback, cross-placeholder resolution) to each top-level param whose value is itself a placeholder string.
+    - New nested pass `_substitute_nested_placeholders` walks every string leaf inside dict/list top-level params and substitutes placeholders using explicit predicate / field-hint resolution. Schema-driven inference is intentionally skipped for nested leaves because per-leaf schema is unavailable; the LLM authored the placeholder explicitly and we honor it literally.
+    - Depth cap `_NESTED_SUBSTITUTION_MAX_DEPTH = 8` guards pathological payloads. MS Graph shapes rarely exceed 4 levels; 8 leaves comfortable headroom.
+    - Bare `{{FOO}}` nested references only substitute when the referenced payload is a scalar; structured payloads are left as literals so the leftover-strip pass can drop them with a loud warning.
+- **Recursive leftover stripping + loud `placeholder.unresolved` warnings (Dev suggestion, defense-in-depth)** -- `_strip_leftover_placeholder_parameters` now walks dicts/lists recursively. A non-required top-level param containing ANY unresolved placeholder leaf at ANY depth is dropped before the MCP call. Required params with nested unresolved leaves are left intact (the repair-plan flow reacts to them) but a warning event is still emitted.
+    - `_find_unresolved_placeholder_leaves` enumerates every placeholder-like string leaf with dotted/indexed path tracking (`parameters.parentReference.id`, `attendees[0].emailAddress.address`).
+    - A single `AGENT_PLANNING` WARNING event with `phase: "placeholder.unresolved"` reports every unresolved leaf (path + literal placeholder) alongside the list of dropped top-level params. Devs now see silent failures in the log stream the instant they happen, instead of puzzling over a 200-but-noop response.
+- **Repair-plan flow fires for nested required params (Dev #1 v0.20260418.0 OneDrive move, root-cause)** -- `_has_resolved_required_parameter_value` now recursively inspects dict/list required params for unresolved placeholder leaves via `_find_unresolved_placeholder_leaves`. Without this, `_get_unresolved_required_parameters` could not see the nested literal inside `parentReference.id`, the repair-plan attempt never fired, and the failed move silently shipped. The added check is O(leaves) with a tiny constant; no measurable overhead on hot paths.
+- **`agent_planning.md` PLACEHOLDER RULES block extended** -- The strict contract now documents:
+    - `[N]` / `[-N]` positional index syntax with the exact Excel scenario (`{{WORKSHEET_LIST[0].id}}` → first worksheet), and a caution that positional indexes are list-order-dependent and usually less safe than a name predicate.
+    - Nested placeholder support: placeholders MAY appear inside dict/list parameter values (e.g. MS Graph's `parentReference: {id: "{{...}}"}`), every string leaf is substituted at any depth, and unresolved nested leaves emit a `placeholder.unresolved` warning and either drop the non-required parent or trigger repair-plan when required.
+
+### Architectural Notes
+
+- The three-tier resolution hierarchy from v0.20260418.0 now extends cleanly to nested values:
+    1. **Explicit predicate / index** — `{{FILE_LIST[name='Book.xlsx'].id}}`, `{{WORKSHEET_LIST[0].id}}`, deterministic.
+    2. **Auto-inferred predicate** — still only top-level; schema-driven inference needs per-param metadata unavailable for nested leaves.
+    3. **Legacy first-match** — preserved at top level; nested pass leaves literals untouched and defers to the leftover-strip + repair-plan pipeline for diagnosis.
+- The leftover-strip pass is now the canonical "last line of defense" against silent failures. Any literal `{{...}}` reaching MCP is a bug — the warning event + repair-plan flow ensures devs and the runtime both notice.
+- `Agent.PLACEHOLDER_INDEX_KEY` is a class attribute (not a module constant) because predicate parsing is a staticmethod on the class; this keeps the reserved key discoverable in a single place. The marker is deliberately long and namespaced (`__index__`) so it cannot collide with real MS Graph field names.
+- This closes all three silent-failure modes in the Dev #1 v0.20260418.0 report: `[N]` syntax, nested-dict substitution, and the loud warning devs requested for literal-placeholder pass-through.
+
+### Tests
+
+**New unit tests** (`tests/unit/test_agent_planning_helpers.py`, 121 total in the file; 13 new):
+- `test_parse_placeholder_predicate_accepts_integer_index` -- `[0]`, `[3]`, `[-1]` parse to `{__index__: N}`; non-integer numerics / bare identifiers without `=` return None.
+- `test_parse_placeholder_reference_supports_integer_index` -- `{{WORKSHEET_LIST[0].id}}` splits into (base, field='id', `{__index__: 0}`).
+- `test_iter_indexable_records_prefers_top_level_value_wrapper` -- MS Graph `{value: [...]}` shape is used directly.
+- `test_iter_indexable_records_handles_top_level_list` -- top-level list-of-dicts passes through.
+- `test_iter_indexable_records_walks_nested_when_no_wrapper_match` -- depth-first fallback walk.
+- `test_filter_records_by_predicate_dispatches_index_path` -- positive/negative/out-of-range indexes, collect_all parity.
+- `test_extract_field_with_index_predicate_picks_positional_record` -- end-to-end extraction via index predicate.
+- `test_substitute_step_parameter_placeholders_resolves_index_predicate` -- Excel B2 scenario; `{{WORKSHEET_LIST[0].id}}` resolves to the first worksheet's GUID, not driveItemId.
+- `test_substitute_step_parameter_placeholders_resolves_nested_dict_placeholder` -- OneDrive scenario; `parentReference: {id: "{{...}}"}` substitutes correctly.
+- `test_substitute_step_parameter_placeholders_resolves_nested_list_placeholder` -- attendees array with per-record predicate resolution.
+- `test_substitute_step_parameter_placeholders_caps_recursion_depth` -- 20-deep pathological payload doesn't trigger RecursionError.
+- `test_find_unresolved_placeholder_leaves_walks_nested_structures` -- leaf finder reports dotted/indexed paths for nested literals.
+- `test_strip_leftover_placeholder_parameters_drops_top_level_with_nested_unresolved` -- non-required parent dict with nested literal gets dropped.
+- `test_strip_leftover_placeholder_parameters_keeps_required_with_nested_unresolved` -- required parent kept so repair-plan can react.
+- `test_has_resolved_required_parameter_value_rejects_nested_unresolved` -- dict/list required params with any nested literal report as unresolved.
+
+**New e2e test** (`e2e/tests/7_orchestration/test_7a6_nested_and_index_placeholder_resolution.py`):
+- Six scenarios covering `[0]` + `[-1]` integer indexing, nested-dict predicate substitution, recursive leftover-strip with warning, required-nested repair-plan trigger, and the combined `[0]` inside nested dict. Exercises the full placeholder pipeline end-to-end against MS Graph-shaped `list-excel-worksheets` and `search-onedrive-files` payloads. 6/6 pass.
+
+### Validation
+
+- Full unit suite: **553 passed, 3 skipped, 1 pre-existing failure** (`test_rce_client.py` hardcoded version assertion — unrelated to placeholder work).
+- Targeted placeholder helper suite: 121/121 pass (108 baseline + 13 new).
+- New e2e test (`test_7a6_nested_and_index_placeholder_resolution`): 6/6 scenarios pass.
+- Random e2e sample: 3/3 pass (scheduling, MCP credentials, artifacts).
+- ruff, black, mypy: clean on touched files.
+
+### Known issues deferred to next release
+
+- **MS365 tool selection collapse on A2A delegation (Dev #1 Excel Failure Mode 2, prior report)** -- still deferred; not a placeholder-resolution issue.
+- **Repair-tool suggests `list-outlook-contacts` for drive-root-item recovery** -- pre-existing heuristic misrouting in `_build_auto_discovery_repair_plan`; orthogonal to this release.
+
 ## v0.20260418.0
 
 ## v0.20260418.0
