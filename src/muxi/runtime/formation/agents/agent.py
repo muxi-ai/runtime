@@ -6042,9 +6042,7 @@ class Agent:
             field_hint: Optional[str] = None
             predicate: Optional[Dict[str, Any]] = None
             if referenced_result is None:
-                base_key, field_hint, predicate = self._parse_placeholder_reference(
-                    placeholder_key
-                )
+                base_key, field_hint, predicate = self._parse_placeholder_reference(placeholder_key)
                 if base_key != placeholder_key:
                     referenced_result = successful_results.get(base_key)
             if referenced_result is None:
@@ -7220,9 +7218,8 @@ class Agent:
                 # resolved fragments replace the tokens and the literal
                 # text is preserved. Whole-string placeholders continue
                 # through the richer schema-aware path below.
-                if (
-                    isinstance(param_value, str)
-                    and self._contains_embedded_placeholder(param_value)
+                if isinstance(param_value, str) and self._contains_embedded_placeholder(
+                    param_value
                 ):
                     replaced = self._substitute_embedded_placeholders(
                         text=param_value,
