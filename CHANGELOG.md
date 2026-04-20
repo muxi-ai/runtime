@@ -4,8 +4,6 @@
 
 ## v0.20260420.0
 
-## v0.20260419.0
-
 ### Silent-Failure Fixes on v0.20260418.0 Placeholder Pipeline
 
 - **`[N]` positional index now supported in placeholder predicates (Dev #1 v0.20260418.0 Excel B2)** -- The LLM emitted `{{WORKSHEET_LIST[0].id}}` to mean "first worksheet's id"; v0.20260418.0's parser accepted only `[key=value]` predicates and rejected bare integers, so the placeholder degraded to the legacy first-match path. The kind-aware cross-placeholder fallback then bound `workbookWorksheetId` to the Book.xlsx `driveItemId`, MS Graph returned 404 on `get-excel-worksheet`, and the failure surfaced as a confusing "could not obtain access token" message. New runtime helpers:
