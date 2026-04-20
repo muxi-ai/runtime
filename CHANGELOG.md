@@ -4,6 +4,8 @@
 
 ## v0.20260420.1
 
+## v0.20260420.1
+
 ### Silent-Failure Fixes on Free-Text MCP Payloads (Google Calendar + Gmail)
 
 The v0.20260420.0 release hardened placeholder resolution for MS Graph's structured JSON shapes (MS365 MCP). Production traffic on the Google Calendar / Gmail MCPs surfaced three remaining silent-failure modes because those servers return **free-text blobs**, not structured lists. All three traced back to the placeholder pipeline assuming structured payloads.
