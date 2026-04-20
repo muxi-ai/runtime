@@ -2,6 +2,79 @@
 
 ## [unreleased]
 
+## v0.20260420.1
+
+### Silent-Failure Fixes on Free-Text MCP Payloads (Google Calendar + Gmail)
+
+The v0.20260420.0 release hardened placeholder resolution for MS Graph's structured JSON shapes (MS365 MCP). Production traffic on the Google Calendar / Gmail MCPs surfaced three remaining silent-failure modes because those servers return **free-text blobs**, not structured lists. All three traced back to the placeholder pipeline assuming structured payloads.
+
+- **Text-block predicate fallback (Google Calendar: filtered placeholder dropped)** -- `{{EVENT_SEARCH[summary='Spark Test 2'].id}}` silently dropped because the google-mcp `get_events` tool returns a bulleted text blob (e.g. `- "Spark Test 2" (Starts: ...)\n  ID: rnnbrh...`), not a JSON list of dicts. v0.20260420.0's `_filter_records_by_predicate` walked structured records only, found zero matches, degraded to the legacy path, dropped the literal token, and the downstream `manage_event` call failed silently. Fix: when the structured walk returns zero matches the filter now falls back to a text-block parser.
+    - New `_parse_text_blocks_into_records` splits the payload into bullet-prefixed chunks (`- ` / `* ` lines), parses each into a synthetic dict, and hands the list to the existing predicate matcher.
+    - New `_split_text_into_bulleted_blocks` groups contiguous bullet-prefixed lines into block strings, preserving follow-on indented metadata (`Description: ...`, `ID: ...`) inside the same block.
+    - New `_text_block_to_record` extracts the quoted title into every title alias (`summary`/`title`/`name`/`subject` via `_TEXT_BLOCK_TITLE_ALIASES`) plus every inline `Key: value` pair, yielding a dict the existing `_record_matches_predicate` can test.
+    - New regex `_TEXT_BLOCK_BULLET_PREFIX` (`^\s*[-*]\s+`) and tuple `_TEXT_BLOCK_TITLE_ALIASES` centralize the detection rules; both are class attributes on `Agent` so they're discoverable alongside `PLACEHOLDER_INDEX_KEY`.
+    - The fallback is conservative: it runs only when the structured predicate walk returned no matches, so predicate-on-structured payloads keeps the exact same precedence it had in v0.20260420.0.
+- **Embedded placeholder substitution (Gmail: literal `{{DRAFT.body}}` sent to MCP)** -- The planner legitimately authored `body="{{DRAFT_CONTENT.body}}\n\nHappy Birthday!"` — a placeholder token spliced into a larger string alongside a literal suffix. v0.20260420.0's substitution only triggered when the ENTIRE value matched `_is_placeholder_like_value`; mixed strings (token + literal) fell through untouched, reaching MCP as literal `{{...}}` text and creating a duplicate malformed draft instead of updating the existing one. Fix: a new embedded-scan pass runs when the whole-string matcher declines.
+    - New regex `_EMBEDDED_PLACEHOLDER_SCAN` captures every `{{...}}` token inside a larger string (parses the exact same placeholder shape the explicit-form matcher accepts, but without anchoring).
+    - New `_contains_embedded_placeholder` staticmethod returns True for strings containing at least one token but which are not themselves a bare-placeholder string.
+    - New `_substitute_embedded_placeholders` instance method splices each resolved token back into the surrounding text. Only **scalar** resolved values are spliced (strings, numbers, bools); structured payloads (dict / list) are left as literals so the leftover-strip pass can drop them with a loud warning — we never want to stringify-dump a JSON blob into an email body.
+    - Wired into both the top-level param path (`_substitute_step_parameter_placeholders`) and the recursive nested path (`_substitute_nested_placeholders` string-leaf branch). Both paths invoke the embedded-scan only after the whole-string matcher declines, so v0.20260420.0's explicit-predicate / kind-aware / cross-placeholder precedence is preserved exactly.
+    - `_find_unresolved_placeholder_leaves` now iterates `_EMBEDDED_PLACEHOLDER_SCAN` matches inside string leaves so the leftover-strip pass sees and logs partially-unresolved embedded tokens (path + literal token) the same way it handles whole-placeholder leaves.
+- **`--- FIELDNAME ---` section separator in field extraction (Gmail: `.body` unextractable)** -- The Gmail MCP emits `--- BODY ---\n<body text>\n` to separate the message body from the `Subject: / From: / To: /` metadata header. v0.20260420.0's `_extract_field_values_from_text` recognized `Body: ...` label lines and `"body": "..."` JSON pairs but not the section-separator form, so `{{DRAFT_CONTENT.body}}` found no match, fell through to the scalar-payload fallback, and returned nothing. Fix: a new Pattern 4 runs **first** (before the looser label and JSON patterns) and short-circuits the rest when it matches.
+    - Pattern 4 matches `(?:^|\n)\s*-{3,}\s*<field>\s*-{3,}\s*\n(<capture>)(?=\n\s*-{3,}\s*<next-field>-{3,}|\Z)` — strict about the dash-framed opening (prevents false positives on markdown horizontal rules) and lazy on the capture with a next-section / end-of-text lookahead so the body stops at the next `--- ATTACHMENTS ---` etc.
+    - Section contents bypass the aggressive character normalization `_accept` applies to label captures — bodies are free-form text with punctuation, newlines, CR-LF, and mixed whitespace, and must be preserved verbatim for downstream mutation calls (draft update, calendar event description, etc.).
+    - **Pattern precedence change**: Pattern 4 now runs FIRST and `continue`s the loop when it matches. Before, Pattern 1 (label-style with `\s`-separator) would match `Body paragraph one.` as `label=Body, value=paragraph` from inside the section body and pollute the result set. Running Pattern 4 first with short-circuit makes the section separator authoritative when it fires. Non-section payloads (label-only, JSON-only) keep the exact same behavior — Pattern 4 declines silently and the loop continues to Patterns 1-3.
+
+### Architectural Notes
+
+- The v0.20260420.0 predicate pipeline assumed "structured JSON → records → match". Google MCPs return "free text → bulleted blocks → extract". This release bridges the two shapes **at the record-iterator layer** so the rest of the pipeline (predicate matching, field extraction, cross-placeholder fallback, leftover-strip, repair-plan) works unchanged against text payloads. The Fix 1 / Fix 3 helpers are the canonical "free-text adapter" for anything downstream of `_iter_result_records`.
+- Embedded-placeholder substitution promotes the contract from "value is a placeholder" to "value MAY contain placeholders". This is the shape the planner already produces for composed outputs (append-a-signature, prefix-a-subject, splice-a-field). The resolution rule stays conservative: scalars are spliced, structured values stay literal, unresolved tokens get logged and dropped.
+- `_EMBEDDED_PLACEHOLDER_SCAN` is deliberately a **non-anchored** variant of the whole-value placeholder regex. It is registered as a class attribute on `Agent` so the unresolved-leaf detector and the embedded substituter share the same source of truth for "what counts as a token".
+- Pattern 4 is order-sensitive. Any new field-extraction pattern added later must decide whether it is more specific than Pattern 4 (unlikely) or less specific (most cases) and inserted accordingly. The in-code comment documents this invariant.
+- All three fixes are purely runtime-side. Zero LLM / MCP / prompt changes. `agent_planning.md` does not need updating — the planner already emits the shapes that now resolve correctly.
+
+### Tests
+
+**New unit tests** (`tests/unit/test_agent_planning_helpers.py`, 135 total in the file; 14 new under the `v0.20260420.0 regression tests` header):
+- `test_parse_text_blocks_into_records_recovers_bulleted_google_calendar_events` -- google-mcp text payload parses into 3 dicts with title aliases (`summary`/`title`/`name`/`subject`) and inline `ID:`/`Description:`/`Location:` fields.
+- `test_parse_text_blocks_into_records_returns_empty_for_non_bulleted_text` -- narrative prose without bullet prefixes yields no records.
+- `test_filter_records_by_predicate_falls_back_to_text_blocks` -- predicate against a bulleted text payload matches the right block even though the structured walk finds nothing.
+- `test_substitute_step_parameter_placeholders_resolves_predicate_on_text_payload` -- end-to-end: `{{EVENT_SEARCH[summary='Spark Test 2'].id}}` against the exact google-mcp payload resolves to the real event_id.
+- `test_contains_embedded_placeholder_detects_mixed_strings` -- detects `{{X}}\n\nLiteral`, declines for bare `{{X}}` (the whole-string matcher handles those) and literal-only strings.
+- `test_substitute_embedded_placeholders_splices_resolved_values` -- `"{{DRAFT.body}}\n\nHappy Birthday!"` + scalar resolution splices correctly and preserves the suffix.
+- `test_substitute_embedded_placeholders_leaves_unresolved_tokens_intact` -- tokens with no matching payload stay literal (the strip-pass will then drop them).
+- `test_substitute_embedded_placeholders_does_not_splice_structured_payload` -- dict/list payloads are NOT stringified into strings; token stays literal for downstream drop.
+- `test_substitute_step_parameter_placeholders_resolves_embedded_body` -- full pipeline: Gmail draft payload with `--- BODY ---` section + embedded `{{DRAFT_CONTENT.body}}\n\nHappy Birthday!` resolves to real body + appended suffix.
+- `test_find_unresolved_placeholder_leaves_detects_embedded_tokens` -- a single embedded unresolved token inside a larger string is reported with correct path.
+- `test_find_unresolved_placeholder_leaves_detects_multiple_embedded_tokens` -- multi-token strings produce one leaf per token.
+- `test_extract_field_values_from_text_recognizes_section_separator` -- `--- BODY ---\n<body>\n` extracts the full body, preserves whitespace/CR-LF/punctuation.
+- `test_extract_field_values_from_text_section_separator_stops_at_next_section` -- body capture stops at the next `--- ATTACHMENTS ---` marker, doesn't bleed into subsequent sections.
+- `test_extract_field_values_from_text_section_separator_not_confused_with_prose` -- bare `---` horizontal rules without a field name between them don't trigger a section match.
+
+**New e2e test** (`e2e/tests/7_orchestration/test_7a7_text_payload_predicate_and_embedded_placeholder.py`):
+- Five scenarios using the exact payload fixtures captured from the v0.20260420.0 production log:
+    1. `calendar_predicate_on_text_payload` -- `{{EVENT_SEARCH[summary='Spark Test 2'].id}}` resolves to the correct event_id against the google-mcp `get_events` bulleted text blob.
+    2. `calendar_predicate_routes_to_right_event` -- predicate `[summary='Ruby Daily Sync']` selects the second event (not the first), proving the text-block filter actually filters.
+    3. `calendar_unmatched_predicate_drops_and_warns` -- an unmatched predicate drops the non-required param AND emits the `placeholder.unresolved` warning event.
+    4. `gmail_embedded_body_substitution` -- Gmail draft with `--- BODY ---` section + embedded `{{DRAFT_CONTENT.body}}\n\nHappy Birthday!` resolves end-to-end, preserving the appended literal.
+    5. `gmail_unresolved_embedded_flagged` -- a payload with no recoverable `body` field leaves the embedded token literal AND the unresolved-leaf detector reports it.
+- 5/5 pass.
+
+### Validation
+
+- Full unit suite: **567 passed, 3 skipped, 1 pre-existing failure** (`test_rce_client.py` hardcoded version assertion — unrelated to placeholder work; confirmed via `git stash`).
+- Targeted placeholder helper suite: 135/135 pass (121 baseline + 14 new).
+- New e2e test (`test_7a7_text_payload_predicate_and_embedded_placeholder`): 5/5 scenarios pass.
+- Neighbouring e2e tests to guard against regressions: `test_7a5_placeholder_predicate_resolution` 7/7, `test_7a6_nested_and_index_placeholder_resolution` 6/6.
+- Random e2e sample (10 tests across 8 areas): 9/10 pass. The single failure (`9_async/test_9a3b_with_approval`) reproduces identically on pristine `develop` HEAD and is caused by the planner LLM short-circuiting the approval message `"Yes, please proceed with this plan"` to an empty plan — upstream of all placeholder-resolution code.
+- `scripts/validate_events.py`: 1209/1209 observe() calls validate (100%).
+
+### Known issues deferred to next release
+
+- **Multi-word label-line capture truncation** -- `Subject: Meeting tomorrow` still extracts only `"Meeting"` because Pattern 1's value capture excludes whitespace. Orthogonal to the three bugs fixed here (body resolution is via Pattern 4; subject already half-worked pre-fix). Candidate for a dedicated "header-line" pattern in the next release.
+- **Short follow-up clarification loss on context-free recall** -- the "pull it up" / "try again" loss-of-context issue noted in the v0.20260420.0 field report is NOT addressed here; root cause is in the buffer-memory injection into `=== CONVERSATION CONTEXT ===`, a separate surface from placeholder resolution.
+- **Gmail `update-draft` tool semantics mismatch** -- the Gmail MCP's `update_draft` actually creates a new draft, requiring explicit `draft_id` plumbing. Tool-contract issue on the MCP side, not a runtime bug.
+
 ## v0.20260420.0
 
 ### Silent-Failure Fixes on v0.20260418.0 Placeholder Pipeline

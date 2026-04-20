@@ -5991,6 +5991,89 @@ class Agent:
         )
         return any(re.match(pattern, stripped) for pattern in placeholder_patterns)
 
+    # Non-anchored scan for ``{{...}}`` tokens embedded inside larger strings
+    # (e.g. ``"{{DRAFT.body}}\n\nHappy Birthday!"``). Kept separate from
+    # ``_is_placeholder_like_value`` which intentionally requires the whole
+    # value to be a placeholder for the schema-aware substitution path. Used
+    # by the embedded-substitution helpers and the unresolved-leaf detector
+    # so partially-resolved strings still flow through the correct logging /
+    # drop path.
+    _EMBEDDED_PLACEHOLDER_SCAN = re.compile(r"\{\{\s*[A-Za-z0-9_\-\[\]='\"\.\s]+?\s*\}\}")
+
+    @staticmethod
+    def _contains_embedded_placeholder(value: Any) -> bool:
+        """Return True when ``value`` is a string containing at least one
+        ``{{...}}`` token, regardless of whether the whole value is a
+        placeholder. Does not fire on pure placeholder values handled by
+        :meth:`_is_placeholder_like_value` — callers check that first.
+        """
+        if not isinstance(value, str) or not value.strip():
+            return False
+        return bool(Agent._EMBEDDED_PLACEHOLDER_SCAN.search(value))
+
+    def _substitute_embedded_placeholders(
+        self,
+        text: str,
+        successful_results: Dict[str, Any],
+    ) -> str:
+        """Replace every resolvable ``{{...}}`` token inside ``text`` in place.
+
+        Each token is resolved through the same pipeline as full-string
+        placeholders (``_parse_placeholder_reference`` → predicate/field
+        extraction), but the resolved value is stringified and spliced
+        back into ``text``. Tokens we cannot resolve are left intact so
+        :meth:`_find_unresolved_placeholder_leaves` can still flag them
+        for the leftover-strip pass.
+
+        Non-scalar resolved values are serialized with ``str()`` so MCP
+        receives a deterministic string rather than a Python repr. This is
+        deliberate: the LLM emitted the token inside a string context, so
+        downstream consumers expect a string substitution.
+        """
+        if not text or not isinstance(text, str):
+            return text
+        if not successful_results:
+            return text
+
+        def _replace(match: re.Match) -> str:
+            token = match.group(0)
+            placeholder_key = token.strip()
+            referenced_result = successful_results.get(placeholder_key)
+            field_hint: Optional[str] = None
+            predicate: Optional[Dict[str, Any]] = None
+            if referenced_result is None:
+                base_key, field_hint, predicate = self._parse_placeholder_reference(
+                    placeholder_key
+                )
+                if base_key != placeholder_key:
+                    referenced_result = successful_results.get(base_key)
+            if referenced_result is None:
+                return token
+
+            payload = self._extract_structured_planning_result_payload(referenced_result)
+            if field_hint or predicate:
+                resolved = self._extract_field_from_result_payload(
+                    payload, field_hint, predicate=predicate
+                )
+            elif isinstance(payload, (str, int, float, bool)):
+                resolved = payload
+            else:
+                # Bare ``{{FOO}}`` inside a larger string + non-scalar
+                # payload: we cannot sensibly splice a dict/list into
+                # free text. Leave the token intact so the unresolved
+                # leaf detector flags it.
+                return token
+
+            if resolved is None:
+                return token
+            if isinstance(resolved, (list, dict)):
+                # Same reasoning — structured values shouldn't be coerced
+                # into free text without caller intent. Leave untouched.
+                return token
+            return str(resolved)
+
+        return Agent._EMBEDDED_PLACEHOLDER_SCAN.sub(_replace, text)
+
     # LLM-invented sentinel strings indicating "the runtime should inject this
     # value later" rather than an actual resolved value.  We must treat these
     # as unresolved so that MCP server defaults, context resolution, or
@@ -6715,9 +6798,180 @@ class Agent:
             matches.append(record)
             if not collect_all:
                 break
+
+        # Text-payload fallback: when structured-record matching finds
+        # nothing, some MCP servers (Google Calendar/Gmail in particular)
+        # serialize list results as human-readable text blocks rather than
+        # JSON arrays. Parse those text blocks into synthetic dict records
+        # so predicates like ``{{EVENT_SEARCH[summary='Spark Test 2'].id}}``
+        # still resolve against the free-text payload.
+        if not matches:
+            for record in Agent._parse_text_blocks_into_records(payload):
+                if not Agent._record_matches_predicate(record, predicate):
+                    continue
+                matches.append(record)
+                if not collect_all:
+                    break
+
         if collect_all:
             return matches
         return matches[0] if matches else None
+
+    # Pattern for a text block boundary inside a free-text MCP payload:
+    # a line starting with ``- `` (bulleted item) OR a blank line followed
+    # by a line matching ``Key: value``/``Key: "value"`` or an inline
+    # ``Key: ... ID: <id>`` record. Used only by
+    # :meth:`_parse_text_blocks_into_records` as a conservative heuristic
+    # to recover predicate-matchable records from free-text payloads.
+    _TEXT_BLOCK_BULLET_PREFIX = re.compile(r"^\s*[-*]\s+", re.MULTILINE)
+
+    # Keys we recognize inside a text block as the "title"/"name" of the
+    # record. Order matters: the first matching key wins when populating
+    # the synthetic record (so a block with both ``Subject:`` and
+    # ``Title:`` labels uses ``Subject`` as the primary title). Lowercase.
+    _TEXT_BLOCK_TITLE_ALIASES = (
+        "summary",
+        "title",
+        "name",
+        "subject",
+        "displayname",
+    )
+
+    @staticmethod
+    def _parse_text_blocks_into_records(payload: Any) -> List[Dict[str, Any]]:
+        """Parse free-text MCP payloads into synthetic dict records.
+
+        Google's MCP servers frequently serialize list results as
+        human-readable text blocks, e.g.::
+
+            - "Spark Test 2" (Starts: 2026-04-21T10:00, Ends: 2026-04-21T10:30)
+              Description: No Description
+              ID: rnnbrh9v8lh853dkvit1d8a234
+            - "Ruby Daily Sync" (Starts: ...)
+              ID: 09jdumm...
+
+        This helper splits each text chunk on bullet boundaries, pulls the
+        quoted title (mapping it to ``summary``/``title``/``name``/
+        ``subject`` so predicate filters work), and harvests ``Key: value``
+        pairs inside each block into the synthetic record. Returns an empty
+        list whenever the payload does not look bulleted — callers use this
+        as an optional fallback and tolerate empty results.
+
+        Conservative by design: we only emit records when a bulleted shape
+        is detected (first non-empty line starts with ``-`` or ``*``) AND
+        the block yields at least one ``Key: value`` pair. This avoids
+        false positives on arbitrary narrative text.
+        """
+        records: List[Dict[str, Any]] = []
+        if payload in (None, "", [], {}):
+            return records
+
+        text_chunks = Agent._collect_text_chunks_from_payload(payload)
+        for chunk in text_chunks:
+            if not isinstance(chunk, str) or not chunk.strip():
+                continue
+            if not Agent._TEXT_BLOCK_BULLET_PREFIX.search(chunk):
+                continue
+            for block in Agent._split_text_into_bulleted_blocks(chunk):
+                record = Agent._text_block_to_record(block)
+                if record:
+                    records.append(record)
+        return records
+
+    @staticmethod
+    def _split_text_into_bulleted_blocks(text: str) -> List[str]:
+        """Split ``text`` at ``^[-*] `` boundaries into block segments.
+
+        Continuation lines (indented or unindented non-bullet lines) belong
+        to the preceding bullet block. Non-bullet prose before the first
+        bullet is ignored.
+        """
+        blocks: List[str] = []
+        current: List[str] = []
+        for raw_line in text.splitlines():
+            if Agent._TEXT_BLOCK_BULLET_PREFIX.match(raw_line):
+                if current:
+                    blocks.append("\n".join(current))
+                    current = []
+                current.append(raw_line)
+            elif current:
+                current.append(raw_line)
+        if current:
+            blocks.append("\n".join(current))
+        return blocks
+
+    @staticmethod
+    def _text_block_to_record(block: str) -> Optional[Dict[str, Any]]:
+        """Convert a single bulleted text block into a synthetic record.
+
+        Extracts:
+        - The first quoted string on the opening bullet line as the title
+          (exposed under every alias in :data:`_TEXT_BLOCK_TITLE_ALIASES`
+          so predicates matching any of them succeed).
+        - Every ``Key: value`` pair on subsequent lines (value trimmed of
+          surrounding whitespace / trailing ``|`` separator fragments).
+        - Inline ``Key: value`` pairs appearing on the opening bullet line
+          itself after the title, so ``ID: xyz`` on the same line as the
+          title is still captured.
+
+        Returns ``None`` when no key-value pairs can be extracted.
+        """
+        if not block or not isinstance(block, str):
+            return None
+
+        record: Dict[str, Any] = {}
+
+        # 1. Title from opening bullet line's first quoted substring.
+        first_line = block.splitlines()[0] if block.splitlines() else block
+        title_match = re.search(r'"([^"\n]{1,256})"|\'([^\'\n]{1,256})\'', first_line)
+        if title_match:
+            title = (title_match.group(1) or title_match.group(2) or "").strip()
+            if title:
+                for alias in Agent._TEXT_BLOCK_TITLE_ALIASES:
+                    record[alias] = title
+
+        # Title aliases we already populated from the quoted header — we
+        # must not overwrite them with narrative labels that happen to
+        # share a name (e.g. ``Subject: No subject`` prose later in the
+        # block when the bullet-line title already set ``subject``).
+        title_alias_keys = {
+            alias.replace("_", "").replace("-", "") for alias in Agent._TEXT_BLOCK_TITLE_ALIASES
+        }
+
+        # 2. Harvest ``Key: value`` pairs from every line (including the
+        #    opening bullet). The key must be an identifier-like word;
+        #    value runs until the next ``|`` pipe separator or end of line
+        #    (some MCPs concatenate fields with ``|`` in a single line).
+        kv_pattern = re.compile(
+            r"(?:^|\|)\s*([A-Za-z][A-Za-z0-9 _\-]{0,48})\s*:\s*([^\n|]+?)\s*(?=\||$)",
+            re.MULTILINE,
+        )
+        for match in kv_pattern.finditer(block):
+            key = match.group(1).strip()
+            value = match.group(2).strip()
+            if not key or not value:
+                continue
+            normalized_key = key.lower().replace(" ", "").replace("-", "").replace("_", "")
+            # Skip the bullet prefix itself from being interpreted as a key.
+            if not normalized_key or normalized_key == "-":
+                continue
+            # Do not clobber a title alias we already populated from the
+            # quoted header on the opening bullet line.
+            if normalized_key in title_alias_keys and any(
+                alias in record for alias in Agent._TEXT_BLOCK_TITLE_ALIASES
+            ):
+                continue
+            # Store under the normalized key (lowercase, no spaces) so
+            # predicate matching can find it regardless of the surface
+            # casing used in the text.
+            record.setdefault(normalized_key, value)
+            # Also preserve the original key for downstream callers that
+            # walk the dict keys directly.
+            record.setdefault(key, value)
+
+        if not record:
+            return None
+        return record
 
     def _extract_field_from_matched_records(
         self,
@@ -6959,6 +7213,23 @@ class Agent:
         substituted = dict(parameters)
         for param_name, param_value in substituted.items():
             if not self._is_placeholder_like_value(param_value):
+                # Embedded-placeholder path: when the value is a string
+                # that *contains* one or more ``{{...}}`` tokens mixed
+                # with literal prose (e.g. ``"{{DRAFT.body}}\n\nHappy
+                # Birthday!"``), run targeted in-place substitution so the
+                # resolved fragments replace the tokens and the literal
+                # text is preserved. Whole-string placeholders continue
+                # through the richer schema-aware path below.
+                if (
+                    isinstance(param_value, str)
+                    and self._contains_embedded_placeholder(param_value)
+                ):
+                    replaced = self._substitute_embedded_placeholders(
+                        text=param_value,
+                        successful_results=successful_results,
+                    )
+                    if replaced != param_value:
+                        substituted[param_name] = replaced
                 continue
 
             placeholder_key = str(param_value).strip()
@@ -7153,6 +7424,15 @@ class Agent:
             ]
 
         if not self._is_placeholder_like_value(value):
+            # Embedded-placeholder path for nested string leaves: a nested
+            # leaf like ``{"body": "{{DRAFT.body}}\n\nHappy Birthday!"}``
+            # is not a whole-string placeholder but still needs the
+            # ``{{...}}`` token resolved in place.
+            if isinstance(value, str) and self._contains_embedded_placeholder(value):
+                return self._substitute_embedded_placeholders(
+                    text=value,
+                    successful_results=successful_results,
+                )
             return value
 
         placeholder_key = str(value).strip()
@@ -7277,6 +7557,22 @@ class Agent:
             ]
 
         leaves: List[Dict[str, str]] = []
+
+        # Embedded-placeholder detection: the top-level/nested substitution
+        # passes already resolved whatever they could; anything still
+        # matching ``{{...}}`` inside a larger string is an unresolved
+        # reference that should be logged (and the containing non-required
+        # param dropped) the same way whole-string placeholders are.
+        if isinstance(value, str) and self._contains_embedded_placeholder(value):
+            for match in Agent._EMBEDDED_PLACEHOLDER_SCAN.finditer(value):
+                leaves.append(
+                    {
+                        "param_path": base_path or "<root>",
+                        "placeholder": match.group(0).strip(),
+                    }
+                )
+            return leaves
+
         if isinstance(value, dict):
             for key, child in value.items():
                 child_path = f"{base_path}.{key}" if base_path else str(key)
@@ -7563,11 +7859,15 @@ class Agent:
     def _extract_field_values_from_text(text: str, field_name: str) -> List[str]:
         """Extract values for ``field_name`` from free-form text.
 
-        Recognizes three patterns:
+        Recognizes four patterns:
 
         1. ``Field: value`` or ``**Field:** value`` (markdown-style labels)
         2. ``"field": "value"`` (embedded JSON)
         3. ``field = value`` (assignment-style)
+        4. ``--- FIELD ---\\n<captured value>`` (section separator;
+           Gmail MCP's ``get_gmail_message_content`` uses this shape for
+           the message body). The captured value runs until the next
+           ``--- ... ---`` line or end of text.
 
         Returns a deduplicated list in discovery order.
         """
@@ -7591,6 +7891,42 @@ class Agent:
 
         for form in Agent._field_name_variants(field_name):
             escaped = re.escape(form)
+
+            # Pattern 4 runs FIRST (before the looser label/JSON patterns)
+            # because the ``--- FIELD ---`` section separator is the most
+            # specific shape and must win over accidental label matches
+            # inside the section body. The Gmail MCP's body section is
+            # the driving case: without precedence, Pattern 1 matches
+            # ``Body paragraph`` (label=``Body``, value=``paragraph``)
+            # and drowns the real section capture in noise.
+            section_pattern = (
+                rf"(?:^|\n)\s*-{{3,}}\s*{escaped}\s*-{{3,}}\s*\n"
+                r"([\s\S]*?)"
+                r"(?=\n\s*-{3,}\s*[A-Za-z0-9][^\n]*-{3,}\s*(?:\n|$)|\Z)"
+            )
+            section_matched = False
+            for match in re.finditer(section_pattern, text, flags=re.IGNORECASE):
+                raw_section = match.group(1)
+                if raw_section is None:
+                    continue
+                section_value = raw_section.strip()
+                if section_value:
+                    # Section contents are free-form text (can contain
+                    # punctuation, newlines, etc.) and typically constitute
+                    # a whole field value rather than a bare token — bypass
+                    # the aggressive character stripping ``_accept`` applies
+                    # so we preserve the full captured block.
+                    if section_value not in seen:
+                        seen.add(section_value)
+                        values.append(section_value)
+                    section_matched = True
+
+            # When the section separator already produced a value for this
+            # surface form, skip the looser patterns so they don't re-extract
+            # fragments of the section body as spurious matches.
+            if section_matched:
+                continue
+
             # Pattern 1: label-style with optional surrounding markdown.
             # Accepts any combination of ``*``, whitespace, ``:`` or ``=`` as
             # the separator so ``**Message ID:**`` (colon inside bold) and

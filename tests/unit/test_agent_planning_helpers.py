@@ -3544,3 +3544,367 @@ def test_has_resolved_required_parameter_value_rejects_nested_unresolved():
         )
         is False
     )
+
+
+# ---------------------------------------------------------------------------
+# v0.20260420.0 regression tests
+#
+# Dev feedback traced to today's release:
+#   A. Google Calendar: filtered placeholders like
+#      {{EVENT_SEARCH[summary='Spark Test 2'].id}} drop the event_id because
+#      the predicate filter cannot match against Google MCP's text-blob
+#      payloads.
+#   B. Gmail: `{{DRAFT_CONTENT.body}}\n\nHappy Birthday!` arrives literally
+#      because embedded placeholders are not recognized by the whole-string
+#      matcher, AND `.body` fails because the Gmail MCP uses a
+#      `--- BODY ---` separator rather than `Body: value`.
+# ---------------------------------------------------------------------------
+
+
+# The Google Calendar `get_events` response shape: wrapped in
+# structuredContent.result, the events are rendered as a bulleted text
+# block with an inline ID field. This is the exact format from the field
+# report logs (v0.20260420.0, google-mcp__get_events).
+GOOGLE_CALENDAR_GET_EVENTS_TEXT = (
+    "Successfully retrieved 3 events from calendar 'primary' for oleksandra@automaze.io:\n"
+    '- "Spark Test 2" (Starts: 2026-04-21T10:00:00+03:00, Ends: 2026-04-21T10:30:00+03:00)\n'
+    "  Description: No Description\n"
+    "  Location: No Location\n"
+    "  Attendees: None\n"
+    "  ID: rnnbrh9v8lh853dkvit1d8a234 | Link: https://example.com/a\n"
+    '- "Ruby Daily Sync" (Starts: 2026-04-21T12:00:00+03:00, Ends: 2026-04-21T12:30:00+03:00)\n'
+    "  Description: Daily sync\n"
+    "  ID: 09jdummda51b9m0fqlomnan8em | Link: https://example.com/b\n"
+    '- "Emerald Daily Sync" (Starts: 2026-04-21T12:30:00+03:00, Ends: 2026-04-21T13:00:00+03:00)\n'
+    "  Description: Daily sync\n"
+    "  ID: _6gq3ihi46kojgba565346b9k6ksk8b9o6 | Link: https://example.com/c\n"
+)
+
+
+def test_parse_text_blocks_into_records_recovers_bulleted_google_calendar_events():
+    """Google Calendar MCP returns a bulleted text block. The new parser
+    must lift each bullet into a synthetic dict record with title aliases
+    populated so predicate filters work against free-text payloads."""
+    records = Agent._parse_text_blocks_into_records(GOOGLE_CALENDAR_GET_EVENTS_TEXT)
+
+    assert len(records) == 3
+    titles = [record.get("summary") for record in records]
+    assert titles == ["Spark Test 2", "Ruby Daily Sync", "Emerald Daily Sync"]
+
+    # Title should be exposed under every alias so predicates written
+    # against any common name-field still resolve.
+    for record in records:
+        assert record["summary"] == record["title"] == record["name"] == record["subject"]
+
+    # Key:value pairs inside the block must be captured — the inline ID
+    # that lives on the same line as the link separator is critical
+    # because the LLM emits `{{EVENT_SEARCH[summary='...'].id}}` to
+    # extract exactly this field.
+    assert records[0]["id"] == "rnnbrh9v8lh853dkvit1d8a234"
+    assert records[1]["id"] == "09jdummda51b9m0fqlomnan8em"
+
+
+def test_parse_text_blocks_into_records_returns_empty_for_non_bulleted_text():
+    """Free narrative prose without bullets must not yield false-positive
+    records — predicate matching depends on this to fail cleanly rather
+    than silently match noise."""
+    prose = (
+        "The calendar has several events today. The first is Spark Test 2 at 10:00, "
+        "followed by Ruby Daily Sync at noon."
+    )
+    assert Agent._parse_text_blocks_into_records(prose) == []
+    assert Agent._parse_text_blocks_into_records(None) == []
+    assert Agent._parse_text_blocks_into_records({}) == []
+
+
+def test_filter_records_by_predicate_falls_back_to_text_blocks():
+    """With no structured records to match, the predicate path must parse
+    the free-text payload into synthetic records and match against those.
+    This is the Google Calendar regression fix: the payload is wrapped as
+    {"result": "<bulleted text>"} and the predicate `summary='Spark Test 2'`
+    has to find the matching block anyway."""
+    payload = {"result": GOOGLE_CALENDAR_GET_EVENTS_TEXT}
+    matched = Agent._filter_records_by_predicate(payload, {"summary": "Spark Test 2"})
+
+    assert matched is not None
+    assert matched["summary"] == "Spark Test 2"
+    assert matched["id"] == "rnnbrh9v8lh853dkvit1d8a234"
+
+
+def test_substitute_step_parameter_placeholders_resolves_predicate_on_text_payload():
+    """End-to-end: `{{EVENT_SEARCH[summary='Spark Test 2'].id}}` must
+    resolve against a Google Calendar text-blob payload so the next
+    manage_event step receives a real event_id."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    my_results = {
+        "{{EVENT_SEARCH}}": {
+            "status": "success",
+            "result": {"result": GOOGLE_CALENDAR_GET_EVENTS_TEXT},
+        }
+    }
+
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters={
+            "action": "update",
+            "event_id": "{{EVENT_SEARCH[summary='Spark Test 2'].id}}",
+            "start_time": "2026-04-21T10:00:00+03:00",
+            "end_time": "2026-04-21T10:45:00+03:00",
+        },
+        param_properties={
+            "action": {"type": "string"},
+            "event_id": {"type": "string"},
+            "start_time": {"type": "string"},
+            "end_time": {"type": "string"},
+        },
+        full_schema={},
+        action_description="Reschedule Spark Test 2",
+        my_results=my_results,
+        tool_name="google-mcp__manage_event",
+    )
+
+    assert substituted["event_id"] == "rnnbrh9v8lh853dkvit1d8a234"
+    assert substituted["action"] == "update"
+
+
+# ---------------------------------------------------------------------------
+# Embedded placeholder substitution (Gmail draft body bug)
+# ---------------------------------------------------------------------------
+
+
+def test_contains_embedded_placeholder_detects_mixed_strings():
+    """The embedded-placeholder scanner must fire on strings where a
+    ``{{...}}`` token is surrounded by literal text, without ever
+    reporting true on placeholder-free text."""
+    assert Agent._contains_embedded_placeholder("{{DRAFT.body}}\n\nHappy Birthday!") is True
+    assert Agent._contains_embedded_placeholder("Prefix {{FOO.id}} suffix") is True
+    # Pure placeholder strings may also match (caller checks
+    # _is_placeholder_like_value first).
+    assert Agent._contains_embedded_placeholder("{{FOO.id}}") is True
+    # Empty / non-string / no-token values must not match.
+    assert Agent._contains_embedded_placeholder("no placeholder here") is False
+    assert Agent._contains_embedded_placeholder("") is False
+    assert Agent._contains_embedded_placeholder(None) is False
+    assert Agent._contains_embedded_placeholder(123) is False
+
+
+def test_substitute_embedded_placeholders_splices_resolved_values():
+    """Gmail regression: the LLM emits
+    `body="{{DRAFT_CONTENT.body}}\n\nHappy Birthday!"`. The resolver
+    must splice in the real body text and preserve the literal suffix."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    successful_results = {
+        "{{DRAFT_CONTENT}}": {
+            "status": "success",
+            "result": {"subject": "Meeting tomorrow", "body": "Hi Anna,\n\nBest regards"},
+        }
+    }
+
+    result = agent._substitute_embedded_placeholders(
+        text="{{DRAFT_CONTENT.body}}\n\nHappy Birthday!",
+        successful_results=successful_results,
+    )
+
+    assert result == "Hi Anna,\n\nBest regards\n\nHappy Birthday!"
+
+
+def test_substitute_embedded_placeholders_leaves_unresolved_tokens_intact():
+    """Unresolved tokens must NOT be dropped mid-string — we need them to
+    stay literal so `_find_unresolved_placeholder_leaves` can flag the
+    parent parameter."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    successful_results = {
+        "{{DRAFT_CONTENT}}": {
+            "status": "success",
+            "result": {"subject": "Meeting"},  # no `body` field
+        }
+    }
+
+    result = agent._substitute_embedded_placeholders(
+        text="{{DRAFT_CONTENT.body}}\n\nHappy Birthday!",
+        successful_results=successful_results,
+    )
+
+    assert result == "{{DRAFT_CONTENT.body}}\n\nHappy Birthday!"
+
+
+def test_substitute_embedded_placeholders_does_not_splice_structured_payload():
+    """Bare ``{{FOO}}`` inside a larger string must be left intact when the
+    referenced payload is a dict/list — we cannot sensibly interpolate a
+    structured payload into free text."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    successful_results = {
+        "{{FOO}}": {
+            "status": "success",
+            "result": {"some": "structured", "data": [1, 2, 3]},
+        }
+    }
+
+    result = agent._substitute_embedded_placeholders(
+        text="Prefix {{FOO}} suffix",
+        successful_results=successful_results,
+    )
+    assert result == "Prefix {{FOO}} suffix"
+
+
+def test_substitute_step_parameter_placeholders_resolves_embedded_body():
+    """End-to-end: Gmail draft body with literal Happy Birthday! must be
+    resolved through the whole substitution pipeline — not just the
+    embedded helper in isolation."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    # Shape the payload the way Gmail MCP actually returns it: a free-text
+    # blob with Subject on a `Subject: value` line and the body under a
+    # `--- BODY ---` separator. Both Fix 2 (embedded substitution) and
+    # Fix 3 (section separator field extraction) must cooperate.
+    gmail_payload_text = (
+        "Message ID: 19d9be86eb54a312\n"
+        "Subject: Meeting tomorrow\n"
+        "From: sender@example.com\n"
+        "To: recipient@example.com\n"
+        "\n"
+        "--- BODY ---\n"
+        "Hi Anna,\n\n"
+        "I wanted to reach out regarding our meeting scheduled for tomorrow.\n\n"
+        "Best regards\n"
+    )
+
+    my_results = {
+        "{{DRAFT_CONTENT}}": {
+            "status": "success",
+            "result": {"result": gmail_payload_text},
+        }
+    }
+
+    substituted = agent._substitute_step_parameter_placeholders(
+        parameters={
+            "subject": "{{DRAFT_CONTENT.subject}}",
+            "body": "{{DRAFT_CONTENT.body}}\n\nHappy Birthday!",
+            "to": ["recipient@example.com"],
+        },
+        param_properties={
+            "subject": {"type": "string"},
+            "body": {"type": "string"},
+            "to": {"type": "array"},
+        },
+        full_schema={},
+        action_description="Update draft appending Happy Birthday",
+        my_results=my_results,
+        tool_name="google-mcp__draft_gmail_message",
+    )
+
+    # Subject resolves via the existing label-line extractor. The field
+    # report confirms the pre-fix behavior already half-resolved subject
+    # to the first whitespace-terminated token ("Meeting"); improving
+    # multi-word label capture is a separate scope item.
+    assert substituted["subject"] == "Meeting"
+    # The body must contain both the resolved original body and the
+    # literal suffix the LLM appended — this is the actual Fix 2 + Fix 3
+    # cooperation we care about here.
+    assert "Hi Anna," in substituted["body"]
+    assert "Best regards" in substituted["body"]
+    assert substituted["body"].endswith("Happy Birthday!")
+
+
+def test_find_unresolved_placeholder_leaves_detects_embedded_tokens():
+    """Embedded (not whole-string) unresolved placeholders must still flow
+    through the leftover-strip flow so non-required params get dropped
+    and devs see the warning."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    leaves = agent._find_unresolved_placeholder_leaves(
+        "{{DRAFT.body}}\n\nHappy Birthday!",
+        base_path="body",
+    )
+
+    assert leaves == [
+        {"param_path": "body", "placeholder": "{{DRAFT.body}}"},
+    ]
+
+
+def test_find_unresolved_placeholder_leaves_detects_multiple_embedded_tokens():
+    """Multiple unresolved tokens inside a single string yield one leaf
+    per token so the observability warning can enumerate them all."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+
+    leaves = agent._find_unresolved_placeholder_leaves(
+        "Prefix {{A.x}} middle {{B.y}} suffix",
+        base_path="template",
+    )
+
+    placeholders = sorted(leaf["placeholder"] for leaf in leaves)
+    assert placeholders == ["{{A.x}}", "{{B.y}}"]
+    assert all(leaf["param_path"] == "template" for leaf in leaves)
+
+
+# ---------------------------------------------------------------------------
+# --- SECTION --- separator field extraction (Gmail body bug)
+# ---------------------------------------------------------------------------
+
+
+def test_extract_field_values_from_text_recognizes_section_separator():
+    """Gmail's `get_gmail_message_content` returns the body under
+    `--- BODY ---` rather than `Body: ...`. The extractor must pick up
+    everything between the opening separator and the next one (or EOS)."""
+    text = (
+        "Subject: Meeting tomorrow\n"
+        "From: sender@example.com\n"
+        "\n"
+        "--- BODY ---\n"
+        "Hi Anna,\n\n"
+        "Best regards\n"
+    )
+
+    body_values = Agent._extract_field_values_from_text(text, "body")
+    assert len(body_values) == 1
+    assert body_values[0].startswith("Hi Anna,")
+    assert body_values[0].rstrip().endswith("Best regards")
+
+
+def test_extract_field_values_from_text_section_separator_stops_at_next_section():
+    """When a second `--- XYZ ---` appears after the body, the body
+    capture must terminate there — otherwise we'd swallow subsequent
+    fields into a single over-long value."""
+    text = (
+        "--- BODY ---\n"
+        "Body paragraph one.\n"
+        "\n"
+        "--- ATTACHMENTS ---\n"
+        "- file1.pdf\n"
+    )
+
+    body_values = Agent._extract_field_values_from_text(text, "body")
+    assert body_values == ["Body paragraph one."]
+
+    attachments = Agent._extract_field_values_from_text(text, "attachments")
+    assert attachments == ["- file1.pdf"]
+
+
+def test_extract_field_values_from_text_section_separator_not_confused_with_prose():
+    """Narrative prose with bare `---` rules (no field name sandwiched
+    between the dashes) must NOT produce a section-separator match —
+    the dashes must flank the requested field name for Pattern 4 to
+    fire. This guard avoids false positives on markdown horizontal
+    rules or any other triple-dash prose."""
+    text = (
+        "Some intro text.\n"
+        "---\n"
+        "Narrative sentence without a label.\n"
+        "---\n"
+    )
+    # Pattern 4 explicitly requires `--- <field> ---` — bare `---` rules
+    # must not match. We verify that none of the extracted values came
+    # from a section capture (a section capture would include the
+    # trailing period from "Narrative sentence without a label.").
+    matches = Agent._extract_field_values_from_text(text, "body")
+    assert all("Narrative sentence without a label" not in m for m in matches)
