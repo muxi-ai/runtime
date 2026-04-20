@@ -2,6 +2,8 @@
 
 ## [unreleased]
 
+## v0.20260420.0
+
 ## v0.20260419.0
 
 ### Silent-Failure Fixes on v0.20260418.0 Placeholder Pipeline
