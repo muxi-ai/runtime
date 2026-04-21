@@ -272,6 +272,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["muxi"]
+combine-as-imports = true
 
 [tool.ruff.format]
 quote-style = "double"

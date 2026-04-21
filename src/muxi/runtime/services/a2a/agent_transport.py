@@ -22,6 +22,7 @@ from a2a.client.transports.base import ClientTransport
 from a2a.types import SendMessageRequest, SendMessageResponse
 
 from . import _sdk_helpers as sdk
+from .models_adapter import ModelsAdapter
 
 
 class AgentNotFoundError(Exception):
@@ -61,25 +62,45 @@ class AgentTransport(ClientTransport):
         if not hasattr(target_agent, "handle_a2a_message"):
             raise AttributeError(f"Agent {target_agent_id} does not support A2A messaging")
 
-        # Extract source agent id out of the request metadata (Struct).
+        # Extract source agent id + message type out of the request metadata
+        # (protobuf Struct). The external HTTP path (server.py) routes these
+        # via a plain dict; the internal in-memory path routes them via Struct,
+        # so we normalize to a dict here.
         request_metadata = (
             sdk.struct_to_dict(request.metadata) if request.HasField("metadata") else {}
         )
         source_agent_id = request_metadata.get("source_agent_id", "unknown")
         message_type = request_metadata.get("message_type", "request")
 
+        # Convert the protobuf Message into the MUXI dict shape the agent's
+        # handle_a2a_message expects (same shape server.py passes on the
+        # external path). Merge any additional metadata from the SDK Message
+        # into the handler context, excluding fields already consumed above.
+        muxi_message = ModelsAdapter.sdk_to_muxi_message(request.message)
+        message_content = muxi_message.get("content", muxi_message)
+
+        handler_context: dict = {}
+        if muxi_message.get("metadata"):
+            handler_context.update(muxi_message["metadata"])
+        for key in ("source_agent_id", "message_type"):
+            handler_context.pop(key, None)
+
+        message_id = (
+            getattr(request.message, "message_id", None)
+            or request_metadata.get("message_id")
+            or None
+        )
+
         response = await target_agent.handle_a2a_message(
             source_agent_id=source_agent_id,
-            message=request.message,
+            message=message_content,
             message_type=message_type,
+            context=handler_context or None,
+            message_id=message_id,
         )
 
         # Build a reply Message from whatever the agent returned.
-        message_suffix = "unknown"
-        if context and hasattr(context, "state"):
-            message_suffix = context.state.get("message_id", "unknown")
-
-        reply_id = f"resp_{target_agent_id}_{message_suffix}"
+        reply_id = f"resp_{target_agent_id}_{message_id or 'unknown'}"
 
         if response is None:
             reply = sdk.make_message(

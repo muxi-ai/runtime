@@ -25,9 +25,9 @@ from typing import Any, Callable, Dict, Optional, Union
 
 from a2a.types import Message, SendMessageRequest
 
+from ...utils.id_generator import generate_nanoid
 from .. import observability
 from . import _sdk_helpers as sdk
-from ...utils.id_generator import generate_nanoid
 
 # Singleton instance and lock for thread safety.
 _a2a_service_instance = None
@@ -152,12 +152,6 @@ class A2AService:
             return None
 
         except Exception as e:
-            observability.observe(
-                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={"error": str(e)},
-                description=f"Error sending A2A message: {e}",
-            )
             duration = asyncio.get_event_loop().time() - start_time
             observability.observe(
                 event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
