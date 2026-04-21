@@ -309,6 +309,20 @@ class LongTermMemory:
         if not self.is_multi_user:
             self._ensure_default_user()
 
+    @property
+    def embedding_model_name(self) -> str:
+        """Public accessor for the configured embedding model slug.
+
+        Exposes the provider-prefixed slug string (e.g.
+        ``"local/nomic-ai/nomic-embed-text-v1.5"``,
+        ``"openai/text-embedding-3-small"``) used by this memory
+        instance for embedding generation. External consumers
+        (``persistent_manager.py``, etc.) should read this public
+        property instead of reaching into the private
+        ``_embedding_model_name`` attribute.
+        """
+        return self._embedding_model_name
+
     async def _ensure_dim(self) -> int:
         """Probe the embedding dimension exactly once and memoize it.
 

@@ -54,11 +54,10 @@ class PersistentMemoryManager:
         ----------
         memory_backend:
             The memory backend instance (typically
-            ``self.overlord.long_term_memory``). The PRD prescribes
-            ``embedding_model_name`` as the public contract; this
-            method also reads the private ``_embedding_model_name``
-            used by the current memory backends so the migration
-            remains compatible with every in-tree consumer.
+            ``self.overlord.long_term_memory``). Reads the public
+            ``embedding_model_name`` property exposed by every in-tree
+            memory backend (``LongTermMemory``, ``WorkingMemory``,
+            ``SQLiteMemory``).
         query:
             The user query string to embed.
 
@@ -68,17 +67,15 @@ class PersistentMemoryManager:
             The query embedding vector, or ``None`` when the backend
             exposes no usable model slug (e.g. a bespoke backend with
             no embedding configuration). A ``None`` return is expected
-            by the caller — it simply omits ``query_embedding`` from
+            by the caller -- it simply omits ``query_embedding`` from
             the subsequent per-collection search calls.
         """
         if memory_backend is None:
             return None
 
-        # Prefer the PRD-prescribed public attribute; fall back to the
-        # private form published by the current memory backends.
+        # Read the public slug attribute exposed by every in-tree
+        # memory backend via its ``embedding_model_name`` property.
         model_name = getattr(memory_backend, "embedding_model_name", None)
-        if not isinstance(model_name, str) or not model_name:
-            model_name = getattr(memory_backend, "_embedding_model_name", None)
         if not isinstance(model_name, str) or not model_name:
             return None
 

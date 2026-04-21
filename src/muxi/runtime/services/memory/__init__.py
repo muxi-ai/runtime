@@ -41,32 +41,14 @@
 # - Retrieve relevant information based on semantic similarity
 # - Provide personalized and contextually appropriate responses
 #
-# Example usage:
-#
-#   # Create a buffer memory for conversation history
-#   from .memory import WorkingMemory
-#
-#   buffer = WorkingMemory(
-#       max_size=10,              # Context window size
-#       buffer_multiplier=10,     # Total capacity = 10 × 10 = 100
-#       model=embedding_model     # For vector search
-#   )
-#
-#   # Add items to memory
-#   await buffer.add("User message", {"role": "user"})
-#
-#   # Search memory for relevant information
-#   results = await buffer.search("topic of interest")
+# Embedding generation is centralized in the ``embedding`` submodule, which
+# routes all embedding calls through OneLLM's provider-prefixed slug system
+# (e.g. ``local/nomic-ai/nomic-embed-text-v1.5``,
+# ``openai/text-embedding-3-small``). Memory tiers accept a string slug via
+# the ``embedding_model`` kwarg and probe dimensions lazily on first use.
 # =============================================================================
 
 from .base import BaseMemory
-from .local_embeddings import (
-    LOCAL_EMBEDDING_MODEL_NAME,
-    LocalEmbeddingProvider,
-    get_local_embedding,
-    get_local_embedding_async,
-    get_local_embedding_dimension,
-)
 from .long_term import LongTermMemory
 from .memobase import Memobase
 from .sqlite import SQLiteMemory
@@ -78,10 +60,4 @@ __all__ = [
     "LongTermMemory",
     "Memobase",
     "SQLiteMemory",
-    # Local embedding utilities
-    "LocalEmbeddingProvider",
-    "get_local_embedding",
-    "get_local_embedding_async",
-    "get_local_embedding_dimension",
-    "LOCAL_EMBEDDING_MODEL_NAME",
 ]

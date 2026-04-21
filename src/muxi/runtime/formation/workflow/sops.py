@@ -4,6 +4,7 @@ This module provides automated workflow generation from documented procedures,
 enabling consistent execution of complex multi-step operations.
 """
 
+import asyncio
 import hashlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -381,8 +382,6 @@ class SOPSystem:
         working_memory = self._get_working_memory()
         if working_memory:
             # Add to FAISS synchronously during startup
-            import asyncio
-
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
@@ -512,12 +511,13 @@ class SOPSystem:
     def _get_embedding_model(self):
         """Lazily construct an embedding adapter from the working memory slug.
 
-        Post-migration, ``WorkingMemory`` stores the embedding model as a
-        string slug on ``self._embedding_model_name`` (the canonical
-        attribute per the mission's embedding-platform decisions). The
-        legacy provider-object attribute ``embedding_model`` is gone, so
-        SOP search now wraps the slug in :class:`OneLLMEmbeddingAdapter`
-        which delegates every embed call to the shared helper.
+        Post-migration, ``WorkingMemory`` exposes the embedding model as
+        a string slug via the public ``embedding_model_name`` property
+        (the canonical public contract per the mission's
+        embedding-platform decisions). The legacy provider-object
+        attribute is gone, so SOP search now wraps the slug in
+        :class:`OneLLMEmbeddingAdapter` which delegates every embed
+        call to the shared helper.
         """
         if self._embedding_model is None:
             try:
@@ -525,7 +525,7 @@ class SOPSystem:
 
                 working_memory = WorkingMemory.get_instance()
                 if working_memory is not None:
-                    model_name = getattr(working_memory, "_embedding_model_name", None)
+                    model_name = getattr(working_memory, "embedding_model_name", None)
                     if isinstance(model_name, str) and model_name:
                         self._embedding_model = OneLLMEmbeddingAdapter(model_name)
             except Exception:

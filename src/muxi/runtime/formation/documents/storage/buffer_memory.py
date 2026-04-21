@@ -62,7 +62,7 @@ class DocumentAwareBufferMemory:
         formation_id: str,
         max_size: int = 10,
         buffer_multiplier: int = 10,
-        model=None,
+        embedding_model: Optional[str] = None,
         vector_dimension: int = 1536,
         recency_bias: float = 0.3,
         mode: str = "local",
@@ -78,40 +78,47 @@ class DocumentAwareBufferMemory:
             formation_id: The formation ID for scoping data
             max_size: Context window size (number of recent messages)
             buffer_multiplier: Total capacity multiplier
-            model: Model for generating embeddings
+            embedding_model: Provider-prefixed embedding model slug
+                (e.g. ``"local/nomic-ai/nomic-embed-text-v1.5"``). When
+                ``None``, defers to ``WorkingMemory``'s default.
             vector_dimension: Dimension for embedding vectors
             recency_bias: Balance between semantic relevance and recency
             mode: Vector search mode ("local" or "remote")
             remote: Remote configuration for FAISSx
             max_memory_mb: Maximum memory usage in MB
             fifo_interval_min: FIFO cleanup interval in minutes
-            chunk_config: Configuration for document chunking
             metadata_storage_path: Path for document metadata storage
         """
         # Initialize the underlying working memory
         from ....services.memory.working import WorkingMemory
 
+        # Store the configured recency bias so search calls can reuse it
+        # (``WorkingMemory`` itself takes ``recency_bias`` per-call, not
+        # in the constructor).
+        self.recency_bias = recency_bias
+
         self._working_memory = WorkingMemory(
             formation_id=formation_id,
             max_size=max_size,
             buffer_multiplier=buffer_multiplier,
-            model=model,
+            embedding_model=embedding_model,
             dimension=vector_dimension,
-            recency_bias=recency_bias,
             mode=mode,
             remote=remote,
             max_memory_mb=max_memory_mb,
             fifo_interval_min=fifo_interval_min,
         )
 
-        # Copy important private attributes
+        # Copy important attributes from the wrapped WorkingMemory. The
+        # legacy ``model`` provider attribute is gone post-migration --
+        # consumers read the ``embedding_model_name`` slug property
+        # instead.
         for attr in [
             "buffer",
             "max_size",
             "buffer_multiplier",
-            "model",
+            "embedding_model_name",
             "vector_dimension",
-            "recency_bias",
             "mode",
             "remote",
             "max_memory_mb",
@@ -424,13 +431,14 @@ class DocumentAwareBufferMemory:
             else:
                 contents.append(str(item))
 
-        # Regenerate embeddings
-        if contents and self.model:
+        # Regenerate embeddings via the shared helper so rebuilds route
+        # through OneLLM instead of a legacy provider-object interface.
+        slug = getattr(self, "embedding_model_name", None)
+        if contents and slug:
             try:
-                embeddings = []
-                for content in contents:
-                    embedding = await self.model.embed(content)
-                    embeddings.append(embedding)
+                from ....services.memory.embedding import embed
+
+                embeddings = await embed(slug, contents, task="search_document")
 
                 # Rebuild index
                 await self._build_index(embeddings)

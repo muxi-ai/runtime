@@ -34,18 +34,17 @@
 # Example usage:
 #
 #   # Create buffer memory with semantic search (local mode)
-#   model = OpenAIModel(model="text-embedding-3-small")
 #   buffer = WorkingMemory(
-#       max_size=10,              # Context window size
-#       buffer_multiplier=10,     # Total capacity = 10 × 10 = 100
-#       model=model               # For generating embeddings
+#       max_size=10,                # Context window size
+#       buffer_multiplier=10,       # Total capacity = 10 x 10 = 100
+#       embedding_model="openai/text-embedding-3-small",
 #   )
 #
 #   # Create buffer memory with remote FAISS/FAISSx server
 #   buffer = WorkingMemory(
 #       max_size=10,
 #       buffer_multiplier=10,
-#       model=model,
+#       embedding_model="openai/text-embedding-3-small",
 #       mode="remote",
 #       remote={
 #           "url": "tcp://localhost:45678",
@@ -128,7 +127,6 @@ class WorkingMemory:
         max_size: int = 10,
         buffer_multiplier: int = 10,
         dimension: int = 768,
-        model: Optional[str] = None,
         mode: str = "local",
         remote: Optional[Dict[str, Any]] = None,
         max_memory_mb: int = 1000,
@@ -156,13 +154,10 @@ class WorkingMemory:
             dimension: Provisional FAISS index dimension hint. Replaced on
                 first ``_ensure_dim()`` once the real dim is probed from
                 the embedding provider. Default is 768 (Nomic v1.5).
-            model: Deprecated alias for ``embedding_model``. Accepts a
-                provider-prefixed slug string; ignored when
-                ``embedding_model`` is also provided.
             embedding_model: Provider-prefixed embedding model slug
                 (e.g. ``"local/nomic-ai/nomic-embed-text-v1.5"``,
-                ``"openai/text-embedding-3-small"``). When ``None`` (and
-                ``model`` is also ``None``), defaults to
+                ``"openai/text-embedding-3-small"``). When ``None``,
+                defaults to
                 :data:`~services.memory.embedding.DEFAULT_EMBEDDING_MODEL`.
             mode: FAISS mode - "local" for in-memory storage or "remote" for
                 server-based storage. Default is "local".
@@ -199,18 +194,17 @@ class WorkingMemory:
         self._model_api_key = api_key
 
         # Resolve the embedding model slug. The old dispatch that
-        # accepted an LLM instance (or a local/API branch) is gone —
+        # accepted an LLM instance (or a local/API branch) is gone --
         # every caller passes a slug string, and embedding generation
         # flows through the shared :func:`embed` helper.
-        slug = embedding_model if embedding_model is not None else model
-        if slug is None:
-            slug = DEFAULT_EMBEDDING_MODEL
-        if not isinstance(slug, str):
+        if embedding_model is None:
+            embedding_model = DEFAULT_EMBEDDING_MODEL
+        if not isinstance(embedding_model, str):
             raise TypeError(
-                "WorkingMemory(embedding_model=..., model=...) must be a "
-                f"provider-prefixed slug string, got {type(slug).__name__}"
+                "WorkingMemory(embedding_model=...) must be a "
+                f"provider-prefixed slug string, got {type(embedding_model).__name__}"
             )
-        self._embedding_model_name: str = slug
+        self._embedding_model_name: str = embedding_model
 
         # Lazy-dim: populated on first ``_ensure_dim()`` call, never in
         # ctor. ``self.dimension`` keeps a provisional FAISS index dim so
@@ -285,15 +279,16 @@ class WorkingMemory:
             return probed
 
     @property
-    def model(self) -> Optional[str]:
-        """Backwards-compatible accessor returning the embedding model slug.
+    def embedding_model_name(self) -> str:
+        """Public accessor for the configured embedding model slug.
 
-        The ``model`` attribute historically exposed a provider object
-        (or ``None``). After the embedding-platform migration the
-        canonical attribute is ``self._embedding_model_name`` (a
-        string). This property remains for consumers that still
-        truthiness-check ``wm.model`` — returning the slug preserves
-        that contract without resurrecting the legacy provider object.
+        Exposes the provider-prefixed slug string (e.g.
+        ``"local/nomic-ai/nomic-embed-text-v1.5"``,
+        ``"openai/text-embedding-3-small"``) used by this memory
+        instance for embedding generation. External consumers
+        (``sops.py``, ``persistent_manager.py``, etc.) should read this
+        public property instead of reaching into the private
+        ``_embedding_model_name`` attribute.
         """
         return self._embedding_model_name
 

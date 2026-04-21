@@ -4,10 +4,10 @@ These tests exercise the migration of
 ``src/muxi/runtime/formation/memory/persistent_manager.py`` to the
 shared embedding helper. Pre-migration the manager read
 ``memory_backend.embedding_model.embed(...)``; post-migration it reads
-the string slug from ``embedding_model_name`` (falling back to the
-private ``_embedding_model_name`` used by the memory backends) and
-delegates embedding generation to
-:func:`muxi.runtime.services.memory.embedding.embed`.
+the string slug from the public ``embedding_model_name`` property
+exposed by every in-tree memory backend (``LongTermMemory``,
+``WorkingMemory``, ``SQLiteMemory``) and delegates embedding generation
+to :func:`muxi.runtime.services.memory.embedding.embed`.
 
 Coverage targets (see ``validation-contract.md``):
   * VAL-NONMEM-006 — ``_generate_query_embedding`` returns a
@@ -44,7 +44,6 @@ def _make_manager(long_term_memory=None, is_multi_user: bool = False) -> Persist
 def _make_memory_backend_without_collections_kwarg(
     *,
     embedding_model_name: str | None = "local/nomic-ai/nomic-embed-text-v1.5",
-    private_attr: bool = True,
 ) -> MagicMock:
     """Build a memory backend whose ``search()`` does NOT accept ``collections``.
 
@@ -52,9 +51,11 @@ def _make_memory_backend_without_collections_kwarg(
     ``_generate_query_embedding`` is invoked upfront so the query is
     embedded once and reused across per-collection ``search`` calls.
 
-    The backend's ``_embedding_model_name`` (or public
-    ``embedding_model_name``) attribute is populated with the provided
-    slug so the manager has a model to forward to the shared helper.
+    The backend exposes its model via the public
+    ``embedding_model_name`` attribute so the manager has a model to
+    forward to the shared helper. Post-m1-f10, the manager reads the
+    public property only and does NOT consult the private
+    ``_embedding_model_name`` attribute.
     """
     backend = MagicMock()
 
@@ -90,17 +91,16 @@ def _make_memory_backend_without_collections_kwarg(
 
     backend.build_search_parameters = _build
 
-    # Publish the slug via the chosen attribute name. The manager should
-    # read either the public or private form.
+    # Publish the slug via the public attribute -- the manager reads
+    # ``embedding_model_name`` and does not fall back to any private
+    # attribute post-m1-f10.
     if embedding_model_name is not None:
-        if private_attr:
-            backend._embedding_model_name = embedding_model_name
-            # Ensure the public attribute does not accidentally resolve
-            # — we want to validate the private-attribute read path.
-            if hasattr(backend, "embedding_model_name"):
-                del backend.embedding_model_name
-        else:
-            backend.embedding_model_name = embedding_model_name
+        backend.embedding_model_name = embedding_model_name
+    else:
+        # Ensure neither form resolves when we want to simulate a
+        # backend with no configured embedding model at all.
+        if hasattr(backend, "embedding_model_name"):
+            del backend.embedding_model_name
     return backend
 
 
@@ -150,7 +150,6 @@ async def test_query_embedding_reads_public_attribute_when_present():
     """Backend exposing the PRD-prescribed public ``embedding_model_name`` is honored."""
     backend = _make_memory_backend_without_collections_kwarg(
         embedding_model_name="openai/text-embedding-3-small",
-        private_attr=False,
     )
     manager = _make_manager(long_term_memory=backend)
 
@@ -172,17 +171,41 @@ async def test_query_embedding_reads_public_attribute_when_present():
 
 @pytest.mark.asyncio
 async def test_query_embedding_returns_none_when_no_model_slug():
-    """Backend without a usable slug → ``_generate_query_embedding`` returns ``None``.
+    """Backend without a usable slug -> ``_generate_query_embedding`` returns ``None``.
 
     The multi-collection fallback path in ``search_long_term_memory``
     relies on a ``None`` return to skip forwarding ``query_embedding``
     when no model is configured.
     """
     backend = _make_memory_backend_without_collections_kwarg(embedding_model_name=None)
-    # Also strip the private attribute to simulate a backend that has no
-    # embedding model configuration at all.
-    if hasattr(backend, "_embedding_model_name"):
-        del backend._embedding_model_name
+    manager = _make_manager(long_term_memory=backend)
+
+    with patch(
+        "muxi.runtime.formation.memory.persistent_manager.embed",
+        new_callable=AsyncMock,
+    ) as mock_embed:
+        vector = await manager._generate_query_embedding(
+            memory_backend=backend,
+            query="anything",
+        )
+
+    assert vector is None
+    assert mock_embed.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_query_embedding_ignores_private_attribute():
+    """Post-m1-f10: the manager reads ONLY the public ``embedding_model_name``.
+
+    A backend that exposes the slug solely via the private
+    ``_embedding_model_name`` attribute MUST NOT be honored by the
+    manager. This guards against regressions that reintroduce the
+    private-attribute fallback deliberately removed in m1-f10.
+    """
+    backend = _make_memory_backend_without_collections_kwarg(embedding_model_name=None)
+    # Publish the slug via the private form only. The manager should
+    # ignore it and return ``None``.
+    backend._embedding_model_name = "local/nomic-ai/nomic-embed-text-v1.5"
     manager = _make_manager(long_term_memory=backend)
 
     with patch(

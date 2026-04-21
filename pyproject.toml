@@ -71,14 +71,13 @@ dependencies = [
     "beautifulsoup4>=4.12.0",  # HTML parsing and validation
     "nltk>=3.8.0",  # Natural language processing for chunking
     "spacy>=3.8.0",  # Advanced NLP for semantic chunking (compatible with NumPy 2.x)
-    "sentence-transformers>=2.2.0",  # Embedding generation for semantic search
 
     # Image processing dependencies
     "Pillow>=12.2.0",  # PIL/Pillow for image processing
     "pdf2image>=1.16.0",  # Convert PDF pages to images (requires Poppler)
 
     # LLM Package
-    "onellm[cache]>=0.20260415.0",
+    "onellm[cache]>=0.20260421.0",
     "boto3>=1.26.0",  # AWS SDK for OneLLM Bedrock provider
     "google-cloud-aiplatform>=1.25.0",  # Google Cloud for OneLLM Vertex AI provider
 
@@ -213,6 +212,7 @@ exclude = '''
 [tool.isort]
 profile = "black"
 line_length = 100
+combine_as_imports = true
 
 [tool.mypy]
 python_version = "3.10"
