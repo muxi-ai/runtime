@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ...utils.fastjson import json
 from .. import observability
+from ..memory.embedding import DEFAULT_EMBEDDING_MODEL, embed
 
 if TYPE_CHECKING:
     from ...services.llm import LLM
@@ -252,22 +253,24 @@ Analyze and provide as JSON:
     async def _generate_embedding(self, text: str) -> List[float]:
         """Generate semantic embedding for text.
 
-        Uses the LLM's embedding capability if available, otherwise falls back
-        to local sentence-transformer embeddings (all-MiniLM-L6-v2, 384 dimensions).
+        Uses the LLM's embedding capability if available, otherwise routes
+        through the shared embedding helper
+        (``services/memory/embedding.py``) using ``DEFAULT_EMBEDDING_MODEL``
+        (``local/nomic-ai/nomic-embed-text-v1.5``, 768-dim). If the helper
+        path itself fails — network outage, missing local model weights,
+        etc. — falls back to ``_generate_semantic_fallback_embedding`` so
+        fusion never hard-fails on embedding unavailability.
         """
         try:
             # Use LLM to generate embedding if available
             if hasattr(self.llm, "get_embedding"):
                 return await self.llm.get_embedding(text)
-            else:
-                # Fallback: Use local sentence-transformer model
-                try:
-                    from ..memory.local_embeddings import get_local_embedding_async
 
-                    return await get_local_embedding_async(text)
-                except ImportError:
-                    # If sentence-transformers not available, use linguistic fallback
-                    return self._generate_semantic_fallback_embedding(text)
+            # Shared-helper path — single choke point for every MUXI
+            # embedding call. Returns list[list[float]] (one vector per
+            # input string); we unpack the first element.
+            vectors = await embed(DEFAULT_EMBEDDING_MODEL, text)
+            return vectors[0]
 
         except Exception as e:
             observability.observe(
@@ -280,13 +283,9 @@ Analyze and provide as JSON:
                 },
                 description="Embedding generation failed in multimodal fusion",
             )
-            # Try local embeddings as last resort
-            try:
-                from ..memory.local_embeddings import get_local_embedding
-
-                return get_local_embedding(text)
-            except Exception:
-                return [0.0] * 384  # Zero embedding as final fallback (384 for local model)
+            # Last-resort fallback: statistical features rather than a
+            # zero vector, keeping cross-modal attention meaningful.
+            return self._generate_semantic_fallback_embedding(text)
 
     def _generate_semantic_fallback_embedding(self, text: str) -> List[float]:
         """
