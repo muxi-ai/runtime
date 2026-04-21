@@ -4,146 +4,32 @@
 
 ## v0.20260421.0
 
-### Native migration to a2a-sdk 1.0
+### Changed
+- Migrate the A2A integration to `a2a-sdk 1.0` with native client, server, registry, transport, and overlord updates.
+- Centralize SDK/protobuf translation in `services/a2a/_sdk_helpers.py` and update auth, JSON-RPC, and streaming response handling for the 1.0 API.
+- Pin A2A dependencies to `a2a-sdk>=1.0,<2.0` and `protobuf>=5.29.5,<6`.
 
-`a2a-sdk 1.0.0` (released 2026-04-20) is a breaking rewrite of Google's Agent-to-Agent SDK. The top-level `A2AClient` helper is gone, enums moved to `SCREAMING_SNAKE_CASE`, `Part` types were flattened into a protobuf `oneof`, `AgentCard.url` was replaced by `supported_interfaces[]`, and `AgentCapabilities` became a fixed-field protobuf message (no per-capability metadata dict). v0.20260420.1 pinned `a2a-sdk<1.0` as an emergency stop; this release replaces every call site with the native 1.0 API. The migration touches 10 production files plus a new helpers module and is accompanied by a full unit + integration + e2e test harness.
-
-- **`services/a2a/_sdk_helpers.py` (new)** -- centralizes the protobuf glue so no other file has to know about it. Exports `make_text_part`, `make_data_part`, `make_message`, `parts_to_muxi_list`, `muxi_part_to_sdk`, `dict_to_struct`, plus constants for `Role`, `TaskState`, and the `Part.content` oneof. The 1.0 `Part.data` field requires `google.protobuf.Value(struct_value=Struct)` rather than a raw dict; `Message.metadata` accepts a `Struct` directly; `MessageToDict` is used for all SDK -> MUXI shape conversions. Every other A2A file now imports from this module instead of reimplementing the glue.
-- **`services/a2a/models_adapter.py` (rewrite)** -- the old `isinstance(part, TextPart)` / `.capabilities.items()` code silently returned empty parts against both 0.3 (RootModel-wrapped parts) and 1.0 (protobuf parts). Rewritten to route capability metadata through `AgentCard.skills[]` with tag-encoded metadata plus a `_muxi_metadata` sentinel skill for MUXI-specific extensions, and to derive `url` from `supported_interfaces[0].url`. This fixes three silent-failure modes documented as xfail markers in the test harness: the Part isinstance bug, the `AgentCapabilities` dict bug, and the per-capability metadata drop.
-- **`services/a2a/auth/outbound.py` (rewrite `create_scheme`)** -- `APIKeySecurityScheme` renamed its fields (`api_key`/`header_name` -> `name`/`location`). Credentials are no longer stored on the scheme object at all; the auth manager now keeps a `_credentials` side-map keyed by scheme id. `HTTPAuthSecurityScheme` is used for bearer auth with a fixed `scheme="bearer"`.
-- **`services/a2a/server.py` (rewrite)** -- the 1.0 SDK removed `SendMessageSuccessResponse` / `JSONRPCError` wrapper types in favor of a plain dict JSON-RPC envelope. Introduced `_jsonrpc_error` / `_jsonrpc_success` helpers and switched to dict-shape part parsing (`parts: [{"text": ...}]` rather than strict protobuf construction) to avoid 1.0's strict oneof validation rejecting incoming requests from older clients.
-- **`services/a2a/client.py` (rewrite)** -- `A2AClient` is gone. The `A2AService` facade now wraps `create_client(url)` for each call and iterates `async for StreamResponse in client.send_message(request)`, collecting payloads by oneof tag (`task` / `message` / `status_update` / `artifact_update`).
-- **`services/a2a/registry_client.py` (rewrite)** -- the previous health check used `A2AClient.send_message(health_check_message)` and inspected the error string for "method not allowed" / 405. Replaced with a plain `httpx.AsyncClient.get("/health", timeout=5)` that treats any <500 response as healthy (handles registries that don't implement `/health` but are otherwise reachable). The `sdk_clients` dict is kept as an empty `Dict[str, Any]` for API compatibility; registry traffic uses the shared httpx client directly.
-- **`services/a2a/agent_transport.py` (rewrite)** -- 1.0's `ClientTransport.send_message` takes `SendMessageRequest` and returns `SendMessageResponse` (non-streaming), not `MessageSendParams`. The AgentTransport now builds a `SendMessageResponse(message=reply)` after dispatching to the internal handler.
-- **`formation/overlord/a2a_messaging.py` (rewrite)** -- external routing now goes through `create_client(url)` + `async for StreamResponse`. Preserves the service-id matching logic that maps MUXI destinations to external registry endpoints. `a2a.client.middleware.ClientCallContext` moved to `a2a.client.ClientCallContext`.
-- **`formation/overlord/a2a_coordinator.py` (rewrite external-routing block)** -- mirrors the `a2a_messaging` pattern. Collects the first `message` or `task` payload from the StreamResponse iterator and returns early; ensures the client is closed in a `finally`. `SendMessageRequest` no longer accepts `id`/`params` fields — the request is built with `message=` and `metadata=` directly.
-- **`formation/overlord/overlord.py` (rewrite `_initialize_a2a_client_factory`)** -- `ClientFactory.register` now takes a `TransportProducer` callable of shape `(AgentCard, str, ClientConfig) -> ClientTransport` rather than a transport instance. The overlord wraps a singleton `AgentTransport` in a closure producer and also stores it on `self.agent_transport` so callers that need synchronous access (like `a2a_messaging._get_agent_transport`) don't have to go through the factory.
-- **Dependency pins (`pyproject.toml`)** -- `a2a-sdk>=1.0,<2.0`, and a new `protobuf>=5.29.5,<6` constraint. `protobuf 6.x`'s `json_format.MessageToDict` is incompatible with the Struct/Value shapes the SDK produces; pinning to `5.29.x` keeps the conversion path working until the ecosystem catches up.
-
-### Architectural Notes
-
-- **Protobuf glue lives in exactly one place.** `_sdk_helpers.py` is the canonical translation layer between MUXI's dict-shaped internal messages and the SDK's protobuf messages. Any new A2A code (registries, servers, clients, transports) must build messages through these helpers rather than touching protobuf construction directly. This contains the blast radius of any future SDK schema change to a single file.
-- **Capability metadata rides on `AgentCard.skills[]`.** SDK 1.0 made `AgentCapabilities` a fixed-field protobuf message (`streaming`, `push_notifications`, `extensions`, `extended_agent_card`); it no longer carries per-capability descriptions or arbitrary metadata. The adapter now serializes each MUXI `A2ACapability` as an `AgentSkill` (one skill per capability) with tag-encoded metadata (`muxi:meta=<json>`) and adds a `_muxi_metadata` sentinel skill for extensions that don't map onto `AgentSkill` directly. Round-trip preserves `name` / `description` / `enabled` / `metadata`.
-- **The `sdk_clients` dict is intentionally empty.** `RegistryClient` previously kept one `A2AClient` per registry; in 1.0 there is no persistent client shape — `create_client(url)` builds a fresh `Client` per call, which internally reuses the httpx connection pool for HTTP-transport registries. The `sdk_clients` attribute is preserved as `Dict[str, Any]` for API compatibility; callers iterating it get zero items, which is the correct no-op.
-- **Transport producers let the same AgentTransport back every `agent://` client.** `ClientFactory.register` takes a callable now instead of an instance. Rather than instantiating a new AgentTransport per create_client call, the producer closure captures the overlord's singleton and returns it verbatim — semantically equivalent to the old "register an instance" API, and the overlord keeps a direct reference for callers that don't want to go through ClientFactory at all.
-- **Health checks decoupled from the SDK.** The pre-migration health check used the A2A message protocol and inspected error strings for 405 to decide whether a registry was "healthy but not accepting messages". With the SDK-shaped health check removed, registries can evolve their health probe independently — a plain `GET /health` with the shared httpx client is faster, less brittle, and treats any <500 response as alive (so registries without a `/health` handler still count as reachable).
-- **No behavioural changes outside the SDK boundary.** All 10 production files were rewritten to preserve their existing public contracts. MUXI callers of `overlord.send_a2a_message` / `overlord.register_with_external_registry` / `A2AService.send_message` see the same inputs, outputs, and error semantics. The xfail markers in the Phase-1 test harness (documenting pre-existing silent-failure modes against 0.3) all flipped to XPASS against 1.0 and were removed — the rewrite fixes those bugs as a side effect rather than reproducing them.
-
-### Tests
-
-**New unit tests** (40 assertions across 3 files):
-
-- `tests/unit/test_a2a_messaging.py` (8 tests) -- validates `convert_from_internal_message` produces the `parts` shape MUXI expects, and that `convert_from_external_response` correctly unwraps text / data responses and wraps empty responses as errors.
-- `tests/unit/test_a2a_models_adapter.py` (8 tests, 3 xfail markers cleared) -- round-trips messages (text + data), round-trips AgentCards (scalar fields + capabilities), round-trips authentication, and asserts capability metadata is preserved through the skills[] encoding. The three xfail markers that previously documented the `isinstance(part, TextPart)` / `AgentCapabilities.items()` / per-capability metadata drop bugs are all cleared as XPASS.
-- `tests/unit/test_a2a_auth_outbound.py` (18 tests, 1 xfail marker cleared) -- validates `AuthCredentials` accepts / rejects expected shapes, validates `apply_authentication` injects the right header per auth type (API key custom header + default `X-API-Key`, bearer `Authorization`, basic-auth `base64(user:pass)`), validates `apply_sdk_authentication` is a noop when no scheme is registered, and validates `create_scheme` constructs `APIKeySecurityScheme` with 1.0's `name=`/`location=` fields.
-
-**New integration tests** (6 assertions, new `tests/integration/` package):
-
-- `tests/integration/test_a2a_server_roundtrip.py` -- boots an in-process `A2AServer` with a registered echo agent and exercises the HTTP surface: `/health`, `/agents`, legacy `POST /agents/{id}/message`, unknown-agent error path, and the 1.0-shape SDK request path with and without extracted text. The 1.0 SDK path's xfail marker (previously documenting the `sdk_to_muxi_message` silent-empty bug) is cleared as XPASS.
-
-**New e2e smokes** (2 tests, `e2e/tests/7_orchestration/`):
-
-- `test_7b1_a2a_internal_messaging.py` -- SDK-binding smoke against the 1.0 API. Asserts `a2a-sdk` reports version `1.0.0`, that string / dict / parts-dict all convert to `SDK Message` correctly, and that SDK -> MUXI round-trip recovers all parts. Finishes in <10s.
-- `test_7b2_a2a_external_messaging.py` -- boots `A2AServer` + echo agent in-process and walks the HTTP surface (`/health`, `/agents`, legacy POST, unknown-agent error). Finishes in <1s.
-
-**Formation swap** (1 e2e test unblocked):
-
-- `e2e/tests/7_orchestration/formations/formation-multi-agent-segregated/agents/project-manager.yaml` -- swapped Linear MCP (`https://mcp.linear.app/sse`) for the filesystem MCP (same pattern as the neighbouring `it-support` agent) so `test_7b1_internal_a2a.py` can run in environments without Linear credentials. The A2A delegation path (`it-support` -> `project-manager`) is preserved; only the downstream side-effect (Linear issue -> filesystem file) changed.
-
-### Validation
-
-- **Phase 1 unit + integration suite (`tests/unit/test_a2a_*.py` + `tests/integration/test_a2a_server_roundtrip.py`): 44/44 pass against `a2a-sdk==1.0.0`.** All 5 xfail markers (3 in models_adapter, 1 in auth_outbound, 1 in server_roundtrip) flipped to XPASS and were removed.
-- **Broader unit suite: 605 passed, 3 skipped, 1 pre-existing unrelated failure** (`tests/unit/rce/test_rce_client.py` asserts `client_version == '0.1.0'` but the runtime reports `0.20260308.2`; pre-dates this migration).
-- **A2A e2e sweep (5 tests): 5/5 pass** -- `test_7b1_a2a_internal_messaging.py` (6.6s), `test_7b1_internal_a2a.py` (25.3s, unblocked by Linear->filesystem swap), `test_7b2_a2a_external_messaging.py` (0.8s), `test_7b3_a2a_discovery.py` (22.4s), `test_19r1_a2a.py` (19.8s).
-- **Random e2e sample (20 tests across 11 areas): 20/20 pass** -- 1_foundation, 2_memory (3), 3_multimodal (5), 4_mcp (2), 7_orchestration (2, including the new a2a internal messaging smoke), 9_async, 11_formatting, 12_scheduling (2), 13_triggers, 18_observability, 21_skills.
-- **`scripts/validate_events.py`: 1206/1206 observe() calls validate (100%).**
-- **Lint: `black --check` clean across all 12 touched files.**
+### Fixed
+- Block tool execution when planner-authored placeholder dependencies remain unresolved, even for schema-optional parameters.
+- Reject unknown planner-invented tool parameters before MCP execution and route blocked steps through repair/replan instead of failing downstream.
+- Fail closed on tool-parameter validation errors so invalid calls no longer reach MCP servers.
 
 ### Breaking changes
+- `a2a-sdk<1.0` is no longer supported.
+- `protobuf>=6` is incompatible with the current A2A conversion path.
 
-- **`a2a-sdk<1.0` is no longer supported.** Anyone pinning `a2a-sdk==0.3.x` alongside this runtime will get an `ImportError` at startup (`a2a.client.A2AClient` no longer exists). The new pin is `a2a-sdk>=1.0,<2.0`.
-- **`protobuf>=6.0` is incompatible with this runtime.** `google.protobuf.json_format.MessageToDict` in 6.x rejects the Struct shapes the SDK produces. The new pin is `protobuf>=5.29.5,<6`.
-- **`AgentCapabilities.items()` is no longer callable.** Any downstream code that treated MUXI's SDK AgentCard as having a dict-shaped `capabilities` field must now walk `AgentCard.skills[]` (preferred) or call `ModelsAdapter.sdk_to_muxi_agent_card(card).capabilities` to get the MUXI-shape dict back.
-- **`RegistryClient.sdk_clients` is always empty.** Code iterating it now gets zero items. External callers that want to speak A2A to a registry should build their own `create_client(url)` instance per call.
-
-### Known issues deferred to next release
-
-- **Per-request client construction overhead.** `create_client(url)` builds a fresh `Client` per `send_message` call, which internally reuses the shared httpx connection pool but re-resolves the agent card on every call. For hot-path external A2A traffic this may add 10-50ms per request depending on DNS + TLS cache state. If profiling shows this is a bottleneck, a future release can cache resolved `AgentCard` objects and reuse them across calls.
-- **`APIKeySecurityScheme.location` is always "header".** SDK 1.0 supports `location="query"` and `location="cookie"` but MUXI's `create_scheme` hardcodes header. If anyone needs query-string or cookie-based API keys, extend `create_scheme` accordingly.
-- **StreamResponse `status_update` and `artifact_update` payloads are dropped.** `a2a_messaging._send_external_message` and `a2a_coordinator` iterate the StreamResponse but only surface `message` and `task` payloads back to MUXI. Incremental status and artifact updates are ignored. Fine for request/response-style agents; future streaming agents will need richer handling.
+### Validation
+- Verified with targeted A2A tests, planner regression tests, the full unit suite, event validation, and a random 10-test E2E sweep.
 
 ## v0.20260420.1
 
-### Silent-Failure Fixes on Free-Text MCP Payloads (Google Calendar + Gmail)
-
-The v0.20260420.0 release hardened placeholder resolution for MS Graph's structured JSON shapes (MS365 MCP). Production traffic on the Google Calendar / Gmail MCPs surfaced three remaining silent-failure modes because those servers return **free-text blobs**, not structured lists. All three traced back to the placeholder pipeline assuming structured payloads.
-
-- **Text-block predicate fallback (Google Calendar: filtered placeholder dropped)** -- `{{EVENT_SEARCH[summary='Spark Test 2'].id}}` silently dropped because the google-mcp `get_events` tool returns a bulleted text blob (e.g. `- "Spark Test 2" (Starts: ...)\n  ID: rnnbrh...`), not a JSON list of dicts. v0.20260420.0's `_filter_records_by_predicate` walked structured records only, found zero matches, degraded to the legacy path, dropped the literal token, and the downstream `manage_event` call failed silently. Fix: when the structured walk returns zero matches the filter now falls back to a text-block parser.
-    - New `_parse_text_blocks_into_records` splits the payload into bullet-prefixed chunks (`- ` / `* ` lines), parses each into a synthetic dict, and hands the list to the existing predicate matcher.
-    - New `_split_text_into_bulleted_blocks` groups contiguous bullet-prefixed lines into block strings, preserving follow-on indented metadata (`Description: ...`, `ID: ...`) inside the same block.
-    - New `_text_block_to_record` extracts the quoted title into every title alias (`summary`/`title`/`name`/`subject` via `_TEXT_BLOCK_TITLE_ALIASES`) plus every inline `Key: value` pair, yielding a dict the existing `_record_matches_predicate` can test.
-    - New regex `_TEXT_BLOCK_BULLET_PREFIX` (`^\s*[-*]\s+`) and tuple `_TEXT_BLOCK_TITLE_ALIASES` centralize the detection rules; both are class attributes on `Agent` so they're discoverable alongside `PLACEHOLDER_INDEX_KEY`.
-    - The fallback is conservative: it runs only when the structured predicate walk returned no matches, so predicate-on-structured payloads keeps the exact same precedence it had in v0.20260420.0.
-- **Embedded placeholder substitution (Gmail: literal `{{DRAFT.body}}` sent to MCP)** -- The planner legitimately authored `body="{{DRAFT_CONTENT.body}}\n\nHappy Birthday!"` — a placeholder token spliced into a larger string alongside a literal suffix. v0.20260420.0's substitution only triggered when the ENTIRE value matched `_is_placeholder_like_value`; mixed strings (token + literal) fell through untouched, reaching MCP as literal `{{...}}` text and creating a duplicate malformed draft instead of updating the existing one. Fix: a new embedded-scan pass runs when the whole-string matcher declines.
-    - New regex `_EMBEDDED_PLACEHOLDER_SCAN` captures every `{{...}}` token inside a larger string (parses the exact same placeholder shape the explicit-form matcher accepts, but without anchoring).
-    - New `_contains_embedded_placeholder` staticmethod returns True for strings containing at least one token but which are not themselves a bare-placeholder string.
-    - New `_substitute_embedded_placeholders` instance method splices each resolved token back into the surrounding text. Only **scalar** resolved values are spliced (strings, numbers, bools); structured payloads (dict / list) are left as literals so the leftover-strip pass can drop them with a loud warning — we never want to stringify-dump a JSON blob into an email body.
-    - Wired into both the top-level param path (`_substitute_step_parameter_placeholders`) and the recursive nested path (`_substitute_nested_placeholders` string-leaf branch). Both paths invoke the embedded-scan only after the whole-string matcher declines, so v0.20260420.0's explicit-predicate / kind-aware / cross-placeholder precedence is preserved exactly.
-    - `_find_unresolved_placeholder_leaves` now iterates `_EMBEDDED_PLACEHOLDER_SCAN` matches inside string leaves so the leftover-strip pass sees and logs partially-unresolved embedded tokens (path + literal token) the same way it handles whole-placeholder leaves.
-- **`--- FIELDNAME ---` section separator in field extraction (Gmail: `.body` unextractable)** -- The Gmail MCP emits `--- BODY ---\n<body text>\n` to separate the message body from the `Subject: / From: / To: /` metadata header. v0.20260420.0's `_extract_field_values_from_text` recognized `Body: ...` label lines and `"body": "..."` JSON pairs but not the section-separator form, so `{{DRAFT_CONTENT.body}}` found no match, fell through to the scalar-payload fallback, and returned nothing. Fix: a new Pattern 4 runs **first** (before the looser label and JSON patterns) and short-circuits the rest when it matches.
-    - Pattern 4 matches `(?:^|\n)\s*-{3,}\s*<field>\s*-{3,}\s*\n(<capture>)(?=\n\s*-{3,}\s*<next-field>-{3,}|\Z)` — strict about the dash-framed opening (prevents false positives on markdown horizontal rules) and lazy on the capture with a next-section / end-of-text lookahead so the body stops at the next `--- ATTACHMENTS ---` etc.
-    - Section contents bypass the aggressive character normalization `_accept` applies to label captures — bodies are free-form text with punctuation, newlines, CR-LF, and mixed whitespace, and must be preserved verbatim for downstream mutation calls (draft update, calendar event description, etc.).
-    - **Pattern precedence change**: Pattern 4 now runs FIRST and `continue`s the loop when it matches. Before, Pattern 1 (label-style with `\s`-separator) would match `Body paragraph one.` as `label=Body, value=paragraph` from inside the section body and pollute the result set. Running Pattern 4 first with short-circuit makes the section separator authoritative when it fires. Non-section payloads (label-only, JSON-only) keep the exact same behavior — Pattern 4 declines silently and the loop continues to Patterns 1-3.
-
-### Architectural Notes
-
-- The v0.20260420.0 predicate pipeline assumed "structured JSON → records → match". Google MCPs return "free text → bulleted blocks → extract". This release bridges the two shapes **at the record-iterator layer** so the rest of the pipeline (predicate matching, field extraction, cross-placeholder fallback, leftover-strip, repair-plan) works unchanged against text payloads. The Fix 1 / Fix 3 helpers are the canonical "free-text adapter" for anything downstream of `_iter_result_records`.
-- Embedded-placeholder substitution promotes the contract from "value is a placeholder" to "value MAY contain placeholders". This is the shape the planner already produces for composed outputs (append-a-signature, prefix-a-subject, splice-a-field). The resolution rule stays conservative: scalars are spliced, structured values stay literal, unresolved tokens get logged and dropped.
-- `_EMBEDDED_PLACEHOLDER_SCAN` is deliberately a **non-anchored** variant of the whole-value placeholder regex. It is registered as a class attribute on `Agent` so the unresolved-leaf detector and the embedded substituter share the same source of truth for "what counts as a token".
-- Pattern 4 is order-sensitive. Any new field-extraction pattern added later must decide whether it is more specific than Pattern 4 (unlikely) or less specific (most cases) and inserted accordingly. The in-code comment documents this invariant.
-- All three fixes are purely runtime-side. Zero LLM / MCP / prompt changes. `agent_planning.md` does not need updating — the planner already emits the shapes that now resolve correctly.
-
-### Tests
-
-**New unit tests** (`tests/unit/test_agent_planning_helpers.py`, 135 total in the file; 14 new under the `v0.20260420.0 regression tests` header):
-- `test_parse_text_blocks_into_records_recovers_bulleted_google_calendar_events` -- google-mcp text payload parses into 3 dicts with title aliases (`summary`/`title`/`name`/`subject`) and inline `ID:`/`Description:`/`Location:` fields.
-- `test_parse_text_blocks_into_records_returns_empty_for_non_bulleted_text` -- narrative prose without bullet prefixes yields no records.
-- `test_filter_records_by_predicate_falls_back_to_text_blocks` -- predicate against a bulleted text payload matches the right block even though the structured walk finds nothing.
-- `test_substitute_step_parameter_placeholders_resolves_predicate_on_text_payload` -- end-to-end: `{{EVENT_SEARCH[summary='Spark Test 2'].id}}` against the exact google-mcp payload resolves to the real event_id.
-- `test_contains_embedded_placeholder_detects_mixed_strings` -- detects `{{X}}\n\nLiteral`, declines for bare `{{X}}` (the whole-string matcher handles those) and literal-only strings.
-- `test_substitute_embedded_placeholders_splices_resolved_values` -- `"{{DRAFT.body}}\n\nHappy Birthday!"` + scalar resolution splices correctly and preserves the suffix.
-- `test_substitute_embedded_placeholders_leaves_unresolved_tokens_intact` -- tokens with no matching payload stay literal (the strip-pass will then drop them).
-- `test_substitute_embedded_placeholders_does_not_splice_structured_payload` -- dict/list payloads are NOT stringified into strings; token stays literal for downstream drop.
-- `test_substitute_step_parameter_placeholders_resolves_embedded_body` -- full pipeline: Gmail draft payload with `--- BODY ---` section + embedded `{{DRAFT_CONTENT.body}}\n\nHappy Birthday!` resolves to real body + appended suffix.
-- `test_find_unresolved_placeholder_leaves_detects_embedded_tokens` -- a single embedded unresolved token inside a larger string is reported with correct path.
-- `test_find_unresolved_placeholder_leaves_detects_multiple_embedded_tokens` -- multi-token strings produce one leaf per token.
-- `test_extract_field_values_from_text_recognizes_section_separator` -- `--- BODY ---\n<body>\n` extracts the full body, preserves whitespace/CR-LF/punctuation.
-- `test_extract_field_values_from_text_section_separator_stops_at_next_section` -- body capture stops at the next `--- ATTACHMENTS ---` marker, doesn't bleed into subsequent sections.
-- `test_extract_field_values_from_text_section_separator_not_confused_with_prose` -- bare `---` horizontal rules without a field name between them don't trigger a section match.
-
-**New e2e test** (`e2e/tests/7_orchestration/test_7a7_text_payload_predicate_and_embedded_placeholder.py`):
-- Five scenarios using the exact payload fixtures captured from the v0.20260420.0 production log:
-    1. `calendar_predicate_on_text_payload` -- `{{EVENT_SEARCH[summary='Spark Test 2'].id}}` resolves to the correct event_id against the google-mcp `get_events` bulleted text blob.
-    2. `calendar_predicate_routes_to_right_event` -- predicate `[summary='Ruby Daily Sync']` selects the second event (not the first), proving the text-block filter actually filters.
-    3. `calendar_unmatched_predicate_drops_and_warns` -- an unmatched predicate drops the non-required param AND emits the `placeholder.unresolved` warning event.
-    4. `gmail_embedded_body_substitution` -- Gmail draft with `--- BODY ---` section + embedded `{{DRAFT_CONTENT.body}}\n\nHappy Birthday!` resolves end-to-end, preserving the appended literal.
-    5. `gmail_unresolved_embedded_flagged` -- a payload with no recoverable `body` field leaves the embedded token literal AND the unresolved-leaf detector reports it.
-- 5/5 pass.
+### Fixed
+- Improve placeholder resolution for free-text Google Calendar and Gmail payloads by parsing bulleted records and `--- FIELD ---` sections.
+- Resolve placeholders embedded inside larger strings, such as draft-body updates, instead of sending literal `{{...}}` tokens to MCP tools.
+- Surface unresolved placeholders with clearer warnings and block or repair invalid tool calls before silent no-op execution.
 
 ### Validation
-
-- Full unit suite: **567 passed, 3 skipped, 1 pre-existing failure** (`test_rce_client.py` hardcoded version assertion — unrelated to placeholder work; confirmed via `git stash`).
-- Targeted placeholder helper suite: 135/135 pass (121 baseline + 14 new).
-- New e2e test (`test_7a7_text_payload_predicate_and_embedded_placeholder`): 5/5 scenarios pass.
-- Neighbouring e2e tests to guard against regressions: `test_7a5_placeholder_predicate_resolution` 7/7, `test_7a6_nested_and_index_placeholder_resolution` 6/6.
-- Random e2e sample (10 tests across 8 areas): 9/10 pass. The single failure (`9_async/test_9a3b_with_approval`) reproduces identically on pristine `develop` HEAD and is caused by the planner LLM short-circuiting the approval message `"Yes, please proceed with this plan"` to an empty plan — upstream of all placeholder-resolution code.
-- `scripts/validate_events.py`: 1209/1209 observe() calls validate (100%).
-
-### Known issues deferred to next release
-
-- **Multi-word label-line capture truncation** -- `Subject: Meeting tomorrow` still extracts only `"Meeting"` because Pattern 1's value capture excludes whitespace. Orthogonal to the three bugs fixed here (body resolution is via Pattern 4; subject already half-worked pre-fix). Candidate for a dedicated "header-line" pattern in the next release.
-- **Short follow-up clarification loss on context-free recall** -- the "pull it up" / "try again" loss-of-context issue noted in the v0.20260420.0 field report is NOT addressed here; root cause is in the buffer-memory injection into `=== CONVERSATION CONTEXT ===`, a separate surface from placeholder resolution.
-- **Gmail `update-draft` tool semantics mismatch** -- the Gmail MCP's `update_draft` actually creates a new draft, requiring explicit `draft_id` plumbing. Tool-contract issue on the MCP side, not a runtime bug.
+- Verified with focused planner helper tests, a dedicated E2E regression, neighboring placeholder-resolution E2Es, and event validation.
 
 ## v0.20260420.0
 
