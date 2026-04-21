@@ -30,6 +30,7 @@
 # smaller deployments or environments where PostgreSQL is not available.
 # =============================================================================
 
+import asyncio
 import os
 import sqlite3
 import time
@@ -41,6 +42,7 @@ from ...extensions import SQLiteVecExtension
 from ...utils.fastjson import json
 from .. import observability
 from .base import BaseMemory
+from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
 
 
 class SQLiteMemory(BaseMemory):
@@ -57,68 +59,134 @@ class SQLiteMemory(BaseMemory):
         self,
         db_path: str,
         formation_id: str,
-        dimension: int = 1536,
+        dimension: int = 1536,  # Retained for backwards compat; real dim probed lazily.
         default_collection: str = "default",
         extensions_dir: str = "extensions",
-        embedding_model=None,
+        embedding_model: Optional[str] = None,
     ):
         """
-        Initialize a local SQLite-based vector memory store with support for persistent collections and embeddings.
+        Initialize a local SQLite-based vector memory store.
 
-        Parameters:
-            db_path (str): Path to the SQLite database file.
-            formation_id (str): Identifier used to scope data within the database.
-            dimension (int, optional): Dimensionality of embedding vectors. Defaults to 1536.
-            default_collection (str, optional): Name of the default collection. Defaults to "default".
-            extensions_dir (str, optional): Directory containing sqlite-vec extensions. Defaults to "extensions".
-            embedding_model (optional): Embedding model name or LLM instance.
+        The embedding dimension is **probed lazily** on the first embed
+        operation via
+        :func:`services.memory.embedding.probe_dimension`; construction
+        does NOT invoke OneLLM. The dim-specific ``memories_{dim}`` table
+        is created on first ``_ensure_dim()`` call — base tables
+        (``users``, ``user_identifiers``, ``collections``) are still
+        created in the constructor so single-user bootstrap works.
+
+        Parameters
+        ----------
+        db_path:
+            Path to the SQLite database file.
+        formation_id:
+            Identifier used to scope data within the database.
+        dimension:
+            Provisional dimension hint retained for backwards
+            compatibility. Ignored once :meth:`_ensure_dim` resolves the
+            real dim from the configured embedding model.
+        default_collection:
+            Name of the default collection. Defaults to ``"default"``.
+        extensions_dir:
+            Directory containing sqlite-vec extensions. Defaults to
+            ``"extensions"``.
+        embedding_model:
+            Provider-prefixed embedding model slug (e.g.
+            ``"local/nomic-ai/nomic-embed-text-v1.5"``,
+            ``"openai/text-embedding-3-small"``). When ``None``, defaults
+            to :data:`~services.memory.embedding.DEFAULT_EMBEDDING_MODEL`.
         """
         self.db_path = db_path
         self.formation_id = formation_id
         self.default_collection = default_collection
         self.extensions_dir = extensions_dir
 
-        # Store embedding model config for lazy loading (like LongTermMemory does)
-        self._embedding_provider = None
-        self._embedding_model_name = None
-        self._use_local_embeddings = False
-        self._local_model_name = None
+        # Resolve the embedding model slug. The old dispatch that
+        # branched on ``is_local_model`` / accepted an LLM instance is
+        # gone — every caller passes a slug string, and embedding
+        # generation flows through the shared ``embedding.embed`` helper.
+        if embedding_model is None:
+            embedding_model = DEFAULT_EMBEDDING_MODEL
+        if not isinstance(embedding_model, str):
+            raise TypeError(
+                "SQLiteMemory(embedding_model=...) must be a provider-prefixed "
+                f"slug string, got {type(embedding_model).__name__}"
+            )
+        self._embedding_model_name: str = embedding_model
 
-        if embedding_model:
-            if isinstance(embedding_model, str):
-                from .local_embeddings import (
-                    is_local_model,
-                    resolve_embedding_dimension,
-                    resolve_local_model_name,
-                )
-
-                if is_local_model(embedding_model):
-                    self._use_local_embeddings = True
-                    self._local_model_name = resolve_local_model_name(embedding_model)
-                    self.dimension = resolve_embedding_dimension(embedding_model)
-                else:
-                    # API model name — will create LLM on first use
-                    self._embedding_model_name = embedding_model
-                    self.dimension = resolve_embedding_dimension(embedding_model)
-            else:
-                # Already an LLM instance
-                self._embedding_provider = embedding_model
-                self.dimension = dimension
-        else:
-            # No embedding model configured - use local fallback
-            self._use_local_embeddings = True
-            from .local_embeddings import get_local_embedding_dimension
-
-            self.dimension = get_local_embedding_dimension()
-
-        # Dimension-specific table name (memories_384, memories_1536, etc.)
-        self.memories_table = f"memories_{self.dimension}"
+        # Lazy-dim: populated on first ``_ensure_dim()`` call, never in
+        # ctor. ``self.dimension`` keeps the provisional hint for any
+        # pre-probe introspection, but the authoritative dim is
+        # ``self._dimension`` (set under the lock by ``_ensure_dim``).
+        self._dimension: Optional[int] = None
+        self._dim_lock = asyncio.Lock()
+        self.dimension = dimension
+        # ``memories_table`` is set once ``_ensure_dim`` resolves the
+        # real dim. Sync read paths guard against the ``None`` case.
+        self.memories_table: Optional[str] = None
 
         # Create database directory if it doesn't exist
         os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
 
-        # Initialize database
+        # Initialize base schema — users, user_identifiers, collections
+        # only. The dim-specific memories table is created lazily by
+        # ``_ensure_dim`` once the real embedding dim is known.
         self.conn = self._init_database()
+
+    async def _ensure_dim(self) -> int:
+        """Probe the embedding dimension exactly once and memoize it.
+
+        On first invocation this calls
+        :func:`services.memory.embedding.probe_dimension` for the
+        configured model slug, stores the result on
+        ``self._dimension``, sets ``self.memories_table`` to
+        ``f"memories_{dim}"``, and creates the corresponding table
+        (idempotent via ``CREATE TABLE IF NOT EXISTS``).
+
+        Concurrent callers are serialized by ``self._dim_lock`` so only
+        a single underlying ``probe_dimension`` call is issued even
+        when multiple coroutines hit this method simultaneously on a
+        fresh instance.
+        """
+        if self._dimension is not None:
+            return self._dimension
+
+        async with self._dim_lock:
+            # Re-check under the lock — another coroutine may have
+            # probed while we were queued on ``acquire``.
+            if self._dimension is not None:
+                return self._dimension
+
+            probed = await probe_dimension(self._embedding_model_name)
+            self._dimension = probed
+            self.dimension = probed
+            self.memories_table = f"memories_{probed}"
+            self._create_memories_table()
+            return probed
+
+    def _create_memories_table(self) -> None:
+        """Create the dim-specific ``memories_{dim}`` table.
+
+        Vectors are stored as BLOB (the helper packs float32 bytes on
+        write). Idempotent via ``IF NOT EXISTS`` so re-opening a DB that
+        already has the table (e.g. the pre-created ``memories_1536``
+        from ``init_schema_sqlite.sql``) is a no-op.
+        """
+        assert self.memories_table is not None, "_ensure_dim must set memories_table first"
+        self.conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS {self.memories_table} (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                collection TEXT NOT NULL,
+                text TEXT NOT NULL,
+                embedding BLOB NOT NULL,
+                metadata TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+            """)
+        self.conn.commit()
 
     async def get_or_create_user(self, identifier: str) -> int:
         """
@@ -235,19 +303,9 @@ class SQLiteMemory(BaseMemory):
             )
         """)
 
-        conn.execute(f"""
-            CREATE TABLE IF NOT EXISTS {self.memories_table} (
-                id TEXT PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                collection TEXT NOT NULL,
-                text TEXT NOT NULL,
-                embedding BLOB NOT NULL,
-                metadata TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            )
-        """)
+        # NOTE: The dim-specific ``memories_{dim}`` table is created by
+        # ``_ensure_dim()`` on the first embed operation — at ctor time
+        # we have only a provisional dim hint, not the real probed dim.
 
         # Create default user and collection if they don't exist
         self._ensure_default_user(conn)
@@ -325,35 +383,6 @@ class SQLiteMemory(BaseMemory):
 
         return nanoid.generate(size=size)
 
-    @property
-    def embedding_provider(self):
-        """Lazy load embedding provider on first access (like LongTermMemory)."""
-        if self._use_local_embeddings:
-            if self._embedding_provider is None:
-                from .local_embeddings import LOCAL_EMBEDDING_MODEL_NAME, LocalEmbeddingProvider
-
-                model_name = self._local_model_name or LOCAL_EMBEDDING_MODEL_NAME
-                self._embedding_provider = LocalEmbeddingProvider(model_name=model_name)
-            return self._embedding_provider
-        if self._embedding_provider is None and self._embedding_model_name:
-            from ..llm import LLM
-
-            self._embedding_provider = LLM(model=self._embedding_model_name)
-        return self._embedding_provider
-
-    def _extract_embedding_from_response(self, embedding_response):
-        """Extract the actual embedding vector from LLM response (copied from LongTermMemory)."""
-        if hasattr(embedding_response, "data") and isinstance(embedding_response.data, list):
-            if len(embedding_response.data) > 0:
-                first_embedding = embedding_response.data[0]
-                if hasattr(first_embedding, "embedding"):
-                    return first_embedding.embedding
-                elif isinstance(first_embedding, (list, np.ndarray)):
-                    return first_embedding
-        elif isinstance(embedding_response, (list, np.ndarray)):
-            return embedding_response
-        return embedding_response
-
     async def add(  # type: ignore[override]
         self,
         content: str,
@@ -365,18 +394,22 @@ class SQLiteMemory(BaseMemory):
         """
         Add content to memory.
 
-        This method stores new content in memory, generating an embedding
-        if an embedding provider is available.
+        Generates an embedding via the shared
+        :func:`services.memory.embedding.embed` helper when one is not
+        supplied, then persists the text + float32 BLOB embedding in the
+        dim-specific ``memories_{dim}`` table.
 
         Args:
-            content: The text content to store
-            metadata: Optional metadata to associate with the content
-            user_id: Optional user identifier for multi-user support
-            collection: Optional collection name
-            embedding: Optional pre-computed embedding
+            content: The text content to store.
+            metadata: Optional metadata to associate with the content.
+            user_id: Optional user identifier for multi-user support.
+            collection: Optional collection name.
+            embedding: Optional pre-computed embedding. When provided,
+                the shared helper is bypassed but ``_ensure_dim()`` is
+                still invoked so the dim-specific table exists.
 
         Returns:
-            The ID of the newly created memory entry
+            The ID of the newly created memory entry.
         """
         if metadata is None:
             metadata = {}
@@ -385,47 +418,34 @@ class SQLiteMemory(BaseMemory):
         if collection is None:
             collection = self.default_collection
 
-        # Generate embedding if not provided and provider is set
-        if embedding is None and self.embedding_provider:
-            try:
-                # Use embed() method like LongTermMemory does
-                embedding_response = await self.embedding_provider.embed(content)
-                # Extract the actual embedding vector using helper method
-                embedding = self._extract_embedding_from_response(embedding_response)
-            except AttributeError as e:
-                # Provider doesn't have embed() method
-                raise RuntimeError(
-                    f"Embedding provider doesn't have 'embed()' method. "
-                    f"Provider type: {type(self.embedding_provider).__name__}. "
-                    f"Error: {str(e)}"
-                ) from e
-            except Exception as e:
-                # Provide context about embedding generation failure
-                content_preview = content[:100] if content else "<empty>"
-                error_msg = (
-                    f"Failed to generate embedding for content (length={len(content)}, "
-                    f"preview='{content_preview}...'): {str(e)}"
-                )
-                raise RuntimeError(error_msg) from e
+        # Always ensure the probed-dim table exists before writing. The
+        # probe is memoized, so this is cheap after the first call.
+        await self._ensure_dim()
 
-            # Add timestamp to metadata
-            metadata["timestamp"] = time.time()
-
-            # Get or create user if provided
-            internal_user_id = None
-            if user_id:
-                internal_user_id = await self.get_or_create_user(user_id)
-            else:
-                internal_user_id = self.default_user_id
-
-            # Add to database and return memory ID
-            memory_id = self._add_internal(
-                content, embedding, metadata, collection, internal_user_id
+        # Generate embedding if not provided. Write paths use
+        # ``task="search_document"`` — the Nomic-style prefix marks the
+        # input as a corpus document. The helper strips the kwarg for
+        # cloud providers that don't honor it.
+        if embedding is None:
+            vectors = await embed(
+                self._embedding_model_name,
+                content,
+                task="search_document",
             )
-            return memory_id
+            embedding = vectors[0]
 
-        # If no embedding provider and no embedding provided, raise error
-        raise ValueError("No embedding provided and no embedding provider configured")
+        # Add timestamp to metadata
+        metadata["timestamp"] = time.time()
+
+        # Get or create user if provided
+        if user_id:
+            internal_user_id = await self.get_or_create_user(user_id)
+        else:
+            internal_user_id = self.default_user_id
+
+        # Add to database and return memory ID
+        memory_id = self._add_internal(content, embedding, metadata, collection, internal_user_id)
+        return memory_id
 
     def _add_internal(
         self,
@@ -509,14 +529,21 @@ class SQLiteMemory(BaseMemory):
         Returns:
             List of dictionaries containing the search results with content and metadata
         """
-        if query_embedding is None:
-            # Generate embedding for query if provider is set
-            if not self.embedding_provider:
-                return []
+        # Always ensure the probed-dim table exists before querying;
+        # probe is memoized after first invocation.
+        await self._ensure_dim()
 
-            # Generate embedding for query using embed() method
-            embedding_response = await self.embedding_provider.embed(query)
-            query_embedding = self._extract_embedding_from_response(embedding_response)
+        # Generate embedding for query if not provided. Search paths use
+        # ``task="search_query"`` — the Nomic-style prefix marks the
+        # input as a retrieval query; the helper strips the kwarg for
+        # cloud providers that don't honor it.
+        if query_embedding is None:
+            vectors = await embed(
+                self._embedding_model_name,
+                query,
+                task="search_query",
+            )
+            query_embedding = vectors[0]
 
         # Get or create user if provided
         internal_user_id = None
@@ -733,6 +760,9 @@ class SQLiteMemory(BaseMemory):
         Retrieve a specific memory by ID.
 
         This method fetches a single memory entry by its unique identifier.
+        Returns ``None`` if the dim-specific ``memories_{dim}`` table has
+        not yet been created (i.e. no async op has run yet and the dim
+        is unresolved).
 
         Args:
             memory_id: The ID of the memory to retrieve
@@ -740,6 +770,9 @@ class SQLiteMemory(BaseMemory):
         Returns:
             The memory object if found, otherwise None
         """
+        if self.memories_table is None:
+            return None
+
         cursor = self.conn.execute(
             f"""
             SELECT m.id, m.text, m.metadata, m.created_at
@@ -775,8 +808,14 @@ class SQLiteMemory(BaseMemory):
             collection: Collection to retrieve memories from
 
         Returns:
-            List of memories in reverse chronological order (newest first)
+            List of memories in reverse chronological order (newest first).
+            Returns an empty list when the dim-specific
+            ``memories_{dim}`` table has not yet been created (i.e. no
+            async op has run yet and the dim is unresolved).
         """
+        if self.memories_table is None:
+            return []
+
         # Use defaults if not specified
         collection = collection or self.default_collection
 
