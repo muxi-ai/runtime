@@ -4,7 +4,6 @@ This module provides automated workflow generation from documented procedures,
 enabling consistent execution of complex multi-step operations.
 """
 
-import asyncio
 import hashlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -12,10 +11,49 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from ...services import observability
+from ...services.memory.embedding import embed
 from ...utils.user_dirs import get_cache_dir
 
 # Lazy import DocumentChunkManager to avoid initialization issues
 # from ..documents.storage.chunk_manager import DocumentChunkManager
+
+
+class OneLLMEmbeddingAdapter:
+    """Adapter that wraps the shared ``embed()`` helper for SOP search.
+
+    SOP search calls ``.generate_embeddings(texts)`` on an embedding
+    object. After the embedding-platform migration, MUXI memory tiers
+    expose the embedding model as a *string slug* rather than a provider
+    object. This adapter bridges that gap: it accepts a model slug at
+    construction time and delegates every embed call to
+    :func:`muxi.runtime.services.memory.embedding.embed`.
+
+    This class is the ONLY place in the runtime where an
+    "object-with-embed-like-interface" remains — it is kept solely to
+    honor SOP search's existing ``generate_embeddings`` contract. Every
+    other consumer (memory tiers, fusion engine, knowledge handler)
+    calls the shared helper directly.
+    """
+
+    def __init__(self, model_name: str):
+        """Store the embedding model slug used for downstream calls.
+
+        Args:
+            model_name: Provider-prefixed model slug (e.g.
+                ``"local/nomic-ai/nomic-embed-text-v1.5"`` or
+                ``"openai/text-embedding-3-small"``).
+        """
+        self.model_name = model_name
+
+    async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
+        """Return embedding vectors for ``texts`` via the shared helper.
+
+        Delegates to :func:`services.memory.embedding.embed`, which
+        handles provider routing, ``task`` kwarg stripping for cloud
+        models, and ``EmbeddingResponse`` dataclass unpacking. The
+        returned list has one vector per input string, preserving order.
+        """
+        return await embed(self.model_name, texts)
 
 
 class SOPSystem:
@@ -472,127 +510,27 @@ class SOPSystem:
         return self._faiss_service
 
     def _get_embedding_model(self):
-        """Lazily get embedding model from working memory."""
+        """Lazily construct an embedding adapter from the working memory slug.
+
+        Post-migration, ``WorkingMemory`` stores the embedding model as a
+        string slug on ``self._embedding_model_name`` (the canonical
+        attribute per the mission's embedding-platform decisions). The
+        legacy provider-object attribute ``embedding_model`` is gone, so
+        SOP search now wraps the slug in :class:`OneLLMEmbeddingAdapter`
+        which delegates every embed call to the shared helper.
+        """
         if self._embedding_model is None:
             try:
                 from ...memory import WorkingMemory
 
                 working_memory = WorkingMemory.get_instance()
-                if working_memory and hasattr(working_memory, "embedding_model"):
-                    # Wrap the model in our adapter for consistent interface
-                    self._embedding_model = self._create_embedding_adapter(
-                        working_memory.embedding_model
-                    )
+                if working_memory is not None:
+                    model_name = getattr(working_memory, "_embedding_model_name", None)
+                    if isinstance(model_name, str) and model_name:
+                        self._embedding_model = OneLLMEmbeddingAdapter(model_name)
             except Exception:
                 pass
         return self._embedding_model
-
-    def _create_embedding_adapter(self, model):
-        """
-        Create an adapter that provides a consistent embedding interface.
-
-        This adapter normalizes different embedding model implementations to provide
-        both sync and async methods with consistent behavior.
-
-        Args:
-            model: The underlying embedding model
-
-        Returns:
-            An adapter object with consistent embed() and generate_embeddings() methods
-        """
-
-        class EmbeddingAdapter:
-            """Adapter to provide consistent embedding interface."""
-
-            def __init__(self, wrapped_model):
-                self.model = wrapped_model
-
-            def embed(self, text: str):
-                """
-                Synchronous single text embedding.
-
-                This method handles both sync and async embedding models transparently.
-                When called from within a running event loop with an async-only model,
-                it will execute the async operation in a thread pool executor to avoid
-                blocking the event loop.
-
-                Args:
-                    text: Text to generate embedding for
-
-                Returns:
-                    Embedding vector
-
-                Note: For better performance in async contexts, prefer using
-                      embed_async() or generate_embeddings() directly.
-                """
-                # Check if model has sync embed method
-                if hasattr(self.model, "embed") and not asyncio.iscoroutinefunction(
-                    self.model.embed
-                ):
-                    return self.model.embed(text)
-                else:
-                    # If only async is available, handle it properly
-                    try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            # We're in a running loop - callers should use embed_async directly
-                            raise RuntimeError(
-                                "Cannot call synchronous embed() from within an async context. "
-                                "Please use await embed_async() instead, or call this from a different thread."
-                            )
-                        else:
-                            # No running loop, we can run it directly
-                            return asyncio.run(self.embed_async(text))
-                    except RuntimeError as e:
-                        # Check if it's our specific error about async context
-                        if "Cannot call synchronous embed()" in str(e):
-                            raise
-                        # No event loop exists, create one and run (for older Python contexts)
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            return loop.run_until_complete(self.embed_async(text))
-                        finally:
-                            loop.close()
-                            asyncio.set_event_loop(None)
-
-            async def embed_async(self, text: str):
-                """Asynchronous single text embedding with fallback to batch method."""
-                # Try direct embed method first
-                if hasattr(self.model, "embed"):
-                    if asyncio.iscoroutinefunction(self.model.embed):
-                        return await self.model.embed(text)
-                    else:
-                        return self.model.embed(text)
-
-                # Fall back to generate_embeddings for single text
-                elif hasattr(self.model, "generate_embeddings"):
-                    embeddings = await self.generate_embeddings([text])
-                    return embeddings[0] if embeddings else None
-
-                return None
-
-            async def generate_embeddings(self, texts: List[str]) -> List[Any]:
-                """Asynchronous batch embedding with proper sync/async handling."""
-                # Prefer batch method if available
-                if hasattr(self.model, "generate_embeddings"):
-                    # Check if it's async or sync
-                    if asyncio.iscoroutinefunction(self.model.generate_embeddings):
-                        return await self.model.generate_embeddings(texts)
-                    else:
-                        # Sync method - call directly
-                        return self.model.generate_embeddings(texts)
-
-                # Fall back to individual embeddings using embed_async
-                # (which already handles sync/async properly)
-                embeddings = []
-                for text in texts:
-                    embedding = await self.embed_async(text)
-                    if embedding is not None:
-                        embeddings.append(embedding)
-                return embeddings if embeddings else []
-
-        return EmbeddingAdapter(model)
 
     def _get_document_processor(self):
         """Lazily get document processor and chunk manager."""
