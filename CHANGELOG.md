@@ -4,6 +4,8 @@
 
 ## v0.20260421.0
 
+## v0.20260421.0
+
 ### Native migration to a2a-sdk 1.0
 
 `a2a-sdk 1.0.0` (released 2026-04-20) is a breaking rewrite of Google's Agent-to-Agent SDK. The top-level `A2AClient` helper is gone, enums moved to `SCREAMING_SNAKE_CASE`, `Part` types were flattened into a protobuf `oneof`, `AgentCard.url` was replaced by `supported_interfaces[]`, and `AgentCapabilities` became a fixed-field protobuf message (no per-capability metadata dict). v0.20260420.1 pinned `a2a-sdk<1.0` as an emergency stop; this release replaces every call site with the native 1.0 API. The migration touches 10 production files plus a new helpers module and is accompanied by a full unit + integration + e2e test harness.
