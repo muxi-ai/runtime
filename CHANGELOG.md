@@ -33,585 +33,252 @@
 
 ## v0.20260420.0
 
-### Silent-Failure Fixes on v0.20260418.0 Placeholder Pipeline
-
-- **`[N]` positional index now supported in placeholder predicates (Dev #1 v0.20260418.0 Excel B2)** -- The LLM emitted `{{WORKSHEET_LIST[0].id}}` to mean "first worksheet's id"; v0.20260418.0's parser accepted only `[key=value]` predicates and rejected bare integers, so the placeholder degraded to the legacy first-match path. The kind-aware cross-placeholder fallback then bound `workbookWorksheetId` to the Book.xlsx `driveItemId`, MS Graph returned 404 on `get-excel-worksheet`, and the failure surfaced as a confusing "could not obtain access token" message. New runtime helpers:
-    - `Agent.PLACEHOLDER_INDEX_KEY` (`"__index__"`) reserves an internal marker key for positional selectors; parser-generated so callers cannot use it as a real field name.
-    - `_parse_placeholder_predicate` now accepts `[N]` and `[-N]` → returns `{__index__: N}`. Non-integer numerics (`[1.5]`) and bare identifiers (`[abc]`) without `=` still fail as before.
-    - `_iter_indexable_records` resolves the "most relevant" list of records for positional selection. Prefers (1) payload as top-level list of dicts, (2) common wrapper keys (`value`/`items`/`data`/`results`/`records`/`matches`/`files`/`messages`/`events`) whose value is a list, (3) depth-first walk for the first list of dicts. Empty list on out-of-range or no-list payloads so callers treat both as "no match".
-    - `_filter_records_by_predicate` dispatches on `__index__` before value matching; index path is exclusive (rejects mixed with `key=value` at the parser level, defensive bail-out here). Returns `None` / `[]` on out-of-range indexes.
-    - `_record_matches_predicate` defensively strips `__index__` so direct callers with a mixed predicate don't crash.
-- **Recursive nested placeholder substitution (Dev #1 v0.20260418.0 OneDrive move)** -- The LLM correctly authored `parentReference: {id: "{{SPARK_FOLDER_SEARCH[name='Spark Test'].id}}"}`, the predicate syntax was already supported in v0.20260418.0, yet the runtime sent a literal `"{{SPARK_FOLDER_SEARCH[name='Spark Test'].id}}"` string to MS Graph because `_substitute_step_parameter_placeholders` iterated only top-level param values. MS Graph returned 200 and silently ignored the bogus parentReference; the file never moved. Fix: the substitution pipeline now runs a two-pass design.
-    - Top-level pass (unchanged) applies the full schema-aware machinery (auto-inferred predicates, kind-based fallback, cross-placeholder resolution) to each top-level param whose value is itself a placeholder string.
-    - New nested pass `_substitute_nested_placeholders` walks every string leaf inside dict/list top-level params and substitutes placeholders using explicit predicate / field-hint resolution. Schema-driven inference is intentionally skipped for nested leaves because per-leaf schema is unavailable; the LLM authored the placeholder explicitly and we honor it literally.
-    - Depth cap `_NESTED_SUBSTITUTION_MAX_DEPTH = 8` guards pathological payloads. MS Graph shapes rarely exceed 4 levels; 8 leaves comfortable headroom.
-    - Bare `{{FOO}}` nested references only substitute when the referenced payload is a scalar; structured payloads are left as literals so the leftover-strip pass can drop them with a loud warning.
-- **Recursive leftover stripping + loud `placeholder.unresolved` warnings (Dev suggestion, defense-in-depth)** -- `_strip_leftover_placeholder_parameters` now walks dicts/lists recursively. A non-required top-level param containing ANY unresolved placeholder leaf at ANY depth is dropped before the MCP call. Required params with nested unresolved leaves are left intact (the repair-plan flow reacts to them) but a warning event is still emitted.
-    - `_find_unresolved_placeholder_leaves` enumerates every placeholder-like string leaf with dotted/indexed path tracking (`parameters.parentReference.id`, `attendees[0].emailAddress.address`).
-    - A single `AGENT_PLANNING` WARNING event with `phase: "placeholder.unresolved"` reports every unresolved leaf (path + literal placeholder) alongside the list of dropped top-level params. Devs now see silent failures in the log stream the instant they happen, instead of puzzling over a 200-but-noop response.
-- **Repair-plan flow fires for nested required params (Dev #1 v0.20260418.0 OneDrive move, root-cause)** -- `_has_resolved_required_parameter_value` now recursively inspects dict/list required params for unresolved placeholder leaves via `_find_unresolved_placeholder_leaves`. Without this, `_get_unresolved_required_parameters` could not see the nested literal inside `parentReference.id`, the repair-plan attempt never fired, and the failed move silently shipped. The added check is O(leaves) with a tiny constant; no measurable overhead on hot paths.
-- **`agent_planning.md` PLACEHOLDER RULES block extended** -- The strict contract now documents:
-    - `[N]` / `[-N]` positional index syntax with the exact Excel scenario (`{{WORKSHEET_LIST[0].id}}` → first worksheet), and a caution that positional indexes are list-order-dependent and usually less safe than a name predicate.
-    - Nested placeholder support: placeholders MAY appear inside dict/list parameter values (e.g. MS Graph's `parentReference: {id: "{{...}}"}`), every string leaf is substituted at any depth, and unresolved nested leaves emit a `placeholder.unresolved` warning and either drop the non-required parent or trigger repair-plan when required.
-
-### Architectural Notes
-
-- The three-tier resolution hierarchy from v0.20260418.0 now extends cleanly to nested values:
-    1. **Explicit predicate / index** — `{{FILE_LIST[name='Book.xlsx'].id}}`, `{{WORKSHEET_LIST[0].id}}`, deterministic.
-    2. **Auto-inferred predicate** — still only top-level; schema-driven inference needs per-param metadata unavailable for nested leaves.
-    3. **Legacy first-match** — preserved at top level; nested pass leaves literals untouched and defers to the leftover-strip + repair-plan pipeline for diagnosis.
-- The leftover-strip pass is now the canonical "last line of defense" against silent failures. Any literal `{{...}}` reaching MCP is a bug — the warning event + repair-plan flow ensures devs and the runtime both notice.
-- `Agent.PLACEHOLDER_INDEX_KEY` is a class attribute (not a module constant) because predicate parsing is a staticmethod on the class; this keeps the reserved key discoverable in a single place. The marker is deliberately long and namespaced (`__index__`) so it cannot collide with real MS Graph field names.
-- This closes all three silent-failure modes in the Dev #1 v0.20260418.0 report: `[N]` syntax, nested-dict substitution, and the loud warning devs requested for literal-placeholder pass-through.
-
-### Tests
-
-**New unit tests** (`tests/unit/test_agent_planning_helpers.py`, 121 total in the file; 13 new):
-- `test_parse_placeholder_predicate_accepts_integer_index` -- `[0]`, `[3]`, `[-1]` parse to `{__index__: N}`; non-integer numerics / bare identifiers without `=` return None.
-- `test_parse_placeholder_reference_supports_integer_index` -- `{{WORKSHEET_LIST[0].id}}` splits into (base, field='id', `{__index__: 0}`).
-- `test_iter_indexable_records_prefers_top_level_value_wrapper` -- MS Graph `{value: [...]}` shape is used directly.
-- `test_iter_indexable_records_handles_top_level_list` -- top-level list-of-dicts passes through.
-- `test_iter_indexable_records_walks_nested_when_no_wrapper_match` -- depth-first fallback walk.
-- `test_filter_records_by_predicate_dispatches_index_path` -- positive/negative/out-of-range indexes, collect_all parity.
-- `test_extract_field_with_index_predicate_picks_positional_record` -- end-to-end extraction via index predicate.
-- `test_substitute_step_parameter_placeholders_resolves_index_predicate` -- Excel B2 scenario; `{{WORKSHEET_LIST[0].id}}` resolves to the first worksheet's GUID, not driveItemId.
-- `test_substitute_step_parameter_placeholders_resolves_nested_dict_placeholder` -- OneDrive scenario; `parentReference: {id: "{{...}}"}` substitutes correctly.
-- `test_substitute_step_parameter_placeholders_resolves_nested_list_placeholder` -- attendees array with per-record predicate resolution.
-- `test_substitute_step_parameter_placeholders_caps_recursion_depth` -- 20-deep pathological payload doesn't trigger RecursionError.
-- `test_find_unresolved_placeholder_leaves_walks_nested_structures` -- leaf finder reports dotted/indexed paths for nested literals.
-- `test_strip_leftover_placeholder_parameters_drops_top_level_with_nested_unresolved` -- non-required parent dict with nested literal gets dropped.
-- `test_strip_leftover_placeholder_parameters_keeps_required_with_nested_unresolved` -- required parent kept so repair-plan can react.
-- `test_has_resolved_required_parameter_value_rejects_nested_unresolved` -- dict/list required params with any nested literal report as unresolved.
-
-**New e2e test** (`e2e/tests/7_orchestration/test_7a6_nested_and_index_placeholder_resolution.py`):
-- Six scenarios covering `[0]` + `[-1]` integer indexing, nested-dict predicate substitution, recursive leftover-strip with warning, required-nested repair-plan trigger, and the combined `[0]` inside nested dict. Exercises the full placeholder pipeline end-to-end against MS Graph-shaped `list-excel-worksheets` and `search-onedrive-files` payloads. 6/6 pass.
+### Fixed
+- Add positional placeholder predicates like `[0]` and `[-1]` for deterministic list selection.
+- Resolve placeholders inside nested dict/list parameters instead of only at the top level.
+- Detect unresolved nested placeholders recursively and route required cases into repair planning.
 
 ### Validation
-
-- Full unit suite: **553 passed, 3 skipped, 1 pre-existing failure** (`test_rce_client.py` hardcoded version assertion — unrelated to placeholder work).
-- Targeted placeholder helper suite: 121/121 pass (108 baseline + 13 new).
-- New e2e test (`test_7a6_nested_and_index_placeholder_resolution`): 6/6 scenarios pass.
-- Random e2e sample: 3/3 pass (scheduling, MCP credentials, artifacts).
-- ruff, black, mypy: clean on touched files.
-
-### Known issues deferred to next release
-
-- **MS365 tool selection collapse on A2A delegation (Dev #1 Excel Failure Mode 2, prior report)** -- still deferred; not a placeholder-resolution issue.
-- **Repair-tool suggests `list-outlook-contacts` for drive-root-item recovery** -- pre-existing heuristic misrouting in `_build_auto_discovery_repair_plan`; orthogonal to this release.
+- Verified with targeted placeholder helper tests, a dedicated E2E regression, and random E2E sampling.
 
 ## v0.20260418.0
 
-## v0.20260418.0
-
-### New Placeholder Contract — Collection Disambiguation
-
-- **New predicate syntax in placeholder references (Dev #1 Excel Failure Mode 1)** -- The dotted placeholder contract is extended from `{{NAME}}` / `{{NAME.field}}` to also accept `{{NAME[key=value]}}` and `{{NAME[key=value].field}}`. This gives the planner a deterministic way to say "the record named X" when a prior step returned a collection. Without this, `{{FILE_LIST.id}}` silently resolved to whichever record `_iter_result_records` encountered first — in the reported Excel case that was the alphabetically-first `Attachments` folder, not the user's `Book.xlsx`, and passing a folder id to `list-excel-worksheets` produced the misleading "WAC 403 / could not obtain access token" error. New runtime helpers:
-    - `_parse_placeholder_reference` now returns a 3-tuple `(base_key, field_hint, predicate)`.
-    - `_parse_placeholder_predicate` parses the `[key=value]` body with typed values: single- or double-quoted strings, booleans, integers, floats, `null`/`none`, and bare identifiers.
-    - `_record_matches_predicate` applies the predicate with normalized field names (so `[name=X]` matches `Name`, `display_name`, or `DisplayName`) and case-insensitive string comparison.
-    - `_filter_records_by_predicate` walks `_iter_result_records` and returns matching records.
-    - `_extract_field_from_result_payload` accepts an optional `predicate=` kwarg that filters records before field extraction. Text-chunk fallback is disabled under predicate mode because free-text payloads cannot be reliably filtered by structural field value.
-    - Malformed predicate syntax (`[==]`, `[]`, etc.) degrades gracefully — the helper returns the untouched placeholder string so downstream resolution / repair-plan flows react normally.
-- **Auto-inferred name predicate from `action_description` (Dev #1 Excel Failure Mode 1, defense-in-depth)** -- Layered on top of the new syntax as a backward-compatibility bridge. When the planner emits the legacy `{{FOO.field}}` form (no predicate) and the step's `action_description` explicitly names a resource, the runtime synthesizes a `{name|displayName|title|subject: X}` predicate automatically and applies it. This closes the "LLM hasn't learned the new syntax yet" gap without waiting for prompt compliance.
-    - `_extract_named_resource_from_action` pulls a resource name from the description via three conservative matchers: double-quoted strings (`"Quarterly Report"`), single-quoted strings (`'Team Standup'`), backticked markdown code spans (`` `Book.xlsx` ``), and unquoted filenames with a recognized extension (`Book.xlsx`, `quarterly-report.pdf`). Bare capitalized words are deliberately excluded — they produce too many false positives in prose.
-    - `_infer_auto_name_predicate` synthesizes the predicate only when three guards all hold: (1) the description names a resource, (2) the payload contains ≥ 2 records carrying the same name-field variant (genuine ambiguity), (3) at least one record actually matches the extracted name (prevents silent rewrites against resources the prior step never returned).
-    - Synthesized predicates use the actual field variant present on matching records (`name`, `displayName`, `title`, or `subject`) so downstream matching — which is strict about key normalization — succeeds.
-    - Precedence is unambiguous: an explicit `[key=value]` from the LLM always wins over the auto-inferred predicate. The auto-path only runs when the LLM emitted no predicate at all.
-    - An `AGENT_PLANNING` INFO observability event is emitted every time auto-inference fires, carrying the inferred predicate, the original placeholder key, the field hint, and a truncated action description — so devs can see exactly when the runtime auto-corrected a plan.
-- **`agent_planning.md` PLACEHOLDER RULES block extended** -- The strict contract now documents the predicate syntax with correct/wrong examples using the exact Book.xlsx scenario, the value-type cheat sheet (quoted strings, bools, numbers, bare identifiers), and the single-pair-only v1 limitation. The LLM learns the structure from the prompt; the runtime catches residual non-compliance via the auto-inference fallback.
-
-### Architectural Notes
-
-- This closes the "collection disambiguation" gap identified during the Dev #1 Excel debug session: our previous plan-execute model assumed shape-deterministic data flow (each step produces a single definite scalar / record). The predicate extension makes the contract expressive enough for list-returning tools, and the auto-inference fallback bridges legacy plans that don't yet use the new syntax. The runtime now has three tiers of resolution for multi-record payloads, in precedence order:
-    1. **Explicit predicate** — `{{FILE_LIST[name='Book.xlsx'].id}}`, deterministic.
-    2. **Auto-inferred predicate** — `{{FILE_LIST.id}}` with action "... to find Book.xlsx", heuristic but guarded.
-    3. **Legacy first-match** — original behavior preserved when no named resource is available.
-- `_parse_placeholder_reference` is now a 3-tuple API. Callers and test assertions updated accordingly (one production call site, one unit test). Safe to extend further (comma-separated AND predicates, not-equals operators) without breaking today's shape.
-- The "collection disambiguation" work is purely runtime-side: zero LLM / MCP changes. The companion MS365 MCP tool-selection bug (Dev #1 Excel Failure Mode 2) — A2A-received agents getting 10 task-only tools instead of the 217 configured — is tracked separately and NOT addressed here.
-
-### Tests
-
-**New unit tests** (`tests/unit/test_agent_planning_helpers.py`, 515 total; 106 passed in the file):
-- `test_parse_placeholder_reference_supports_quoted_string_predicate` -- `{{FILE_LIST[name='Book.xlsx'].id}}` splits into (`{{FILE_LIST}}`, `id`, `{name: 'Book.xlsx'}`); double- and single-quote forms both parse.
-- `test_parse_placeholder_predicate_accepts_all_scalar_value_types` -- quoted strings, booleans, integers, floats, null, bare identifiers; malformed cases return None.
-- `test_parse_placeholder_reference_rejects_malformed_predicate` -- `[==]` degrades gracefully to the untouched string.
-- `test_record_matches_predicate_normalizes_field_names_and_string_case` -- `[name=X]` matches `Name`, `display_name`, `DisplayName`; string comparisons are case-insensitive; None matches missing/null.
-- `test_extract_field_with_predicate_picks_correct_record_from_list` -- Dev #1 Excel scenario; predicate resolves to Book.xlsx id, not Attachments.
-- `test_extract_field_with_predicate_skips_text_fallback` -- text payloads are not scanned when a predicate is active.
-- `test_filter_records_by_predicate_collects_all_matches` -- `collect_all=True` path returns every matching record in order.
-- `test_substitute_step_parameter_placeholders_uses_predicate` -- end-to-end substitution honors the predicate.
-- `test_extract_named_resource_from_action_prefers_quoted_strings` -- quoted/backticked wins over incidental filenames.
-- `test_extract_named_resource_from_action_detects_unquoted_filenames` -- filenames with recognized extensions qualify.
-- `test_extract_named_resource_from_action_ignores_prose_without_markers` -- bare capitalized words do NOT qualify.
-- `test_infer_auto_name_predicate_fires_for_ambiguous_multi_record_payload` -- Excel scenario; synthesizes `{name: 'Book.xlsx'}`.
-- `test_infer_auto_name_predicate_returns_none_without_ambiguity` -- single-record payloads skip inference.
-- `test_infer_auto_name_predicate_returns_none_when_named_resource_not_in_payload` -- guard prevents silent rewrite against absent resources.
-- `test_infer_auto_name_predicate_adapts_to_displayname_field` -- synthesized predicate uses the actual field variant present on records.
-- `test_substitute_placeholders_auto_applies_predicate_from_action` -- end-to-end Excel scenario without explicit predicate.
-- `test_substitute_placeholders_respects_explicit_predicate_over_auto` -- explicit `[name=X]` wins over auto-inference.
-- `test_substitute_placeholders_falls_back_to_legacy_without_named_resource` -- legacy first-match preserved for plans without named context.
-
-**New e2e test** (`e2e/tests/7_orchestration/test_7a5_placeholder_predicate_resolution.py`):
-- Seven scenarios exercising the full substitution pipeline against realistic MS365 Graph API response shapes (`list-folder-files`, `list-sharepoint-sites`) — explicit predicate path, auto-inference path, `displayName` variant adaptation, legacy fallback, explicit-beats-auto precedence, array-typed predicate filtering, and the guard that declines auto-inference when the named resource is not in the payload. Verifies both the resolved values and the emitted `AGENT_PLANNING` observability event.
+### Changed
+- Extend placeholder syntax to support filtered references such as `{{NAME[key=value].field}}`.
+- Add guarded auto-inference of name predicates when the planner references an ambiguous collection without an explicit filter.
+- Document the stronger placeholder contract in the planning prompt.
 
 ### Validation
-
-- Full unit suite: **515 passed, 27 skipped** (zero failures).
-- Targeted placeholder helper suite: 106/106 pass (89 baseline + 7 predicate syntax + 10 auto-inference).
-- New e2e test (`test_7a5_placeholder_predicate_resolution`): 7/7 scenarios pass.
-- Random e2e sample: 5/5 pass (multimodal, artifacts, knowledge, clarification x2).
-- ruff, black, mypy: clean on touched files.
-
-### Known issues deferred to next release
-
-- **MS365 tool selection collapse on A2A delegation (Dev #1 Excel Failure Mode 2)** -- when `ms365-assistant` is reached via A2A from another agent, semantic tool selection returns only 10 task/planner tools (out of 217 configured), excluding all drive and Excel tools. This is a runtime bug in the MCP tool-selection path, not a placeholder-resolution issue, and requires separate investigation. Tracked with the observability diagnostic proposal (log ranked-tools-before-cutoff for A2A-received planning).
-- **Cross-placeholder explicit-predicate miss semantics** -- when the LLM writes `{{FOO[name='Nonexistent'].id}}` and no record matches, the existing kind-aware `_resolve_parameter_from_result_payload` fallback can still return a value of the matching schema kind. This is pre-existing behavior (not a regression from today's changes); tightening it to respect explicit-predicate intent is deferred as a targeted follow-up.
+- Verified with focused placeholder helper coverage, a dedicated E2E regression, and the full unit suite.
 
 ## v0.20260417.2
 
-## v0.20260417.2
-
-### Prompt Hardening
-
-- **Planning prompt now pins the placeholder contract** -- Added a new `PLACEHOLDER RULES (strict)` block to `src/muxi/runtime/formation/prompts/agent_planning.md` that codifies the four failure modes surfaced by v0.20260416.x / v0.20260417.x field reports. The runtime-side guards shipped in v0.20260417.1 stay in place; this change reduces how often they're triggered by telling the planner upfront what valid plans look like.
-    - **Syntax pinning**: only `{{UPPERCASE_NAME}}` or `{{UPPERCASE_NAME.field}}` is valid. No `<<NAME>>`, `${{NAME}}`, `{NAME}`.
-    - **Reference consistency**: a later step may reference a prior output ONLY by the exact name assigned in its `output_placeholder`. Invented names now have an explicit "silently fails" warning with a correct/wrong example (drawn from the Calendar BUG-1 shape).
-    - **Dotted field syntax documented**: `{{NAME.field}}` is now called out as the supported way to extract a single field from a prior step's output, and explicitly noted that array parameters are auto-collected by the runtime (don't emit a list literal).
-    - **Sentinel values banned**: explicit list (`auto-injected`, `auto_fill`, `from_server`, `from_context`, `server_default`, `<to-be-provided>`, `to_be_injected`) with instruction to OMIT the key instead.
-    - **Array extrapolation banned**: explicit prohibition against fabricating additional items (incrementing IDs, pattern-completed emails, guessed hashes) — drawn verbatim from the Gmail BUG-3 failure signature.
-
-### Rationale
-
-- Four of the last five placeholder-related regressions came from the LLM writing syntactically valid but semantically inconsistent plans. The runtime fixes in v0.20260417.1 catch these at multiple layers, but every catch adds latency and log noise. Pinning the contract up-front should drop the incidence rate materially on capable models (GPT-4o-mini, Claude Sonnet-4) while leaving the runtime guards as the safety net.
-- Token cost: ~180 tokens added per planning call (~12% overhead on the planning prompt). Acceptable given the expected reduction in repair-plan / inference-fallback round-trips.
+### Changed
+- Harden the planning prompt with strict placeholder syntax, reference-consistency rules, sentinel-value bans, and anti-fabrication guidance.
 
 ### Validation
-
-- Full unit suite: **497 passed, 27 skipped** (no prompt-snapshot regressions).
-- Random e2e: 5/5 pass.
-- No code changes; isolated to `agent_planning.md`.
-
-### Expected impact (by category)
-
-| Category | Estimated reduction |
-| --- | --- |
-| Sentinel values (`auto-injected` etc.) | ~90% |
-| Placeholder-name mismatch across steps | ~70% |
-| Array extrapolation / fabrication | ~30-50% |
-| Syntax variation (`<<NAME>>` etc.) | ~95% |
-
-Runtime guards (v0.20260417.1) remain the source of truth and catch the residual.
+- Verified with the full unit suite and random E2E coverage.
 
 ## v0.20260417.1
 
-## v0.20260417.1
-
-### Bug Fixes
-
-- **Placeholder substitution now extracts from free-text MCP results (CRITICAL, Gmail BUG-3)** -- When the LLM referenced `{{APRIL_10_MESSAGES.message_ids}}` and the Gmail search tool returned its results as a free-text blob (`"1. **Message ID:** aaa111\n2. **Message ID:** bbb222\n..."`), `_extract_field_from_result_payload` only walked structured records and returned `None`. The unresolved flag triggered parameter inference, which saw one real ID in context and hallucinated the other nine by incrementing the hex digits. Fix: added `_collect_text_chunks_from_payload` and `_extract_field_values_from_text` so the extractor also scans every text chunk for label-style (`Field: value`, `**Field:** value`) and JSON-style (`"field": "value"`) patterns, with case-insensitive matching across snake_case / camelCase / spaced / Title / ALL-CAPS variants. For array parameters (`message_ids`), extraction now collects every match, and singular / plural forms are probed automatically so `message_ids` still finds `Message ID: ...` labels.
-- **Cross-placeholder fallback for LLM-invented placeholder names (CRITICAL, Calendar BUG-1)** -- The planner occasionally emits a placeholder name in step 2 that it never assigned in step 1 (e.g. `{{EVENT_ID_FROM_SEARCH}}` after only producing `{{EVENT_DETAILS}}`). `_substitute_step_parameter_placeholders` used to bail out on a missed key lookup and left the literal `{{EVENT_ID_FROM_SEARCH}}` string in the parameter dict. Because `event_id` isn't in the tool's `required` list for `manage_event`, the unresolved-required gate never fired and the literal placeholder went straight to MCP (→ 404). Fix: added `_resolve_parameter_across_all_results` which tries to bind the parameter to a value from the union of all successful prior results (structured + text fallback, including unadorned `id:` labels for `*_id` params); only commits when exactly one candidate exists so it won't silently pick wrong values from ambiguous multi-record sets.
-- **Leftover literal placeholders are now stripped before the MCP call (CRITICAL, Calendar BUG-1 defense)** -- Added `_strip_leftover_placeholder_parameters`, called right before `_validate_tool_parameters`, which drops any non-required parameter still shaped like a placeholder (`{{...}}`, `<<...>>`, etc.) after all substitution / context / inference attempts have run. Required-parameter placeholders are preserved so the existing repair-plan flow can handle them.
-- **Array inference validation drops fabricated items (CRITICAL, Gmail BUG-3 defense-in-depth)** -- `_validate_inferred_parameters_against_results` now handles list-typed parameters. Every inferred item must literally appear in a prior successful result (as a record value or in any text chunk); items that don't are dropped. If the entire list is fabricated, the parameter is removed so the repair-plan flow runs instead of sending an invalid array to MCP. This kills the Gmail "incrementing hex" hallucination pattern at the inference gate even when text extraction already fills most of the array from the prior result.
-
-### Tests
-
-- `test_field_name_variants_covers_snake_camel_space_and_all_caps` -- verifies the variant generator produces every common surface form.
-- `test_extract_field_values_from_text_handles_markdown_and_json_patterns` -- `Field: value`, `**Field:** value`, and `"field": "value"` all resolved.
-- `test_extract_field_values_from_text_collects_all_matches_for_arrays` -- Gmail BUG-3 shape; returns all 3 message IDs from the text blob.
-- `test_extract_field_from_result_payload_falls_back_to_text_patterns` -- Calendar `ID: abc` line is found when looking for `event_id`.
-- `test_extract_field_from_result_payload_collects_all_in_array_mode` -- deduplicated, order-preserving array extraction from text.
-- `test_substitute_step_parameter_placeholders_resolves_dotted_array_param` -- Gmail BUG-3 end-to-end; `{{APRIL_10_MESSAGES.message_ids}}` resolves to `["aaa111", "bbb222", "ccc333"]`.
-- `test_substitute_step_parameter_placeholders_cross_placeholder_fallback` -- Calendar BUG-1 shape; `{{EVENT_ID_FROM_SEARCH}}` with only `{{EVENT_DETAILS}}` in `my_results` resolves correctly.
-- `test_substitute_step_parameter_placeholders_cross_placeholder_declines_ambiguous` -- ambiguous multi-result case leaves the literal placeholder for the strip step / repair flow.
-- `test_strip_leftover_placeholder_parameters_drops_unresolved_non_required` -- Calendar BUG-1 defense; literal `{{...}}` on non-required params is dropped before MCP.
-- `test_strip_leftover_placeholder_parameters_preserves_required_literals` -- required placeholders survive for the repair flow.
-- `test_validate_inferred_parameters_drops_fabricated_array_items` -- Gmail BUG-3 defense; fabricated IDs are removed and only the real ID survives.
-- `test_validate_inferred_parameters_removes_array_when_all_fabricated` -- the parameter is dropped entirely when no item is verified.
-- `test_validate_inferred_parameters_keeps_real_ids_from_text_payload` -- items verified against text chunks are preserved.
-- `test_collect_text_chunks_from_payload_walks_nested_structures` -- nested `structuredContent` / `content[].text` serializations are fully visited.
+### Fixed
+- Extract identifier fields from free-text MCP payloads instead of relying only on structured records.
+- Add cross-result fallback for planner-invented placeholder names when a single safe prior match exists.
+- Strip leftover placeholder literals before MCP execution and reject fabricated inferred array items.
 
 ### Validation
-
-- Full unit suite: **497 passed, 27 skipped**.
-- Targeted placeholder / inference tests: 88/88 pass.
-- ruff, black, mypy: clean.
-
-### Known issues deferred to next release
-
-- **Gmail cross-request context loss (Bug 2)** -- when a user asks follow-up questions that reference an ID the agent mentioned in a prior turn (e.g. "pull content from the draft I sent"), the planner occasionally fabricates a new ID instead of reusing the real one from buffer memory. Needs a structured tool-output memory layer visible to the planner; not a substitution / inference bug and outside the scope of this release.
-- **Calendar date drift in response synthesis (Bug 2)** -- planner sees the correct current date (`v0.20260416.1` fix confirmed via log), but occasional drift persists in the final user-facing response. Needs a separate trace against response synthesis; not reproduced in this pass.
-- **Repair-tool domain mismatch** -- still fires for non-`auto-injected` sentinel cases. Tracked.
-- **Scheduled-job response delivery** -- still requires webhooks; synchronous completion (`v0.20260416.3`) keeps DB state correct.
+- Verified with targeted placeholder and inference tests plus the full unit suite.
 
 ## v0.20260417.0
 
-## v0.20260417.0
-
-### Bug Fixes
-
-- **Repair-tool selection now respects resource domain** -- The auto-discovery repair scorer in `_build_auto_discovery_repair_plan` previously had no notion of resource domain, so a `list-mail-folders` or `search-sharepoint-sites` call could be chosen to repair a failed `get-drive-root-item` even though both live on the same `ms365-mcp` server. Fix: added `_DOMAIN_TOKENS` (an unambiguous-token taxonomy for mail, calendar, drive, sharepoint, chat, contact, task, and note domains) and `_get_tool_domain_tags()`. When both the failed tool and a candidate carry unambiguous domain tags, the scorer now adds +4 for overlapping domains and -15 for disjoint domains, which is enough to drop cross-domain candidates below the `score <= 0` cutoff when the only positive signal is a verb match on the same server. Generic tokens (`file`, `folder`, `item`, `message`, `page`, `list`, etc.) are deliberately excluded so legitimately ambiguous tools stay untagged and neither incur nor cause a penalty.
-
-### Tests
-
-- `test_get_tool_domain_tags_classifies_unambiguous_tokens` -- unit coverage for the new tagger (drive, mail, sharepoint, calendar, task domains).
-- `test_get_tool_domain_tags_returns_empty_for_ambiguous_names` -- ensures generic names stay untagged.
-- `test_auto_discovery_rejects_cross_domain_same_server_candidate` -- exact shape from the v0.20260416.2 Dev #1 Excel report; `list-mail-folders` and `search-sharepoint-sites` must be rejected and `list-drives` must win when repairing `get-drive-root-item`.
-- `test_auto_discovery_prefers_same_domain_same_server_candidate` -- calendar repair prefers `list-calendar-events` over `list-mail-folders`.
+### Fixed
+- Make repair-tool selection respect resource domain so same-server but unrelated tools no longer win recovery planning.
 
 ### Validation
-
-- Full unit suite: **483 passed, 27 skipped**.
-- Targeted repair-tool tests: 74/74 pass.
-- Random e2e (5/5 pass): `14_user_synopsis/test_14a1_synopsis_enabled`, `19_api/test_19p1_scheduler_admin`, `4_mcp/test_4a2_system_info_mcp`, `4_mcp/test_4d3_clarification`, `5_artifacts/test_5_9`.
-- ruff, black, mypy: clean.
+- Verified with targeted repair-tool tests, the full unit suite, and random E2E coverage.
 
 ## v0.20260416.3
 
-### Bug Fixes
-
-- **LLM-emitted sentinel values no longer block MCP server-default injection (CRITICAL, Dev #1 Excel, BUG-4 context)** -- When the planner encountered a required parameter that a same-server MCP default would provide (e.g. `driveId` on `get-drive-root-item`), it often emitted a literal sentinel string like `"driveId": "auto-injected"`. The v0.20260416.1 parameter-preservation fix treated that sentinel as a resolved value, so the real server default was never merged in. MCP then rejected the call with `driveId=auto-injected`. Fix: added `_is_sentinel_placeholder_value()` that matches LLM-invented sentinels (`auto-injected`, `from_server`, `from_context`, `server_default`, `<to-be-injected>`, etc.) and the parameter candidate / unresolved-parameter pipelines now treat these values as unresolved so server defaults, context, and inference can overwrite them.
-- **Dotted placeholder references like `{{SPARK_EVENT.event_id}}` now resolve correctly (CRITICAL, BUG-3)** -- `_substitute_step_parameter_placeholders` used the full `{{FOO.field}}` string as a `my_results` lookup key, but the dict is keyed on the bare `{{FOO}}` placeholder. Lookup always missed and the literal `{{FOO.field}}` string was passed through to MCP. Fix: added `_parse_placeholder_reference()` that strips the `.field` suffix for lookup and records the suffix as a field hint; `_extract_field_from_result_payload()` then walks the referenced step's records (case-insensitive, ignoring underscores/dashes) to find the requested field.
-- **Whole-payload fallback no longer returns the entire result dict for unknown params (CRITICAL, BUG-4 root cause)** -- The final branch of `_resolve_parameter_from_result_payload` previously returned the entire payload whenever a field-level match failed. For LLM-hallucinated parameters that weren't in the tool schema (e.g. `user_google_email` on `manage_event`), this sent the whole result dict to MCP and produced pydantic validation errors. Fix: the fallback now only applies when the parameter has a known schema **and** the payload is a scalar; it never returns a dict or a list for a hallucinated or schema-less parameter.
-- **Scheduler now marks job success when no webhook is configured** -- `_execute_single_job` unconditionally called `overlord.chat(use_async=True, webhook_url=webhook_url)` and relied on `complete_job_from_webhook` to update counters. When the formation had no `async.webhook_url`, the webhook never fired: jobs ran successfully (LLM replied, memory updated) but `total_runs` stayed 0 and `last_run_status` stayed empty. Fix: when `webhook_url` is absent, the scheduler runs the chat synchronously and calls `mark_job_execution_success` (and `complete_onetime_job` for one-time jobs) directly after the await returns.
-
-### Tests
-
-- `test_is_sentinel_placeholder_value_matches_llm_invented_tokens` -- coverage for the new sentinel matcher (auto-injected, from_server, from_context, etc.).
-- `test_merge_parameter_candidates_overrides_sentinel_placeholder_values` -- ensures real values beat sentinels during merge.
-- `test_get_unresolved_required_parameters_flags_sentinel_placeholder_values` -- ensures sentinels count as unresolved so server-default injection runs.
-- `test_substitute_step_parameter_placeholders_strips_dot_field_suffix` -- exact bug shape from BUG-3 (`{{SPARK_EVENT.event_id}}` must resolve to the event's id).
-- `test_parse_placeholder_reference_splits_dotted_forms` -- unit coverage for the dotted reference parser.
-- `test_resolve_parameter_from_result_payload_does_not_return_whole_payload` -- regression for BUG-4 (`user_google_email` on `manage_event` with empty schema must resolve to `None`, not the whole result dict).
-- `test_resolve_parameter_from_result_payload_still_returns_scalar_for_scalar_schema` -- sanity check that legitimate scalar resolution still works.
-- 3 source-level verification tests in `TestSchedulerMarksSuccessWhenNoWebhook` confirming the synchronous no-webhook completion path.
+### Fixed
+- Treat LLM-emitted sentinel values like `auto-injected` as unresolved so MCP defaults can override them.
+- Resolve dotted placeholders such as `{{STEP.event_id}}` correctly.
+- Prevent schema-less whole-payload fallback from sending entire result dicts as tool parameters.
+- Mark scheduler jobs successful even when no webhook is configured.
 
 ### Validation
-
-- Full unit suite: **479 passed, 27 skipped**.
-- Targeted fix tests: 85/85 pass.
-- Random e2e (5/5 pass): `19_api/test_19w1_logs_stream`, `3_multimodal/test_3d3`, `3_multimodal/test_3f1`, `5_artifacts/test_5_13_rce_error_paths`, `9_async/test_9c1_webhook_failure`.
-- ruff, black: clean.
-- mypy: 4 pre-existing errors in `scheduler/service.py` (unrelated to this release).
-
-### Known issues deferred to next release
-
-- **Repair-tool domain mismatch** -- auto-discovery still picks `list-mail-folders` / `search-sharepoint-sites` when `get-drive-root-item` fails because there's no keyword-domain scoring pass; Fix 1 in this release removes the trigger for the most common case (`auto-injected` driveId) so the repair path is rarely reached now.
-- **CLI-side timestamp parsing** -- scheduler list output crashes on microsecond timestamps (CLI issue, not runtime).
-- **Scheduled-job response delivery** -- no mechanism exists to deliver scheduler output back to the user without a webhook; synchronous completion (Fix 4) just keeps DB state correct.
+- Verified with targeted fix tests, the full unit suite, and random E2E coverage.
 
 ## v0.20260416.2
 
+### Notes
+- No separate release notes were recorded for this version in `CHANGELOG.md`.
+
 ## v0.20260416.1
 
-### Bug Fixes
-
-- **Planning mode no longer strips tool parameters (CRITICAL)** -- `_finalize_execution_plan` was rebuilding `my_steps` from the unified `steps` list, but the planning prompt template only instructs the LLM to emit `parameters` in its separate `my_steps` block. The rebuild silently replaced every parameter set with `{}`, so `manage_event` was called with only `{"action": "create"}` and `get_events` with `{}` -- missing all required fields. Fix: `_finalize_execution_plan` now preserves parameters from the LLM's original `my_steps` by matching on `tool_name`, using a FIFO queue so repeated tool uses keep their own params.
-- **Planner can now resolve relative date references like "today" and "tomorrow"** -- `_plan_before_execution` used `self.system_message` (the static formation-config attribute) and never saw the current-date injection that `process_message` applies to the live conversation system message. The planner therefore had no way to turn "tomorrow" into an RFC3339 date and emitted literal strings like `"time_min": "tomorrow at 00:00:00"`. Fix: the planning prompt now includes a `## Current date/time:` section with the current local date, time, and timezone, plus an explicit instruction to resolve relative references into concrete dates.
-
-### Tests
-
-- `test_finalize_execution_plan_preserves_parameters_from_llm_my_steps` -- exact shape from the bug report (`steps` without params, `my_steps` with full param set).
-- `test_finalize_execution_plan_preserves_parameters_across_repeated_tool_use` -- two `manage_event` calls in the same plan, ensuring params are matched positionally per tool.
-- `test_plan_before_execution_injects_current_date_into_planning_prompt` -- verifies the planning prompt carries a `## Current date/time:` block before the LLM call.
+### Fixed
+- Preserve planner-supplied tool parameters during execution-plan finalization.
+- Inject current date and time into the planning prompt so relative dates like "today" and "tomorrow" resolve correctly.
 
 ### Validation
-
-- Full unit suite: **469 passed, 27 skipped**.
-- ruff, black, mypy: clean.
+- Verified with focused regression tests and the full unit suite.
 
 ## v0.20260416.0
 
-### Bug Fixes
-
-- **Parameter-free planned MCP steps no longer crash with UnboundLocalError** -- `server_default_param_names` was initialized inside the `if required_params:` branch but referenced unconditionally by validation and tool dispatch. Tools like `list-mail-messages`, `get_events`, and `search_gmail_messages` that require no user-supplied parameters crashed before reaching the MCP server. Fix: hoisted the variable initialization above the conditional gate.
-- **Scheduler job execution no longer crashes with "Future attached to a different loop"** -- The scheduler worker thread created its own event loop, but `overlord.chat()` and its downstream I/O (asyncpg, httpx, MCP transports) are bound to the main uvicorn loop. Fix: `start()` now captures the main loop, and `_execute_due_jobs()` dispatches via `asyncio.run_coroutine_threadsafe()` so job execution runs where the formation's async resources live.
-- **Repair-tool selection no longer picks tools from unrelated MCP servers** -- The auto-discovery fallback in `_build_auto_discovery_repair_plan` scored candidates purely on verb/keyword heuristics with no server affinity. A `todo-helper-mcp__get-default-list-id` could outscore same-server mail tools when repairing a failed `ms365-mcp__list-mail-messages`. Fix: added server affinity scoring (+4 same-server, -3 cross-server).
-- **Fixed legacy table name in e2e test `test_2k1_enhanced_prompt_integration`** -- Memory verification query referenced bare `memories` table instead of `memories_1536`, causing the test to fail on all dimension-aware databases.
-
-### Tests
-
-- Regression test exercising `process_message()` with a planned MCP step using `parameters: {}` (the exact crash path).
-- Regression test verifying cross-server tool (`todo-helper-mcp`) is rejected when a same-server candidate (`ms365-mcp`) is available during repair planning.
-- 3 source-level verification tests confirming scheduler dispatches job execution to the main event loop.
+### Fixed
+- Prevent parameter-free planned MCP steps from crashing before execution.
+- Run scheduler jobs on the main async loop to avoid cross-loop failures.
+- Prefer same-server tools during repair planning and fix the legacy table name in the affected E2E test.
 
 ### Validation
-
-- Full affected unit suite: **72 passed**.
-- Scheduler e2e test (`test_12a4_verify_execution`): passed.
-- 5 random e2e regression tests: 4/5 passed (1 pre-existing DB schema issue unrelated to this release).
+- Verified with affected unit tests, scheduler E2E coverage, and random E2E sampling.
 
 ## v0.20260415.0
 
-### Runtime Fixes
-
-- **MCP default-backed required parameters no longer trigger fallback inference** -- Planning/execution now treats required params supplied by MCP server defaults as satisfiable, so runtime-injected values like `driveId` are not redundantly inferred and accidentally replaced with guessed values such as `"me"`.
-- **Named-resource hint extraction is now more general without service-specific heuristics** -- Context hint extraction now recognizes user-supplied resource references like `#social`, `@name`, quoted names, and filenames, allowing semantic record disambiguation without introducing Slack- or app-specific runtime rules.
-- **Delegated analysis prompts now carry prior tool results** -- When delegation is still necessary, the runtime appends compact summaries of successful prior tool results so downstream agents do not reason without the data already gathered and fabricate answers from missing context.
-- **Planning guidance now discourages delegating pure reasoning over locally retrieved data** -- Agents are instructed to keep arithmetic, summarization, and analysis with the current agent when its own tools can already fetch the needed data, reducing unnecessary A2A handoffs like Excel aggregation falling into the generic assistant.
-
-### Dependency Updates
-
-- **Raised `onellm[cache]` minimum version to `>=0.20260415.0`** -- Pulls in the latest OneLLM fixes required by current runtime work without changing the dependency shape.
-- **Kept `faissx` minimum version at `>=0.20260403.0`** -- Confirmed the current floor already matches the requested minimum, so no additional package change was needed.
-- **Aligned direct dependency floors with recently merged Dependabot PRs** -- Raised the minimum versions for dependencies that already had merged update PRs and are declared directly in `pyproject.toml`: `fastmcp>=3.2.0`, `pypdf>=6.10.0`, `Pillow>=12.2.0`, `aiohttp>=3.13.4`, `requests>=2.33.0`, `cryptography>=46.0.7`, `pytest>=9.0.3`, and `black>=26.3.1`.
-
-### Notes
-
-- Only direct dependencies declared in `pyproject.toml` were raised. CI-only GitHub Actions bumps and transitive-only lockfile bumps were intentionally left out.
-- Prepared as an unreleased entry so additional fixes from today can be appended before the next push/tag.
-
-## 0.20260414.0 - Result Recency Bias, Snake_case Normalization & Preventive Hardening
-
-### Bug Fixes
-
-- **Alias extraction copied `driveItemId` into `workbookWorksheetId` instead of the worksheet GUID** -- When multiple prior steps' results all contain records with an `id` field, the alias extraction iterated results in chronological order and returned the first match. In the 4-step Excel chain, the `list-folder-files` result (step 2) appeared before `list-excel-worksheets` (step 3), so the file's `driveItemId` was extracted instead of the worksheet GUID. Fix: reversed result iteration order so the most recent step's records are searched first, and relaxed the alias resolution guard to return the first (most-recent) match when multiple alias values exist.
-- **Snake_case parameter names (`channel_id`, `drive_id`) were not matched by the alias suffix list** -- The Slack MCP uses `channel_id` (snake_case), but the suffix list only matched `channelid` (camelCase lowered). The underscore prevented suffix matching, so `channel_id` was never bound from `slack_list_channels` results. Fix: normalize parameter names by stripping underscores before suffix matching (both in alias extraction, kind inference, and driveId fallback).
-
-### Preventive Hardening
-
-- **Exact-key matching in `_resolve_parameter_from_records` now normalizes underscores** -- When a record has `channel_id` as a literal key and the required param is `channelId` (or vice versa), the exact-match phase now strips underscores before comparing. Previously only the alias path was normalized, so the exact-match short-circuit was missed for cross-casing keys.
-- **`_extract_explicit_parameter_values_from_text` now matches both camelCase and snake_case forms** -- When context text contains `channel_id = C08SZKB16UF` but the schema param is `channelId`, the regex now tries both forms. Previously only the literal param name was searched, so cross-casing context lines were invisible.
-- **`_record_matches_context_hints` now checks snake_case field variants** -- Added `display_name`, `file_name`, `web_url`, `channel_name`, and `topic` to the candidate fields list. MCP servers using snake_case conventions (Slack, Jira, etc.) could have records that matched context hints but were missed because only camelCase fields were checked.
-- **`_compact_planning_record` preferred_keys expanded for snake_case MCPs** -- Added snake_case variants (`display_name`, `drive_id`, `drive_item_id`, `parent_reference`, `web_url`, `site_id`, `channel_id`, `channel_name`, `created_at`, `updated_at`) plus commonly useful fields (`position`, `visibility`, `type`, `status`, `description`, `topic`). Records from snake_case MCPs were being stripped to empty dicts during compaction, losing data needed by downstream steps.
-
-### Tests
-
-- **Most-recent-step preference** -- Test confirming that when both a file record (step 2) and a worksheet record (step 3) have `id` fields, the worksheet GUID from the more recent step is extracted for `workbookWorksheetId`.
-- **Snake_case alias matching** -- Test confirming `channel_id` (snake_case) extracts the channel ID from a Slack channel record.
-- **Exact-key normalization** -- 3 tests: `channel_id` record key matches `channelId` param, `channelId` record key matches `channel_id` param, `drive_item_id` record key matches `driveItemId` param.
-- **Explicit text cross-casing** -- 2 tests: `channel_id = X` in text resolves `channelId` param, and `channelId = X` in text resolves `channel_id` param.
-- **Context hints snake_case fields** -- 2 tests: records with `display_name` and `channel_name` fields are matched by context hints.
-- **Compact record preservation** -- Test confirming snake_case keys (`display_name`, `channel_id`, `channel_name`, `position`, `visibility`, `type`, `status`, `description`) are retained while unknown keys are dropped.
-- **Full snake_case MCP resolution** -- Integration test feeding a Slack `channels` result with snake_case keys and verifying `channel_id` is correctly bound.
-
-### Validation
-
-- Full unit suite: **456 passed**, 27 skipped.
-- mypy/Black clean.
-- 5 random e2e regression tests passed (API streaming, foundation loading, artifacts, knowledge isolation, orchestration SOP).
-
-## 0.20260413.1 - Worksheet & Entity ID Binding from Prior Tool Results
-
-### Bug Fixes
-
-- **`workbookWorksheetId` and other entity GUIDs could not be extracted from prior tool results** -- The alias extraction helper that maps a record's `id` field to downstream parameters only recognized 9 entity suffixes (`itemid`, `fileid`, `folderid`, etc). Parameters ending in `worksheetid`, `channelid`, `planid`, `teamid`, and other common MS365 Graph entity patterns were not covered. This caused the 4-step Excel read chain (get-drive-root-item, list-folder-files, list-excel-worksheets, get-excel-range) to succeed through step 3 but fail at step 4 because `workbookWorksheetId` was never bound. Fix: added `worksheetid`, `sheetid`, `notebookid`, `sectionid`, `pageid`, `channelid`, `teamid`, `planid`, `listid`, `eventid`, and `contactid` to the alias suffix list.
-- **Real GUIDs in braces were rejected as unresolved placeholders** -- The placeholder detection pattern `^\{[A-Z0-9...]*\}$` matched real worksheet GUIDs like `{4C35B2DD-58DF-4BDB-B806-E0421A3D5456}` because they are uppercase hex in braces. The value was discarded by `_is_nonempty_parameter_candidate`, preventing it from being used as a resolved parameter even after correct extraction. Fix: added an early exemption for GUID-format strings (`{8-4-4-4-12}` hex pattern) before the placeholder patterns are checked.
-- **JSON string values in the `result` field were not parsed for record extraction** -- When a tool result arrived as `{"result": "{\"value\": [...]}", "status": "success"}`, the extraction function returned the raw JSON string without parsing. `_iter_result_records` cannot iterate strings, so zero records were found and no identifiers were extracted for downstream steps. This is the same class of bug fixed in v0.20260410.0 for the `content` field (modern MCP protocol), now also fixed for the `result` field path. Fix: added `_parse_json_like_text()` call for string-typed `result` values.
-
-### Tests
-
-- **Entity ID alias extraction coverage** -- Added tests for `workbookWorksheetId`, `planId`, and `channelId` alias extraction from records, plus a full `_resolve_parameters_from_context` integration test that feeds a `list-excel-worksheets` JSON string result and verifies `workbookWorksheetId` is bound correctly.
-- **GUID placeholder exemption coverage** -- Added tests verifying real GUIDs in braces are not treated as placeholders, planning placeholder patterns are still detected, and `_is_nonempty_parameter_candidate` accepts GUIDs but rejects placeholders.
-- **Result-field string parsing coverage** -- Added tests for `_extract_structured_planning_result_payload` handling JSON object strings, JSON array strings, and plain text strings in the `result` field.
-- **Validation sweep** -- Full unit suite passed (`445 passed, 27 skipped`). 10 random e2e regression tests passed across triggers, multi-identity, API, skills, memory, multimodal, orchestration, and clarification.
-
-## 0.20260413.0 - Planning JSON Robustness & Truncation Fix
-
-### Bug Fixes
-
-- **Planning JSON parser failed when the LLM returned prose before the JSON block** -- Some models (notably `claude-sonnet-4-20250514`) emit a natural-language preamble before the JSON execution plan, sometimes wrapped in a markdown code fence that does not start at character 0. The parser only handled the case where the response began with `` ``` ``, so the full prose+JSON string was passed to `json.loads()`, which failed at char 0. The entire planning phase was abandoned and the request fell through to A2A delegation, where an agent without the right tools fabricated responses from training data. Fix: planning JSON extraction now uses a three-stage approach -- direct parse, regex extraction of code-fenced JSON anywhere in the response, then brace-matched search for the outermost `{...}` containing `"steps"`.
-- **Multi-step plans were silently truncated on formations with many tools** -- The planning LLM call did not set `max_tokens`, inheriting the Anthropic API default (4096). Formations with 100+ MCP tools produce planning prompts where a 4-step plan (e.g., get-drive-root-item, list-folder-files, list-excel-worksheets, get-excel-range) exceeds that cap. The model stopped generating mid-JSON, producing an unterminated string error at ~3000 characters. The agent fell back to delegation, which could not fulfill the request. Fix: the planning call now sets `max_tokens=16384` explicitly, which is the maximum output supported by current Anthropic models and 4-5x larger than any realistic multi-step plan.
-
-### Tests
-
-- **Planning JSON extraction coverage** -- Added 3 tests to `tests/unit/test_agent_planning_helpers.py` covering: prose preamble with code-fenced JSON, bare JSON preceded by prose text, and verification that `max_tokens=16384` is passed to the planning LLM call.
-- **Validation sweep** -- Full unit suite passed (`435 passed, 27 skipped`) along with Black and mypy checks on touched files.
-
-## 0.20260410.0 - MCP Default Parameters, Deterministic Planned-Step Binding & Result Extraction
-
-### New Features
-
-- **MCP server `parameters` field for infrastructure constants** -- MCP server declarations (formation-level and agent-level) now support a `parameters` field: a flat dictionary of default tool arguments that the runtime auto-injects into every tool call for that server. This removes the need for the LLM planner to discover or infer fixed org-level values like `driveId`, `siteId`, or `tenantId`. Parameters support `${{ user.credentials.X }}` placeholder resolution at call time and are validated as flat dicts with scalar values. Tool-call-supplied arguments take precedence over defaults.
-
-### Bug Fixes
-
-- **Planned tool execution could bind required parameters from polluted enhanced prompts instead of the current request** -- Planning already used the extracted current request plus explicit `[Context: ...]` lines, but execution-time parameter resolution still scanned the broader enhanced prompt and could pick up stale values from memory/profile/conversation sections. Fix: planned-step execution now resolves parameters from the clean current request/context, successful prior results, and active runtime skill context instead of the full enhanced prompt blob.
-- **Placeholder values could still leak into local planned tool calls** -- Local `my_steps` did not have a deterministic placeholder substitution pass, and strings like `{{ROOT_FOLDER_ID}}` or `<<ID>>` could still be treated as resolved required values. Fix: placeholder-shaped values are now considered unresolved, local planned steps substitute placeholder params from prior successful results before execution, and unresolved placeholders block tool calls safely.
-- **Failed prior steps could contaminate downstream parameter reuse and inference** -- Parameter extraction and compact inference context considered all prior results, including handled error payloads. Fix: only successful prior tool/skill results are now eligible for placeholder substitution, structured record extraction, and inference context construction.
-- **LLM could fabricate ID-typed parameters not found in any prior result** -- When inferring parameters for multi-step tool chains, the LLM could hallucinate plausible-looking IDs (e.g., a driveItemId) that did not appear in any successful prior result. These fabricated IDs would reach the MCP server and produce confusing errors. Fix: added `_validate_inferred_parameters_against_results()` which checks LLM-inferred ID-typed params against successful result records using `_record_matches_expected_kind()` and rejects values not found in discovered records.
-- **Structured MCP result extraction failed for modern protocol string content** -- `ModernProtocolFeatures.process_structured_output()` flattens content blocks into a single JSON string, but `_extract_structured_planning_result_payload()` only handled `list`-typed content. String content was wrapped in a dict with no useful records, preventing downstream steps from extracting identifiers like `driveItemId` from prior successful tool calls. Fix: when content is a string, attempt `json.loads()` before returning so JSON payloads from modern MCP protocol are properly parsed for record extraction.
-- **Agent-level MCP registration did not pass `parameters` to service** -- The overlord's `_register_agent_mcp_servers()` path did not forward the `parameters` kwarg, so MCP servers declared at agent level (common in formations like Spark) had empty defaults despite being configured. Fix: added parameters pass-through in both the formation-level and agent-level registration paths.
-- **Activated skills could guide planning but not contribute machine-usable runtime context** -- Skill activation only appended prompt instructions, so formations had no generic way to register runtime-only structured facts for later tool execution. Fix: skills now support `execution_context` in frontmatter, the runtime resolves secret-backed values without injecting them into the prompt body, and active skill execution context is stored per `(agent_id, session_id)` for deterministic parameter binding.
-- **`run_skill` results were not first-class structured inputs for later planned steps** -- Skill execution returned stdout text only, forcing downstream chaining to rely on prompt reconstruction. Fix: when skill stdout is valid JSON, `run_skill` now exposes it as `structuredContent`, and planning/execution result extraction consumes that structured payload like any other successful tool result.
-
-### Tests
-
-- **MCP default parameters unit coverage** -- Added `tests/unit/test_mcp_default_parameters.py` with 10 tests covering: parameter injection during tool invocation, tool-call args taking precedence over defaults, `${{ user.credentials.X }}` placeholder resolution, validation of flat/scalar-only dicts, and formation/agent-level registration pass-through.
-- **Post-inference validation coverage** -- Extended `tests/unit/test_agent_planning_helpers.py` with tests for ID-typed parameter validation against successful result records, rejection of fabricated IDs, and pass-through of IDs that match discovered records.
-- **Expanded planned-step and skills regression coverage** -- Extended `tests/unit/test_agent_planning_helpers.py`, `tests/unit/skills/test_skills.py`, and `tests/unit/skills/test_skill_secrets.py`, and added `tests/unit/skills/test_skill_dispatch.py` to cover clean execution binding, placeholder rejection/substitution, failed-result exclusion, runtime skill execution context, and structured `run_skill` stdout chaining.
-- **Validation sweep** -- Full unit suite passed (`432 passed, 27 skipped`) along with focused mypy, Ruff, and Black checks on all touched files.
-- **Live formation validation** -- End-to-end tested against Spark Enterprise formation (MS365 + Sonnet 4.5 and Opus 4) confirming: `driveId` injected from MCP defaults, `driveItemId` extracted from prior step results, full 3-step tool chain executes deterministically, honest failure when target file not found. Both models produce identical behavior.
-
-## 0.20260409.4 - Recover Workbook Identifiers from Prior MCP Results
-
-### Bug Fixes
-
-- **Multi-step MS365/Excel workflows could still lose the named workbook identifier after earlier lookup steps** -- When prior MCP calls returned large payloads, repair planning could latch onto a parent/root record or an overly broad summary instead of the workbook itself. Fix: extract matching structured records from prior results, preserve the relevant workbook entry in planning context, and deterministically reuse identifiers such as `driveItemId` for downstream Excel calls.
-- **Repair planning could still reject the right fix when it stayed on the same tool chain** -- If the best recovery was to keep the same final tool but add a missing discovery step first, the runtime could treat the repaired plan as unchanged and stop. Fix: compare repaired plans more carefully, accept meaningful same-tool-chain repairs, and auto-insert a missing lookup step when replanning still skips it.
-
-### Tests
-
-- **Expanded planning helper regression coverage** -- Extended `tests/unit/test_agent_planning_helpers.py` to verify workbook identifier recovery from large prior MCP payloads, acceptance of meaningful same-tool-chain repairs, and automatic discovery-step insertion for missing Excel/MS365 identifiers.
-- **Random e2e regression sniff tests** -- Ran 5 random standalone e2e tests before release confidence checking, with all 5 passing across `multimodal`, `knowledge`, `orchestration`, and `clarification`.
-
-## 0.20260409.3 - Prefer Local Tools Over Self-Delegation
-
-### Bug Fixes
-
-- **Agents could delegate a tool step back to themselves instead of executing it locally** -- In some multi-step MS365/Excel workflows, the planner marked a step like `list-excel-worksheets` as `can_i_do_this: false` even though that tool was already in the current agent's own toolset. The runtime trusted that flag, converted the step into a delegated handoff, and triggered the A2A loop detector instead of letting the local repair-planning path build the required discovery chain. Fix: normalize any step whose tool is already present in the current agent's available tool list to `can_i_do_this: true`, keep it in `my_steps`, and prevent self-delegation.
-
-### Tests
-
-- **Focused planning helper coverage** -- Extended `tests/unit/test_agent_planning_helpers.py` to verify that locally available tools are always kept as local execution steps even when the planner initially marks them as non-executable.
-
-## 0.20260409.2 - Repair Planning for Missing Tool Identifiers
-
-### Bug Fixes
-
-- **Sequential MCP workflows could still stop after the first missing identifier** -- The earlier guardrail correctly refused to call tools with unresolved required parameters such as `driveItemId`, but execution still stopped at that point because the runtime had no way to repair a bad one-step plan into the required discovery chain. Fix: add a single repair-planning pass that feeds the failed tool, missing parameters, current tool chain, and any prior tool results back into the planner so it can insert prerequisite lookup steps before retrying the workflow.
-- **The planner did not get enough schema signal to choose discovery chains reliably** -- Planning context mostly exposed tool names and short descriptions, which made it too easy for the LLM to choose tools like `list-excel-worksheets` without realizing they require identifiers from earlier lookup steps. Fix: include each tool's required parameter names in the planning prompt so the planner can better infer when a prerequisite discovery step is needed.
-- **Planner-supplied parameters could be dropped before execution** -- `_finalize_execution_plan()` rebuilt `my_steps` from `steps` but discarded explicit parameters from the plan, forcing later inference even when the planner had already provided useful arguments such as `driveId` or `searchQuery`. Fix: preserve planner-supplied parameters when normalizing `my_steps`.
-
-### Tests
-
-- **Focused planning helper coverage** -- Extended `tests/unit/test_agent_planning_helpers.py` to verify planner-supplied parameters are preserved, required params are surfaced in the planning prompt, and repair-planning is triggered when execution discovers a missing identifier.
-- **Random e2e regression sniff tests** -- Ran 5 random standalone e2e tests before release confidence checking, with all 5 passing.
-
-## 0.20260409.1 - Planner Guardrails for Identifier Discovery & Tool Error Reporting
-
-### Bug Fixes
-
-- **Planning could still invent or accept unresolved required identifiers** -- When a tool required a concrete ID such as a drive item, the planner could still accept blank/default values from LLM parameter inference or skip directly to the action step without a real lookup. Fix: teach planning prompts to require identifier-discovery steps, reject unresolved required parameter values during inference, and surface an explicit planning error when required tool inputs cannot be determined.
-- **Handled MCP/tool failures could still look like successful execution in observability** -- Some tool calls returned structured error payloads instead of raising exceptions, but the agent still emitted success-shaped completion events for those results. Fix: detect error-shaped tool payloads consistently in both direct tool invocation and planning execution, record them as failures in observability, and avoid treating those planned steps as successful completions.
-
-### Tests
-
-- **Focused planning helper regression coverage** -- Extended `tests/unit/test_agent_planning_helpers.py` to verify blank required string parameters are rejected, MCP error payloads are detected correctly, and tool-call completion events report `success=False` when the underlying tool returns an error result.
-- **Random e2e regression sniff tests** -- Ran 5 random standalone e2e tests before release confidence checking, with all 5 passing across `memory`, `mcp`, `artifacts`, `knowledge`, and `clarification`.
-
-## 0.20260409.0 - Faster Persistent Memory Recall & Profile Lookups
-
-### Bug Fixes
-
-- **Profile and memory recall could be slower than necessary** -- Requests that searched across multiple memory collections could recompute the same embedding and fan out into extra lookups, adding avoidable latency before context was assembled. Fix: persistent memory search now uses a single multi-collection query where supported and otherwise reuses one query embedding across fallback searches.
-- **Broad profile questions could miss the fastest available path** -- Requests like “what do you know about me?” could jump into heavier semantic recall even when recent profile facts or cached synopsis data were already enough. Fix: restore lightweight user-scoped reads for synopsis/profile data and surface recent profile facts before broader semantic search.
-- **Large PostgreSQL-backed memory stores could degrade more than necessary** -- Persistent memory tables were missing cheap lookup and vector index paths as data grew. Fix: add best-effort PostgreSQL indexes for user/collection filtering and semantic search, while keeping index creation failures non-fatal and warning-only.
-
-### Tests
-
-- **Focused memory performance coverage** -- Added unit coverage for multi-collection ranking and top-k stability, profile fast-path behavior, and non-fatal PostgreSQL index creation handling.
-- **Live validation** -- Full unit suite and targeted memory end-to-end tests passed, and a 5,000-row benchmark user confirmed faster unified semantic recall and cheap profile lookups.
-- **Random e2e regression sniff tests** -- Ran 10 random standalone e2e tests before release confidence checking, with all 10 passing across `foundation`, `memory`, `multimodal`, `orchestration`, `clarification`, `scheduling`, `api`, and `skills`.
-
-## 0.20260408.2 - Chat SSE Keepalive During Slow Setup
-
-### Bug Fixes
-
-- **Successful chat requests could still time out at the client before any response bytes arrived** -- `/v1/chat` and `/v1/audiochat` awaited `overlord.chat()` / `overlord.audiochat()` before yielding the first SSE chunk. Slow pre-stream work (user resolution, memory/context enhancement, embedding warm-up, routing, and tool setup) and long gaps between streamed items could leave the HTTP connection idle long enough for clients or proxies to time out even though the backend request eventually succeeded. Fix: wrap streaming responses in a keepalive generator that emits immediate and periodic SSE comment frames during stream setup and between token gaps, while preserving the existing `token` and `done` event contract.
-
-### Tests
-
-- **Focused keepalive coverage for streaming chat endpoints** -- Added `tests/unit/test_chat_sse_keepalive.py` to verify keepalive emission during slow stream setup and delayed token gaps, and reran `e2e/tests/19_api/test_19e1_chat_streaming.py` to confirm `/v1/chat` still streams correctly end-to-end.
-
-## 0.20260408.1 - Specialist Routing Follow-through & Direct Response Date Preservation
-
-### Bug Fixes
-
-- **Broad user-defined assistants could still absorb specialist service requests** -- The first routing guardrail only corrected LLM selections when the chosen agent was literally `muxi-generalist`. Formations that used a developer-defined broad agent such as `assistant` could still route ambiguous MS365 requests like "What is my current user profile?" away from the specialist. Fix: generalize the post-LLM override to any non-specialist agent and score specialist agents using agent-specific MCP tool names and descriptions in addition to their routing metadata.
-- **Delegated A2A specialists could still skip MCP planning** -- When a broad agent delegated work to a specialist, the specialist received `is_a2a_task=True` and bypassed planning entirely, which meant it could answer from model prior instead of invoking the specialist MCP tools. Fix: only bypass planning for A2A tasks when no tools are available; when tools exist, plan normally but disable any further delegation and strip `delegate_steps` deterministically.
-- **Direct planning responses could still rewrite exact service dates** -- The previous date-preservation fix covered workflow synthesis, but direct planning-based agent responses still assembled tool results without a final guardrailed synthesis step. Fix: add an agent-side planning-response synthesis prompt that preserves exact dates, weekdays, times, and ranges from tool results.
-- **Modern MCP structured output could lose canonical timestamp fields** -- `process_structured_output()` flattened modern MCP responses into plain text and could discard `structuredContent`, removing machine-readable fields such as exact received timestamps before final response synthesis. Fix: preserve `structured_content` in processed MCP results and join all text blocks instead of keeping only the first one.
-
-### Tests
-
-- **Focused unit coverage for routing, delegated A2A planning, and MCP structured output preservation** -- Added `tests/unit/test_agent_planning_helpers.py` and `tests/unit/test_mcp_protocol_features.py`, and extended `tests/unit/test_agent_router.py` to verify tool-aware specialist overrides, deterministic delegate-step stripping when delegation is disabled, planning-response date guardrails, and preservation of structured MCP content.
-- **Random e2e regression sniff tests** -- Ran 5 random standalone e2e tests before release confidence checking, with all 5 passing.
-
-## 0.20260408.0 - Routing Follow-through & Date-Preservation Hardening
-
-### Bug Fixes
-
-- **`muxi-generalist` could still win despite a clearly better domain match** -- Even after the earlier routing metadata improvements, the LLM router could still return `muxi-generalist` for requests that strongly matched a developer-supplied agent such as an MS365/profile assistant. Fix: keep normal LLM routing, but when the LLM selects `muxi-generalist`, run a lightweight deterministic overlap check across the other available agents and override the result only when a non-`muxi-generalist` agent is a clearly stronger match.
-- **Routing heuristic was harder to audit than necessary** -- The fallback scoring logic mixed several weighting rules without explaining why each existed, which made future tuning riskier. Fix: factor the scoring into `_score_available_agents()`, document the scoring rules, add inline comments for each signal, and update the routing prompt to explicitly state that `muxi-generalist` should be used only as a fallback when no other available agent is a strong match.
-- **User-defined broad assistants could still absorb specialist requests** -- The first routing guardrail only corrected LLM selections when the chosen agent was literally `muxi-generalist`. Formations that used a developer-defined broad agent like `assistant` still routed ambiguous MS365 requests (for example "What is my current user profile?") to the wrong agent. Fix: generalize the post-LLM override to any non-specialist agent and enrich routing metadata with agent-specific MCP tool names/descriptions so specialist tool intent can win even when the user omits explicit service keywords.
-- **Workflow synthesis could rewrite exact email/calendar dates into relative labels** -- Final workflow synthesis and synthesis-task prompts told the LLM to be coherent and concise, but gave no instruction to preserve absolute dates and times from prior task results. This allowed models to rewrite concrete values like `Tuesday, April 7, 2026` into relative language such as `today`, which is especially dangerous for briefings, emails, and calendar summaries. Fix: add explicit date-preservation guardrails to both the workflow synthesis prompt and workflow task prompt so absolute dates, weekdays, times, and ranges are kept exactly as written unless the source data already uses relative wording.
-- **Delegated A2A tasks could still skip tool planning** -- When a broad agent delegated work to a specialist, the specialist received `is_a2a_task=True` and bypassed planning entirely, which meant it never invoked MCP tools even when it had the right tools to answer the request. Fix: only bypass planning for A2A tasks when no tools are available; when tools exist, plan normally but disable any further delegation and strip `delegate_steps` deterministically.
-- **Planning-based direct responses could still lose exact timestamps** -- Yesterday's date-preservation fix covered workflow synthesis, but direct agent planning responses still assembled raw tool results without a final guardrailed synthesis step. Fix: add an agent-side planning-response synthesis prompt that preserves exact dates/times and uses structured MCP results as source material.
-- **Modern MCP structured output discarded machine-readable fields** -- `process_structured_output()` flattened MCP responses down to a text string and dropped `structuredContent`, which could remove exact timestamps and other canonical data before the final response was written. Fix: preserve `structured_content` in processed MCP results and join all content text blocks instead of keeping only the first one.
-
-### Tests
-
-- **Focused unit coverage for `muxi-generalist` override behavior** -- Extended `tests/unit/test_agent_router.py` to verify that `muxi-generalist` is overridden for a strong MS365/profile request but retained for broad requests like "Tell me a joke".
-- **Focused unit coverage for tool-aware specialist overrides** -- Extended `tests/unit/test_agent_router.py` to verify that a user-defined broad `assistant` is overridden when specialist MCP tool hints make the domain match clear.
-- **Focused unit coverage for delegated A2A planning guardrails** -- Added `tests/unit/test_agent_planning_helpers.py` covering: A2A planning bypass only when no tools exist, planning-response synthesis prompts preserving exact dates, and deterministic stripping of `delegate_steps` when delegation is disabled.
-- **Focused unit coverage for MCP structured output preservation** -- Added `tests/unit/test_mcp_protocol_features.py` to verify that `structuredContent` and all text blocks are preserved in processed MCP results.
-- **Focused unit coverage for date-preservation prompt guardrails** -- Added `tests/unit/test_workflow_date_preservation_prompts.py` to verify that workflow synthesis and synthesis-task prompts explicitly preserve absolute dates/times and keep prior-step date strings intact.
-- **Random e2e regression sniff tests** -- Ran 25 random standalone e2e tests across routing-adjacent and unrelated areas (`topic_tagging`, `api`, `skills`, `mcp`, `knowledge`, `memory`, `clarification`, `async`, `formatting`, `streaming`, `multimodal`, `triggers`, and `artifacts`) with all tests passing.
-
-## 0.20260407.0 - Specialist Routing & HTTP MCP Request Lifecycle Hardening
-
-### Bug Fixes
-
-- **Specialist agent metadata was ignored during Overlord routing** -- The routing prompt and fallback heuristic only considered `agent_id` and `description`, even though the overlord had already loaded richer metadata such as `role`, `specialties`, and nested `specialization.*`. This caused specialist agents (for example MS365-focused agents) to lose ambiguous domain requests to the default generalist unless the user's wording was extremely explicit. Fix: normalize `specialization.domain` and `specialization.keywords` into routing metadata at load time, surface `role`, `specialties`, specialization domain, and specialization keywords in the routing prompt, and teach the heuristic fallback to prefer specialists when metadata overlaps the request.
-- **Routing cache leaked agent choices across sessions** -- `AgentRouter` cached decisions by raw message string only. Short follow-up turns like `"yes"` or `"continue"` could reuse a routing decision from a different session, overriding the intended session context. Fix: cache keys are now built from `(session_id, normalized_message)` and follow-up routing uses the last agent only within the same session.
-- **Current-request extraction dropped multiline context before routing** -- When the enhanced prompt contained `=== CURRENT REQUEST ===`, the overlord only extracted the first `User:` line for routing. Additional lines that clarified the domain could be silently discarded before agent selection. Fix: the router now preserves the full current-request block until the next section marker.
-- **HTTP MCP tool calls ignored per-request timeouts** -- `StreamableHTTPTransport` and `HTTPSSETransport` enforced timeouts during connect/init, but raw `session.call_tool()`, `list_tools()`, `list_resources()`, and `list_prompts()` calls were not wrapped with `asyncio.wait_for()`. HTTP requests could therefore outlive the configured timeout and stall for minutes. Fix: both HTTP transports now enforce `timeout or self.request_timeout` around every MCP SDK operation.
-- **HTTP SSE transport hardcoded multi-minute read timeouts** -- The SSE transport used `timeout=60` and `sse_read_timeout=300` regardless of the configured request timeout, creating a large mismatch between formation config and actual behavior. Fix: connect/init now use the configured timeout and the SSE read timeout is derived from that request timeout instead of a fixed 5-minute value.
-- **Live MCP reconnects ignored explicit transport type** -- MCP registration stored the resolved/configured `transport_type`, but live reconnects always went back through auto/fallback transport selection. This could re-enter streamable-vs-SSE detection on every reconnect even when the formation had already chosen a transport. Fix: `MCPServerClient` now preserves explicit transport type during reconnects and the factory respects explicit `streamable_http` / `http_sse` requests directly.
-- **Client disconnects left poisoned pooled HTTP MCP connections behind** -- When a streaming chat disconnected, the outer SSE response was cancelled but the underlying MCP request was not tied to the overlord request lifecycle. A long-running HTTP MCP call could remain alive on a pooled connection and wedge later requests behind the same stale session or per-server lock. Fix: thread `request_id` and `CancellationToken` through the MCP service/handler path, add `MCPService.cancel_requests_for_request()`, close bad pooled live connections on cancellation, and invoke that cleanup from the chat stream generator's disconnect path.
-
-### Tests
-
-- **Focused routing and HTTP MCP lifecycle unit coverage** -- Added `tests/unit/test_agent_router.py` to cover specialist metadata in routing prompts, session-scoped cache behavior, and specialist fallback preference. Added `tests/unit/test_mcp_http_request_lifecycle.py` to cover HTTP transport timeout enforcement, explicit transport-type reconnects, request tracking propagation, and pooled-connection cancellation cleanup.
-
-## 0.20260403.0 - MCP Accept Header & Agent Context Fixes
+### Changed
+- Treat MCP default-backed required parameters as satisfiable so runtime defaults are not overwritten by inference.
+- Generalize named-resource hint extraction and include prior tool results in delegated analysis prompts.
+- Discourage delegating pure reasoning when the current agent already has the required data.
 
 ### Dependencies
+- Raise `onellm[cache]` to `>=0.20260415.0` and align direct dependency floors with merged updates in `pyproject.toml`.
 
-- **Bump faissx to >= 0.20260403.0** -- This version includes improved data persistence between restarts, ensuring vector store state survives formation restarts without data loss.
+## v0.20260414.0
 
-### Bug Fixes
+### Fixed
+- Prefer the most recent matching prior result when extracting IDs for downstream steps.
+- Normalize snake_case and camelCase fields across alias extraction, text extraction, context hints, and planning-record compaction.
 
-- **Strict MCP servers reject transport detection with 406 Not Acceptable** -- FastMCP and other strict HTTP MCP servers enforce content negotiation and reject requests with the default `Accept: */*` header, returning a `406 Not Acceptable` with `"Client must accept application/json"`. The transport detector's ping request used aiohttp's default headers, so these servers were never recognised as reachable endpoints. Fix: the detector now sends `Accept: application/json, text/event-stream, */*` explicitly, satisfying both strict JSON-only servers and streaming SSE servers. Credit: community contribution (PR #139).
+### Validation
+- Verified with focused regression coverage, the full unit suite, and random E2E sampling.
 
-## 0.20260402.0 - Workflow Tool-Call Reliability & Date Awareness
+## v0.20260413.1
 
-### Bug Fixes
+### Fixed
+- Expand entity-ID alias coverage so identifiers like `workbookWorksheetId`, `planId`, and `channelId` bind correctly from prior results.
+- Stop treating real brace-wrapped GUIDs as unresolved placeholders.
+- Parse JSON strings in the `result` field before attempting record extraction.
 
-- **Workflow tasks inherit full conversation history, causing tool call simulation** -- Agents are long-lived and accumulate conversation history across direct-chat and workflow executions. When a workflow task was dispatched, the agent called `chat_with_tools` with the entire accumulated `self._messages` history — including prior sessions where MCP tools had been called. The LLM, seeing that history, would reproduce prior tool call shapes as XML text content (e.g. `<ms365_list_todo_tasks>`) rather than issuing fresh structured API function calls against the registered tool schemas. The MUXI tool loop only handles structured API tool calls; XML in text content is treated as the response and passed to downstream steps as data. Fix: when `is_workflow_task` is True, the initial `chat_with_tools` call uses an isolated context of [system message(s) + current task prompt only]. Subsequent calls within the tool loop still receive the full working context so real tool results flow correctly between iterations.
-- **LLM uses training-data date instead of system date** -- The model consistently computed "today" as an incorrect historical date regardless of the actual system date, because no temporal context was present in the agent's context. Fix: the system message is now prepended with `It is now <weekday, Month DD, YYYY HH:MM (TZ)>.` on every `process_message` call. The prefix is replaced fresh each request so long-running agents never serve a stale date. Applies to direct chat, workflow tasks, and A2A calls alike.
-- **Tool name observability missing for workflow task LLM calls** -- When tools were passed to `chat_with_tools`, no log entry confirmed which tool names actually reached the LLM. Fix: a DEBUG-level observability event now logs `tool_count` and `tool_names` immediately before each `chat_with_tools` call, visible in server logs when `log_level: debug` is set.
+### Validation
+- Verified with focused regression tests, the full unit suite, and a random E2E sweep.
 
-## 0.20260401.1 - SOP Workflow: Synthesis Bypass Fix & Hallucination Guard
+## v0.20260413.0
 
-### Bug Fixes
+### Fixed
+- Make planning JSON extraction robust to prose and code fences before the JSON block.
+- Increase planning `max_tokens` to avoid silent truncation of larger multi-step plans.
 
-- **`synthesis: false` returns raw metadata dict instead of response text** -- When a SOP declares `synthesis: false`, the overlord skips the LLM synthesis pass and returns the last successful task's output directly. The extraction path called `raw_output.get("content", str(raw_output))`, but `_parse_task_response` wraps agent output under `{"main": {"result": "...", ...}}`. The fallback `str(raw_output)` serialised the entire nested dict, producing a JSON blob instead of the actual response. Fix: the extraction now checks `raw_output["main"]["result"]` first, then `raw_output.get("content")`, then falls back to `str(raw_output)`.
-- **Directive tags leak into task description for heading-format SOPs** -- The deterministic SOP parser correctly stripped `[agent:name]`, `[mcp:tool]`, `[parallel]` etc. from step body text, but not from the heading title (e.g. `### Step 1: Fetch calendar events [agent:ms365-assistant] [parallel]`). The full heading text — including all directive brackets — was included verbatim in the task description passed to the agent. Fix: the heading extractor now strips directive tags from `step_title` before constructing `full_desc`, matching the behaviour of the numbered-list extractor.
-- **Workflow task agents generate pseudo-XML tool calls instead of real calls** -- When executing a workflow task, some models recognise the task description as mapping to known MCP/tool patterns and generate `<use_mcp_tool>` XML output in the response text rather than issuing a structured API tool call. The MUXI tool loop only handles structured function calls from the LLM API; XML in the response text is treated as the task result and passed to downstream steps as data, causing downstream agents to receive fabricated XML as "prior step results". Fix: `_create_task_prompt` now appends an explicit instruction to use available tools directly and not simulate, fabricate, or generate pseudo-tool-call XML.
-- **Workflow tasks inherit full conversation history, causing tool call simulation** -- Agents are long-lived and accumulate conversation history across direct-chat and workflow executions. When a workflow task was dispatched, the agent called `chat_with_tools` with the entire accumulated `self._messages` history — including prior sessions where ms365 or other MCP tools were actually called. Claude Sonnet, seeing this history, would "continue the pattern" by generating `<ms365_list_todo_tasks>` XML in text content (matching prior tool call shapes from training data) rather than issuing a fresh structured API function call against the registered tool schemas. Fix: when `is_workflow_task` is True, the initial `chat_with_tools` call uses an isolated context of [system message(s) + current task prompt only]. Subsequent calls in the tool loop still use `self._messages` so real tool results flow correctly between iterations.
-- **LLM uses training-data date instead of system date** -- The model consistently computed "today" as 2025-01-10 (approximate training cutoff) regardless of the actual system date, because no date context was present in the agent's context. Fix: the system message is now prepended with `It is now <weekday, Month DD, YYYY HH:MM>.` on every `process_message` call. The prefix is replaced fresh each request so long-running agents never serve a stale date. Applies to direct chat, workflow tasks, and A2A calls alike.
-- **Tool name observability missing for workflow task LLM calls** -- When tools were passed to `chat_with_tools`, there was no log entry showing which tool names reached the LLM. Debugging the hallucination required log correlation across multiple events. Fix: a DEBUG-level observability event now logs `tool_count` and `tool_names` immediately before each `chat_with_tools` call, visible in server logs when `log_level: debug` is set.
+### Validation
+- Verified with focused parser coverage, the full unit suite, and formatting/type checks.
 
-## 0.20260401.0 - Skill Secrets, SOP Synthesis Fix & Workflow Data Flow
+## v0.20260410.0
 
-### New Features
+### Added
+- Support MCP server-level default `parameters` for infrastructure constants.
+- Add skill `execution_context` support and structured `run_skill` outputs for later planned-step chaining.
 
-- **`${{ secrets.X }}` interpolation in skill instructions** -- Skills can now reference formation secrets directly in their `SKILL.md` body using the same syntax used everywhere else in MUXI. The runtime scans all skill files (`SKILL.md`, `scripts/`, `references/`, `assets/`) for secret references at load time, stores the list in `SkillMetadata.required_secrets`, and interpolates them before injecting the skill body into the agent's context on activation. Missing secrets are logged as warnings at startup without blocking formation load.
-- **Secret env injection for bundled skill scripts** -- Scripts inside a skill's `scripts/` directory cannot use `${{ }}` syntax directly (they are executed as regular programs). Instead, the runtime resolves the skill's required secrets and passes them as environment variables to the RCE subprocess via the existing `env` field on `POST /skill/{id}/run`. Keys map directly from secret name to env var name (`${{ secrets.NOTION_KEY }}` → `NOTION_KEY`). Secrets are passed only to the subprocess environment -- they are never written to disk, never cached by the RCE service, and are gone when the process exits.
+### Fixed
+- Bind planned-step parameters from the current request, successful prior results, and runtime skill context instead of polluted prompt text.
+- Reject placeholder-shaped values and fabricated inferred identifiers before local MCP execution.
+- Parse structured MCP results more reliably and pass agent-level MCP defaults through registration.
 
-  > [!WARNING]
-  > **Skills RCE must not be publicly exposed if passing variables dynamically** -- Because the `env` field on execution requests carries plaintext secret values, the HTTP channel between the runtime and `skills-rce` is only safe within a trusted network boundary (same host, Docker network, or private network - which is how the MUXI Server is using it). This restriction is now documented in the skills-rce README and in the skills concept docs.
+### Validation
+- Verified with focused unit coverage, the full unit suite, and live formation validation.
 
-### Tests
+## v0.20260409.4
 
-- **29 new unit tests for skill secrets** -- Added `tests/unit/skills/test_skill_secrets.py` covering: `scan_secret_refs()` (various patterns, nested directories, deduplication, whitespace tolerance, uppercase normalization), `required_secrets` populated on `SkillMetadata` after parse, `activate_async()` with and without a secrets manager, `validate_secrets()` (all present / some missing / no manager), `resolve_skill_env()` (full resolution / missing secrets omitted / no manager), and `set_secrets_manager()` late binding.
-- **E2E test for secret injection via RCE** -- Added `e2e/tests/21_skills/test_21c3_skill_secrets_env.py`. Verifies: `required_secrets` is populated at parse time; `activate_async()` resolves `${{ secrets.SKILL_TEST_GREETING }}` to its actual value in the injected content; `resolve_skill_env()` builds the correct env map; the RCE subprocess receives the secret as an environment variable and the script outputs the expected value; the script fails without the env injection (proving injection is the mechanism).
+### Fixed
+- Recover workbook identifiers more reliably from large prior MCP results.
+- Accept meaningful same-tool-chain repairs and auto-insert missing discovery steps when needed.
 
-### Bug Fixes
+### Validation
+- Verified with focused planning-helper tests and random E2E sampling.
 
-- **SOP synthesis step fails with truncated instructions** -- The deterministic SOP parser capped step body text at 500 characters in both the numbered-list and heading-format extractors. Synthesis steps routinely carry structured output specs (JSON field definitions, format rules, output constraints) that exceed this limit. The truncation produced a task prompt ending in `....`, which caused the executing agent to error on the first attempt with `retry_count: 1`. Fix: removed the 500-character cap from both extractors. SOP step descriptions are task instructions, not summaries — they must be passed verbatim.
-- **Parallel SOP steps return no data to synthesis agent** -- `_collect_task_inputs` correctly gathered dependency outputs into `execution_context["inputs"]`, but `_create_task_prompt` serialised them as a raw nested JSON blob: `{"from_task_1": {"main": {"result": "...", "status": "success", ...}}}`. The synthesis agent received the metadata wrapper, not the actual content, and reported "the previous tool calls didn't return results that I can see" before falling back to hallucination. Fix: `_create_task_prompt` now extracts `main.result` from each dependency output and presents it under a clear `## Results from prior steps / ### Task N` heading so the synthesis agent receives the raw step data directly.
+## v0.20260409.3
+
+### Fixed
+- Force locally available tools to run locally instead of self-delegating through A2A.
+
+### Validation
+- Verified with focused planning-helper regression coverage.
+
+## v0.20260409.2
+
+### Fixed
+- Add a repair-planning pass for workflows that stop on missing identifiers.
+- Expose required tool parameters to the planner and preserve planner-supplied parameters during execution normalization.
+
+### Validation
+- Verified with focused planning-helper tests and random E2E sampling.
+
+## v0.20260409.1
+
+### Fixed
+- Reject unresolved required identifiers earlier in planning and parameter inference.
+- Record handled MCP/tool error payloads as failures instead of success-shaped completions.
+
+### Validation
+- Verified with focused planning-helper tests and random E2E sampling.
+
+## v0.20260409.0
+
+### Changed
+- Speed up persistent memory recall and profile lookups with cheaper fast paths and better multi-collection search reuse.
+- Add best-effort PostgreSQL indexes for user/collection filtering and semantic search.
+
+### Validation
+- Verified with focused memory coverage, live validation, and random E2E sampling.
+
+## v0.20260408.2
+
+### Fixed
+- Emit SSE keepalives during slow `/v1/chat` and `/v1/audiochat` setup so successful requests do not time out before the first bytes arrive.
+
+### Validation
+- Verified with focused streaming endpoint coverage and chat-stream E2E validation.
+
+## v0.20260408.1
+
+### Fixed
+- Improve specialist routing for user-defined broad assistants using actual MCP tool signals.
+- Let delegated A2A specialists still plan with local tools while preventing further delegation loops.
+- Preserve exact dates and structured MCP content in direct planning responses.
+
+### Validation
+- Verified with focused routing/planning tests and random E2E sampling.
+
+## v0.20260408.0
+
+### Fixed
+- Add deterministic specialist-routing overrides when the generalist is a weak match.
+- Preserve exact dates and times in workflow synthesis and direct planning responses.
+- Keep structured MCP content intact and allow delegated A2A tasks to plan with tools.
+
+### Validation
+- Verified with focused unit coverage and broad random E2E sampling.
+
+## v0.20260407.0
+
+### Fixed
+- Use richer specialist metadata and session-scoped routing cache keys during agent selection.
+- Preserve multiline current-request context for routing.
+- Enforce HTTP MCP timeouts consistently, preserve explicit transport type on reconnect, and cancel poisoned requests on disconnect.
+
+### Validation
+- Verified with focused routing and MCP lifecycle unit coverage.
+
+## v0.20260403.0
+
+### Dependencies
+- Bump `faissx` to `>=0.20260403.0` for improved vector-store persistence.
+
+### Fixed
+- Send an explicit `Accept` header during MCP transport detection so strict servers no longer fail with `406 Not Acceptable`.
+
+## v0.20260402.0
+
+### Fixed
+- Isolate workflow-task tool calls from accumulated chat history to prevent pseudo-tool XML generation.
+- Inject the current system date into each request so models stop using stale training-date assumptions.
+- Add DEBUG observability for tool names passed into workflow-task LLM calls.
+
+## v0.20260401.1
+
+### Fixed
+- Return the actual last task result when SOPs set `synthesis: false`.
+- Strip directive tags from heading-format SOP titles before task execution.
+- Harden workflow tasks against pseudo-tool XML generation, stale date assumptions, and missing tool-name observability.
+
+## v0.20260401.0
+
+### Added
+- Support `${{ secrets.X }}` interpolation in skills and pass resolved secrets into bundled skill scripts as environment variables.
+
+### Fixed
+- Stop truncating long SOP synthesis instructions.
+- Feed raw prior-step results, not metadata wrappers, into synthesis tasks for parallel workflows.
+
+### Validation
+- Verified with new skill-secret coverage and dedicated E2E validation.
 
 ## 0.20260331.0 - SOP Reliability & Workflow Hardening
 
