@@ -205,11 +205,18 @@ class A2ARegistryClient:
                 self.registry_status.pop(registry_url, None)
                 self.registered_agents.pop(registry_url, None)
 
-                # Close and remove SDK client
-                if registry_url in self.sdk_clients:
-                    client = self.sdk_clients.pop(registry_url)
-                    if hasattr(client, "close"):
-                        asyncio.create_task(client.close())
+                # Close and remove the per-registry httpx client to avoid a
+                # leaked connection pool. sdk_clients was dropped in the 1.0
+                # migration (create_client builds a fresh Client per call),
+                # so there is nothing else to tear down here.
+                http_client = self.httpx_clients.pop(registry_url, None)
+                if http_client is not None:
+                    try:
+                        asyncio.create_task(http_client.aclose())
+                    except RuntimeError:
+                        # Not running inside an event loop — drop the client
+                        # and let it be GC'd; aclose() can't be awaited here.
+                        pass
 
                 # Emit registry removal event
                 observability.observe(

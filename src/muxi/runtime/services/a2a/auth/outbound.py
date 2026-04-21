@@ -318,10 +318,15 @@ class A2AAuthManager:
             secret_value = await self.secrets_manager.get_secret(secret_name)
             if secret_value:
                 auth_type = config["auth_type"]
+                # Build the credentials dict first so the success observability
+                # event is emitted for every supported auth type (API_KEY and
+                # BEARER used to return before reaching the observe() below).
                 if auth_type == AuthType.API_KEY:
-                    return {"api_key": secret_value}
+                    credentials = {"api_key": secret_value}
                 elif auth_type == AuthType.BEARER:
-                    return {"token": secret_value}
+                    credentials = {"token": secret_value}
+                else:
+                    credentials = None
 
                 # Log successful credential load
                 observability.observe(
@@ -334,6 +339,9 @@ class A2AAuthManager:
                         "auth_type": auth_type.value,
                     },
                 )
+
+                if credentials is not None:
+                    return credentials
             else:
                 # Log missing credential
                 observability.observe(

@@ -163,7 +163,7 @@ class A2AServer:
                         "status": "healthy",
                         "formation": self.formation_name,
                         "agents": (list(self.overlord.agents.keys()) if self.overlord else []),
-                        "sdk_version": "0.3.0",
+                        "sdk_version": "1.0",
                         "protocol": "a2a-sdk",
                     }
                 except Exception as e:
@@ -193,7 +193,7 @@ class A2AServer:
                         "agents": agents_info,
                         "total_agents": len(agents_info),
                         "sdk_enabled": True,
-                        "protocol_version": "a2a-sdk-0.3.0",
+                        "protocol_version": "a2a-sdk-1.0",
                     }
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=str(e))
