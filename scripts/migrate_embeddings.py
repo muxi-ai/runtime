@@ -4,19 +4,25 @@
 Re-embeds all memories from memories_{from_dim} into memories_{to_dim}
 using the target embedding model.  Supports PostgreSQL and SQLite.
 
-Usage:
-    # Local 384 -> OpenAI 1536
-    python scripts/migrate_embeddings.py \
-        --connection-string "postgresql://localhost/muxi" \
-        --from-dim 384 --to-dim 1536 \
-        --to-model "openai/text-embedding-3-small" \
-        --openai-api-key "sk-YOUR_KEY_HERE"
+All embedding generation flows through the shared embedding helper at
+``muxi.runtime.services.memory.embedding.embed`` which dispatches to
+OneLLM ``LocalProvider`` for ``local/*`` slugs and to the appropriate
+cloud provider otherwise. This keeps the CLI aligned with the runtime's
+single code path.
 
-    # OpenAI 1536 -> local 768
+Usage:
+    # OpenAI 1536 -> local Nomic v1.5 (768-dim, Apache-2.0)
     python scripts/migrate_embeddings.py \
         --connection-string "postgresql://localhost/muxi" \
         --from-dim 1536 --to-dim 768 \
-        --to-model "local/all-mpnet-base-v2"
+        --to-model "local/nomic-ai/nomic-embed-text-v1.5"
+
+    # Local 768 -> OpenAI 1536
+    python scripts/migrate_embeddings.py \
+        --connection-string "postgresql://localhost/muxi" \
+        --from-dim 768 --to-dim 1536 \
+        --to-model "openai/text-embedding-3-small" \
+        --openai-api-key "sk-YOUR_KEY_HERE"
 
     # SQLite
     python scripts/migrate_embeddings.py \
@@ -63,7 +69,12 @@ def parse_args():
     parser.add_argument(
         "--to-model",
         required=True,
-        help='Target embedding model (e.g. "openai/text-embedding-3-small" or "local/all-mpnet-base-v2")',
+        help=(
+            "Target embedding model slug as understood by the shared "
+            "runtime helper (e.g. 'openai/text-embedding-3-small' or "
+            "'local/nomic-ai/nomic-embed-text-v1.5'). ``local/*`` slugs "
+            "route through OneLLM's LocalProvider (HuggingFace + ONNX)."
+        ),
     )
     parser.add_argument(
         "--from-table", help='Override source table name (e.g. "memories" for legacy)'
@@ -86,39 +97,25 @@ def is_sqlite(conn_str: str) -> bool:
 
 
 def get_embedder(model_name: str, api_key: Optional[str] = None):
-    """Return an async callable(text) -> List[float]."""
-    from muxi.runtime.services.memory.local_embeddings import (
-        is_local_model,
-        resolve_local_model_name,
-    )
+    """Return an async callable ``(text) -> List[float]``.
 
-    if is_local_model(model_name):
-        bare = resolve_local_model_name(model_name)
-        from muxi.runtime.services.memory.local_embeddings import LocalEmbeddingProvider
+    Delegates all generation to the shared embedding helper; the helper
+    itself dispatches to OneLLM's ``LocalProvider`` for ``local/*`` slugs
+    or to the matching cloud provider otherwise. There is no longer a
+    per-provider branch in this script.
+    """
+    if api_key:
+        # Match prior behavior: surface the CLI-provided key to OpenAI
+        # without clobbering an already-set environment variable.
+        os.environ.setdefault("OPENAI_API_KEY", api_key)
 
-        provider = LocalEmbeddingProvider(model_name=bare)
+    from muxi.runtime.services.memory.embedding import embed
 
-        async def _embed(text: str) -> List[float]:
-            return await provider.embed(text)
+    async def _embed(text: str) -> List[float]:
+        vectors = await embed(model_name, text)
+        return vectors[0]
 
-        return _embed
-    else:
-        if api_key:
-            os.environ.setdefault("OPENAI_API_KEY", api_key)
-        from muxi.runtime.services.llm import LLM
-
-        llm = LLM(model=model_name)
-
-        async def _embed(text: str) -> List[float]:
-            resp = await llm.embed(text)
-            if hasattr(resp, "data") and isinstance(resp.data, list):
-                first = resp.data[0]
-                if hasattr(first, "embedding"):
-                    return first.embedding
-                return list(first)
-            return list(resp)
-
-        return _embed
+    return _embed
 
 
 # ---------------------------------------------------------------------------
