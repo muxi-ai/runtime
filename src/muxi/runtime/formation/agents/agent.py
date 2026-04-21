@@ -1604,6 +1604,100 @@ class Agent:
                                         step_index += 1
                                         continue
 
+                                    (
+                                        unresolved_nonrequired_placeholder_params,
+                                        unresolved_nonrequired_placeholder_leaves,
+                                    ) = self._get_unresolved_nonrequired_placeholder_parameters(
+                                        parameters=parameters,
+                                        required_params=required_params,
+                                    )
+
+                                    if unresolved_nonrequired_placeholder_params:
+                                        observability.observe(
+                                            event_type=observability.ConversationEvents.AGENT_PLANNING,
+                                            level=observability.EventLevel.WARNING,
+                                            data={
+                                                "agent_id": self.agent_id,
+                                                "tool_name": tool_name,
+                                                "phase": "placeholder.unresolved",
+                                                "blocked_params": (
+                                                    unresolved_nonrequired_placeholder_params
+                                                ),
+                                                "dropped_params": [],
+                                                "unresolved": (
+                                                    unresolved_nonrequired_placeholder_leaves
+                                                ),
+                                            },
+                                            description=(
+                                                f"{len(unresolved_nonrequired_placeholder_leaves)} "
+                                                f"unresolved placeholder leaf(s) for "
+                                                f"{tool_name or '(unknown)'}: "
+                                                f"{', '.join(leaf['param_path'] for leaf in unresolved_nonrequired_placeholder_leaves)}; "
+                                                "blocked execution for non-required "
+                                                f"planner-authored param(s): "
+                                                f"{', '.join(unresolved_nonrequired_placeholder_params)}"
+                                            ),
+                                        )
+
+                                        repaired_plan = None
+                                        if not replan_attempted:
+                                            replan_attempted = True
+                                            repaired_plan = await self._repair_execution_plan_for_missing_parameters(
+                                                user_message=planning_user_request,
+                                                available_tools=tools,
+                                                allow_delegation=not is_a2a_task,
+                                                failed_step=step,
+                                                tool_name=tool_name,
+                                                unresolved_params=(
+                                                    unresolved_nonrequired_placeholder_params
+                                                ),
+                                                current_plan=execution_plan,
+                                                my_results=my_results,
+                                            )
+
+                                        if repaired_plan:
+                                            execution_plan = repaired_plan
+                                            step_index = 0
+                                            continue
+
+                                        my_results[placeholder] = {
+                                            "status": "error",
+                                            "error": (
+                                                "Could not resolve planner-authored placeholder "
+                                                f"parameters for {tool_name}: "
+                                                f"{', '.join(unresolved_nonrequired_placeholder_params)}. "
+                                                "A prerequisite lookup/discovery step is required "
+                                                "before this action."
+                                            ),
+                                            "tool_name": tool_name,
+                                            "step_action": step.get("action", ""),
+                                            "blocked_params": (
+                                                unresolved_nonrequired_placeholder_params
+                                            ),
+                                        }
+                                        observability.observe(
+                                            event_type=observability.ConversationEvents.AGENT_PLANNING,
+                                            level=observability.EventLevel.WARNING,
+                                            data={
+                                                "agent_id": self.agent_id,
+                                                "tool_name": tool_name,
+                                                "blocked_params": (
+                                                    unresolved_nonrequired_placeholder_params
+                                                ),
+                                                "reason": "unresolved_placeholder_dependencies",
+                                                "unresolved": (
+                                                    unresolved_nonrequired_placeholder_leaves
+                                                ),
+                                            },
+                                            description=(
+                                                f"Blocking planned step {tool_name} - unresolved "
+                                                "planner placeholders remain in non-required "
+                                                "parameters"
+                                            ),
+                                        )
+                                        step_index += 1
+                                        continue
+
                                     # Final safety net: strip any placeholder-shaped values
                                     # that survived substitution / context / inference.
                                     # This prevents literal ``{{...}}`` strings from
@@ -1613,6 +1707,11 @@ class Agent:
                                         parameters=parameters,
                                         required_params=required_params,
                                         tool_name=tool_name,
+                                    )
+
+                                    unknown_params = self._get_unknown_tool_parameters(
+                                        parameters=parameters,
+                                        tool_schema=tool_schema,
                                     )
 
                                     # Validate parameters against tool schema before execution
@@ -1640,12 +1739,34 @@ class Agent:
                                             ),
                                         )
 
+                                        repaired_plan = None
+                                        if not replan_attempted:
+                                            replan_attempted = True
+                                            repaired_plan = await self._repair_execution_plan_for_validation_failure(
+                                                user_message=planning_user_request,
+                                                available_tools=tools,
+                                                allow_delegation=not is_a2a_task,
+                                                failed_step=step,
+                                                tool_name=tool_name,
+                                                validation_error=validation_error or "",
+                                                blocked_params=unknown_params,
+                                                current_plan=execution_plan,
+                                                my_results=my_results,
+                                            )
+
+                                        if repaired_plan:
+                                            execution_plan = repaired_plan
+                                            step_index = 0
+                                            continue
+
                                         # Store error result instead of executing
                                         my_results[placeholder] = {
                                             "status": "error",
                                             "error": f"Parameter validation failed: {validation_error}",
                                             "tool_name": tool_name,
                                             "step_action": step.get("action", ""),
+                                            "blocked_params": unknown_params,
+                                            "validation_error": validation_error,
                                         }
                                         step_index += 1
                                         continue
@@ -4421,6 +4542,47 @@ class Agent:
             )
         return "\n".join(feedback_lines)
 
+    def _build_validation_failure_replanning_feedback(
+        self,
+        failed_step: Dict[str, Any],
+        tool_name: str,
+        validation_error: str,
+        blocked_params: List[str],
+        current_plan: Dict[str, Any],
+        my_results: Dict[str, Any],
+    ) -> str:
+        """Explain a fail-closed validation block so replanning can correct it."""
+        current_tools = [
+            step.get("tool_name", "")
+            for step in current_plan.get("my_steps", [])
+            if step.get("tool_name")
+        ]
+        feedback_lines = [
+            "Previous execution plan was blocked before tool execution because the",
+            "planned parameters did not satisfy the tool contract.",
+            f"Failed step: {failed_step.get('action', '')}",
+            f"Tool: {tool_name}",
+            f"Validation error: {validation_error}",
+        ]
+        if blocked_params:
+            feedback_lines.append(f"Blocked parameters: {', '.join(blocked_params)}")
+        if current_tools:
+            feedback_lines.append(f"Current tool chain: {', '.join(current_tools)}")
+        feedback_lines.extend(
+            [
+                "Revise the plan so the blocked tool step only uses parameters declared",
+                "in the tool schema and only after prerequisite discovery steps have",
+                "produced any required identifiers.",
+                "Do not invent undeclared parameter names.",
+                "Do not guess missing identifiers or leave placeholder values unresolved.",
+            ]
+        )
+        if my_results:
+            feedback_lines.append(
+                "Reuse any existing tool results already gathered instead of repeating completed steps."
+            )
+        return "\n".join(feedback_lines)
+
     @staticmethod
     def _normalize_repair_plan_signature(plan: Dict[str, Any]) -> Dict[str, Any]:
         """Normalize the meaningful parts of a plan for repair/no-change checks."""
@@ -4814,6 +4976,89 @@ class Agent:
                 "phase": "repair_plan_completed",
                 "tool_name": tool_name,
                 "unresolved_params": unresolved_params,
+                "repaired_tools": repaired_tools,
+            },
+            description=f"Repair planning updated tool chain for {tool_name}",
+        )
+        return repaired_plan
+
+    async def _repair_execution_plan_for_validation_failure(
+        self,
+        user_message: str,
+        available_tools: List[Dict[str, Any]],
+        allow_delegation: bool,
+        failed_step: Dict[str, Any],
+        tool_name: str,
+        validation_error: str,
+        blocked_params: List[str],
+        current_plan: Dict[str, Any],
+        my_results: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Attempt one repair-planning pass when validation blocks execution."""
+        observability.observe(
+            event_type=observability.ConversationEvents.AGENT_PLANNING,
+            level=observability.EventLevel.WARNING,
+            data={
+                "agent_id": self.agent_id,
+                "phase": "repair_plan_start",
+                "tool_name": tool_name,
+                "reason": "validation_failed",
+                "blocked_params": blocked_params,
+                "validation_error": validation_error,
+            },
+            description=(
+                f"Attempting repair plan for {tool_name} due to validation failure: "
+                f"{validation_error}"
+            ),
+        )
+
+        repaired_plan = await self._plan_before_execution(
+            user_message,
+            available_tools,
+            allow_delegation=allow_delegation,
+            replanning_feedback=self._build_validation_failure_replanning_feedback(
+                failed_step=failed_step,
+                tool_name=tool_name,
+                validation_error=validation_error,
+                blocked_params=blocked_params,
+                current_plan=current_plan,
+                my_results=my_results,
+            ),
+            completed_results=my_results,
+        )
+
+        current_tools = [step.get("tool_name", "") for step in current_plan.get("my_steps", [])]
+        repaired_tools = [step.get("tool_name", "") for step in repaired_plan.get("my_steps", [])]
+        current_signature = self._normalize_repair_plan_signature(current_plan)
+        repaired_signature = self._normalize_repair_plan_signature(repaired_plan)
+
+        if repaired_signature == current_signature:
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_PLANNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": self.agent_id,
+                    "phase": "repair_plan_no_change",
+                    "tool_name": tool_name,
+                    "reason": "validation_failed",
+                    "blocked_params": blocked_params,
+                    "validation_error": validation_error,
+                    "current_tools": current_tools,
+                },
+                description="Repair planning produced no meaningful tool-chain change",
+            )
+            return None
+
+        observability.observe(
+            event_type=observability.ConversationEvents.AGENT_PLANNING,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": self.agent_id,
+                "phase": "repair_plan_completed",
+                "tool_name": tool_name,
+                "reason": "validation_failed",
+                "blocked_params": blocked_params,
+                "validation_error": validation_error,
                 "repaired_tools": repaired_tools,
             },
             description=f"Repair planning updated tool chain for {tool_name}",
@@ -7580,6 +7825,33 @@ class Agent:
                 leaves.extend(self._find_unresolved_placeholder_leaves(child, base_path=child_path))
         return leaves
 
+    def _get_unresolved_nonrequired_placeholder_parameters(
+        self,
+        *,
+        parameters: Dict[str, Any],
+        required_params: List[str],
+    ) -> tuple[List[str], List[Dict[str, str]]]:
+        """Return non-required top-level params that still contain placeholders.
+
+        These are planner-authored dependencies that the runtime could not
+        bind to a concrete value. Even when the tool schema marks them
+        optional, the current plan still depends on them, so execution must
+        block and re-plan instead of silently dropping them.
+        """
+        required_set = set(required_params or [])
+        blocked_params: List[str] = []
+        unresolved_leaves: List[Dict[str, str]] = []
+
+        for param_name, param_value in (parameters or {}).items():
+            leaves = self._find_unresolved_placeholder_leaves(param_value, base_path=param_name)
+            if not leaves:
+                continue
+            unresolved_leaves.extend(leaves)
+            if param_name not in required_set:
+                blocked_params.append(param_name)
+
+        return blocked_params, unresolved_leaves
+
     def _resolve_parameter_across_all_results(
         self,
         param_name: str,
@@ -8115,6 +8387,22 @@ class Agent:
 
         return merged
 
+    @staticmethod
+    def _get_unknown_tool_parameters(
+        parameters: Dict[str, Any],
+        tool_schema: Dict[str, Any],
+    ) -> List[str]:
+        """Return provided params that are not declared in the tool schema."""
+        param_schema = tool_schema.get("parameters", {})
+        if not isinstance(param_schema, dict):
+            return []
+
+        param_properties = param_schema.get("properties", {})
+        if not isinstance(param_properties, dict):
+            return []
+
+        return [param_name for param_name in parameters if param_name not in param_properties]
+
     def _validate_tool_parameters(
         self,
         parameters: Dict[str, Any],
@@ -8138,6 +8426,7 @@ class Agent:
             required_params = param_schema.get("required", [])
             param_properties = param_schema.get("properties", {})
             server_default_param_names = server_default_param_names or set()
+            unknown_params: List[str] = []
 
             # Check all required parameters are present
             for req_param in required_params:
@@ -8147,7 +8436,8 @@ class Agent:
             # Validate each provided parameter
             for param_name, param_value in parameters.items():
                 if param_name not in param_properties:
-                    # Parameter not in schema - could be extra, log warning but allow
+                    # Unknown planner-authored parameters are a hard block:
+                    # executing them fail-open forwards invalid args to MCP.
                     observability.observe(
                         event_type=observability.ConversationEvents.AGENT_PLANNING,
                         level=observability.EventLevel.WARNING,
@@ -8159,6 +8449,7 @@ class Agent:
                         },
                         description=f"Parameter '{param_name}' not in tool schema for {tool_name}",
                     )
+                    unknown_params.append(param_name)
                     continue
 
                 param_def = param_properties[param_name]
@@ -8220,10 +8511,18 @@ class Agent:
                             f"Parameter '{param_name}' value {param_value} is above maximum {max_val}",
                         )
 
+            if unknown_params:
+                return (
+                    False,
+                    "Unexpected parameters not in tool schema: "
+                    + ", ".join(sorted(unknown_params)),
+                )
+
             return True, None
 
         except Exception as e:
-            # Log validation error but don't crash
+            # Validation errors themselves should fail closed so the step can
+            # re-plan instead of executing with unchecked parameters.
             observability.observe(
                 event_type=observability.ErrorEvents.PARAMETER_VALIDATION_FAILED,
                 level=observability.EventLevel.ERROR,
@@ -8235,9 +8534,7 @@ class Agent:
                 },
                 description=f"Error validating parameters for {tool_name}: {e}",
             )
-            # Return true to allow execution to proceed despite validation error
-            # This prevents blocking legitimate use cases with incomplete schemas
-            return True, None
+            return False, str(e)
 
     def _has_resolved_required_parameter_value(
         self, param_value: Any, param_def: Dict[str, Any]

@@ -1132,6 +1132,166 @@ async def test_process_message_executes_parameter_free_planned_tool_without_unbo
 
 
 @pytest.mark.asyncio
+async def test_process_message_blocks_unresolved_nonrequired_placeholder_before_execution():
+    """Planner-authored placeholder dependencies must block execution even
+    when the tool schema marks the parameter optional."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+    agent.name = "Google Assistant"
+    agent.model = SimpleNamespace()
+    agent.system_message = "You are a helpful assistant."
+    agent._messages = []
+    agent._knowledge_config = None
+    agent._mcp_service = SimpleNamespace(server_configs={})
+    agent.overlord = SimpleNamespace(
+        mcp_service=SimpleNamespace(
+            get_tool_registry=lambda _agent_id: {
+                "google-mcp": {
+                    "manage_event": {
+                        "description": "Update or delete a calendar event.",
+                        "inputSchema": {
+                            "type": "object",
+                            "required": ["action"],
+                            "properties": {
+                                "action": {"type": "string"},
+                                "event_id": {"type": "string"},
+                                "start_time": {"type": "string"},
+                                "end_time": {"type": "string"},
+                            },
+                        },
+                    }
+                }
+            }
+        )
+    )
+    agent.invoke_tool = AsyncMock(return_value={"status": "success", "result": "should-not-run"})
+    agent._plan_before_execution = AsyncMock(
+        return_value={
+            "steps": [
+                {
+                    "step_number": 1,
+                    "action": "Reschedule Spark Test 2",
+                    "tool_name": "google-mcp__manage_event",
+                    "can_i_do_this": True,
+                    "output_placeholder": "{{UPDATE_RESULT}}",
+                }
+            ],
+            "my_steps": [
+                {
+                    "action": "Reschedule Spark Test 2",
+                    "tool_name": "google-mcp__manage_event",
+                    "parameters": {
+                        "action": "update",
+                        "event_id": "{{EVENT_SEARCH[summary='Spark Test 2'].id}}",
+                        "start_time": "2026-04-22T10:00:00+03:00",
+                        "end_time": "2026-04-22T10:45:00+03:00",
+                    },
+                    "output_placeholder": "{{UPDATE_RESULT}}",
+                }
+            ],
+            "delegate_steps": [],
+            "data_flow": "Update the event after resolving its id.",
+        }
+    )
+    agent._repair_execution_plan_for_missing_parameters = AsyncMock(return_value=None)
+    agent._synthesize_planning_execution_response = AsyncMock(return_value="Blocked placeholder.")
+    agent._check_cancellation = AsyncMock()
+
+    with (
+        patch("muxi.runtime.formation.agents.agent.streaming.stream"),
+        patch("muxi.runtime.formation.agents.agent.observability.observe"),
+    ):
+        response = await agent.process_message(
+            "Reschedule Spark Test 2 to tomorrow at 10:00.",
+            user_id="tester",
+            session_id="sess_123",
+            request_id="req_123",
+        )
+
+    assert response.content == "Blocked placeholder."
+    agent.invoke_tool.assert_not_awaited()
+    agent._repair_execution_plan_for_missing_parameters.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_message_blocks_unknown_schema_params_before_execution():
+    """Unknown planner params must trigger repair instead of being sent to MCP."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "google-assistant"
+    agent.name = "Google Assistant"
+    agent.model = SimpleNamespace()
+    agent.system_message = "You are a helpful assistant."
+    agent._messages = []
+    agent._knowledge_config = None
+    agent._mcp_service = SimpleNamespace(server_configs={})
+    agent.overlord = SimpleNamespace(
+        mcp_service=SimpleNamespace(
+            get_tool_registry=lambda _agent_id: {
+                "google-mcp": {
+                    "manage_gmail_filter": {
+                        "description": "Create or delete Gmail filters.",
+                        "inputSchema": {
+                            "type": "object",
+                            "required": ["action"],
+                            "properties": {
+                                "action": {"type": "string"},
+                                "criteria": {"type": "object"},
+                            },
+                        },
+                    }
+                }
+            }
+        )
+    )
+    agent.invoke_tool = AsyncMock(return_value={"status": "success", "result": "should-not-run"})
+    agent._plan_before_execution = AsyncMock(
+        return_value={
+            "steps": [
+                {
+                    "step_number": 1,
+                    "action": "Create Gmail filter",
+                    "tool_name": "google-mcp__manage_gmail_filter",
+                    "can_i_do_this": True,
+                    "output_placeholder": "{{FILTER_RESULT}}",
+                }
+            ],
+            "my_steps": [
+                {
+                    "action": "Create Gmail filter",
+                    "tool_name": "google-mcp__manage_gmail_filter",
+                    "parameters": {
+                        "action": "create",
+                        "criteria": {"from": "bondaruk.aleksandra92@gmail.com"},
+                        "actions": {"addLabelIds": ["muxi-test"]},
+                    },
+                    "output_placeholder": "{{FILTER_RESULT}}",
+                }
+            ],
+            "delegate_steps": [],
+            "data_flow": "Create filter directly.",
+        }
+    )
+    agent._repair_execution_plan_for_validation_failure = AsyncMock(return_value=None)
+    agent._synthesize_planning_execution_response = AsyncMock(return_value="Blocked validation.")
+    agent._check_cancellation = AsyncMock()
+
+    with (
+        patch("muxi.runtime.formation.agents.agent.streaming.stream"),
+        patch("muxi.runtime.formation.agents.agent.observability.observe"),
+    ):
+        response = await agent.process_message(
+            "Create a Gmail filter for emails from bondaruk.aleksandra92@gmail.com.",
+            user_id="tester",
+            session_id="sess_123",
+            request_id="req_123",
+        )
+
+    assert response.content == "Blocked validation."
+    agent.invoke_tool.assert_not_awaited()
+    agent._repair_execution_plan_for_validation_failure.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_repair_execution_plan_replans_with_missing_parameter_feedback():
     agent = object.__new__(Agent)
     agent.agent_id = "test-agent"
@@ -2775,6 +2935,34 @@ def test_validate_tool_parameters_allows_server_default_backed_required_params()
     assert error is None
 
 
+def test_validate_tool_parameters_rejects_unknown_schema_params():
+    """Unknown planner-authored params must fail closed before MCP execution."""
+    agent = object.__new__(Agent)
+    agent.agent_id = "test-agent"
+
+    is_valid, error = agent._validate_tool_parameters(
+        parameters={
+            "action": "create",
+            "criteria": {"from": "bondaruk.aleksandra92@gmail.com"},
+            "actions": {"addLabelIds": ["muxi-test"]},
+        },
+        tool_schema={
+            "parameters": {
+                "type": "object",
+                "required": ["action"],
+                "properties": {
+                    "action": {"type": "string"},
+                    "criteria": {"type": "object"},
+                },
+            }
+        },
+        tool_name="google-mcp__manage_gmail_filter",
+    )
+
+    assert is_valid is False
+    assert error == "Unexpected parameters not in tool schema: actions"
+
+
 def test_build_delegation_prompt_with_results_appends_prior_result_context():
     """Delegation prompts should carry prior tool results even without placeholders."""
     agent = object.__new__(Agent)
@@ -3875,13 +4063,7 @@ def test_extract_field_values_from_text_section_separator_stops_at_next_section(
     """When a second `--- XYZ ---` appears after the body, the body
     capture must terminate there — otherwise we'd swallow subsequent
     fields into a single over-long value."""
-    text = (
-        "--- BODY ---\n"
-        "Body paragraph one.\n"
-        "\n"
-        "--- ATTACHMENTS ---\n"
-        "- file1.pdf\n"
-    )
+    text = "--- BODY ---\n" "Body paragraph one.\n" "\n" "--- ATTACHMENTS ---\n" "- file1.pdf\n"
 
     body_values = Agent._extract_field_values_from_text(text, "body")
     assert body_values == ["Body paragraph one."]
@@ -3896,12 +4078,7 @@ def test_extract_field_values_from_text_section_separator_not_confused_with_pros
     the dashes must flank the requested field name for Pattern 4 to
     fire. This guard avoids false positives on markdown horizontal
     rules or any other triple-dash prose."""
-    text = (
-        "Some intro text.\n"
-        "---\n"
-        "Narrative sentence without a label.\n"
-        "---\n"
-    )
+    text = "Some intro text.\n" "---\n" "Narrative sentence without a label.\n" "---\n"
     # Pattern 4 explicitly requires `--- <field> ---` — bare `---` rules
     # must not match. We verify that none of the extracted values came
     # from a section capture (a section capture would include the

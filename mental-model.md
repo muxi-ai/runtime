@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-21 (OneLLM 0.20260421.0 compatibility)
+**Last Updated:** 2026-04-21 (OneLLM 0.20260421.0 compatibility; planner fail-closed contract)
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -585,7 +585,7 @@ A2ARegistryClient(registry_url, api_key) → discovers agents
 - Registry URL is extracted from `a2a.inbound.registries[0]` or `a2a.outbound.registries[0]`
 - Registry health checks run periodically (configurable interval)
 
-#### Agent Planning Robustness (as of v0.20260417.2)
+#### Agent Planning Robustness (updated 2026-04-21)
 
 **Why this section exists:** Five placeholder-related regressions shipped between
 v0.20260416.0 and v0.20260417.0 all traced to the same underlying tension — the
@@ -608,7 +608,7 @@ placeholder-class bug, start here.
 └─────────────────────────────────────────────────────────────────┘
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Runtime guards (agent.py, v0.20260417.1)                       │
+│  Runtime guards (agent.py, updated 2026-04-21)                  │
 │  "Runtime" enforcement — absorbs the 5–10% of plans that        │
 │  violate the contract anyway.                                   │
 │                                                                 │
@@ -629,6 +629,29 @@ is violated.
 | **Dotted reference against free-text payload** | `{{APRIL_10_MESSAGES.message_ids}}` against a Gmail text blob | "Use `{{NAME.field}}` for single-field extraction; runtime auto-collects for array parameters." | `_extract_field_from_result_payload` scans text chunks via `_collect_text_chunks_from_payload` and `_extract_field_values_from_text` (label + JSON patterns, snake/camel/spaced/Title variants, singular/plural pairing). |
 | **Array extrapolation** | One real message ID → nine incrementing-hex fabrications | "Include ONLY values you have literally observed.  Do NOT extrapolate from one example." | `_validate_inferred_parameters_against_results` verifies every inferred list item against prior record values + joined text; drops fabricated items; removes the parameter entirely if all are fake. |
 | **Syntax variation** | `<<NAME>>`, `${{NAME}}`, `{NAME}` | "Only `{{UPPERCASE_NAME}}` or `{{UPPERCASE_NAME.field}}` is valid." | `_is_placeholder_like_value` recognizes all variants defensively and routes them through unresolved-parameter handling. |
+| **Planner-authored optional dependency** | Step 2 emits optional `event_id: "{{EVENT_SEARCH[summary='Spark Test 2'].id}}"`, binding fails, and the write call would previously continue without it | "If a step references a prior result via placeholder, that parameter must be fully resolved before execution." | `_get_unresolved_nonrequired_placeholder_parameters()` treats unresolved planner placeholders in non-required params as execution-blocking and routes them through `_repair_execution_plan_for_missing_parameters()` instead of silently dropping them. |
+| **Unknown schema params / fail-open validation** | Planner invents `actions` for `manage_gmail_filter`, runtime warns, MCP rejects it downstream | "Only emit parameters declared in the tool schema. Do not invent near-miss keys." | `_get_unknown_tool_parameters()` + `_validate_tool_parameters()` now fail closed; `process_message()` triggers `_repair_execution_plan_for_validation_failure()` before any MCP call. |
+
+##### Execution gate contract (current)
+
+For every planned local tool step in `Agent.process_message()`, the runtime now
+enforces this order:
+
+```python
+substitute placeholders
+-> resolve from context / prior results / MCP defaults
+-> infer only remaining required params
+-> block on unresolved required params
+-> block on unresolved planner-authored placeholders in non-required params
+-> strip only leftover defensive placeholder garbage
+-> validate against schema (including unknown-param rejection)
+-> only then invoke MCP/tool
+```
+
+The important mental-model change is that the runtime no longer treats
+"schema-optional" as "safe to omit" when the planner explicitly authored the
+parameter.  If the plan depends on a placeholder-bound identifier, that
+dependency is semantically required even if the MCP schema marks it optional.
 
 ##### Triage recipe for a new placeholder-class bug
 
@@ -664,7 +687,11 @@ is violated.
   `_collect_text_chunks_from_payload`, `_extract_field_values_from_text`,
   `_field_name_variants`, `_singularize_field_name`,
   `_strip_leftover_placeholder_parameters`, `_resolve_parameter_from_result_payload`,
-  `_validate_inferred_parameters_against_results`, `_merge_parameter_candidates`.
+  `_validate_inferred_parameters_against_results`, `_merge_parameter_candidates`,
+  `_get_unresolved_nonrequired_placeholder_parameters`,
+  `_get_unknown_tool_parameters`, `_validate_tool_parameters`,
+  `_repair_execution_plan_for_missing_parameters`,
+  `_repair_execution_plan_for_validation_failure`.
 - `tests/unit/test_agent_planning_helpers.py` — regression tests; each past
   failure mode has at least two tests (happy path + edge case).
 

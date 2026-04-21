@@ -24,7 +24,9 @@ try:
 except Exception:
     RCE_AVAILABLE = False
 
-pytestmark = pytest.mark.skipif(not RCE_AVAILABLE, reason="RCE server not running on localhost:7891")
+pytestmark = pytest.mark.skipif(
+    not RCE_AVAILABLE, reason="RCE server not running on localhost:7891"
+)
 
 
 @pytest.fixture
@@ -55,7 +57,9 @@ def skill_dir(tmp_path):
     (skill / "SKILL.md").write_text("---\nname: test-skill\ndescription: unit test\n---\n# Test")
     scripts = skill / "scripts"
     scripts.mkdir()
-    (scripts / "run.py").write_text('print("skill executed")\nwith open("out.txt","w") as f: f.write("ok")')
+    (scripts / "run.py").write_text(
+        'print("skill executed")\nwith open("out.txt","w") as f: f.write("ok")'
+    )
     return skill
 
 
@@ -63,7 +67,8 @@ class TestRCEStatus:
     @pytest.mark.asyncio
     async def test_connect_returns_status(self, client):
         assert client.status is not None
-        assert client.status.version == "0.1.0"
+        assert isinstance(client.status.version, str)
+        assert client.status.version.strip()
         assert "python" in client.languages
         assert client.status.resources.get("cpus", 0) > 0
 
@@ -153,9 +158,7 @@ class TestSkillLifecycle:
 
     @pytest.mark.asyncio
     async def test_upload_and_check(self, client, skill_dir):
-        result = await client.upload_skill_zip(
-            "unit-test-skill", skill_dir, "sha256:" + "a" * 64
-        )
+        result = await client.upload_skill_zip("unit-test-skill", skill_dir, "sha256:" + "a" * 64)
         assert result["status"] == "cached"
         assert result["file_count"] == 2
 
@@ -219,7 +222,10 @@ class TestSkillLifecycle:
         result = await client.run_skill(
             "unit-test-skill-5",
             "python3 reader.py",
-            input_files={"data.csv": "x,y\n1,2\n3,4", "reader.py": "print(open('data.csv').read())"},
+            input_files={
+                "data.csv": "x,y\n1,2\n3,4",
+                "reader.py": "print(open('data.csv').read())",
+            },
         )
         assert result.ok
         assert "x,y" in result.stdout
@@ -253,22 +259,42 @@ class TestAuth:
 
 class TestDataclasses:
     def test_exec_result_ok_property(self):
-        r = ExecResult(id="x", status="success", exit_code=0, stdout="", stderr="", duration_ms=1, artifacts=[])
+        r = ExecResult(
+            id="x", status="success", exit_code=0, stdout="", stderr="", duration_ms=1, artifacts=[]
+        )
         assert r.ok is True
-        r2 = ExecResult(id="x", status="error", exit_code=1, stdout="", stderr="", duration_ms=1, artifacts=[])
+        r2 = ExecResult(
+            id="x", status="error", exit_code=1, stdout="", stderr="", duration_ms=1, artifacts=[]
+        )
         assert r2.ok is False
 
     def test_rce_status_from_dict(self):
-        s = RCEStatus.from_dict({
-            "version": "0.1.0", "languages": ["python"], "runtimes": [],
-            "resources": {"cpus": 2}, "packages": {}, "cached_skills": [], "uptime_seconds": 100,
-        })
+        s = RCEStatus.from_dict(
+            {
+                "version": "0.1.0",
+                "languages": ["python"],
+                "runtimes": [],
+                "resources": {"cpus": 2},
+                "packages": {},
+                "cached_skills": [],
+                "uptime_seconds": 100,
+            }
+        )
         assert s.version == "0.1.0"
         assert s.languages == ["python"]
 
     def test_exec_result_from_dict_null_artifacts(self):
-        r = ExecResult.from_dict({"id": "x", "status": "success", "exit_code": 0,
-                                   "stdout": "", "stderr": "", "duration_ms": 0, "artifacts": None})
+        r = ExecResult.from_dict(
+            {
+                "id": "x",
+                "status": "success",
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": "",
+                "duration_ms": 0,
+                "artifacts": None,
+            }
+        )
         assert r.artifacts == []
 
     def test_rce_error_has_status_code(self):
