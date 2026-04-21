@@ -160,8 +160,8 @@ e2e/evidence/
 *.img
 *.egg-info/
 
-# Factory AI
-.factory/
+# Factory AI mission infrastructure is version-controlled. Only exclude per-session state.
+.factory/settings.json
 old-reports/
 e2e/results/
 evidence/

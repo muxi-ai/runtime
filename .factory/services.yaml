@@ -1,0 +1,21 @@
+commands:
+  install: pip install -e ".[dev]"
+  typecheck: mypy src/muxi/runtime/
+  test: pytest tests/unit/ -v
+  test-integration: pytest tests/integration/ -v -m slow
+  lint: ruff check src/ tests/
+  format-check: black --check src/ tests/
+  isort-check: isort --check src/ tests/
+  sweep-legacy: |
+    rg "local_embeddings" src/muxi/runtime/ ; \
+    rg "sentence_transformers|sentence-transformers" src/muxi/runtime/ ; \
+    rg "LocalEmbeddingProvider|get_local_embedding_async|get_local_embedding|resolve_embedding_dimension|is_local_model|resolve_local_model_name|get_local_embedding_dimension|LOCAL_EMBEDDING_MODEL_NAME" src/
+  e2e-random: cd e2e && python run_random_tests.py 10
+  verify-onellm: python -c "from onellm.providers.local import LocalProvider; print('LocalProvider OK')"
+  verify-version: python -c "import onellm; print(onellm.__version__)"
+
+# No long-running services required for this mission.
+# This is library-only work; all validation is shell + pytest.
+# PostgreSQL (localhost:5432) is an EXISTING resource that some e2e tests may use
+# opportunistically — do NOT start a new instance; tests skip or use SQLite if PG unavailable.
+services: {}
