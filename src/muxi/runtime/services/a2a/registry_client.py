@@ -12,14 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
 import httpx
-from a2a.client import A2AClient
 from a2a.types import AgentCard as SDKAgentCard
-from a2a.types import (
-    Message,
-    Role,
-    SendMessageRequest,
-    TextPart,
-)
 
 from .. import observability
 from .models import AgentCard
@@ -70,21 +63,19 @@ class A2ARegistryClient:
             self.registries = registries or []
             self.config = config or RegistryConfig()
 
-            # Initialize A2A SDK clients for each registry
-            self.sdk_clients: Dict[str, A2AClient] = {}
+            # The 1.0 SDK no longer exposes a drop-in replacement for A2AClient —
+            # create_client builds a fresh Client per call. Registry traffic
+            # stays on the shared httpx client for registration, discovery, and
+            # health checks. The sdk_clients map is kept for legacy compatibility
+            # but is intentionally left empty.
+            self.sdk_clients: Dict[str, Any] = {}
             self.httpx_clients: Dict[str, httpx.AsyncClient] = {}
 
             for registry_url in self.registries:
-                # Create httpx client for this registry with base_url for consistent routing
                 self.httpx_clients[registry_url] = httpx.AsyncClient(
                     base_url=registry_url,
                     timeout=self.config.timeout_seconds,
                     headers={"User-Agent": self.config.user_agent},
-                )
-
-                # Create SDK client with httpx client
-                self.sdk_clients[registry_url] = A2AClient(
-                    httpx_client=self.httpx_clients[registry_url], url=registry_url
                 )
 
             # Track registry health
@@ -165,16 +156,13 @@ class A2ARegistryClient:
                 self.registry_status[registry_url] = {"last_check": None, "healthy": None}
                 self.registered_agents[registry_url] = []
 
-                # Create httpx client for new registry
+                # Create httpx client for new registry. The SDK client map is
+                # left untouched; registry traffic runs over the shared httpx
+                # client directly (see __init__ for context).
                 self.httpx_clients[registry_url] = httpx.AsyncClient(
                     base_url=registry_url,
                     timeout=self.config.timeout_seconds,
                     headers={"User-Agent": self.config.user_agent},
-                )
-
-                # Create SDK client with httpx client (consistent with __init__)
-                self.sdk_clients[registry_url] = A2AClient(
-                    httpx_client=self.httpx_clients[registry_url], url=registry_url
                 )
 
                 # Emit registry addition event
@@ -280,35 +268,24 @@ class A2ARegistryClient:
                 data={"registry_url": registry_url, "sdk_enabled": True},
             )
 
-            client = self.sdk_clients.get(registry_url)
-            if not client:
+            httpx_client = self.httpx_clients.get(registry_url)
+            if not httpx_client:
                 return False
 
-            # Use SDK to send health check message
-            health_message = Message(
-                message_id="health_check",
-                role=Role.agent,
-                parts=[TextPart(text="health", kind="text")],
-                metadata={"type": "health_check"},
-                kind="message",
-            )
-
-            # Send health check via SDK
-            request = SendMessageRequest(agent_id="registry", message=health_message, timeout=5)
-
-            # Try to send the health check message
-            # If registry is healthy, it should respond or at least accept the message
+            # Use the shared httpx client to hit the registry's /health
+            # endpoint. a2a-sdk 1.0's create_client is higher-level than what
+            # a health probe needs; a plain GET keeps the probe fast and
+            # independent from agent-card resolution latency.
             try:
-                await client.send_message(request)
-                is_healthy = True
-            except Exception as e:
-                # Only consider healthy if it's a method not allowed error (health endpoint exists but rejects messages)
-                # Connectivity issues or other errors should mark as unhealthy
-                error_msg = str(e).lower()
-                if "method not allowed" in error_msg or "405" in error_msg:
-                    is_healthy = True  # Health endpoint exists but doesn't accept messages
-                else:
-                    is_healthy = False  # Real connectivity or server issue
+                response = await httpx_client.get("/health", timeout=5)
+                # 2xx = healthy; 4xx responses (e.g. 404 or 405 on registries
+                # that don't implement /health but are otherwise reachable)
+                # still indicate the server is alive.
+                is_healthy = response.status_code < 500
+            except httpx.HTTPError:
+                is_healthy = False
+            except Exception:
+                is_healthy = False
 
             # Update status tracking
             self.registry_status[registry_url] = {

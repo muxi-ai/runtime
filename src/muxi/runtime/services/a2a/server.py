@@ -21,14 +21,31 @@ from typing import Any, Dict, List, Optional
 import uvicorn
 
 # A2A SDK imports
-from a2a.types import Message as SDKMessage
-from a2a.types import Role as SDKRole
 from fastapi import Body, FastAPI, HTTPException, Path, Request
 from pydantic import BaseModel
 
 from ...utils.id_generator import generate_nanoid
 from .. import observability
+from . import _sdk_helpers as sdk
 from .models_adapter import ModelsAdapter
+
+# JSON-RPC 2.0 error codes used when the SDK-formatted path needs to surface
+# an error. a2a-sdk 1.0 no longer ships JSONRPCError/JSONRPCErrorResponse
+# pydantic models; we build the equivalent envelopes as plain dicts.
+_JSONRPC_INVALID_REQUEST = -32600
+_JSONRPC_INTERNAL_ERROR = -32603
+
+
+def _jsonrpc_error(request_id: Optional[str], code: int, message: str) -> Dict[str, Any]:
+    return {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "error": {"code": code, "message": message},
+    }
+
+
+def _jsonrpc_success(request_id: Optional[str], result: Dict[str, Any]) -> Dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
 
 # Legacy request/response models for backward compatibility
@@ -326,16 +343,11 @@ class A2AServer:
                         description="Untrusted client attempted A2A communication",
                     )
 
-                    from a2a.types import JSONRPCError, JSONRPCErrorResponse
-
-                    error_response = JSONRPCErrorResponse(
-                        id=request_data.get("id", message_id),
-                        error=JSONRPCError(
-                            code=-32600,  # Invalid Request
-                            message=f"Untrusted client: {client_host}",
-                        ),
+                    return _jsonrpc_error(
+                        request_data.get("id", message_id),
+                        _JSONRPC_INVALID_REQUEST,
+                        f"Untrusted client: {client_host}",
                     )
-                    return error_response.model_dump(mode="json")
             # Parse SDK message from request
             sdk_message_data = None
 
@@ -352,27 +364,25 @@ class A2AServer:
 
                 # The SDK message should have role and parts
                 if "role" in sdk_message_data and "parts" in sdk_message_data:
-                    # Create SDK Message object from dict
-                    try:
-
-                        sdk_message_obj = SDKMessage(**sdk_message_data)
-                        # Convert to MUXI format for agent processing
-                        muxi_message = ModelsAdapter.sdk_to_muxi_message(sdk_message_obj)
-                    except Exception:
-                        # Fallback: work directly with the dict
-                        muxi_message = {
-                            "parts": [],
-                            "metadata": sdk_message_data.get("metadata", {}),
-                        }
-                        for part in sdk_message_data.get("parts", []):
-                            if part.get("kind") == "text":
-                                muxi_message["parts"].append(
-                                    {"type": "TextPart", "text": part.get("text", "")}
-                                )
-                            elif part.get("kind") == "data":
-                                muxi_message["parts"].append(
-                                    {"type": "DataPart", "data": part.get("data", {})}
-                                )
+                    # Dict-shape parse. Protobuf constructors are strict about
+                    # field names (kind -> oneof, data -> Struct-wrapped Value),
+                    # so we normalize the incoming parts into MUXI dict shape
+                    # directly rather than round-tripping through SDKMessage.
+                    muxi_message = {
+                        "parts": [],
+                        "metadata": sdk_message_data.get("metadata") or {},
+                    }
+                    for part in sdk_message_data.get("parts", []):
+                        # Accept either the legacy .kind marker or the new
+                        # flattened shape (just .text or .data).
+                        if part.get("kind") == "text" or "text" in part:
+                            muxi_message["parts"].append(
+                                {"type": "TextPart", "text": part.get("text", "")}
+                            )
+                        elif part.get("kind") == "data" or "data" in part:
+                            muxi_message["parts"].append(
+                                {"type": "DataPart", "data": part.get("data", {})}
+                            )
 
                     # Extract the actual message content
                     message_content = ""
@@ -455,37 +465,29 @@ class A2AServer:
                 else:
                     response_content = str(response)
 
-                # Create SDK response message
+                # Create SDK response message and serialize to plain dict.
                 response_message = ModelsAdapter.muxi_to_sdk_message(
                     response_content,
                     message_id=f"resp_{message_id}",
-                    role=SDKRole.agent,
+                    role=sdk.ROLE_AGENT,
                     context={"agent_id": agent_id},
                 )
-
-                # Return SDK-formatted response
-                from a2a.types import SendMessageSuccessResponse
-
-                sdk_response = SendMessageSuccessResponse(
-                    id=request_data.get("id", message_id), result=response_message
+                return _jsonrpc_success(
+                    request_data.get("id", message_id),
+                    sdk.message_to_dict(response_message),
                 )
-                result = sdk_response.model_dump(mode="json")
-                return result
             else:
-                # No response content - create a simple success message
+                # No response content - create a simple success message.
                 success_message = ModelsAdapter.muxi_to_sdk_message(
                     "Message delivered successfully",
                     message_id=f"resp_{message_id}",
-                    role=SDKRole.agent,
+                    role=sdk.ROLE_AGENT,
                     context={"agent_id": agent_id},
                 )
-
-                from a2a.types import SendMessageSuccessResponse
-
-                sdk_response = SendMessageSuccessResponse(
-                    id=request_data.get("id", message_id), result=success_message
+                return _jsonrpc_success(
+                    request_data.get("id", message_id),
+                    sdk.message_to_dict(success_message),
                 )
-                return sdk_response.model_dump(mode="json")
 
         except HTTPException:
             # Re-raise HTTP exceptions to be handled by FastAPI
@@ -502,15 +504,11 @@ class A2AServer:
                 },
                 description=f"SDK A2A message handling failed: {str(e)}",
             )
-            from a2a.types import JSONRPCError, JSONRPCErrorResponse
-
-            error_response = JSONRPCErrorResponse(
-                id=request_data.get("id", message_id),
-                error=JSONRPCError(
-                    code=-32603, message=f"Message handling failed: {str(e)}"  # Internal error
-                ),
+            return _jsonrpc_error(
+                request_data.get("id", message_id),
+                _JSONRPC_INTERNAL_ERROR,
+                f"Message handling failed: {str(e)}",
             )
-            return error_response.model_dump(mode="json")
 
     async def _handle_legacy_message(
         self,

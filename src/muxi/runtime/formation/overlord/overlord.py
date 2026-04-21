@@ -3110,22 +3110,31 @@ Agent response: {raw_response}"""
                     )
 
     def _initialize_a2a_client_factory(self):
-        """Initialize the A2A ClientFactory with AgentTransport registered."""
+        """Initialize the A2A ClientFactory with AgentTransport registered.
+
+        In a2a-sdk 1.0, ClientFactory.register takes a `TransportProducer`
+        callable `(AgentCard, str, ClientConfig) -> ClientTransport` rather
+        than a transport instance. We close over a single in-memory
+        AgentTransport and return it from the producer; the overlord also
+        keeps a direct reference (`self.agent_transport`) so callers that
+        need the transport synchronously don't have to round-trip through
+        ClientFactory.
+        """
         try:
             from a2a.client import ClientConfig, ClientFactory
 
             from ...services.a2a.agent_transport import AgentTransport
 
-            # Create client factory with default configuration
             config = ClientConfig()
             self.client_factory = ClientFactory(config)
 
-            # Register agent transport for direct agent communication
             agent_transport = AgentTransport(overlord=self)
-            self.client_factory.register("agent", agent_transport)
+            self.agent_transport = agent_transport
 
-            # Log successful initialization
-            # REMOVE - line 2786 (user: remove)
+            def _agent_transport_producer(_card, _url, _cfg):
+                return agent_transport
+
+            self.client_factory.register("agent", _agent_transport_producer)
 
         except Exception as e:
             # Log error but don't fail - A2A is optional
@@ -3136,6 +3145,7 @@ Agent response: {raw_response}"""
                 description=f"Failed to initialize A2A ClientFactory: {str(e)}",
             )
             self.client_factory = None
+            self.agent_transport = None
 
     async def send_a2a_message(
         self,
